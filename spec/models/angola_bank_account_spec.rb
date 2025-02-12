@@ -45,10 +45,14 @@ describe AngolaBankAccount do
   end
 
   describe "#validate_account_number" do
-    it "allows 25 character Angola IBAN format when Ibandit does not support AO" do
-      allow(Rails.env).to receive(:production?).and_return(true)
+    before { allow(Rails.env).to receive(:production?).and_return(true) }
 
+    it "allows 25 character Angola IBAN format when Ibandit does not support AO" do
       expect(build(:angola_bank_account, account_number: "AO06004000009439667010104")).to be_valid
+    end
+
+    it "allows 21 digit NIB (legacy) format" do
+      expect(build(:angola_bank_account, account_number: "600400000943966701010", account_number_last_four: "1010")).to be_valid
     end
   end
 end

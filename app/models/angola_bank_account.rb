@@ -6,9 +6,10 @@ class AngolaBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
-  # Angola IBAN: AO + 2 check digits + 21 numeric (BBAN). Ibandit may not support AO.
-  ACCOUNT_NUMBER_FORMAT_REGEX = /\AAO\d{23}\z/
-  private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
+  # Angola IBAN: AO + 2 check digits + 21 digits (25 chars). NIB (legacy): 21 digits only.
+  IBAN_FORMAT_REGEX = /\AAO\d{23}\z/
+  NIB_FORMAT_REGEX = /\A\d{21}\z/
+  private_constant :IBAN_FORMAT_REGEX, :NIB_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
@@ -50,7 +51,8 @@ class AngolaBankAccount < BankAccount
     end
 
     def validate_account_number
-      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
+      return if IBAN_FORMAT_REGEX.match?(account_number_decrypted)
+      return if NIB_FORMAT_REGEX.match?(account_number_decrypted)
       return if Ibandit::IBAN.new(account_number_decrypted).valid?
       errors.add :base, "The account number is invalid."
     end
