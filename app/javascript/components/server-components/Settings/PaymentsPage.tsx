@@ -56,7 +56,7 @@ export type User = {
   joined_at: string;
 };
 
-const PAYOUT_FREQUENCIES = ["weekly", "monthly", "quarterly"] as const;
+const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
 
 export type ComplianceInfo = {
@@ -891,6 +891,14 @@ const PaymentsPage = (props: Props) => {
                 }))}
               />
             </fieldset>
+            {payoutFrequency === "daily" && (
+              <div role="status" className="info">
+                <div>
+                  Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
+                  <b>3% fee</b>.
+                </div>
+              </div>
+            )}
             <fieldset className={cx({ danger: payoutThresholdCents.error })}>
               <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>
               <PriceInput
