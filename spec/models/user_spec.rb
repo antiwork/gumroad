@@ -677,6 +677,14 @@ describe User, :vcr do
       user.update!(payment_address: "")
       expect(user.paypal_payout_email).to eq nil
     end
+
+    it "returns nil if payment_address is blank and connected PayPal account details are not available" do
+      user.update!(payment_address: "")
+      create(:merchant_account_paypal, user:, charge_processor_merchant_id: "B66YJBBNCRW6L")
+      allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(nil)
+
+      expect(user.paypal_payout_email).to eq nil
+    end
   end
 
   describe "#build_user_compliance_info" do
