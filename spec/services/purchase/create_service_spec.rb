@@ -2893,7 +2893,7 @@ describe Purchase::CreateService, :vcr do
     context "no variants selected" do
       it "doesn't return an error message" do
         product.update!(native_type: Link::NATIVE_TYPE_COFFEE)
-        create(:variant, variant_category: create(:variant_category, link: product))
+        create(:variant, variant_category: create(:variant_category, link: product), price_difference_cents: 100)
 
         params[:variants] = []
 

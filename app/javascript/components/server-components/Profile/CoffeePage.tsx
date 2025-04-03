@@ -68,7 +68,7 @@ export const CoffeeProduct = ({
         selection={selection}
         label={getCtaName(product.custom_button_text_option || "donate_prompt")}
         onClick={(evt) => {
-          if (selection.optionId === null && selection.price.value === null) {
+          if (selection.optionId === null && !selection.price.value) {
             evt.preventDefault();
             setSelection({ ...selection, price: { ...selection.price, error: true } });
           }

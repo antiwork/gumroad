@@ -209,7 +209,7 @@ describe Variant do
 
       context "name is blank" do
         it "does not add an error" do
-          variant = build(:variant, variant_category:)
+          variant = build(:variant, variant_category:, price_difference_cents: 100)
           expect(variant).to be_valid
         end
       end

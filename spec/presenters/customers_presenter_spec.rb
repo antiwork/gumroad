@@ -17,7 +17,7 @@ describe CustomersPresenter do
     create(:gift, giftee_email: "giftee@gumroad.com", giftee_purchase: create(:purchase), gifter_purchase: purchase2)
     purchase2.reload
     create(:upsell_purchase, purchase: purchase1, upsell: create(:upsell, seller:, product:, cross_sell: true))
-    create(:variant, name: nil, variant_category: coffee.variant_categories_alive.first)
+    create(:variant, name: nil, variant_category: coffee.variant_categories_alive.first, price_difference_cents: 100)
   end
 
   describe "#customers_props" do
@@ -69,6 +69,27 @@ describe CustomersPresenter do
           show_refund_fee_notice: false,
         }
       )
+    end
+  end
+
+  describe "variant belongs to coffee" do
+    let(:seller) { create(:user, :eligible_for_service_products) }
+    let(:coffee) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE) }
+    let(:variant_category) { create(:variant_category, link: coffee) }
+
+    context "name is blank" do
+      it "does not add an error" do
+        variant = build(:variant, variant_category:, price_difference_cents: 100)  # Add a valid price
+        expect(variant).to be_valid
+      end
+    end
+
+    context "price is zero" do
+      it "adds an error" do
+        variant = build(:variant, variant_category:, price_difference_cents: 0)
+        expect(variant).not_to be_valid
+        expect(variant.errors.full_messages).to include("Price difference cents must be greater than 0")
+      end
     end
   end
 end
