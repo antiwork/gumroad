@@ -810,7 +810,11 @@ class Purchase < ApplicationRecord
   end
 
   def email_digest
-    Digest::SHA256.hexdigest(email) if email.present?
+    if email.present?
+      key = GlobalConfig.get("OBFUSCATE_IDS_CIPHER_KEY")
+      token_data = "#{id}:#{email}"
+      Base64.urlsafe_encode64(OpenSSL::HMAC.digest("SHA256", key, token_data))
+    end
   end
 
   def transaction_url_for_seller

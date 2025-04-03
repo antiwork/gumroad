@@ -3720,6 +3720,23 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#email_digest" do
+    it "returns a HMAC digest of id and email" do
+      purchase = create(:purchase, email: "test@example.com")
+      key = GlobalConfig.get("OBFUSCATE_IDS_CIPHER_KEY")
+      token_data = "#{purchase.id}:#{purchase.email}"
+      expected_digest = OpenSSL::HMAC.digest("SHA256", key, token_data)
+      base64_encoded_digest = Base64.urlsafe_encode64(expected_digest)
+
+      expect(purchase.email_digest).to eq(base64_encoded_digest)
+    end
+
+    it "returns nil when email is blank" do
+      purchase = build(:purchase, email: nil)
+      expect(purchase.email_digest).to be_nil
+    end
+  end
+
   describe "email" do
     describe "on create" do
       describe "valid email" do
@@ -6132,20 +6149,6 @@ describe Purchase, :vcr do
       product.user.update!(bears_affiliate_fee: true)
       expect(affiliate_purchase.send(:determine_affiliate_fee_cents)).to eq 0
       expect(affiliate_purchase.fee_cents).to eq 209
-    end
-  end
-
-  describe "#email_digest" do
-    it "returns SHA256 hash of the email" do
-      purchase = create(:purchase, email: "test@example.com")
-      expected_digest = Digest::SHA256.hexdigest("test@example.com")
-      expect(purchase.email_digest).to eq(expected_digest)
-    end
-
-    it "returns nil if email is nil" do
-      purchase = create(:purchase)
-      purchase.email = nil
-      expect(purchase.email_digest).to be_nil
     end
   end
 
