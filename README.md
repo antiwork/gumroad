@@ -49,3 +49,221 @@ We use `docker` and `docker compose` to setup the services for development envir
 
 - For MacOS: Grab the docker mac installation from the [Docker website](https://www.docker.com/products/docker-desktop)
 - For Linux:
+
+```bash
+sudo wget -qO- https://get.docker.com/ | sh
+sudo usermod -aG docker $(whoami)
+```
+
+#### MySQL & Percona Toolkit
+
+Install a local version of MySQL 8.0.x to match the version running in production.
+
+The local version of MySQL is a dependency of the Ruby `mysql2` gem. You do not need to start an instance of the MySQL service locally. The app will connect to a MySQL instance running in the Docker container.
+
+- For MacOS:
+
+```bash
+brew install mysql@8.0 percona-toolkit
+brew link --force mysql@8.0
+
+# to use Homebrew's `openssl`:
+brew install openssl
+bundle config --global build.mysql2 --with-opt-dir="$(brew --prefix openssl)"
+
+# ensure MySQL is not running as a service
+brew services stop mysql@8.0
+```
+
+- For Linux:
+  - MySQL:
+    - https://dev.mysql.com/doc/refman/8.0/en/linux-installation.html
+    - `apt install libmysqlclient-dev`
+  - Percona Toolkit: https://www.percona.com/doc/percona-toolkit/LATEST/installation.html
+
+#### Image Processing Libraries
+
+##### ImageMagick
+
+We use `imagemagick` for preview editing.
+
+- For MacOS: `brew install imagemagick`
+- For Linux: `sudo apt-get install imagemagick`
+
+##### libvips
+
+For newer image formats we use `libvips` for image processing with ActiveStorage.
+
+- For MacOS: `brew install libvips`
+- For Linux: `sudo apt-get install libvips-dev`
+
+#### FFmpeg
+
+We use `ffprobe` that comes with `FFmpeg` package to fetch metadata from video files.
+
+- For MacOS: `brew install ffmpeg`
+- For Linux: `sudo apt-get install ffmpeg`
+
+#### PDFtk
+
+We use [pdftk](https://www.pdflabs.com/tools/pdftk-server/) to stamp PDF files with the Gumroad logo and the buyers' emails.
+
+- For MacOS: Download from [here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg)
+- For Linux: `sudo apt-get install pdftk`
+
+### Installation
+
+#### Bundler and gems
+
+We use Bundler to install Ruby gems.
+
+```shell
+gem install bundler
+```
+
+If you have a license for Sidekiq Pro, configure its credentials:
+
+```shell
+bundle config gems.contribsys.com <key>
+```
+
+If you don't have a license for Sidekiq Pro, set the environment variable `GUMROAD_SIDEKIQ_PRO_DISABLED` in your shell:
+
+```shell
+export GUMROAD_SIDEKIQ_PRO_DISABLED=true
+echo "export GUMROAD_SIDEKIQ_PRO_DISABLED=true" >> ~/.bashrc
+```
+
+Run `bundle install` to install the necessary dependencies.
+
+Also make sure to install `dotenv` as it is required for some console commands:
+
+```shell
+gem install dotenv
+```
+
+#### npm and Node.js dependencies
+
+Make sure the correct version of `npm` is enabled:
+
+```shell
+corepack enable
+```
+
+Install dependencies:
+
+```shell
+npm install
+```
+
+### Configuration
+
+#### Setup Custom credentials
+
+App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
+
+#### Local SSL Certificates
+
+1. Install mkcert on macOS:
+
+```shell
+brew install mkcert
+```
+
+For other operating systems, see [mkcert installation instructions](https://github.com/FiloSottile/mkcert?tab=readme-ov-file#installation).
+
+2. Generate certificates by running:
+
+```shell
+bin/generate_ssl_certificates
+```
+
+### Running Locally
+
+#### Start Docker services
+
+First, make sure the required Docker services are running:
+
+If you installed Docker Desktop (on a Mac or Windows machine), you can run:
+
+```shell
+make local
+```
+
+If you are on Linux, or installed Docker via a package manager on a mac, you may have to manually give docker superuser access to open ports 80 and 443. To do that, use `sudo make local` instead.
+
+This command will not terminate. You run this in one tab and start the application in another tab.
+If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
+
+#### Setup the database
+
+```shell
+bin/rails db:prepare
+```
+
+For Linux (Debian / Ubuntu) you might need the following:
+
+- `apt install libxslt-dev libxml2-dev`
+
+#### Start the application
+
+```shell
+bin/dev
+```
+
+This starts the rails server, the javascript build system, and a Sidekiq worker.
+
+If you know what foreman does and you don't want to use it you can inspect the contents of the `Procfile.dev` file and run the required components individually.
+
+You can now access the application @ https://gumroad.dev.
+
+## Development
+
+### Logging in
+
+You can log in with the username `seller@gumroad.com` and the password `password`. The two-factor authentication code is `000000`.
+
+Read more about logging in as a user with a different team role at [Users & authentication](docs/users.md).
+
+### Resetting Elasticsearch indices
+
+You will need to explicitly reindex Elasticsearch to populate the indices after setup, otherwise you will see `index_not_found_exception` errors when you visit the dev application. You can reset them using:
+
+```ruby
+# Run this in a rails console:
+DevTools.delete_all_indices_and_reindex_all
+```
+
+### Push Notifications
+
+To send push notifications:
+
+```shell
+INITIALIZE_RPUSH_APPS=true bundle exec rpush start -e development -f
+```
+
+### Common Development Tasks
+
+#### Rails console:
+
+```shell
+bin/rails c
+```
+
+#### Rake tasks:
+
+```shell
+bin/rake task_name
+```
+
+### Linting
+
+We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
+
+If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
+
+## Community
+
+- [Twitter](https://twitter.com/gumroad)
+- [Feature Requests](https://gumroad.canny.io/feature-requests)
+- [Bug Reports](https://github.com/gumroad/gumroad/issues)
