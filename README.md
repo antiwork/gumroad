@@ -215,7 +215,7 @@ This starts the rails server, the javascript build system, and a Sidekiq worker.
 
 If you know what foreman does and you don't want to use it you can inspect the contents of the `Procfile.dev` file and run the required components individually.
 
-You can now access the application @ https://gumroad.dev.
+You can now access the application at `https://gumroad.dev`.
 
 ## Development
 
