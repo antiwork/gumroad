@@ -997,7 +997,7 @@ class User < ApplicationRecord
 
     return nil unless has_paypal_account_connected?
 
-    paypal_connect_account.paypal_account_details["primary_email"]
+    paypal_connect_account.paypal_account_details&.dig("primary_email")
   end
 
   protected
