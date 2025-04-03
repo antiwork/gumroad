@@ -11,6 +11,7 @@ class ProductReview < ApplicationRecord
   belongs_to :link, optional: true
   belongs_to :purchase, optional: true
   has_one :response, class_name: "ProductReviewResponse"
+  has_many :videos, dependent: :destroy, class_name: "ProductReviewVideo"
 
   validates_presence_of :purchase
   validates_presence_of :link
