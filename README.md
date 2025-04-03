@@ -182,9 +182,7 @@ bin/generate_ssl_certificates
 
 #### Start Docker services
 
-First, make sure the required Docker services are running:
-
-If you installed Docker Desktop (on a Mac or Windows machine), you can run:
+If you installed Docker Desktop (on a Mac or Windows machine), you can run the following command to start the Docker services:
 
 ```shell
 make local
