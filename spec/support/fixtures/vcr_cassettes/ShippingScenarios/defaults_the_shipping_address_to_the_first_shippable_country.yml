@@ -1,0 +1,72 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"Rudolstaedter Strasse 52","city":"Wettringen","state":"Freistaat
+        Bayern","zip":"91631","country":"Germany"},"verify":["delivery"]}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/4.3.0 Ruby/3.0.3-p157
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - e641a25e629f68e3ed7db8380053a2f5
+      Cache-Control:
+      - no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_120c64e7e67311ecb5b0ac1f6bc72124"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"9e07a5a78003e3fbdf12e5424f93be84"
+      X-Runtime:
+      - '0.200179'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb1nuq
+      X-Version-Label:
+      - easypost-202206070235-9b10761c18-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb1nuq 0910011e7e
+      - intlb1nuq 570dfcbc0a
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        eyJpZCI6ImFkcl8xMjBjNjRlN2U2NzMxMWVjYjViMGFjMWY2YmM3MjEyNCIsIm9iamVjdCI6IkFkZHJlc3MiLCJjcmVhdGVkX2F0IjoiMjAyMi0wNi0wN1QxNTowNDowNCswMDowMCIsInVwZGF0ZWRfYXQiOiIyMDIyLTA2LTA3VDE1OjA0OjA0KzAwOjAwIiwibmFtZSI6bnVsbCwiY29tcGFueSI6bnVsbCwic3RyZWV0MSI6IlJ1ZG9sc3RhZWR0ZXIgU3RyYXNzZSA1MiIsInN0cmVldDIiOm51bGwsImNpdHkiOiJXZXR0cmluZ2VuIiwic3RhdGUiOiJGcmVpc3RhYXQgQmF5ZXJuIiwiemlwIjoiOTE2MzEiLCJjb3VudHJ5IjoiREUiLCJwaG9uZSI6bnVsbCwiZW1haWwiOm51bGwsIm1vZGUiOiJ0ZXN0IiwiY2Fycmllcl9mYWNpbGl0eSI6bnVsbCwicmVzaWRlbnRpYWwiOm51bGwsImZlZGVyYWxfdGF4X2lkIjpudWxsLCJzdGF0ZV90YXhfaWQiOm51bGwsInZlcmlmaWNhdGlvbnMiOnsiZGVsaXZlcnkiOnsic3VjY2VzcyI6ZmFsc2UsImVycm9ycyI6W3siY29kZSI6IkUuU1RSRUVULklOVkFMSUQiLCJmaWVsZCI6InN0cmVldDEiLCJtZXNzYWdlIjoiU3RyZWV0IGlzIGludmFsaWQiLCJzdWdnZXN0aW9uIjoiQWx0ZSBTdHJhw59lIn1dLCJkZXRhaWxzIjp7fX19fQ==
+  recorded_at: Tue, 07 Jun 2022 15:04:04 GMT
+recorded_with: VCR 6.1.0

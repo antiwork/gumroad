@@ -1,0 +1,51 @@
+<% charge_info = @receipt_presenter.charge_info %>
+<div>
+  <p style="display: inline-block;">
+    <%= charge_info.formatted_created_at %>
+  </p>
+</div>
+
+<div>
+  <h2>You've received a gift!</h2>
+
+  <p>Hi! <%= mail_to(@chargeable.gifter_email) %> bought this as a gift for you. We hope you like it!</p>
+
+  <% if @chargeable.gift_note.present? %>
+    <div>
+      <div class="promo" role="status">
+        <div>
+          <table class="reset">
+            <tr>
+              <td>
+                <%= image_tag("illustrations/gift.png", alt: "Gift") %>
+              </td>
+              <td>
+                <%= @chargeable.gift_note %>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <% @receipt_presenter.items_infos.each do |item_info| %>
+    <div class="item">
+      <%= render("customer_mailer/receipt/item", item_info: item_info) %>
+    </div>
+  <% end %>
+
+  <% if @receipt_presenter.giftee_manage_subscription.note.present? %>
+    <p>
+      <%= @receipt_presenter.giftee_manage_subscription.note %>
+    </p>
+  <% end %>
+
+  <% if charge_info.product_questions_note.present? %>
+    <div>
+      <%= charge_info.product_questions_note %>
+    </div>
+  <% end %>
+</div>
+
+<%= render("customer_mailer/receipt/sections/shipping", receipt_presenter: @receipt_presenter) %>

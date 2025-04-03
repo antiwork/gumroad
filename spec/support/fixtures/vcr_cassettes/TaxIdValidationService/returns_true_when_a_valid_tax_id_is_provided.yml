@@ -1,0 +1,49 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://v3.api.taxid.pro/validate?country=IS&tin=528491
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer <TAX_ID_PRO_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 18 Dec 2024 08:20:43 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 8f3dbc398a71529b-LAX
+      Cf-Cache-Status:
+      - DYNAMIC
+      Vary:
+      - Accept-Encoding
+      Rndr-Id:
+      - e382c91a-f88a-4b1d
+      X-Render-Origin-Server:
+      - uvicorn
+      Server:
+      - cloudflare
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: '{"country_name":null,"tin_compact":"528491","tin_standard":"528491","format_name":"Virdisaukaskattsnumer","is_valid":true,"message":null}'
+  recorded_at: Wed, 18 Dec 2024 08:20:43 GMT
+recorded_with: VCR 6.2.0

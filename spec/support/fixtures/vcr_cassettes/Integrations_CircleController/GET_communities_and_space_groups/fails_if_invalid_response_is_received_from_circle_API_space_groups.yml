@@ -1,0 +1,61 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://app.circle.so/api/v1/communities
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Token <CIRCLE_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Fri, 20 Aug 2021 14:03:44 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Accept-Encoding
+      Etag:
+      - W/"3c9f064a2f2417780b20c7fc34676473"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Set-Cookie:
+      - ahoy_visit=79c33494-ca39-484d-a00a-58b759e0bf39; domain=.circle.so; path=/;
+        expires=Fri, 20 Aug 2021 14:08:44 GMT; Secure; SameSite=None
+      - ahoy_visitor=c5d15230-b2ab-47a1-b416-d27e220979f0; domain=.circle.so; path=/;
+        expires=Sun, 20 Aug 2023 14:03:44 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - 9738f9c6b739e5826592d0f1af4ed599
+      X-Runtime:
+      - '0.047669'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 681c2aac5ee40e80-BOM
+    body:
+      encoding: ASCII-8BIT
+      string: '[{"id":3512,"name":"Gumroad","slug":"gumroad","icon_url":"https://d2y5h3osumboay.cloudfront.net/o4431o822um5prcmyefm7pc9fhht","logo_url":"https://d2y5h3osumboay.cloudfront.net/jwp8ec5m46vtdw05eki9fd38ga7zJ5Hj6yK1","owner_id":200455,"is_private":false,"space_ids":[24914,24916,24918,24919,25148,25159,27096,32841,42109,42111,42112,76381,77110,97329,97374,97376,97377,97378,98660,98664,105741,105742,116356,116357,132358,132553,132554,132556,132557,132559,132560,132561,132562,132563,132565,132566,132567,132568,132569,132571,132573,132574,132575,134985,139900,140195,142769,142937],"last_visited_by_current_user":true,"default_existing_member_space_id":0,"root_url":"community.gumroad.com","display_on_switcher":true,"prefs":{"has_posts":true,"has_spaces":true,"has_topics":true,"brand_color":"#00959A","has_seen_widget":true,"has_invited_member":true,"has_completed_onboarding":true}}]'
+  recorded_at: Fri, 20 Aug 2021 14:03:44 GMT
+recorded_with: VCR 6.0.0

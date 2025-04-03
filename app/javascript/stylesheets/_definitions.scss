@@ -1,0 +1,286 @@
+@use "sass:math";
+@use "sass:list";
+@import "colors";
+
+$unit: 1rem !default;
+$colors: (
+  "pink": #ff90e8,
+  "purple": #90a8ed,
+  "green": #23a094,
+  "orange": #ffc900,
+  "red": #dc341e,
+  "yellow": #f1f333,
+);
+
+$brands: (
+  facebook: (
+    color: #4267b2,
+  ),
+  twitter: (
+    color: #000000,
+  ),
+  paypal: (
+    color: #00457c,
+  ),
+  stripe: (
+    color: #625bf6,
+  ),
+  apple: (
+    color: #000000,
+  ),
+  android: (
+    color: #142f40,
+  ),
+  kindle: (
+    color: #f3a642,
+  ),
+  discord: (
+    color: #7289da,
+    text-color: #ffffff,
+  ),
+  zoom: (
+    color: #4087fc,
+    text-color: #ffffff,
+  ),
+  google: (
+    color: #5383ec,
+    text-color: #ffffff,
+  ),
+);
+
+$states: (success, danger, warning, info);
+$bg-colors: list.join($states, primary "black" accent filled);
+
+@function size($multiplier) {
+  @return $unit * $multiplier;
+}
+
+@function sizes($multipliers...) {
+  $sizes: ();
+  @each $multiplier in $multipliers {
+    $sizes: list.append($sizes, size($multiplier));
+  }
+  @return $sizes;
+}
+
+$spacers: sizes(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4);
+$font-sizes: sizes(0.875, 1, 1.25, 1.5, 2.5);
+$line-heights: (1.3, 1.4, 1.4, 1.3, 1.2);
+$breakpoints: (
+  sm: 640px,
+  lg: 1024px,
+);
+$grays: (0.1, 0.2, 0.5);
+$border-radii: sizes(0.25, 0.5, 10);
+$box-shadows: ((size(0.25) size(0.25) size(0)), (size(0.5) size(0.5) size(0)));
+$z-indices: (
+  base: 0,
+  overlay: 1,
+  above-overlay: 2,
+  header: 3,
+  menubar: 10,
+  modal: 20,
+  tooltip: 30,
+);
+
+@mixin breakpoint-up($name, $container: false) {
+  @media (min-width: map-get($breakpoints, $name)) {
+    @if $container {
+      // This roughly emulates container queries using .squished and should be replaced once they're properly supported.
+      &:not(.squished &) {
+        @content;
+      }
+    } @else {
+      @content;
+    }
+  }
+  @if $container {
+    $keys: map-keys($breakpoints);
+    $index: list.index($keys, $name);
+    @if $index < list.length($keys) {
+      @media (min-width: map-get($breakpoints, list.nth($keys, $index + 1))) {
+        @content;
+      }
+    }
+  }
+}
+
+@mixin font-size($index) {
+  font-size: nth($font-sizes, $index);
+  line-height: nth($line-heights, $index);
+}
+
+@mixin max-lines($lines) {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+}
+
+@mixin transition($properties...) {
+  transition-timing-function: ease-out;
+  transition-duration: var(--transition-duration);
+  transition-property: $properties;
+}
+
+// For setting our main colors as a background, the mixins below should be used to ensure proper contrast.
+//
+// Generally, the only other background colors that should be used are gray() values and --active-bg,
+// which are guaranteed to have the same contrast values as the context they're used in and therefore do not need a mixin.
+@mixin assert-bg-color($name) {
+  @if not list.index($bg-colors, $name) {
+    @error "#{$name} is not a valid background color name.";
+  }
+}
+
+* {
+  --parent-color: var(--color);
+}
+
+@mixin bg-color($name) {
+  @include assert-bg-color($name);
+  background-color: full-color($name);
+  --color: var(--contrast-#{$name});
+  --parent-color: inherit;
+  color: full-color(color);
+  --active-bg: #{gray(1)};
+}
+
+@mixin bg-bordered($name) {
+  @include assert-bg-color($name);
+  border-color: rgb(var(--#{$name}));
+  background-color: gray(2, $name);
+}
+
+@mixin text-muted {
+  color: gray(3);
+}
+
+@function spacer($index) {
+  @return nth($spacers, $index);
+}
+
+@function border-radius($index) {
+  @return nth($border-radii, $index);
+}
+
+@function z-index($name) {
+  @return map-get($z-indices, $name);
+}
+
+@function gray($index, $name: "color") {
+  @return rgb(var(--#{$name}) / nth($grays, $index));
+}
+
+@function full-color($name) {
+  @return rgb(var(--#{$name}));
+}
+
+@function box-shadow($index, $color: full-color(color)) {
+  @return nth($box-shadows, $index) $color;
+}
+
+@function dynamic-grid($breakpoint: $grid-wrap-breakpoint) {
+  @return min(100%, (#{$breakpoint} - 100%) * 1000);
+}
+
+@mixin text-singleline {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@mixin dummy {
+  background-color: gray(1);
+  animation: loading 1s infinite linear alternate;
+  border-radius: border-radius(1);
+}
+
+$light-body-bg: #f4f4f0 !default;
+@mixin globals {
+  @for $i from 1 through length($spacers) {
+    --spacer-#{$i}: #{nth($spacers, $i)};
+  }
+  @for $i from 1 through length($border-radii) {
+    --border-radius-#{$i}: #{nth($border-radii, $i)};
+  }
+  @for $i from 1 through length($box-shadows) {
+    --box-shadow-#{$i}: #{nth($box-shadows, $i)} var(--color);
+  }
+  @each $name, $z-index in $z-indices {
+    --z-index-#{$name}: #{$z-index};
+  }
+  @each $name, $color in $colors {
+    --#{$name}: #{$color};
+  }
+  @each $name, $breakpoint in $breakpoints {
+    --breakpoint-#{$name}: #{$breakpoint};
+  }
+
+  // We specify these colors as RGB values so we can apply alpha channels to them as needed
+  $base-colors: (
+    "success": split-color(map-get($colors, "green")),
+    "warning": split-color(map-get($colors, "orange")),
+    "danger": split-color(map-get($colors, "red")),
+    "info": split-color(map-get($colors, "purple")),
+    "accent": split-color(map-get($colors, "pink")),
+    "primary": 0 0 0,
+    "black": 0 0 0,
+    "filled": 255 255 255,
+  );
+  @each $name, $color in $base-colors {
+    --#{$name}: #{$color};
+    --contrast-#{$name}: #{split-color(fg-color(rgb($color)))};
+  }
+  --color: 0 0 0;
+  --body-bg: #{$light-body-bg};
+  --border-alpha: 1;
+  --font-family: #{$font-family};
+  --border-width: #{$border-width};
+  --big-icon-size: #{$big-icon-size};
+  --active-bg: #{full-color(filled)};
+  --main-stack-width: #{$main-stack-width};
+  //can't use $dynamic-grid here because postCSS dies; let's try it again for new versions
+  --dynamic-grid: min(100%, calc((#{$grid-wrap-breakpoint} - 100%) * 1000));
+  --disabled-opacity: #{$disabled-opacity};
+  --form-element-height: #{$form-element-height};
+  --transition-duration: 0.14s;
+
+  @media (prefers-color-scheme: dark) {
+    --body-bg: #242423;
+    --primary: 221 221 221;
+    --contrast-primary: 0 0 0;
+    --color: 221 221 221;
+    --filled: 0 0 0;
+    --contrast-filled: 221 221 221;
+    --contrast-black: 221 221 221;
+    --border-alpha: 0.35;
+  }
+}
+
+$border-width: math.div(size(1), 16);
+$border-color: rgb(var(--parent-color) / var(--border-alpha));
+$backdrop-bg: rgba(0, 0, 0, 0.5);
+$border: solid $border-width $border-color;
+$outline: size(0.125) solid full-color(accent);
+$font-family: "ABC Favorit", Avenir, Montserrat, Corbel, "URW Gothic", source-sans-pro, sans-serif;
+$form-element-padding-x: spacer(4);
+$form-element-padding-y: spacer(3);
+$form-element-font-size: 2;
+$form-element-border-radius: border-radius(1);
+$big-icon-size: 1.25em;
+$tooltip-arrow-size: spacer(2);
+$table-border-radius: border-radius(1);
+$table-image-thumb-height: size(5);
+$logo-aspect-ratio: 0.14;
+$body-max-width: size(71.25);
+$body-padding-desktop: spacer(8);
+$body-padding-mobile: spacer(4);
+$disabled-opacity: 0.3;
+$grid-wrap-breakpoint: size(31.25);
+$main-stack-width: size(28);
+$form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heights, $form-element-font-size) +
+  $form-element-padding-y * 2 + $border-width * 2;
+$body-padding-desktop-center: max((100% - #{$body-max-width}) / 2, #{$body-padding-desktop});
+$button-hover-transform-length: spacer(1);
+$header-padding-y: spacer(6);

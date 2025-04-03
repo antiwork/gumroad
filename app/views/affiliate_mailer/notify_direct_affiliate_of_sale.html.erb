@@ -1,0 +1,9 @@
+<%= header_section(@subject) %>
+<div>
+  <% if @purchase.is_free_trial_purchase? %>
+    <p><%= @seller_name %> just made a sale of <%= @product_name %> to <%= @customer_email %> thanks to you! The purchase price was <%= @purchase_price_formatted %>. If the subscriber continues with their subscription after their free trial has expired on <%= @free_trial_end_date %>, we will update your balance to reflect your <%= @affiliate_percentage_text %> commission net of fees (<%= @affiliate_amount_formatted %>). <%= @recurring_commission_text %></p>
+  <% else %>
+    <p><%= @seller_name %> just made a sale of <%= @product_name %> to <%= @customer_email %> thanks to you! The purchase price was <%= @purchase_price_formatted %>. We've updated your balance to reflect your <%= @affiliate_percentage_text %> commission net of fees (<%= @affiliate_amount_formatted %>). <%= @recurring_commission_text %></p>
+  <% end %>
+  <p>Thanks for being a part of the team.</p>
+</div>

@@ -1,0 +1,68 @@
+ARG WEB_BASE_DOCKERFILE_FROM
+FROM ${WEB_BASE_DOCKERFILE_FROM}
+
+# Customizations copied from:
+# https://github.com/circleci/circleci-images/blob/master/shared/images/Dockerfile-basic.template
+# https://github.com/circleci/circleci-images/blob/master/shared/images/Dockerfile-browsers.template
+
+# Workaround weird jdk bug
+# https://github.com/geerlingguy/ansible-role-java/issues/64
+RUN mkdir -p /usr/share/man/man1
+
+# chrome
+RUN sed -i "s/bullseye main/bullseye main contrib non-free/" /etc/apt/sources.list \
+  && apt-get update -y -qq \
+  && apt-get install -yq --no-install-recommends \
+    ca-certificates \
+    curl \
+    ffmpeg \
+    file \
+    fonts-takao \
+    gnupg \
+    imagemagick \
+    less \
+    libcurl4-openssl-dev \
+    libgcrypt20 \
+    liblzma-dev \
+    default-libmysqlclient-dev \
+    libssl-dev \
+    libtag1-dev \
+    libvips-dev \
+    libxrender1 \
+    locales \
+    netcat \
+    pdftk \
+    screen \
+    vim \
+    xauth \
+    zlib1g-dev \
+# node 20.x
+  && mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+  && apt-get update \
+  && apt-get install -y nodejs \
+  && corepack enable \
+# git
+  && apt-get install -y git \
+  && apt-get clean autoclean \
+  && apt-get autoremove -y \
+  && rm -rf \
+    /var/lib/apt/lists/ \
+    /tmp/* \
+    /var/tmp/*
+
+# Set timezone to UTC by default
+RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
+
+# Use unicode
+RUN locale-gen C.UTF-8 || true
+ARG LANG=C.UTF-8
+
+# Make app a sudoer
+RUN echo 'app ALL=NOPASSWD: ALL' >> /etc/sudoers.d/50-app
+
+# create scratch space for rspec test results
+RUN mkdir -p /tmp/test-results/ \
+  && chmod -R 2777 /tmp/test-results/
+

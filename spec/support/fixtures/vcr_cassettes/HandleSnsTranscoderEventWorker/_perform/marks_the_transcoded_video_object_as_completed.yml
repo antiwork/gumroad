@@ -1,0 +1,63 @@
+---
+http_interactions:
+  - request:
+      method: post
+      uri: https://lxlxpswfb.mediaconvert.us-east-1.amazonaws.com/2017-08-29/jobs
+      body:
+        encoding: UTF-8
+        string:
+          '{"accelerationSettings":{"mode":"DISABLED"},"clientRequestToken":"6ac9ee51-e7a4-4895-b755-8d50c8212ddc","queue":"arn:aws:mediaconvert:us-east-1:<AWS_ACCOUNT_ID>:queues/staging","role":"arn:aws:iam::<AWS_ACCOUNT_ID>:role/service-role/MediaConvert_Default_Role","settings":{"outputGroups":[{"name":"Apple
+          HLS","outputGroupSettings":{"type":"HLS_GROUP_SETTINGS","hlsGroupSettings":{"segmentLength":10,"minSegmentLength":0,"destination":"s3://gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/test/hls/index","destinationSettings":{"s3Settings":{"accessControl":{"cannedAcl":"PUBLIC_READ"}}}}},"outputs":[{"preset":"hls_480p","nameModifier":"_480p"}]}],"inputs":[{"audioSelectors":{"Audio
+          Selector 1":{"defaultSelection":"DEFAULT"}},"videoSelector":{"rotate":"AUTO"},"fileInput":"s3://gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/test.mp4"}]}}'
+      headers:
+        Accept-Encoding:
+          - ""
+        Amz-Sdk-Invocation-Id:
+          - 8b6ab3ba-e5e8-4d22-a608-96e1ba6f04cb
+        Content-Type:
+          - application/json
+        User-Agent:
+          - aws-sdk-ruby3/3.201.4 ua/2.1 api/mediaconvert#1.134.0 os/macos#23 md/arm64
+            lang/ruby#3.3.4 md/3.3.4 m/D
+        Host:
+          - lxlxpswfb.mediaconvert.us-east-1.amazonaws.com
+        X-Amz-Date:
+          - 20241205T202938Z
+        X-Amz-Content-Sha256:
+          - 05ee6527e4c91715b204392bd61da3a63df24ae216a0b477b07133d86fdd9edf
+        Authorization:
+          - AWS4-HMAC-SHA256 Credential=<AWS_ACCESS_KEY_ID>/20241205/us-east-1/mediaconvert/aws4_request,
+            SignedHeaders=amz-sdk-invocation-id;content-type;host;x-amz-content-sha256;x-amz-date,
+            Signature=9b84fd6a9f709d9f61830589b659b9497b5b951c604bdd5ec1a0b4bc1edb2041
+        Content-Length:
+          - "860"
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 201
+        message: Created
+      headers:
+        Date:
+          - Thu, 05 Dec 2024 20:29:39 GMT
+        Content-Type:
+          - application/json
+        Content-Length:
+          - "2879"
+        Connection:
+          - keep-alive
+        X-Amzn-Requestid:
+          - 4f49adce-ab74-45cd-898b-e150130e614c
+        X-Amz-Apigw-Id:
+          - CVb__HyQoAMEpjg=
+        X-Amzn-Trace-Id:
+          - Root=1-67520d32-0b4c8cdd63cf6d527c2ae9e4
+      body:
+        encoding: UTF-8
+        string:
+          '{"job":{"arn":"arn:aws:mediaconvert:us-east-1:<AWS_ACCOUNT_ID>:jobs/1733430578845-2l9swd","id":"1733430578845-2l9swd","createdAt":1733430578,"queue":"arn:aws:mediaconvert:us-east-1:<AWS_ACCOUNT_ID>:queues/staging","role":"arn:aws:iam::<AWS_ACCOUNT_ID>:role/service-role/MediaConvert_Default_Role","settings":{"outputGroups":[{"name":"Apple
+          HLS","outputs":[{"containerSettings":{"container":"M3U8","m3u8Settings":{"audioFramesPerPes":2,"pcrControl":"PCR_EVERY_PES_PACKET","pmtPid":480,"programNumber":1,"patInterval":100,"pmtInterval":100,"scte35Source":"NONE","timedMetadata":"NONE","videoPid":481,"audioPids":[482,483,484,485,486,487,488,489,490,491,492]}},"preset":"hls_480p","videoDescription":{"scalingBehavior":"DEFAULT","height":480,"timecodeInsertion":"DISABLED","antiAlias":"ENABLED","sharpness":100,"codecSettings":{"codec":"H_264","h264Settings":{"interlaceMode":"PROGRESSIVE","numberReferenceFrames":3,"syntax":"DEFAULT","softness":0,"framerateDenominator":1,"hrdBufferInitialFillPercentage":90,"slices":1,"gopBReference":"DISABLED","maxBitrate":700000,"spatialAdaptiveQuantization":"ENABLED","temporalAdaptiveQuantization":"ENABLED","flickerAdaptiveQuantization":"DISABLED","entropyEncoding":"CAVLC","framerateControl":"SPECIFIED","rateControlMode":"QVBR","codecProfile":"MAIN","framerateNumerator":30,"minIInterval":0,"adaptiveQuantization":"HIGH","codecLevel":"AUTO","sceneChangeDetect":"ENABLED","qualityTuningLevel":"SINGLE_PASS","unregisteredSeiTimecode":"DISABLED","gopSizeUnits":"AUTO","parControl":"INITIALIZE_FROM_SOURCE","numberBFramesBetweenReferenceFrames":0,"repeatPps":"DISABLED"}},"afdSignaling":"NONE","respondToAfd":"NONE","colorMetadata":"INSERT"},"audioDescriptions":[{"audioTypeControl":"FOLLOW_INPUT","audioSourceName":"Audio
+          Selector 1","codecSettings":{"codec":"AAC","aacSettings":{"audioDescriptionBroadcasterMix":"NORMAL","bitrate":128000,"rateControlMode":"CBR","codecProfile":"LC","codingMode":"CODING_MODE_2_0","rawFormat":"NONE","sampleRate":44100,"specification":"MPEG4"}},"languageCodeControl":"FOLLOW_INPUT"}],"nameModifier":"_480p"}],"outputGroupSettings":{"type":"HLS_GROUP_SETTINGS","hlsGroupSettings":{"segmentLength":10,"destination":"s3://gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/test/hls/index","destinationSettings":{"s3Settings":{"accessControl":{"cannedAcl":"PUBLIC_READ"}}},"minSegmentLength":0}}}],"inputs":[{"audioSelectors":{"Audio
+          Selector 1":{"defaultSelection":"DEFAULT"}},"videoSelector":{"rotate":"AUTO"},"fileInput":"s3://gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/test.mp4"}]},"status":"SUBMITTED","timing":{"submitTime":1733430578},"billingTagsSource":"JOB","accelerationSettings":{"mode":"DISABLED"},"statusUpdateInterval":"SECONDS_60","priority":0,"accelerationStatus":"NOT_APPLICABLE","messages":{"info":[],"warning":[]},"clientRequestToken":"6ac9ee51-e7a4-4895-b755-8d50c8212ddc"}}'
+    recorded_at: Thu, 05 Dec 2024 20:29:38 GMT
+recorded_with: VCR 6.2.0

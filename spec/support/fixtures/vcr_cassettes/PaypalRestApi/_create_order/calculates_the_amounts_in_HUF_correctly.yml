@@ -1,0 +1,58 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"reference_id":"RwtKZN3ru9U9In38aZSD2g==","amount":{"currency_code":"HUF","value":"3705","breakdown":{"shipping":{"currency_code":"HUF","value":"0"},"tax_total":{"currency_code":"HUF","value":"0"},"item_total":{"currency_code":"HUF","value":"3705"}}},"payee":{"merchant_id":"MN7CSWD6RCNJ8"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"HUF","value":"1235"},"quantity":3,"sku":"aa"}],"soft_descriptor":"Gumroad","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"HUF","value":"247"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAJ8ZuWAicvxc4m42ewOeup4rWt82bMaSINuAQdFgQTAdKeNmDa5at6XxUhbVnnLGbAYxMX_ZWIQZPcYZMDbmmscb60srw
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - create-order-RwtKZN3ru9U9In38aZSD2g==
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1197'
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 15 Jan 2021 14:12:50 GMT
+      Paypal-Debug-Id:
+      - 87b19f028b38
+    body:
+      encoding: UTF-8
+      string: '{"id":"2JF44553M4071524D","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"RwtKZN3ru9U9In38aZSD2g==","amount":{"currency_code":"HUF","value":"3705.00","breakdown":{"item_total":{"currency_code":"HUF","value":"3705.00"},"shipping":{"currency_code":"HUF","value":"0.00"},"tax_total":{"currency_code":"HUF","value":"0.00"}}},"payee":{"merchant_id":"MN7CSWD6RCNJ8"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"HUF","value":"247.00"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"soft_descriptor":"Gumroad","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"HUF","value":"1235.00"},"quantity":"3","sku":"aa"}]}],"create_time":"2021-01-15T14:12:49Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/2JF44553M4071524D","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=2JF44553M4071524D","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/2JF44553M4071524D","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/2JF44553M4071524D/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Fri, 15 Jan 2021 14:12:50 GMT
+recorded_with: VCR 6.0.0

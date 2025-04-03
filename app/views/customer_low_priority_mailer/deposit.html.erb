@@ -1,0 +1,60 @@
+<%= header_section("It's pay day!") %>
+<div>
+  <p>
+    <img src="<%= asset_path("email/gumroad_coins.png") %>" alt="Cha-ching!">
+  </p>
+
+  <h2 style="text-align: center;"><%= @payment_display_amount %> has been deposited in your account for sales up until <%= @paid_date %>.</h2>
+
+  <% if @revenue_by_link.present? || @credit_amount_cents != 0 || @paypal_payout_amount_cents != 0 || @affiliate_credit_cents != 0 || @stripe_connect_payout_amount_cents != 0 %>
+    <table>
+      <thead>
+        <tr>
+          <th>Products</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if @revenue_by_link.present? %>
+          <% @revenue_by_link.each do |link_id, revenue_cents| %>
+            <% link = Link.find(link_id.to_i) %>
+            <tr>
+              <td>
+                <a href="<%= link.long_url %>"><%= link.name %></a>
+              </td>
+              <td><%= Money.new(revenue_cents.to_i, 'USD').format(symbol: true, with_currency: @payment_currency != Currency::USD) %></td>
+            </tr>
+          <% end %>
+        <% end %>
+        <% if @affiliate_credit_cents != 0 %>
+          <tr>
+            <td>Affiliate or collaborator fees received</td>
+            <td><%= Money.new(@affiliate_credit_cents, 'USD').format(symbol: true, with_currency: @payment_currency != Currency::USD) %></td>
+          </tr>
+        <% end %>
+        <% if @credit_amount_cents != 0 %>
+          <tr>
+            <td>Gumroad credits</td>
+            <td><%= Money.new(@credit_amount_cents, 'USD').format(symbol: true, with_currency: @payment_currency != Currency::USD) %></td>
+          </tr>
+        <% end %>
+        <% if @paypal_payout_amount_cents != 0 %>
+          <tr>
+            <td>PayPal Payouts</td>
+            <td>- <%= Money.new(@paypal_payout_amount_cents, 'USD').format(symbol: true, with_currency: @payment_currency != Currency::USD) %></td>
+          </tr>
+        <% end %>
+        <% if @stripe_connect_payout_amount_cents != 0 %>
+          <tr>
+            <td>Stripe Connect Payouts</td>
+            <td>- <%= Money.new(@stripe_connect_payout_amount_cents, 'USD').format(symbol: true, with_currency: @payment_currency != Currency::USD) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+
+  <p>
+    <a class="button primary" href="<%= balance_url %>">View account balance</a>
+  </p>
+</div>

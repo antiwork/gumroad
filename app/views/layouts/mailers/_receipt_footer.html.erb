@@ -1,0 +1,27 @@
+<p>
+  <% if @chargeable.orderable.test? %>
+    <div>
+      <div class="warning" role="alert">
+        <div>
+          <table class="reset">
+            <tr>
+              <td>
+                <%= image_tag("email/solid-shield-exclamation.png", alt: "Warning") %>
+              </td>
+              <td style="text-align: left;">
+                This was a test purchase — you have not been charged (you are seeing this message because you are logged in as the creator).
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% end %>
+  <% footer_info = @receipt_presenter.footer_info %>
+  <% if footer_info.can_manage_subscription? %>
+    <%= footer_info.manage_subscription_note %>
+    <%= footer_info.manage_subscription_link %>
+  <% else %>
+    <%= footer_info.unsubscribe_link %>
+  <% end %>
+</p>

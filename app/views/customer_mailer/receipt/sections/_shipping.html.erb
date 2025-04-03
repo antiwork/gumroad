@@ -1,0 +1,6 @@
+<% if receipt_presenter.shipping_info.present? %>
+  <div>
+    <h3><%= receipt_presenter.shipping_info.title %></h3>
+    <%= render("customer_mailer/receipt/attributes", attributes: receipt_presenter.shipping_info.attributes) %>
+  </div>
+<% end %>

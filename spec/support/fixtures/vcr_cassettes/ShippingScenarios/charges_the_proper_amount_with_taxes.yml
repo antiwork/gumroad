@@ -1,0 +1,126 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: UTF-8
+      string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"AZ","to_zip":"85144","shipping":4.0,"line_items":[{"quantity":1,"unit_price":16.0,"discount":0,"product_tax_code":null}],"nexus_addresses":[{"country":"US","state":"AZ"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=utf-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1058'
+      Connection:
+      - close
+      Date:
+      - Fri, 17 Jan 2025 07:33:05 GMT
+      X-Amzn-Trace-Id:
+      - Root=1-678a07b1-76bc1fef3188323e6d567f5e
+      X-Amzn-Requestid:
+      - 3ccd7c84-9ed1-4117-b1a0-2dc86aa63114
+      Access-Control-Allow-Origin:
+      - https://developers.taxjar.com
+      X-Amz-Apigw-Id:
+      - EhYj1GyfoAMEBqA=
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 8a21725c0b41361135c86518ae9c3160.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - LAX54-P7
+      X-Amz-Cf-Id:
+      - 6si9yGSRsrz5FLF3TXuJS1we8fHDpx3HiFrGOnD7t4-EJ3SGThEnBw==
+    body:
+      encoding: UTF-8
+      string: '{"tax":{"order_total_amount":20.0,"shipping":4.0,"taxable_amount":16.0,"amount_to_collect":1.07,"rate":0.067,"has_nexus":true,"freight_taxable":false,"tax_source":"origin","jurisdictions":{"country":"US","state":"AZ","county":"PINAL"},"breakdown":{"taxable_amount":16.0,"tax_collectable":1.07,"combined_tax_rate":0.067,"state_taxable_amount":16.0,"state_tax_rate":0.056,"state_tax_collectable":0.9,"county_taxable_amount":16.0,"county_tax_rate":0.011,"county_tax_collectable":0.18,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_tax_collectable":0.0,"line_items":[{"id":"1","taxable_amount":16.0,"tax_collectable":1.07,"combined_tax_rate":0.067,"state_taxable_amount":16.0,"state_sales_tax_rate":0.056,"state_amount":0.9,"county_taxable_amount":16.0,"county_tax_rate":0.011,"county_amount":0.18,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_amount":0.0}]}}}'
+  recorded_at: Fri, 17 Jan 2025 07:33:05 GMT
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses
+    body:
+      encoding: UTF-8
+      string: '{"verify":["delivery"],"street1":"3029 W Sherman Rd","city":"San Tan
+        Valley","state":"AZ","zip":"85144","country":"US"}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/6.4.1 Ruby/3.3.4-p94 OS/Darwin OSVersion/22 OSArch/arm64
+      Host:
+      - api.easypost.com
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <EASYPOST_API_KEY>
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - 8a1b5b4a678a07dff4d9febf000f3718
+      Cache-Control:
+      - private, no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_6608073ed4a511ef8728ac1f6bc539ae"
+      Content-Type:
+      - application/json; charset=utf-8
+      X-Runtime:
+      - '0.048859'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb42nuq
+      X-Version-Label:
+      - easypost-202501170101-53487187f6-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb2nuq 99aac35317
+      - intlb3nuq 51d74985a2
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_6608073ed4a511ef8728ac1f6bc539ae","object":"Address","created_at":"2025-01-17T07:33:51+00:00","updated_at":"2025-01-17T07:33:51+00:00","name":null,"company":null,"street1":"3029
+        W SHERMAN RD","street2":"","city":"SAN TAN VALLEY","state":"AZ","zip":"85144-4289","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":true,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":null,"longitude":null,"time_zone":null}}}}'
+  recorded_at: Fri, 17 Jan 2025 07:33:51 GMT
+recorded_with: VCR 6.2.0

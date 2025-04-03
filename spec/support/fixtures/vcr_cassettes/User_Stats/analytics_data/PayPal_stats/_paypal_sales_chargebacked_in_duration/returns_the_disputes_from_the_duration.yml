@@ -1,0 +1,999 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic QWFEdkxJeUYwVFRlVUJqUEIwM3BBVkdjRFM1S0JNenFkcktyNU9VRXN2TWdBNnM5czNTNHdaY1U0cm1VUDI0WjczeEk2eHRlY2I2MjVibDY6RVBMQ2dJOE9CY2g2RzUyeHRTeHNBSVVDbGdobVJqZ3o2T2FvNndmT1RXMGtZN3F1UXFCa1ZsT3c0RFdqU2NlWnNQQ0x4OWczSEEyOFhUbzU=
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1667'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:22 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=N5_YYGPpmSbGrOlL1VFJkAar2lRDuS52E5Ga2HvMcD~6PPMUIjIemNsPw4Spn3_CgmHm0ipoV4WZ6nlYFYKP4z_W1DtFYIXBKQhheLZXVGBluJqPMG1FW98yuYuz39gx;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - dfa97c36c1276
+      Pragma:
+      - no-cache
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Token-Service:
+      - IAAS
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"scope":"https://uri.paypal.com/services/customer/partner-referrals/readwrite
+        https://uri.paypal.com/services/payments/partnerfee https://uri.paypal.com/services/invoicing
+        https://uri.paypal.com/services/payments/realtimepayment https://uri.paypal.com/services/customer/onboarding/user
+        https://api.paypal.com/v1/vault/credit-card https://api.paypal.com/v1/payments/.*
+        https://uri.paypal.com/services/payments/referenced-payouts-items/readwrite
+        https://uri.paypal.com/services/reporting/search/read https://uri.paypal.com/services/customer/partner
+        https://uri.paypal.com/services/customer/merchant-integrations/read https://uri.paypal.com/services/applications/webhooks
+        https://uri.paypal.com/services/disputes/update-seller https://uri.paypal.com/services/payments/payment/authcapture
+        openid https://uri.paypal.com/services/disputes/read-seller https://uri.paypal.com/services/payments/refund
+        https://uri.paypal.com/services/risk/raas/transaction-context https://uri.paypal.com/services/customer/consumer-referrals/create
+        https://uri.paypal.com/services/partners/merchant-accounts/readwrite https://uri.paypal.com/services/identity/grantdelegation
+        https://uri.paypal.com/services/customer/onboarding/account https://uri.paypal.com/payments/payouts
+        https://uri.paypal.com/services/customer/onboarding/sessions https://api.paypal.com/v1/vault/credit-card/.*
+        https://uri.paypal.com/services/subscriptions","access_token":"A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":32337,"nonce":"2023-10-30T13:04:19ZWEmxxeY5ZrhLJSXlld88ULDuBocag2tZGhlnp1t93I0"}'
+  recorded_at: Mon, 30 Oct 2023 13:05:22 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"12.0","breakdown":{"shipping":{"currency_code":"USD","value":"0.0"},"tax_total":{"currency_code":"USD","value":"2.0"},"item_total":{"currency_code":"USD","value":"10.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"10.0"},"quantity":1,"sku":"r"}],"soft_descriptor":"edgar3699e2c566","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"3.34"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"8WSrc31tg1txttOO4H1WlA=="}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '16986711223839722'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1219'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:24 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=Kf_2nrInqnmqrdBcpY9VInUDbqGo7f9cZh9DlVXv8BZIHQcUyztRh_OL_0QJXJ6CA8pU5lsZ5xp0F0DXwE6ZejVHeQNlq6deuEWDONZok2ASRz3gMVrlTOD~Mv2gYWyJ;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 983cd319459e9
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000983cd319459e9-d6676a17cac70bc5-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"16756932AY597254D","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"12.00","breakdown":{"item_total":{"currency_code":"USD","value":"10.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"2.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"3.34"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"8WSrc31tg1txttOO4H1WlA==","soft_descriptor":"edgar3699e2c566","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"10.00"},"quantity":"1","sku":"r"}]}],"create_time":"2023-10-30T13:05:23Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/16756932AY597254D","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=16756932AY597254D","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/16756932AY597254D","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/16756932AY597254D/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:24 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/16756932AY597254D/capture
+    body:
+      encoding: UTF-8
+      string: '{"payment_source":{"token":{"id":"B-8AM85704X2276171X","type":"BILLING_AGREEMENT"}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-16756932AY597254D
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3046'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:26 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=pl6tPleZNpttVGaCHGgC2~H2m7gcfbqkqS~ab9TC38B_p9vMXUksFu3xgGIbQyGiVADa195gD4idiVzxZhtQTx_2Ad_ZwKXRFoBZDGzIUyLaETw5whlJSIs6U1juY7bs;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 29a20f1b6e0e9
+      Server-Timing:
+      - traceparent;desc="00-000000000000000000029a20f1b6e0e9-bab22077956b83e3-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"16756932AY597254D","intent":"CAPTURE","status":"COMPLETED","payment_source":{"paypal":{"email_address":"paypal-gr-integspecs@gumroad.com","account_id":"92SVVJSWYT72E","account_status":"VERIFIED","name":{"given_name":"Gumbot","surname":"Gumstein"},"address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}}},"purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"12.00","breakdown":{"item_total":{"currency_code":"USD","value":"10.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"2.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"3.34"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"The
+        Works of Edgar Gumstein","invoice_id":"8WSrc31tg1txttOO4H1WlA==","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"10.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"r"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"}},"payments":{"captures":[{"id":"6LX87322GR907682T","status":"COMPLETED","amount":{"currency_code":"USD","value":"12.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"12.00"},"paypal_fee":{"currency_code":"USD","value":"0.77"},"platform_fees":[{"amount":{"currency_code":"USD","value":"3.34"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"7.89"},"receivable_amount":{"currency_code":"GBP","value":"5.94"},"exchange_rate":{"source_currency":"USD","target_currency":"GBP","value":"0.753164066"}},"invoice_id":"8WSrc31tg1txttOO4H1WlA==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/6LX87322GR907682T","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/6LX87322GR907682T/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/16756932AY597254D","rel":"up","method":"GET"}],"create_time":"2023-10-30T13:05:26Z","update_time":"2023-10-30T13:05:26Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"create_time":"2023-10-30T13:05:23Z","update_time":"2023-10-30T13:05:26Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/16756932AY597254D","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:27 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"150.0","breakdown":{"shipping":{"currency_code":"USD","value":"0.0"},"tax_total":{"currency_code":"USD","value":"0.0"},"item_total":{"currency_code":"USD","value":"150.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.0"},"quantity":1,"sku":"x"}],"soft_descriptor":"edgar3699e2c566","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"48.0"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"9CPJNRV0-iZYxhmNoYxVgQ=="}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '16986711274136598'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1223'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:29 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=FhPyUTsNnWh9ei4GpOg_PJLUq55xnyMFXBPZ087HwN6f9q9j6fNpu4Y35wD8tkXz4z29xjDbUzvm0NFB50uLpRSagQOGIavbMocJ34XbniP4qrsqcKFDHdBNoKS967zF;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - c70e97a975728
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000c70e97a975728-5576fd012bbee795-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"5TX76397FT0360015","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"150.00","breakdown":{"item_total":{"currency_code":"USD","value":"150.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"48.00"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"9CPJNRV0-iZYxhmNoYxVgQ==","soft_descriptor":"edgar3699e2c566","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.00"},"quantity":"1","sku":"x"}]}],"create_time":"2023-10-30T13:05:28Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5TX76397FT0360015","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=5TX76397FT0360015","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5TX76397FT0360015","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5TX76397FT0360015/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:29 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/5TX76397FT0360015/capture
+    body:
+      encoding: UTF-8
+      string: '{"payment_source":{"token":{"id":"B-8AM85704X2276171X","type":"BILLING_AGREEMENT"}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-5TX76397FT0360015
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3055'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:31 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=epdEDX~RelDdfVY7BcsRP0w573Y0o5sRV7epKcfznyu7FiM2nHT2vAayUMPCyeHHq1PTMgrroRUs1W6LRygPvv31TZQ4sJx2eK1vf8soVl1e33eIws7fmtNZ2LmCLo2L;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - f464932479e09
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000f464932479e09-53ee54e8c90cefe5-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"5TX76397FT0360015","intent":"CAPTURE","status":"COMPLETED","payment_source":{"paypal":{"email_address":"paypal-gr-integspecs@gumroad.com","account_id":"92SVVJSWYT72E","account_status":"VERIFIED","name":{"given_name":"Gumbot","surname":"Gumstein"},"address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}}},"purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"150.00","breakdown":{"item_total":{"currency_code":"USD","value":"150.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"48.00"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"The
+        Works of Edgar Gumstein","invoice_id":"9CPJNRV0-iZYxhmNoYxVgQ==","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"x"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"}},"payments":{"captures":[{"id":"1UT600789K341705C","status":"COMPLETED","amount":{"currency_code":"USD","value":"150.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"150.00"},"paypal_fee":{"currency_code":"USD","value":"6.15"},"platform_fees":[{"amount":{"currency_code":"USD","value":"48.00"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"95.85"},"receivable_amount":{"currency_code":"GBP","value":"72.19"},"exchange_rate":{"source_currency":"USD","target_currency":"GBP","value":"0.753164066"}},"invoice_id":"9CPJNRV0-iZYxhmNoYxVgQ==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/1UT600789K341705C","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/1UT600789K341705C/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5TX76397FT0360015","rel":"up","method":"GET"}],"create_time":"2023-10-30T13:05:31Z","update_time":"2023-10-30T13:05:31Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"create_time":"2023-10-30T13:05:28Z","update_time":"2023-10-30T13:05:31Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5TX76397FT0360015","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:32 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"10.0","breakdown":{"shipping":{"currency_code":"USD","value":"0.0"},"tax_total":{"currency_code":"USD","value":"0.0"},"item_total":{"currency_code":"USD","value":"10.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"10.0"},"quantity":1,"sku":"r"}],"soft_descriptor":"edgar3699e2c566","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"3.2"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"9BP_LOy3sbE7Br64GHSzgg=="}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '16986711324805892'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1219'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:34 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=IpbCD~Lhth9qWahka5nVyTth0rka0BxB35kE7WyAz8aQu1lg9zCILWUMnMGGokSW7G2UoabiQ9Qcglc0Ws27slGim9wpz59PoPqnR5l8apGkpxmXsniqAqHNIF7IdUD3;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 58bd0feab087d
+      Server-Timing:
+      - traceparent;desc="00-000000000000000000058bd0feab087d-14731b5585f894e7-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"60F06012HF312412M","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"10.00","breakdown":{"item_total":{"currency_code":"USD","value":"10.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"3.20"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"9BP_LOy3sbE7Br64GHSzgg==","soft_descriptor":"edgar3699e2c566","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"10.00"},"quantity":"1","sku":"r"}]}],"create_time":"2023-10-30T13:05:33Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/60F06012HF312412M","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=60F06012HF312412M","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/60F06012HF312412M","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/60F06012HF312412M/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:34 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/60F06012HF312412M/capture
+    body:
+      encoding: UTF-8
+      string: '{"payment_source":{"token":{"id":"B-8AM85704X2276171X","type":"BILLING_AGREEMENT"}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-60F06012HF312412M
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3046'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:37 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=QGH~cn1Ky_dS~riDTvNPNMMZ1OOEhj5__KnaN6zSjis87y81PYNKx4H8qiu30kbvqOkwjWYCzrCZ3eDj3kB6g7qrOTx5J1fT5GJnIZ1rGUv534cYxHOEu0srxZiTEzhE;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 9e5af2cc1eaff
+      Server-Timing:
+      - traceparent;desc="00-00000000000000000009e5af2cc1eaff-f0e36ee0972ede6f-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"60F06012HF312412M","intent":"CAPTURE","status":"COMPLETED","payment_source":{"paypal":{"email_address":"paypal-gr-integspecs@gumroad.com","account_id":"92SVVJSWYT72E","account_status":"VERIFIED","name":{"given_name":"Gumbot","surname":"Gumstein"},"address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}}},"purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"10.00","breakdown":{"item_total":{"currency_code":"USD","value":"10.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"3.20"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"The
+        Works of Edgar Gumstein","invoice_id":"9BP_LOy3sbE7Br64GHSzgg==","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"10.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"r"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"}},"payments":{"captures":[{"id":"6RU51452273121217","status":"COMPLETED","amount":{"currency_code":"USD","value":"10.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"10.00"},"paypal_fee":{"currency_code":"USD","value":"0.69"},"platform_fees":[{"amount":{"currency_code":"USD","value":"3.20"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"6.11"},"receivable_amount":{"currency_code":"GBP","value":"4.60"},"exchange_rate":{"source_currency":"USD","target_currency":"GBP","value":"0.753164066"}},"invoice_id":"9BP_LOy3sbE7Br64GHSzgg==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/6RU51452273121217","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/6RU51452273121217/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/60F06012HF312412M","rel":"up","method":"GET"}],"create_time":"2023-10-30T13:05:36Z","update_time":"2023-10-30T13:05:36Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"create_time":"2023-10-30T13:05:33Z","update_time":"2023-10-30T13:05:36Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/60F06012HF312412M","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:37 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"18.0","breakdown":{"shipping":{"currency_code":"USD","value":"0.0"},"tax_total":{"currency_code":"USD","value":"3.0"},"item_total":{"currency_code":"USD","value":"15.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"15.0"},"quantity":1,"sku":"rz"}],"soft_descriptor":"edgar3699e2c566","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"1.26"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"3_m0F5oequtAI4D6hq7KmA=="}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1698671137848534'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1220'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:39 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=pMe6RZtkE3yI7g2BK2yFbzKy3fIxTynz5xI0Ue~fpiYHAG47MTvJ2F1Oo2BJsCsLo14Jq_2ZH~XRosSU2RCuy8PZQ4fikh4T7ywikhrBSVzgICA04cplFhvoq6Tpk5iE;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 064514de2dd25
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000064514de2dd25-ce7e2506ef34d533-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"5CT15793HS1584645","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"18.00","breakdown":{"item_total":{"currency_code":"USD","value":"15.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"3.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"1.26"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"3_m0F5oequtAI4D6hq7KmA==","soft_descriptor":"edgar3699e2c566","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"15.00"},"quantity":"1","sku":"rz"}]}],"create_time":"2023-10-30T13:05:39Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5CT15793HS1584645","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=5CT15793HS1584645","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5CT15793HS1584645","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5CT15793HS1584645/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:39 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/5CT15793HS1584645/capture
+    body:
+      encoding: UTF-8
+      string: '{"payment_source":{"token":{"id":"B-8AM85704X2276171X","type":"BILLING_AGREEMENT"}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-5CT15793HS1584645
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3049'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:42 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=4D~miZ53iPvlB5A15HQ7l9l6ByoxF34V_hmdX_DDb1QufW~k8euUdTC_to8Ej57YFbpXd8P8sus_Zs8QWZqg6Eq2p510QI51xtC2TYJI8gx8yWonyCxjrC5ZZlclLDUp;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 1dc723c956af1
+      Server-Timing:
+      - traceparent;desc="00-00000000000000000001dc723c956af1-5c909163dff26e25-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"5CT15793HS1584645","intent":"CAPTURE","status":"COMPLETED","payment_source":{"paypal":{"email_address":"paypal-gr-integspecs@gumroad.com","account_id":"92SVVJSWYT72E","account_status":"VERIFIED","name":{"given_name":"Gumbot","surname":"Gumstein"},"address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}}},"purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"18.00","breakdown":{"item_total":{"currency_code":"USD","value":"15.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"3.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"1.26"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"The
+        Works of Edgar Gumstein","invoice_id":"3_m0F5oequtAI4D6hq7KmA==","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"15.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"rz"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"}},"payments":{"captures":[{"id":"26U97447816568501","status":"COMPLETED","amount":{"currency_code":"USD","value":"18.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"18.00"},"paypal_fee":{"currency_code":"USD","value":"1.00"},"platform_fees":[{"amount":{"currency_code":"USD","value":"1.26"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"15.74"},"receivable_amount":{"currency_code":"GBP","value":"11.85"},"exchange_rate":{"source_currency":"USD","target_currency":"GBP","value":"0.753164066"}},"invoice_id":"3_m0F5oequtAI4D6hq7KmA==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/26U97447816568501","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/26U97447816568501/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5CT15793HS1584645","rel":"up","method":"GET"}],"create_time":"2023-10-30T13:05:41Z","update_time":"2023-10-30T13:05:41Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"create_time":"2023-10-30T13:05:39Z","update_time":"2023-10-30T13:05:41Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5CT15793HS1584645","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:42 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"150.0","breakdown":{"shipping":{"currency_code":"USD","value":"0.0"},"tax_total":{"currency_code":"USD","value":"0.0"},"item_total":{"currency_code":"USD","value":"150.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.0"},"quantity":1,"sku":"x"}],"soft_descriptor":"edgar3699e2c566","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"48.0"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"7TD6eSbgqFoc-Gnii6NXAA=="}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '169867114255873'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1223'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:44 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=wNisr10k5Gwxh5w2yhp803EPZBNP8wQEQpduo93WZwLJo~wgZ3O5SGG3_6TowBZAgWVGS9ysKP1ETQRtX_5rj3RuOi0LD06_MmcwF6OxdsozfYE90fi15s6mcg7KfNb8;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 1825f3e314f48
+      Server-Timing:
+      - traceparent;desc="00-00000000000000000001825f3e314f48-09706cef151cc5db-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"28K22912W7190602J","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"150.00","breakdown":{"item_total":{"currency_code":"USD","value":"150.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"48.00"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"7TD6eSbgqFoc-Gnii6NXAA==","soft_descriptor":"edgar3699e2c566","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.00"},"quantity":"1","sku":"x"}]}],"create_time":"2023-10-30T13:05:43Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/28K22912W7190602J","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=28K22912W7190602J","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/28K22912W7190602J","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/28K22912W7190602J/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:44 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/28K22912W7190602J/capture
+    body:
+      encoding: UTF-8
+      string: '{"payment_source":{"token":{"id":"B-8AM85704X2276171X","type":"BILLING_AGREEMENT"}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-28K22912W7190602J
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3055'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:46 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=hWEfq0_DQ2NSRj_YvwQ4WRzhiqgogXlVad_3WhfHNZIE3IHCK9_WsDcwgqr0UEVLcSLItc3D22n_Ol5UuAGrmdmOyn93fZzSCro92Ki3ZtImVtoll4IpXJh~yGz05sHw;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - f693f44fc372f
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000f693f44fc372f-9c690afbc0a8e2e2-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"28K22912W7190602J","intent":"CAPTURE","status":"COMPLETED","payment_source":{"paypal":{"email_address":"paypal-gr-integspecs@gumroad.com","account_id":"92SVVJSWYT72E","account_status":"VERIFIED","name":{"given_name":"Gumbot","surname":"Gumstein"},"address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}}},"purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"150.00","breakdown":{"item_total":{"currency_code":"USD","value":"150.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"48.00"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"The
+        Works of Edgar Gumstein","invoice_id":"7TD6eSbgqFoc-Gnii6NXAA==","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"x"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"}},"payments":{"captures":[{"id":"592864438L636980J","status":"COMPLETED","amount":{"currency_code":"USD","value":"150.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"150.00"},"paypal_fee":{"currency_code":"USD","value":"6.15"},"platform_fees":[{"amount":{"currency_code":"USD","value":"48.00"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"95.85"},"receivable_amount":{"currency_code":"GBP","value":"72.19"},"exchange_rate":{"source_currency":"USD","target_currency":"GBP","value":"0.753164066"}},"invoice_id":"7TD6eSbgqFoc-Gnii6NXAA==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/592864438L636980J","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/592864438L636980J/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/28K22912W7190602J","rel":"up","method":"GET"}],"create_time":"2023-10-30T13:05:45Z","update_time":"2023-10-30T13:05:45Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"create_time":"2023-10-30T13:05:43Z","update_time":"2023-10-30T13:05:45Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/28K22912W7190602J","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:46 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"150.0","breakdown":{"shipping":{"currency_code":"USD","value":"0.0"},"tax_total":{"currency_code":"USD","value":"0.0"},"item_total":{"currency_code":"USD","value":"150.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.0"},"quantity":1,"sku":"x"}],"soft_descriptor":"edgar3699e2c566","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"10.5"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"ZwEZY4A-0pocpO013zEYvQ=="}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1698671147211862'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1223'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:49 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=P0OEi9hou1AfSDDmxcBgC3zs8WKfaN7Veodd2HtQyZmD5YrczXQg4Fc6p2tCz6DxKxO_pdGHYOZd~zMR3EusP3M_HZSXKXhMf3_CRZL941bK1w~j_9cS0uTP0FuPbYVI;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - aa36346741cae
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000aa36346741cae-ec1c132fb464e6f8-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"1GK66500KH028213A","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"150.00","breakdown":{"item_total":{"currency_code":"USD","value":"150.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"10.50"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"invoice_id":"ZwEZY4A-0pocpO013zEYvQ==","soft_descriptor":"edgar3699e2c566","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.00"},"quantity":"1","sku":"x"}]}],"create_time":"2023-10-30T13:05:48Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/1GK66500KH028213A","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=1GK66500KH028213A","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/1GK66500KH028213A","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/1GK66500KH028213A/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:49 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/1GK66500KH028213A/capture
+    body:
+      encoding: UTF-8
+      string: '{"payment_source":{"token":{"id":"B-8AM85704X2276171X","type":"BILLING_AGREEMENT"}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAICKBfOmZZJrNc3-JlT01yNhjTTnvjRccj0A6zDmJFsL0TBg12Qbirzv_xqIgkhj96YAt7p5VmF6lWlUKSHjI4AGSws5A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-1GK66500KH028213A
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3057'
+      Connection:
+      - keep-alive
+      Date:
+      - Mon, 30 Oct 2023 13:05:51 GMT
+      X-Datadome:
+      - protected
+      Accept-Ch:
+      - Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+      Set-Cookie:
+      - datadome=BlLfNeJcKVG17ZU_48maJ138CMSFsFQ8V8SBEDNUKsV9oGH4PTLdxXU4nWgyO0TB9CIHQ8bOy1pReOcrvmQJAQKLiA~zAZeZx2YE1Bs3z7nWOd8JOpi8TPGiqqVyYjFX;
+        Max-Age=31536000; Domain=.paypal.com; Path=/; Secure; SameSite=Lax; HttpOnly
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - edf5736e2b429
+      Server-Timing:
+      - traceparent;desc="00-0000000000000000000edf5736e2b429-71ff14ac70d74170-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"1GK66500KH028213A","intent":"CAPTURE","status":"COMPLETED","payment_source":{"paypal":{"email_address":"paypal-gr-integspecs@gumroad.com","account_id":"92SVVJSWYT72E","account_status":"VERIFIED","name":{"given_name":"Gumbot","surname":"Gumstein"},"address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}}},"purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"150.00","breakdown":{"item_total":{"currency_code":"USD","value":"150.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"10.50"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"The
+        Works of Edgar Gumstein","invoice_id":"ZwEZY4A-0pocpO013zEYvQ==","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"150.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"x"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"}},"payments":{"captures":[{"id":"40W69966V0178522Y","status":"COMPLETED","amount":{"currency_code":"USD","value":"150.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"150.00"},"paypal_fee":{"currency_code":"USD","value":"6.15"},"platform_fees":[{"amount":{"currency_code":"USD","value":"10.50"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"133.35"},"receivable_amount":{"currency_code":"GBP","value":"100.43"},"exchange_rate":{"source_currency":"USD","target_currency":"GBP","value":"0.753164066"}},"invoice_id":"ZwEZY4A-0pocpO013zEYvQ==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/40W69966V0178522Y","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/40W69966V0178522Y/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/1GK66500KH028213A","rel":"up","method":"GET"}],"create_time":"2023-10-30T13:05:50Z","update_time":"2023-10-30T13:05:50Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"address_line_1":"1
+        Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"create_time":"2023-10-30T13:05:48Z","update_time":"2023-10-30T13:05:50Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/1GK66500KH028213A","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 30 Oct 2023 13:05:51 GMT
+recorded_with: VCR 6.2.0

@@ -1,0 +1,102 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"messages":[{"role":"user","content":"Generate a username for a user
+        with the email address dtcoats@outlook.com. DO NOT use the email domain if
+        it''s a generic email provider. It should be one word and all lowercase with
+        no numbers. Avoid any generic sounding names like support, hi, hello, contact,
+        info, help."}],"model":"gpt-4o-mini","temperature":0.0,"max_tokens":10}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 22 Jul 2024 06:18:44 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '456'
+      Openai-Version:
+      - '2020-10-01'
+      Strict-Transport-Security:
+      - max-age=15552000; includeSubDomains; preload
+      X-Ratelimit-Limit-Requests:
+      - '10000'
+      X-Ratelimit-Limit-Tokens:
+      - '15000000'
+      X-Ratelimit-Remaining-Requests:
+      - '9999'
+      X-Ratelimit-Remaining-Tokens:
+      - '14999921'
+      X-Ratelimit-Reset-Requests:
+      - 6ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_5caa8baaa0fa9459c595b10b1d05c527
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=wrJ5Hl8auzAJgd.W3hE8_I.xO7Go4m_ZpbDiyCmx9b8-1721629124-1.0.1.1-WMbsghJCDImj48oL.7JARRiPFeLbIuY5FWjxiOMeMOFZ2uOe5Os1Z4YvlQnJuJt3LuiB8DHF29Bi_9Wr407FDw;
+        path=/; expires=Mon, 22-Jul-24 06:48:44 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=OxH46CKAPRt_YjaPYSNhGbktQesbvHLXAV2D04YtLMM-1721629124376-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8a7150a5bb9f4720-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-9ngfcc1FBpZRXJqZI8v3iuUMACQyI",
+          "object": "chat.completion",
+          "created": 1721629124,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "coatsy"
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 68,
+            "completion_tokens": 3,
+            "total_tokens": 71
+          },
+          "system_fingerprint": "fp_611b667b19"
+        }
+  recorded_at: Mon, 22 Jul 2024 06:18:44 GMT
+recorded_with: VCR 6.2.0

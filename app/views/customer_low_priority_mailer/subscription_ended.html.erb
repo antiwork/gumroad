@@ -1,0 +1,14 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("Your installment plan has been paid in full.") %>
+<% else %>
+  <%= header_section("Your subscription has ended.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>You have completed all your installment payments for <%= @subscription.link.name %>. You will no longer be charged.</p>
+    <p>The product will remain in your library.</p>
+  <% else %>
+    <p>Your subscription to <%= @subscription.link.name %> has ended. You will no longer be charged, nor will you receive new content.</p>
+  <% end %>
+  <p>If you have any questions, please contact the creator.</p>
+</div>

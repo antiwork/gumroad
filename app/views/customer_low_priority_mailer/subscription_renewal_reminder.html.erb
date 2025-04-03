@@ -1,0 +1,20 @@
+<% detail_style = "flex-grow:unset;flex:1;font-size:16px;" %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>This is a reminder that your next installment payment of <%= @price %> for <%= @subscription.link.name %> will be charged on <%= @date %>.</p>
+  <% else %>
+    <p>This is a reminder that your membership to "<%= @subscription.link.name %>" will automatically renew on <%= @date %>.</p>
+    <p>You're paying <%= @price %>.</p>
+  <% end %>
+</div>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <%= link_to "Manage installment plan", @edit_card_url, class: "button primary" %>
+  <% else %>
+    <%= link_to "Manage membership", @edit_card_url, class: "button primary" %>
+  <% end %>
+</div>
+<div>
+  <p>Questions about your product?</p>
+  <p>Contact <%= @subscription.link.user.display_name %> by replying to this email</p>
+</div>

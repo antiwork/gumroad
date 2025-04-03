@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema",
+  "type": "object",
+  "properties": {
+    "tabs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": ["name", "sections"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["tabs"],
+  "additionalProperties": false
+}

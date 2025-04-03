@@ -1,0 +1,10 @@
+<%= header_section("Your order has shipped!") %>
+<div>
+  <% if @tracking_url %>
+    <p>Your order of <%= @product.name %> is en route and should arrive soon.</p>
+    <p><%= link_to("Track your package", @tracking_url, class: "button primary") %></p>
+  <% else %>
+    <p>Your order of <%= @product.name %> has been shipped and should arrive soon.</p>
+  <% end %>
+  <p>If you have any questions about the status of the shipment, you can reach out by replying to this email.</p>
+</div>

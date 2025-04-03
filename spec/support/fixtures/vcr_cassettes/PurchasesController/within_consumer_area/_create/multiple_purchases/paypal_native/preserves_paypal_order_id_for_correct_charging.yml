@@ -1,0 +1,131 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic QWFEdkxJeUYwVFRlVUJqUEIwM3BBVkdjRFM1S0JNenFkcktyNU9VRXN2TWdBNnM5czNTNHdaY1U0cm1VUDI0WjczeEk2eHRlY2I2MjVibDY6RVBMQ2dJOE9CY2g2RzUyeHRTeHNBSVVDbGdobVJqZ3o2T2FvNndmT1RXMGtZN3F1UXFCa1ZsT3c0RFdqU2NlWnNQQ0x4OWczSEEyOFhUbzU=
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1667'
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 29 Dec 2023 12:42:50 GMT
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - f24c21d9027d4
+      Pragma:
+      - no-cache
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Token-Service:
+      - IAAS
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"scope":"https://uri.paypal.com/services/customer/partner-referrals/readwrite
+        https://uri.paypal.com/services/payments/partnerfee https://uri.paypal.com/services/invoicing
+        https://uri.paypal.com/services/payments/realtimepayment https://uri.paypal.com/services/customer/onboarding/user
+        https://api.paypal.com/v1/vault/credit-card https://api.paypal.com/v1/payments/.*
+        https://uri.paypal.com/services/payments/referenced-payouts-items/readwrite
+        https://uri.paypal.com/services/reporting/search/read https://uri.paypal.com/services/customer/partner
+        https://uri.paypal.com/services/customer/merchant-integrations/read https://uri.paypal.com/services/applications/webhooks
+        https://uri.paypal.com/services/disputes/update-seller https://uri.paypal.com/services/payments/payment/authcapture
+        openid https://uri.paypal.com/services/disputes/read-seller https://uri.paypal.com/services/payments/refund
+        https://uri.paypal.com/services/risk/raas/transaction-context https://uri.paypal.com/services/customer/consumer-referrals/create
+        https://uri.paypal.com/services/partners/merchant-accounts/readwrite https://uri.paypal.com/services/identity/grantdelegation
+        https://uri.paypal.com/services/customer/onboarding/account https://uri.paypal.com/payments/payouts
+        https://uri.paypal.com/services/customer/onboarding/sessions https://api.paypal.com/v1/vault/credit-card/.*
+        https://uri.paypal.com/services/subscriptions","access_token":"A21AALzAbSznqE3dMJ0BGKYXCN8VHpMT32BZ5y8erGMQZVhWj_645BIGklrIgHlKIIY2tPo1NroP8-5VmFeZDdR3tD29jiDiw","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":30831,"nonce":"2023-12-29T12:16:41ZHZOlshdaV264uBBBiNGPpGlPxW68BVt7KI3z0mX6Emg"}'
+  recorded_at: Fri, 29 Dec 2023 12:42:50 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/5N6097403T968205C/capture
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AALzAbSznqE3dMJ0BGKYXCN8VHpMT32BZ5y8erGMQZVhWj_645BIGklrIgHlKIIY2tPo1NroP8-5VmFeZDdR3tD29jiDiw
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-5N6097403T968205C
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.2.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.2.2p53-arm64-darwin20;OpenSSL
+        3.1.0 14 Mar 2023)
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '385'
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 29 Dec 2023 12:42:51 GMT
+      Access-Control-Expose-Headers:
+      - Server-Timing
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 1625337ddbbdb
+      Server-Timing:
+      - traceparent;desc="00-00000000000000000001625337ddbbdb-e39e3271a9ed79cf-01"
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"name":"RESOURCE_NOT_FOUND","details":[{"issue":"INVALID_RESOURCE_ID","description":"Specified
+        resource ID does not exist. Please check the resource ID and try again."}],"message":"The
+        specified resource does not exist.","debug_id":"1625337ddbbdb","links":[{"href":"https://developer.paypal.com/docs/api/orders/v2/#error-INVALID_RESOURCE_ID","rel":"information_link","method":"GET"}]}'
+  recorded_at: Fri, 29 Dec 2023 12:42:51 GMT
+recorded_with: VCR 6.2.0

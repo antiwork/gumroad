@@ -1,0 +1,101 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"messages":[{"role":"user","content":"Generate a username for a user
+        with the name Alexander Nathaniel Harrison. It should be one word and all
+        lowercase with no numbers. Avoid any generic sounding names like support,
+        hi, hello, contact, info, help."}],"model":"gpt-4o-mini","temperature":0.0,"max_tokens":10}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 22 Jul 2024 06:18:40 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '342'
+      Openai-Version:
+      - '2020-10-01'
+      Strict-Transport-Security:
+      - max-age=15552000; includeSubDomains; preload
+      X-Ratelimit-Limit-Requests:
+      - '10000'
+      X-Ratelimit-Limit-Tokens:
+      - '15000000'
+      X-Ratelimit-Remaining-Requests:
+      - '9999'
+      X-Ratelimit-Remaining-Tokens:
+      - '14999936'
+      X-Ratelimit-Reset-Requests:
+      - 6ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_533cdc8bce2c66a22a70cc01e7f4b60e
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=cKA_FYrA49Rb7eCVYnmnUoKiZjmyOzcBsgqBAco8CIQ-1721629120-1.0.1.1-qSfxvdGYOn0DFVQ4a3vAfgcpVVEjcWzl285eOUL7L9kNaSONrp677bToqyVVmxoQG4hH5llrrcd0zTCDg2THmw;
+        path=/; expires=Mon, 22-Jul-24 06:48:40 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=rTNW0sK0XrlmNFsZh2TeT5a1zkaZqCRfT6Y0WmkC6HM-1721629120480-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8a71508ecc60480e-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-9ngfY52UmiYccIQ4pwyH56ugNwSUg",
+          "object": "chat.completion",
+          "created": 1721629120,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "alxnatharrison"
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 51,
+            "completion_tokens": 4,
+            "total_tokens": 55
+          },
+          "system_fingerprint": "fp_661538dc1f"
+        }
+  recorded_at: Mon, 22 Jul 2024 06:18:40 GMT
+recorded_with: VCR 6.2.0

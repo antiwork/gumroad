@@ -1,0 +1,358 @@
+.rich-text {
+  &,
+  .ProseMirror {
+    > * {
+      margin-bottom: spacer(4);
+    }
+  }
+
+  h1 {
+    margin-bottom: spacer(5);
+  }
+
+  h2,
+  h3 {
+    margin-top: spacer(6);
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  ul:not(.inline),
+  ol {
+    margin-left: spacer(4);
+  }
+
+  li:not(:last-child) {
+    margin-bottom: spacer(4);
+  }
+
+  hr {
+    margin: spacer(6) 0;
+  }
+
+  p {
+    margin-bottom: spacer(4);
+  }
+
+  blockquote {
+    padding-left: spacer(6);
+  }
+
+  figure {
+    margin-bottom: spacer(5);
+
+    img {
+      width: 100%;
+      object-fit: contain;
+      border-radius: border-radius(1);
+    }
+
+    figcaption,
+    .figcaption {
+      padding-left: spacer(1);
+      margin: spacer(3) 0 0 0;
+    }
+  }
+
+  pre {
+    border: $border;
+    border-radius: border-radius(1);
+    margin-bottom: spacer(4);
+    padding: spacer(2) spacer(3);
+    white-space: pre-wrap;
+
+    .copy-wrapper {
+      float: right;
+      display: none;
+    }
+
+    &:hover {
+      .copy-wrapper {
+        display: initial;
+      }
+    }
+
+    .hljs {
+      &-comment,
+      &-quote {
+        @include text-muted;
+      }
+
+      &-variable,
+      &-template-variable,
+      &-attribute,
+      &-name,
+      &-regexp,
+      &-link,
+      &-name,
+      &-selector-id,
+      &-selector-class {
+        color: #99568b;
+      }
+
+      &-tag,
+      &-number,
+      &-meta,
+      &-built_in,
+      &-builtin-name,
+      &-literal,
+      &-type,
+      &-params {
+        color: #667399;
+      }
+
+      &-string,
+      &-symbol,
+      &-bullet {
+        color: #156059;
+      }
+
+      &-title,
+      &-section {
+        color: #78716c;
+      }
+
+      &-keyword,
+      &-selector-tag {
+        color: #91921f;
+      }
+
+      &-attr {
+        color: var(--color);
+      }
+
+      &-emphasis {
+        font-style: italic;
+      }
+
+      &-strong {
+        font-weight: 700;
+      }
+    }
+  }
+
+  .actions-menu {
+    position: absolute;
+    bottom: spacer(4);
+    left: 0;
+    @include font-size(2);
+    z-index: z-index(overlay);
+
+    @include breakpoint-up(lg) {
+      display: none;
+      bottom: unset;
+      top: spacer(5);
+      left: -(spacer(2));
+      translate: -100% 0;
+    }
+  }
+
+  :has(> .actions-menu) {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0 100% 0 #{-(spacer(7))};
+    }
+
+    &:hover:not(:has(.react-renderer:hover)) > .actions-menu,
+    &.selected > .actions-menu,
+    > .menu[open] {
+      display: unset;
+      grid-column: unset;
+    }
+
+    &.selected {
+      border-radius: border-radius(1);
+      outline: $outline;
+      // Fix outline clipping when items are next to each other in a list
+      position: relative;
+    }
+
+    [role="group"] {
+      padding-left: spacer(5);
+    }
+  }
+
+  .react-renderer[draggable] {
+    cursor: unset;
+  }
+
+  .embed {
+    @extend %row-item;
+
+    border: $border;
+    border-radius: border-radius(1);
+    @include bg-color(filled);
+
+    > .preview {
+      background-color: var(--body-bg);
+      border-radius: border-radius(1) border-radius(1) 0 0;
+      grid-template-columns: 1fr;
+      border-bottom: $border;
+      margin: -1 * spacer(4);
+      max-width: unset;
+      margin-bottom: spacer(2);
+      position: relative;
+      aspect-ratio: 16 / 9;
+
+      > :first-child {
+        top: 0;
+
+        &.placeholder {
+          height: calc(100% - 2 * spacer(4));
+          place-content: center;
+          margin: spacer(4);
+        }
+      }
+    }
+
+    .content h4 {
+      font-weight: bold;
+      @include max-lines(1);
+      word-break: keep-all;
+    }
+
+    .content > .thumbnail {
+      position: relative;
+      width: size(4);
+      height: size(3);
+      margin-right: spacer(2);
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: border-radius(1);
+      }
+
+      .placeholder {
+        position: absolute;
+        inset: 0;
+        padding: 0;
+        background: $backdrop-bg;
+      }
+
+      &:hover .placeholder {
+        border-color: full-color(accent);
+        color: full-color(accent);
+      }
+
+      &:not(:hover) img + .placeholder {
+        opacity: 0;
+      }
+    }
+  }
+}
+
+.rich-text-editor-toolbar[role="toolbar"] {
+  position: sticky;
+  top: 0;
+  @include bg-color(primary);
+  display: flex;
+  gap: spacer(1);
+  flex-wrap: wrap;
+  padding-block: spacer(1);
+  z-index: z-index(overlay);
+
+  .toolbar-item {
+    padding: spacer(1) spacer(2);
+    border-radius: border-radius(1);
+
+    &:hover {
+      background-color: gray(1);
+    }
+
+    &[aria-pressed="true"],
+    .active {
+      color: full-color(accent);
+    }
+  }
+
+  [role="separator"] {
+    display: none;
+    border-right: solid $border-width gray(3);
+    margin: spacer(2);
+
+    &::before {
+      content: none;
+    }
+
+    @include breakpoint-up(sm) {
+      display: flex;
+    }
+  }
+
+  [role="menuitemradio"] {
+    &[aria-checked="true"] {
+      background-color: var(--active-bg);
+    }
+  }
+}
+
+:where(.rich-text-editor-toolbar) {
+  padding-inline: spacer(2);
+}
+
+.ProseMirror[contenteditable="true"] {
+  white-space: break-spaces;
+
+  &:focus-within {
+    outline: none;
+  }
+
+  figure {
+    & > img {
+      cursor: pointer;
+    }
+
+    // Chrome-specific workaround to prevent highlighting the br
+    br::selection {
+      background: none;
+    }
+
+    img::selection {
+      background: gray(3);
+    }
+
+    &[data-has-focus] img {
+      outline: $outline;
+    }
+  }
+}
+
+.rich-text-editor {
+  display: grid;
+  grid-template-rows: max-content 1fr;
+  min-height: size(14);
+  border-radius: border-radius(1);
+
+  .rich-text-editor-toolbar[role="toolbar"] {
+    border: $border;
+    border-bottom: none;
+    border-radius: border-radius(1) border-radius(1) 0 0;
+  }
+
+  .textarea {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    min-height: 100%;
+
+    &:focus-within {
+      outline: $outline;
+    }
+  }
+}
+
+// Placeholder plugin
+.ProseMirror p.is-editor-empty:first-child::before,
+.ProseMirror .node-image.is-empty .figcaption::before {
+  content: attr(data-placeholder);
+  pointer-events: none;
+  float: left;
+  height: 0;
+  @include text-muted;
+}

@@ -1,0 +1,9 @@
+<%= header_section(@title) %>
+<div>
+  <p>Hi<%= @purchaser_name.present? ? " #{@purchaser_name}" : "" %>,</p>
+  <p>Hope you're getting great value from <%= @product_name %>. We'd love to hear your thoughts on it. When you have a moment, could you drop us a quick review?</p>
+  <p>Thank you for your contribution!</p>
+  <a href="<%= @review_url %>" class="button primary">
+    Leave a review
+  </a>
+</div>

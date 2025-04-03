@@ -1,0 +1,4 @@
+#!/usr/bin/with-contenv bash
+
+gosu app \
+  /bin/bash -c "cd /app && bundle exec rpush start -e $RAILS_ENV -f"

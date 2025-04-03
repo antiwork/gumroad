@@ -1,0 +1,201 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+ruby file: ".ruby-version"
+
+gem "rails", "7.1.3.4"
+gem "rake", "13.2.1"
+
+group :development do
+  gem "derailed_benchmarks", "~> 2.1"
+  gem "rack-mini-profiler", "~> 3.0", require: false
+  gem "stackprof", "~> 0.2"
+end
+
+group :development, :test do
+  gem "bundler"
+  gem "dotenv-rails", "~> 2.8"
+  gem "knapsack_pro", "~> 7.0"
+  gem "pry-byebug", "~> 3.10"
+  gem "pry-rails", "~> 0.3", require: "pry-rails/console"
+  gem "rubocop", "~> 1.65.0", require: false
+  gem "rubocop-rspec", "~> 3.0.0", require: false
+  gem "rubocop-performance", "~> 1.21.0", require: false
+  gem "rubocop-rake", "~> 0.6.0", require: false
+  gem "rubocop-rails", "~> 2.26.0", require: false
+  gem "active_record_query_trace", "~> 1.8"
+  gem "shoulda-matchers", "~> 6.0"
+  gem "spring", "~> 4.0"
+  gem "spring-commands-rspec", "~> 1.0"
+end
+
+group :test do
+  gem "capybara", "~> 3.38"
+  gem "database_cleaner-active_record", "~> 2.0"
+  gem "database_cleaner-mongoid", "~> 2.0"
+  gem "factory_bot_rails", "~> 6.4"
+  gem "faker", "~> 3.1"
+  gem "rspec", "~> 3.12"
+  gem "rspec-github", "~> 2.4.0", require: false
+  gem "rspec-rails", "~> 6.0"
+  gem "rspec-retry", "~> 0.6"
+  gem "rspec_junit_formatter", "~> 0.6"
+  gem "rspec-sidekiq", "~> 5.0"
+  gem "rails-controller-testing", "~> 1.0"
+  gem "vcr", "~> 6.1"
+  gem "webmock", "~> 3.18", require: "webmock/rspec"
+  gem "json_matchers", "~> 0.11", require: "json_matchers/rspec"
+  gem "capybara_accessible_selectors", github: "citizensadvice/capybara_accessible_selectors",
+                                       ref: "161b8c5b1a0a5408af914d7544956372e9da2c9e"
+  gem "puffing-billy", "~> 4.0.0", require: "billy/capybara/rspec"
+  gem "super_diff", "~> 0.12.0", require: false
+end
+
+group :deployer do
+  gem "byebug", "~> 11.1"
+  gem "colorize", "~> 1.0"
+  gem "dotenv", "~> 2.8"
+end
+
+gem "acme-client", "~> 2.0"
+gem "actionpack-action_caching", "~> 1.2"
+gem "actionpack-cloudflare", "~> 1.1", group: %i[staging production] # Verify that this works after upgrading the Rails gem version
+gem "activerecord-mysql-index-hint", "~> 0.0"
+gem "active_model_otp", "~> 2.3"
+gem "after_commit_everywhere", "~> 1.3"
+gem "alterity", "~> 1.4"
+gem "ancestry", "~> 4.2"
+gem "apple_id", "~> 1.5"
+# AWS SDK Gems
+gem "aws-sdk-s3", "~> 1.117"
+gem "aws-sdk-sqs", "~> 1.69"
+gem "aws-sdk-elastictranscoder", "~> 1.39"
+gem "aws-sdk-autoscaling", "~> 1.84"
+gem "aws-sdk-mediaconvert", "~> 1.96"
+gem "aws-sdk-sns", "~> 1.57"
+# End AWS SDK Gems
+gem "babel-transpiler", "~> 0.7"
+gem "bootsnap", "~> 1.15", require: false
+gem "braintree", "~> 4.9"
+gem "bugsnag", "~> 6.25"
+gem "builder", "~> 3.2"
+gem "closure_tree", "~> 7.4"
+gem "color", "~> 1.8"
+gem "countries", "~> 6.0"
+gem "csv", "~> 3.3"
+gem "devise", "~> 4.8"
+gem "devise-pwned_password", "~> 0.1"
+gem "discordrb", "~> 3.4"
+gem "doorkeeper", "5.7.1"
+gem "easypost", "~> 6.0"
+gem "elasticsearch", "7.11.2"
+gem "elasticsearch-api", "7.11.2"
+gem "elasticsearch-dsl", "0.1.10"
+gem "elasticsearch-model", "7.1.1"
+gem "elasticsearch-rails", "7.1.1"
+gem "elasticsearch-transport", "7.11.2"
+gem "epub-parser", "~> 0.4"
+gem "flag_shih_tzu", "~> 0.3"
+gem "flipper", "~> 1.3.0"
+gem "flipper-redis", "~> 1.3.0"
+gem "flipper-ui", "~> 1.3.0"
+gem "friendly_id", "~> 5.5"
+gem "googleauth", "~> 1.7"
+gem "google-apis-androidpublisher_v3", "~> 0.64"
+gem "htmlentities", "~> 4.3"
+gem "http_accept_language", "~> 2.1"
+gem "httparty", "~> 0.21"
+gem "ibandit", "~> 1.12"
+gem "image_sorcery", "~> 1.1"
+gem "image_processing", "~> 1.12"
+gem "mini_magick", "~> 4.12"
+gem "jbuilder", "~> 2.11"
+gem "js-routes", "~> 2.2"
+gem "json", "~> 2.6"
+gem "json-schema", "~> 5.0"
+gem "kaminari", "~> 1.2"
+gem "koala", "~> 3.3"
+gem "lograge", "~> 0.12"
+gem "makara", "0.6.0.pre"
+gem "maxmind-geoip2", "~> 1.1"
+gem "mime-types", "~> 3.4"
+gem "mini_racer", "0.16.0"
+gem "money", "~> 6.16"
+gem "mongoid", "~> 9.0"
+gem "mysql2", ">= 0.5.6"
+gem "nokogiri", "~> 1.13"
+gem "omniauth-facebook", "~> 10.0"
+gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"
+gem "omniauth-rails_csrf_protection", "~> 1.0"
+# Update to a normal release once https://github.com/isaacsanders/omniauth-stripe-connect/issues/67 is fixed
+gem "omniauth-stripe-connect", github: "isaacsanders/omniauth-stripe-connect", ref: "468dd9acaccdbba38a38cdbcdf7f10c17be25e89"
+gem "omniauth-twitter", "~> 1.4"
+gem "paper_trail", "~> 15.0"
+gem "paypal-sdk-merchant", "~> 1.117"
+gem "paypal-checkout-sdk", "~> 1.0"
+gem "pdf-reader", "~> 2.11"
+gem "pdfkit", "~> 0.8"
+gem "pagy", "~> 9.0.0"
+gem "phony", "~> 2.20"
+gem "prawn", "~> 2.4"
+gem "premailer-rails", "~> 1.12"
+gem "private_address_check", "~> 0.5"
+gem "puma", "6.4.2"
+gem "pundit", "~> 2.3"
+gem "public_suffix", "~> 5.0"
+gem "rack-attack", "~> 6.6"
+gem "rack-cors", "~> 2.0"
+gem "rack-ssl", "~> 1.4"
+gem "rack-timeout", "~> 0.6", require: "rack/timeout/base"
+gem "rack-utf8_sanitizer", "~> 1.8"
+gem "ratelimit", "~> 1.0"
+gem "redcarpet", "~> 3.5"
+gem "redis", "~> 5.0"
+gem "redis-namespace", "~> 1.10"
+gem "resend", "~> 0.16"
+gem "rinku", "~> 2.0", require: "rails_rinku"
+# TODO(ershad): Update to a normal release once https://github.com/rpush/rpush/pull/675 is released (support for Rails 7.1)
+gem "rpush", github: "rpush/rpush", ref: "12d92519cb090f3b37d654ea206a3f107eab319d"
+gem "rpush-redis", "~> 1.2"
+gem "ruby-limiter", "~> 2.2"
+gem "ruby-oembed", "~> 0.16", require: "oembed"
+gem "rubyzip", "~> 2.3"
+gem "sass-rails", "~> 6.0"
+gem "secure_headers", "~> 6.5"
+gem "selenium-webdriver", "~> 4.7"
+gem "sendgrid-ruby", "~> 6.6"
+gem "shakapacker", "~> 8.0"
+gem "sidekiq-cron", "~> 1.9"
+gem "suo", "~> 0.4"
+
+if ENV["GUMROAD_SIDEKIQ_PRO_DISABLED"] == "true"
+  gem "sidekiq", "~> 7.2"
+else
+  source "https://gems.contribsys.com/" do
+    gem "sidekiq-pro", "~> 7.2"
+  end
+end
+
+gem "sidekiq-unique-jobs", "~> 8.0"
+gem "sitemap_generator", "~> 6.3"
+gem "slack-notifier", "~> 2.4"
+gem "sprockets-rails", "~> 3.4", require: "sprockets/railtie"
+gem "ssrf_filter", "~> 1.2.0"
+gem "state_machines-activerecord", "~> 0.8"
+gem "streamio-ffmpeg", "~> 3.0"
+gem "stripe", "~> 12.0"
+gem "strongbox", "~> 0.7"
+gem "subexec", "~> 0.2"
+gem "taxjar-ruby", "~> 3.0", require: "taxjar"
+gem "terser", "~> 1.1"
+gem "twitter", "~> 8.0"
+gem "valvat", "~> 1.2"
+gem "warden", "~> 1.2"
+gem "webdrivers", "~> 5.2"
+gem "zip-zip", "~> 0.3"
+gem "rouge", "~> 4.0"
+gem "ruby-openai", "~> 7.0"
+gem "anycable-rails", "~> 1.5"
+
+gem "react_on_rails", "~> 14.0"

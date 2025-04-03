@@ -1,0 +1,39 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://production-mediaconverter.gumroad.net/convert
+    body:
+      encoding: UTF-8
+      string: '{"id":"14","s3_video_uri":"s3://gumroad-specs/specs/ScreenRecording.mov","s3_hls_dir_uri":"s3://gumroad-specs/specs/ScreenRecording/hls/","presets":["hls_480p","hls_1080p"],"callback_url":"http://api.test.gumroad.com:31337/internal/grmc/webhook"}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - production-mediaconverter.gumroad.net
+      Authorization:
+      - Basic MGZiMDI0NjFlYjI4MDQzNTU0M2ZjNmI0NzU0YTU5N2Y6
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Length:
+      - '24'
+      Content-Type:
+      - application/json
+      Date:
+      - Sun, 30 Mar 2025 23:55:36 GMT
+    body:
+      encoding: UTF-8
+      string: '{"job_id":"2dd4e29998"}
+
+        '
+  recorded_at: Sun, 30 Mar 2025 23:55:36 GMT
+recorded_with: VCR 6.2.0

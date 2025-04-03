@@ -1,0 +1,56 @@
+steps:
+  - label: ":docker: Build Base Image"
+    key: build-base-image
+    branches: "main deploy-* comp-assets-*"
+    command: ".buildkite/scripts/build_base.sh"
+    timeout_in_minutes: 60
+    plugins:
+      - docker-login#v3.0.0:
+          username: gumroadteam
+          password-env: DOCKERHUB_PASSWORD
+
+  - label: ":docker: Build Web Image"
+    key: build-web-image
+    command: ".buildkite/scripts/build_web.sh"
+    depends_on: build-base-image
+    branches: "main deploy-* comp-assets-*"
+    timeout_in_minutes: 25
+    plugins:
+      - docker-login#v3.0.0:
+          username: gumroadteam
+          password-env: DOCKERHUB_PASSWORD
+
+  - label: ":gear: Compile Assets"
+    key: compile-assets
+    depends_on: build-web-image
+    branches: "main deploy-* comp-assets-*"
+    command: ".buildkite/scripts/compile_assets.sh"
+    artifact_paths: "log/**/*"
+    parallelism: 2
+    timeout_in_minutes: 25
+    plugins:
+      - docker-login#v3.0.0:
+          username: "gumroadteam"
+          password-env: DOCKERHUB_PASSWORD
+
+  - label: ":rocket: Deploy Branch App"
+    key: build-and-deploy-branch
+    depends_on: compile-assets
+    branches: "deploy-*"
+    command: ".buildkite/scripts/deploy_branch.sh"
+    timeout_in_minutes: 45
+    plugins:
+      - docker-login#v3.0.0:
+          username: "gumroadteam"
+          password-env: DOCKERHUB_PASSWORD
+
+  - label: ":rocket: Deploy to Production"
+    key: production-deployment
+    depends_on: compile-assets
+    branches: "main"
+    command: ".buildkite/scripts/deploy_production.sh"
+    timeout_in_minutes: 120
+    plugins:
+      - docker-login#v3.0.0:
+          username: "gumroadteam"
+          password-env: DOCKERHUB_PASSWORD

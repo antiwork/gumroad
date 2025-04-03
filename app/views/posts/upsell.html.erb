@@ -1,0 +1,22 @@
+<div class="item">
+  <div class="product-checkout-cell">
+    <div class="figure">
+      <% if @product.for_email_thumbnail_url.present? %>
+        <%= image_tag(@product.for_email_thumbnail_url, alt: @product.name) %>
+      <% end %>
+    </div>
+    <div class="section">
+      <div class="content">
+        <div class="section">
+          <h4><%= link_to @product.name, @upsell_url %></h4>
+        </div>
+        <div class="section">
+          <% if @offer_code %>
+            <s style="display: inline;"><%= MoneyFormatter.format(@product.price_cents, @product.price_currency_type, no_cents_if_whole: true, symbol: true) %></s>
+          <% end %>
+          <%= MoneyFormatter.format(@offer_code ? @product.price_cents - @offer_code.amount_off(@product.price_cents) : @product.price_cents, @product.price_currency_type, no_cents_if_whole: true, symbol: true) %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

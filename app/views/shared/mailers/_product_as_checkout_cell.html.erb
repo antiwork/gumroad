@@ -1,0 +1,22 @@
+<div class="product-checkout-cell">
+  <% product_name = product[:name] %>
+  <% product_thumbnail_url = product[:thumbnail_url] %>
+  <% product_url = product[:url] %>
+  <div class="figure">
+    <% if product_thumbnail_url.present? %>
+      <%= link_to(image_tag(product_thumbnail_url, alt: product_name), product_url, target: "_blank") %>
+    <% end %>
+  </div>
+  <div class="section">
+    <div class="content">
+      <div class="section" title="<%= product_name %>">
+        <h4>
+          <%= link_to(product_name, product_url, target: "_blank") %>
+        </h4>
+      </div>
+      <div class="section">
+        <%= yield %>
+      </div>
+    </div>
+  </div>
+</div>

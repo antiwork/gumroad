@@ -1,0 +1,12 @@
+<%= header_section "Two-Factor Authentication" %>
+<div>
+  We have detected a new login to your Gumroad account. Please enter this authentication token in the challenge page to continue:
+  <p>
+    <strong>
+      <%= simple_format @authentication_token %>
+    </strong>
+  </p>
+  You can also click the following button to continue with your login.
+  <%= link_to "Login", verify_two_factor_authentication_url(token: @authentication_token, user_id: @user.encrypted_external_id, format: :html), class: "button primary" %>
+  This authentication token and login link will expire in <%= distance_of_time_in_words(TwoFactorAuthentication::TOKEN_VALIDITY) %>.
+</div>

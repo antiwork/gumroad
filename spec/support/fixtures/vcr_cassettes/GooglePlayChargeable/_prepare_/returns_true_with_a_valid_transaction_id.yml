@@ -1,0 +1,114 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://www.googleapis.com/oauth2/v4/token
+    body:
+      encoding: ASCII-8BIT
+      string: grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJwbGF5LWJpbGxpbmctYXBpQGd1bXJvYWQtbGlicmFyeS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsImF1ZCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92NC90b2tlbiIsImV4cCI6MTcyMDEzNzI0MiwiaWF0IjoxNzIwMTM3MTIyLCJzY29wZSI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL2F1dGgvYW5kcm9pZHB1Ymxpc2hlciJ9.g7s2a9Kd3BGirjjr7tjTtonPj2WuDwcFpdPOvDgnUESxS8gu2bISMqN3wDa0BWJg-07R5h8Z7AsFGnzvVskbH-xSPeEvGvcKN7kKN9DeSsiy1F0WSU5aqZlyPOO-45kuuXJteQ2EHInaa5XNPzAxMN7kA0XsYqf6WOz5_m2oLzEqzjJBxVL66QZiuvbLID8fM_EQst0uxU9AvBdGeldr1G-KIPHYlsfFvbiMfyufp8egOpd0ZW9oe-wFofyn-2I867P56kUuB5DLOAhl-1F7xXI0Esfd8OlJkyKERaRriK8JmebzfxLXxZ90NY8pkSsgtqj36QLg4_YKw_ro5xI7bA
+    headers:
+      User-Agent:
+      - Faraday v1.10.3
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json; charset=UTF-8
+      Vary:
+      - Origin
+      - Referer
+      - X-Origin
+      Date:
+      - Thu, 04 Jul 2024 23:53:02 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Cache-Control:
+      - private
+      X-Xss-Protection:
+      - '0'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Transfer-Encoding:
+      - chunked
+    body:
+      encoding: ASCII-8BIT
+      string: '{"access_token":"ya29.c.c0AY_VpZjVLwr6Fgz9k3R7tWJk2_QN6S67eSherUrkvtb6niFP7TsIvgB_YihD4PVEeFa-lWHzxKjjaNg2mqDyzPuwq8BbwPb36s_csNTJ41oLoCZHVqwNq47h8nu8eqtE_epf9SDlIBUtAbJPjl3-YkIyQv6K0XDzpUrHfi7e3X4oVCwivWdJ_I1Tc-wQvSfJ9mQTKfAOgOAFgo8pkGf_CX_D8HDW_wW11X4-Co4T2V-igM5LzZF6kGXXjiHcBonaAGktsAvXuMvOICZSp1BIffgEhhzZpirzEZh-S0Nd1JK2RTQgbrCrnaJLd6oueSXHty4T_fVrnuAzSNPTjpXt_3b9H5vTJjjD4urnqYA1iK_45tprXBoWirgL384PlZ_Ixfz1Za3pycZRunS9s-s5ku_qmOhzsJbxkmrOvSvZFirqm0YUcB0FjF4h2S5F-t6p40nYpUdMciJVURJFecvBieofaxF58fXgU76d1nSUyX2jsXpROJnBsOqlMZZz7hquY7i8s5RfSkJh2d-w3jOXBtOvepIhBYbl4hdr0p3vdIm1asJ_YFxRcabjrF2n7nOYa9J6JRx4mQFMq5Z_Onpb19tZdyY8SJWq6jVblVSRgq44glJ9eiQdR9mlnU-Q7IaZzrhJuSg7vSJ9YRiO5cQmy8so__k3Mw_R2gh4z_zmXabzVWWwQIR8J-kZzVSuo0XkkZ_w3wrge50nl5J1bvMyJVd3IQ25nfrYV1MVkw4ByX6vaeix81gg38tQpbBmy4cM99lU1-kc9uwpbxhFu8yU5ubd7zYe9w49-YzyRlIj9YkarogncWqJ60oRr9Qc49iW3B6nRQitveX_bcMytuOks_nblO7YqB7miYp9br2oikl-XS3nSbmZFm9t0up462albklS_9dXYeu6--cimB_Vsbr3vMk3-UuYQeYrZkskicfRwFdV3nuVJnjxIVYIxuOplQvsdo59jk-1-FM2YtVaWtBWj2qnxrp71kik6a3J4rz-XVByXs9WJtM","expires_in":3599,"token_type":"Bearer"}'
+  recorded_at: Thu, 04 Jul 2024 23:53:02 GMT
+- request:
+    method: get
+    uri: https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.gumroad.app/purchases/products/com.gumroad.product_2/tokens/ioaofjheincpkpjngbpeklnj.AO-J1Oz2PB6tI_SYNj1vMDgLuNffrzVMNNZwV9vpOUqFOzicks0zTDZl6xh1q3StS-gxZf0WVjyAyayhPh0-6TwAS8gkahn7FQ
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - unknown/0.0.0 google-apis-androidpublisher_v3/0.66.0 Mac OS X/14.5 (gzip)
+      Accept:
+      - "*/*"
+      Accept-Encoding:
+      - gzip,deflate
+      Date:
+      - Thu, 04 Jul 2024 23:53:02 GMT
+      X-Goog-Api-Client:
+      - gl-ruby/3.3.3 gdcl/1.66.0
+      Authorization:
+      - Bearer ya29.c.c0AY_VpZjVLwr6Fgz9k3R7tWJk2_QN6S67eSherUrkvtb6niFP7TsIvgB_YihD4PVEeFa-lWHzxKjjaNg2mqDyzPuwq8BbwPb36s_csNTJ41oLoCZHVqwNq47h8nu8eqtE_epf9SDlIBUtAbJPjl3-YkIyQv6K0XDzpUrHfi7e3X4oVCwivWdJ_I1Tc-wQvSfJ9mQTKfAOgOAFgo8pkGf_CX_D8HDW_wW11X4-Co4T2V-igM5LzZF6kGXXjiHcBonaAGktsAvXuMvOICZSp1BIffgEhhzZpirzEZh-S0Nd1JK2RTQgbrCrnaJLd6oueSXHty4T_fVrnuAzSNPTjpXt_3b9H5vTJjjD4urnqYA1iK_45tprXBoWirgL384PlZ_Ixfz1Za3pycZRunS9s-s5ku_qmOhzsJbxkmrOvSvZFirqm0YUcB0FjF4h2S5F-t6p40nYpUdMciJVURJFecvBieofaxF58fXgU76d1nSUyX2jsXpROJnBsOqlMZZz7hquY7i8s5RfSkJh2d-w3jOXBtOvepIhBYbl4hdr0p3vdIm1asJ_YFxRcabjrF2n7nOYa9J6JRx4mQFMq5Z_Onpb19tZdyY8SJWq6jVblVSRgq44glJ9eiQdR9mlnU-Q7IaZzrhJuSg7vSJ9YRiO5cQmy8so__k3Mw_R2gh4z_zmXabzVWWwQIR8J-kZzVSuo0XkkZ_w3wrge50nl5J1bvMyJVd3IQ25nfrYV1MVkw4ByX6vaeix81gg38tQpbBmy4cM99lU1-kc9uwpbxhFu8yU5ubd7zYe9w49-YzyRlIj9YkarogncWqJ60oRr9Qc49iW3B6nRQitveX_bcMytuOks_nblO7YqB7miYp9br2oikl-XS3nSbmZFm9t0up462albklS_9dXYeu6--cimB_Vsbr3vMk3-UuYQeYrZkskicfRwFdV3nuVJnjxIVYIxuOplQvsdo59jk-1-FM2YtVaWtBWj2qnxrp71kik6a3J4rz-XVByXs9WJtM
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json; charset=UTF-8
+      Vary:
+      - Origin
+      - Referer
+      - X-Origin
+      Content-Encoding:
+      - gzip
+      Date:
+      - Thu, 04 Jul 2024 23:53:02 GMT
+      Server:
+      - ESF
+      Cache-Control:
+      - private
+      X-Xss-Protection:
+      - '0'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Transfer-Encoding:
+      - chunked
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "purchaseTimeMillis": "1720126119585",
+          "purchaseState": 0,
+          "consumptionState": 1,
+          "developerPayload": "",
+          "orderId": "GPA.3375-1247-2605-34469",
+          "purchaseType": 0,
+          "acknowledgementState": 1,
+          "kind": "androidpublisher#productPurchase",
+          "regionCode": "US"
+        }
+  recorded_at: Thu, 04 Jul 2024 23:53:02 GMT
+recorded_with: VCR 6.2.0

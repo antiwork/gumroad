@@ -1,0 +1,10 @@
+<%= header_section("#{@charge_processor_id.capitalize} account required") %>
+<div>
+  <p>
+    <%= "You are #{@affiliate.collaborator? ? "a collaborator" : "an affiliate"} for a creator that has made recent sales. We aren't able to perform the proper related actions until you've connected a #{@charge_processor_id.capitalize} account." %>
+  </p>
+
+  <p>
+    <%= link_to "Connect a #{@charge_processor_id.capitalize} account", settings_payments_url %>
+  </p>
+</div>

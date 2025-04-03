@@ -1,0 +1,2230 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_methods
+    body:
+      encoding: UTF-8
+      string: type=card&card[number]=4242+4242+4242+4242&card[exp_month]=12&card[exp_year]=2023&card[cvc]=123
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_MiJptaR3rlu5Pe","request_duration_ms":436}}'
+      Idempotency-Key:
+      - 29ac6816-5fc6-4408-91c8-ca6f2b792dd9
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:18 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '931'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayment_methods; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - 29ac6816-5fc6-4408-91c8-ca6f2b792dd9
+      Original-Request:
+      - req_y5ehoFSvnTvQsg
+      Request-Id:
+      - req_y5ehoFSvnTvQsg
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "pm_0O6yaY9e1RjUNIyYdwpOUTJT",
+          "object": "payment_method",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "card": {
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": null,
+              "cvc_check": "unchecked"
+            },
+            "country": "US",
+            "exp_month": 12,
+            "exp_year": 2023,
+            "fingerprint": "W691J2Ye3VDoq6Ij",
+            "funding": "credit",
+            "generated_from": null,
+            "last4": "4242",
+            "networks": {
+              "available": [
+                "visa"
+              ],
+              "preferred": null
+            },
+            "three_d_secure_usage": {
+              "supported": true
+            },
+            "wallet": null
+          },
+          "created": 1698684318,
+          "customer": null,
+          "livemode": false,
+          "metadata": {},
+          "type": "card"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:18 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: country=CA&default_currency=cad&type=custom&business_type=individual&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_profile[url]=www.gumroad.com&business_profile[product_description]=Test+product&business_profile[mcc]=5734&individual[verification][document][front]=file_identity_document_success&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[phone]=0000000000&individual[id_number]=000000000&individual[email]=me%40example.com&individual[address][line1]=address_full_match&individual[address][city]=Toronto&individual[address][state]=ON&individual[address][postal_code]=M4C+1T2&individual[address][country]=CA&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&external_account[object]=bank_account&external_account[country]=CA&external_account[currency]=cad&external_account[routing_number]=11000-000&external_account[account_number]=000123456789
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_y5ehoFSvnTvQsg","request_duration_ms":551}}'
+      Idempotency-Key:
+      - b6f1827a-9bb3-488e-bd13-e03183664f3d
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:23 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '5427'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - b6f1827a-9bb3-488e-bd13-e03183664f3d
+      Original-Request:
+      - req_Eny0xNIsbd6IEE
+      Request-Id:
+      - req_Eny0xNIsbd6IEE
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1O6yaZS2Go1OY8ab",
+          "object": "account",
+          "business_profile": {
+            "mcc": "5734",
+            "name": null,
+            "product_description": "Test product",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "www.gumroad.com"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "active",
+            "transfers": "active"
+          },
+          "charges_enabled": true,
+          "company": {
+            "address": {
+              "city": "Toronto",
+              "country": "CA",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "M4C 1T2",
+              "state": "ON"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "CA",
+          "created": 1698684321,
+          "default_currency": "cad",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1O6yaZS2Go1OY8abLaDdp1J1",
+                "object": "bank_account",
+                "account": "acct_1O6yaZS2Go1OY8ab",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "CA",
+                "currency": "cad",
+                "default_for_currency": true,
+                "fingerprint": "bHAdUgrfRKNYlJ4L",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "11000-000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1O6yaZS2Go1OY8ab/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1O6yaaS2Go1OY8abQqMPrdaI",
+            "object": "person",
+            "account": "acct_1O6yaZS2Go1OY8ab",
+            "address": {
+              "city": "Toronto",
+              "country": "CA",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "M4C 1T2",
+              "state": "ON"
+            },
+            "created": 1698684320,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "me@example.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_0O6yaZ9e1RjUNIyYMjeUcLIc"
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {},
+          "payouts_enabled": true,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {},
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "GUMROAD.CO",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "payments": {
+              "statement_descriptor": "GUMROAD.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": false,
+              "schedule": {
+                "delay_days": 7,
+                "interval": "daily"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1427846400,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:22 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1O6yaZS2Go1OY8ab
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_Eny0xNIsbd6IEE","request_duration_ms":4019}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:23 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '5428'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_Fo97pTAh28Z11k
+      Stripe-Account:
+      - acct_1O6yaZS2Go1OY8ab
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1O6yaZS2Go1OY8ab",
+          "object": "account",
+          "business_profile": {
+            "mcc": "5734",
+            "name": null,
+            "product_description": "Test product",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "www.gumroad.com"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "active",
+            "transfers": "active"
+          },
+          "charges_enabled": true,
+          "company": {
+            "address": {
+              "city": "Toronto",
+              "country": "CA",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "M4C 1T2",
+              "state": "ON"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "CA",
+          "created": 1698684321,
+          "default_currency": "cad",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1O6yaZS2Go1OY8abLaDdp1J1",
+                "object": "bank_account",
+                "account": "acct_1O6yaZS2Go1OY8ab",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "CA",
+                "currency": "cad",
+                "default_for_currency": true,
+                "fingerprint": "bHAdUgrfRKNYlJ4L",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "11000-000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1O6yaZS2Go1OY8ab/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1O6yaaS2Go1OY8abQqMPrdaI",
+            "object": "person",
+            "account": "acct_1O6yaZS2Go1OY8ab",
+            "address": {
+              "city": "Toronto",
+              "country": "CA",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "M4C 1T2",
+              "state": "ON"
+            },
+            "created": 1698684320,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "me@example.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_0O6yaZ9e1RjUNIyYMjeUcLIc"
+              },
+              "status": "verified"
+            }
+          },
+          "metadata": {},
+          "payouts_enabled": true,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {},
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "GUMROAD.CO",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "payments": {
+              "statement_descriptor": "GUMROAD.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": false,
+              "schedule": {
+                "delay_days": 7,
+                "interval": "daily"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1427846400,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:23 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_intents
+    body:
+      encoding: UTF-8
+      string: payment_method=pm_0O6yaY9e1RjUNIyYdwpOUTJT&confirmation_method=manual&payment_method_types[0]=card&confirm=true&amount=1000&currency=usd&transfer_data[destination]=acct_1O6yaZS2Go1OY8ab&on_behalf_of=acct_1O6yaZS2Go1OY8ab&application_fee_amount=30
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_Fo97pTAh28Z11k","request_duration_ms":530}}'
+      Idempotency-Key:
+      - 1250292c-623d-4547-8982-f097e0f797db
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:25 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1452'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayment_intents; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - 1250292c-623d-4547-8982-f097e0f797db
+      Original-Request:
+      - req_SsC3TLF0L4QRS8
+      Request-Id:
+      - req_SsC3TLF0L4QRS8
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "object": "payment_intent",
+          "amount": 1000,
+          "amount_capturable": 0,
+          "amount_details": {
+            "tip": {}
+          },
+          "amount_received": 1000,
+          "application": null,
+          "application_fee_amount": 30,
+          "automatic_payment_methods": null,
+          "canceled_at": null,
+          "cancellation_reason": null,
+          "capture_method": "automatic",
+          "client_secret": "pi_2O6yad9e1RjUNIyY0QWvD1h7_secret_KKCF6LPVJ8HkNPMJ0cqjBLuyk",
+          "confirmation_method": "manual",
+          "created": 1698684323,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "invoice": null,
+          "last_payment_error": null,
+          "latest_charge": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "livemode": false,
+          "metadata": {},
+          "next_action": null,
+          "on_behalf_of": "acct_1O6yaZS2Go1OY8ab",
+          "payment_method": "pm_0O6yaY9e1RjUNIyYdwpOUTJT",
+          "payment_method_configuration_details": null,
+          "payment_method_options": {
+            "card": {
+              "installments": null,
+              "mandate_options": null,
+              "network": null,
+              "request_three_d_secure": "automatic"
+            }
+          },
+          "payment_method_types": [
+            "card"
+          ],
+          "processing": null,
+          "receipt_email": null,
+          "review": null,
+          "setup_future_usage": null,
+          "shipping": null,
+          "source": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer_data": {
+            "destination": "acct_1O6yaZS2Go1OY8ab"
+          },
+          "transfer_group": "group_pi_2O6yad9e1RjUNIyY0QWvD1h7"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:25 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/charges/ch_2O6yad9e1RjUNIyY0Bvo6H6X
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_SsC3TLF0L4QRS8","request_duration_ms":2090}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:26 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2921'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges%2F%3Acharge; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_xH7ddiLHYsWtTe
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 0,
+          "amount_updates": [],
+          "application": null,
+          "application_fee": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+          "application_fee_amount": 30,
+          "balance_transaction": "txn_2O6yad9e1RjUNIyY06fox3oO",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "calculated_statement_descriptor": "GUMROAD.COM",
+          "captured": true,
+          "created": 1698684324,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": "acct_1O6yaZS2Go1OY8ab",
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "invoice": null,
+          "livemode": false,
+          "metadata": {},
+          "on_behalf_of": "acct_1O6yaZS2Go1OY8ab",
+          "order": null,
+          "outcome": {
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 21,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "payment_method": "pm_0O6yaY9e1RjUNIyYdwpOUTJT",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 1000,
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "exp_month": 12,
+              "exp_year": 2023,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "W691J2Ye3VDoq6Ij",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "4242",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "overcapture": {
+                "maximum_amount_capturable": 1000,
+                "status": "unavailable"
+              },
+              "three_d_secure": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUopbv_qQYyBsFdnNypqTosFmpfskJeXtKXsINASWgNVwWRWZjAuuXBQghofWE1Q-qQaVzPWjL6SDj3aIc",
+          "refunded": false,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer": "tr_2O6yad9e1RjUNIyY0DaMwx3a",
+          "transfer_data": {
+            "amount": null,
+            "destination": "acct_1O6yaZS2Go1OY8ab"
+          },
+          "transfer_group": "group_pi_2O6yad9e1RjUNIyY0QWvD1h7"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:26 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/charges/ch_2O6yad9e1RjUNIyY0Bvo6H6X
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_xH7ddiLHYsWtTe","request_duration_ms":420}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:26 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2921'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges%2F%3Acharge; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_jZp5IpAbMKWCpk
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 0,
+          "amount_updates": [],
+          "application": null,
+          "application_fee": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+          "application_fee_amount": 30,
+          "balance_transaction": "txn_2O6yad9e1RjUNIyY06fox3oO",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "calculated_statement_descriptor": "GUMROAD.COM",
+          "captured": true,
+          "created": 1698684324,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": "acct_1O6yaZS2Go1OY8ab",
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "invoice": null,
+          "livemode": false,
+          "metadata": {},
+          "on_behalf_of": "acct_1O6yaZS2Go1OY8ab",
+          "order": null,
+          "outcome": {
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 21,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "payment_method": "pm_0O6yaY9e1RjUNIyYdwpOUTJT",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 1000,
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "exp_month": 12,
+              "exp_year": 2023,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "W691J2Ye3VDoq6Ij",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "4242",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "overcapture": {
+                "maximum_amount_capturable": 1000,
+                "status": "unavailable"
+              },
+              "three_d_secure": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoprv_qQYyBnDbW6WeWzosFr9FaSYhQMLy2S7bWqVE3eJdIAQz-D8F_sf8rzPEolrTTk8dmVdq_23oMcQ",
+          "refunded": false,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer": "tr_2O6yad9e1RjUNIyY0DaMwx3a",
+          "transfer_data": {
+            "amount": null,
+            "destination": "acct_1O6yaZS2Go1OY8ab"
+          },
+          "transfer_group": "group_pi_2O6yad9e1RjUNIyY0QWvD1h7"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:26 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/refunds
+    body:
+      encoding: UTF-8
+      string: charge=ch_2O6yad9e1RjUNIyY0Bvo6H6X&reverse_transfer=true&refund_application_fee=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_jZp5IpAbMKWCpk","request_duration_ms":385}}'
+      Idempotency-Key:
+      - b68ff643-0d45-4717-b59f-730e1f87d34d
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:29 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '456'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Frefunds; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - b68ff643-0d45-4717-b59f-730e1f87d34d
+      Original-Request:
+      - req_3ABpsFL9ZUawge
+      Request-Id:
+      - req_3ABpsFL9ZUawge
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "re_2O6yad9e1RjUNIyY0Mmspdt0",
+          "object": "refund",
+          "amount": 1000,
+          "balance_transaction": "txn_2O6yad9e1RjUNIyY0nzYI4bq",
+          "charge": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "created": 1698684327,
+          "currency": "usd",
+          "metadata": {},
+          "payment_intent": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "reason": null,
+          "receipt_number": null,
+          "source_transfer_reversal": null,
+          "status": "succeeded",
+          "transfer_reversal": "trr_0O6yah9e1RjUNIyYSENKGf8W"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:29 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/refunds/re_2O6yad9e1RjUNIyY0Mmspdt0?expand%5B%5D=balance_transaction
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_3ABpsFL9ZUawge","request_duration_ms":3096}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:30 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1051'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Frefunds%2F%3Arefund; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_vIURFLPf9GKq5b
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "re_2O6yad9e1RjUNIyY0Mmspdt0",
+          "object": "refund",
+          "amount": 1000,
+          "balance_transaction": {
+            "id": "txn_2O6yad9e1RjUNIyY0nzYI4bq",
+            "object": "balance_transaction",
+            "amount": -1383,
+            "available_on": 1699228800,
+            "created": 1698684327,
+            "currency": "cad",
+            "description": "REFUND FOR CHARGE",
+            "exchange_rate": 1.38343,
+            "fee": -69,
+            "fee_details": [
+              {
+                "amount": -69,
+                "application": null,
+                "currency": "cad",
+                "description": "Stripe processing fee refund",
+                "type": "stripe_fee"
+              }
+            ],
+            "net": -1314,
+            "reporting_category": "refund",
+            "source": "re_2O6yad9e1RjUNIyY0Mmspdt0",
+            "status": "pending",
+            "type": "refund"
+          },
+          "charge": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "created": 1698684327,
+          "currency": "usd",
+          "metadata": {},
+          "payment_intent": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "reason": null,
+          "receipt_number": null,
+          "source_transfer_reversal": null,
+          "status": "succeeded",
+          "transfer_reversal": "trr_0O6yah9e1RjUNIyYSENKGf8W"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:30 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/charges/ch_2O6yad9e1RjUNIyY0Bvo6H6X?expand%5B%5D=application_fee.refunds.data.balance_transaction&expand%5B%5D=balance_transaction
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_vIURFLPf9GKq5b","request_duration_ms":1222}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:31 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '5043'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges%2F%3Acharge; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_sOYv4djkZB8Z2Y
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 1000,
+          "amount_updates": [],
+          "application": null,
+          "application_fee": {
+            "id": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+            "object": "application_fee",
+            "account": "acct_1O6yaZS2Go1OY8ab",
+            "amount": 30,
+            "amount_refunded": 30,
+            "application": "<STRIPE_CONNECT_CLIENT_ID>",
+            "balance_transaction": "txn_0O6yah9e1RjUNIyY3B5O5z6d",
+            "charge": "py_1O6yaeS2Go1OY8abUuxFr78T",
+            "created": 1698684324,
+            "currency": "usd",
+            "livemode": false,
+            "originating_transaction": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+            "refunded": true,
+            "refunds": {
+              "object": "list",
+              "data": [
+                {
+                  "id": "fr_1O6yahS2Go1OY8ablWmKoOYs",
+                  "object": "fee_refund",
+                  "amount": 41,
+                  "balance_transaction": {
+                    "id": "txn_0O6yai9e1RjUNIyYmltrLiZI",
+                    "object": "balance_transaction",
+                    "amount": -30,
+                    "available_on": 1699228800,
+                    "created": 1698684327,
+                    "currency": "usd",
+                    "description": "REFUND FOR APPLICATION FEE",
+                    "exchange_rate": 1.38343,
+                    "fee": 0,
+                    "fee_details": [],
+                    "net": -30,
+                    "reporting_category": "platform_earning_refund",
+                    "source": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+                    "status": "pending",
+                    "type": "application_fee_refund"
+                  },
+                  "created": 1698684327,
+                  "currency": "cad",
+                  "fee": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+                  "metadata": {}
+                }
+              ],
+              "has_more": false,
+              "total_count": 1,
+              "url": "/v1/application_fees/fee_1O6yaeS2Go1OY8abPPAQ6h0G/refunds"
+            }
+          },
+          "application_fee_amount": 30,
+          "balance_transaction": {
+            "id": "txn_2O6yad9e1RjUNIyY06fox3oO",
+            "object": "balance_transaction",
+            "amount": 1356,
+            "available_on": 1699228800,
+            "created": 1698684324,
+            "currency": "cad",
+            "description": null,
+            "exchange_rate": 1.35576,
+            "fee": 69,
+            "fee_details": [
+              {
+                "amount": 69,
+                "application": null,
+                "currency": "cad",
+                "description": "Stripe processing fees",
+                "type": "stripe_fee"
+              }
+            ],
+            "net": 1287,
+            "reporting_category": "charge",
+            "source": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+            "status": "pending",
+            "type": "charge"
+          },
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "calculated_statement_descriptor": "GUMROAD.COM",
+          "captured": true,
+          "created": 1698684324,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": "acct_1O6yaZS2Go1OY8ab",
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "invoice": null,
+          "livemode": false,
+          "metadata": {},
+          "on_behalf_of": "acct_1O6yaZS2Go1OY8ab",
+          "order": null,
+          "outcome": {
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 21,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "payment_method": "pm_0O6yaY9e1RjUNIyYdwpOUTJT",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 1000,
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "exp_month": 12,
+              "exp_year": 2023,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "W691J2Ye3VDoq6Ij",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "4242",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "overcapture": {
+                "maximum_amount_capturable": 1000,
+                "status": "unavailable"
+              },
+              "three_d_secure": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoq7v_qQYyBhgTXGYhtjosFrKdndmLSeX5l5Bu38sROoDjFlTzKXuebvmvw2iuqfFcwuS1-vjY9-SnZYQ",
+          "refunded": true,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer": "tr_2O6yad9e1RjUNIyY0DaMwx3a",
+          "transfer_data": {
+            "amount": null,
+            "destination": "acct_1O6yaZS2Go1OY8ab"
+          },
+          "transfer_group": "group_pi_2O6yad9e1RjUNIyY0QWvD1h7"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:31 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/transfers/tr_2O6yad9e1RjUNIyY0DaMwx3a
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_sOYv4djkZB8Z2Y","request_duration_ms":496}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:31 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1151'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Ftransfers%2F%3Atransfer;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Request-Id:
+      - req_ywM13MCnIjmMIJ
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "tr_2O6yad9e1RjUNIyY0DaMwx3a",
+          "object": "transfer",
+          "amount": 1356,
+          "amount_reversed": 1356,
+          "balance_transaction": "txn_2O6yad9e1RjUNIyY0mEsFf0w",
+          "created": 1698684324,
+          "currency": "cad",
+          "description": null,
+          "destination": "acct_1O6yaZS2Go1OY8ab",
+          "destination_payment": "py_1O6yaeS2Go1OY8abUuxFr78T",
+          "livemode": false,
+          "metadata": {},
+          "reversals": {
+            "object": "list",
+            "data": [
+              {
+                "id": "trr_0O6yah9e1RjUNIyYSENKGf8W",
+                "object": "transfer_reversal",
+                "amount": 1356,
+                "balance_transaction": "txn_0O6yai9e1RjUNIyYTW0VZ4p6",
+                "created": 1698684327,
+                "currency": "cad",
+                "destination_payment_refund": "pyr_1O6yahS2Go1OY8abFNwpzPWp",
+                "metadata": {},
+                "source_refund": "re_2O6yad9e1RjUNIyY0Mmspdt0",
+                "transfer": "tr_2O6yad9e1RjUNIyY0DaMwx3a"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/transfers/tr_2O6yad9e1RjUNIyY0DaMwx3a/reversals"
+          },
+          "reversed": true,
+          "source_transaction": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "source_type": "card",
+          "transfer_group": "group_pi_2O6yad9e1RjUNIyY0QWvD1h7"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:31 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/charges/py_1O6yaeS2Go1OY8abUuxFr78T?expand%5B%5D=application_fee.refunds&expand%5B%5D=refunds.data.balance_transaction
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_ywM13MCnIjmMIJ","request_duration_ms":328}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1O6yaZS2Go1OY8ab
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:32 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '4361'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges%2F%3Acharge; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_W94ElSXKEDDhQL
+      Stripe-Account:
+      - acct_1O6yaZS2Go1OY8ab
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "py_1O6yaeS2Go1OY8abUuxFr78T",
+          "object": "charge",
+          "amount": 1356,
+          "amount_captured": 1356,
+          "amount_refunded": 1356,
+          "application": "<STRIPE_CONNECT_CLIENT_ID>",
+          "application_fee": {
+            "id": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+            "object": "application_fee",
+            "account": "acct_1O6yaZS2Go1OY8ab",
+            "amount": 30,
+            "amount_refunded": 30,
+            "application": "<STRIPE_CONNECT_CLIENT_ID>",
+            "balance_transaction": "txn_0O6yah9e1RjUNIyY3B5O5z6d",
+            "charge": "py_1O6yaeS2Go1OY8abUuxFr78T",
+            "created": 1698684324,
+            "currency": "usd",
+            "livemode": false,
+            "originating_transaction": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+            "refunded": true,
+            "refunds": {
+              "object": "list",
+              "data": [
+                {
+                  "id": "fr_1O6yahS2Go1OY8ablWmKoOYs",
+                  "object": "fee_refund",
+                  "amount": 41,
+                  "balance_transaction": "txn_0O6yai9e1RjUNIyYmltrLiZI",
+                  "created": 1698684327,
+                  "currency": "cad",
+                  "fee": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+                  "metadata": {}
+                }
+              ],
+              "has_more": false,
+              "total_count": 1,
+              "url": "/v1/application_fees/fee_1O6yaeS2Go1OY8abPPAQ6h0G/refunds"
+            }
+          },
+          "application_fee_amount": 41,
+          "balance_transaction": "txn_1O6yaeS2Go1OY8abDBE35miQ",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "calculated_statement_descriptor": null,
+          "captured": true,
+          "created": 1698684324,
+          "currency": "cad",
+          "customer": null,
+          "description": null,
+          "destination": null,
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "invoice": null,
+          "livemode": false,
+          "metadata": {},
+          "on_behalf_of": null,
+          "order": null,
+          "outcome": null,
+          "paid": true,
+          "payment_intent": null,
+          "payment_method": null,
+          "payment_method_details": {
+            "stripe_account": {},
+            "type": "stripe_account"
+          },
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xTzZ5YVpTMkdvMU9ZOGFiKKu7_6kGMgbFiXUmL_Q6LBZRtZTGBf7XLEGoaoX7FWRVm2hpY0tE96TtP22115GHs1w1hb4KW5C5FgGq",
+          "refunded": true,
+          "refunds": {
+            "object": "list",
+            "data": [
+              {
+                "id": "pyr_1O6yahS2Go1OY8abFNwpzPWp",
+                "object": "refund",
+                "amount": 1356,
+                "balance_transaction": {
+                  "id": "txn_1O6yaiS2Go1OY8abIY914U4c",
+                  "object": "balance_transaction",
+                  "amount": -1356,
+                  "available_on": 1699228800,
+                  "created": 1698684327,
+                  "currency": "cad",
+                  "description": "REFUND FOR PAYMENT",
+                  "exchange_rate": null,
+                  "fee": 0,
+                  "fee_details": [],
+                  "net": -1356,
+                  "reporting_category": "refund",
+                  "source": "pyr_1O6yahS2Go1OY8abFNwpzPWp",
+                  "status": "pending",
+                  "type": "payment_refund"
+                },
+                "charge": "py_1O6yaeS2Go1OY8abUuxFr78T",
+                "created": 1698684327,
+                "currency": "cad",
+                "metadata": {},
+                "payment_intent": null,
+                "reason": null,
+                "receipt_number": null,
+                "source_transfer_reversal": "trr_0O6yah9e1RjUNIyYSENKGf8W",
+                "status": "succeeded",
+                "transfer_reversal": "trr_0O6yah9e1RjUNIyYSENKGf8W"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/charges/py_1O6yaeS2Go1OY8abUuxFr78T/refunds"
+          },
+          "review": null,
+          "shipping": null,
+          "source": {
+            "id": "<STRIPE_PLATFORM_ACCOUNT_ID>",
+            "object": "account",
+            "application_icon": "https://files.stripe.com/links/MDB8OWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEV8ZmxfbGl2ZV96QURJZllYTVhmQTEwQWswUmg3MlRpOGI00M3h6olFO",
+            "application_logo": "https://files.stripe.com/links/MDB8OWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEV8ZmxfbGl2ZV9WNnByazhHekswejFlUGh3a1M0dnRxZko00eY1DsvrA",
+            "application_name": "Gumroad",
+            "application_url": "https://gumroad.com"
+          },
+          "source_transfer": "tr_2O6yad9e1RjUNIyY0DaMwx3a",
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer_data": null,
+          "transfer_group": null
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:32 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/charges/ch_2O6yad9e1RjUNIyY0Bvo6H6X?expand%5B%5D=application_fee
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_W94ElSXKEDDhQL","request_duration_ms":407}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:45:32 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3897'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges%2F%3Acharge; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_E7mafwFgh5ZOFI
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+          "object": "charge",
+          "amount": 1000,
+          "amount_captured": 1000,
+          "amount_refunded": 1000,
+          "amount_updates": [],
+          "application": null,
+          "application_fee": {
+            "id": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+            "object": "application_fee",
+            "account": "acct_1O6yaZS2Go1OY8ab",
+            "amount": 30,
+            "amount_refunded": 30,
+            "application": "<STRIPE_CONNECT_CLIENT_ID>",
+            "balance_transaction": "txn_0O6yah9e1RjUNIyY3B5O5z6d",
+            "charge": "py_1O6yaeS2Go1OY8abUuxFr78T",
+            "created": 1698684324,
+            "currency": "usd",
+            "livemode": false,
+            "originating_transaction": "ch_2O6yad9e1RjUNIyY0Bvo6H6X",
+            "refunded": true,
+            "refunds": {
+              "object": "list",
+              "data": [
+                {
+                  "id": "fr_1O6yahS2Go1OY8ablWmKoOYs",
+                  "object": "fee_refund",
+                  "amount": 41,
+                  "balance_transaction": "txn_0O6yai9e1RjUNIyYmltrLiZI",
+                  "created": 1698684327,
+                  "currency": "cad",
+                  "fee": "fee_1O6yaeS2Go1OY8abPPAQ6h0G",
+                  "metadata": {}
+                }
+              ],
+              "has_more": false,
+              "total_count": 1,
+              "url": "/v1/application_fees/fee_1O6yaeS2Go1OY8abPPAQ6h0G/refunds"
+            }
+          },
+          "application_fee_amount": 30,
+          "balance_transaction": "txn_2O6yad9e1RjUNIyY06fox3oO",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "calculated_statement_descriptor": "GUMROAD.COM",
+          "captured": true,
+          "created": 1698684324,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": "acct_1O6yaZS2Go1OY8ab",
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "invoice": null,
+          "livemode": false,
+          "metadata": {},
+          "on_behalf_of": "acct_1O6yaZS2Go1OY8ab",
+          "order": null,
+          "outcome": {
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 21,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_2O6yad9e1RjUNIyY0QWvD1h7",
+          "payment_method": "pm_0O6yaY9e1RjUNIyYdwpOUTJT",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 1000,
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "exp_month": 12,
+              "exp_year": 2023,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "W691J2Ye3VDoq6Ij",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "4242",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "overcapture": {
+                "maximum_amount_capturable": 1000,
+                "status": "unavailable"
+              },
+              "three_d_secure": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUorLv_qQYyBvIoShrMHzosFuCgUXw7UNZykrlHxn3UQ-qqJlmIi1xIAi7OFZGBnQkT_Pyb0fC9eDcd0-M",
+          "refunded": true,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer": "tr_2O6yad9e1RjUNIyY0DaMwx3a",
+          "transfer_data": {
+            "amount": null,
+            "destination": "acct_1O6yaZS2Go1OY8ab"
+          },
+          "transfer_group": "group_pi_2O6yad9e1RjUNIyY0QWvD1h7"
+        }
+  recorded_at: Mon, 30 Oct 2023 16:45:32 GMT
+recorded_with: VCR 6.2.0

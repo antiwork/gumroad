@@ -1,0 +1,58 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/invalid_order/capture
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAJ8ZuWAicvxc4m42ewOeup4rWt82bMaSINuAQdFgQTAdKeNmDa5at6XxUhbVnnLGbAYxMX_ZWIQZPcYZMDbmmscb60srw
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-invalid_order
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '446'
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 15 Jan 2021 14:57:26 GMT
+      Paypal-Debug-Id:
+      - 4814ead4c276f
+    body:
+      encoding: UTF-8
+      string: '{"name":"RESOURCE_NOT_FOUND","details":[{"field":"order_id","value":"invalid_order","location":"path","issue":"INVALID_RESOURCE_ID","description":"Specified
+        resource ID does not exist. Please check the resource ID and try again."}],"message":"The
+        specified resource does not exist.","debug_id":"4814ead4c276f","links":[{"href":"https://developer.paypal.com/docs/api/orders/v2/#error-INVALID_RESOURCE_ID","rel":"information_link","method":"GET"}]}'
+  recorded_at: Fri, 15 Jan 2021 14:57:27 GMT
+recorded_with: VCR 6.0.0

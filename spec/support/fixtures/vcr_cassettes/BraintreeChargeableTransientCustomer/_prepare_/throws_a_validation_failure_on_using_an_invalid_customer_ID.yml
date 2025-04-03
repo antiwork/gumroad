@@ -1,0 +1,133 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/customers
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <customer>
+          <credit-card>
+            <payment-method-nonce>fake-paypal-future-nonce</payment-method-nonce>
+          </credit-card>
+        </customer>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:54:14 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Etag:
+      - W/"67cc70ee620e8ccccd0fd8b4202234ad"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Runtime:
+      - '0.290429'
+      X-Request-Id:
+      - 02-1572494053.227-157.34.125.172-5505543
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 02-1572494053.227-157.34.125.172-5505543
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        H4sIAOZaul0AA6RTTW/aQBC98yuQ74sxH1JAxrRSClKl5ESTlks09o7Nhv1wdtdg+uu7tvlIMDlUOe57b3Zm3syE81Lw7g61YUrOvKDX97ooE0WZzGber9WC3HnzqBMmhbFKoI463W7IaDQYjsdBMOqPQt+9KtCRyQakJe59R9O3MhETGg9lsjdO9J6t1CnTxhIJAruS8ZlndYGeX1McPmMSJXKQhxaOAhhvoflGyfYfKZQtbI+xYfZGPo1gkRKwXXvIceZR97RMoBcN+sGEBH0yDFb94XQ8mgajdehfAur4Iqf/F38JaPLXppOUIaemKSnjKgZeufhn+PSXLid2/ftn+vD6EDyufpSP99/7oX/RHJugzJIENDXHMkBrOJxcgkPuxJAkqpD2o6IStCQN6OCYce62hECmEQXWs722sBZ+0cbmj+P+kY+79x4+SSmmUPBTrlgpjiC9qCoq9I/kWVyvTvQKEntU4TcsQeQce27TQr/hTsqLq8lyMY6fnwq6DDhdbnbrxWSfLCYCBuNyfb+9GkAdzARkSArNo421uZn6PhiD1vRiDUxaZ2DmOt7DocrsO8MrP18E2o2iL1xlym+G0MtlNke5Y1rJSjIzIGmsSneF5wynnKaITaJZbt1l35h8rbFqizJKt/KNTkK/eZ24L25v07ch1dlLdG5IZlnFXw8mBW7cZG5Jz/+47ush39yvIylTdZPmTLCqrMIgUZp+/o/GnTOgbrhFh377Cq4xU4NAqUY33Jbll22NOv8AAAD//wMAQUoL4ncFAAA=
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:54:12 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/customers/invalid
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:54:15 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Cache-Control:
+      - no-cache
+      X-Runtime:
+      - '0.048559'
+      X-Request-Id:
+      - 02-1572494055.109-157.34.125.172-5505863
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 02-1572494055.109-157.34.125.172-5505863
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        H4sIAOdaul0AAwAAAP//AwAAAAAAAAAAAA==
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:54:15 GMT
+recorded_with: VCR 3.0.3

@@ -1,0 +1,64 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"gbp","value":"12.46","breakdown":{"shipping":{"currency_code":"GBP","value":"1.01"},"tax_total":{"currency_code":"GBP","value":"1.35"},"item_total":{"currency_code":"GBP","value":"10.1"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"custom","unit_amount":{"currency_code":"GBP","value":"5.05"},"quantity":2,"sku":"w"}],"soft_descriptor":"edgareb2864575","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.71"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]}}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAI9v6NTs3Y42Ufo-5Q-cskFZtTLkOodRO1uJQvdaWnsbiCt078vvzYnSy5X1gLFwGZIyhtT6D_EUZyyyp_YjB9CudeK7w
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '164085107257162'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.0.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.0.2p107-arm64-darwin20;OpenSSL
+        1.1.1l  24 Aug 2021)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1156'
+      Connection:
+      - keep-alive
+      Date:
+      - Thu, 30 Dec 2021 07:57:54 GMT
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - f12100e75387e
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"id":"0XG29689TP060184T","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"GBP","value":"12.46","breakdown":{"item_total":{"currency_code":"GBP","value":"10.10"},"shipping":{"currency_code":"GBP","value":"1.01"},"tax_total":{"currency_code":"GBP","value":"1.35"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.71"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"soft_descriptor":"edgareb2864575","items":[{"name":"custom","unit_amount":{"currency_code":"GBP","value":"5.05"},"quantity":"2","sku":"w"}]}],"create_time":"2021-12-30T07:57:53Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/0XG29689TP060184T","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=0XG29689TP060184T","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/0XG29689TP060184T","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/0XG29689TP060184T/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Thu, 30 Dec 2021 07:57:54 GMT
+recorded_with: VCR 6.0.0

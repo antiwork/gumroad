@@ -1,0 +1,743 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=SG&default_currency=sgd&metadata[user_id]=1217871880528&metadata[tos_agreement_id]=yMw7XuB0WcxuvcazE7vCuQ%3D%3D&metadata[user_compliance_info_id]=5GNeXF4CkmqogQFvW1Eypg%3D%3D&metadata[bank_account_id]=RgPQjZT9-D4FdVzRglpnzQ%3D%3D&tos_acceptance[date]=1698781675&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar131e8856_6836%40gumroad.com&individual[phone]=0000000000&individual[address][line1]=address_full_match&individual[address][city]=Singapore&individual[address][state]=Singapore&individual[address][postal_code]=12345&individual[address][country]=SG&individual[dob][day]=2&individual[dob][month]=1&individual[dob][year]=1980&individual[id_number]=000000000&individual[nationality]=US&bank_account[country]=SG&bank_account[currency]=sgd&bank_account[account_number]=000123456&bank_account[routing_number]=1100-000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_tHdpVioTz7kBW3","request_duration_ms":2685}}'
+      Idempotency-Key:
+      - a586c1cd-6809-4d4b-a56f-b80e037c4acb
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:47:58 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6026'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - a586c1cd-6809-4d4b-a56f-b80e037c4acb
+      Original-Request:
+      - req_syn1RPXZUqwYsC
+      Request-Id:
+      - req_syn1RPXZUqwYsC
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1O7NupS4nkapQnjM",
+          "object": "account",
+          "business_profile": {
+            "mcc": "5192",
+            "name": null,
+            "product_description": "Chuck Bartowski",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "inactive"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "Singapore",
+              "country": "SG",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "12345",
+              "state": "Singapore"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "SG",
+          "created": 1698781677,
+          "default_currency": "sgd",
+          "details_submitted": false,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1O7NuqS4nkapQnjMJd8pd0s9",
+                "object": "bank_account",
+                "account": "acct_1O7NupS4nkapQnjM",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "SG",
+                "currency": "sgd",
+                "default_for_currency": true,
+                "fingerprint": "VDIVVTFuMKl6xYpo",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "3456",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "1100-000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1O7NupS4nkapQnjM/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1O7NuqS4nkapQnjMNecJD2Y6",
+            "object": "person",
+            "account": "acct_1O7NupS4nkapQnjM",
+            "address": {
+              "city": "Singapore",
+              "country": "SG",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "12345",
+              "state": "Singapore"
+            },
+            "created": 1698781676,
+            "dob": {
+              "day": 2,
+              "month": 1,
+              "year": 1980
+            },
+            "email": "edgar131e8856_6836@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "nationality": "US",
+            "phone": "+10000000000",
+            "relationship": {
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [
+                "full_name_aliases"
+              ],
+              "errors": [],
+              "eventually_due": [
+                "full_name_aliases",
+                "verification.proof_of_liveness"
+              ],
+              "past_due": [
+                "full_name_aliases"
+              ],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "RgPQjZT9-D4FdVzRglpnzQ==",
+            "tos_agreement_id": "yMw7XuB0WcxuvcazE7vCuQ==",
+            "user_compliance_info_id": "5GNeXF4CkmqogQFvW1Eypg==",
+            "user_id": "1217871880528"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "individual.full_name_aliases"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "individual.full_name_aliases",
+              "individual.verification.proof_of_liveness"
+            ],
+            "past_due": [
+              "individual.full_name_aliases"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {},
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "VIPUL.GUMR",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "vipul.gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "payments": {
+              "statement_descriptor": "VIPUL.GUMROAD.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 1,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1698781675,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:47:58 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NupS4nkapQnjM/persons
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_syn1RPXZUqwYsC","request_duration_ms":3472}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:47:59 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2181'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Request-Id:
+      - req_sqz65vXlMsralz
+      Stripe-Account:
+      - acct_1O7NupS4nkapQnjM
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "person_1O7NuqS4nkapQnjMNecJD2Y6",
+              "object": "person",
+              "account": "acct_1O7NupS4nkapQnjM",
+              "additional_tos_acceptances": {
+                "account": {
+                  "date": null,
+                  "ip": null,
+                  "user_agent": null
+                }
+              },
+              "address": {
+                "city": "Singapore",
+                "country": "SG",
+                "line1": "address_full_match",
+                "line2": null,
+                "postal_code": "12345",
+                "state": "Singapore"
+              },
+              "created": 1698781676,
+              "dob": {
+                "day": 2,
+                "month": 1,
+                "year": 1980
+              },
+              "email": "edgar131e8856_6836@gumroad.com",
+              "first_name": "Chuck",
+              "future_requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "id_number_provided": true,
+              "last_name": "Bartowski",
+              "metadata": {},
+              "nationality": "US",
+              "phone": "+10000000000",
+              "relationship": {
+                "director": false,
+                "executive": false,
+                "legal_guardian": false,
+                "owner": false,
+                "percent_ownership": null,
+                "representative": true,
+                "title": null
+              },
+              "requirements": {
+                "alternatives": [],
+                "currently_due": [
+                  "full_name_aliases"
+                ],
+                "errors": [],
+                "eventually_due": [
+                  "full_name_aliases",
+                  "verification.proof_of_liveness"
+                ],
+                "past_due": [
+                  "full_name_aliases"
+                ],
+                "pending_verification": []
+              },
+              "ssn_last_4_provided": true,
+              "verification": {
+                "additional_document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "details": null,
+                "details_code": null,
+                "document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "status": "pending"
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1O7NupS4nkapQnjM/persons"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:47:59 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NupS4nkapQnjM/persons/person_1O7NuqS4nkapQnjMNecJD2Y6
+    body:
+      encoding: UTF-8
+      string: full_name_aliases[0]=
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_sqz65vXlMsralz","request_duration_ms":386}}'
+      Idempotency-Key:
+      - d358f3e7-4294-4473-9ee4-f98f178d973b
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:48:04 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1760'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons%2F%3Aperson;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Idempotency-Key:
+      - d358f3e7-4294-4473-9ee4-f98f178d973b
+      Original-Request:
+      - req_NYNt3fBn55wAFB
+      Request-Id:
+      - req_NYNt3fBn55wAFB
+      Stripe-Account:
+      - acct_1O7NupS4nkapQnjM
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1O7NuqS4nkapQnjMNecJD2Y6",
+          "object": "person",
+          "account": "acct_1O7NupS4nkapQnjM",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "Singapore",
+            "country": "SG",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "12345",
+            "state": "Singapore"
+          },
+          "created": 1698781676,
+          "dob": {
+            "day": 2,
+            "month": 1,
+            "year": 1980
+          },
+          "email": "edgar131e8856_6836@gumroad.com",
+          "first_name": "Chuck",
+          "full_name_aliases": [],
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "metadata": {},
+          "nationality": "US",
+          "phone": "+10000000000",
+          "relationship": {
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": false,
+            "percent_ownership": null,
+            "representative": true,
+            "title": null
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [
+              "verification.proof_of_liveness"
+            ],
+            "errors": [],
+            "eventually_due": [
+              "verification.proof_of_liveness"
+            ],
+            "past_due": [
+              "verification.proof_of_liveness"
+            ],
+            "pending_verification": []
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "status": "verified"
+          }
+        }
+  recorded_at: Tue, 31 Oct 2023 19:48:03 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/account_links
+    body:
+      encoding: UTF-8
+      string: account=acct_1O7NupS4nkapQnjM&refresh_url=http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fsettings%2Fpayments%2Fverify_identity&return_url=http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fsettings%2Fpayments%2Fverify_identity&type=account_onboarding
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NYNt3fBn55wAFB","request_duration_ms":4670}}'
+      Idempotency-Key:
+      - bef9c3a6-019f-460b-b144-633b59d0c409
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:48:04 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '165'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccount_links; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - bef9c3a6-019f-460b-b144-633b59d0c409
+      Original-Request:
+      - req_ObmIgTB4Ni0agj
+      Request-Id:
+      - req_ObmIgTB4Ni0agj
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "account_link",
+          "created": 1698781684,
+          "expires_at": 1698781984,
+          "url": "https://connect.stripe.com/setup/c/acct_1O7NupS4nkapQnjM/RpUrTwsCYr9t"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:48:04 GMT
+recorded_with: VCR 6.2.0

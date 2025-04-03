@@ -1,0 +1,124 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://app.circle.so/api/v1/communities
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Token <CIRCLE_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Fri, 20 Aug 2021 14:03:38 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Accept-Encoding
+      Etag:
+      - W/"3c9f064a2f2417780b20c7fc34676473"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Set-Cookie:
+      - ahoy_visit=85a9b8aa-f78b-44cc-a367-16ba5373f0ba; domain=.circle.so; path=/;
+        expires=Fri, 20 Aug 2021 14:08:38 GMT; Secure; SameSite=None
+      - ahoy_visitor=4edd9835-d5b3-47da-ab99-f08d89d38aa3; domain=.circle.so; path=/;
+        expires=Sun, 20 Aug 2023 14:03:38 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - c1ee02262d92bee8cbcb94eee8d6e277
+      X-Runtime:
+      - '0.063672'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 681c2a869cac0e2c-BOM
+    body:
+      encoding: ASCII-8BIT
+      string: '[{"id":3512,"name":"Gumroad","slug":"gumroad","icon_url":"https://d2y5h3osumboay.cloudfront.net/o4431o822um5prcmyefm7pc9fhht","logo_url":"https://d2y5h3osumboay.cloudfront.net/jwp8ec5m46vtdw05eki9fd38ga7zJ5Hj6yK1","owner_id":200455,"is_private":false,"space_ids":[24914,24916,24918,24919,25148,25159,27096,32841,42109,42111,42112,76381,77110,97329,97374,97376,97377,97378,98660,98664,105741,105742,116356,116357,132358,132553,132554,132556,132557,132559,132560,132561,132562,132563,132565,132566,132567,132568,132569,132571,132573,132574,132575,134985,139900,140195,142769,142937],"last_visited_by_current_user":true,"default_existing_member_space_id":0,"root_url":"community.gumroad.com","display_on_switcher":true,"prefs":{"has_posts":true,"has_spaces":true,"has_topics":true,"brand_color":"#00959A","has_seen_widget":true,"has_invited_member":true,"has_completed_onboarding":true}}]'
+  recorded_at: Fri, 20 Aug 2021 14:03:38 GMT
+- request:
+    method: get
+    uri: https://app.circle.so/api/v1/space_groups?community_id=3512
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Token <CIRCLE_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Fri, 20 Aug 2021 14:03:39 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Accept-Encoding
+      Etag:
+      - W/"825032513f9d214a065f9253a5c53d8b"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Set-Cookie:
+      - ahoy_visit=51376b92-a813-4e2c-aafe-6c3cc1671cb4; domain=.circle.so; path=/;
+        expires=Fri, 20 Aug 2021 14:08:39 GMT; Secure; SameSite=None
+      - ahoy_visitor=b71abbd1-6956-4a27-a08f-6e5b8df8166f; domain=.circle.so; path=/;
+        expires=Sun, 20 Aug 2023 14:03:39 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - da6a0ce56353c1b21b0ee3cbd66e57e3
+      X-Runtime:
+      - '0.135182'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 681c2a8d4ef02dfc-BOM
+    body:
+      encoding: ASCII-8BIT
+      string: '[{"id":8015,"name":"Community","is_hidden_from_non_members":false,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":["77110","24914","32841","132358","25159","97329","76381",76381,77110,134985,32841,132358,24914,97329,140195],"created_at":"2020-10-17T00:52:17.905Z","updated_at":"2021-08-06T00:34:52.373Z","automatically_add_members_to_new_spaces":false,"add_members_to_space_group_on_space_join":false,"slug":"community","hide_non_member_spaces_from_sidebar":false},{"id":8017,"name":"14
+        Day Product","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":["25148","27096","24918","25157","24916","24919","27095",24918,27096,25148,24916,24919],"created_at":"2020-10-17T00:56:17.325Z","updated_at":"2021-04-27T08:42:23.214Z","automatically_add_members_to_new_spaces":true,"add_members_to_space_group_on_space_join":true,"slug":"14dayproduct","hide_non_member_spaces_from_sidebar":true},{"id":13237,"name":"Sale
+        Every Day","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":[42109,42111,42112],"created_at":"2020-12-14T22:04:07.505Z","updated_at":"2021-04-27T08:35:31.274Z","automatically_add_members_to_new_spaces":true,"add_members_to_space_group_on_space_join":true,"slug":"sale-every-day","hide_non_member_spaces_from_sidebar":true},{"id":30973,"name":"Milestones","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":["97352","97340","97343","97346","97348","97349","97351",132571,132573,132574,132575],"created_at":"2021-04-27T08:47:11.647Z","updated_at":"2021-07-20T12:12:13.635Z","automatically_add_members_to_new_spaces":false,"add_members_to_space_group_on_space_join":false,"slug":"milestones","hide_non_member_spaces_from_sidebar":true},{"id":30981,"name":"Discover","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":["97378","132568","97374","132569","97377","132553","132554","132556","132557","132559","132560","132561","132562","132563","97376","132565","132566","132567",132553,97374,132557,132556],"created_at":"2021-04-27T10:34:48.095Z","updated_at":"2021-08-03T12:08:58.889Z","automatically_add_members_to_new_spaces":false,"add_members_to_space_group_on_space_join":false,"slug":"discover","hide_non_member_spaces_from_sidebar":false},{"id":31336,"name":"5
+        Day Email List Course","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":[98660,98664],"created_at":"2021-04-29T12:11:01.995Z","updated_at":"2021-04-29T12:22:48.465Z","automatically_add_members_to_new_spaces":true,"add_members_to_space_group_on_space_join":true,"slug":"5-day-email-list-course","hide_non_member_spaces_from_sidebar":false},{"id":33545,"name":"Grow
+        Your Audience Challenge","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":[105741,105742],"created_at":"2021-05-15T13:19:57.081Z","updated_at":"2021-05-15T13:22:10.587Z","automatically_add_members_to_new_spaces":true,"add_members_to_space_group_on_space_join":true,"slug":"grow-your-audience-challenge","hide_non_member_spaces_from_sidebar":false},{"id":36700,"name":"Sale
+        Every Day Course","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":[116356,116357],"created_at":"2021-06-08T17:14:16.451Z","updated_at":"2021-06-08T17:15:48.861Z","automatically_add_members_to_new_spaces":true,"add_members_to_space_group_on_space_join":true,"slug":"sale-every-day-course","hide_non_member_spaces_from_sidebar":false},{"id":43576,"name":"Tests","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":[139900,142937],"created_at":"2021-08-05T13:14:01.390Z","updated_at":"2021-08-12T20:33:12.085Z","automatically_add_members_to_new_spaces":false,"add_members_to_space_group_on_space_join":false,"slug":"tests","hide_non_member_spaces_from_sidebar":false},{"id":44429,"name":"Drafts","is_hidden_from_non_members":true,"allow_members_to_create_spaces":false,"community_id":3512,"space_order_array":[142769],"created_at":"2021-08-12T11:37:10.752Z","updated_at":"2021-08-12T11:37:37.829Z","automatically_add_members_to_new_spaces":false,"add_members_to_space_group_on_space_join":false,"slug":"drafts","hide_non_member_spaces_from_sidebar":false}]'
+  recorded_at: Fri, 20 Aug 2021 14:03:39 GMT
+recorded_with: VCR 6.0.0

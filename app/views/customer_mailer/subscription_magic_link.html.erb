@@ -1,0 +1,6 @@
+<div>
+  <%= header_section "Here's your magic link" %>
+  <p>You requested a magic link to manage your membership for "<%= @subscription.link.name %>". Note that this link expires in <%= "#{Subscription::TOKEN_VALIDITY / 1.hour}" %> hours.</p>
+  <%= link_to "Open magic link", manage_subscription_url(id: @subscription.external_id, token: @subscription.token, format: :html), class: "button primary" %>
+</div>
+If you didn't request a magic link, you can safely ignore this message.

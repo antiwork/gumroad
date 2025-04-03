@@ -1,0 +1,82 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/customers
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <customer>
+          <credit-card>
+            <payment-method-nonce>fake-paypal-future-nonce</payment-method-nonce>
+          </credit-card>
+        </customer>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 4.15.0
+      X-Apiversion:
+      - '6'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Mon, 30 Oct 2023 11:07:28 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Authentication:
+      - basic_auth
+      Vary:
+      - Accept, Accept-Encoding, Origin
+      Strict-Transport-Security:
+      - max-age=31536000
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Content-Encoding:
+      - gzip
+      Etag:
+      - W/"05f25a860c015c4a0b0fac419fd4b2fd"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Runtime:
+      - '1.646441'
+      X-Request-Id:
+      - 4295f7ed-f57a-42de-88ae-ae73f39615a1
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 4295f7ed-f57a-42de-88ae-ae73f39615a1
+      Paypal-Debug-Id:
+      - 39f62f9760ef4
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        H4sIAHCOP2UAA+xVTW/cNhC9+1cI6rWy9sOOvYaWThFjDRi1g7Z2kvpiUOJIYkKRCkntrvzrS4qrD6920RS5FtBBnPeGM3wzHEbX24J5a5CKCr70p6cT3wOeCEJ5tvSfHlfBpX+NTqKkUloUINGJ50WUoPPzd/PL2cV8dnYWhWZtzQZOcsx1YNaXJP2+TYoFiec82ShDGqKWnVKpdMBxAR6nbOlrWYEfNhDDx5BEFCXm9cgOBaZsZC1zwcd7pHg7sm0gVlQfiCcBayAB1p6uS1j6xCw1LcBHs8lsHkwnwXzyOJ1eTS6uZhfPUdg7NP5VSf6bf+/g4jeyBykFRpRLKWMixsyq+Pf80yu5XejnL3fpw+PT7P41qx9e7+uHmz+isKftzkGoDhIsidplgqXEdSsUrktDxkkiKq7fMixhRHFGY44pY6ZVApxJgAJceR33ZYe9dNgLJVF40KPdLhGxxJwYAWyqAcMxjMrqiD9XGLfHrqeD/X4eAiPyD+p/gN9uRSDFFWsTj4VggLmP7AmjcAd25Kaz0VfM4ZQIeO+kPTX3IAod1BL7OMnt6jz+/Kkit1NGbvP182qxSVaL7/df8nn8+Y4m2V57NP60wBkElWQo17pUV2GIlQKtTk1FKNemWJkRcINrGzw0eTQVLUDngrwwkYlwl1vJs2vgayoFt5SlMgWNxdaMiS5CG1NVsUokLbUZPgf6suFo8Q04+jrdboo4llHo1i36kxfMnVwFdjJxMHpwqqnF94uTYqZMdQ5Ru33M+V3PtD9R2Jn2ODwVramrcYq/QdDj72GLi5LBgVq/mZ7oTuQ8CgeGntUNUnQjTPb9sqf8QNLtJEXT2dx95o44S8/orjUhEpTqEZsG5TBFZzr3VkwI+av30Yzl33EmBPduJF3b1BrKvtMMPRmVvV9sQLceMhKqa/QnkI0QxPtgFubWWdOQo7QpEfrwWxS6vyH2r4eyHGH8WGAeRECLs8m7c0MamN6kYwejrB3w9JdJZmjolQqPShWpnJblMRUlJLSkdmB2Zfeasu4B/yt/VPlj+nY9P7iXRoaC2klRKQiEJM2VOPgWSVibmdTMoBEcheOHc9/WpBHtUoLRHOzfEnTyDwAAAP//AwBqkc2+rwkAAA==
+  recorded_at: Mon, 30 Oct 2023 11:07:28 GMT
+recorded_with: VCR 6.2.0

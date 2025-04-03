@@ -1,0 +1,157 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://drive.protonmail.com/urls/FJT6WRE0S0
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 09 Dec 2021 13:51:34 GMT
+      Last-Modified:
+      - Tue, 16 Nov 2021 11:37:56 GMT
+      Accept-Ranges:
+      - bytes
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Expires:
+      - Wed, 11 Jan 1984 05:00:00 GMT
+      Vary:
+      - Accept-Encoding
+      Set-Cookie:
+      - Session-Id=YbIJ5qaZqycHMCph6C62CQAAAHc; Domain=protonmail.com; Path=/; HttpOnly;
+        Secure; Max-Age=7776000
+      - Version=default; Path=/; Secure; Max-Age=7776000
+      Pragma:
+      - no-cache
+      Content-Length:
+      - '1543'
+      Content-Type:
+      - text/html; charset=UTF-8
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Content-Security-Policy:
+      - 'default-src ''self''; connect-src ''self'' *.protonmail.com blob:; worker-src
+        ''self'' blob:; script-src ''self'' blob: ''sha256-eAhF1Kdccp0BTXM6nMW7SYBdV0c3fZwzcC177TQ692g='';
+        style-src ''self'' ''unsafe-inline''; img-src http: https: data: blob: cid:;
+        media-src ''self'' blob:; frame-src ''self'' blob: https://secure.protonmail.com;
+        object-src ''self'' blob:; child-src ''self'' data: blob:; report-uri https://reports.protonmail.com/reports/csp;
+        frame-ancestors ''none'';'
+      Expect-Ct:
+      - max-age=2592000, enforce, report-uri="https://reports.protonmail.com/reports/tls"
+      Public-Key-Pins-Report-Only:
+      - pin-sha256="8joiNBdqaYiQpKskgtkJsqRxF7zN0C0aqfi8DacknnI="; pin-sha256="drtmcR2kFkM8qJClsuWgUzxgBkePfRCkRpqUesyDmeE=";
+        report-uri="https://reports.protonmail.com/reports/tls"
+      X-Frame-Options:
+      - deny
+      X-Content-Type-Options:
+      - nosniff
+      X-Xss-Protection:
+      - 1; mode=block; report=https://reports.protonmail.com/reports/csp
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Permitted-Cross-Domain-Policies:
+      - none
+    body:
+      encoding: ASCII-8BIT
+      string: '<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport"
+        content="width=device-width,user-scalable=no"/><meta http-equiv="x-dns-prefetch-control"
+        content="off"/><base href="/"/><title></title><meta name="description" content="Proton
+        Drive allows you to securely store and share your sensitive documents and
+        access them anywhere."/><meta property="og:title" content="Proton Drive"/><meta
+        property="og:description" content="Proton Drive allows you to securely store
+        and share your sensitive documents and access them anywhere."/><meta name="og:image"
+        content="https://drive.protonmail.com/assets/social_logo.png"/><meta name="google"
+        content="notranslate"/><link rel="shortcut icon" href="/assets/favicon.ico"><link
+        rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png"><link
+        rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png"><link
+        rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-48x48.png"><link
+        rel="manifest" href="/assets/manifest.json"><meta name="mobile-web-app-capable"
+        content="yes"><meta name="theme-color" content="#1c223d"><meta name="application-name"
+        content="ProtonDrive"><link rel="apple-touch-icon" sizes="57x57" href="/assets/apple-touch-icon-57x57.png"><link
+        rel="apple-touch-icon" sizes="60x60" href="/assets/apple-touch-icon-60x60.png"><link
+        rel="apple-touch-icon" sizes="72x72" href="/assets/apple-touch-icon-72x72.png"><link
+        rel="apple-touch-icon" sizes="76x76" href="/assets/apple-touch-icon-76x76.png"><link
+        rel="apple-touch-icon" sizes="114x114" href="/assets/apple-touch-icon-114x114.png"><link
+        rel="apple-touch-icon" sizes="120x120" href="/assets/apple-touch-icon-120x120.png"><link
+        rel="apple-touch-icon" sizes="144x144" href="/assets/apple-touch-icon-144x144.png"><link
+        rel="apple-touch-icon" sizes="152x152" href="/assets/apple-touch-icon-152x152.png"><link
+        rel="apple-touch-icon" sizes="167x167" href="/assets/apple-touch-icon-167x167.png"><link
+        rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-180x180.png"><link
+        rel="apple-touch-icon" sizes="1024x1024" href="/assets/apple-touch-icon-1024x1024.png"><meta
+        name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style"
+        content="black-translucent"><meta name="apple-mobile-web-app-title" content="ProtonDrive"><link
+        rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height:
+        568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-640x1136.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height:
+        667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-750x1334.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height:
+        896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-828x1792.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height:
+        812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1125x2436.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height:
+        736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1242x2208.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height:
+        896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1242x2688.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 768px) and (device-height:
+        1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1536x2048.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height:
+        1112px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1668x2224.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height:
+        1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1668x2388.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 1024px) and (device-height:
+        1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-2048x2732.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 810px) and (device-height:
+        1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/assets/apple-touch-startup-image-1620x2160.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height:
+        568px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="/assets/apple-touch-startup-image-1136x640.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height:
+        667px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="/assets/apple-touch-startup-image-1334x750.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height:
+        896px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="/assets/apple-touch-startup-image-1792x828.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height:
+        812px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="/assets/apple-touch-startup-image-2436x1125.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height:
+        736px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="/assets/apple-touch-startup-image-2208x1242.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height:
+        896px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="/assets/apple-touch-startup-image-2688x1242.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 768px) and (device-height:
+        1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
+        href="/assets/apple-touch-startup-image-2048x1536.png"><link rel="apple-touch-startup-image"
+        media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio:
+        2) and (orientation: landscape)" href="/assets/apple-touch-startup-image-2224x1668.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height:
+        1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
+        href="/assets/apple-touch-startup-image-2388x1668.png"><link rel="apple-touch-startup-image"
+        media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio:
+        2) and (orientation: landscape)" href="/assets/apple-touch-startup-image-2732x2048.png"><link
+        rel="apple-touch-startup-image" media="(device-width: 810px) and (device-height:
+        1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)"
+        href="/assets/apple-touch-startup-image-2160x1620.png"><link rel="icon" type="image/png"
+        sizes="228x228" href="/assets/coast-228x228.png"><meta name="msapplication-TileColor"
+        content="#1c223d"><meta name="msapplication-TileImage" content="/assets/mstile-144x144.png"><meta
+        name="msapplication-config" content="/assets/browserconfig.xml"><link rel="yandex-tableau-widget"
+        href="/assets/yandex-browser-manifest.json"><link href="/index.8bd87097.css"
+        rel="stylesheet"></head><body><div class="app-root"></div><div class="app-root-loader"></div><noscript
+        class="app-noscript">Proton Drive requires Javascript. Enable Javascript and
+        reload this page to continue.</noscript><script defer="defer" src="/runtime.096ea4e6.js"
+        integrity="sha384-udvuSJOOAeht5eSLA6PrsugcHVuegZV6nc1MsO410ktJK5OXBU9To8V6w/7CSTys"
+        crossorigin="anonymous"></script><script defer="defer" src="/index.c82a6829.js"
+        integrity="sha384-q+L2nTjDap2BOZDYnXHBcWTK4R4UYU6E8gVyniTy4H2LVDiwiSQZv8+6pgpc0koB"
+        crossorigin="anonymous"></script><script defer="defer" src="/unsupported.dda18144.js"
+        integrity="sha384-9ctX3sUXTaJg786D+U+P8xoOqoLHXuHvP9deoMZKgLertGVygOTPh1Shu1Vact9t"
+        crossorigin="anonymous"></script></body></html>'
+  recorded_at: Thu, 09 Dec 2021 13:51:34 GMT
+recorded_with: VCR 6.0.0

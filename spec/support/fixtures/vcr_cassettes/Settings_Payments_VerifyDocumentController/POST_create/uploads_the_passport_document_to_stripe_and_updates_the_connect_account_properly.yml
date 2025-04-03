@@ -1,0 +1,953 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=AE&default_currency=aed&metadata[user_id]=219483467403&metadata[tos_agreement_id]=lxfJYsVgQ7aMd81lyrlkpQ%3D%3D&metadata[user_compliance_info_id]=Kyuh-8ZHlRFbGt_JpkPhrg%3D%3D&metadata[bank_account_id]=xOT-Wgl-S6m0PIhTlK8qfg%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=company&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Buy+More%2C+LLC&business_profile[support_phone]=0000000000&company[name]=Buy+More%2C+LLC&company[address][line1]=address_full_match&company[address][city]=Dubai&company[address][state]=Dubai&company[address][postal_code]=51133&company[address][country]=AE&company[tax_id]=000000000&company[phone]=0000000000&company[directors_provided]=true&company[executives_provided]=true&company[structure]=llc&bank_account[country]=AE&bank_account[currency]=aed&bank_account[account_number]=AE070331234567890123456&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_jBXErltJaqT0Jv","request_duration_ms":581}}'
+      Idempotency-Key:
+      - 7aa54e42-1539-4d7c-90b4-04c646144fbd
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:46:57 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6824'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - 7aa54e42-1539-4d7c-90b4-04c646144fbd
+      Original-Request:
+      - req_3RAdvvzh6lkov8
+      Request-Id:
+      - req_3RAdvvzh6lkov8
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1O7NtqS7UwEMubhT",
+          "object": "account",
+          "business_profile": {
+            "mcc": "5192",
+            "name": "Buy More, LLC",
+            "product_description": "Buy More, LLC",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": "0000000000",
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "company",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "inactive"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "Dubai",
+              "country": "AE",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "51133",
+              "state": "Dubai"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": "Buy More, LLC",
+            "name_kana": null,
+            "name_kanji": null,
+            "owners_provided": false,
+            "ownership_declaration": null,
+            "phone": "0000000000",
+            "structure": "llc",
+            "tax_id_provided": true,
+            "vat_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "AE",
+          "created": 1698781615,
+          "default_currency": "aed",
+          "details_submitted": false,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1O7NtqS7UwEMubhTdxB9UxQf",
+                "object": "bank_account",
+                "account": "acct_1O7NtqS7UwEMubhT",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "AE",
+                "currency": "aed",
+                "default_for_currency": true,
+                "fingerprint": "RU0lp0Y2BJI2OCvJ",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "3456",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1O7NtqS7UwEMubhT/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "metadata": {
+            "bank_account_id": "xOT-Wgl-S6m0PIhTlK8qfg==",
+            "tos_agreement_id": "lxfJYsVgQ7aMd81lyrlkpQ==",
+            "user_compliance_info_id": "Kyuh-8ZHlRFbGt_JpkPhrg==",
+            "user_id": "219483467403"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "company.business_vat_id_number",
+              "company.owners_provided",
+              "owners.address.line1",
+              "owners.address.state",
+              "owners.dob.day",
+              "owners.dob.month",
+              "owners.dob.year",
+              "owners.first_name",
+              "owners.id_number",
+              "owners.last_name",
+              "owners.nationality",
+              "representative.address.line1",
+              "representative.address.state",
+              "representative.dob.day",
+              "representative.dob.month",
+              "representative.dob.year",
+              "representative.email",
+              "representative.first_name",
+              "representative.id_number",
+              "representative.last_name",
+              "representative.nationality",
+              "representative.phone",
+              "representative.relationship.executive",
+              "representative.relationship.title"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "company.business_vat_id_number",
+              "company.owners_provided",
+              "documents.bank_account_ownership_verification.files",
+              "documents.company_license.files",
+              "documents.company_memorandum_of_association.files",
+              "owners.address.line1",
+              "owners.address.state",
+              "owners.dob.day",
+              "owners.dob.month",
+              "owners.dob.year",
+              "owners.documents.passport.files",
+              "owners.first_name",
+              "owners.id_number",
+              "owners.last_name",
+              "owners.nationality",
+              "representative.address.line1",
+              "representative.address.state",
+              "representative.dob.day",
+              "representative.dob.month",
+              "representative.dob.year",
+              "representative.documents.passport.files",
+              "representative.email",
+              "representative.first_name",
+              "representative.id_number",
+              "representative.last_name",
+              "representative.nationality",
+              "representative.phone",
+              "representative.relationship.executive",
+              "representative.relationship.title"
+            ],
+            "past_due": [
+              "company.business_vat_id_number",
+              "company.owners_provided",
+              "owners.address.line1",
+              "owners.address.state",
+              "owners.dob.day",
+              "owners.dob.month",
+              "owners.dob.year",
+              "owners.first_name",
+              "owners.id_number",
+              "owners.last_name",
+              "owners.nationality",
+              "representative.address.line1",
+              "representative.address.state",
+              "representative.dob.day",
+              "representative.dob.month",
+              "representative.dob.year",
+              "representative.email",
+              "representative.first_name",
+              "representative.id_number",
+              "representative.last_name",
+              "representative.nationality",
+              "representative.phone",
+              "representative.relationship.executive",
+              "representative.relationship.title"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {},
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "VIPUL.GUMR",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "vipul.gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "payments": {
+              "statement_descriptor": "VIPUL.GUMROAD.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 1,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1427846400,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:46:57 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NtqS7UwEMubhT/persons
+    body:
+      encoding: UTF-8
+      string: first_name=Chuck&last_name=Bartowski&email=edgar73a057a0_6822%40gumroad.com&phone=0000000000&address[line1]=address_full_match&address[city]=Dubai&address[state]=Dubai&address[postal_code]=51133&address[country]=AE&dob[day]=2&dob[month]=1&dob[year]=1901&id_number=000000000&nationality=US&relationship[representative]=true&relationship[owner]=true&relationship[title]=CEO&relationship[percent_ownership]=100
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_3RAdvvzh6lkov8","request_duration_ms":3432}}'
+      Idempotency-Key:
+      - 20ecea4b-bb3b-4034-8cc4-db4860ac4206
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:47:01 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2042'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Idempotency-Key:
+      - 20ecea4b-bb3b-4034-8cc4-db4860ac4206
+      Original-Request:
+      - req_DC2ISZ0U4xp6gn
+      Request-Id:
+      - req_DC2ISZ0U4xp6gn
+      Stripe-Account:
+      - acct_1O7NtqS7UwEMubhT
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1O7NtuS7UwEMubhTuFd98ytm",
+          "object": "person",
+          "account": "acct_1O7NtqS7UwEMubhT",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "Dubai",
+            "country": "AE",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "51133",
+            "state": "Dubai"
+          },
+          "created": 1698781618,
+          "dob": {
+            "day": 2,
+            "month": 1,
+            "year": 1901
+          },
+          "email": "edgar73a057a0_6822@gumroad.com",
+          "first_name": "Chuck",
+          "first_name_kana": null,
+          "first_name_kanji": null,
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "gender": null,
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "last_name_kana": null,
+          "last_name_kanji": null,
+          "maiden_name": null,
+          "metadata": {},
+          "nationality": "US",
+          "phone": "+10000000000",
+          "relationship": {
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": true,
+            "percent_ownership": 100.0,
+            "representative": true,
+            "title": "CEO"
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [
+              "documents.passport.files",
+              "documents.visa.files",
+              "verification.document"
+            ],
+            "errors": [],
+            "eventually_due": [
+              "documents.passport.files",
+              "documents.visa.files",
+              "verification.document"
+            ],
+            "past_due": [
+              "documents.passport.files",
+              "documents.visa.files",
+              "verification.document"
+            ],
+            "pending_verification": []
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "status": "unverified"
+          }
+        }
+  recorded_at: Tue, 31 Oct 2023 19:47:01 GMT
+- request:
+    method: post
+    uri: https://files.stripe.com/v1/files
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        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
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - multipart/form-data; boundary=2c4b8dd959ab99ad09d74eb37a1e58cdc4d768be3a636ddb019c88a391bd
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_DC2ISZ0U4xp6gn","request_duration_ms":3831}}'
+      Idempotency-Key:
+      - c393a421-80cc-400d-bf18-fa95cd2e78ab
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1O7NtqS7UwEMubhT
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:47:02 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '409'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Ffiles; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_VLetuYyibYTJQ8
+      Stripe-Account:
+      - acct_1O7NtqS7UwEMubhT
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Api-Gateway-Reached:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - livemode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "file_1O7NtyS7UwEMubhTxttfNCEt",
+          "object": "file",
+          "created": 1698781622,
+          "expires_at": null,
+          "filename": "RackMultipart20231101-12090-v1zcsn.png",
+          "links": {
+            "object": "list",
+            "data": [],
+            "has_more": false,
+            "url": "/v1/file_links?file=file_1O7NtyS7UwEMubhTxttfNCEt"
+          },
+          "purpose": "account_requirement",
+          "size": 5818,
+          "title": null,
+          "type": "png",
+          "url": null
+        }
+  recorded_at: Tue, 31 Oct 2023 19:47:02 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NtqS7UwEMubhT/persons
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_VLetuYyibYTJQ8","request_duration_ms":1123}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:47:03 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2602'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Request-Id:
+      - req_DMnD04MPv8qU7n
+      Stripe-Account:
+      - acct_1O7NtqS7UwEMubhT
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "person_1O7NtuS7UwEMubhTuFd98ytm",
+              "object": "person",
+              "account": "acct_1O7NtqS7UwEMubhT",
+              "additional_tos_acceptances": {
+                "account": {
+                  "date": null,
+                  "ip": null,
+                  "user_agent": null
+                }
+              },
+              "address": {
+                "city": "Dubai",
+                "country": "AE",
+                "line1": "address_full_match",
+                "line2": null,
+                "postal_code": "51133",
+                "state": "Dubai"
+              },
+              "created": 1698781618,
+              "dob": {
+                "day": 2,
+                "month": 1,
+                "year": 1901
+              },
+              "email": "edgar73a057a0_6822@gumroad.com",
+              "first_name": "Chuck",
+              "first_name_kana": null,
+              "first_name_kanji": null,
+              "future_requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "gender": null,
+              "id_number_provided": true,
+              "last_name": "Bartowski",
+              "last_name_kana": null,
+              "last_name_kanji": null,
+              "maiden_name": null,
+              "metadata": {},
+              "nationality": "US",
+              "phone": "+10000000000",
+              "relationship": {
+                "director": false,
+                "executive": false,
+                "legal_guardian": false,
+                "owner": true,
+                "percent_ownership": 100.0,
+                "representative": true,
+                "title": "CEO"
+              },
+              "requirements": {
+                "alternatives": [],
+                "currently_due": [
+                  "documents.passport.files",
+                  "documents.visa.files",
+                  "verification.document"
+                ],
+                "errors": [],
+                "eventually_due": [
+                  "documents.passport.files",
+                  "documents.visa.files",
+                  "verification.document"
+                ],
+                "past_due": [
+                  "documents.passport.files",
+                  "documents.visa.files",
+                  "verification.document"
+                ],
+                "pending_verification": []
+              },
+              "ssn_last_4_provided": true,
+              "verification": {
+                "additional_document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "details": "Provided identity information could not be verified",
+                "details_code": "failed_keyed_identity",
+                "document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "status": "unverified"
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1O7NtqS7UwEMubhT/persons"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:47:03 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NtqS7UwEMubhT/persons/person_1O7NtuS7UwEMubhTuFd98ytm
+    body:
+      encoding: UTF-8
+      string: documents[passport][files][0]=file_1O7NtyS7UwEMubhTxttfNCEt
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_DMnD04MPv8qU7n","request_duration_ms":372}}'
+      Idempotency-Key:
+      - 28b75582-fd58-4a17-84b3-19cc9178d4b1
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:47:05 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1967'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons%2F%3Aperson;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Idempotency-Key:
+      - 28b75582-fd58-4a17-84b3-19cc9178d4b1
+      Original-Request:
+      - req_5K5UQUYUxGdVEY
+      Request-Id:
+      - req_5K5UQUYUxGdVEY
+      Stripe-Account:
+      - acct_1O7NtqS7UwEMubhT
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1O7NtuS7UwEMubhTuFd98ytm",
+          "object": "person",
+          "account": "acct_1O7NtqS7UwEMubhT",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "Dubai",
+            "country": "AE",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "51133",
+            "state": "Dubai"
+          },
+          "created": 1698781618,
+          "dob": {
+            "day": 2,
+            "month": 1,
+            "year": 1901
+          },
+          "email": "edgar73a057a0_6822@gumroad.com",
+          "first_name": "Chuck",
+          "first_name_kana": null,
+          "first_name_kanji": null,
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "gender": null,
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "last_name_kana": null,
+          "last_name_kanji": null,
+          "maiden_name": null,
+          "metadata": {},
+          "nationality": "US",
+          "phone": "+10000000000",
+          "relationship": {
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": true,
+            "percent_ownership": 100.0,
+            "representative": true,
+            "title": "CEO"
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [
+              "documents.visa.files",
+              "verification.document"
+            ],
+            "errors": [],
+            "eventually_due": [
+              "documents.visa.files",
+              "verification.document"
+            ],
+            "past_due": [
+              "documents.visa.files",
+              "verification.document"
+            ],
+            "pending_verification": []
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": "file_1O7NtyS7UwEMubhTxttfNCEt"
+            },
+            "status": "unverified"
+          }
+        }
+  recorded_at: Tue, 31 Oct 2023 19:47:05 GMT
+recorded_with: VCR 6.2.0

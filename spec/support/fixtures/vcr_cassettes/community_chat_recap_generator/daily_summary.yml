@@ -1,0 +1,134 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You
+        are an AI assistant that creates concise, informative daily summaries of community
+        chat conversations.\n\nYour task is to analyze the provided chat messages
+        and create a summary with minimum 1 and maximum 5 bullet points (maximum 500
+        characters) highlighting key discussions, questions answered, important announcements,
+        or decisions made. Messages from the creator of the community are highlighted
+        with [CREATOR], refer to them as \"creator\". Refer to each customer as \"a
+        customer\" and never mention their actual names. Make important words/phrases
+        bold using \u003cstrong\u003e tags. Do not say anything that was not said
+        in the messages.\n\nFormat your response in an HTML unordered list exactly
+        like this:\n\n\u003cul\u003e\n  \u003cli\u003eSummary bullet point 1\u003c/li\u003e\n  \u003cli\u003eSummary
+        bullet point 2\u003c/li\u003e\n\u003c/ul\u003e\n\nKeep the summary conversational
+        and easy to read.\nMake sure to include all significant topics discussed.\nDon''t
+        include usernames or timestamps in your summary.\nIf there are very few messages,
+        keep the summary brief but informative.\n"},{"role":"user","content":"Here
+        are today''s chat messages in the community:\n\n[2025-03-25 01:00:00] [Name:
+        edgar5afc6eec1] [CREATOR]: Welcome to the community!\n\n[2025-03-25 02:00:00]
+        [Name: edgar8f97f8853] : How do I use this feature?\n\n[2025-03-25 03:00:00]
+        [Name: edgar5afc6eec1] [CREATOR]: Here''s how to use it...\n\n[2025-03-25
+        04:00:00] [Name: edgar22d3ff674] : Thank you for the information!\n\n[2025-03-25
+        05:00:00] [Name: edgar05dd075f5] : I''m grateful for the help!\n\n[2025-03-25
+        06:00:00] [Name: edgar5afc6eec1] [CREATOR]: You''re welcome!"}],"temperature":0.7}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer sk-gumroad-dev-service-account-xxxxxx
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 26 Mar 2025 12:31:24 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '1302'
+      Openai-Version:
+      - '2020-10-01'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999614'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_40339ee4f9239c7f0709f1185a18b7ab
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=sX.z_36OLhQpsyBemLj5zA2q11NsuWLf3wvr7TEo.Io-1742992284-1.0.1.1-H5K_xxxxxxxx;
+        path=/; expires=Wed, 26-Mar-25 13:01:24 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=0oyTNhhbn4qO6F90R2ouwFTgJwqCQqzmkOb7GaRgImQ-1742992284437-0.0.1.1-xxxxxxxx;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9266aa27fc6a47c2-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-BFKChpLjAPS0dxYJ07n85i6nkS66t",
+          "object": "chat.completion",
+          "created": 1742992283,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "<ul>\n  <li>Creator welcomed everyone to the community.</li>\n  <li>A customer asked about using a specific feature.</li>\n  <li>Creator provided detailed instructions on how to use the feature.</li>\n  <li>Two customers expressed their gratitude for the information and help.</li>\n</ul>",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 429,
+            "completion_tokens": 67,
+            "total_tokens": 496,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_b376dfbbd5"
+        }
+  recorded_at: Wed, 26 Mar 2025 12:31:24 GMT
+recorded_with: VCR 6.2.0

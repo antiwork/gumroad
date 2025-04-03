@@ -1,0 +1,36 @@
+<div>
+  <table>
+    <tbody>
+      <tr>
+        <td><%= @service_charge.created_at.to_fs(:formatted_date_full_month) %></td>
+        <td><%= @service_charge.formatted_charge %> charged to <%= "#{@service_charge.card_type.upcase} *#{@service_charge.card_visual.delete('*').delete(' ')}" %></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Thanks for continuing to support Gumroad! You're all set until <%= @service_charge.recurring_service.humanized_renewal_at %>.</p>
+  <p>As long as you remain within your <%= link_to "current tier", settings_main_url %>, you'll be charged at the same rate.</p>
+  <p>Please let us know about feature requests and other questions by replying to this email. Happy creating!</p>
+</div>
+<div>
+  <table>
+    <tbody>
+      <tr>
+        <td>Sales tax:</td>
+        <td>$0</td>
+      </tr>
+      <% if @service_charge.discount_code.present? %>
+        <tr>
+          <td>Credit applied:</td>
+          <td><%= @service_charge.discount_amount %></td>
+        </tr>
+      <% end %>
+      <tr>
+        <td>Order total</td>
+        <td><%= @service_charge.formatted_charge %></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <%= link_to "Generate invoice", generate_service_charge_invoice_service_charge_url(@service_charge.external_id), class: "button primary", target: "_blank" %>
+  </p>
+</div>

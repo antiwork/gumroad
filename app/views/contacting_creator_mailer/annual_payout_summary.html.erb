@@ -1,0 +1,7 @@
+<%= header_section("Here's your financial report for #{@year}!") %>
+<div>
+  <p>In <%= @year %> you made <%= @formatted_total_amount %> on Gumroad. Congratulations! We've created a payout summary for the <%= @year %> calendar year to make it easy for you to get a financial understanding of your account.</p>
+  <p>Good luck in <%= @next_year %>!</p>
+  <p>Please click this <%= link_to "link", @link %> to download the payout summary.</p>
+</div>
+

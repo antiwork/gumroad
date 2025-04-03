@@ -1,0 +1,203 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/radar/early_fraud_warnings/issfr_1O9ttzGFgEK9GGWTiwPNm9WO?expand%5B%5D=charge
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/11.4.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_SIuLktdTATGg4p","request_duration_ms":3}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"11.4.0","lang":"ruby","lang_version":"3.3.1 p55 (2024-04-23)","platform":"arm64-darwin23","engine":"ruby","publisher":"stripe","uname":"Darwin
+        aeros.local 23.4.0 Darwin Kernel Version 23.4.0: Fri Mar 15 00:12:41 PDT 2024;
+        root:xnu-10063.101.17~1/RELEASE_ARM64_T8103 arm64","hostname":"aeros.local"}'
+      Stripe-Account:
+      - acct_1O9tZ6GFgEK9GGWT
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Wed, 15 May 2024 04:58:20 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3317'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fradar%2Fearly_fraud_warnings%2F%3Aearly_fraud_warning;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to="coop"
+      Report-To:
+      - '{"group":"coop","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/coop-report?s=mono-bapi-srv"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - coop="https://q.stripe.com/coop-report?s=mono-bapi-srv"
+      Request-Id:
+      - req_XT9hQg2Mva8Ii8
+      Stripe-Account:
+      - acct_1O9tZ6GFgEK9GGWT
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Content-Type-Options:
+      - nosniff
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "issfr_1O9ttzGFgEK9GGWTiwPNm9WO",
+          "object": "radar.early_fraud_warning",
+          "actionable": false,
+          "charge": {
+            "id": "ch_3O9ttyGFgEK9GGWT0BVMJhq1",
+            "object": "charge",
+            "amount": 4999,
+            "amount_captured": 4999,
+            "amount_refunded": 4999,
+            "application": "<STRIPE_CONNECT_CLIENT_ID>",
+            "application_fee": "fee_1O9ttyGFgEK9GGWTIBFBzMht",
+            "application_fee_amount": 500,
+            "balance_transaction": "txn_3O9ttyGFgEK9GGWT01lJxbmN",
+            "billing_details": {
+              "address": {
+                "city": null,
+                "country": null,
+                "line1": null,
+                "line2": null,
+                "postal_code": "",
+                "state": null
+              },
+              "email": null,
+              "name": null,
+              "phone": null
+            },
+            "calculated_statement_descriptor": "GUMRD.COM* SELLER US",
+            "captured": true,
+            "created": 1699381286,
+            "currency": "usd",
+            "customer": null,
+            "description": "You bought https://unitedstates.gumroad.dev/l/a",
+            "destination": null,
+            "dispute": null,
+            "disputed": false,
+            "failure_balance_transaction": null,
+            "failure_code": null,
+            "failure_message": null,
+            "fraud_details": {},
+            "invoice": null,
+            "livemode": false,
+            "metadata": {
+              "purchase": "gTNRmhM8EWg_YOF1sneJhQ=="
+            },
+            "on_behalf_of": null,
+            "order": null,
+            "outcome": {
+              "network_status": "approved_by_network",
+              "reason": null,
+              "risk_level": "normal",
+              "risk_score": 56,
+              "seller_message": "Payment complete.",
+              "type": "authorized"
+            },
+            "paid": true,
+            "payment_intent": "pi_3O9ttyGFgEK9GGWT0Gd0cFFf",
+            "payment_method": "pm_1O9ttxGFgEK9GGWTNWfav01J",
+            "payment_method_details": {
+              "card": {
+                "amount_authorized": 4999,
+                "brand": "visa",
+                "checks": {
+                  "address_line1_check": null,
+                  "address_postal_code_check": null,
+                  "cvc_check": "pass"
+                },
+                "country": "US",
+                "exp_month": 1,
+                "exp_year": 2034,
+                "extended_authorization": {
+                  "status": "disabled"
+                },
+                "fingerprint": "I03xpzqac6uXAW7s",
+                "funding": "credit",
+                "incremental_authorization": {
+                  "status": "unavailable"
+                },
+                "installments": null,
+                "last4": "5423",
+                "mandate": null,
+                "multicapture": {
+                  "status": "unavailable"
+                },
+                "network": "visa",
+                "network_token": {
+                  "used": false
+                },
+                "overcapture": {
+                  "maximum_amount_capturable": 4999,
+                  "status": "unavailable"
+                },
+                "three_d_secure": null,
+                "wallet": null
+              },
+              "type": "card"
+            },
+            "receipt_email": null,
+            "receipt_number": null,
+            "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xTzl0WjZHRmdFSzlHR1dUKOyBkbIGMgYKE3pNH_Q6LBa1SI_KGUAV5jDV-UMDJEtWhIXu75VtarUh72bI34n72jOobsVQVhK8ppKZ",
+            "refunded": true,
+            "review": null,
+            "shipping": null,
+            "source": null,
+            "source_transfer": null,
+            "statement_descriptor": null,
+            "statement_descriptor_suffix": "Seller US",
+            "status": "succeeded",
+            "transfer_data": null,
+            "transfer_group": "390"
+          },
+          "created": 1699381287,
+          "fraud_type": "made_with_stolen_card",
+          "livemode": false,
+          "payment_intent": "pi_3O9ttyGFgEK9GGWT0Gd0cFFf"
+        }
+  recorded_at: Wed, 15 May 2024 04:58:20 GMT
+recorded_with: VCR 6.2.0

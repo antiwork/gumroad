@@ -1,0 +1,206 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/radar/early_fraud_warnings/issfr_0O8n7K9e1RjUNIyYmTbvMMLa?expand%5B%5D=charge
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/11.4.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_yz6HRVR9ur9DZ6","request_duration_ms":160}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"11.4.0","lang":"ruby","lang_version":"3.3.1 p55 (2024-04-23)","platform":"arm64-darwin23","engine":"ruby","publisher":"stripe","uname":"Darwin
+        aeros.local 23.4.0 Darwin Kernel Version 23.4.0: Fri Mar 15 00:12:41 PDT 2024;
+        root:xnu-10063.101.17~1/RELEASE_ARM64_T8103 arm64","hostname":"aeros.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Wed, 15 May 2024 04:58:21 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3493'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fradar%2Fearly_fraud_warnings%2F%3Aearly_fraud_warning;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to="coop"
+      Report-To:
+      - '{"group":"coop","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/coop-report?s=mono-bapi-srv"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - coop="https://q.stripe.com/coop-report?s=mono-bapi-srv"
+      Request-Id:
+      - req_38HIYAyRFNmd3z
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Content-Type-Options:
+      - nosniff
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "issfr_0O8n7K9e1RjUNIyYmTbvMMLa",
+          "object": "radar.early_fraud_warning",
+          "actionable": false,
+          "charge": {
+            "id": "ch_2O8n7J9e1RjUNIyY1rs9MIRL",
+            "object": "charge",
+            "amount": 19523,
+            "amount_captured": 19523,
+            "amount_refunded": 19523,
+            "amount_updates": [],
+            "application": null,
+            "application_fee": null,
+            "application_fee_amount": null,
+            "balance_transaction": "txn_2O8n7J9e1RjUNIyY1OEx3dMU",
+            "billing_details": {
+              "address": {
+                "city": null,
+                "country": null,
+                "line1": null,
+                "line2": null,
+                "postal_code": "",
+                "state": null
+              },
+              "email": null,
+              "name": null,
+              "phone": null
+            },
+            "calculated_statement_descriptor": "GUMRD.COM* RAZVAN WITH",
+            "captured": true,
+            "created": 1699116877,
+            "currency": "usd",
+            "customer": null,
+            "description": "You bought https://rmarescu.gumroad.dev/l/hz",
+            "destination": "acct_1JpgXiS0ZnILuwfA",
+            "dispute": null,
+            "disputed": false,
+            "failure_balance_transaction": null,
+            "failure_code": null,
+            "failure_message": null,
+            "fraud_details": {
+              "user_report": "fraudulent"
+            },
+            "invoice": null,
+            "livemode": false,
+            "metadata": {
+              "purchase": "DNZkaw0o-Ucr7hB40jIphg=="
+            },
+            "on_behalf_of": null,
+            "order": null,
+            "outcome": {
+              "network_status": "approved_by_network",
+              "reason": null,
+              "risk_level": "normal",
+              "risk_score": 35,
+              "seller_message": "Payment complete.",
+              "type": "authorized"
+            },
+            "paid": true,
+            "payment_intent": "pi_2O8n7J9e1RjUNIyY1X7FyY6q",
+            "payment_method": "pm_0O8n7I9e1RjUNIyYncV6sFh4",
+            "payment_method_details": {
+              "card": {
+                "amount_authorized": 19523,
+                "brand": "visa",
+                "checks": {
+                  "address_line1_check": null,
+                  "address_postal_code_check": null,
+                  "cvc_check": "pass"
+                },
+                "country": "US",
+                "exp_month": 1,
+                "exp_year": 2034,
+                "extended_authorization": {
+                  "status": "disabled"
+                },
+                "fingerprint": "I03xpzqac6uXAW7s",
+                "funding": "credit",
+                "incremental_authorization": {
+                  "status": "unavailable"
+                },
+                "installments": null,
+                "last4": "5423",
+                "mandate": null,
+                "multicapture": {
+                  "status": "unavailable"
+                },
+                "network": "visa",
+                "network_token": {
+                  "used": false
+                },
+                "overcapture": {
+                  "maximum_amount_capturable": 19523,
+                  "status": "unavailable"
+                },
+                "three_d_secure": null,
+                "wallet": null
+              },
+              "type": "card"
+            },
+            "receipt_email": null,
+            "receipt_number": null,
+            "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUo7YGRsgYyBiwCwjaupzosFnElR9591B4WqvIlQ1ZZnKsU-6YCtVm5rT_KzSZxcLiA5I99R9i8edm8nGo",
+            "refunded": true,
+            "review": null,
+            "shipping": null,
+            "source": null,
+            "source_transfer": null,
+            "statement_descriptor": null,
+            "statement_descriptor_suffix": "Razvan with a very lon",
+            "status": "succeeded",
+            "transfer": "tr_2O8n7J9e1RjUNIyY1BxidGvM",
+            "transfer_data": {
+              "amount": 18907,
+              "destination": "acct_1JpgXiS0ZnILuwfA"
+            },
+            "transfer_group": "384"
+          },
+          "created": 1699116878,
+          "fraud_type": "made_with_stolen_card",
+          "livemode": false,
+          "payment_intent": "pi_2O8n7J9e1RjUNIyY1X7FyY6q"
+        }
+  recorded_at: Wed, 15 May 2024 04:58:21 GMT
+recorded_with: VCR 6.2.0

@@ -1,0 +1,124 @@
+# Note: You must restart bin/shakapacker-dev-server for changes to take effect
+# This file contains the defaults used by shakapacker.
+
+default: &default
+  source_path: app/javascript
+
+  # You can have a subdirectory of the source_path, like 'packs' (recommended).
+  # Alternatively, you can use '/' to use the whole source_path directory.
+  # Notice that this is a relative path to source_path
+  source_entry_path: packs
+
+  # If nested_entries is true, then we'll pick up subdirectories within the source_entry_path.
+  # You cannot set this option to true if you set source_entry_path to '/'
+  nested_entries: true
+
+  #  While using a File-System-based automated bundle generation feature, miscellaneous warnings suggesting css order
+  #  conflicts may arise due to the mini-css-extract-plugin. For projects where css ordering has been mitigated through
+  #  consistent use of scoping or naming conventions, the css order warnings can be disabled by setting
+  #  css_extract_ignore_order_warnings to true
+  css_extract_ignore_order_warnings: false
+
+  public_root_path: public
+  public_output_path: packs
+  cache_path: tmp/shakapacker
+  webpack_compile_output: true
+  # See https://github.com/shakacode/shakapacker#deployment
+  shakapacker_precompile: true
+
+  # Location for manifest.json, defaults to {public_output_path}/manifest.json if unset
+  # manifest_path: public/packs/manifest.json
+
+  # Additional paths webpack should look up modules
+  # ['app/assets', 'engine/foo/app/assets']
+  additional_paths: ["app/assets"]
+
+  # Reload manifest.json on all requests so we reload latest compiled packs
+  cache_manifest: false
+
+  # Select loader to use, available options are 'babel' (default), 'swc' or 'esbuild'
+  webpack_loader: 'babel'
+
+  # Set to true to enable check for matching versions of shakapacker gem and NPM package - will raise an error if there is a mismatch or wildcard versioning is used
+  ensure_consistent_versioning: false
+
+  # Select whether the compiler will use SHA digest ('digest' option) or most most recent modified timestamp ('mtime') to determine freshness
+  compiler_strategy: digest
+
+  # Select whether the compiler will always use a content hash and not just in production
+  # Don't use contentHash except for production for performance
+  # https://webpack.js.org/guides/build-performance/#avoid-production-specific-tooling
+  useContentHash: false
+
+development:
+  <<: *default
+  compile: false
+  compiler_strategy: mtime
+
+  # Reference: https://webpack.js.org/configuration/dev-server/
+  # Keys not described there are documented inline and in https://github.com/shakacode/shakapacker/
+  dev_server:
+    # For running dev server with https, set `server: https`.
+    # You may use `https: true` instead but notice that it is deprecated in favor of `server: https`
+    # Ensure only one of these entries is set.
+    server:
+      type: https
+      options:
+        key: './docker/local-nginx/certs/gumroad_dev.key'
+        cert: './docker/local-nginx/certs/gumroad_dev.crt'
+    host: gumroad.dev
+    port: 3035
+    # Hot Module Replacement updates modules while the application is running without a full reload
+    # Used instead of the `hot` key in https://webpack.js.org/configuration/dev-server/#devserverhot
+    hmr: false
+    # If HMR is on, CSS will by inlined by delivering it as part of the script payload via style-loader. Be sure
+    # that you add style-loader to your project dependencies.
+    #
+    # If you want to instead deliver CSS via <link> with the mini-css-extract-plugin, set inline_css to false.
+    # In that case, style-loader is not needed as a dependency.
+    #
+    # mini-css-extract-plugin is a required dependency in both cases.
+    inline_css: true
+    # Defaults to the inverse of hmr. Uncomment to manually set this.
+    # live_reload: true
+    client:
+      # Should we show a full-screen overlay in the browser when there are compiler errors or warnings?
+      overlay: true
+      # May also be a string
+      # webSocketURL:
+      #  hostname: '0.0.0.0'
+      #  pathname: '/ws'
+      #  port: 8080
+    # Should we use gzip compression?
+    compress: true
+    # Note that apps that do not check the host are vulnerable to DNS rebinding attacks
+    allowed_hosts: 'all'
+    # Shows progress and colorizes output of bin/shakapacker[-dev-server]
+    pretty: false
+    headers:
+      'Access-Control-Allow-Origin': '*'
+    static:
+      watch:
+        ignored: '**/node_modules/**'
+
+test:
+  <<: *default
+  compile: true
+
+  # Compile test packs to a separate directory
+  public_output_path: packs-test
+
+production: &production
+  <<: *default
+
+  # Production depends on precompilation of packs prior to booting for performance.
+  compile: false
+
+  # Use content hash for naming assets. Cannot be overridden by for production.
+  useContentHash: true
+
+  # Cache manifest.json for performance
+  cache_manifest: true
+
+staging:
+  <<: *production

@@ -1,0 +1,93 @@
+.stack {
+  display: grid;
+  @include bg-color(filled);
+  border: $border;
+  border-radius: border-radius(1);
+
+  & > * {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: spacer(4);
+    gap: spacer(4);
+    justify-content: space-between;
+
+    &:not(:first-child) {
+      border-top: $border;
+    }
+
+    // SCSS does not support @extends like this
+    $match-width-selectors: ".button, fieldset";
+
+    > :first-child {
+      flex-grow: 1;
+
+      &:where(#{$match-width-selectors}) {
+        flex-basis: 0;
+      }
+    }
+
+    > :where(#{$match-width-selectors}) + :where(#{$match-width-selectors}) {
+      flex: 1;
+    }
+
+    h4,
+    h5,
+    h6 {
+      font-weight: bold;
+    }
+  }
+
+  > details {
+    display: block;
+  }
+
+  > details summary {
+    grid-auto-flow: column;
+    grid-template-columns: 1fr auto;
+    &::before {
+      grid-column: 2;
+    }
+  }
+
+  @include breakpoint-up(lg, true) {
+    &.two-columns {
+      grid-template-columns: 1fr 1fr;
+
+      & > :nth-child(odd) {
+        border-right: $border;
+      }
+
+      & > :nth-child(2) {
+        border-top: none;
+      }
+    }
+  }
+
+  &.borderless {
+    border: none;
+    gap: spacer(4);
+
+    & > * {
+      padding: 0;
+      border: none;
+    }
+  }
+}
+
+main.stack {
+  height: min-content;
+  margin: spacer(4) auto;
+  max-width: $main-stack-width;
+  width: calc(100% - 2 * #{spacer(4)});
+
+  > header,
+  > footer {
+    text-align: center;
+  }
+
+  > * {
+    flex-direction: column;
+    align-items: initial;
+  }
+}

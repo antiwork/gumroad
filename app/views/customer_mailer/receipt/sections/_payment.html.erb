@@ -1,0 +1,13 @@
+<% if receipt_presenter.payment_info.present? %>
+  <div>
+    <h3><%= receipt_presenter.payment_info.title %></h3>
+    <% receipt_presenter.payment_info.notes.each do |note| %>
+      <div>
+        <%= note %>
+      </div>
+    <% end %>
+    <%= render("customer_mailer/receipt/attributes", attributes: receipt_presenter.payment_info.today_payment_attributes) %>
+    <%= render("customer_mailer/receipt/attributes", attributes: receipt_presenter.payment_info.upcoming_payment_attributes) %>
+    <%= render("customer_mailer/receipt/attributes", attributes: [receipt_presenter.payment_info.payment_method_attribute].compact) %>
+  </div>
+<% end %>

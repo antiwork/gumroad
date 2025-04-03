@@ -1,0 +1,13 @@
+<%= header_section "#{@comment.author_name} commented on #{@comment.commentable.name}" %>
+
+<div>
+  <h3><%= @comment.author_name %></h3>
+
+  <small class="text-muted"><%= l(@comment.created_at, format: "%B %-d, %Y %-I:%M%p") %></small>
+
+  <p style="white-space: pre-wrap"><%= raw Rinku.auto_link(strip_tags(@comment.content), :all, %(target="_blank" rel="noopener noreferrer nofollow")) %></p>
+
+  <%= link_to "View comment", custom_domain_view_post_url(slug: @comment.commentable.slug, host: @comment.commentable.seller.subdomain_with_protocol), class: "button primary", target: "_blank" %>
+</div>
+
+<p>To stop receiving comment notifications, please <%= link_to "change your notification settings", settings_main_url(anchor: "notifications"), target: "_blank" %>.</p>

@@ -1,0 +1,77 @@
+<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
+  function addInteractivity() {
+    if (window._gumroadHomepageInteractivityAdded) return;
+
+    // Mobile menu functionality
+    const mobileMenuToggle = document.querySelector('[data-toggle="mobile-menu"]');
+    const mobileMenu = document.querySelector('#mobile-menu');
+    const line1 = document.querySelector('[data-menu-line="1"]');
+    const line2 = document.querySelector('[data-menu-line="2"]');
+
+    mobileMenuToggle.addEventListener('click', function() {
+      mobileMenu.classList.toggle('hidden');
+
+      if (!mobileMenu.classList.contains('hidden')) {
+        line1.classList.add('translate-y-[5px]', '-rotate-45', 'transform-gpu');
+        line2.classList.add('-translate-y-[5px]', 'rotate-45', 'transform-gpu');
+      } else {
+        line1.classList.remove('translate-y-[5px]', '-rotate-45', 'transform-gpu');
+        line2.classList.remove('-translate-y-[5px]', 'rotate-45', 'transform-gpu');
+      }
+    });
+
+    // Accordion functionality
+    const accordionItems = document.querySelectorAll('.accordion-item')
+    accordionItems.forEach(item => {
+      const trigger = item.querySelector('[data-accordion-trigger]')
+      const content = item.querySelector('[data-accordion-content]')
+      const verticalLine = trigger?.querySelector('svg line:last-child')
+      if (trigger && content && verticalLine) {
+        trigger.addEventListener('click', () => {
+          accordionItems.forEach(otherItem => {
+            if (otherItem !== item) {
+              const otherContent = otherItem.querySelector('[data-accordion-content]')
+              const otherVerticalLine = otherItem.querySelector('svg line:last-child')
+              otherContent.style.maxHeight = '0'
+              otherVerticalLine.style.transform = 'rotate(0deg)'
+            }
+          })
+          const isOpen = content.style.maxHeight !== '0px' && content.style.maxHeight !== ''
+          content.style.maxHeight = isOpen ? '0' : `${content.scrollHeight}px`
+          verticalLine.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(-90deg)'
+          verticalLine.style.transformOrigin = 'center'
+        })
+      }
+    })
+
+    // Parallax functionality
+    const parallaxElements = document.querySelectorAll('[data-parallax]');
+    if (parallaxElements.length > 0) {
+      parallaxElements.forEach(element => {
+        element.style.transform = 'translateY(0)';
+      });
+      window.addEventListener('scroll', function() {
+        const scrolled = window.pageYOffset;
+        parallaxElements.forEach(element => {
+          const elementTop = element.getBoundingClientRect().top + scrolled;
+          const elementInView = scrolled + window.innerHeight > elementTop;
+
+          if (elementInView) {
+            const distance = (scrolled - elementTop) * 0.05;
+            element.style.transform = `translateY(${distance}px)`;
+          }
+        });
+      });
+    }
+
+    window._gumroadHomepageInteractivityAdded = true;
+  }
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('load', addInteractivity);
+  } else {
+    addInteractivity();
+  }
+<% end %>
+
+<script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>

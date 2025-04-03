@@ -1,0 +1,45 @@
+<%= header_section(@subject) %>
+<div>
+  <% if @is_paypal %>
+    <p>
+      A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>.
+    </p>
+    <% if @disputable.multiple_purchases? %>
+      <% @disputable.disputed_purchases.each do |purchase| %>
+        <p>
+          <%= link_to purchase.link.name, purchase.link.long_url %>
+        </p>
+      <% end %>
+    <% end %>
+    <p>
+      Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account. You are thus responsible for handling the dispute with PayPal and the customer.
+    </p>
+    <p>
+      You can go <%= link_to "here", "https://www.paypal.com/us/webapps/mpp/security/resolve-disputes" %> for more information or reach out to PayPal's support team for further assistance.
+    </p>
+    <p>
+      If you win the dispute, you'll be notified by us and the amount will be released back to your PayPal account by PayPal.
+    </p>
+  <% else %>
+    <p>
+      A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>. We have deducted the amount from your balance, and are looking into it for you.
+    </p>
+    <% if @disputable.multiple_purchases? %>
+      <% @disputable.disputed_purchases.each do |purchase| %>
+        <p>
+          <%= link_to purchase.link.name, purchase.link.long_url %>
+        </p>
+      <% end %>
+    <% end %>
+    <p>
+      Sometimes, a customer will dispute a charge with their bank because they don't recognize "Gumroad" on their credit card transaction. We have contacted the customer about this, and have asked them to contact you (if they have a legitimate issue) or their bank (to cancel the dispute).
+    </p>
+    <%= @dispute_evidence_content %>
+    <p>
+      We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.
+    </p>
+    <p>
+      You'll get another notification once we have won the dispute. If you haven't received that notification, we have not yet won this dispute.
+    </p>
+  <% end %>
+</div>

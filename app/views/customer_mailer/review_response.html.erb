@@ -1,0 +1,27 @@
+<%= header_section("#{@seller_presenter[:name]} responded to your review") %>
+
+<div class="review">
+  <div class="content">
+    <%= render("shared/mailers/review_rating", rating: @review_presenter[:rating]) %>
+    <% if @review_presenter[:message] %>
+      <p><%= "#{@review_presenter[:message]}" %></p>
+    <% end %>
+    <div class="byline">
+      <img class="user-avatar" src="<%= @review_presenter[:rater][:avatar_url] %>" alt="<%= @review_presenter[:rater][:name] %>">
+      <span><%= @review_presenter[:rater][:name] %></span>
+    </div>
+  </div>
+
+  <div class="content response">
+    <p><%= "#{@review_presenter[:response][:message]}" %></p>
+    <div class="byline">
+      <img class="user-avatar" src="<%= @seller_presenter[:avatar_url] %>" alt="<%= @seller_presenter[:name] %>">
+      <span><%= @seller_presenter[:name] %></span>
+      <span class="pill small">Creator</span>
+    </div>
+  </div>
+</div>
+
+<div>
+  <%= link_to "View product", @product.long_url, class: "button primary" %>
+</div>

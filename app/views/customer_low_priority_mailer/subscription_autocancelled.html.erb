@@ -1,0 +1,14 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("Your installment plan has been paused.") %>
+<% else %>
+  <%= header_section("Your subscription has been canceled.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>Due to multiple failed payment attempts, your installment plan for <%= @subscription.link.name %> has been paused and you have lost access to the product.</p>
+    <p>Please <%= link_to "update your payment method", manage_subscription_url(@subscription.external_id, token: @subscription.refresh_token) %> to resume your installment plan.</p>
+  <% else %>
+    <p>Your subscription to <%= @subscription.link.name %> has been automatically canceled due to multiple failed payments.</p>
+    <p>If you would like to subscribe to the product, please purchase it <%= link_to "here", @subscription.link.long_url %> with an updated credit card.</p>
+  <% end %>
+</div>

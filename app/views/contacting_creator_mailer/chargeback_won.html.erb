@@ -1,0 +1,13 @@
+<%= header_section("A dispute has been won") %>
+<div>
+  <p>
+    We have won a dispute against <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %> on your behalf. Your account has been credited the full amount.
+  </p>
+  <% if @disputable.multiple_purchases? %>
+    <% @disputable.disputed_purchases.each do |purchase| %>
+      <p>
+        <%= link_to purchase.link.name, purchase.link.long_url %>
+      </p>
+    <% end %>
+  <% end %>
+</div>

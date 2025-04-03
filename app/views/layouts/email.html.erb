@@ -1,0 +1,37 @@
+<!-- IMPORTANT: If you modify this file, you may also need to modify app/views/posts/post_email.html.erb -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= @subject %></title>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <meta name="viewport" content="initial-scale = 1.0, width=device-width">
+    <%= yield :style %>
+    <%= stylesheet_pack_tag :email %>
+  </head>
+  <body>
+    <div class="email <%= @installment.present? ? 'post' : (@announcement ? 'announcement' : '') %>">
+      <div class="main">
+        <%= yield %>
+      </div>
+      <div class="footer">
+        <div class="paragraphs">
+          <%= render(@footer_template) if @footer_template %>
+          <p><%= GumroadAddress.full %></p>
+
+          <% if @unsub_link.present? %>
+            <p>
+              <a href="<%= @unsub_link %>">Unsubscribe</a>
+            </p>
+          <% end %>
+          <% unless Rails.env.production? %>
+            <p>(⌐▨_▨) <%= Rails.env.capitalize %> (▨_▨¬)</p>
+          <% end %>
+        </div>
+        <a class="wordmark" href="<%= root_url %>">
+          Powered by
+          <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" style="width: 138px; height: 18px;" width="138" height="18">
+        </a>
+      </div>
+    </div>
+  </body>
+</html>

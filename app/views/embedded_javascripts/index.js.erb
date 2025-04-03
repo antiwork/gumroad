@@ -1,0 +1,14 @@
+{
+  const script = document.createElement("script");
+  script.src = "<%= asset_url(@script_path) %>";
+  script.charset = "utf-8";
+  document.head.appendChild(script);
+  <% if @stylesheet.present? %>
+    document.head.innerHTML += '<%= stylesheet_pack_tag(@stylesheet, host: DOMAIN) %>';
+  <% end %>
+
+  <% if @global_stylesheet_path.present? %>
+    const loaderScript = document.querySelector("script[src*='/js/gumroad.js']");
+    loaderScript.dataset.stylesUrl = "<%= asset_url(@global_stylesheet_path) %>";
+  <% end %>
+}

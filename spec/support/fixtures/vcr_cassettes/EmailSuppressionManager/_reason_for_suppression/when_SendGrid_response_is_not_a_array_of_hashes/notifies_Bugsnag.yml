@@ -1,0 +1,333 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.sendgrid.com/v3/suppression/spam_reports/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GUMROAD_TRANSACTIONS_API_KEY>
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 26 May 2023 10:44:52 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1685097900'
+      Twilio-Request-Id:
+      - RQ2QKMbkQNfFYTuyzKPfmbWkl78uh
+      X-Envoy-Upstream-Service-Time:
+      - '286'
+      Powered-By:
+      - Mako
+    body:
+      encoding: UTF-8
+      string: "[]"
+  recorded_at: Fri, 26 May 2023 10:44:52 GMT
+- request:
+    method: get
+    uri: https://api.sendgrid.com/v3/suppression/spam_reports/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GUMROAD_FOLLOWER_CONFIRMATION_API_KEY>
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 26 May 2023 10:44:53 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1685097900'
+      Twilio-Request-Id:
+      - RQ2QKMbnEsNm5Y2wUdA2lxblljPce
+      X-Envoy-Upstream-Service-Time:
+      - '345'
+      Powered-By:
+      - Mako
+    body:
+      encoding: UTF-8
+      string: "[]"
+  recorded_at: Fri, 26 May 2023 10:44:53 GMT
+- request:
+    method: get
+    uri: https://api.sendgrid.com/v3/suppression/spam_reports/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GR_CREATORS_API_KEY>
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 26 May 2023 10:44:54 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1685097900'
+      Twilio-Request-Id:
+      - RQ2QKMc0rbfaFW5iYsvgZ9W3DzlMO
+      X-Envoy-Upstream-Service-Time:
+      - '301'
+      Powered-By:
+      - Mako
+    body:
+      encoding: UTF-8
+      string: "[]"
+  recorded_at: Fri, 26 May 2023 10:44:54 GMT
+- request:
+    method: get
+    uri: https://api.sendgrid.com/v3/suppression/spam_reports/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GR_CUSTOMERS_LEVEL_2_API_KEY>
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 26 May 2023 10:44:55 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1685097900'
+      Twilio-Request-Id:
+      - RQ2QKMc4Zm2LOH8JzJOzdpXjW1ojJ
+      X-Envoy-Upstream-Service-Time:
+      - '358'
+      Powered-By:
+      - Mako
+    body:
+      encoding: UTF-8
+      string: "[]"
+  recorded_at: Fri, 26 May 2023 10:44:55 GMT
+- request:
+    method: get
+    uri: https://api.sendgrid.com/v3/suppression/spam_reports/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GR_CUSTOMERS_LEVEL_2_API_KEY>
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 26 May 2023 10:44:56 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '598'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1685097900'
+      Twilio-Request-Id:
+      - RQ2QKMc9qZSHdkrdTPFYEi17rMf2W
+      X-Envoy-Upstream-Service-Time:
+      - '508'
+      Powered-By:
+      - Mako
+    body:
+      encoding: UTF-8
+      string: "[]"
+  recorded_at: Fri, 26 May 2023 10:44:56 GMT
+recorded_with: VCR 6.1.0

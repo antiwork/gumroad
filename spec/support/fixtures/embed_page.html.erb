@@ -1,0 +1,23 @@
+<html>
+  <head>
+    <title>Embed test</title>
+    <% if custom_domain_base_uri.present? %>
+      <script src="<%= custom_domain_base_uri %>/js/gumroad-embed.js"></script>
+    <% else %>
+      <script src="/js/gumroad-embed.js"></script>
+    <% end %>
+  </head>
+  <body>
+    <% if url.present? %>
+      <div class="gumroad-product-embed" data-outbound-embed="<%= outbound && 'true' %>" data-gumroad-params="<%= gumroad_params %>">
+        <a href="<%= url %>">Loading...</a>
+      </div>
+    <% else %>
+      <div class="gumroad-product-embed" data-gumroad-product-id="<%= unique_permalink %>" data-outbound-embed="<%= outbound && 'true' %>" data-gumroad-params="<%= gumroad_params %>">
+        <% if insert_anchor_tag %>
+          <a href="<%= product.long_url %>">Loading...</a>
+        <% end %>
+      </div>
+    <% end %>
+  </body>
+</html>

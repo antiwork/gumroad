@@ -1,0 +1,323 @@
+---
+http_interactions:
+- request:
+    method: delete
+    uri: https://api.sendgrid.com/v3/suppression/bounces/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GUMROAD_TRANSACTIONS_API_KEY>
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Thu, 18 May 2023 22:17:15 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '58'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1684448280'
+      Twilio-Request-Id:
+      - RQ2Pz7p7WU3lXN3lhNpMU6xtr3fZ2
+      X-Envoy-Upstream-Service-Time:
+      - '188'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"field":null,"message":"resource not found"}]}'
+  recorded_at: Thu, 18 May 2023 22:17:15 GMT
+- request:
+    method: delete
+    uri: https://api.sendgrid.com/v3/suppression/bounces/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GUMROAD_FOLLOWER_CONFIRMATION_API_KEY>
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Thu, 18 May 2023 22:17:16 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '58'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1684448280'
+      Twilio-Request-Id:
+      - RQ2Pz7p0jehSHM5HjjaN9M2wrq7nA
+      X-Envoy-Upstream-Service-Time:
+      - '239'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"field":null,"message":"resource not found"}]}'
+  recorded_at: Thu, 18 May 2023 22:17:15 GMT
+- request:
+    method: delete
+    uri: https://api.sendgrid.com/v3/suppression/bounces/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GR_CREATORS_API_KEY>
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Thu, 18 May 2023 22:17:16 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '58'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1684448280'
+      Twilio-Request-Id:
+      - RQ2Pz7pCqKbLMGhvL11neRBEkufKn
+      X-Envoy-Upstream-Service-Time:
+      - '234'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"field":null,"message":"resource not found"}]}'
+  recorded_at: Thu, 18 May 2023 22:17:16 GMT
+- request:
+    method: delete
+    uri: https://api.sendgrid.com/v3/suppression/bounces/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GR_CUSTOMERS_LEVEL_2_API_KEY>
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Thu, 18 May 2023 22:17:17 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '58'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '599'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1684448280'
+      Twilio-Request-Id:
+      - RQ2Pz7pIdf7StqCOSbgsZOU0vsRHx
+      X-Envoy-Upstream-Service-Time:
+      - '257'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"field":null,"message":"resource not found"}]}'
+  recorded_at: Thu, 18 May 2023 22:17:17 GMT
+- request:
+    method: delete
+    uri: https://api.sendgrid.com/v3/suppression/bounces/sam@example.com
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - application/json
+      User-Agent:
+      - sendgrid/6.6.2;ruby
+      Authorization:
+      - Bearer <SENDGRID_GR_CUSTOMERS_LEVEL_2_API_KEY>
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Thu, 18 May 2023 22:17:18 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '58'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Methods:
+      - HEAD, GET, OPTIONS, DELETE
+      Access-Control-Max-Age:
+      - '21600'
+      Access-Control-Expose-Headers:
+      - Link, Location
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Headers:
+      - AUTHORIZATION, Content-Type, On-behalf-of, x-sg-elas-acl, X-Recaptcha, X-Request-Source,
+        Browser-Fingerprint
+      Content-Security-Policy:
+      - default-src https://api.sendgrid.com; frame-src 'none'; object-src 'none'
+      X-Content-Type-Options:
+      - nosniff
+      Strict-Transport-Security:
+      - max-age=31536000
+      - max-age=600; includeSubDomains
+      X-Client-Ff:
+      - '1000'
+      X-Ratelimit-Remaining:
+      - '598'
+      X-Ratelimit-Limit:
+      - '600'
+      X-Ratelimit-Reset:
+      - '1684448280'
+      Twilio-Request-Id:
+      - RQ2Pz7pR1dMv5uZ8f2pE4F41dpXQ0
+      X-Envoy-Upstream-Service-Time:
+      - '211'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"field":null,"message":"resource not found"}]}'
+  recorded_at: Thu, 18 May 2023 22:17:18 GMT
+recorded_with: VCR 6.1.0

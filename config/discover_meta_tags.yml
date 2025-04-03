@@ -1,0 +1,652 @@
+descriptions:
+  default: Browse over %{result_count} unique %{tags} products published by independent creators on Gumroad.
+    Discover the best things to read, watch, create & more!
+  3d-models: "Browse over %{result_count} 3D assets including 3D models, CG textures, HDRI environments & more for VFX, game
+    development, AR/VR, architecture, and animation."
+  procreate: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to your
+    Procreate projects. These sets include sketching effects & more."
+  blender: "Download 3D models, materials, HDRs, scenes & brushes from our growing library of %{result_count}
+    high-quality assets for Blender "
+  brushes: "Explore over %{result_count} brushes for Procreate, Photoshop, Blender & more. Add a professional touch
+    to your art and illustrations with interesting textures and realistic effects such as watercolor and paint."
+  illustration-tutorials: "Art, drawing & painting tutorials for Procreate, Adobe Illustrator, Clip Studio Paint &
+    more: over %{result_count} templates & courses! Learn how to draw and paint online."
+  unity: "Browse Unity Vrchat assets, 3D models, avatars, and courses. Free & premium assets from professional artists
+    and creators."
+  artwork: "Browse original artwork from %{result_count} independent illustrators & artists: ranging from digital art
+    & video loops to paper crafts and 3D renders."
+  comedy: "Comedy shows, memberships, podcasts, art and more! Browse %{result_count} comedy assets and downloads from
+    professional comedians and creators."
+  photoshop: "Download Photoshop templates, courses and assets from professional designers and illustrators. Thousands
+    of free & premium assets."
+  how-to-make-money: "Learn how to grow & expand your finances: passive income, investing, side hustles, freelancing,
+    skills training & more ways to make money online."
+  marketing: "Marketing training: videos, ebooks, guides, templates, and more to help you grow your business and
+    brand. Learn from growth experts on topics such as Twitter, landing pages, email, affiliates, SEO, ads, & more."
+  stock-reference-photos: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people,
+    places, animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
+  comics-graphic-novels: "Browse thousands of comics, novels and other assets available for download by professional
+    designers and creators."
+  game-development: "Learn game development from professional developers and creators. Free & premium courses,
+    downloads and other assets."
+  spark-ar: "The marketplace to buy & sell Spark AR templates, patches, shaders & games. The best place to discover
+    Spark AR projects & assets from leading creators."
+  zbrush: "Over %{result_count} ZBrush-compatible 3D models, brushes, tutorials, and more: the best marketplace for
+    resources and training from Zbrush experts"
+  cinema4d: "Over %{result_count} Cinema4D tutorials, presets, templates & more to jumpstart your next C4D animation
+    project."
+  social-media-marketing: "Social media marketing courses, resources & downloads. Learn how to master social media
+    from top marketing professionals. Free & premium digital products."
+  ebooks: "Browse thousands of free & premium eBooks across various genres and topics, available directly from the
+    authors!"
+  ableton: "Over %{result_count} royalty-free Templates, Projects, Sessions, and Plugins/VSTs for Ableton Live created
+    by (& for) professional music producers & sound designers"
+  substance-designer-painter: "Browse over %{result_count} custom Substance 3D assets for your projects, including
+    lights, models, textures & more designed by experts."
+  architecture: "A growing library of professional assets for architecture visualization, design, drawing, and
+    rendering. Get the right assets for any project."
+  apparel-sewing: "Easy-to-follow instructions and templates for sewing including cross stitch patterns, crocheting,
+    embroidery & more — perfect for apparel designers of all experience levels: "
+  ui-kits: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant)
+    and template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  character-design: "Browse and download professional character design, rigging, and more assets from creators and
+    artists. Free & premium options."
+  writing: "Discover the best online courses & resources for writers: learn & improve your writing skills — from
+    storytelling & professional development, to scriptwriting, fiction/nonfiction, poetry, comedy, lyrics, & more."
+  houdinifx: "The best place to buy, share & sell digital assets, tools, and scripts for HoudiniFx: browse our
+    growing library of over %{result_count} templates."
+  clip-studio-paint: "Create illustrations, manga, comics and animation with assets, resources, brushes, & tutorials
+    for Clip Studio: software for digital artists & painters."
+  rigging: "%{result_count} rigging tutorials and advanced rigs to accelerate your 3D animation workflow and level
+    up your characters in Blender, Maya, 3DSMax, & more."
+  print-on-demand: "Assets, templates, and courses from expert creators power your Print on Demand store: earn passive
+    income with dropshipping"
+  tutorials: "Learn a new skill: discover what you can create with over %{result_count} thousand courses and classes:
+    learn directly from experts across fields."
+  unreal-engine-4: "The best free & paid assets for your next Unreal Engine project: from architecture visualizaton
+    and blueprints to characters and animation rigs"
+  lightroom: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch to your
+    next photography project. Use these high-quality presets & actions to create minimal looks, cinematographic styles,
+    black & white or vintage effects and more"
+  kdp: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers, interiors, and more.
+    Get started with Kindle Publishing in no time!"
+  motion-graphics: "A diverse selection of %{result_count} templates for motion graphics: animated text &
+    illustrations, transitions, brush strokes, 3D renders, and more."
+  icons: "Over %{result_count} unique custom-designed icon packs — from minimal vector to hand-drawn images: perfect
+    for UI design, iOS personalization, or presentations & posters."
+  productivity: "Become more productive & boost your efficiency with %{result_count} productivity resources from
+    eBooks and courses to templates and planners."
+  maya: "Over %{result_count} high-quality 3D Models, scripts/plugins, textures, shaders, & tutorials for Autodesk's
+    Maya visual FX software."
+  film-luts: "The creator marketplace for professionally-designed LUTs, overlays, and presets to add a unique touch to
+    your video production and projects."
+  notion: "Get started with over %{result_count} Notion templates to boost your productivity with habit trackers,
+    business growth tools, custom icons, & more. Pre-built, easy-to-use Notion pages & databases: customize for your
+    needs."
+  3d-printing: "The digital marketplace for sharing high-quality 3D printable models such as tabletop gaming and toys:
+    free & premium templates for 3d printing."
+  video-loops: "Browse our growing library of %{result_count} unique & high-quality stock videos, motion backgrounds
+    and VJ loops available in hi-res (4K / UHD / 1080p), curated by independent creators."
+  self-improvement: "Courses, eBooks & more for self-growth: make progress on your personal development journey and
+    improve your life. Browse %{result_count} self-help resources from experts."
+  ios-icons: "Discover %{result_count} custom iOS icon packs for your iPhone. Free & premium icons, built for Apple
+    devices. PNG and vector icons"
+  mockups: "Discover over %{result_count} high-quality, customizable mockups and scene creators for apps, apparel,
+    artwork, branding: effortlessly create photorealistic product images to your online websites & stores"
+  textures: "High-resolution textures for 2D or 3D surfaces & materials such as concrete, stone, paint & even skin —
+    great for games, archviz, VFX, & product rendering."
+  fonts: "Discover a growing selection of high-quality desktop and web fonts: download & buy typefaces directly from
+    leading type foundries & designers."
+  website-design: "Over %{result_count} professional assets, tutorials and templates for website design: landing page
+    guides, UI & icon kits, coded HTML templates & more"
+  music-samples: "Thousands of high quality royalty free samples, multiple genre music loops, drum samples,
+    royalty-free music, and more, across all genres: Hip Hop, Trap, EDM, House, Funk, Soul, RnB, and even Classical!"
+  guitar: "Learn how-to play guitar with tutorials & lessons, tabs, sheet music, backing tracks & more: for beginners
+    & experts."
+  meditation: "Tutorials (from eBooks to videos) for guided meditations: resources to improve your mindfulness and
+    reduce stress."
+  sound-design: "Expert tools & tutorials: buy, sell, and share plugins, presets, samples, tutorials and more for
+    sound designers and music producers."
+  woodworking: "Discover %{result_count} DIY woodworking project ideas: plans, blueprints, and tutorials for all
+    levels – from novices to hobbyists & experts"
+  crafts-diy: "DIY tutorials and craft projects for all ages & experience levels: create custom, handmade designs for
+    embroidery kits, paper crafts, woodworking plans and more!"
+  food-cooking: "Learn & level up your cooking with %{result_count} recipes & cookbooks, meal plans and courses the
+    world's leading food experts!"
+  brushpack: "Explore over %{result_count} brushes for Procreate, Photoshop, Blender & more. Add a professional touch to
+    your art and illustrations with interesting textures and realistic effects such as watercolor and paint."
+  illustration: "Art, drawing & painting tutorials for Procreate, Adobe Illustrator, Clip Studio Paint & more: over
+    %{result_count} templates & courses! Learn how to draw and paint online."
+  twitter: "Social media marketing courses, resources & downloads. Learn how to master social media from top marketing
+    professionals. Free & premium digital products."
+  ebook: "Browse thousands of free & premium eBooks across various genres and topics, available directly from the
+    authors!"
+  spark-ar-filter: "The marketplace to buy & sell Spark AR templates, patches, shaders & games. The best place to
+    discover Spark AR projects & assets from leading creators."
+  comics: "Browse thousands of comics, novels and other assets available for download by professional designers and
+    creators."
+  substance-painter: "Browse over %{result_count} custom Substance 3D assets for your projects, including lights,
+    models, textures & more designed by experts."
+  digital-art: "Browse original artwork from %{result_count} independent illustrators & artists: ranging from digital
+    art & video loops to paper crafts and 3D renders."
+  photoshop-brushes: "Download Photoshop templates, courses and assets from professional designers and illustrators.
+    Thousands of free & premium assets."
+  clothing: "Easy-to-follow instructions and templates for sewing including cross stitch patterns, crocheting,
+    embroidery & more — perfect for apparel designers of all experience levels"
+  procreatebrushes: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to
+    your Procreate projects. These sets include sketching effects & more."
+  spark-ar-template: "The marketplace to buy & sell Spark AR templates, patches, shaders & games. The best place to
+    discover Spark AR projects & assets from leading creators."
+  shoes: "Easy-to-follow instructions and templates for sewing including cross stitch patterns, crocheting, embroidery
+    & more — perfect for apparel designers of all experience levels"
+  ui-kit: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant)
+    and template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  stock-photos: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places,
+    animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
+  book: "Discover the best online courses & resources for writers: learn & improve your writing skills — from
+    storytelling & professional development, to scriptwriting, fiction/nonfiction, poetry, comedy, lyrics, & more."
+  houdini: "The best place to buy, share & sell digital assets, tools, and scripts for HoudiniFx: browse our growing
+    library of over %{result_count} templates."
+  3dmodel: "Browse over 3,977 3D assets including 3D models, CG textures, HDRI environments & more for VFX, game
+    development, AR/VR, architecture, and animation."
+  design-system: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva,
+    Ant) and template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  figma: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant) and
+    template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  spark-ar-make-up: "The marketplace to buy & sell Spark AR templates, patches, shaders & games. The best place to
+    discover Spark AR projects & assets from leading creators."
+  rig: "%{result_count} rigging tutorials and advanced rigs to accelerate your 3D animation workflow and level up your
+    characters in Blender, Maya, 3DSMax, & more."
+  max-for-live: "Over %{result_count} royalty-free Templates, Projects, Sessions, and Plugins/VSTs for Ableton Live
+    created by (& for) professional music producers & sound designers"
+  ableton-live: "Over %{result_count} royalty-free Templates, Projects, Sessions, and Plugins/VSTs for Ableton Live
+    created by (& for) professional music producers & sound designers"
+  substance-designer: "Browse over %{result_count} custom Substance 3D assets for your projects, including lights,
+    models, textures & more designed by experts."
+  archviz: "A growing library of professional assets for architecture visualization, design, drawing, and rendering.
+    Get the right assets for any project."
+  merch-by-amazon: "Assets, templates, and courses from expert creators power your Print on Demand store: earn passive
+    income with dropshipping"
+  psd: "Download Photoshop templates, courses and assets from professional designers and illustrators. Thousands of free
+    & premium assets."
+  how-to: "Learn a new skill: discover what you can create with over %{result_count} thousand courses and classes —
+    learn directly from experts across fields."
+  video: "Over %{result_count} video assets: from royalty-free stock footage and video production plugins to
+    downloadable videos for learning and entertainment."
+  blender-3d: "Download 3D models, materials, HDRs, scenes & brushes from our growing library of %{result_count}
+    high-quality assets for Blender"
+  ecommerce: "Learn how to grow & expand your eCommerce business: FBA training, marketing resources, & more."
+  texturing: "High-resolution textures for 2D or 3D surfaces & materials such as concrete, stone, paint & even skin —
+    great for games, archviz, VFX, & product rendering."
+  figure-drawing: "Browse and download professional character design, rigging, and more assets from creators and
+    artists. Free & premium options."
+  course: "Learn a new skill: discover what you can create with over %{result_count} thousand courses and classes —
+    learn directly from experts across fields."
+  drawing-tutorial: "Art, drawing & painting tutorials for Procreate, Adobe Illustrator, Clip Studio Paint & more: over
+    %{result_count} templates & courses! Learn how to draw and paint online."
+  procreate-stamps: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to
+    your Procreate projects. These sets include sketching effects & more."
+  entrepreneurship: "Learn how to grow & expand your business: passive income, side hustles, freelancing, skills
+    training & more ways to make money online."
+  presets: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch to your next
+    photography project. Use these high-quality presets & actions to create minimal looks, cinematographic styles, black
+    & white or vintage effects and more"
+  after-effects: "A diverse selection of %{result_count} templates for motion graphics: animated text & illustrations,
+    transitions, brush strokes, 3D renders, and more."
+  investing: "Learn how to grow & expand your finances: passive income, investing, side hustles, freelancing, skills
+    training & more ways to make money online."
+  blender-addon: "Download 3D models, materials, HDRs, scenes & brushes from our growing library of %{result_count}
+    high-quality assets for Blender "
+  parody: "Comedy shows, memberships, podcasts, art and more! Browse %{result_count} comedy assets and downloads from
+    professional comedians and creators."
+  cinema-4d: "Over %{result_count} Cinema4D tutorials, presets, templates & more to jumpstart your next C4D animation
+    project."
+  spark-ar-patch: "The marketplace to buy & sell Spark AR templates, patches, shaders & games. The best place to
+    discover Spark AR projects & assets from leading creators."
+  c4d: "Over %{result_count} Cinema4D tutorials, presets, templates & more to jumpstart your next C4D animation project."
+  ux: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant) and
+    template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  photo-reference: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places,
+    animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
+  web-design: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant)
+    and template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  procreate-brush: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to your
+    Procreate projects. These sets include sketching effects & more."
+  maya-script: "Over %{result_count} high-quality 3D Models, scripts/plugins, textures, shaders, & tutorials for
+    Autodesk's Maya visual FX software."
+  miniatures: "The digital marketplace for sharing high-quality 3D printable models for tabletop gaming and toys: free
+    & premium templates for 3d printing."
+  kdp-book-cover: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers, interiors,
+    and more. Get started with Kindle Publishing in no time!"
+  tshirt-design: "Assets, templates, and courses from expert creators power your Print on Demand store: earn passive
+    income with dropshipping "
+  maya-rig: "Over %{result_count} high-quality 3D Models, scripts/plugins, textures, shaders, & tutorials for Autodesk's
+    Maya visual FX software."
+  photos: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places, animals,
+    and objects: perfect for projects ranging from print media to social graphics and digital art."
+  kdp-digital-design: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers,
+    interiors, and more. Get started with Kindle Publishing in no time!"
+  zbrush-tutorial: "Over %{result_count} ZBrush-compatible 3D models, brushes, tutorials, and more: the best marketplace
+    for resources and training from Zbrush experts"
+  kdp-cover-design: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers, interiors,
+    and more. Get started with Kindle Publishing in no time!"
+  luts: "The creator marketplace for professionally-designed LUTs, overlays, and presets to add a unique touch to your
+    video production and projects."
+  ableton-live-packs: "Over %{result_count} royalty-free Templates, Projects, Sessions, and Plugins/VSTs for Ableton
+    Live created by (& for) professional music producers & sound designers"
+  how-to-draw: "Art, drawing & painting tutorials for Procreate, Adobe Illustrator, Clip Studio Paint & more: over
+    %{result_count} templates & courses! Learn how to draw and paint online."
+  vfx: "A diverse selection of %{result_count} templates for motion graphics: animated text & illustrations,
+    transitions, brush strokes, 3D renders, and more."
+  3dsmax: "Over %{result_count} 3DSMax-compatible 3D models, brushes, tutorials, and more: the best marketplace for
+    resources and training from 3DSMax experts"
+  3dprinting: "The digital marketplace for sharing high-quality 3D printable models such as tabletop gaming and toys:
+    free & premium templates for 3d printing."
+  lightroom-presets: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch
+    to your next photography project. Use these high-quality presets & actions to create minimal looks, cinematographic
+    styles, black & white or vintage effects and more"
+  vj-loops: "Browse our growing library of %{result_count} unique & high-quality stock videos, motion backgrounds and
+    VJ loops available in hi-res (4K / UHD / 1080p), curated by independent creators."
+  web-development: "Browse over %{result_count} products for web developers: from web development courses and guides to
+    Javascript libraries and HTML templates for your next project."
+  game-art: "Learn game development from professional developers and creators. Free & premium courses, downloads and
+    other assets."
+  video-game: "Learn game development from professional developers and creators. Free & premium courses, downloads and
+    other assets."
+  procreate-tutorial: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to
+    your Procreate projects. These sets include sketching effects & more."
+  twitch-overlay: "Social media marketing courses, resources & downloads. Learn how to master social media from top
+    marketing professionals. Free & premium digital products."
+  texture: "High-resolution textures for 2D or 3D surfaces & materials such as concrete, stone, paint & even skin —
+    great for games, archviz, VFX, & product rendering."
+  self-growth: "Courses, eBooks & more for self-growth: make progress on your personal development journey and improve
+    your life. Browse %{result_count} self-help resources from experts."
+  self-help: "Courses, eBooks & more for self-growth: make progress on your personal development journey and improve
+    your life. Browse %{result_count} self-help resources from experts."
+  stock-market: "Learn how to grow & expand your finances: passive income, investing, side hustles, freelancing, skills
+    training & more ways to make money online."
+  lightroom-mobile: "Explore over 2080 Lightroom presets for desktop & mobile: effortlessly add a professional touch to
+    your next photography project. Use these high-quality presets & actions to create minimal looks, cinematographic
+    styles, black & white or vintage effects and more"
+  twitch-graphics: "Social media marketing courses, resources & downloads. Learn how to master social media from top
+    marketing professionals. Free & premium digital products."
+  ios14homescreen: "Discover %{result_count} custom iOS icon packs for your iPhone. Free & premium icons, built for
+    Apple devices. PNG and vector icons"
+  twitch: "Social media marketing courses, resources & downloads. Learn how to master social media from top marketing
+    professionals. Free & premium digital products."
+  mockup: "Discover over %{result_count} high-quality, customizable mockups and scene creators for apps, apparel,
+    artwork, branding: effortlessly create photorealistic product images to your online websites & stores"
+  blender-2.8: "Download 3D models, materials, HDRs, scenes & brushes from our growing library of %{result_count}
+    high-quality assets for Blender "
+  sketch: "Over %{result_count} UI Kits and assets for designing mobile or web apps in Sketch. Top-rated design systems
+    (ie. Eva, Ant) and template screens for Sketch, Figma & more. Prototype a stunning iOS, Android, or web app."
+  ui: "Over %{result_count} UI Kits for mobile or web apps & wireframes. Top-rated design systems (ie. Eva, Ant) and
+    template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  kdp-interior: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers, interiors,
+    and more. Get started with Kindle Publishing in no time!"
+  instagram: "Social media marketing courses, resources & downloads. Learn how to master social media from top marketing
+    professionals. Free & premium digital products."
+  digital-download: "Over %{result_count} digital downloads for creators: jumpstart your next project with templates,
+    tutorials & more."
+  finance: "Learn how to grow & expand your finances: passive income, investing, side hustles, freelancing, skills
+    training & more ways to make money online."
+  kdp-template: "Over %{result_count} templates & tutorials for KDP Amazon Sellers including book covers, interiors,
+    and more. Get started with Kindle Publishing in no time!"
+  ios-14-icons: "Discover %{result_count} custom iOS icon packs for your iPhone. Free & premium icons, built for Apple
+    devices. PNG and vector icons"
+  social-media: "Social media courses, resources & downloads. Learn how to master social media from top marketing
+    professionals. Free & premium digital products."
+  zbrush-alpha: "Over %{result_count} ZBrush-compatible 3D models, brushes, tutorials, and more: the best marketplace
+    for resources and training from Zbrush experts"
+  kontakt-instrument: "Over %{result_count} royalty-free Templates, Projects, Sessions, and Plugins/VSTs for Ableton
+    Live created by (& for) professional music producers & sound designers"
+  amazon: "Over %{result_count} digital products for Amazon Sellers including tutorials, templates, and more. Get
+    started with Amazon FBA or KDP in no time!"
+  tabletop-gaming: "The digital marketplace for sharing high-quality 3D printable models for tabletop gaming and toys:
+    free & premium templates for 3d printing."
+  vj-pack: "Browse our growing library of %{result_count} unique & high-quality stock videos, motion backgrounds and VJ
+    loops available in hi-res (4K / UHD / 1080p), curated by independent creators."
+  vj-clip: "Browse our growing library of %{result_count} unique & high-quality stock videos, motion backgrounds and VJ
+    loops available in hi-res (4K / UHD / 1080p), curated by independent creators."
+  lut-pack: "The creator marketplace for professionally-designed LUTs, overlays, and presets to add a unique touch to
+    your video production and projects."
+  freelancing: "Jumpstart your freelancing business with %{result_count} guides, templates, courses & other assets for
+    freelancers & agencies."
+  patterns: "High-resolution patterns and textures for seamless 2D or 3D surfaces & materials such as concrete, stone,
+    paint & even skin — great for games, archviz, VFX, & product rendering."
+  font: "Discover a growing selection of high-quality desktop and web fonts: download & buy typefaces directly from
+    leading type foundries & designers."
+  zbrush-brush: "Over %{result_count} ZBrush-compatible 3D models, brushes, tutorials, and more: the best marketplace
+    for resources and training from Zbrush experts"
+  png-files: "Browse over %{result_count} free & premium PNG files: download digital art, raster graphics, &
+    transparent icons."
+  lut: "The creator marketplace for professionally-designed LUTs, overlays, and presets to add a unique touch to your
+    video production and projects."
+  ios14: "Discover %{result_count} custom iOS icon packs for your iPhone. Free & premium icons, built for Apple devices.
+    PNG and vector icons"
+  procreate-5-brushes: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to
+    your Procreate projects. These sets include sketching effects & more."
+  typeface: "Let your next project stand out with %{result_count} high-quality fonts & typefaces from expert designers
+    and type foundries"
+  music-production: "Expert tools & tutorials for music production: buy, sell, and share plugins, presets, samples, and
+    tutorials for sound designers"
+  lut-preset: "The creator marketplace for professionally-designed LUTs, overlays, and presets to add a unique touch to
+    your video production and projects."
+  logo: "Over %{result_count} unique & custom-designed logo assets — from brandmark and style guide templates to
+    tutorials for branding design."
+  loops: "Browse our growing library of %{result_count} unique & high-quality video and audio loops: available in hi-res
+    (4K / UHD / 1080p), curated by independent creators."
+  icon-pack: "Over %{result_count} unique custom-designed icon packs — from minimal vector to hand-drawn images: perfect
+    for UI design, iOS personalization, or presentations & posters."
+  brushes-pack: "Explore over %{result_count} brushes for Procreate, Photoshop, Blender & more. Add a professional touch
+    to your art and illustrations with interesting textures and realistic effects such as watercolor and paint."
+  website: "Over %{result_count} professional assets, tutorials and templates for website design: landing page guides,
+    UI & icon kits, coded HTML templates & more"
+  samples: "Thousands of high quality royalty free samples, multiple genre music loops, drum samples, royalty-free
+    music, and more, across all genres: Hip Hop, Trap, EDM, House, Funk, Soul, RnB, and even Classical!"
+  character-rig: "%{result_count} rigging tutorials and advanced rigs to accelerate your 3D animation workflow and level
+    up your characters in Blender, Maya, 3DSMax, & more."
+  original-art: "Browse original artwork from %{result_count} independent illustrators & artists: ranging from digital
+    art & video loops to paper crafts and 3D renders."
+  landing-page: "Over %{result_count} professional assets, tutorials and templates for website design: landing page
+    guides, UI & icon kits, coded HTML templates & more"
+  vector: "Over %{result_count} unique custom-designed vectors — from icons to infographics: perfect for graphic design
+    or presentations & posters."
+  4k: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places, animals, and
+    objects: perfect for projects ranging from print media to social graphics and digital art."
+  royalty-free: "Browse over 587,000 photos featuring high-resolution stock and reference photos of people, places,
+    animals, and objects: perfect for projects ranging from print media to social graphics and digital art."
+  icon-set: "Over %{result_count} unique custom-designed icon packs — from minimal vector to hand-drawn images: perfect
+    for UI design, iOS personalization, or presentations & posters."
+  graphic-design: "Jumpstart your next graphic design project with over %{result_count} assets created by professional
+    designers: from assets & templates to tutorial"
+  subliminal-messages: "Browse over %{result_count} audio samples and loops with subliminal messages to transform your
+    mindset"
+  sample-pack: "Thousands of high quality royalty free samples, multiple genre music loops, drum samples, royalty-free
+    music, and more, across all genres: Hip Hop, Trap, EDM, House, Funk, Soul, RnB, and even Classical!"
+  powerpoint: "Browse %{result_count} professionally-designed PowerPoint templates to ace your next pitch or
+    presentation."
+  illustrations: "Browse original artwork from %{result_count} independent illustrators & artists: ranging from digital
+    art & video loops to paper crafts and 3D renders."
+  typography: "Discover a growing selection of %{result_count} high-quality digital products for typography: from type
+    design tutorials & eBooks to custom fonts and typefaces."
+  html5: "Jumpstart your next project with %{result_count} digital downloads for HTML5: from templates & UI kits to
+    video tutorials and guides."
+  voice-over-tutorial: "Learn the art of voiceover and voice acting from the experts: over %{result_count} tutorials
+    for vocal professionals."
+  guitar-tabs: "Learn how-to play guitar with tutorials & lessons, tabs, sheet music, backing tracks & more: for
+    beginners & experts."
+  kontakt: "Over %{result_count} royalty-free templates, instruments, plugins & tutorials for Kontakt created by (& for)
+    professional music producers & sound designers"
+  procreate-5: "Thousands of Procreate brushes, stamps, textures & tutorials for adding a variety of effects to your
+    Procreate projects. These sets include sketching effects & more."
+  mockup-template: "Discover over %{result_count} high-quality, customizable mockups and scene creators for apps,
+    apparel, artwork, branding: effortlessly create photorealistic product images to your online websites & stores"
+  binaural-beats: "Tutorials (from eBooks to videos) for guided meditations: resources to improve your mindfulness and
+    reduce stress."
+  graphic-novel: "Browse thousands of comics, novels and other assets available for download by professional designers
+    and creators."
+  guitar-lessons: "Learn how-to play guitar with tutorials & lessons, tabs, sheet music, backing tracks & more: for
+    beginners & experts."
+  wireframe: "Over %{result_count} downloads for wireframing and prototyping. Top-rated UI Kits (ie. Eva, Ant) and
+    template screens for Figma, Adobe XD, Sketch & more. Prototype a stunning iOS, Android, or web app."
+  planner: "Become more productive & boost your efficiency with %{result_count} productivity resources from eBooks and
+    courses to templates and planners."
+  drums: "Buy, sell, and share drum samples, plugins, samples, loops and more for sound design and music production."
+  premiere-pro: "Buy, sell, and share templates, add-ons, tutorials and more for video production & editing with Adobe
+    Premiere Pro."
+  minecraft-skins: "Explore over %{result_count} custom skins and texture packs for Minecraft: easily customize styles
+    and rendering in your Minecraft worlds!"
+  comic-books: "Browse thousands of comics, novels and other assets available for download by professional designers
+    and creators."
+  sheet-music: "Browse %{result_count} sheet music files for popular songs across genres and instruments: from guitar
+    tabs to piano."
+  hdri-environment: "Browse over %{result_count} HDRI environments & more 3D assets for VFX, game development, AR/VR,
+    architecture, and animation."
+  sample-library: "Thousands of high quality royalty free samples, multiple genre music loops, drum samples,
+    royalty-free music, and more, across all genres: Hip Hop, Trap, EDM, House, Funk, Soul, RnB, and even Classical!"
+  after-effects-free: "A diverse selection of %{result_count} templates for motion graphics: animated text &
+    illustrations, transitions, brush strokes, 3D renders, and more."
+  after-effects-files: "A diverse selection of %{result_count} templates for motion graphics: animated text &
+    illustrations, transitions, brush strokes, 3D renders, and more."
+  papercrafts: "Browse a wide variety of %{result_count} templates and guides for papercrafts activities: perfect for
+    the classroom and children."
+  sample-packs: "Thousands of high quality royalty free samples, multiple genre music loops, drum samples, royalty-free
+    music, and more, across all genres: Hip Hop, Trap, EDM, House, Funk, Soul, RnB, and even Classical!"
+  cross-stitch: "Create unique or custom, handmade pieces with our growing selection of %{result_count} cross stitch
+    patterns and knitting guides from expert sewing & needlecraft designers."
+  cross-stitch-pattern: "Create unique or custom, handmade pieces with our growing selection of %{result_count} cross
+    stitch patterns and knitting guides from expert sewing & needlecraft designers."
+  needle-point: "Create unique or custom, handmade pieces with our growing selection of %{result_count} needlepoint
+    patterns and knitting guides from expert sewing & needlecraft designers."
+  woodworking-plans: "Discover %{result_count} DIY woodworking project ideas: plans, blueprints, and tutorials for all
+    levels – from novices to hobbyists & experts"
+  powerpoint-templates: "Browse %{result_count} professionally-designed PowerPoint templates to ace your next pitch or
+    presentation."
+  motion-design: "A diverse selection of %{result_count} templates for motion graphics: animated text & illustrations,
+    transitions, brush strokes, 3D renders, and more."
+  sound-effect: "Browse %{result_count} high-quality sound effects and audio samples to add a professional touch to
+    your videos."
+  background-music: "Browse %{result_count} high-quality stock audio samples to add background music and sound effects
+    to your projects."
+  crafts: "Browse our growing selection of %{result_count} templates and guides for crafts & DIY activities to create
+    unique, handmade pieces."
+  free-mockups: "Discover over %{result_count} high-quality, customizable mockups and scene creators for apps, apparel,
+    artwork, branding: effortlessly create photorealistic product images to your online websites & stores"
+titles:
+  default: "%{tags}"
+  3d-models: Professional 3D Modeling Assets
+  procreate: Free & Premium Procreate Brushes
+  blender: "Blender Assets: 3D Models, Materials & More"
+  brushes: Brushes for Digital Artists
+  illustration-tutorials: Drawing & Painting Tutorials
+  unity: Unity Game Development Downloads & Assets
+  artwork: Original Artwork from Independent Artists
+  comedy: Free & Premium Comedy Shows and Downloads
+  photoshop: "Photoshop Courses, Designs & Downloads"
+  how-to-make-money: "Making Money Online: Courses & Downloads"
+  marketing: "Free & Premium Marketing Courses, Templates & Resources"
+  stock-reference-photos: High-Quality Stock & Reference Photos
+  comics-graphic-novels: Free & Premium Comics and Graphic Novels
+  game-development: Game Development Courses & Downloads
+  spark-ar: Buy & Sell Spark AR Templates & Assets
+  zbrush: "3D Models, Brushes, & Tutorials for ZBrush"
+  cinema4d: "Cinema4D Tutorials, Presets & Downloads"
+  social-media-marketing: "Social Media Marketing Courses, Resources & Downloads"
+  ebooks: Download Free & Premium eBooks
+  ableton: "Ableton Templates, Projects & Plugins"
+  substance-designer-painter: Substance 3D Assets & Downloads
+  architecture: "Architecture Design Assets, Visualization & Rendering"
+  apparel-sewing: "Sewing Kits, Patterns & Tutorials"
+  ui-kits: "UI Kits (Figma, Adobe, and More)"
+  character-design: Character Design & Rigging Downloads
+  writing: Writing Courses & Downloads
+  houdinifx: 3D Assets for HoudiniFx
+  clip-studio-paint: "Clip Studio Paint Brushes, Assets, Tutorials & More"
+  rigging: "Rigging Assets, Templates & Tutorials"
+  print-on-demand: Dropshipping Assets & Downloads
+  tutorials: "Courses & Tutorials: Learn Online"
+  unreal-engine-4: Unreal Engine Assets Marketplace
+  lightroom: Photography Lightroom Presets & Filters
+  kdp: "Amazon KDP - Assets, Templates & Courses for KDP"
+  motion-graphics: Motion Graphics Courses & Downloads
+  icons: Download Free & Premium Icons and Kits
+  productivity: Productivity Templates & Downloads
+  maya: "Maya Scripts, Rigs, 3D Assets & Tutorials"
+  film-luts: "Marketplace for LUTs, Video Presets & Templates"
+  notion: "Notion Templates, Dashboards, Icons & Kits"
+  3d-printing: Free & Premium 3D Printing Templates
+  video-loops: Royalty-Free Stock Video Footage & Motion Graphics
+  self-improvement: "Self-Improvement Courses, eBooks & Resources"
+  ios-icons: iOS Icons Pack Downloads
+  mockups: The Best Free & Premium Mockups
+  textures: Stock Textures for 3D & Graphic Design
+  fonts: Download The Best Free & Premium Fonts
+  website-design: "Website Design Templates, Tutorials & Downloads"
+  music-samples: Royalty-Free Music & Samples
+  guitar: "Guitar Tabs, Tutorials & Sheet Music"
+  meditation: Meditation Programs & Downloads
+  sound-design: "Sound Design Tools, Templates & Tutorials"
+  woodworking: "Woodworking Plans, Kits & Tutorials"
+  crafts-diy: Tutorials and assets for DIY & Crafts
+  food-cooking: "Food & Cooking Recipes, Tutorials, Books $ More"
+  brushpack: Brushes for Digital Artists
+  illustration: Drawing & Painting Tutorials
+  twitter: Social Media Marketing Courses, Resources & Downloads
+  ebook: Download Free & Premium eBooks
+  spark-ar-filter: Buy & Sell Spark AR Templates & Assets
+  comics: Free & Premium Comics and Graphic Novels
+  substance-painter: Substance 3D Assets & Downloads
+  digital-art: Original Artwork from Independent Artists
+  photoshop-brushes: Photoshop Courses, Designs & Downloads
+  clothing: Sewing Kits, Patterns & Tutorials
+  procreatebrushes: Free & Premium Procreate Brushes
+  spark-ar-template: Buy & Sell Spark AR Templates & Assets
+  shoes: Sewing Kits, Patterns & Tutorials
+  ui-kit: UI Kits (Figma, Adobe, and More)
+  stock-photos: High-Quality Stock & Reference Photos
+  book: Writing Courses & Downloads
+  houdini: 3D Assets for HoudiniFx
+  3dmodel: Professional 3D Modeling Assets
+  design-system: Design Systems & UI Kits
+  figma: UI Kits for Figma
+  spark-ar-make-up: Spark AR Make-up Filters
+  rig: Rigging Assets, Templates & Tutorials
+  max-for-live: Max for Live Templates, Projects & Plugins
+  ableton-live: Ableton Templates, Projects & Plugins
+  substance-designer: Substance 3D Assets & Downloads
+  archviz: Architecture Design Assets, Visualization & Rendering
+  merch-by-amazon: Dropshipping Assets & Downloads
+  psd: Photoshop Courses, Designs & Downloads
+  how-to: "Courses & Tutorials: Learn Online"
+  video: Stock Footage & Video Downloads
+  blender-3d: "Blender Assets: 3D Models, Materials & More"
+  ecommerce: eCommerce Courses & Downloads
+  texturing: Stock Textures for 3D & Graphic Design
+  figure-drawing: Character Design & Rigging Downloads
+  course: "Courses & Tutorials: Learn Online"
+  drawing-tutorial: Drawing & Painting Tutorials
+  procreate-stamps: Free & Premium Procreate Stamps
+  entrepreneurship: Courses & Downloads for Entrepreneurs
+  presets: Photography Lightroom Presets & Filters
+  after-effects: Motion Graphics Courses & Downloads
+  investing: Investing Courses & Downloads
+  blender-addon: Download Blender Add-ons
+  parody: Comedy Parody Shows & Downloads
+  cinema-4d: Cinema4D Tutorials, Presets & Downloads
+  spark-ar-patch: Buy & Sell Spark AR Templates & Assets
+  c4d: Cinema4D Tutorials, Presets & Downloads
+  ux: UI Kits (Figma, Adobe, and More)
+  photo-reference: High-Quality Stock & Reference Photos
+  web-design: UI Kits (Figma, Adobe, and More)
+  procreate-brush: Free & Premium Procreate Brushes
+  maya-script: Maya Scripts, Rigs, 3D Assets & Tutorials
+  miniatures: Tabletop Gaming 3D Printing Models
+  kdp-book-cover: Amazon KDP Book Covers - Assets, Templates & more
+  tshirt-design: Dropshipping Assets & Downloads
+  maya-rig: Maya Scripts, Rigs, 3D Assets & Tutorials
+  photos: High-Quality Stock & Reference Photos
+  kdp-digital-design: Amazon KDP Design - Assets, Templates & Tutorials
+  zbrush-tutorial: 3D Models, Brushes, & Tutorials for ZBrush
+  kdp-cover-design: Amazon KDP Book Covers - Assets, Templates & more
+  luts: Marketplace for LUTs, Video Presets & Templates
+  ableton-live-packs: Ableton Templates, Projects & Plugins
+  how-to-draw: Drawing & Painting Tutorials
+  vfx: Motion Graphics Courses & Downloads
+  3dsmax: 3DSMax Models, Textures & Tutorials
+  3dprinting: Free & Premium 3D Printing Templates
+  lightroom-presets: Photography Lightroom Presets & Filters
+  vj-loops: Download VJ Loops & Video Assets
+  web-development: Web Development Courses, Libraries & Templates
+  game-art: Game Design Art
+  video-game: Game Development Courses & Downloads
+  procreate-tutorial: Free & Premium Procreate Brushes
+  twitch-overlay: Social Media Marketing Courses, Resources & Downloads
+  texture: Stock Textures for 3D & Graphic Design
+  self-growth: Self-Improvement Courses, eBooks & Resources
+  self-help: Self-Improvement Courses, eBooks & Resources
+  stock-market: "Making Money Online: Courses & Downloads"
+  lightroom-mobile: Lightroom Mobile - Photo Presets & Filters
+  twitch-graphics: Social Media Marketing Courses, Resources & Downloads
+  ios14homescreen: iOS Icons Pack Downloads
+  twitch: Social Media Marketing Courses, Resources & Downloads
+  mockup: The Best Free & Premium Mockups
+  blender-2.8: "Blender Assets: 3D Models, Materials & More"
+  sketch: Download UI Kits & Templates for Sketch
+  ui: UI Kits (Figma, Adobe, and More)
+  kdp-interior: Amazon KDP Interiors  - Assets, Templates & more
+  instagram: Social Media Marketing Courses, Resources & Downloads
+  digital-download: "Digital Downloads: Assets, Tutorials & more"
+  finance: "Making Money Online: Courses & Downloads"
+  kdp-template: Amazon KDP - Assets, Templates & more
+  ios-14-icons: iOS Icons Pack Downloads
+  social-media: Social Media Guides, Resources, Templates & more
+  zbrush-alpha: 3D Models, Brushes, & Tutorials for ZBrush
+  kontakt-instrument: Ableton Templates, Projects & Plugins
+  amazon: Amazon Sellers - FBA, KDP & more
+  tabletop-gaming: Tabletop Gaming 3D Printing Models
+  vj-pack: Royalty-Free Stock Video Footage & Motion Graphics
+  vj-clip: Royalty-Free Stock Video Footage & Motion Graphics
+  lut-pack: Marketplace for LUTs, Video Presets & Templates
+  freelancing: Guides, Templates & Courses for Freelancing
+  patterns: Seamless Textures & Patterns
+  font: Download The Best Free & Premium Fonts
+  zbrush-brush: 3D Models, Brushes, & Tutorials for ZBrush
+  png-files: Download PNG files
+  lut: Marketplace for LUTs, Video Presets & Templates
+  ios14: iOS Icons Pack Downloads
+  procreate-5-brushes: Free & Premium Procreate Brushes
+  typeface: Premium Fonts & Typefaces
+  music-production: Music Production Tools, Templates & Tutorials
+  lut-preset: Marketplace for LUTs, Video Presets & Templates
+  logo: Logo Design Templates & Tutorials
+  loops: Download Video or Audio Loops
+  icon-pack: Download Free & Premium Icons and Kits
+  brushes-pack: Brushes for Digital Artists
+  website: Website Design Templates, Tutorials & Downloads
+  samples: Royalty-Free Music & Samples
+  character-rig: Rigging Assets, Templates & Tutorials
+  original-art: Original Artwork from Independent Artists
+  landing-page: Website Design Templates, Tutorials & Downloads
+  vector: Download Free & Premium Vector Graphics
+  4k: 4K Stock & Reference Photos
+  royalty-free: High-Quality Stock & Reference Photos
+  icon-set: Download Free & Premium Icons and Kits
+  graphic-design: Graphic Design Asset & Tutorials
+  subliminal-messages: Listen to Subliminal Messages
+  sample-pack: Royalty-Free Music & Samples
+  powerpoint: Download PowerPoint Presentation Templates
+  illustrations: Original Artwork from Independent Artists
+  typography: Typography Tutorials & Assets
+  html5: HTML5 Tutorials & Templates
+  voice-over-tutorial: Voiceover Acting Tutorial
+  guitar-tabs: Guitar Tabs, Tutorials & Sheet Music
+  kontakt: Kontakt Instruments, Plugins & Tutorials
+  procreate-5: Free & Premium Procreate Brushes
+  mockup-template: The Best Free & Premium Mockups
+  binaural-beats: Meditation Programs & Downloads
+  graphic-novel: Free & Premium Comics and Graphic Novels
+  guitar-lessons: Guitar Tabs, Tutorials & Sheet Music
+  wireframe: Wireframing & Prototyping Assets
+  planner: Productivity Templates & Downloads
+  drums: Drum Samples, Plugins & Loops
+  premiere-pro: Tutorials, Add-ons & Templates for Premiere Pro
+  minecraft-skins: Download Custom Minecraft Skins
+  comic-books: Free & Premium Comics and Graphic Novels
+  sheet-music: Download Sheet Music
+  hdri-environment: Download HDRI Environments
+  sample-library: Royalty-Free Music & Samples
+  after-effects-free: Motion Graphics Courses & Downloads
+  after-effects-files: Motion Graphics Courses & Downloads
+  papercrafts: Download Papercrafts Templates
+  sample-packs: Royalty-Free Music & Samples
+  cross-stitch: Download Cross-Stitch Patterns
+  cross-stitch-pattern: Download Cross-Stitch Patterns
+  needle-point: Download Needlepoint Patterns
+  woodworking-plans: Woodworking Plans, Kits & Tutorials
+  powerpoint-templates: Download PowerPoint Presentation Templates
+  motion-design: Motion Graphics Courses & Downloads
+  sound-effect: Sound Effects & Stock Audio
+  background-music: Stock Background Music & Audio
+  crafts: Resources + Templates for Arts & Crafts
+  free-mockups: The Best Free & Premium Mockups

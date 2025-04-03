@@ -1,0 +1,7 @@
+<div>
+  <p>In accordance with Singapore’s Payment Services Act, our payment processor Stripe requires extra verification for Singapore-based accounts.</p>
+  <p>Please submit all required verification information <%= link_to "on your payment settings page", "https://gumroad.com/settings/payments" %> in order to avoid your account being permanently closed by Stripe.</p>
+  <p>After the deadline on <%= @deadline %>, your current balance will be forfeited.</p>
+  <p><%= link_to "Complete your account", settings_payments_url, class: "button primary" %></p>
+  <p>Or you can click here: <%= link_to settings_payments_url, settings_payments_url %></p>
+</div>

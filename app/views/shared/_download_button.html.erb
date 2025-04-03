@@ -1,0 +1,25 @@
+<%# _download_button.html.erb
+
+Parameters:
+
+- link (required, Link object) - The link you are generating a download button for.
+- is_preview (optional, Boolean) - A boolean used to designate that the download button is being only used for
+  a visual preview, the links generated should not be real (i.e. href is #)
+- url_redirect (optional, UrlRedirect object) - a url redirect object
+
+Notes:
+
+You should not check for the existence of the url_redirect object as a basis for determining if the button is in
+preview mode, that is what is_preview is for.
+
+The existence of url_redirect and is_preview are mutually exclusive. One or the other is always nil. If is_preview
+is true then the url_redirect is nil. If the url_redirect is not nil then is_preview is nil. Rely on this fact and
+question the use of try in this template. %>
+
+<% preview = !!(defined?(is_preview) && is_preview) %>
+
+<% if !url_redirect&.is_rental? %>
+  <%= link_to view_content_button_text(link), preview ? "#" : url_redirect_download_page_url(url_redirect.token), class: "button primary" %>
+<% elsif link.streamable? %>
+  <%= link_to "Watch", preview ? "#" : url_redirect_stream_page_url(url_redirect.token), class: "button primary" %>
+<% end %>

@@ -1,0 +1,43 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/nvp
+    body:
+      encoding: UTF-8
+      string: USER=<PAYPAL_USERNAME>&PWD=<PAYPAL_PASSWORD>&SIGNATURE=<PAYPAL_SIGNATURE>&VERSION=90.0&CURRENCYCODE=USD&METHOD=TransactionSearch&TRANSACTIONCLASS=Sent&AMT=897.71&TRANSACTIONID=75K708962P9301333&STARTDATE=2023-12-24T00%3A00%3A00Z
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - text/plain; charset=utf-8
+      Content-Length:
+      - '411'
+      Connection:
+      - keep-alive
+      Date:
+      - Thu, 28 Dec 2023 09:31:23 GMT
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - e168129b8a7bc
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Operation-Name:
+      - TransactionSearch
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: L_TIMESTAMP0=2023%2d12%2d26T18%3a46%3a38Z&L_TIMEZONE0=GMT&L_TYPE0=Payment&L_EMAIL0=sb%2ddmsfs3088295%40business%2eexample%2ecom&L_NAME0=John%20Doe%27s%20Test%20Store&L_TRANSACTIONID0=75K708962P9301333&L_STATUS0=Completed&L_AMT0=%2d897%2e71&L_CURRENCYCODE0=USD&L_FEEAMT0=%2d17%2e95&L_NETAMT0=%2d915%2e66&TIMESTAMP=2023%2d12%2d28T09%3a31%3a23Z&CORRELATIONID=e168129b8a7bc&ACK=Success&VERSION=90%2e0&BUILD=57991821
+  recorded_at: Thu, 28 Dec 2023 09:31:23 GMT
+recorded_with: VCR 6.2.0

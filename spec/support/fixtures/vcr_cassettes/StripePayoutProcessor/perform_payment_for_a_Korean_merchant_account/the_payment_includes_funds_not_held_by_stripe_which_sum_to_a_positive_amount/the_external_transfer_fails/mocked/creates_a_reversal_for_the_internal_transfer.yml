@@ -1,0 +1,329 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=transfers&country=KR&default_currency=krw&metadata[user_id]=1460588916235&metadata[tos_agreement_id]=tCGnU-49IVd76puEpDuoKA%3D%3D&metadata[user_compliance_info_id]=tCGnU-49IVd76puEpDuoKA%3D%3D&metadata[bank_account_id]=9CPJNRV0-iZYxhmNoYxVgQ%3D%3D&tos_acceptance[date]=1698692204&tos_acceptance[ip]=54.234.242.13&tos_acceptance[service_agreement]=recipient&business_type=individual&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar1553991b_1539%40gumroad.com&individual[phone]=0000000000&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=546080&individual[address][country]=KR&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[id_number]=000000000&bank_account[country]=KR&bank_account[currency]=krw&bank_account[account_number]=000123456789&bank_account[routing_number]=SGSEKRSLXXX&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=false
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_zO5kaMcQUzYx7H","request_duration_ms":3423}}'
+      Idempotency-Key:
+      - 7d0397c9-b639-46d0-8a75-229f1b6a6e32
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 18:56:48 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6073'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - 7d0397c9-b639-46d0-8a75-229f1b6a6e32
+      Original-Request:
+      - req_uRL1VlxBl2UaUK
+      Request-Id:
+      - req_uRL1VlxBl2UaUK
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1O70dlS68BRd8lqE",
+          "object": "account",
+          "business_profile": {
+            "mcc": "5192",
+            "name": null,
+            "product_description": "Chuck Bartowski",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "transfers": "active"
+          },
+          "charges_enabled": true,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "KR",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "546080",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "name_kana": null,
+            "name_kanji": null,
+            "owners_provided": true,
+            "ownership_declaration": null,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "vat_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "KR",
+          "created": 1698692206,
+          "default_currency": "krw",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1O70dlS68BRd8lqEQUKYGvFY",
+                "object": "bank_account",
+                "account": "acct_1O70dlS68BRd8lqE",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "SG SECURITIES KOREA CO., LTD.",
+                "country": "KR",
+                "currency": "krw",
+                "default_for_currency": true,
+                "fingerprint": "IONXFvybGyPjE91G",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "SGSEKRSLXXX",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1O70dlS68BRd8lqE/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1O70dmS68BRd8lqEJu4RMPul",
+            "object": "person",
+            "account": "acct_1O70dlS68BRd8lqE",
+            "address": {
+              "city": "San Francisco",
+              "country": "KR",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "546080",
+              "state": "California"
+            },
+            "created": 1698692206,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar1553991b_1539@gumroad.com",
+            "first_name": "Chuck",
+            "first_name_kana": null,
+            "first_name_kanji": null,
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "gender": null,
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "last_name_kana": null,
+            "last_name_kanji": null,
+            "maiden_name": null,
+            "metadata": {},
+            "nationality": null,
+            "phone": "+10000000000",
+            "relationship": {
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [
+                "verification.document"
+              ],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "status": "unverified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "9CPJNRV0-iZYxhmNoYxVgQ==",
+            "tos_agreement_id": "tCGnU-49IVd76puEpDuoKA==",
+            "user_compliance_info_id": "tCGnU-49IVd76puEpDuoKA==",
+            "user_id": "1460588916235"
+          },
+          "payouts_enabled": true,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [
+              "individual.verification.document"
+            ],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {},
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "VIPUL.GUMR",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "vipul.gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "payments": {
+              "statement_descriptor": "VIPUL.GUMROAD.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": false,
+              "schedule": {
+                "delay_days": 0,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1698692204,
+            "ip": "54.234.242.13",
+            "service_agreement": "recipient",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Mon, 30 Oct 2023 18:56:48 GMT
+recorded_with: VCR 6.2.0

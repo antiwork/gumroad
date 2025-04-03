@@ -1,0 +1,807 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=SG&default_currency=sgd&metadata[user_id]=5138287013890&metadata[tos_agreement_id]=L87x1x0a6u11J1wNRJ5oTg%3D%3D&metadata[user_compliance_info_id]=L87x1x0a6u11J1wNRJ5oTg%3D%3D&metadata[bank_account_id]=L87x1x0a6u11J1wNRJ5oTg%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=company&business_profile[name]=Buy+More%2C+LLC&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Buy+More%2C+LLC&company[name]=Buy+More%2C+LLC&company[address][line1]=address_full_match&company[address][city]=Singapore&company[address][postal_code]=546080&company[address][country]=SG&company[tax_id]=000000000&company[phone]=0000000000&company[directors_provided]=true&company[executives_provided]=true&bank_account[country]=SG&bank_account[currency]=sgd&bank_account[account_number]=000123456&bank_account[routing_number]=1100-000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.11.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_Y3yOzyW6uiKaUz","request_duration_ms":2887}}'
+      Idempotency-Key:
+      - fca6801e-bd13-4847-8c68-de8d64ac482e
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
+        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
+        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
+        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 11 Mar 2024 08:30:16 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '5819'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to=https://q.stripe.com/coop-report
+      Idempotency-Key:
+      - fca6801e-bd13-4847-8c68-de8d64ac482e
+      Original-Request:
+      - req_l2e78GwJeziASp
+      Request-Id:
+      - req_l2e78GwJeziASp
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1Ot4FNS3cC9UELpB",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": "5192",
+            "name": "Buy More, LLC",
+            "product_description": "Buy More, LLC",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "company",
+          "capabilities": {
+            "card_payments": "inactive",
+            "transfers": "inactive"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "Singapore",
+              "country": "SG",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "546080",
+              "state": null
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": "Buy More, LLC",
+            "owners_provided": false,
+            "phone": "0000000000",
+            "tax_id_provided": true,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "SG",
+          "created": 1710145815,
+          "default_currency": "sgd",
+          "details_submitted": false,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1Ot4FNS3cC9UELpBL04zYzbt",
+                "object": "bank_account",
+                "account": "acct_1Ot4FNS3cC9UELpB",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "SG",
+                "currency": "sgd",
+                "default_for_currency": true,
+                "fingerprint": "VDIVVTFuMKl6xYpo",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "3456",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "1100-000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1Ot4FNS3cC9UELpB/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "metadata": {
+            "bank_account_id": "L87x1x0a6u11J1wNRJ5oTg==",
+            "tos_agreement_id": "L87x1x0a6u11J1wNRJ5oTg==",
+            "user_compliance_info_id": "L87x1x0a6u11J1wNRJ5oTg==",
+            "user_id": "5138287013890"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [
+              "representative.address.line1",
+              "representative.address.postal_code",
+              "representative.dob.day",
+              "representative.dob.month",
+              "representative.dob.year",
+              "representative.email",
+              "representative.first_name",
+              "representative.full_name_aliases",
+              "representative.id_number",
+              "representative.last_name",
+              "representative.nationality",
+              "representative.phone",
+              "representative.relationship.executive",
+              "representative.relationship.title"
+            ],
+            "disabled_reason": "requirements.past_due",
+            "errors": [],
+            "eventually_due": [
+              "representative.address.line1",
+              "representative.address.postal_code",
+              "representative.dob.day",
+              "representative.dob.month",
+              "representative.dob.year",
+              "representative.email",
+              "representative.first_name",
+              "representative.full_name_aliases",
+              "representative.id_number",
+              "representative.last_name",
+              "representative.nationality",
+              "representative.phone",
+              "representative.relationship.executive",
+              "representative.relationship.title"
+            ],
+            "past_due": [
+              "representative.address.line1",
+              "representative.address.postal_code",
+              "representative.dob.day",
+              "representative.dob.month",
+              "representative.dob.year",
+              "representative.email",
+              "representative.first_name",
+              "representative.full_name_aliases",
+              "representative.id_number",
+              "representative.last_name",
+              "representative.nationality",
+              "representative.phone",
+              "representative.relationship.executive",
+              "representative.relationship.title"
+            ],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "BUY MORE,",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "vipul.gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null
+            },
+            "payments": {
+              "statement_descriptor": "BUY MORE, LLC",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 1,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1427846400,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Mon, 11 Mar 2024 08:30:16 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1Ot4FNS3cC9UELpB/persons
+    body:
+      encoding: UTF-8
+      string: first_name=Chuck&last_name=Bartowski&email=chuck%40gum.com&phone=0000000000&address[line1]=address_full_match&address[city]=Singapore&address[postal_code]=546080&address[country]=SG&dob[day]=1&dob[month]=1&dob[year]=1901&id_number=000000000&nationality=SG&relationship[representative]=true&relationship[owner]=true&relationship[title]=CEO&relationship[percent_ownership]=100
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.11.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_l2e78GwJeziASp","request_duration_ms":3539}}'
+      Idempotency-Key:
+      - 89ac471d-7dba-4975-9f0f-ebd2f5a58e42
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
+        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
+        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
+        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 11 Mar 2024 08:30:18 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1711'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to=https://q.stripe.com/coop-report
+      Idempotency-Key:
+      - 89ac471d-7dba-4975-9f0f-ebd2f5a58e42
+      Original-Request:
+      - req_kyHF8pWfIxlSww
+      Request-Id:
+      - req_kyHF8pWfIxlSww
+      Stripe-Account:
+      - acct_1Ot4FNS3cC9UELpB
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1Ot4FRS3cC9UELpBGdosX6xk",
+          "object": "person",
+          "account": "acct_1Ot4FNS3cC9UELpB",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "Singapore",
+            "country": "SG",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "546080",
+            "state": null
+          },
+          "created": 1710145817,
+          "dob": {
+            "day": 1,
+            "month": 1,
+            "year": 1901
+          },
+          "email": "chuck@gum.com",
+          "first_name": "Chuck",
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "metadata": {},
+          "nationality": "SG",
+          "phone": "+10000000000",
+          "relationship": {
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": true,
+            "percent_ownership": 100.0,
+            "representative": true,
+            "title": "CEO"
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [
+              "full_name_aliases"
+            ],
+            "errors": [],
+            "eventually_due": [
+              "full_name_aliases",
+              "verification.proof_of_liveness"
+            ],
+            "past_due": [
+              "full_name_aliases"
+            ],
+            "pending_verification": []
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "status": "pending"
+          }
+        }
+  recorded_at: Mon, 11 Mar 2024 08:30:18 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1Ot4FNS3cC9UELpB/persons
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.11.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_kyHF8pWfIxlSww","request_duration_ms":1912}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
+        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
+        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
+        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 11 Mar 2024 08:30:19 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2159'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to=https://q.stripe.com/coop-report
+      Request-Id:
+      - req_AJQEvVGb1mZeGW
+      Stripe-Account:
+      - acct_1Ot4FNS3cC9UELpB
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "person_1Ot4FRS3cC9UELpBGdosX6xk",
+              "object": "person",
+              "account": "acct_1Ot4FNS3cC9UELpB",
+              "additional_tos_acceptances": {
+                "account": {
+                  "date": null,
+                  "ip": null,
+                  "user_agent": null
+                }
+              },
+              "address": {
+                "city": "Singapore",
+                "country": "SG",
+                "line1": "address_full_match",
+                "line2": null,
+                "postal_code": "546080",
+                "state": null
+              },
+              "created": 1710145817,
+              "dob": {
+                "day": 1,
+                "month": 1,
+                "year": 1901
+              },
+              "email": "chuck@gum.com",
+              "first_name": "Chuck",
+              "future_requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "id_number_provided": true,
+              "last_name": "Bartowski",
+              "metadata": {},
+              "nationality": "SG",
+              "phone": "+10000000000",
+              "relationship": {
+                "director": false,
+                "executive": false,
+                "legal_guardian": false,
+                "owner": true,
+                "percent_ownership": 100.0,
+                "representative": true,
+                "title": "CEO"
+              },
+              "requirements": {
+                "alternatives": [],
+                "currently_due": [
+                  "full_name_aliases"
+                ],
+                "errors": [],
+                "eventually_due": [
+                  "full_name_aliases",
+                  "verification.proof_of_liveness"
+                ],
+                "past_due": [
+                  "full_name_aliases"
+                ],
+                "pending_verification": []
+              },
+              "ssn_last_4_provided": true,
+              "verification": {
+                "additional_document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "details": null,
+                "details_code": null,
+                "document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "status": "pending"
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1Ot4FNS3cC9UELpB/persons"
+        }
+  recorded_at: Mon, 11 Mar 2024 08:30:19 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1Ot4FNS3cC9UELpB/persons/person_1Ot4FRS3cC9UELpBGdosX6xk
+    body:
+      encoding: UTF-8
+      string: full_name_aliases[0]=
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.11.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_AJQEvVGb1mZeGW","request_duration_ms":366}}'
+      Idempotency-Key:
+      - 9c5b3900-5426-45b7-9cdf-bad183fc3a34
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.11.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
+        version 6.5.0-25-generic (buildd@lcy02-amd64-054) (x86_64-linux-gnu-gcc-13
+        (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #25-Ubuntu
+        SMP PREEMPT_DYNAMIC Wed Feb  7 14:58:39 UTC 2024","hostname":"dell"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 11 Mar 2024 08:30:22 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1772'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons%2F%3Aperson;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to=https://q.stripe.com/coop-report
+      Idempotency-Key:
+      - 9c5b3900-5426-45b7-9cdf-bad183fc3a34
+      Original-Request:
+      - req_jpuizVEjz2Iw2b
+      Request-Id:
+      - req_jpuizVEjz2Iw2b
+      Stripe-Account:
+      - acct_1Ot4FNS3cC9UELpB
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1Ot4FRS3cC9UELpBGdosX6xk",
+          "object": "person",
+          "account": "acct_1Ot4FNS3cC9UELpB",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "Singapore",
+            "country": "SG",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "546080",
+            "state": null
+          },
+          "created": 1710145817,
+          "dob": {
+            "day": 1,
+            "month": 1,
+            "year": 1901
+          },
+          "email": "chuck@gum.com",
+          "first_name": "Chuck",
+          "full_name_aliases": [],
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "metadata": {},
+          "nationality": "SG",
+          "phone": "+10000000000",
+          "relationship": {
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": true,
+            "percent_ownership": 100.0,
+            "representative": true,
+            "title": "CEO"
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [
+              "verification.proof_of_liveness"
+            ],
+            "errors": [],
+            "eventually_due": [
+              "verification.proof_of_liveness"
+            ],
+            "past_due": [
+              "verification.proof_of_liveness"
+            ],
+            "pending_verification": [
+              "verification.document"
+            ]
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "status": "pending"
+          }
+        }
+  recorded_at: Mon, 11 Mar 2024 08:30:22 GMT
+recorded_with: VCR 6.2.0

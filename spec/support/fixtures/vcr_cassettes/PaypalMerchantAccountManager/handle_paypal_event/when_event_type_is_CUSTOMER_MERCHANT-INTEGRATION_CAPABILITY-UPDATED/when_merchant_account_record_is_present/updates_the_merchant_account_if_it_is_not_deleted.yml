@@ -1,0 +1,104 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic QWFEdkxJeUYwVFRlVUJqUEIwM3BBVkdjRFM1S0JNenFkcktyNU9VRXN2TWdBNnM5czNTNHdaY1U0cm1VUDI0WjczeEk2eHRlY2I2MjVibDY6RVBMQ2dJOE9CY2g2RzUyeHRTeHNBSVVDbGdobVJqZ3o2T2FvNndmT1RXMGtZN3F1UXFCa1ZsT3c0RFdqU2NlWnNQQ0x4OWczSEEyOFhUbzU=
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1615'
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 22 Apr 2022 13:57:54 GMT
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - 7edfc32de322c
+      Pragma:
+      - no-cache
+      X-Paypal-Token-Service:
+      - IAAS
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"scope":"https://uri.paypal.com/services/customer/partner-referrals/readwrite
+        https://uri.paypal.com/services/invoicing https://uri.paypal.com/services/payments/realtimepayment
+        https://uri.paypal.com/services/customer/onboarding/user https://api.paypal.com/v1/vault/credit-card
+        https://api.paypal.com/v1/payments/.* https://uri.paypal.com/services/payments/referenced-payouts-items/readwrite
+        https://uri.paypal.com/services/reporting/search/read https://uri.paypal.com/services/customer/partner
+        https://uri.paypal.com/services/customer/merchant-integrations/read https://uri.paypal.com/services/applications/webhooks
+        https://uri.paypal.com/services/disputes/update-seller https://uri.paypal.com/services/payments/payment/authcapture
+        openid https://uri.paypal.com/services/disputes/read-seller https://uri.paypal.com/services/payments/refund
+        https://uri.paypal.com/services/risk/raas/transaction-context https://uri.paypal.com/services/customer/consumer-referrals/create
+        https://uri.paypal.com/services/partners/merchant-accounts/readwrite https://uri.paypal.com/services/identity/grantdelegation
+        https://uri.paypal.com/services/customer/onboarding/account https://uri.paypal.com/payments/payouts
+        https://uri.paypal.com/services/customer/onboarding/sessions https://api.paypal.com/v1/vault/credit-card/.*
+        https://uri.paypal.com/services/subscriptions","access_token":"A21AAK-5LbVsb8HdgTD70kYum5T6kZuCUp2tW8sNIrjwdvfjeAtYxhEUD6hpzySHsrbQpP6eio4zNaA-1Fx2h7H5vdVcb--5A","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":29151,"nonce":"2022-04-22T13:03:45ZGRzEM1CYKJ4L9-HbwzGW8Dnik4RJvGmbI8rHNWaS7hg"}'
+  recorded_at: Fri, 22 Apr 2022 13:57:54 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v1/customer/partners/<PAYPAL_PARTNER_MERCHANT_ID>/merchant-integrations/GSQ5PDPXZCWGW
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer A21AAK-5LbVsb8HdgTD70kYum5T6kZuCUp2tW8sNIrjwdvfjeAtYxhEUD6hpzySHsrbQpP6eio4zNaA-1Fx2h7H5vdVcb--5A
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2210'
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 22 Apr 2022 13:57:55 GMT
+      Application-Id:
+      - APP-80W284485P519543T
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Caller-Acct-Num:
+      - <PAYPAL_PARTNER_MERCHANT_ID>
+      Paypal-Debug-Id:
+      - 27b8e8abfb89e
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"merchant_id":"GSQ5PDPXZCWGW","tracking_id":"7332867124044-1648064088","products":[{"name":"PPCP_CUSTOM","vetting_status":"SUBSCRIBED","capabilities":["AMEX_OPTBLUE","CARD_PROCESSING_VIRTUAL_TERMINAL","COMMERCIAL_ENTITY","CUSTOM_CARD_PROCESSING","DEBIT_CARD_SWITCH","FRAUD_TOOL_ACCESS"]},{"name":"PPCP_STANDARD","vetting_status":"SUBSCRIBED","capabilities":["ALT_PAY_PROCESSING","PAYPAL_CREDIT_PROCESSING","RECEIVE_MONEY","SEND_MONEY","STANDARD_CARD_PROCESSING","VENMO_PAY_PROCESSING","WITHDRAW_MONEY"]},{"name":"MOBILE_PAYMENT_ACCEPTANCE","status":"ACTIVE"}],"capabilities":[{"name":"AMEX_OPTBLUE","status":"ACTIVE"},{"name":"CARD_PROCESSING_VIRTUAL_TERMINAL","status":"ACTIVE"},{"name":"COMMERCIAL_ENTITY","status":"ACTIVE"},{"name":"CUSTOM_CARD_PROCESSING","status":"ACTIVE"},{"name":"DEBIT_CARD_SWITCH","status":"ACTIVE"},{"name":"FRAUD_TOOL_ACCESS","status":"ACTIVE"},{"name":"ALT_PAY_PROCESSING","status":"ACTIVE"},{"name":"PAYPAL_CREDIT_PROCESSING","status":"ACTIVE"},{"name":"RECEIVE_MONEY","status":"ACTIVE"},{"name":"SEND_MONEY","status":"ACTIVE"},{"name":"STANDARD_CARD_PROCESSING","status":"ACTIVE"},{"name":"VENMO_PAY_PROCESSING","status":"ACTIVE"},{"name":"WITHDRAW_MONEY","status":"ACTIVE"}],"payments_receivable":true,"legal_name":"John
+        Doe''s Test Store","primary_email":"sb-6intt2962376@business.example.com","primary_email_confirmed":true,"oauth_integrations":[{"integration_type":"OAUTH_THIRD_PARTY","integration_method":"PAYPAL","oauth_third_party":[{"partner_client_id":"<PAYPAL_PARTNER_CLIENT_ID>","merchant_client_id":"Aa89PinX50UeS8Y0i1uTyy2YEURX1Lhkf3zItNUC104hropkNz_PY8iYCxAJVB8taVM7tvBnf3BERa-8","scopes":["https://uri.paypal.com/services/payments/delay-funds-disbursement","https://uri.paypal.com/services/payments/realtimepayment","https://uri.paypal.com/services/payments/partnerfee","https://uri.paypal.com/services/payments/refund","https://uri.paypal.com/services/customer/merchant-integrations/read","https://uri.paypal.com/services/disputes/update-seller","https://uri.paypal.com/services/payments/payment/authcapture","https://uri.paypal.com/services/disputes/read-seller"]}]}],"primary_currency":"USD","country":"US"}'
+  recorded_at: Fri, 22 Apr 2022 13:57:55 GMT
+recorded_with: VCR 6.1.0

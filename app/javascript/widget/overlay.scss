@@ -1,0 +1,15 @@
+@import "../stylesheets/font";
+@import "../stylesheets/definitions";
+@import "../stylesheets/button";
+
+.gumroad-button {
+  @include globals;
+}
+
+a.gumroad-button {
+  --parent-color: 0 0 0 !important;
+  @extend %button, .primary;
+  font-family: $font-family;
+  $icons: [];
+  @import "../stylesheets/icons";
+}

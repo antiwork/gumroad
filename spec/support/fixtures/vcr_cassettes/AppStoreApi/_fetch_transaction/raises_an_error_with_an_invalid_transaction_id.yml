@@ -1,0 +1,61 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/111111111111
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer eyJraWQiOiJVNUZTS0hOM1VRIiwiYWxnIjoiRVMyNTYifQ.eyJleHAiOjE3MTYzMDMzNzQsImlzcyI6IjY5YTZkZTc5LTEzNTYtNDdlMy1lMDUzLTViOGM3YzExYTRkMSIsImF1ZCI6ImFwcHN0b3JlY29ubmVjdC12MSIsImJpZCI6ImNvbS5HUkQuR3Vtcm9hZCJ9.ThLVM1OTDoaC0V80gFVH8wcbnCBF1hnFIOgDE-kLGj03U1jAKc6plEjX8cWmaZAYHFxlHiilwWTIv4n67awP8w
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Server:
+      - daiquiri/5
+      Date:
+      - Tue, 21 May 2024 14:36:15 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '64'
+      Connection:
+      - keep-alive
+      X-Apple-Jingle-Correlation-Key:
+      - SWHFNMCUHIJ3OS7SSKH2HHWMYQ
+      X-Apple-Request-Uuid:
+      - 958e56b0-543a-13b7-4bf2-928fa39eccc4
+      B3:
+      - 958e56b0543a13b74bf2928fa39eccc4-e75222621d03f78f
+      X-B3-Traceid:
+      - 958e56b0543a13b74bf2928fa39eccc4
+      X-B3-Spanid:
+      - e75222621d03f78f
+      Apple-Seq:
+      - '0.0'
+      Apple-Tk:
+      - 'false'
+      Apple-Originating-System:
+      - CommerceGateway
+      X-Responding-Instance:
+      - 'CommerceGateway:20109:::'
+      Apple-Timing-App:
+      - 22 ms
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      X-Daiquiri-Instance:
+      - daiquiri:47578002:st44p00it-hyhk16094801:7987:24RELEASE108:daiquiri-amp-commerce-clients-ext-002-st
+    body:
+      encoding: UTF-8
+      string: '{"errorCode":4040010,"errorMessage":"Transaction id not found."}'
+  recorded_at: Tue, 21 May 2024 14:36:15 GMT
+recorded_with: VCR 6.2.0

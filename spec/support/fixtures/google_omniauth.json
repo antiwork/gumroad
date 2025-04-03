@@ -1,0 +1,48 @@
+{
+  "provider": "google_oauth2",
+  "uid": "101656774483284362141",
+  "info": {
+    "name": "Paulius Dragunas",
+    "email": "pdragunas@example.com",
+    "unverified_email": "pdragunas@example.com",
+    "email_verified": true,
+    "first_name": "Paulius",
+    "last_name": "Dragunas",
+    "image": "https://lh3.googleusercontent.com/a/AAcHTtdgNSTE4zlSCNpD_ElfkqF6Ku8lm0m4PiIVGcNLug=s96-c"
+  },
+  "credentials": {
+    "token": "ya29.a0AWY7Cknm-t6qMFeQ1HIHDzEcusfkonyD2V11tBKiFo2H6vU1FFPaKGfyO61xlfp2OODGWYRv4NP0OQlEoadBQRVddNa6JiKfWI2Vniq0p8lrsXnhsbWWceGFilEIdtshth3xHotZ0N-qLnjLUwKZ1YPALtkYaCgYKAa8SARESFQG1tDrpLGNYHScnIRri5mQEdOxooQ0163",
+    "refresh_token": "1//06_qs9GhiygH0CgYIARAAGAYSNwF-L9IrnzRGpzSHpDaPu34iluO1d-vtSfyIbL3Znq7fET4EjaCgVRNc8Ly0qda6zO2V3pB4AlU",
+    "expires_at": 1685420310,
+    "expires": true
+  },
+  "extra": {
+    "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjJkOWE1ZWY1YjEyNjIzYzkxNjcxYTcwOTNjYjMyMzMzM2NkMDdkMDkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiIzNTUxODgwNDkyMDQtdXBja2hkbDduYXRhNnNibzVidGVsMW9scGtka2xydTYuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhdWQiOiIzNTUxODgwNDkyMDQtdXBja2hkbDduYXRhNnNibzVidGVsMW9scGtka2xydTYuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJzdWIiOiIxMDE2NTY3NzQ0ODMyODQzNjIxNDEiLCJlbWFpbCI6InBkcmFndW5hc0BnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiYXRfaGFzaCI6ImFvTFpnVThYYTJ1V1ExeGtmWXlIZEEiLCJuYW1lIjoiUGF1bGl1cyBEcmFndW5hcyIsInBpY3R1cmUiOiJodHRwczovL2xoMy5nb29nbGV1c2VyY29udGVudC5jb20vYS9BQWNIVHRkZ05TVEU0emxTQ05wRF9FbGZrcUY2S3U4bG0wbTRQaUlWR2NOTHVnPXM5Ni1jIiwiZ2l2ZW5fbmFtZSI6IlBhdWxpdXMiLCJmYW1pbHlfbmFtZSI6IkRyYWd1bmFzIiwibG9jYWxlIjoiZW4iLCJpYXQiOjE2ODU0MTY3MTEsImV4cCI6MTY4NTQyMDMxMX0.KmKve8rHsNHZeOUsVTxijNXqsFpLCb-yGqya_EVGpDkfW7BUDUBL_3s8aHdyGBPmBfTrqX6a2QkOLEUNmaJumE7Ib900zkDfz2SqFDSjTeqn4QyoXRPWXyzuKiTORXAV9q-WRzs-k5TWhq76HD_4i4FK3YmMyY2ktiF08ShQGAnbw-jUG6gv482KLKQsuE7qZDvNVTw31F4oCx-KzGaXp9H2C9rEUWj6DSFtfeKTGhgMf_uzpVGFtl5J8yA8VCNOMTNtDXjqcdlaQQg-thXYu91Mms5IGQeIfLWad1KXMRH4Qu1vYm9o1Yp6K1aCLxkwDtRiAhiSmQyASLhSJgQ9Cw",
+    "id_info": {
+      "iss": "https://accounts.google.com",
+      "azp": "355188049204-upckhdl7nata6sbo5btel1olpkdklru6.apps.googleusercontent.com",
+      "aud": "355188049204-upckhdl7nata6sbo5btel1olpkdklru6.apps.googleusercontent.com",
+      "sub": "101656774483284362141",
+      "email": "pdragunas@example.com",
+      "email_verified": true,
+      "at_hash": "aoLZgU8Xa2uWQ1xkfYyHdA",
+      "name": "Paulius Dragunas",
+      "picture": "https://lh3.googleusercontent.com/a/AAcHTtdgNSTE4zlSCNpD_ElfkqF6Ku8lm0m4PiIVGcNLug=s96-c",
+      "given_name": "Paulius",
+      "family_name": "Dragunas",
+      "locale": "en",
+      "iat": 1685416711,
+      "exp": 1685420311
+    },
+    "raw_info": {
+      "sub": "101656774483284362141",
+      "name": "Paulius Dragunas",
+      "given_name": "Paulius",
+      "family_name": "Dragunas",
+      "picture": "https://lh3.googleusercontent.com/a/AAcHTtdgNSTE4zlSCNpD_ElfkqF6Ku8lm0m4PiIVGcNLug=s96-c",
+      "email": "pdragunas@example.com",
+      "email_verified": true,
+      "locale": "en"
+    }
+  }
+}

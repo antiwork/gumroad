@@ -1,0 +1,5 @@
+<%= header_section("Please add a payment account to Gumroad.") %>
+<div>
+  <p>You have <%= @seller.balance_formatted %> waiting for you.</p>
+  <p>In order for us to deposit money into your account, we need you to set up a payment account. Please add it by visiting your <%= link_to "payout settings", settings_payments_url %> and filling it in.</p>
+</div>

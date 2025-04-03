@@ -1,0 +1,23 @@
+<div style="border: 1px solid; border-bottom: none; border-radius: 4px; overflow: hidden;">
+  <% @products.take(Installment::MAX_ABANDONED_CART_PRODUCTS_TO_SHOW_IN_EMAIL).each do |product| %>
+    <div class="item" style="display: contents">
+      <%= render("shared/mailers/product_as_checkout_cell", product:) do %>
+        <div class="section">
+          <% seller = product.dig(:seller) %>
+          <% seller_name = seller[:name] %>
+          <% seller_profile_url = seller[:profile_url] %>
+          <div class="footer" title="<%= seller_name %>">
+            <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller_name}", class: "user-avatar"), seller_profile_url, target: "_blank") %>
+            <%= link_to(seller_name, seller_profile_url, target: "_blank") %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+</div>
+<% if @products.size > Installment::MAX_ABANDONED_CART_PRODUCTS_TO_SHOW_IN_EMAIL %>
+  <div>
+    <%= link_to "and #{pluralize(@products.size - Installment::MAX_ABANDONED_CART_PRODUCTS_TO_SHOW_IN_EMAIL, 'more product')}", checkout_index_url(host: UrlService.domain_with_protocol), target: "_blank" %>
+  </div>
+<% end %>
+<%= link_to "Complete checkout", checkout_index_url(host: UrlService.domain_with_protocol), target: "_blank", class: "button primary" %>

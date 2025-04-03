@@ -1,0 +1,106 @@
+---
+http_interactions:
+- request:
+    method: patch
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/5AF67588T4374172W
+    body:
+      encoding: UTF-8
+      string: '[{"op":"add","path":"/purchase_units/@reference_id==''default''/invoice_id","value":"Gc7kEE9tam91EhIVNQoiIg=="}]'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAIkyQeglGs7U79PgF9ATkZAxpJMwNgaMjQXIqfcoDUSdfNhAD7JCnRpgxU0fMpz_i4ooLRs5v6FA7hF4pMXpELi5mZJgA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '16146819654324028'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 204
+      message: No Content
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Date:
+      - Tue, 02 Mar 2021 10:46:08 GMT
+      Paypal-Debug-Id:
+      - 29fa10cad7f84
+    body:
+      encoding: UTF-8
+      string: ''
+  recorded_at: Tue, 02 Mar 2021 10:46:08 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/5AF67588T4374172W/capture
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAIkyQeglGs7U79PgF9ATkZAxpJMwNgaMjQXIqfcoDUSdfNhAD7JCnRpgxU0fMpz_i4ooLRs5v6FA7hF4pMXpELi5mZJgA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - capture-5AF67588T4374172W
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '2588'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 02 Mar 2021 10:46:13 GMT
+      Paypal-Debug-Id:
+      - 139f90944b3fe
+    body:
+      encoding: UTF-8
+      string: '{"id":"5AF67588T4374172W","intent":"CAPTURE","status":"COMPLETED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"10.00","breakdown":{"item_total":{"currency_code":"USD","value":"10.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-6intt2962376@business.example.com","merchant_id":"GSQ5PDPXZCWGW"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"0.60"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"Classic-Digital","invoice_id":"Gc7kEE9tam91EhIVNQoiIg==","items":[{"name":"Classic-Digital","unit_amount":{"currency_code":"USD","value":"10.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"E"}],"shipping":{"name":{"full_name":"Gumbot
+        Gumstein"},"address":{"address_line_1":"1 Main St","admin_area_2":"San Jose","admin_area_1":"CA","postal_code":"95131","country_code":"US"}},"payments":{"captures":[{"id":"70836846T1450305X","status":"COMPLETED","amount":{"currency_code":"USD","value":"10.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"10.00"},"paypal_fee":{"currency_code":"USD","value":"0.59"},"platform_fees":[{"amount":{"currency_code":"USD","value":"0.60"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"8.81"}},"invoice_id":"Gc7kEE9tam91EhIVNQoiIg==","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/70836846T1450305X","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/70836846T1450305X/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5AF67588T4374172W","rel":"up","method":"GET"}],"create_time":"2021-03-02T10:46:12Z","update_time":"2021-03-02T10:46:12Z"}]}}],"payer":{"name":{"given_name":"Gumbot","surname":"Gumstein"},"email_address":"paypal-gr-integspecs@gumroad.com","payer_id":"92SVVJSWYT72E","address":{"country_code":"US"}},"create_time":"2021-03-02T10:44:18Z","update_time":"2021-03-02T10:46:12Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/5AF67588T4374172W","rel":"self","method":"GET"}]}'
+  recorded_at: Tue, 02 Mar 2021 10:46:13 GMT
+recorded_with: VCR 6.0.0

@@ -1,0 +1,364 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=transfers&country=DZ&default_currency=dzd&metadata[user_id]=164759031713&metadata[tos_agreement_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&metadata[user_compliance_info_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&metadata[bank_account_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&tos_acceptance[service_agreement]=recipient&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Algiers&individual[address][postal_code]=16000&individual[address][country]=DZ&bank_account[country]=DZ&bank_account[currency]=dzd&bank_account[account_number]=00001234567890123456&bank_account[routing_number]=AAAADZDZXXX&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=false
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NwgmfCYvJ1tUP5","request_duration_ms":1}}'
+      Idempotency-Key:
+      - 8c42260a-e54d-42e6-b364-5e92c82d5c83
+      Stripe-Version:
+      - 2023-10-16; risk_in_requirements_beta=v1
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.3.4 p94 (2024-07-09)","platform":"arm64-darwin23","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Rachels-MacBook-Pro-2.local 23.4.0 Darwin Kernel Version 23.4.0: Wed Feb 21
+        21:44:54 PST 2024; root:xnu-10063.101.15~2/RELEASE_ARM64_T6030 arm64","hostname":"Rachels-MacBook-Pro-2.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Fri, 08 Nov 2024 17:09:15 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6527'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Cross-Origin-Opener-Policy-Report-Only:
+      - same-origin; report-to="coop"
+      Idempotency-Key:
+      - 8c42260a-e54d-42e6-b364-5e92c82d5c83
+      Original-Request:
+      - req_WcrdMB8B96mntT
+      Report-To:
+      - '{"group":"coop","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/coop-report"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - coop="https://q.stripe.com/coop-report"
+      Request-Id:
+      - req_WcrdMB8B96mntT
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - 2023-10-16; risk_in_requirements_beta=v1
+      Vary:
+      - Origin
+      X-Content-Type-Options:
+      - nosniff
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - A
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1QIvgKS6DUC2zBKX",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": "5192",
+            "name": "Chuck Bartowski",
+            "product_description": "Chuck Bartowski",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "transfers": "active"
+          },
+          "charges_enabled": true,
+          "company": {
+            "address": {
+              "city": "Algiers",
+              "country": "DZ",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "16000",
+              "state": null
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "name_kana": null,
+            "name_kanji": null,
+            "owners_provided": true,
+            "ownership_declaration": null,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "vat_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application_custom"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "application",
+            "stripe_dashboard": {
+              "type": "none"
+            },
+            "type": "application"
+          },
+          "country": "DZ",
+          "created": 1731085753,
+          "default_currency": "dzd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1QIvgKS6DUC2zBKX70kgWg9w",
+                "object": "bank_account",
+                "account": "acct_1QIvgKS6DUC2zBKX",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "DZ",
+                "currency": "dzd",
+                "default_for_currency": true,
+                "fingerprint": "TUG3TdqR4E10bPQG",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "3456",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "AAAADZDZXXX",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1QIvgKS6DUC2zBKX/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1QIvgKS6DUC2zBKX62dhnYAJ",
+            "object": "person",
+            "account": "acct_1QIvgKS6DUC2zBKX",
+            "address": {
+              "city": "Algiers",
+              "country": "DZ",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "16000",
+              "state": null
+            },
+            "created": 1731085753,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "chuck@gum.com",
+            "first_name": "Chuck",
+            "first_name_kana": null,
+            "first_name_kanji": null,
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "gender": null,
+            "id_number_provided": false,
+            "last_name": "Bartowski",
+            "last_name_kana": null,
+            "last_name_kanji": null,
+            "maiden_name": null,
+            "metadata": {},
+            "nationality": null,
+            "phone": "+10000000000",
+            "relationship": {
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [
+                "verification.document"
+              ],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": false,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "status": "unverified"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "3X1LPBvu3iVKxQRODqFmzA==",
+            "tos_agreement_id": "3X1LPBvu3iVKxQRODqFmzA==",
+            "user_compliance_info_id": "3X1LPBvu3iVKxQRODqFmzA==",
+            "user_id": "164759031713"
+          },
+          "payouts_enabled": true,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [
+              "individual.verification.document"
+            ],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "capital": {},
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "CHUCK BART",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Chuck Bartowski",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null
+            },
+            "payments": {
+              "statement_descriptor": "CHUCK BARTOWSKI",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": false,
+              "schedule": {
+                "delay_days": 0,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1427846400,
+            "ip": "54.234.242.13",
+            "service_agreement": "recipient",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Fri, 08 Nov 2024 17:09:15 GMT
+recorded_with: VCR 6.2.0

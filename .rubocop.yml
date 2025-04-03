@@ -1,0 +1,82 @@
+inherit_from:
+  - ./config/.rails-rubocop.yml
+
+# Rails configuration overrides
+Layout/ClosingParenthesisIndentation: # Results in some weirdness so disable it
+  Enabled: false
+Lint/RedundantSafeNavigation: # False positives / no safe auto-corrections so disable it
+  Enabled: false
+Performance/MapCompact: # May report false positives
+  Enabled: false
+Performance/OpenStruct: # May report false positives
+  Enabled: false
+Performance/RedundantMerge: # May report false positives
+  Enabled: false
+Style/ArrayIntersect: # May report false positives
+  Enabled: false
+# End Rails configuration overrides
+
+# Configure empty lines between method definitions
+Layout/EmptyLineBetweenDefs:
+  Enabled: true
+  NumberOfEmptyLines: 1
+  EmptyLineBetweenMethodDefs: true
+  EmptyLineBetweenClassDefs: true
+  EmptyLineBetweenModuleDefs: true
+  AllowAdjacentOneLineDefs: true
+  # DefLikeMacros: []
+
+require:
+  - rubocop-performance
+  - rubocop-rails
+  - rubocop-rspec
+  - rubocop-rake
+
+AllCops:
+  # RuboCop has a bunch of cops enabled by default. This setting tells RuboCop
+  # to ignore them, so only the ones explicitly set in this file are enabled.
+  DisabledByDefault: true
+  SuggestExtensions: false
+  Exclude:
+    - "bin/**/*"
+    - "db/schema.rb"
+    - "node_modules/**/*"
+    - !ruby/regexp /nomad\/[^gumroad_deployer]/
+    - "tmp/**/*"
+    - "vendor/bundle/**/*"
+
+Layout/ArgumentAlignment:
+  Enabled: true
+
+Layout/ArrayAlignment:
+  Enabled: true
+
+Layout/BlockAlignment:
+  Enabled: true
+
+Layout/DefEndAlignment:
+  Enabled: true
+
+Layout/HashAlignment:
+  Enabled: true
+
+Layout/FirstHashElementIndentation:
+  Enabled: true
+
+Layout/FirstArrayElementIndentation:
+  Enabled: true
+
+Layout/SpaceInsideArrayLiteralBrackets:
+  Enabled: true
+
+Layout/SpaceInsideArrayPercentLiteral:
+  Enabled: true
+
+Rails/BulkChangeTable:
+  Enabled: true
+  Database: mysql
+  Exclude:
+    - !ruby/regexp /^db\/migrate\/(201[1-9]|202[0-2]|20230[1-9])/ # Exclude migration files created before the cop was introduced
+
+Style/BlockDelimiters:
+  Enabled: true

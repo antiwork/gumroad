@@ -1,0 +1,12 @@
+<% if @product.is_recurring_billing? %>
+  <%= header_section("Subscriptions have been canceled") %>
+<% else %>
+  <%= header_section("Installment plans have been canceled") %>
+<% end %>
+<div>
+  <% if @product.is_recurring_billing? %>
+    <p>Subscriptions for product <%= @product.name %> have been canceled due to the deletion of the product. Your subscribers will no longer be charged.</p>
+  <% else %>
+    <p>Installment plans for product <%= @product.name %> have been canceled due to the deletion of the product. They will no longer be charged.</p>
+  <% end %>
+</div>

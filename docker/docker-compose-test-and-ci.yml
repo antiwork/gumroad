@@ -1,0 +1,42 @@
+services:
+  db_test:
+    image: mysql:8.0.32
+    tmpfs:
+      - /var/lib/mysql:rw
+    ports:
+      - "3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+    command:
+      - "mysqld"
+      - "--default-authentication-plugin=mysql_native_password"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--character-set-server=utf8mb4"
+
+  redis:
+    image: redis:7.0.7
+    tmpfs:
+      - /data:rw
+    ports:
+      - "6379"
+
+  mongo:
+    image: mongo:3.6.16
+    tmpfs:
+      - /data/db:rw
+    ports:
+      - "27017"
+    command: "mongod --smallfiles"
+
+  elasticsearch:
+    image: elasticsearch:7.9.3
+    ports:
+      - "9200"
+    environment:
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "discovery.type=single-node"
+
+  memcached:
+    image: memcached
+    ports:
+      - "11211"

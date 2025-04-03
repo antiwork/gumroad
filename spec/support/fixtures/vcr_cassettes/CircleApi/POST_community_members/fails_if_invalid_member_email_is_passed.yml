@@ -1,0 +1,57 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://app.circle.so/api/v1/community_members?community_id=3512&email=invalid_email&space_group_ids%5B%5D=43576
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      Authorization:
+      - Token <CIRCLE_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Date:
+      - Thu, 19 Aug 2021 13:11:15 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cache-Control:
+      - no-cache
+      Set-Cookie:
+      - ahoy_visit=e0720a1d-531d-4ea9-9ea2-5f15b24421a4; domain=.circle.so; path=/;
+        expires=Thu, 19 Aug 2021 13:16:15 GMT; Secure; SameSite=None
+      - ahoy_visitor=c4a76ca7-04a3-4f25-8732-d5e0351615ae; domain=.circle.so; path=/;
+        expires=Sat, 19 Aug 2023 13:11:15 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - 5576c3caeb39abd7e5c136c3ab32675d
+      X-Runtime:
+      - '0.197136'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 6813a06cc8650de4-BOM
+    body:
+      encoding: UTF-8
+      string: '{"success":false,"errors":"Email is invalid"}'
+  recorded_at: Thu, 19 Aug 2021 13:11:15 GMT
+recorded_with: VCR 6.0.0

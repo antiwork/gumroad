@@ -1,0 +1,424 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build_base:
+    name: Build base image
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - name: Build and push base image
+        env:
+          WEB_BASE_REPO: quay.io/gumroad/web_base
+        run: |
+          set -e
+          GREEN='\033[0;32m'
+          NC='\033[0m'
+          logger() {
+            echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
+          }
+          logger "pulling ruby:$(cat .ruby-version)-slim-bullseye"
+          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
+          WEB_BASE_SHA=$(docker/base/generate_tag_for_web_base.sh)
+          if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
+            logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
+            NEW_BASE_REPO=$WEB_BASE_REPO \
+              CONTRIBSYS_CREDENTIALS=${{ secrets.CONTRIBSYS_CREDENTIALS }} \
+              make build_base
+
+            logger "Pushing $WEB_BASE_REPO:$WEB_BASE_SHA"
+            for i in {1..3}; do
+              logger "Push attempt $i"
+              if docker push --quiet $WEB_BASE_REPO:$WEB_BASE_SHA; then
+                logger "Pushed $WEB_BASE_REPO:$WEB_BASE_SHA"
+                break
+              elif [ $i -eq 3 ]; then
+                logger "Failed to push $WEB_BASE_REPO:$WEB_BASE_SHA"
+                exit 1
+              else
+                sleep 5
+              fi
+            done
+          else
+            logger "$WEB_BASE_REPO:$WEB_BASE_SHA already exists"
+          fi
+
+  build_test:
+    runs-on: self-hosted
+    name: Build test image
+    needs: build_base
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          logout: false
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BUILD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BUILD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Cache S3 credentials files for tests
+        id: cache-s3-files
+        uses: actions/cache@v3
+        with:
+          path: |
+            lib/GeoIP2-City.mmdb
+            config/credentials.yml.enc
+            config/certs/development_com.GRD.iOSCreator.pem
+            config/certs/production_com.GRD.iOSCreator.pem
+          key: s3-files-${{ hashFiles('**/*.mmdb', '**/credentials.yml.enc', '**/development_com.GRD.iOSCreator.pem') }}-test
+      - name: Download files from S3
+        if: steps.cache-s3-files.outputs.cache-hit != 'true'
+        run: |
+          for file in \
+            "GeoIP2-City.mmdb:lib/GeoIP2-City.mmdb" \
+            "credentials.yml.enc:config/credentials.yml.enc" \
+            "certs/development_com.GRD.iOSCreator.pem:config/certs/development_com.GRD.iOSCreator.pem" \
+            "certs/development_com.GRD.iOSCreator.pem:config/certs/production_com.GRD.iOSCreator.pem"; do
+            src="s3://gumroad-secrets/credentials/development/${file%:*}"
+            dst="${file#*:}"
+            aws s3 cp "$src" "$dst"
+          done
+      - name: Build and push test image
+        env:
+          WEB_BASE_REPO: quay.io/gumroad/web_base
+          WEB_BASE_TEST_REPO: quay.io/gumroad/web_base_test
+          WEB_REPO: quay.io/gumroad/web
+          REVISION: ${{ github.sha }}
+        run: |
+          set -e
+          GREEN='\033[0;32m'
+          NC='\033[0m'
+          logger() {
+            echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
+          }
+          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
+          WEB_BASE_TEST_SHA=$(docker/base/generate_tag_for_web_base_test.sh)
+          build_and_push() {
+            local repo=$1
+            local tag=$2
+            local make_target=$3
+            if ! docker manifest inspect $repo:$tag > /dev/null 2>&1; then
+              logger "building $repo:$tag"
+              NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO NEW_WEB_REPO=$WEB_REPO \
+                BRANCH_CACHE_UPLOAD_ENABLED=false \
+                  BRANCH_CACHE_RESTORE_ENABLED=false \
+                  NEW_WEB_TAG=$REVISION \
+                  COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
+                  RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+                  make $make_target
+              logger "pushing $repo:$tag"
+              for i in {1..3}; do
+                logger "Push attempt $i"
+                if docker push --quiet $repo:$tag; then
+                  logger "Pushed $repo:$tag"
+                  break
+                elif [ $i -eq 3 ]; then
+                  logger "Failed to push $repo:$tag"
+                  exit 1
+                else
+                  sleep 5
+                fi
+              done
+            else
+              logger "$repo:$tag already exists"
+            fi
+          }
+
+          build_and_push $WEB_BASE_TEST_REPO $WEB_BASE_TEST_SHA build_base_test
+          build_and_push $WEB_REPO test-$REVISION build_test
+
+  pull_images:
+    name: Pull images to ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [antiwork-1, antiwork-2]
+    runs-on:
+      - self-hosted
+      - ${{ matrix.runner }}
+    needs: build_test
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - name: Pull images
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          for i in {1..3}; do
+            if docker pull --quiet $WEB_REPO:test-${{ github.sha }}; then
+              break
+            elif [ $i -eq 3 ]; then
+              echo "Failed to pull $WEB_REPO:test-${{ github.sha }} after 3 attempts"
+              exit 1
+            fi
+            sleep 20
+          done
+
+  test_fast:
+    name: Test Fast ${{ matrix.ci_node_index }}
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
+    runs-on: self-hosted
+    needs: pull_images
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [15]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          logout: false
+      - name: Start services
+        env:
+          COMPOSE_HTTP_TIMEOUT: 300
+        run: docker compose -f docker/docker-compose-test-and-ci.yml up -d
+      - name: Wait for services
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh db_test 3306
+        timeout-minutes: 5
+
+      - name: Setup test database
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_ENV=test \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            $WEB_REPO:test-${{ github.sha }} \
+            bundle exec rake db:setup
+
+      - name: Run tests
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            -e RUBY_YJIT_ENABLE=1 \
+            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
+            -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
+            -e KNAPSACK_PRO_CI_NODE_INDEX=${{ matrix.ci_node_index }} \
+            -e KNAPSACK_PRO_LOG_LEVEL=info \
+            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES=true \
+            -e KNAPSACK_PRO_TEST_FILE_PATTERN="spec/**/*_spec.rb" \
+            -e KNAPSACK_PRO_TEST_FILE_EXCLUDE_PATTERN="spec/requests/**/*_spec.rb" \
+            -e KNAPSACK_PRO_COMMIT_HASH=${{ github.sha }} \
+            -e KNAPSACK_PRO_BRANCH=${{ github.ref_name }} \
+            -e KNAPSACK_PRO_CI_NODE_BUILD_ID=${{ github.run_id }} \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
+            -e KNAPSACK_PRO_PROJECT_DIR=/app \
+            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT=true \
+            -e S3_DELETER_ACCESS_KEY_ID=${{ secrets.S3_DELETER_ACCESS_KEY_ID }} \
+            -e S3_DELETER_SECRET_ACCESS_KEY=${{ secrets.S3_DELETER_SECRET_ACCESS_KEY }} \
+            -e CI=true \
+            -e IN_DOCKER=true \
+            $WEB_REPO:test-${{ github.sha }} \
+            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+        timeout-minutes: 15
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
+  test_slow:
+    name: Test Slow ${{ matrix.ci_node_index }}
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
+      WEB_REPO: quay.io/gumroad/web
+    runs-on: self-hosted
+    needs: pull_images
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [45]
+        ci_node_index:
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+          ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          logout: false
+      - name: Start services
+        env:
+          COMPOSE_HTTP_TIMEOUT: 300
+        run: docker compose -f docker/docker-compose-test-and-ci.yml up -d
+      - name: Wait for services
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh db_test 3306
+        timeout-minutes: 5
+      - name: Setup test database
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_ENV=test \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            $WEB_REPO:test-${{ github.sha }} \
+            bundle exec rake db:setup
+
+      - name: Run tests
+        uses: nick-fields/retry@v3
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          on_retry_command: |
+            docker compose -f docker/docker-compose-test-and-ci.yml down -v
+            docker compose -f docker/docker-compose-test-and-ci.yml up -d
+            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.sha }} \
+              docker/ci/wait_on_connection.sh db_test 3306
+
+            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              -e RAILS_ENV=test \
+              -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+              $WEB_REPO:test-${{ github.sha }} \
+              bundle exec rake db:setup
+          command: |
+            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+              -e RUBY_YJIT_ENABLE=1 \
+              -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
+              -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
+              -e KNAPSACK_PRO_CI_NODE_INDEX=${{ matrix.ci_node_index }} \
+              -e KNAPSACK_PRO_LOG_LEVEL=info \
+              -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES=true \
+              -e KNAPSACK_PRO_TEST_FILE_PATTERN="spec/requests/**/*_spec.rb" \
+              -e KNAPSACK_PRO_COMMIT_HASH=${{ github.sha }} \
+              -e KNAPSACK_PRO_BRANCH=${{ github.ref_name }} \
+              -e KNAPSACK_PRO_CI_NODE_BUILD_ID=${{ github.run_id }} \
+              -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
+              -e KNAPSACK_PRO_PROJECT_DIR=/app \
+              -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT=true \
+              -e S3_DELETER_ACCESS_KEY_ID=${{ secrets.S3_DELETER_ACCESS_KEY_ID }} \
+              -e S3_DELETER_SECRET_ACCESS_KEY=${{ secrets.S3_DELETER_SECRET_ACCESS_KEY }} \
+              -e CI=true \
+              -e IN_DOCKER=true \
+              $WEB_REPO:test-${{ github.sha }} \
+              /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
+  cleanup:
+    name: Remove image from ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [antiwork-1, antiwork-2]
+    runs-on:
+      - self-hosted
+      - ${{ matrix.runner }}
+    needs: [test_fast, test_slow]
+    if: always()
+    steps:
+      - name: Remove images
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker rmi $WEB_REPO:test-${{ github.sha }} 2>/dev/null || true

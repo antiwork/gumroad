@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "type": "object",
+  "properties": {
+    "purchases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "country": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "integer"
+          },
+          "variant_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer"
+            }
+          },
+          "price_cents": {
+            "type": "integer"
+          }
+        },
+        "required": ["id", "created_at", "product_id", "price_cents"],
+        "additionalProperties": false
+      }
+    },
+    "follower": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "created_at"],
+      "additionalProperties": false
+    },
+    "affiliates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "integer"
+          }
+        },
+        "required": ["id", "created_at", "product_id"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["purchases"]
+    },
+    {
+      "required": ["follower"]
+    },
+    {
+      "required": ["affiliates"]
+    }
+  ],
+  "additionalProperties": false
+}

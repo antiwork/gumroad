@@ -1,0 +1,55 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"reference_id":"P5ppE6H8XIjy2JSCgUhbAw==","amount":{"currency_code":"USD","value":"5.00","breakdown":{"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"item_total":{"currency_code":"USD","value":"5.00"}}},"payee":{"email_address":"<PAYPAL_MERCHANT_EMAIL>"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"5.00"},"quantity":0,"sku":"g"}],"soft_descriptor":"You
+        bought /l/g"}]}'
+    headers:
+      Content-Type:
+      - application/json
+      Prefer:
+      - return=representation
+      Authorization:
+      - Bearer A21AAEoHdxMrfOn2fqQGB61AqZmJby4k19FR7F58IsuDEeAVR7UeXVfTiazgv1SeBaZdLp2ErjifHB6zmIUPA59bO2wwTVQDw
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.5.8
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.5.8p224-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '535'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 17 Jun 2020 18:21:54 GMT
+      Paypal-Debug-Id:
+      - 3a05fe1a2ca6f
+    body:
+      encoding: UTF-8
+      string: '{"name":"INVALID_REQUEST","message":"Request is not well-formed, syntactically
+        incorrect, or violates schema.","debug_id":"3a05fe1a2ca6f","details":[{"field":"/purchase_units/@reference_id==''P5ppE6H8XIjy2JSCgUhbAw==''/items/0/quantity","value":"0","location":"body","issue":"INVALID_PARAMETER_SYNTAX","description":"The
+        value of a field does not conform to the expected format."}],"links":[{"href":"https://developer.paypal.com/docs/api/orders/v2/#error-INVALID_PARAMETER_SYNTAX","rel":"information_link","encType":"application/json"}]}'
+    http_version: 
+  recorded_at: Wed, 17 Jun 2020 18:21:55 GMT
+recorded_with: VCR 3.0.3

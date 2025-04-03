@@ -1,0 +1,34 @@
+<% shown_product_affiliates = product_affiliates.take(@max_products) %>
+
+<h3>How much will I earn?</h3>
+<% shown_product_affiliates.each_with_index do |product_affiliate, index| %>
+  <% product = product_affiliate.product %>
+  <% price = product.default_price_cents %>
+  <% percentage = product_affiliate.affiliate_percentage %>
+  <table>
+    <tbody>
+      <tr>
+        <td>
+          <h4><%= product.name %></h4>
+          <% url = product.long_url %>
+          <a href="<%= url %>"><%= url %></a>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <h4>Price</h4>
+        </td>
+        <td><%= MoneyFormatter.format(price, product.price_currency_type, no_cents_if_whole: true, symbol: true) %></td>
+      </tr>
+      <tr>
+        <td>
+          <h4>Your cut</h4>
+        </td>
+        <td><%= "#{percentage}% (#{MoneyFormatter.format(price * (percentage / 100.0), product.price_currency_type, no_cents_if_whole: true, symbol: true)})" %></td>
+      </tr>
+    </tbody>
+  </table>
+  <% unless index == shown_product_affiliates.size - 1 %>
+    <hr>
+  <% end %>
+<% end %>

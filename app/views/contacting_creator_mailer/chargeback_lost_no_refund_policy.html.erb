@@ -1,0 +1,18 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    Unfortunately, we weren't able to win the dispute initiated by one of your customers (<%= @disputable.customer_email %>) for their purchase of <%= @disputable.multiple_purchases? ? "the following items" : link_to(@disputable.first_product_without_refund_policy.name, @disputable.first_product_without_refund_policy.long_url, target: "_blank") %> for <%= @disputable.formatted_disputed_amount %>.
+  </p>
+  <% if @disputable.multiple_purchases? %>
+    <% @disputable.disputed_purchases.each do |purchase| %>
+      <p>
+        <%= link_to purchase.link.name, purchase.link.long_url %>
+      </p>
+    <% end %>
+  <% end %>
+  <p>
+    We noticed that <%= @disputable.first_product_without_refund_policy.name %> currently doesn't have a refund policy.
+  </p>
+
+  <%= link_to("Add a refund policy to this product", edit_link_url(@disputable.first_product_without_refund_policy), class: "button primary") %>
+</div>

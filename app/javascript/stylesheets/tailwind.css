@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Coins parallax animation */
+.parallax-up {
+  transform: translateY(0);
+  will-change: transform;
+  transition: transform 0.1s linear;
+  transform-style: preserve-3d;
+  animation: parallax-scroll linear;
+  animation-timeline: view();
+  animation-range: entry exit;
+  animation-fill-mode: forwards;
+}
+
+@keyframes parallax-scroll {
+  to {
+    transform: translateY(-50%);
+  }
+}

@@ -1,0 +1,52 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: ASCII-8BIT
+      string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"CA","to_zip":"94107","shipping":20.0,"line_items":[{"quantity":1,"unit_price":100.0,"discount":0,"product_tax_code":null}],"nexus_addresses":[{"country":"US","state":"CA"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.2.2-p53; OpenSSL 1.1.1w  11 Sep 2023) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=UTF-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 03 Jan 2024 19:29:00 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1123'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"81c9a00838de4b02dffbb677da522efc"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - 9865d986-9b11-4626-8809-64c1bc2b42a7
+      X-Runtime:
+      - '0.026121'
+    body:
+      encoding: UTF-8
+      string: '{"tax":{"order_total_amount":120.0,"shipping":20.0,"taxable_amount":100.0,"amount_to_collect":8.63,"rate":0.08625,"has_nexus":true,"freight_taxable":false,"tax_source":"destination","jurisdictions":{"country":"US","state":"CA","county":"SAN
+        FRANCISCO","city":"SAN FRANCISCO"},"breakdown":{"taxable_amount":100.0,"tax_collectable":8.63,"combined_tax_rate":0.08625,"state_taxable_amount":100.0,"state_tax_rate":0.0625,"state_tax_collectable":6.25,"county_taxable_amount":100.0,"county_tax_rate":0.01,"county_tax_collectable":1.0,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":100.0,"special_tax_rate":0.01375,"special_district_tax_collectable":1.38,"line_items":[{"id":"1","taxable_amount":100.0,"tax_collectable":8.63,"combined_tax_rate":0.08625,"state_taxable_amount":100.0,"state_sales_tax_rate":0.0625,"state_amount":6.25,"county_taxable_amount":100.0,"county_tax_rate":0.01,"county_amount":1.0,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_district_taxable_amount":100.0,"special_tax_rate":0.01375,"special_district_amount":1.38}]}}}'
+  recorded_at: Wed, 03 Jan 2024 19:29:00 GMT
+recorded_with: VCR 6.2.0

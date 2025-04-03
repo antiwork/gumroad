@@ -1,0 +1,41 @@
+# This file contains per-environment settings for AnyCable.
+#
+# Since AnyCable config is based on anyway_config (https://github.com/palkan/anyway_config), all AnyCable settings
+# can be set or overridden through the corresponding environment variables.
+# E.g., `rpc_host` is overridden by ANYCABLE_RPC_HOST, `debug` by ANYCABLE_DEBUG etc.
+#
+# Note that AnyCable recognizes REDIS_URL env variable for Redis pub/sub adapter. If you want to
+# use another Redis instance for AnyCable, provide ANYCABLE_REDIS_URL variable.
+#
+# Read more about AnyCable configuration here: https://docs.anycable.io/ruby/configuration
+#
+default: &default
+  # Turn on/off access logs ("Started..." and "Finished...")
+  access_logs_disabled: true
+  # Whether to enable gRPC level logging or not
+  log_grpc: true
+  # Use Redis Streams to broadcast messages to AnyCable server
+  broadcast_adapter: redisx
+  # You can use REDIS_URL env var to configure Redis URL.
+  # Localhost is used by default.
+  # redis_url: "redis://localhost:6379/1"
+  # Use the same channel name for WebSocket server, e.g.:
+  #   $ anycable-go --redis_channel="__anycable__"
+  # redis_channel: "__anycable__"
+  # Must be the same as in your AnyCable server config ($ANYCABLE_SECRET)
+  # secret: "anycable-local-secret"
+
+development:
+  <<: *default
+  # WebSocket endpoint of your AnyCable server for clients to connect to
+  # Make sure you have the `action_cable_meta_tag` in your HTML layout
+  # to propogate this value to the client app ($ANYCABLE_WEBSOCKET_URL)
+  # websocket_url: "wss://gumroad.dev:8081/cable"
+
+test:
+  <<: *default
+
+production:
+  <<: *default
+  # websocket_url: ~
+  # secret: ~

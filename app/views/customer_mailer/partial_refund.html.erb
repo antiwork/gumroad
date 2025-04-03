@@ -1,0 +1,4 @@
+<%= header_section("You have been #{@refund_type} refunded.") %>
+<div>
+  <p>You received a partial refund of <%= @formatted_refund_amount %> for your <%= @purchase.formatted_total_transaction_amount %> purchase of <%= @purchase.link_name %>. It may take up to 3-7 days to show up in your account.</p>
+</div>

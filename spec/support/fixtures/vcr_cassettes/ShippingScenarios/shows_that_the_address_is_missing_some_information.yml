@@ -1,0 +1,146 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses?verify%5B%5D=delivery
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"255 Nonexistent St","city":"San Francisco","state":"CA","zip":"94107","country":"US"}}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/3.2.0 Ruby/2.7.2-p137
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - 890574df60cba192ea0d41a40032b98e
+      Cache-Control:
+      - no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_4d74e51d455f4481a94fc76d7e2d1ee2"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"738f92025bb7ed81d209c02c3d273921"
+      X-Request-Id:
+      - 4e2c181a-eb16-400c-9685-6e2ab898e76f
+      X-Runtime:
+      - '0.067666'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb4nuq
+      X-Version-Label:
+      - easypost-202106161905-7b7dcd08bf-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb2nuq 15c8815ace
+      - intlb1nuq 15c8815ace
+      Strict-Transport-Security:
+      - max-age=15768000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_4d74e51d455f4481a94fc76d7e2d1ee2","object":"Address","created_at":"2021-06-17T19:25:06+00:00","updated_at":"2021-06-17T19:25:06+00:00","name":null,"company":null,"street1":"255
+        Nonexistent St","street2":null,"city":"San Francisco","state":"CA","zip":"94107","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":null,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":false,"errors":[{"code":"E.ADDRESS.NOT_FOUND","field":"address","message":"Address
+        not found","suggestion":null}],"details":{}}}}'
+  recorded_at: Thu, 17 Jun 2021 19:25:06 GMT
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses?verify%5B%5D=delivery
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"255 King St Apt 602","city":"San Francisco","state":"CA","zip":"94107","country":"US"}}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/3.2.0 Ruby/2.7.2-p137
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - 890574e060cba192ea0d41a50032b9a6
+      Cache-Control:
+      - no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_80f668364aa746b8b57b03a9c7d95d33"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"b75e828ee7f1ecb56f298abb9ec16036"
+      X-Request-Id:
+      - 9af42142-798a-4615-a29a-4abe97d80609
+      X-Runtime:
+      - '0.057443'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb7nuq
+      X-Version-Label:
+      - easypost-202106161905-7b7dcd08bf-master
+      X-Backend:
+      - easypost
+      X-Canary:
+      - direct
+      X-Proxied:
+      - extlb2nuq 15c8815ace
+      - intlb1nuq 15c8815ace
+      Strict-Transport-Security:
+      - max-age=15768000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_80f668364aa746b8b57b03a9c7d95d33","object":"Address","created_at":"2021-06-17T19:25:06+00:00","updated_at":"2021-06-17T19:25:06+00:00","name":null,"company":null,"street1":"255
+        KING ST APT 602","street2":"","city":"SAN FRANCISCO","state":"CA","zip":"94107-5400","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":true,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":37.77704,"longitude":-122.39292,"time_zone":"America/Los_Angeles"}}}}'
+  recorded_at: Thu, 17 Jun 2021 19:25:06 GMT
+recorded_with: VCR 6.0.0

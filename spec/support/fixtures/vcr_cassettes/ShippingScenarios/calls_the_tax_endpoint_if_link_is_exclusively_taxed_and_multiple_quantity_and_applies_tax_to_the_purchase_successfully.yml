@@ -1,0 +1,122 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: UTF-8
+      string: '{"from_country":"US","from_state":null,"from_zip":"94107","to_country":"US","to_state":"CA","to_zip":"94107","shipping":0.0,"line_items":[{"quantity":3,"unit_price":500.0,"discount":0}],"nexus_addresses":[{"country":"US","state":"CA"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 21.6.0 Darwin Kernel Version
+        21.6.0: Mon Aug 22 20:19:52 PDT 2022; root:xnu-8020.140.49~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.0.3-p157; OpenSSL 1.1.1n  15 Mar 2022) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=UTF-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sat, 12 Nov 2022 22:18:47 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1144'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"17257ca2c7a18a0bb38f218f1fe3a764"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - e3ab1afa-863f-4022-b93d-8aa735cc1398
+      X-Runtime:
+      - '0.028094'
+    body:
+      encoding: ASCII-8BIT
+      string: '{"tax":{"order_total_amount":1500.0,"shipping":0.0,"taxable_amount":1500.0,"amount_to_collect":129.38,"rate":0.08625,"has_nexus":true,"freight_taxable":false,"tax_source":"destination","jurisdictions":{"country":"US","state":"CA","county":"SAN
+        FRANCISCO","city":"SAN FRANCISCO"},"breakdown":{"taxable_amount":1500.0,"tax_collectable":129.38,"combined_tax_rate":0.08625,"state_taxable_amount":1500.0,"state_tax_rate":0.0625,"state_tax_collectable":93.75,"county_taxable_amount":1500.0,"county_tax_rate":0.01,"county_tax_collectable":15.0,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":1500.0,"special_tax_rate":0.01375,"special_district_tax_collectable":20.63,"line_items":[{"id":"1","taxable_amount":1500.0,"tax_collectable":129.38,"combined_tax_rate":0.08625,"state_taxable_amount":1500.0,"state_sales_tax_rate":0.0625,"state_amount":93.75,"county_taxable_amount":1500.0,"county_tax_rate":0.01,"county_amount":15.0,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_district_taxable_amount":1500.0,"special_tax_rate":0.01375,"special_district_amount":20.63}]}}}'
+  recorded_at: Sat, 12 Nov 2022 22:18:47 GMT
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"1640 17th St","city":"San Francisco","state":"CA","zip":"94107","country":"United
+        States"},"verify":["delivery"]}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/4.8.1 Ruby/3.0.3-p157 OS/Darwin OSVersion/21 OSArch/arm64
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - faa1113c63701bc9eacd2efc00041801
+      Cache-Control:
+      - private, no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_fb7a694c62d711eda8afac1f6bc7bdc6"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"8eb59bcff97f68f15e73fd7290a1e2d4"
+      X-Runtime:
+      - '0.048042'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb8nuq
+      X-Version-Label:
+      - easypost-202211102043-5e82a6be5e-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb3wdc 29913d444b
+      - intlb2nuq 29913d444b
+      - intlb2wdc 29913d444b
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_fb7a694c62d711eda8afac1f6bc7bdc6","object":"Address","created_at":"2022-11-12T22:18:49+00:00","updated_at":"2022-11-12T22:18:49+00:00","name":null,"company":null,"street1":"1640
+        17TH ST","street2":"","city":"SAN FRANCISCO","state":"CA","zip":"94107-2332","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":false,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":37.76493,"longitude":-122.40005,"time_zone":"America/Los_Angeles"}}}}'
+  recorded_at: Sat, 12 Nov 2022 22:18:49 GMT
+recorded_with: VCR 6.1.0

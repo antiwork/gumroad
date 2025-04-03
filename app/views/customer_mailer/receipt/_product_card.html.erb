@@ -1,0 +1,41 @@
+<div class="product-card">
+  <div class="carousel">
+    <div class="items">
+      <% thumbnail_url = product[:thumbnail_url] || ActionController::Base.helpers.asset_url("native_types/thumbnails/#{product[:native_type]}.png") %>
+      <%= link_to(image_tag(thumbnail_url, alt: product[:name]), product[:url], target: "_blank") %>
+    </div>
+  </div>
+  <div class="header">
+    <h4>
+      <%= link_to(product[:name], product[:url], target: "_blank") %>
+    </h4>
+    <% if product[:creator].present? %>
+      <div>
+        <div class="user">
+          <% if product[:creator][:avatar_url].present? %>
+            <%= link_to(image_tag(product[:creator][:avatar_url], alt: "Avatar of #{product[:creator][:name]}", class: "user-avatar"), product[:creator][:profile_url], target: "_blank") %>
+          <% end %>
+          <%= link_to(product[:creator][:name], product[:creator][:profile_url], target: "_blank", class: "user-name") %>
+        </div>
+      </div>
+    <% end %>
+    <% if product[:ratings].present? %>
+      <div class="rating">
+        ★
+        <% if product[:ratings][:count].positive? %>
+          <span class="rating-average"><%= product[:ratings][:average] %></span>
+          <%= "(#{number_to_si(product[:ratings][:count])})" %>
+        <% else %>
+          No ratings
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+  <div class="footer">
+    <div>
+      <div class="price">
+        <%= product_card_formatted_price(price: product[:price], currency_code: product[:currency_code], is_pay_what_you_want: product[:is_pay_what_you_want], recurrence: product[:recurrence], duration_in_months: product[:duration_in_months]) %>
+      </div>
+    </div>
+  </div>
+</div>

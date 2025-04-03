@@ -1,0 +1,55 @@
+# frozen_string_literal: true
+
+class NorthMacedoniaBankAccount < BankAccount
+  BANK_ACCOUNT_TYPE = "MK"
+
+  BANK_CODE_FORMAT_REGEX = /\A[a-zA-Z0-9]{8,11}\z/
+  private_constant :BANK_CODE_FORMAT_REGEX
+
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\A[a-zA-Z0-9]{19}\z/
+  private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
+
+  alias_attribute :bank_code, :bank_number
+
+  validate :validate_bank_code
+  validate :validate_account_number, if: -> { Rails.env.production? }
+
+  def routing_number
+    "#{bank_code}"
+  end
+
+  def bank_account_type
+    BANK_ACCOUNT_TYPE
+  end
+
+  def country
+    Compliance::Countries::MKD.alpha2
+  end
+
+  def currency
+    Currency::MKD
+  end
+
+  def account_number_visual
+    "#{country}******#{account_number_last_four}"
+  end
+
+  def to_hash
+    {
+      routing_number:,
+      account_number: account_number_visual,
+      bank_account_type:
+    }
+  end
+
+  private
+    def validate_bank_code
+      return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
+      errors.add :base, "The bank code is invalid."
+    end
+
+    def validate_account_number
+      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
+      errors.add :base, "The account number is invalid."
+    end
+end

@@ -1,0 +1,48 @@
+{
+  "completed_in": 0.017,
+  "max_id": 251397734328836096,
+  "max_id_str": "251397734328836096",
+  "next_page": "?page=2&max_id=251397734328836096&q=gumroad&rpp=1&include_entities=1&result_type=recent",
+  "page": 1,
+  "query": "gumroad",
+  "refresh_url": "?since_id=251397734328836096&q=gumroad&result_type=recent&include_entities=1",
+  "results": [
+    {
+      "created_at": "Thu, 27 Sep 2012 19:07:45 +0000",
+      "entities": {
+        "hashtags": [],
+        "urls": [
+          {
+            "url": "http://t.co/YoKT9WOW",
+            "expanded_url": "http://gum.co/xXs",
+            "display_url": "gum.co/xXs",
+            "indices": [30, 50]
+          }
+        ],
+        "user_mentions": [
+          { "screen_name": "gumroad", "name": "Gumroad", "id": 276271004, "id_str": "276271004", "indices": [20, 28] }
+        ]
+      },
+      "from_user": "dominucco",
+      "from_user_id": 285215642,
+      "from_user_id_str": "285215642",
+      "from_user_name": "Michael Dominick",
+      "geo": "nil",
+      "id": 251397734328836096,
+      "id_str": "251397734328836096",
+      "iso_language_code": "en",
+      "metadata": { "result_type": "recent" },
+      "profile_image_url": "http://a0.twimg.com/profile_images/2205313349/thing-a-week-29-code-monkey_normal.jpeg",
+      "profile_image_url_https": "https://si0.twimg.com/profile_images/2205313349/thing-a-week-29-code-monkey_normal.jpeg",
+      "source": "&lt;a href=&quot;http://twitter.com/tweetbutton&quot;&gt;Tweet Button&lt;/a&gt;",
+      "text": "Buy Code Journal on @Gumroad! http://t.co/YoKT9WOW Buying direct keeps you ahead of the AppStore!",
+      "to_user": "nil",
+      "to_user_id": 0,
+      "to_user_id_str": "0",
+      "to_user_name": "nil"
+    }
+  ],
+  "results_per_page": 1,
+  "since_id": 0,
+  "since_id_str": "0"
+}

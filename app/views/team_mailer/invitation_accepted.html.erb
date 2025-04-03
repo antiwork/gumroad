@@ -1,0 +1,24 @@
+<div>
+  <p>
+    <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" style="height: 22px; margin: 0 auto;" height="22">
+  </p>
+</div>
+<div style="background-color: #f4f4f0">
+  <p>
+    <img src="<%= @user.avatar_url %>" alt="<%= @user_name %>" style="height: 80px; width: 80px; margin: 0 auto;" class="user-avatar">
+    <h2 style="text-align: center;">
+      <%= @subject %>
+    </h2>
+  </p>
+</div>
+<div>
+  <p><%= @user_name %> joined the team at <%= @seller.username %> as <%= @team_membership.role.humanize %>.</p>
+</div>
+<div>
+  <p>
+    <strong>Change their role?</strong>
+  </p>
+  <p>
+    <%= link_to "Manage your team settings", settings_team_url %>
+  </p>
+</div>

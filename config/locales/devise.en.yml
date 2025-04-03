@@ -1,0 +1,9 @@
+en:
+  devise:
+    mailer:
+      email_changed:
+        subject: 'Security alert: Your Gumroad account email is being changed'
+  errors:
+    messages:
+      pwned_password: has previously appeared in a data breach as per haveibeenpwned.com
+        and should never be used. Please choose something harder to guess.

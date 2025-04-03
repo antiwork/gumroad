@@ -1,0 +1,101 @@
+---
+http_interactions:
+  - request:
+      method: post
+      uri: https://sqs.us-east-1.amazonaws.com/
+      body:
+        encoding: UTF-8
+        string: '{"QueueName":"risk_queue"}'
+      headers:
+        Accept-Encoding:
+          - ""
+        Content-Type:
+          - application/x-amz-json-1.0
+        X-Amz-Target:
+          - AmazonSQS.GetQueueUrl
+        User-Agent:
+          - aws-sdk-ruby3/3.188.0 ua/2.0 api/sqs#1.68.0 os/macos#21 md/arm64 lang/ruby#3.2.2
+            md/3.2.2 cfg/retry-mode#legacy
+        Host:
+          - sqs.us-east-1.amazonaws.com
+        X-Amz-Date:
+          - 20231128T154144Z
+        X-Amz-Content-Sha256:
+          - b648440477478a1660ef22abb0ad6c6b76d3bff98971c4583928f7629d316a34
+        Authorization:
+          - AWS4-HMAC-SHA256 Credential=<AWS_ACCESS_KEY_ID>/20231128/us-east-1/sqs/aws4_request,
+            SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-target,
+            Signature=70dc0fe29c1b7e470497945c11556f5b914fa885a6f6e8a0de881015c5248456
+        Content-Length:
+          - "26"
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        X-Amzn-Requestid:
+          - 493d0351-d0e7-5710-a37e-5eb1dc9ea1b8
+        Date:
+          - Tue, 28 Nov 2023 15:41:45 GMT
+        Content-Type:
+          - application/x-amz-json-1.0
+        Content-Length:
+          - "74"
+        Connection:
+          - keep-alive
+      body:
+        encoding: UTF-8
+        string: '{"QueueUrl":"https://sqs.us-east-1.amazonaws.com/<AWS_ACCOUNT_ID>/risk_queue"}'
+    recorded_at: Tue, 28 Nov 2023 15:41:45 GMT
+  - request:
+      method: post
+      uri: https://sqs.us-east-1.amazonaws.com/
+      body:
+        encoding: UTF-8
+        string: '{"QueueName":"risk_queue"}'
+      headers:
+        Accept-Encoding:
+          - ""
+        Content-Type:
+          - application/x-amz-json-1.0
+        X-Amz-Target:
+          - AmazonSQS.GetQueueUrl
+        User-Agent:
+          - aws-sdk-ruby3/3.188.0 ua/2.0 api/sqs#1.68.0 os/macos#21 md/arm64 lang/ruby#3.2.2
+            md/3.2.2 cfg/retry-mode#legacy
+        Host:
+          - sqs.us-east-1.amazonaws.com
+        X-Amz-Date:
+          - 20231128T154145Z
+        X-Amz-Content-Sha256:
+          - b648440477478a1660ef22abb0ad6c6b76d3bff98971c4583928f7629d316a34
+        Authorization:
+          - AWS4-HMAC-SHA256 Credential=<AWS_ACCESS_KEY_ID>/20231128/us-east-1/sqs/aws4_request,
+            SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-target,
+            Signature=7d5622d21e8556b060b5c9fbdf5e056795f7e2a54d898c15ceabf6a9af52938c
+        Content-Length:
+          - "26"
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        X-Amzn-Requestid:
+          - 9b00f031-abd1-5b04-b529-add1a7a86dac
+        Date:
+          - Tue, 28 Nov 2023 15:41:45 GMT
+        Content-Type:
+          - application/x-amz-json-1.0
+        Content-Length:
+          - "74"
+        Connection:
+          - keep-alive
+      body:
+        encoding: UTF-8
+        string: '{"QueueUrl":"https://sqs.us-east-1.amazonaws.com/<AWS_ACCOUNT_ID>/risk_queue"}'
+    recorded_at: Tue, 28 Nov 2023 15:41:45 GMT
+recorded_with: VCR 6.2.0

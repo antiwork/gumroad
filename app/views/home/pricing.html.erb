@@ -1,0 +1,89 @@
+<%= render "home/shared/header",
+  bg_color: "orange",
+  subtitle: "Pricing",
+  title: "Simple, transparent pricing",
+  description: "We believe in transparent pricing that helps you grow. No hidden fees, no monthly charges." do %>
+  <div class="pointer-events-none absolute inset-0 overflow-visible parallax-up">
+    <div class="absolute left-[-2rem] top-[12rem] z-[1] w-[6.875rem] lg:left-auto lg:right-[10vw] lg:top-[22rem]">
+      <%= image_tag "pricing-coin-4.svg", alt: "Decorative pricing coin 4" %>
+    </div>
+    <div class="absolute right-[0rem] top-[6rem] z-[1] w-[12rem] lg:right-[-2rem] lg:bottom-[-4rem] lg:top-auto">
+      <%= image_tag "pricing-coin-5.svg", alt: "Decorative pricing coin 5" %>
+    </div>
+    <div class="absolute bottom-[-14rem] sm:bottom-[-12rem] left-1/2 z-[1] w-[6rem] -translate-x-1/2 md:bottom-[-16rem] md:w-[9rem] lg:bottom-[-24rem] lg:w-[11rem]">
+      <%= image_tag "pricing-coin-6.svg", alt: "Decorative pricing coin 6", class: "h-auto w-full" %>
+    </div>
+    <div class="invisible absolute left-[10vw] top-[14rem] z-[1] w-[14rem] overflow-visible lg:visible">
+      <%= image_tag "pricing-coin-2.svg", alt: "Decorative pricing coin 2" %>
+    </div>
+    <div class="invisible absolute left-[-1rem] top-[14rem] z-[1] w-[8rem] overflow-hidden lg:visible">
+      <%= image_tag "pricing-coin-1.svg", alt: "Decorative pricing coin 1" %>
+    </div>
+    <div class="invisible absolute bottom-[-6rem] left-[-2rem] z-[1] w-[14rem] overflow-hidden lg:visible">
+      <%= image_tag "pricing-coin-3.svg", alt: "Decorative pricing coin 3" %>
+    </div>
+  </div>
+<% end %>
+
+<div class="flex flex-col border-b border-black overflow-hidden lg:flex-row">
+  <div class="bg-purple flex items-center justify-center text-center lg:w-1/2 px-4 py-16 md:p-24 xl:p-32 border-b lg:border-b-0 lg:border-r">
+  <div class="max-w-xl space-y-12 md:space-y-8">
+  <div class="space-y-8">
+    <h3 class="font-medium text-5xl lg:text-6xl">
+      10% + $0.50
+    </h3>
+    <p class="text-xl lg:text-2xl">
+      Per transaction for all sales through your profile or direct links to your customers.
+    </p>
+  </div>
+</div>
+  </div>
+  <div class="bg-green flex items-center justify-center text-center lg:w-1/2 px-4 py-16 md:p-16 xl:p-32">
+    <div class="max-w-xl space-y-12 md:space-y-8">
+      <div class="space-y-8">
+        <h3 class="font-medium text-5xl lg:text-6xl">
+          30%
+        </h3>
+        <p class="text-xl lg:text-2xl">
+        Per transaction when new customers find and buy from you through our discover marketplace.
+      </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mx-auto my-16 max-w-6xl px-8 md:my-24 md:px-28 md:text-center lg:my-32">
+  <h2 class="text-5xl font-medium md:text-6xl lg:text-7xl">
+    Frequently asked questions
+  </h2>
+</div>
+
+<div class="mx-auto mb-16 px-8 md:px-28">
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What can I sell on Gumroad?",
+      content: "Digital products, e-books, courses, tutorials, and memberships—almost anything! Creators in just about every industry use (and love) Gumroad, from digital artists, writers, musicians and other creative-types to business-minded entrepreneurs and tech gurus like our SaaS creators. A better question is, \"What can't I sell on Gumroad?\""
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "How do I get paid?",
+      content: "Gumroad's goal is to help creators make a living doing what they love, so we make it as simple as possible to get paid. How we pay creators, whether through direct deposit or PayPal, varies by country."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What are the fees?",
+      content: "Unlike other platforms, Gumroad doesn't charge you a monthly fee. Instead, our fees are deducted as a small percentage of every sale, so we only make money when you do."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Can I use Gumroad for memberships?",
+      content: "Yes!<br><br>Whether it's for a podcast, online course, or SaaS subscriptions, Gumroad makes it easy to manage memberships."
+    } %>
+  </div>
+</div>
+
+<%= render "home/shared/section_cta" %>
+<%= render "home/shared/footer" %>

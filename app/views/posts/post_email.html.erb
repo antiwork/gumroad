@@ -1,0 +1,71 @@
+<!-- IMPORTANT:
+Do not include route helpers (`root_url`), because the URL options (e.g. the hostname) won't be correct. -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{{subject}}</title>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <meta name="viewport" content="initial-scale = 1.0, width=device-width">
+    <style><%= @post.user.seller_profile.custom_styles.to_s.html_safe %></style>
+    <%= stylesheet_pack_tag :email %>
+  </head>
+  <body>
+    <div class="email post">
+      <div class="main">
+        <%= render("shared/preheader_text", text: CGI.unescapeHTML(@post.truncated_description)) %>
+        <% if @has_post_url %>
+          <%= header_section(post_title_displayable(post: @post, url: "{{post_url}}")) %>
+        <% else %>
+          <%= header_section(post_title_displayable(post: @post)) %>
+        <% end %>
+
+        <div class="rich-text">
+          <%= Rinku.auto_link(@post.message_with_inline_syntax_highlighting_and_upsells&.html_safe, :all, %(target="_blank" rel="nofollow")).html_safe %>
+
+          <% if @post.call_to_action_url.present? %>
+            <p>
+              <a class="button accent" href="<%= @post.call_to_action_url %>" target="_blank"><%= @post.call_to_action_text %></a>
+            </p>
+          <% end %>
+        </div>
+
+        <% if @has_download_button %>
+          <div>
+            <p>
+              <a class="button primary" href="{{download_url}}">{{t_view_attachments_prompt}}</a>
+            </p>
+          </div>
+        <% end %>
+
+        <% if @has_comment_button %>
+          <div>
+            <p>
+              <a class="button primary" href="{{post_url}}#comments" target="_blank">{{t_post_a_comment}}</a>
+            </p>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="footer">
+        <div class="paragraphs">
+          <p>
+            <% if @has_seller_update_reason %>
+              {{seller_update_reason}}
+            <% end %>
+            <a href="{{unsubscribe_url}}">{{t_unsubscribe}}</a>
+          </p>
+
+          <p><%= GumroadAddress.full %></p>
+          <% unless Rails.env.production? %>
+            <p>(⌐▨_▨) <%= Rails.env.capitalize %> (▨_▨¬)</p>
+          <% end %>
+        </div>
+
+        <a class="wordmark" href="<%= @gumroad_url %>">
+          {{t_powered_by}}
+          <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" style="width: 138px; height: 18px;" width="138" height="18">
+        </a>
+      </div>
+    </div>
+  </body>
+</html>

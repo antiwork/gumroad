@@ -1,0 +1,53 @@
+// Use a partial selector here to allow for selecting .icon without it generating CSS for the _many_ usages that extend this.
+%icon {
+  content: "\00a0";
+  display: inline-block;
+  background: currentColor;
+  min-height: max(1lh, 1em);
+  width: 1em;
+  mask-position: 50% 50%;
+  mask-size: 120%;
+  mask-repeat: no-repeat;
+  flex-shrink: 0;
+
+  &::after {
+    content: "\00a0";
+  }
+}
+
+.icon {
+  @extend %icon;
+}
+
+@each $icon in $icons {
+  .icon-#{$icon} {
+    mask-image: url("~images/icons/#{$icon}.svg");
+  }
+}
+
+.logo-full {
+  @extend %icon;
+  width: calc(1em / #{$logo-aspect-ratio});
+  mask-image: url("~images/logo.svg");
+  mask-size: contain;
+}
+
+.logo-g {
+  display: block;
+  background-image: url("~images/logo-g.svg");
+  background-size: contain;
+  width: $big-icon-size;
+  height: $big-icon-size;
+}
+
+// Override %icon here rather than making a shared base to avoid generating the giant selector string for %icon twice
+.brand-icon {
+  @extend %icon;
+  mask-size: 100%;
+}
+
+@each $name, $info in $brands {
+  .brand-icon-#{$name} {
+    mask-image: url("~images/brands/#{$name}.svg");
+  }
+}

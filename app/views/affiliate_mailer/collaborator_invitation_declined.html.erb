@@ -1,0 +1,16 @@
+<div>
+  <img src="<%= @invitee.avatar_url %>" class="user-avatar header-badge" style="width: 3em;">
+  <h2 style="text-align: center;"><%= @subject %></h2>
+</div>
+
+<div class="squished">
+  <p>
+    If you believe this was a mistake or if you'd like to invite someone else, you can update your collaborator settings at any time from your Collaborators dashboard.
+  </p>
+</div>
+
+<div>
+  <a href="<%= collaborators_url %>" class="button accent">
+    Manage collaborators
+  </a>
+</div>

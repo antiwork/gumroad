@@ -1,0 +1,22 @@
+{
+  "created": 1368601287,
+  "data": {
+    "object": {
+      "amount": 1000,
+      "charge": "ch_zitkxbhds3zqlt",
+      "created": 1367132504,
+      "currency": "usd",
+      "evidence": null,
+      "evidence_due_by": 1368575999,
+      "livemode": true,
+      "object": "dispute",
+      "status": "won"
+    }
+  },
+  "id": "evt_1peD3v6A43BSL0",
+  "livemode": true,
+  "object": "event",
+  "pending_webhooks": 0,
+  "request": null,
+  "type": "charge.dispute.closed"
+}

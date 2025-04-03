@@ -1,0 +1,61 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://svcnab2b.revenuquebec.ca/2019/02/ValidationTVQ/1002092821TQ0001
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sat, 15 Jun 2024 21:47:53 GMT
+      Content-Type:
+      - application/json;charset=utf-8
+      Content-Length:
+      - '242'
+      Connection:
+      - keep-alive
+      Cache-Control:
+      - no-cache
+      Pragma:
+      - no-cache
+      Expires:
+      - "-1"
+      Gx-Temps-Execution:
+      - '00:00:00.0498684'
+      Server-Timing:
+      - NASystContribEx;dur=39,total;dur=88
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=VqqveqL2BmcFrYabggRB.R.L37.EEGqpchY8iOnX6oQ-1718488073-1.0.1.1-t5fxe.q30pITjjipyqtI0VaoTnO2O6rcAEZUD9MMsmEGZRIBbsz89LFzWfT66_HBDxrSqjJEED2ke9zpddXHFg;
+        path=/; expires=Sat, 15-Jun-24 22:17:53 GMT; domain=.revenuquebec.ca; HttpOnly;
+        Secure; SameSite=None
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/csp-reporting.cloudflare.com\/cdn-cgi\/script_monitor\/report?m=ZzHb09lTUmcEGdBgWv5I4xH59BUwJfq3IuVs3xJ71lU-1718488073-1.0.1.1-8YFhTekFDbJrEyjbrwZI_Md5MY5xAZl2w0NfLpBXn.6tF4j63icmermzTqO0P0QVy58ZpKtNbkYOYkfLZGbWSM9QW9BRfBZmFAC7a5fLdKbfh8V1FN3kE0gDiwxSOQvyRFiZESAgefsEG17M.LTb0Kcq3h.XAd_.3Y41qGgJ1PM"}],"group":"cf-csp-endpoint","max_age":86400}'
+      Content-Security-Policy-Report-Only:
+      - script-src 'none'; report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?m=ZzHb09lTUmcEGdBgWv5I4xH59BUwJfq3IuVs3xJ71lU-1718488073-1.0.1.1-8YFhTekFDbJrEyjbrwZI_Md5MY5xAZl2w0NfLpBXn.6tF4j63icmermzTqO0P0QVy58ZpKtNbkYOYkfLZGbWSM9QW9BRfBZmFAC7a5fLdKbfh8V1FN3kE0gDiwxSOQvyRFiZESAgefsEG17M.LTb0Kcq3h.XAd_.3Y41qGgJ1PM;
+        report-to cf-csp-endpoint
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8945c2da0ec6844f-YVR
+    body:
+      encoding: ASCII-8BIT
+      string: '{"Resultat":{"StatutSousDossierUsager":"R","DescriptionStatut":"Regulier","DateStatut":"1992-07-01T00:00:00","NomEntreprise":"APPLE
+        CANADA INC.","RaisonSociale":null},"OperationReussie":true,"MessagesFonctionnels":[],"MessagesInformatifs":[]}'
+  recorded_at: Sat, 15 Jun 2024 21:47:53 GMT
+recorded_with: VCR 6.2.0

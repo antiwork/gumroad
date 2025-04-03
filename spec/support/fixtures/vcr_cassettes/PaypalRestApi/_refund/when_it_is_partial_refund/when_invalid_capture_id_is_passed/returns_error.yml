@@ -1,0 +1,60 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/payments/captures/invalid_capture_id/refund
+    body:
+      encoding: UTF-8
+      string: '{"amount":{"currency_code":"USD","value":"2.0"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAJ8ZuWAicvxc4m42ewOeup4rWt82bMaSINuAQdFgQTAdKeNmDa5at6XxUhbVnnLGbAYxMX_ZWIQZPcYZMDbmmscb60srw
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - refund-invalid_capture_id-200-16107231301938224
+      Prefer:
+      - return=representation
+      Paypal-Auth-Assertion:
+      - eyJhbGciOiJub25lIn0=.eyJwYXllcl9pZCI6IkI2NllKQkJOQ1JXNkwiLCJpc3MiOiJBYUR2TEl5RjBUVGVVQmpQQjAzcEFWR2NEUzVLQk16cWRyS3I1T1VFc3ZNZ0E2czlzM1M0d1pjVTRybVVQMjRaNzN4STZ4dGVjYjYyNWJsNiJ9.
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '440'
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 15 Jan 2021 15:05:32 GMT
+      Paypal-Debug-Id:
+      - bc30fb1f682d4
+    body:
+      encoding: UTF-8
+      string: '{"name":"RESOURCE_NOT_FOUND","message":"The specified resource does
+        not exist.","debug_id":"bc30fb1f682d4","details":[{"issue":"INVALID_RESOURCE_ID","field":"capture_id","value":"invalid_capture_id","description":"Specified
+        resource ID does not exist. Please check the resource ID and try again.","location":"path"}],"links":[{"href":"https://developer.paypal.com/docs/api/payments/v2/#error-INVALID_RESOURCE_ID","rel":"information_link"}]}'
+  recorded_at: Fri, 15 Jan 2021 15:05:32 GMT
+recorded_with: VCR 6.0.0

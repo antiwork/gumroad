@@ -1,0 +1,12 @@
+<div>
+  <img src="<%= @seller.avatar_url %>" class="user-avatar header-badge" style="width: 3em;">
+  <h2 style="text-align: center;"><%= @subject %></h2>
+</div>
+
+<% product_affiliates = @collaborator.product_affiliates %>
+
+<div class="squished">
+  <%= render("affiliate_mailer/collaborator/table", product_affiliates: product_affiliates) %>
+</div>
+
+<%= render("affiliate_mailer/collaborator/footer", product_affiliates: product_affiliates) %>

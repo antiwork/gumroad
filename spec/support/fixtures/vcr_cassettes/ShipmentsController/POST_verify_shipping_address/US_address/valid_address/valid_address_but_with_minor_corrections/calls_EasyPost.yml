@@ -1,0 +1,73 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"1640 17 Street","city":"San Francisco","state":"CA","zip":"94107","country":"United
+        States"},"verify":["delivery"]}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/4.3.0 Ruby/3.0.3-p157
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - bd1792d7629e0105e2c497b80005ee43
+      Cache-Control:
+      - no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_9259212fe59c11ec9ef2ac1f6b0a0d1e"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"74b45b0db241b20304eb29e0ac2baf47"
+      X-Runtime:
+      - '0.050653'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb4nuq
+      X-Version-Label:
+      - easypost-202206030043-0fd9609f83-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb3wdc 0910011e7e
+      - intlb1nuq 570dfcbc0a
+      - intlb2wdc 570dfcbc0a
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_9259212fe59c11ec9ef2ac1f6b0a0d1e","object":"Address","created_at":"2022-06-06T13:28:37+00:00","updated_at":"2022-06-06T13:28:37+00:00","name":null,"company":null,"street1":"1640
+        17TH ST","street2":"","city":"SAN FRANCISCO","state":"CA","zip":"94107-2332","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":false,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":37.76493,"longitude":-122.40005,"time_zone":"America/Los_Angeles"}}}}'
+  recorded_at: Mon, 06 Jun 2022 13:28:38 GMT
+recorded_with: VCR 6.1.0

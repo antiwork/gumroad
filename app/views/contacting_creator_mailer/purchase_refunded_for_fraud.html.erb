@@ -1,0 +1,4 @@
+<%= header_section("Fraud was detected on your Gumroad account.") %>
+<div>
+  <p>Our risk team has detected a fraudulent transaction on one of your products, using a stolen card. We have refunded <%= @purchase.email %>'s purchase of <%= @purchase.link.name %> for <%= @purchase.formatted_display_price %>. We're doing our best to protect you, and no further action needs to be taken on your part.</p>
+</div>

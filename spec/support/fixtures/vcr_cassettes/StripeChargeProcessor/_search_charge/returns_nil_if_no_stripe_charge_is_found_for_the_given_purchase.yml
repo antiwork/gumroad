@@ -1,0 +1,1458 @@
+---
+http_interactions:
+  - request:
+      method: get
+      uri: https://api.stripe.com/v1/charges?transfer_group=1234567890
+      body:
+        encoding: US-ASCII
+        string: ""
+      headers:
+        User-Agent:
+          - Stripe/v1 RubyBindings/10.0.0
+        Authorization:
+          - Bearer <STRIPE_API_KEY>
+        Content-Type:
+          - application/x-www-form-urlencoded
+        X-Stripe-Client-Telemetry:
+          - '{"last_request_metrics":{"request_id":"req_c6OkFK0VFPiWgU","request_duration_ms":439}}'
+        Stripe-Version:
+          - "2023-10-16"
+        X-Stripe-Client-User-Agent:
+          - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+            Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+            05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+        Accept-Encoding:
+          - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        Server:
+          - nginx
+        Date:
+          - Mon, 30 Oct 2023 16:38:59 GMT
+        Content-Type:
+          - application/json
+        Content-Length:
+          - "81"
+        Connection:
+          - keep-alive
+        Access-Control-Allow-Credentials:
+          - "true"
+        Access-Control-Allow-Methods:
+          - GET,HEAD,PUT,PATCH,POST,DELETE
+        Access-Control-Allow-Origin:
+          - "*"
+        Access-Control-Expose-Headers:
+          - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+            X-Stripe-Privileged-Session-Required
+        Access-Control-Max-Age:
+          - "300"
+        Cache-Control:
+          - no-cache, no-store
+        Content-Security-Policy-Report-Only:
+          - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges; block-all-mixed-content;
+            default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+            img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+        Request-Id:
+          - req_3S2shlLQaIDKWr
+        Stripe-Version:
+          - "2023-10-16"
+        Vary:
+          - Origin
+        X-Stripe-Routing-Context-Priority-Tier:
+          - api-testmode
+        Strict-Transport-Security:
+          - max-age=63072000; includeSubDomains; preload
+      body:
+        encoding: UTF-8
+        string: |-
+          {
+            "object": "list",
+            "data": [],
+            "has_more": false,
+            "url": "/v1/charges"
+          }
+    recorded_at: Mon, 30 Oct 2023 16:38:59 GMT
+  - request:
+      method: get
+      uri: https://api.stripe.com/v1/charges?created%5Bgte%5D=1621973384&created%5Blte%5D=1621973414&limit=100
+      body:
+        encoding: US-ASCII
+        string: ""
+      headers:
+        User-Agent:
+          - Stripe/v1 RubyBindings/10.0.0
+        Authorization:
+          - Bearer <STRIPE_API_KEY>
+        Content-Type:
+          - application/x-www-form-urlencoded
+        X-Stripe-Client-Telemetry:
+          - '{"last_request_metrics":{"request_id":"req_3S2shlLQaIDKWr","request_duration_ms":342}}'
+        Stripe-Version:
+          - "2023-10-16"
+        X-Stripe-Client-User-Agent:
+          - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+            Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+            05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+        Accept-Encoding:
+          - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        Server:
+          - nginx
+        Date:
+          - Mon, 30 Oct 2023 16:39:00 GMT
+        Content-Type:
+          - application/json
+        Content-Length:
+          - "39274"
+        Connection:
+          - keep-alive
+        Access-Control-Allow-Credentials:
+          - "true"
+        Access-Control-Allow-Methods:
+          - GET,HEAD,PUT,PATCH,POST,DELETE
+        Access-Control-Allow-Origin:
+          - "*"
+        Access-Control-Expose-Headers:
+          - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+            X-Stripe-Privileged-Session-Required
+        Access-Control-Max-Age:
+          - "300"
+        Cache-Control:
+          - no-cache, no-store
+        Content-Security-Policy-Report-Only:
+          - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges; block-all-mixed-content;
+            default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+            img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+        Request-Id:
+          - req_zRJuLburIOfiEP
+        Stripe-Version:
+          - "2023-10-16"
+        Vary:
+          - Origin
+        X-Stripe-Routing-Context-Priority-Tier:
+          - api-testmode
+        Strict-Transport-Security:
+          - max-age=63072000; includeSubDomains; preload
+      body:
+        encoding: UTF-8
+        string: |-
+          {
+            "object": "list",
+            "data": [
+              {
+                "id": "ch_0Iv6Zr9e1RjUNIyYiyvZ9Jxm",
+                "object": "charge",
+                "amount": 10000,
+                "amount_captured": 10000,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zs9e1RjUNIyYqgKmx1cv",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973411,
+                "currency": "usd",
+                "customer": null,
+                "description": "You bought http://127.0.0.1:31337/l/D",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 52,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Zr9e1RjUNIyY2K9Ocuxv",
+                "payment_method": "pm_0Iv6Zp9e1RjUNIyYtV7iVbqH",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 10000,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBjjMutbZfzosFpY9tAGe64hEUt3fgBWvtgmL60_9KxORTBK1Vro9nMqnAOHu_6OjLIb7Dcs",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6Zm9e1RjUNIyYnFgXfQfF",
+                "object": "charge",
+                "amount": 7000,
+                "amount_captured": 7000,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zm9e1RjUNIyYcwwcHM3k",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973406,
+                "currency": "usd",
+                "customer": null,
+                "description": "You bought http://127.0.0.1:31337/l/I",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 31,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Zm9e1RjUNIyYvDtoTzM5",
+                "payment_method": "pm_0Iv6Zj9e1RjUNIyYu4BvwdEE",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 7000,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBktYn9a_tzosFpR8CpjZt5-oVfZROSwEeaNVfOEL054wFVBnB4K2GQo_Gz6veKU7zLwdcho",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6Zl9e1RjUNIyYSvU1Qo3I",
+                "object": "charge",
+                "amount": 3700,
+                "amount_captured": 3700,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zl9e1RjUNIyYF2HSLxQY",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973405,
+                "currency": "usd",
+                "customer": "cus_JYCzRQLjzWWe8j",
+                "description": "You bought http://127.0.0.1:31337/l/a",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 8,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Zl9e1RjUNIyY3oA2jHE2",
+                "payment_method": "pm_0Iv6Zi9e1RjUNIyYenSY3Fgi",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 3700,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBkhJPJ4WuzosFn5jG9tnetvhgtrUk9XyHweSN5CKynLcWLTq67kJNOAzZiqHAMR3FQ4C77I",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6Zj9e1RjUNIyYbjzQu3vg",
+                "object": "charge",
+                "amount": 7500,
+                "amount_captured": 7500,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zk9e1RjUNIyYLiK47MPF",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973403,
+                "currency": "usd",
+                "customer": null,
+                "description": "You bought http://127.0.0.1:31337/l/Y",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 10,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Zj9e1RjUNIyYGlB0AUU6",
+                "payment_method": "pm_0Iv6Zh9e1RjUNIyYGACfqoST",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 7500,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBmPCrRd8EzosFpoajoozb4D3TwIFHKbcTYUM6sN8NByJXkmaJn-L2lOJs4zAxclhOb7dlxA",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6Zg9e1RjUNIyYlycl8WMl",
+                "object": "charge",
+                "amount": 599,
+                "amount_captured": 599,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zh9e1RjUNIyYxMwUejWs",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": null,
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973400,
+                "currency": "usd",
+                "customer": "cus_JYCz8ofJlSqhvO",
+                "description": "You bought http://127.0.0.1:31337/l/s",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 9,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Zg9e1RjUNIyYfFIrsdUm",
+                "payment_method": "pm_0Iv6Ze9e1RjUNIyY9DW1C429",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 599,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBmxEL_jccDosFiD9kpB_KVMkaRu8i1TVL8x6M4f1U31Sh3o1KCTcUjkyARaMfeTkY-wKqLw",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6Zg9e1RjUNIyY5nscjeJj",
+                "object": "charge",
+                "amount": 12000,
+                "amount_captured": 12000,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zg9e1RjUNIyYmwg7si6c",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973400,
+                "currency": "usd",
+                "customer": null,
+                "description": "You bought http://127.0.0.1:31337/l/F",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 59,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Zg9e1RjUNIyYrb0iosXU",
+                "payment_method": "pm_0Iv6Zd9e1RjUNIyYNwnyrhM1",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 12000,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBheZOjUyvTosFgWqLEdLzqCcjukA1XKgke_rMrFVVXdwZTuKv_3eRYBvSdh1nkRzu_O8QBk",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6Ze9e1RjUNIyY3jtiQNvn",
+                "object": "charge",
+                "amount": 100,
+                "amount_captured": 100,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6Zf9e1RjUNIyYQ4gLaq6h",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMBOT",
+                "captured": true,
+                "created": 1621973398,
+                "currency": "usd",
+                "customer": null,
+                "description": "You bought http://127.0.0.1:31337/l/o",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 51,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6Ze9e1RjUNIyYuSBmK2K3",
+                "payment_method": "pm_0Iv6Zc9e1RjUNIyY84JPxMya",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 100,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBlG8kCUVhDosFq-CQBrj172shfmjqHOH6cJqEcA_H2iU63mqAQNGcIxq-Mbhna9BcSP8niQ",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumbot",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6ZZ9e1RjUNIyYp8EqNpYV",
+                "object": "charge",
+                "amount": 599,
+                "amount_captured": 599,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6ZZ9e1RjUNIyYXVuVByma",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": null,
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973393,
+                "currency": "usd",
+                "customer": "cus_JYCznCESNvHzla",
+                "description": "You bought http://127.0.0.1:31337/l/j",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 50,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6ZZ9e1RjUNIyYz7HJCuPf",
+                "payment_method": "pm_0Iv6ZX9e1RjUNIyYI9xJhmJs",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 599,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBrmh0_NX_TosFoehxqqpr1ZoqvD1cNBb442_QmwzILP3q_0Fm3lLAqKPUl-dwCGVMas_4cg",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6ZY9e1RjUNIyYmaebVywC",
+                "object": "charge",
+                "amount": 199,
+                "amount_captured": 199,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6ZY9e1RjUNIyYIcUODB5W",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* CREATORDUDE",
+                "captured": true,
+                "created": 1621973392,
+                "currency": "usd",
+                "customer": "cus_JYCz4XaBjzfAJD",
+                "description": "You bought http://127.0.0.1:31337/l/with_fields",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 39,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6ZY9e1RjUNIyYUFtlb2hw",
+                "payment_method": "pm_0Iv6ZU9e1RjUNIyYBKwoG81v",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 199,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBu26Gqm8HDosFuBaRKrRnh5WLdBU9zlQaDnhfoDDRtCLcYRctUWTeh68Ha5fxSSQnl9itTU",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "creatordude",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6ZV9e1RjUNIyYkXpxSrAX",
+                "object": "charge",
+                "amount": 100,
+                "amount_captured": 100,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6ZV9e1RjUNIyYOsUSSUeI",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMBOT",
+                "captured": true,
+                "created": 1621973389,
+                "currency": "usd",
+                "customer": null,
+                "description": "You bought http://127.0.0.1:31337/l/A",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 32,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6ZU9e1RjUNIyYOaXDEp8G",
+                "payment_method": "pm_0Iv6ZT9e1RjUNIyYHIko8FPs",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 100,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBrq51LmX2TosFgQMkivfgGuzTekuvmEVqMRGMgyyWuNdT8FEnxKb0kxD5h4vVwX_CAFIeGI",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumbot",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6ZS9e1RjUNIyYGu1s2DFo",
+                "object": "charge",
+                "amount": 599,
+                "amount_captured": 599,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6ZT9e1RjUNIyYAJ43Rfvo",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": null,
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                "captured": true,
+                "created": 1621973386,
+                "currency": "usd",
+                "customer": "cus_JYCzcQ6ye3j1Yb",
+                "description": "You bought http://127.0.0.1:31337/l/X",
+                "destination": null,
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "G_-mnBf9b1j9A7a4ub4nFQ=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 11,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6ZS9e1RjUNIyY0xGZZwip",
+                "payment_method": "pm_0Iv6ZQ9e1RjUNIyY33WtKMAP",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 599,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBr4XclTvkDosFqwAMtfHZzd7c7XmVzzTdcrjjrUlNIH226K45uWGbZ4GK20h4ukbxqS1o04",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Gumroad",
+                "status": "succeeded",
+                "transfer_data": null,
+                "transfer_group": "1"
+              },
+              {
+                "id": "ch_0Iv6ZR9e1RjUNIyYVBMK1ueH",
+                "object": "charge",
+                "amount": 1000,
+                "amount_captured": 1000,
+                "amount_refunded": 0,
+                "amount_updates": [],
+                "application": null,
+                "application_fee": null,
+                "application_fee_amount": null,
+                "balance_transaction": "txn_0Iv6ZS9e1RjUNIyYC27fnfRH",
+                "billing_details": {
+                  "address": {
+                    "city": null,
+                    "country": null,
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": "",
+                    "state": null
+                  },
+                  "email": null,
+                  "name": null,
+                  "phone": null
+                },
+                "calculated_statement_descriptor": "GUM.CO/CC* WILD VIOLET",
+                "captured": true,
+                "created": 1621973385,
+                "currency": "usd",
+                "customer": "cus_JXebVcz5jAbcHI",
+                "description": "You bought https://staging.gumroad.com/l/bikZ",
+                "destination": "acct_1G0m7fDNOHNRFxWo",
+                "dispute": null,
+                "disputed": false,
+                "failure_balance_transaction": null,
+                "failure_code": null,
+                "failure_message": null,
+                "fraud_details": {},
+                "invoice": null,
+                "livemode": false,
+                "metadata": {
+                  "purchase": "6RNPNSondrJ8t9SqSjxTjw=="
+                },
+                "on_behalf_of": null,
+                "order": null,
+                "outcome": {
+                  "network_status": "approved_by_network",
+                  "reason": null,
+                  "risk_level": "normal",
+                  "risk_score": 21,
+                  "seller_message": "Payment complete.",
+                  "type": "authorized"
+                },
+                "paid": true,
+                "payment_intent": "pi_0Iv6ZR9e1RjUNIyYbmyiGBIt",
+                "payment_method": "pm_0IuZIb9e1RjUNIyY06W6UYQB",
+                "payment_method_details": {
+                  "card": {
+                    "amount_authorized": null,
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": null
+                    },
+                    "country": "US",
+                    "exp_month": 10,
+                    "exp_year": 2022,
+                    "extended_authorization": {
+                      "status": "disabled"
+                    },
+                    "fingerprint": "W691J2Ye3VDoq6Ij",
+                    "funding": "credit",
+                    "incremental_authorization": {
+                      "status": "unavailable"
+                    },
+                    "installments": null,
+                    "last4": "4242",
+                    "mandate": null,
+                    "multicapture": {
+                      "status": "unavailable"
+                    },
+                    "network": "visa",
+                    "network_token": {
+                      "used": false
+                    },
+                    "overcapture": {
+                      "maximum_amount_capturable": 1000,
+                      "status": "unavailable"
+                    },
+                    "three_d_secure": null,
+                    "wallet": null
+                  },
+                  "type": "card"
+                },
+                "receipt_email": null,
+                "receipt_number": null,
+                "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoo7j_qQYyBvLMZvdBKzosFi4G6AaAsmxWbC0OIDpAUtolvIrzPFSlgikMuKD4myybktn8oXhrH1NQDW4",
+                "refunded": false,
+                "review": null,
+                "shipping": null,
+                "source": null,
+                "source_transfer": null,
+                "statement_descriptor": null,
+                "statement_descriptor_suffix": "Wild Violet Cross Stit",
+                "status": "succeeded",
+                "transfer": "tr_0Iv6ZR9e1RjUNIyYS6i8NuFH",
+                "transfer_data": {
+                  "amount": 935,
+                  "destination": "acct_1G0m7fDNOHNRFxWo"
+                },
+                "transfer_group": "115780"
+              }
+            ],
+            "has_more": false,
+            "url": "/v1/charges"
+          }
+    recorded_at: Mon, 30 Oct 2023 16:39:00 GMT
+recorded_with: VCR 6.2.0

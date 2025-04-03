@@ -1,0 +1,78 @@
+---
+http_interactions:
+- request:
+    method: delete
+    uri: https://discord.com/api/v9/users/@me/guilds/0
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept:
+      - "*/*"
+      User-Agent:
+      - DiscordBot (https://github.com/shardlab/discordrb, v3.5.0) rest-client/2.1.0
+        ruby/3.3.3p89 discordrb/3.5.0
+      Authorization:
+      - Bot <DISCORD_BOT_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Host:
+      - discord.com
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Date:
+      - Fri, 05 Jul 2024 21:34:02 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '43'
+      Connection:
+      - keep-alive
+      Set-Cookie:
+      - __cfruid=204460728f2b19c4a9397059fc6a22d25f25c862-1720215242; path=/; domain=.discord.com;
+        HttpOnly; Secure; SameSite=None
+      - __dcfduid=4bf638de3b1611ef91fe260b2652e71a; Expires=Wed, 04-Jul-2029 21:34:02
+        GMT; Max-Age=157680000; Secure; HttpOnly; Path=/; SameSite=Lax
+      - __sdcfduid=4bf638de3b1611ef91fe260b2652e71a7ba3325ce9c0648f8355bac239246bb4a5b16ce382f8fc3a84bfab81c13c1ac5;
+        Expires=Wed, 04-Jul-2029 21:34:02 GMT; Max-Age=157680000; Secure; HttpOnly;
+        Path=/; SameSite=Lax
+      - _cfuvid=t9GVd_aeXThLWKAGfWuL8ftu15BkutyBqlhFyDgtOBw-1720215242164-0.0.1.1-604800000;
+        path=/; domain=.discord.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      X-Ratelimit-Bucket:
+      - b353d78ff3f98f77197d13d44ed4c164
+      X-Ratelimit-Limit:
+      - '1'
+      X-Ratelimit-Remaining:
+      - '0'
+      X-Ratelimit-Reset:
+      - '1720215243.149'
+      X-Ratelimit-Reset-After:
+      - '1.000'
+      Via:
+      - 1.1 google
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      Cf-Cache-Status:
+      - DYNAMIC
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=1wS3Q0JMOzH93YJGDdAiqPIgYTqe8mNYNFcs6BWdEVjgkMKu51Bs%2F9FKuDDGYO%2F1VDlLNcmkRQy7RVTutmIfwhpydyuP6nmgsu%2BU84mgcb3ny1IUAzMM5IiIFEa4"}],"group":"cf-nel","max_age":604800}'
+      Nel:
+      - '{"success_fraction":0,"report_to":"cf-nel","max_age":604800}'
+      X-Content-Type-Options:
+      - nosniff
+      Content-Security-Policy:
+      - frame-ancestors 'none'; default-src 'none'
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 89ea7a0f2c110cbd-EWR
+    body:
+      encoding: UTF-8
+      string: '{"message": "Unknown Guild", "code": 10004}'
+  recorded_at: Fri, 05 Jul 2024 21:34:02 GMT
+recorded_with: VCR 6.2.0

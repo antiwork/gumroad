@@ -1,0 +1,15 @@
+<%= header_section(@subject) %>
+<div>
+  <p><%= @affiliate_request.seller.display_name %> is now reviewing your application and once they approve you, you will receive a confirmation email, along with some helpful tips to get started as an affiliate.</p>
+  <p><strong>Name:</strong> <%= @affiliate_request.name %></p>
+  <p><strong>Email:</strong> <%= @affiliate_request.email %></p>
+  <p>
+    <em>"<%= Rinku.auto_link(strip_tags(@affiliate_request.promotion_text)) %>"</em>
+  </p>
+
+  <% unless @requester_has_existing_account %>
+    <strong>
+      <p>In the meantime, <%= link_to "create your Gumroad account", signup_url(email: @affiliate_request.email) %> using email <%= @affiliate_request.email %> and confirm it. You'll receive your affiliate links once your Gumroad account is active.</p>
+    </strong>
+  <% end %>
+</div>

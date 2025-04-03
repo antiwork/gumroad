@@ -1,0 +1,53 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/nvp
+    body:
+      encoding: UTF-8
+      string: USER=<PAYPAL_USERNAME>&PWD=<PAYPAL_PASSWORD>&SIGNATURE=<PAYPAL_SIGNATURE>&VERSION=90.0&CURRENCYCODE=USD&METHOD=MassPay&RECEIVERTYPE=EmailAddress&L_EMAIL0=seller%40gr.co&L_AMT0=9.8&L_UNIQUEID0=1&L_NOTE0=Chuck%20Bartowski%2C%20selling%20digital%20products%20%2F%20memberships
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - text/plain;charset=UTF-8
+      Content-Length:
+      - '108'
+      Connection:
+      - keep-alive
+      Date:
+      - Sat, 01 Mar 2025 17:12:16 GMT
+      Correlation-Id:
+      - 8c4ce9ce39649
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - 8c4ce9ce39649
+      Traceparent:
+      - 00-00000000000000000008c4ce9ce39649-df13c478fcab419f-01
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Api-Rc:
+      - ''
+      X-Paypal-Operation-Name:
+      - MassPay
+      X-Slr-Retry-Api:
+      - MassPay
+      Http-X-Pp-Az-Locator:
+      - ccg18.slc
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: TIMESTAMP=2025%2d03%2d01T17%3a12%3a16Z&CORRELATIONID=8c4ce9ce39649&ACK=Success&VERSION=90%2e0&BUILD=53356671
+  recorded_at: Sat, 08 Mar 2025 12:00:00 GMT
+recorded_with: VCR 6.2.0

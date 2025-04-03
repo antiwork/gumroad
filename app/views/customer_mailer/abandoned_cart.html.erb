@@ -1,0 +1,6 @@
+<% @installments.each do |installment| %>
+  <div>
+    <h2><%= installment[:subject] %></h2>
+    <%= raw Rinku.auto_link(installment[:message]&.html_safe, :all, 'target="_blank" rel="nofollow"') %>
+  </div>
+<% end %>

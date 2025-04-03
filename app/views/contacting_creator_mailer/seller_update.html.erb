@@ -1,0 +1,68 @@
+<%= header_section("Your last week.") %>
+<div>
+  <table>
+    <thead>
+      <tr>
+        <th>New followers</th>
+        <th>You made</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <%= @seller.last_weeks_followers %>
+        </td>
+        <td>
+          <strong><%= formatted_dollar_amount(@seller.last_weeks_sales) %></strong>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <a class="button primary" href="<%= audience_dashboard_url %>#<%= @start_of_period.strftime("%Y-%m-%d") %>_<%= @end_of_period.strftime("%Y-%m-%d") %>">
+            View audience
+          </a>
+        </td>
+        <td>
+          <a class="button primary" href="<%= sales_dashboard_url %>#<%= @start_of_period.strftime("%Y-%m-%d") %>_<%= @end_of_period.strftime("%Y-%m-%d") %>">
+            View sales
+          </a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <table>
+    <tbody>
+      <% @seller.links.alive.has_paid_sales_between(@start_of_period, @end_of_period).each do |link| %>
+        <% sales         = link.sales.paid.not_chargedback_or_chargedback_reversed.where("created_at > ? and created_at <= ?", @start_of_period, @end_of_period) %>
+        <% new_subs      = link.sales.paid.not_chargedback_or_chargedback_reversed.not_recurring_charge.where("created_at > ? and created_at <= ?", @start_of_period, @end_of_period) %>
+        <% existing_subs = link.sales.paid.not_chargedback_or_chargedback_reversed.recurring_charge.where("created_at > ? and created_at <= ?", @start_of_period, @end_of_period) %>
+        <tr>
+          <td>
+            <a href="<%= edit_link_url(link) %>"><%= truncate(link.name, separator: " ", length: 48) %></a>
+          </td>
+          <% if link.is_recurring_billing %>
+            <td>
+              <% if new_subs.count > 0 %>
+                <%= pluralize(new_subs.count, "new subscription") %>
+                →
+                <%= Money.new(new_subs.sum(:price_cents), "USD").format.gsub(".00", "") %>
+                <br>
+              <% end %>
+              <% if existing_subs.count > 0 %>
+                <%= pluralize(existing_subs.count, "existing subscription") %>
+                →
+                <%= Money.new(existing_subs.sum(:price_cents), "USD").format.gsub(".00", "") %>
+              <% end %>
+            </td>
+          <% else %>
+            <td>
+              <%= pluralize(sales.count, "sale") %>
+              →
+              <%= Money.new(sales.sum(:price_cents), "USD").format.gsub(".00", "") %>
+            </td>
+          <% end %>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

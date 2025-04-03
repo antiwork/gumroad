@@ -1,0 +1,5 @@
+.histogram {
+  display: grid;
+  gap: spacer(3);
+  grid-template-columns: auto 1fr auto;
+}

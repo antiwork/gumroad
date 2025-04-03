@@ -1,0 +1,55 @@
+{
+  "created": 1341894470,
+  "type": "charge.succeeded",
+  "object": "event",
+  "data": {
+    "object": {
+      "fee": 42,
+      "customer": null,
+      "livemode": false,
+      "failure_message": null,
+      "currency": "usd",
+      "amount_refunded": 0,
+      "disputed": false,
+      "card": {
+        "address_state": null,
+        "exp_month": 12,
+        "cvc_check": "pass",
+        "type": "visa",
+        "last4": "4242",
+        "address_line2": null,
+        "address_line1": null,
+        "fingerprint": "qhjxpr7dicdfytlh",
+        "country": "us",
+        "address_zip": null,
+        "object": "card",
+        "address_country": null,
+        "address_line1_check": null,
+        "name": null,
+        "exp_year": 2012,
+        "address_zip_check": null
+      },
+      "id": "ch_zitkxbhds3zqlt",
+      "charge": "ch_zitkxbhds3zqlt",
+      "fee_details": [
+        {
+          "type": "stripe_fee",
+          "description": "stripe processing fees",
+          "application": null,
+          "amount": 42,
+          "currency": "usd"
+        }
+      ],
+      "created": 1341894469,
+      "refunded": false,
+      "object": "charge",
+      "paid": true,
+      "amount": 400,
+      "invoice": null,
+      "description": "charge for site@stripe.com"
+    }
+  },
+  "pending_webhooks": 0,
+  "livemode": false,
+  "id": "evt_vt2g4wl6qiwmcy"
+}

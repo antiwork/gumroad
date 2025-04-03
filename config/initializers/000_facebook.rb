@@ -1,0 +1,6 @@
+# frozen_string_literal: true
+
+FACEBOOK_APP_ID = GlobalConfig.get("FACEBOOK_APP_ID")
+FACEBOOK_APP_SECRET = GlobalConfig.get("FACEBOOK_APP_SECRET")
+FACEBOOK_OG_NAMESPACE = GlobalConfig.get("FACEBOOK_OG_NAMESPACE")
+FACEBOOK_API_VERSION = GlobalConfig.get("FACEBOOK_API_VERSION", "v19.0")

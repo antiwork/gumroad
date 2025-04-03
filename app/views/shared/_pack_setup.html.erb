@@ -1,0 +1,9 @@
+<% unless @_has_pack %>
+  <% content_for :script do %>
+    <% if current_shakapacker_instance.manifest.lookup_pack_with_chunks(page, type: :stylesheet) %>
+      <% @css_pack_name = page %>
+    <% end %>
+    <%= javascript_pack_tag page %>
+  <% end %>
+  <% @_has_pack = true %>
+<% end %>

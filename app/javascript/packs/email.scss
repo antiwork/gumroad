@@ -1,0 +1,36 @@
+// Use 'px' as the default unit since some email clients don't support 'rem': https://www.caniemail.com/search/?s=rem
+$unit: 16px;
+// Our default body bg looks weird in email clients
+$light-body-bg: #ffffff;
+
+@import "../stylesheets/colors";
+@import "../stylesheets/definitions";
+@import "../stylesheets/font";
+@import "../stylesheets/global";
+@import "../stylesheets/icon_names";
+@import "../stylesheets/icons";
+
+@import "../stylesheets/alert";
+@import "../stylesheets/button";
+@include buttons;
+@import "../stylesheets/containers";
+@import "../stylesheets/forms";
+@import "../stylesheets/grid";
+@import "../stylesheets/pill";
+@import "../stylesheets/price";
+@import "../stylesheets/product";
+@import "../stylesheets/rows";
+@import "../stylesheets/rich_text";
+@import "../stylesheets/stack";
+@import "../stylesheets/table";
+
+@import "../stylesheets/email";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  height: auto;
+  min-height: 100%;
+}

@@ -1,0 +1,121 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://app.circle.so/api/v1/community_members?community_id=3512&email=circle_test_email@gumroad.com&space_group_ids%5B%5D=43576
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      Authorization:
+      - Token <CIRCLE_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 19 Aug 2021 13:11:11 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Accept-Encoding
+      Etag:
+      - W/"90244b2949a6474f2dc8f947d9317ca1"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Set-Cookie:
+      - ahoy_visit=10f62acf-c9f7-4e8a-8609-0f90f480b54d; domain=.circle.so; path=/;
+        expires=Thu, 19 Aug 2021 13:16:11 GMT; Secure; SameSite=None
+      - ahoy_visitor=8ec267c1-63ca-4aaf-a2c6-fb62ffbf61ea; domain=.circle.so; path=/;
+        expires=Sat, 19 Aug 2023 13:11:11 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - bd624c51c0baaa5a3579411004c1cdad
+      X-Runtime:
+      - '0.047341'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 6813a0563fa3320b-BOM
+    body:
+      encoding: ASCII-8BIT
+      string: '{"success":true,"message":"This user is already a member of this community
+        and has been added to the spaces / space groups specified.","user":{"id":1464458,"email":"circle_test_email@gumroad.com","first_name":null,"last_name":null,"bio":null,"time_zone":null,"accepted_terms_at":null,"accepted_privacy_at":null,"admin":null,"prefs":null,"created_at":"2021-08-19T12:46:28.000Z","updated_at":"2021-08-19T12:46:28.000Z","headline":null,"posts_count":0,"comments_count":0,"profile_info":{"website":null,"twitter_url":null,"facebook_url":null,"linkedin_url":null,"instagram_url":null},"public_uid":"8bdd397d","affiliate_code":null,"affiliate_ref":null,"password_confirmed_at":null,"password_confirmation_sent_at":null,"password_set_at":null,"terms_of_service":null,"attachable_sgid":"BAh7CEkiCGdpZAY6BkVUSSIwZ2lkOi8vanVtcHN0YXJ0LWFwcC9Vc2VyLzE0NjQ0NTg_ZXhwaXJlc19pbgY7AFRJIgxwdXJwb3NlBjsAVEkiD2F0dGFjaGFibGUGOwBUSSIPZXhwaXJlc19hdAY7AFQw--6ef95728d437c7160f528b8f00b67523ad9a6e1a","community_member_id":1719764}}'
+  recorded_at: Thu, 19 Aug 2021 13:11:12 GMT
+- request:
+    method: post
+    uri: https://app.circle.so/api/v1/community_members?community_id=3512&email=circle_test_email@gumroad.com&space_group_ids%5B%5D=43576
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      Authorization:
+      - Token <CIRCLE_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 19 Aug 2021 13:11:13 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Accept-Encoding
+      Etag:
+      - W/"90244b2949a6474f2dc8f947d9317ca1"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Set-Cookie:
+      - ahoy_visit=69d5b7d9-293f-40c2-9643-329fb87d3ddc; domain=.circle.so; path=/;
+        expires=Thu, 19 Aug 2021 13:16:13 GMT; Secure; SameSite=None
+      - ahoy_visitor=987e915f-1aad-472f-9dea-d387d53efdca; domain=.circle.so; path=/;
+        expires=Sat, 19 Aug 2023 13:11:13 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - ea7e81e72f7ec84f93c3663b1c8639d7
+      X-Runtime:
+      - '0.120657'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 6813a05dcc0c0f04-BOM
+    body:
+      encoding: ASCII-8BIT
+      string: '{"success":true,"message":"This user is already a member of this community
+        and has been added to the spaces / space groups specified.","user":{"id":1464458,"email":"circle_test_email@gumroad.com","first_name":null,"last_name":null,"bio":null,"time_zone":null,"accepted_terms_at":null,"accepted_privacy_at":null,"admin":null,"prefs":null,"created_at":"2021-08-19T12:46:28.000Z","updated_at":"2021-08-19T12:46:28.000Z","headline":null,"posts_count":0,"comments_count":0,"profile_info":{"website":null,"twitter_url":null,"facebook_url":null,"linkedin_url":null,"instagram_url":null},"public_uid":"8bdd397d","affiliate_code":null,"affiliate_ref":null,"password_confirmed_at":null,"password_confirmation_sent_at":null,"password_set_at":null,"terms_of_service":null,"attachable_sgid":"BAh7CEkiCGdpZAY6BkVUSSIwZ2lkOi8vanVtcHN0YXJ0LWFwcC9Vc2VyLzE0NjQ0NTg_ZXhwaXJlc19pbgY7AFRJIgxwdXJwb3NlBjsAVEkiD2F0dGFjaGFibGUGOwBUSSIPZXhwaXJlc19hdAY7AFQw--6ef95728d437c7160f528b8f00b67523ad9a6e1a","community_member_id":1719764}}'
+  recorded_at: Thu, 19 Aug 2021 13:11:13 GMT
+recorded_with: VCR 6.0.0

@@ -1,0 +1,21 @@
+<%= header_section("Unremovable Discord member") %>
+<div>
+  <p>
+    We attempted to remove the member with Discord user ID
+    <b><%= @discord_user_id %></b>
+    from your Discord server
+    <b><%= @discord_server_name %></b>
+    . We attempted this removal because their access to
+    <b><%= @purchase.link.name %></b>
+    under email <%= @purchase.email %> changed.
+  </p>
+  <p>
+    If you want to remove this member from Discord, please do so within Discord itself.
+  </p>
+  <p>
+    We were unable to remove the member because they have a Discord role which is higher than the Gumroad bot's role on the server.
+  </p>
+  <p>
+    To ensure we can remove members in the future, move the Gumroad bot's role to a higher position.
+  </p>
+</div>

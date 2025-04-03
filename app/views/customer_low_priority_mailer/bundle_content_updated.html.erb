@@ -1,0 +1,7 @@
+<%= header_section(@title) %>
+<div>
+  <p>Get excited! <%= @seller_name %> just added new content to <%= @product_name %>. You can access it by visiting your library or clicking the button below.</p>
+  <a class="button primary" href="<%= library_url({ bundles: @purchase.link.external_id }) %>">
+    View content
+  </a>
+</div>

@@ -1,0 +1,56 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://svcnab2b.revenuquebec.ca/2019/02/ValidationTVQ/1002092821TQ0001
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Fri, 21 Jun 2024 23:56:30 GMT
+      Content-Type:
+      - application/json;charset=utf-8
+      Content-Length:
+      - '242'
+      Connection:
+      - keep-alive
+      Cache-Control:
+      - no-cache
+      Pragma:
+      - no-cache
+      Expires:
+      - "-1"
+      Gx-Temps-Execution:
+      - '00:00:00.0565365'
+      Server-Timing:
+      - total;dur=95,NASystContribEx;dur=47
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=NGEUZDWBw_IU53jAXbmEGsCa_YzkilQxPIuzmwvHRcw-1719014190-1.0.1.1-WR8tNjSC89GEVB2ZMm5UfLGAuLwGWL6k8RUag_E60kNbHYouzyppI6YKhVGOyHGPa7sMd.ScDAT07m_d4prQ7w;
+        path=/; expires=Sat, 22-Jun-24 00:26:30 GMT; domain=.revenuquebec.ca; HttpOnly;
+        Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8977ef7fddf82dbb-YVR
+    body:
+      encoding: ASCII-8BIT
+      string: '{"Resultat":{"StatutSousDossierUsager":"R","DescriptionStatut":"Regulier","DateStatut":"1992-07-01T00:00:00","NomEntreprise":"APPLE
+        CANADA INC.","RaisonSociale":null},"OperationReussie":true,"MessagesFonctionnels":[],"MessagesInformatifs":[]}'
+  recorded_at: Fri, 21 Jun 2024 23:56:30 GMT
+recorded_with: VCR 6.2.0

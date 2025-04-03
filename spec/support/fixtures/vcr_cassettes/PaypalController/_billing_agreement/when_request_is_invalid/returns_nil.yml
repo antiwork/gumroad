@@ -1,0 +1,56 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/billing-agreements/agreements
+    body:
+      encoding: UTF-8
+      string: '{"token_id":"invalid_billing_agreement_token_id"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAEDl9G2o2QaCF5yJlFoyyqpFNEjVza7fkmWy0mTpAtIZCPPS0b_gUu3UDBn-t1YMS_KFdJr-fmBQfSCujRn5RsjASG0sA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1595755501'
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.5.8
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.5.8p224-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '309'
+      Content-Type:
+      - application/json;charset=UTF-8
+      Date:
+      - Sun, 26 Jul 2020 09:25:03 GMT
+      Paypal-Debug-Id:
+      - e3c164008efbb
+    body:
+      encoding: UTF-8
+      string: '{"name":"VALIDATION_ERROR","details":[{"name":"baToken","message":"Invalid
+        BA-Token Identifier.Valid token is of format BA-XXXXXXXXXXXXXXXXX."}],"message":"Invalid
+        request - see details","information_link":"https://developer.paypal.com/webapps/developer/docs/api/#VALIDATION_ERROR","debug_id":"e3c164008efbb"}'
+  recorded_at: Sun, 26 Jul 2020 09:25:03 GMT
+recorded_with: VCR 6.0.0

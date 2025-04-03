@@ -1,0 +1,19 @@
+# Run this command to always ignore these commits in `git blame`:
+# git config --local blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Add a lot of rubocop style cops (#10999)
+fab227a486208bc4c632a38959346afa9ceed709
+# Add rubocop alignment cops (#18150)
+c31fc90531a7556ad2543e5d18b550fc206427c1
+# Enable additional base ESLint rules (#24952)
+9538b2f49b0e211adc73a171e7859a88d1d71771
+# Use Prettier defaults where possible (#25573)
+bc4670dcd25fbed8935552bf667984ac7c63b916
+# Fix ESLint error introduced in #25676 and enable ESLint on CI (#25727)
+b22b7d0ea5e1f95b384a02df20303e35f1766b6c
+# Switch TS array style to shorthand syntax (#25845)
+3679e20c7b3934e94f29636683ef2b0ad2bb6673
+# Enable Rubocop for migration files (#26678)
+eeacfe9731316c7b016b433ff7c4a31e119f3a68
+# Remove Sorbet; Rubocop style changes (#29527)
+1ac9e69ca44f7734b43b691a2f7d7290b1e24706

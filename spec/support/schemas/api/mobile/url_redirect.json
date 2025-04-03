@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "purchase_valid": { "type": "boolean" },
+    "product": { "$ref": "file:/api/mobile/product.json#" }
+  },
+  "required": ["success"]
+}

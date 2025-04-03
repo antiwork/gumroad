@@ -1,0 +1,51 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: UTF-8
+      string: '{"from_country":"US","from_state":null,"from_zip":"94107","to_country":"US","to_state":"WA","to_zip":"98121","shipping":1.0,"line_items":[{"quantity":1,"unit_price":10.0,"discount":0}],"nexus_addresses":[{"country":"US","state":"WA"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 21.3.0 Darwin Kernel Version
+        21.3.0: Wed Jan  5 21:37:58 PST 2022; root:xnu-8019.80.24~20/RELEASE_ARM64_T6000
+        arm64; ruby 3.0.3-p157; OpenSSL 1.1.1n  15 Mar 2022) taxjar-ruby/3.0.3'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=UTF-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 01 Sep 2022 19:48:31 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1485'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"b35efe9ea09bdbb183cb172dc963430f"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - cf500f1f-f9d4-4eed-8736-c39365bc2e1a
+      X-Runtime:
+      - '0.034752'
+    body:
+      encoding: ASCII-8BIT
+      string: '{"tax":{"order_total_amount":11.0,"shipping":1.0,"taxable_amount":11.0,"amount_to_collect":1.13,"rate":0.1025,"has_nexus":true,"freight_taxable":true,"tax_source":"destination","jurisdictions":{"country":"US","state":"WA","county":"KING","city":"SEATTLE"},"breakdown":{"taxable_amount":11.0,"tax_collectable":1.13,"combined_tax_rate":0.1025,"state_taxable_amount":11.0,"state_tax_rate":0.065,"state_tax_collectable":0.72,"county_taxable_amount":11.0,"county_tax_rate":0.003,"county_tax_collectable":0.03,"city_taxable_amount":11.0,"city_tax_rate":0.0115,"city_tax_collectable":0.13,"special_district_taxable_amount":11.0,"special_tax_rate":0.023,"special_district_tax_collectable":0.25,"shipping":{"taxable_amount":1.0,"tax_collectable":0.1,"combined_tax_rate":0.1025,"state_taxable_amount":1.0,"state_sales_tax_rate":0.065,"state_amount":0.07,"county_taxable_amount":1.0,"county_tax_rate":0.003,"county_amount":0.0,"city_taxable_amount":1.0,"city_tax_rate":0.0115,"city_amount":0.01,"special_taxable_amount":1.0,"special_tax_rate":0.023,"special_district_amount":0.02},"line_items":[{"id":"1","taxable_amount":10.0,"tax_collectable":1.03,"combined_tax_rate":0.1025,"state_taxable_amount":10.0,"state_sales_tax_rate":0.065,"state_amount":0.65,"county_taxable_amount":10.0,"county_tax_rate":0.003,"county_amount":0.03,"city_taxable_amount":10.0,"city_tax_rate":0.0115,"city_amount":0.12,"special_district_taxable_amount":10.0,"special_tax_rate":0.023,"special_district_amount":0.23}]}}}'
+  recorded_at: Thu, 01 Sep 2022 19:48:31 GMT
+recorded_with: VCR 6.1.0

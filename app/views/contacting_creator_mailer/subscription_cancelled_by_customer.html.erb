@@ -1,0 +1,4 @@
+<%= header_section("A subscription has been canceled.") %>
+<div>
+  <p>Your customer (<%= link_to @subscription.email, customers_url(query: @subscription.email) %>) has elected to cancel their subscription to <%= @subscription.link.name %>. They will no longer be charged. Please note that they will continue to receive any posts you send to subscribers until the end of their billing cycle (<%= @subscription.formatted_end_time_of_subscription %>).</p>
+</div>

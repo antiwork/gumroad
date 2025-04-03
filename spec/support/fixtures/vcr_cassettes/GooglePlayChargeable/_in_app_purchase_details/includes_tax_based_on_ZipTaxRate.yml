@@ -1,0 +1,503 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://www.googleapis.com/oauth2/v4/token
+    body:
+      encoding: ASCII-8BIT
+      string: grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJwbGF5LWJpbGxpbmctYXBpQGd1bXJvYWQtbGlicmFyeS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsImF1ZCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92NC90b2tlbiIsImV4cCI6MTcyMTU2NDEyMSwiaWF0IjoxNzIxNTY0MDAxLCJzY29wZSI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL2F1dGgvYW5kcm9pZHB1Ymxpc2hlciJ9.bQGcY6BjXPDA1jQQ7nQE69u9Wtm6s4iCwuMaDtzMOh6PPr4fgzkM02SQCk_4lX4rmXtvfeomWNBPXNRv7Nv6KO0daSCVmhtgy43dLhDj3O3GYv_x26DmFDmSWqro4vO00hZeNz-cCfZGce5RkWWs8rLdLHRqaRrKkJ5qxvaHnTn0HGHGjjCezmwcrkF69Ae50UfI-g1belMZ4fMxPkVJbXk8LblnqbNhVw2q3BCnGgFbzMX4insFW5KvL6seTTuuZrGc43WtD0RBuhsKG92hRhA8YfJ1zgSMB17wzjxC8ya6eCSDQzovKxg_e6j-PUvxp7YFlVwEQz-6EozGzJcXvQ
+    headers:
+      User-Agent:
+      - Faraday v1.10.3
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json; charset=UTF-8
+      Vary:
+      - Origin
+      - Referer
+      - X-Origin
+      Date:
+      - Sun, 21 Jul 2024 12:14:22 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Cache-Control:
+      - private
+      X-Xss-Protection:
+      - '0'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Transfer-Encoding:
+      - chunked
+    body:
+      encoding: ASCII-8BIT
+      string: '{"access_token":"ya29.c.c0ASRK0GZP5pFNmHOu6oegLIpoG1YVrNkfSVt9_HCP5E5_Vd0-gJuIGRbJZ8fjiQCXFGAniVXLeKDOO8ket5JQ-X2HUbK3YCBBb4poEUTJEVjzrKdgjltBRFN5l-zbQqpTATPe1QyXXmr46sIRONVdY9TQRnE4JIUtFzlBZ_F7pZX1lTVEqEJf9Mqnt4NYdqAaAJ9YMNDMEPX-Z5vOXKrBt6mKL-8IASjl_uN3OPGAPyMBXyyWYDx9Bj2Sp6q1UZZjEBJUnmns4AfK7OpEObkMV0-WMeL_5uFNmnc5XiBLgVwDO462A5AfFMZJxcB9y3hfDFgcf1nY-oxZDWuHdwW9akI2dAftVODY8c7kaAjbTtxiPxr-cRUGZ1wN384Cf2jSVkeZsi-4wY7dY-o_Xrxr5yrxx-6t6W3qMZIVRrZW-p-XmiJYVJ0Ms5ghcrwuc2gqqwmOnId-nsvrid2ixe8q3RVwYs2BR_nJZhzUxVMt75e0pFgQv_knhfYne_ROtwd3IwFg02Ffwkttm573IBmjWlh8V9qO6xVpf7rlblhuadnO469F1a20IJg7bIUgg-7iF6W4ZQs5gV--YkazqwetZ4ltVJ1eoQ7tx6ztRFImzWmvzBimwwyvaWqwZ83eZBxMkWIQl98rIcmcS53xs2crcB2Z7Ucorz4gJnJ_tV3S--QOSxZXxrcJWWhimRncgjhfsFd4-nizxp_fM0nrwhReORJqmOxMcFpceeQ6yFhnfo1XngeQVJRfvB7e8nOhhioj8_F4w4muQhzl4FoyOlXixv4IkbogqiX1rp4X_Xa72U-B-IwpSSSkg3IS8xu-VxhFSxlMVUj_24r76klBoS2gShFrSthJhzBIt5teOzUzQItskiQxkyxjfx91jxi3Quaaje3Jfm4jUoiZ6aaqksukMcRZM3hnOppap96WSje2ev1yyQQ_z_5fjBZFkRJ0aiecdJ3mgYMi5-074Vu0lk39vsnb2OmoY91zgUt_6zr3ssjmgeUSOuteVYy","expires_in":3599,"token_type":"Bearer"}'
+  recorded_at: Sun, 21 Jul 2024 12:14:22 GMT
+- request:
+    method: get
+    uri: https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.gumroad.app/inappproducts/com.gumroad.product_2
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - unknown/0.0.0 google-apis-androidpublisher_v3/0.66.0 Mac OS X/14.5 (gzip)
+      Accept:
+      - "*/*"
+      Accept-Encoding:
+      - gzip,deflate
+      Date:
+      - Sun, 21 Jul 2024 12:14:22 GMT
+      X-Goog-Api-Client:
+      - gl-ruby/3.3.4 gdcl/1.66.0
+      Authorization:
+      - Bearer ya29.c.c0ASRK0GZP5pFNmHOu6oegLIpoG1YVrNkfSVt9_HCP5E5_Vd0-gJuIGRbJZ8fjiQCXFGAniVXLeKDOO8ket5JQ-X2HUbK3YCBBb4poEUTJEVjzrKdgjltBRFN5l-zbQqpTATPe1QyXXmr46sIRONVdY9TQRnE4JIUtFzlBZ_F7pZX1lTVEqEJf9Mqnt4NYdqAaAJ9YMNDMEPX-Z5vOXKrBt6mKL-8IASjl_uN3OPGAPyMBXyyWYDx9Bj2Sp6q1UZZjEBJUnmns4AfK7OpEObkMV0-WMeL_5uFNmnc5XiBLgVwDO462A5AfFMZJxcB9y3hfDFgcf1nY-oxZDWuHdwW9akI2dAftVODY8c7kaAjbTtxiPxr-cRUGZ1wN384Cf2jSVkeZsi-4wY7dY-o_Xrxr5yrxx-6t6W3qMZIVRrZW-p-XmiJYVJ0Ms5ghcrwuc2gqqwmOnId-nsvrid2ixe8q3RVwYs2BR_nJZhzUxVMt75e0pFgQv_knhfYne_ROtwd3IwFg02Ffwkttm573IBmjWlh8V9qO6xVpf7rlblhuadnO469F1a20IJg7bIUgg-7iF6W4ZQs5gV--YkazqwetZ4ltVJ1eoQ7tx6ztRFImzWmvzBimwwyvaWqwZ83eZBxMkWIQl98rIcmcS53xs2crcB2Z7Ucorz4gJnJ_tV3S--QOSxZXxrcJWWhimRncgjhfsFd4-nizxp_fM0nrwhReORJqmOxMcFpceeQ6yFhnfo1XngeQVJRfvB7e8nOhhioj8_F4w4muQhzl4FoyOlXixv4IkbogqiX1rp4X_Xa72U-B-IwpSSSkg3IS8xu-VxhFSxlMVUj_24r76klBoS2gShFrSthJhzBIt5teOzUzQItskiQxkyxjfx91jxi3Quaaje3Jfm4jUoiZ6aaqksukMcRZM3hnOppap96WSje2ev1yyQQ_z_5fjBZFkRJ0aiecdJ3mgYMi5-074Vu0lk39vsnb2OmoY91zgUt_6zr3ssjmgeUSOuteVYy
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Etag:
+      - 8e363659bbdffac8e1b630b6ef4352f859c6b72e
+      Content-Type:
+      - application/json; charset=UTF-8
+      Vary:
+      - Origin
+      - Referer
+      - X-Origin
+      Content-Encoding:
+      - gzip
+      Date:
+      - Sun, 21 Jul 2024 12:14:23 GMT
+      Server:
+      - ESF
+      Cache-Control:
+      - private
+      X-Xss-Protection:
+      - '0'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Transfer-Encoding:
+      - chunked
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "packageName": "com.gumroad.app",
+          "sku": "com.gumroad.product_2",
+          "status": "active",
+          "purchaseType": "managedUser",
+          "defaultPrice": {
+            "priceMicros": "2000000",
+            "currency": "USD"
+          },
+          "prices": {
+            "AE": {
+              "priceMicros": "7700000",
+              "currency": "AED"
+            },
+            "AT": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "AU": {
+              "priceMicros": "3300000",
+              "currency": "AUD"
+            },
+            "BD": {
+              "priceMicros": "250000000",
+              "currency": "BDT"
+            },
+            "BE": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "BG": {
+              "priceMicros": "4300000",
+              "currency": "BGN"
+            },
+            "BH": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "BM": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "BO": {
+              "priceMicros": "14000000",
+              "currency": "BOB"
+            },
+            "BR": {
+              "priceMicros": "11000000",
+              "currency": "BRL"
+            },
+            "CA": {
+              "priceMicros": "2800000",
+              "currency": "CAD"
+            },
+            "CH": {
+              "priceMicros": "1800000",
+              "currency": "CHF"
+            },
+            "CL": {
+              "priceMicros": "2300000000",
+              "currency": "CLP"
+            },
+            "CO": {
+              "priceMicros": "8000000000",
+              "currency": "COP"
+            },
+            "CR": {
+              "priceMicros": "1100000000",
+              "currency": "CRC"
+            },
+            "CY": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "CZ": {
+              "priceMicros": "55000000",
+              "currency": "CZK"
+            },
+            "DE": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "DK": {
+              "priceMicros": "17000000",
+              "currency": "DKK"
+            },
+            "DZ": {
+              "priceMicros": "275000000",
+              "currency": "DZD"
+            },
+            "EC": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "EE": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "EG": {
+              "priceMicros": "110000000",
+              "currency": "EGP"
+            },
+            "ES": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "FI": {
+              "priceMicros": "2300000",
+              "currency": "EUR"
+            },
+            "FM": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "FR": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "GB": {
+              "priceMicros": "1900000",
+              "currency": "GBP"
+            },
+            "GE": {
+              "priceMicros": "6000000",
+              "currency": "GEL"
+            },
+            "GH": {
+              "priceMicros": "40000000",
+              "currency": "GHS"
+            },
+            "GI": {
+              "priceMicros": "1600000",
+              "currency": "GBP"
+            },
+            "GR": {
+              "priceMicros": "2300000",
+              "currency": "EUR"
+            },
+            "HK": {
+              "priceMicros": "15000000",
+              "currency": "HKD"
+            },
+            "HR": {
+              "priceMicros": "2300000",
+              "currency": "EUR"
+            },
+            "HU": {
+              "priceMicros": "899000000",
+              "currency": "HUF"
+            },
+            "ID": {
+              "priceMicros": "32000000000",
+              "currency": "IDR"
+            },
+            "IE": {
+              "priceMicros": "2300000",
+              "currency": "EUR"
+            },
+            "IL": {
+              "priceMicros": "7300000",
+              "currency": "ILS"
+            },
+            "IN": {
+              "priceMicros": "200000000",
+              "currency": "INR"
+            },
+            "IQ": {
+              "priceMicros": "2600000000",
+              "currency": "IQD"
+            },
+            "IT": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "JO": {
+              "priceMicros": "1400000",
+              "currency": "JOD"
+            },
+            "JP": {
+              "priceMicros": "310000000",
+              "currency": "JPY"
+            },
+            "KE": {
+              "priceMicros": "300000000",
+              "currency": "KES"
+            },
+            "KH": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "KR": {
+              "priceMicros": "3100000000",
+              "currency": "KRW"
+            },
+            "KW": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "KY": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "KZ": {
+              "priceMicros": "1090000000",
+              "currency": "KZT"
+            },
+            "LI": {
+              "priceMicros": "1900000",
+              "currency": "CHF"
+            },
+            "LK": {
+              "priceMicros": "600000000",
+              "currency": "LKR"
+            },
+            "LT": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "LU": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "LV": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "MA": {
+              "priceMicros": "24000000",
+              "currency": "MAD"
+            },
+            "MC": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "MM": {
+              "priceMicros": "4000000000",
+              "currency": "MMK"
+            },
+            "MO": {
+              "priceMicros": "16000000",
+              "currency": "MOP"
+            },
+            "MX": {
+              "priceMicros": "42000000",
+              "currency": "MXN"
+            },
+            "MY": {
+              "priceMicros": "10000000",
+              "currency": "MYR"
+            },
+            "NG": {
+              "priceMicros": "3450000000",
+              "currency": "NGN"
+            },
+            "NL": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "NO": {
+              "priceMicros": "27000000",
+              "currency": "NOK"
+            },
+            "NZ": {
+              "priceMicros": "3800000",
+              "currency": "NZD"
+            },
+            "OM": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "PA": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "PE": {
+              "priceMicros": "7500000",
+              "currency": "PEN"
+            },
+            "PH": {
+              "priceMicros": "115000000",
+              "currency": "PHP"
+            },
+            "PK": {
+              "priceMicros": "550000000",
+              "currency": "PKR"
+            },
+            "PL": {
+              "priceMicros": "9700000",
+              "currency": "PLN"
+            },
+            "PT": {
+              "priceMicros": "2300000",
+              "currency": "EUR"
+            },
+            "PY": {
+              "priceMicros": "20000000000",
+              "currency": "PYG"
+            },
+            "QA": {
+              "priceMicros": "7500000",
+              "currency": "QAR"
+            },
+            "RO": {
+              "priceMicros": "11000000",
+              "currency": "RON"
+            },
+            "RS": {
+              "priceMicros": "249000000",
+              "currency": "RSD"
+            },
+            "RU": {
+              "priceMicros": "179000000",
+              "currency": "RUB"
+            },
+            "SA": {
+              "priceMicros": "8600000",
+              "currency": "SAR"
+            },
+            "SE": {
+              "priceMicros": "27000000",
+              "currency": "SEK"
+            },
+            "SG": {
+              "priceMicros": "2980000",
+              "currency": "SGD"
+            },
+            "SI": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "SK": {
+              "priceMicros": "2200000",
+              "currency": "EUR"
+            },
+            "SM": {
+              "priceMicros": "1800000",
+              "currency": "EUR"
+            },
+            "SV": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "TC": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "TH": {
+              "priceMicros": "78000000",
+              "currency": "THB"
+            },
+            "TR": {
+              "priceMicros": "79000000",
+              "currency": "TRY"
+            },
+            "TW": {
+              "priceMicros": "68000000",
+              "currency": "TWD"
+            },
+            "TZ": {
+              "priceMicros": "5500000000",
+              "currency": "TZS"
+            },
+            "UA": {
+              "priceMicros": "100000000",
+              "currency": "UAH"
+            },
+            "US": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "VA": {
+              "priceMicros": "1800000",
+              "currency": "EUR"
+            },
+            "VG": {
+              "priceMicros": "2000000",
+              "currency": "USD"
+            },
+            "VN": {
+              "priceMicros": "51000000000",
+              "currency": "VND"
+            },
+            "ZA": {
+              "priceMicros": "42000000",
+              "currency": "ZAR"
+            }
+          },
+          "listings": {
+            "en-US": {
+              "title": "Gumroad Product",
+              "description": "Gumroad Product $2"
+            }
+          },
+          "defaultLanguage": "en-US",
+          "managedProductTaxesAndComplianceSettings": {
+            "eeaWithdrawalRightType": "WITHDRAWAL_RIGHT_DIGITAL_CONTENT"
+          }
+        }
+  recorded_at: Sun, 21 Jul 2024 12:14:23 GMT
+recorded_with: VCR 6.2.0

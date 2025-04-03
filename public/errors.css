@@ -1,0 +1,195 @@
+* { padding: 0; margin: 0; }
+
+body {
+  font-family: -apple-system, ".SFNSDisplay-Regular", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: #f4f4f0;
+  color: $darkest-tan-color;
+  font-size: 13px;
+  line-height: 21px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  height: auto;
+}
+
+.main-content {
+  margin: 0 auto;
+  padding-top: 100px;
+  text-align: center;
+  font-size: 16px;
+}
+
+.main-content.wide {
+  max-width: 700px;
+}
+
+h3 {
+  font-size: 60px;
+  line-height: 60px;
+  color: rgba(0, 0, 0, .2);
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 0 white;
+}
+
+.mini-rule {
+  width: 600px;
+  height: 1px;
+  border-top: 1px dotted rgba(0, 0, 0, .15);
+  margin: 36px auto;
+  clear: both;
+}
+
+hr {
+  background: #dddddd;
+  border: 0;
+  display: block;
+  height: 3px;
+  margin: 34px auto 43px;
+  max-width: 200px;
+}
+
+a {
+  color: $darkest-tan-color;
+}
+
+.learn-card--collection {
+  background-position: center;
+  background-size: cover;
+  border-radius: 4px;
+  box-shadow: 0px 1px 2px rgba(0,0,0,0.15);
+  color: white;
+  height: 225px;
+  margin-bottom: 15px;
+  position: relative;
+  transition: all .25s ease-in-out;
+  width: 200px;
+}
+
+.learn-card--collection:hover {
+  transform: scale(1.02);
+}
+
+.text {
+  background: -webkit-linear-gradient(transparent, rgba(0, 0, 0, 0.2));
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  bottom: 0;
+  font-size: 17px;
+  font-weight: 600;
+  left: 0;
+  line-height: 27px;
+  padding: 45px 15px 15px;
+  position: absolute;
+  right: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+ol {
+  padding: 20px 0;
+}
+
+li {
+  list-style-type: none;
+  display: inline-block;
+  font-size: 14px;
+  margin: 0 10px;
+}
+
+.footer-item {
+  display: block;
+  font-size: 14px;
+  padding: 5px 0;
+}
+
+.footer-item a {
+  color: #b0b0b0;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color .2s linear;
+}
+
+.footer-item a:hover {
+  color: #838383;
+  text-decoration: none;
+}
+
+.about-item {
+  margin-top: 20px;
+}
+
+.about-item a:not(:first-of-type):before {
+  color: #b0b0b0;
+  content: "/";
+  padding: 0 10px;
+}
+
+.error-page.maintenance h3 {
+  font-size: 60px;
+}
+
+.error-page.maintenance .challenge-box {
+  display:inline-block;
+}
+
+.cf-im-under-attack p {
+  margin:0 auto;
+  text-align:center;
+}
+
+.challenge-box .cf-submit {
+  display:inline-block;
+  width:auto;
+  height:auto;
+  margin:0 !important;
+}
+
+.challenge-box .cf-btn {
+  display: inline-block;
+  padding: 11px 15px 12px;
+  width:auto !important;
+  height:auto !important;
+  cursor: pointer;
+  color: #ffffff;
+  font-size: 17px;
+  line-height: 100%;
+  font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+  border-radius: 4px;
+  -moz-border-radius: 4px;
+  -webkit-border-radius: 4px;
+  -webkit-transition: all 0.05s ease-in-out;
+  -moz-transition: all 0.05s ease-in-out;
+  -ms-transition: all 0.05s ease-in-out;
+  -o-transition: all 0.05s ease-in-out;
+  transition: all 0.05s ease-in-out;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.15000000000000002);
+  -webkit-box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
+  -moz-box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
+  color: $darkest-tan-color;
+  filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr='#f8f8f8', endColorstr='#e8e8e8', GradientType=0)";
+  background: -webkit-linear-gradient(#f8f8f8, #e8e8e8);
+  background: -moz-linear-gradient(#f8f8f8, #e8e8e8);
+  background: linear-gradient(#f8f8f8, #e8e8e8);
+  border: 1px solid #c0c0c0;
+  text-shadow: 0 1px 1px white;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.15000000000000002);
+  -webkit-transition: none;
+  -moz-transition: none;
+  -ms-transition: none;
+  -o-transition: none;
+  transition: none;
+}
+
+.challenge-box .cf-btn:hover {
+  background:#eeeeee;
+  color:#222;
+}
+
+.challenge-box .cf-btn:before {
+  content: "Continue";
+}
+
+.challenge-box .cf-btn .color, .challenge-box .cf-btn .mask {
+  display:none !important;
+  background:none !important;
+}

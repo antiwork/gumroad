@@ -1,0 +1,22 @@
+<% if show_helper_widget? %>
+  <% timestamp = (Time.now.to_f * 1000).to_i %>
+
+  <%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
+    (function(d) {
+      var g=d.createElement("script");
+      g.src="<%= helper_widget_host %>"+"/widget/sdk.js";
+      g.onload=function(){
+        window.HelperWidget.init({
+          title: "Support",
+          email: "<%= current_seller.email %>",
+          email_hash: "<%= helper_widget_email_hmac(timestamp) %>",
+          mailbox_slug: "gumroad",
+          timestamp: <%= timestamp %>,
+          icon_color: "#FF90E8",
+          customer_metadata: <%= helper_customer_metadata.to_json.html_safe %>,
+        });
+      }
+      d.body.appendChild(g);
+    })(document);
+  <% end %>
+<% end %>

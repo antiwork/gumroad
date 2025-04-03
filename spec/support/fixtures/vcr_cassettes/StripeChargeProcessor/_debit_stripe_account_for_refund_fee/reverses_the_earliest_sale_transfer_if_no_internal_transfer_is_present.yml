@@ -1,0 +1,3049 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/transfers?created%5Blt%5D=1686182400&destination=acct_1MdawPS4gcql7bLm&limit=100
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_FvIrpRMQyzXkrw","request_duration_ms":470}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:58:55 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '84846'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Ftransfers; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_8SrPohgwp0T03S
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "tr_2NGFam9e1RjUNIyY0ZK2wWHK",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NGFam9e1RjUNIyY0iFgvzhk",
+              "created": 1686118297,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NGFanS4gcql7bLmBTAwpVlO",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NGFam9e1RjUNIyY0ZK2wWHK/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NGFam9e1RjUNIyY0huMIRjt",
+              "source_type": "card",
+              "transfer_group": "180953"
+            },
+            {
+              "id": "tr_2NGFZR9e1RjUNIyY1tq3dfMR",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NGFZR9e1RjUNIyY1JRYOkL9",
+              "created": 1686118214,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NGFZSS4gcql7bLmeYWdc6nn",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NGFZR9e1RjUNIyY1tq3dfMR/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NGFZR9e1RjUNIyY13PMS9p7",
+              "source_type": "card",
+              "transfer_group": "180952"
+            },
+            {
+              "id": "tr_2NGBoN9e1RjUNIyY0udmOyXx",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NGBoN9e1RjUNIyY0jFRJpt6",
+              "created": 1686103763,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NGBoNS4gcql7bLmoDCDTvJw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NGBoN9e1RjUNIyY0udmOyXx/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NGBoN9e1RjUNIyY0nUZsRbb",
+              "source_type": "card",
+              "transfer_group": "180937"
+            },
+            {
+              "id": "tr_2NFriI9e1RjUNIyY1tjopVzK",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFriI9e1RjUNIyY1ghkr0CB",
+              "created": 1686026506,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFriIS4gcql7bLmBzcA0lpK",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFriI9e1RjUNIyY1tjopVzK/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFriI9e1RjUNIyY1av4DrYJ",
+              "source_type": "card",
+              "transfer_group": "180617"
+            },
+            {
+              "id": "tr_2NFrWv9e1RjUNIyY1TVibVRY",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFrWv9e1RjUNIyY1yzgd5X8",
+              "created": 1686025802,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFrWwS4gcql7bLmXXg3vlyD",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFrWv9e1RjUNIyY1TVibVRY/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFrWv9e1RjUNIyY1fKfyBrk",
+              "source_type": "card",
+              "transfer_group": "180592"
+            },
+            {
+              "id": "tr_2NFq529e1RjUNIyY1Qs4OeKD",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFq529e1RjUNIyY1ib5tSxL",
+              "created": 1686020228,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFq52S4gcql7bLmYl5WjkxU",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFq529e1RjUNIyY1Qs4OeKD/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFq529e1RjUNIyY15YBQ8wj",
+              "source_type": "card",
+              "transfer_group": "180580"
+            },
+            {
+              "id": "tr_2NFpqQ9e1RjUNIyY1rwkSz9G",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFpqQ9e1RjUNIyY1F3kD1HU",
+              "created": 1686019322,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFpqQS4gcql7bLmcedc6KU2",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFpqQ9e1RjUNIyY1rwkSz9G/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFpqQ9e1RjUNIyY1J3hzUuf",
+              "source_type": "card",
+              "transfer_group": "180579"
+            },
+            {
+              "id": "tr_2NFpmB9e1RjUNIyY0NmeJHVF",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFpmB9e1RjUNIyY0ISIcQCZ",
+              "created": 1686019059,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFpmBS4gcql7bLm7JFSWbHO",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFpmB9e1RjUNIyY0NmeJHVF/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFpmB9e1RjUNIyY0zzz9InE",
+              "source_type": "card",
+              "transfer_group": "180578"
+            },
+            {
+              "id": "tr_2NFpH69e1RjUNIyY0KqNn3zG",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFpH69e1RjUNIyY0t203gGG",
+              "created": 1686017133,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFpH7S4gcql7bLm40gqqEWN",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFpH69e1RjUNIyY0KqNn3zG/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFpH69e1RjUNIyY0uVueFQH",
+              "source_type": "card",
+              "transfer_group": "180577"
+            },
+            {
+              "id": "tr_2NFp4V9e1RjUNIyY01YVKnQv",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFp4V9e1RjUNIyY0DUpar3y",
+              "created": 1686016351,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFp4VS4gcql7bLmcg87dGz5",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFp4V9e1RjUNIyY01YVKnQv/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFp4V9e1RjUNIyY0fkKYy21",
+              "source_type": "card",
+              "transfer_group": "180575"
+            },
+            {
+              "id": "tr_2NFp409e1RjUNIyY1ryf6h88",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFp409e1RjUNIyY15c0zX7C",
+              "created": 1686016321,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFp41S4gcql7bLmQBrj7YEz",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFp409e1RjUNIyY1ryf6h88/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFp409e1RjUNIyY1yNyg8xx",
+              "source_type": "card",
+              "transfer_group": "180574"
+            },
+            {
+              "id": "tr_2NFp3A9e1RjUNIyY0Z8a5vzs",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2NFp3A9e1RjUNIyY0NrPmlox",
+              "created": 1686016268,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1NFp3AS4gcql7bLmfOvRAthu",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2NFp3A9e1RjUNIyY0Z8a5vzs/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2NFp3A9e1RjUNIyY0Kp6O5yc",
+              "source_type": "card",
+              "transfer_group": "180572"
+            },
+            {
+              "id": "tr_2N927G9e1RjUNIyY1hmwoVif",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N927G9e1RjUNIyY1AskJtJk",
+              "created": 1684398199,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N927HS4gcql7bLmDCScwk5m",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N927G9e1RjUNIyY1hmwoVif/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N927G9e1RjUNIyY1p9Wb63N",
+              "source_type": "card",
+              "transfer_group": "178094"
+            },
+            {
+              "id": "tr_2N91qn9e1RjUNIyY03LdqeNA",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 3000,
+              "balance_transaction": "txn_2N91qn9e1RjUNIyY0r6oOnJt",
+              "created": 1684397178,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N91qoS4gcql7bLmWqU4hA8T",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0O4yJh9e1RjUNIyYXjl6Y2VQ",
+                    "object": "transfer_reversal",
+                    "amount": 1000,
+                    "balance_transaction": "txn_0O4yJh9e1RjUNIyYiUZD3g27",
+                    "created": 1698206617,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1O4yJhS4gcql7bLmRAwIkfrF",
+                    "metadata": {},
+                    "source_refund": null,
+                    "transfer": "tr_2N91qn9e1RjUNIyY03LdqeNA"
+                  },
+                  {
+                    "id": "trr_0O4xG79e1RjUNIyYPekWf3Nf",
+                    "object": "transfer_reversal",
+                    "amount": 1000,
+                    "balance_transaction": "txn_0O4xG79e1RjUNIyYOenUv0FE",
+                    "created": 1698202551,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1O4xG7S4gcql7bLm0vFvufnk",
+                    "metadata": {},
+                    "source_refund": null,
+                    "transfer": "tr_2N91qn9e1RjUNIyY03LdqeNA"
+                  },
+                  {
+                    "id": "trr_0O4rT09e1RjUNIyYmHnDccgS",
+                    "object": "transfer_reversal",
+                    "amount": 1000,
+                    "balance_transaction": "txn_0O4rT19e1RjUNIyY4sCDZ8jN",
+                    "created": 1698180286,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1O4rT0S4gcql7bLmZLpp5wqY",
+                    "metadata": {},
+                    "source_refund": null,
+                    "transfer": "tr_2N91qn9e1RjUNIyY03LdqeNA"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 3,
+                "url": "/v1/transfers/tr_2N91qn9e1RjUNIyY03LdqeNA/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N91qn9e1RjUNIyY0Qq4v0lh",
+              "source_type": "card",
+              "transfer_group": "178093"
+            },
+            {
+              "id": "tr_2N91qf9e1RjUNIyY0ONPodmq",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N91qf9e1RjUNIyY0NPReF2w",
+              "created": 1684397170,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N91qgS4gcql7bLmKFnyaT14",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N91qf9e1RjUNIyY0ONPodmq/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N91qf9e1RjUNIyY0cIfm8VJ",
+              "source_type": "card",
+              "transfer_group": "178092"
+            },
+            {
+              "id": "tr_2N91qd9e1RjUNIyY16IkKGbI",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N91qd9e1RjUNIyY1wwleIPh",
+              "created": 1684397168,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N91qeS4gcql7bLmbfrYZkFk",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N91qd9e1RjUNIyY16IkKGbI/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N91qd9e1RjUNIyY1ZX2rQ3z",
+              "source_type": "card",
+              "transfer_group": "178091"
+            },
+            {
+              "id": "tr_2N91qc9e1RjUNIyY1VIZO9NF",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N91qc9e1RjUNIyY1B9561wt",
+              "created": 1684397166,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N91qcS4gcql7bLmGreoFK1w",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N91qc9e1RjUNIyY1VIZO9NF/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N91qc9e1RjUNIyY1U1GIUEL",
+              "source_type": "card",
+              "transfer_group": "178090"
+            },
+            {
+              "id": "tr_2N91qS9e1RjUNIyY1DlLSZi1",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N91qS9e1RjUNIyY1NvCSmhN",
+              "created": 1684397157,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N91qTS4gcql7bLmGWdLoZvD",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N91qS9e1RjUNIyY1DlLSZi1/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N91qS9e1RjUNIyY1TkmFDiF",
+              "source_type": "card",
+              "transfer_group": "178089"
+            },
+            {
+              "id": "tr_2N913g9e1RjUNIyY1ZfAxRXD",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N913g9e1RjUNIyY1lnisU3M",
+              "created": 1684394133,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N913hS4gcql7bLmrZDdOxxw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N913g9e1RjUNIyY1ZfAxRXD/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N913g9e1RjUNIyY1Q5JwIhe",
+              "source_type": "card",
+              "transfer_group": "178065"
+            },
+            {
+              "id": "tr_2N90TB9e1RjUNIyY0oqnxKul",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 2583,
+              "balance_transaction": "txn_2N90TB9e1RjUNIyY0fTQWOdp",
+              "created": 1684391870,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N90TCS4gcql7bLmITZwM03W",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N90Um9e1RjUNIyYPPYW71F9",
+                    "object": "transfer_reversal",
+                    "amount": 2583,
+                    "balance_transaction": "txn_0N90Um9e1RjUNIyYCykYWN0a",
+                    "created": 1684391968,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N90UmS4gcql7bLmGOb9g1dX",
+                    "metadata": {},
+                    "source_refund": "re_2N90TB9e1RjUNIyY0ofKmOFH",
+                    "transfer": "tr_2N90TB9e1RjUNIyY0oqnxKul"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N90TB9e1RjUNIyY0oqnxKul/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N90TB9e1RjUNIyY06FBsBJs",
+              "source_type": "card",
+              "transfer_group": "178027"
+            },
+            {
+              "id": "tr_2N90Sr9e1RjUNIyY1M2HzooJ",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N90Sr9e1RjUNIyY1T2wmz9A",
+              "created": 1684391850,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N90SsS4gcql7bLmiv8Doril",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N90Sr9e1RjUNIyY1M2HzooJ/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N90Sr9e1RjUNIyY1yHsUZ4f",
+              "source_type": "card",
+              "transfer_group": "178026"
+            },
+            {
+              "id": "tr_2N90Sb9e1RjUNIyY0pFEolF6",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N90Sb9e1RjUNIyY0iPOcki4",
+              "created": 1684391834,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N90ScS4gcql7bLm9hsgxCVq",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N90Sb9e1RjUNIyY0pFEolF6/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N90Sb9e1RjUNIyY06nhmJ7S",
+              "source_type": "card",
+              "transfer_group": "178025"
+            },
+            {
+              "id": "tr_2N90Sb9e1RjUNIyY0nT8Eu5h",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N90Sb9e1RjUNIyY0EGiUiGx",
+              "created": 1684391833,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N90SbS4gcql7bLm6swVadgf",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N90Sb9e1RjUNIyY0nT8Eu5h/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N90Sb9e1RjUNIyY0vurYtdc",
+              "source_type": "card",
+              "transfer_group": "178024"
+            },
+            {
+              "id": "tr_2N90SR9e1RjUNIyY0y1wGQW2",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N90SR9e1RjUNIyY0rywnaeT",
+              "created": 1684391823,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N90SRS4gcql7bLmNZ8LouYZ",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N90SR9e1RjUNIyY0y1wGQW2/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N90SR9e1RjUNIyY0sbN1DAe",
+              "source_type": "card",
+              "transfer_group": "178023"
+            },
+            {
+              "id": "tr_2N8tiF9e1RjUNIyY0SKUiYEH",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tiF9e1RjUNIyY0OAPyDPt",
+              "created": 1684365896,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tiGS4gcql7bLmrOOz6crd",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tiF9e1RjUNIyY0SKUiYEH/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tiF9e1RjUNIyY0A75jcyK",
+              "source_type": "card",
+              "transfer_group": "177979"
+            },
+            {
+              "id": "tr_2N8thf9e1RjUNIyY1ipeQqrG",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8thf9e1RjUNIyY1K2jwly6",
+              "created": 1684365860,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8thgS4gcql7bLmmAjensAK",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8thf9e1RjUNIyY1ipeQqrG/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8thf9e1RjUNIyY1dBQSrWc",
+              "source_type": "card",
+              "transfer_group": "177978"
+            },
+            {
+              "id": "tr_2N8the9e1RjUNIyY0eeT1jf5",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8the9e1RjUNIyY0LAJMulU",
+              "created": 1684365859,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8thfS4gcql7bLmqFfQ3r7M",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8the9e1RjUNIyY0eeT1jf5/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8the9e1RjUNIyY0BsjdGfq",
+              "source_type": "card",
+              "transfer_group": "177977"
+            },
+            {
+              "id": "tr_2N8thb9e1RjUNIyY1fESqY8p",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8thb9e1RjUNIyY1tvzJFuq",
+              "created": 1684365856,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8thcS4gcql7bLmloOxJ0Cg",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8thb9e1RjUNIyY1fESqY8p/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8thb9e1RjUNIyY1Ytfthb4",
+              "source_type": "card",
+              "transfer_group": "177976"
+            },
+            {
+              "id": "tr_2N8thX9e1RjUNIyY0JF6pmm3",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8thX9e1RjUNIyY0Qh8PexV",
+              "created": 1684365852,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8thYS4gcql7bLmCB52FYVw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8thX9e1RjUNIyY0JF6pmm3/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8thX9e1RjUNIyY0FUUkmmV",
+              "source_type": "card",
+              "transfer_group": "177975"
+            },
+            {
+              "id": "tr_2N8thV9e1RjUNIyY1Cszkfqr",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8thV9e1RjUNIyY1Uc39ciM",
+              "created": 1684365850,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8thWS4gcql7bLmQsBVYeFp",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8thV9e1RjUNIyY1Cszkfqr/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8thV9e1RjUNIyY1N7fbXc9",
+              "source_type": "card",
+              "transfer_group": "177974"
+            },
+            {
+              "id": "tr_2N8te29e1RjUNIyY0oISVNau",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8te29e1RjUNIyY0dFzAqY3",
+              "created": 1684365634,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8te2S4gcql7bLm5HQIBorM",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8te29e1RjUNIyY0oISVNau/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8te29e1RjUNIyY0u4zzAl4",
+              "source_type": "card",
+              "transfer_group": "177973"
+            },
+            {
+              "id": "tr_2N8tdx9e1RjUNIyY0xJzWgqr",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tdx9e1RjUNIyY0K4ujner",
+              "created": 1684365630,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tdyS4gcql7bLmXQ2lyPXh",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tdx9e1RjUNIyY0xJzWgqr/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tdx9e1RjUNIyY0pzriFK4",
+              "source_type": "card",
+              "transfer_group": "177971"
+            },
+            {
+              "id": "tr_2N8tdx9e1RjUNIyY1A8WU1Il",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tdx9e1RjUNIyY1yU7tsAN",
+              "created": 1684365630,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tdyS4gcql7bLmzsrbRSqo",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tdx9e1RjUNIyY1A8WU1Il/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tdx9e1RjUNIyY1RHJjPfu",
+              "source_type": "card",
+              "transfer_group": "177972"
+            },
+            {
+              "id": "tr_2N8tdw9e1RjUNIyY0YSwYKLL",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tdw9e1RjUNIyY0EI06KTO",
+              "created": 1684365629,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tdxS4gcql7bLm55YohThK",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tdw9e1RjUNIyY0YSwYKLL/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tdw9e1RjUNIyY0MmYCdVa",
+              "source_type": "card",
+              "transfer_group": "177970"
+            },
+            {
+              "id": "tr_2N8tdt9e1RjUNIyY0GnHlILM",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tdt9e1RjUNIyY0NAUVRdb",
+              "created": 1684365625,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tdtS4gcql7bLmSEY4G1dE",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tdt9e1RjUNIyY0GnHlILM/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tdt9e1RjUNIyY0VnZh5dk",
+              "source_type": "card",
+              "transfer_group": "177969"
+            },
+            {
+              "id": "tr_2N8tOU9e1RjUNIyY12NlRSHq",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tOU9e1RjUNIyY181Xiw6T",
+              "created": 1684364670,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tOUS4gcql7bLmePtbSrmD",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tOU9e1RjUNIyY12NlRSHq/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tOU9e1RjUNIyY1CXqc9RN",
+              "source_type": "card",
+              "transfer_group": "177968"
+            },
+            {
+              "id": "tr_2N8tON9e1RjUNIyY0rzeNbN7",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tON9e1RjUNIyY0aIdLuK2",
+              "created": 1684364663,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tONS4gcql7bLmqboA8XdX",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tON9e1RjUNIyY0rzeNbN7/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tON9e1RjUNIyY0aRTGFZS",
+              "source_type": "card",
+              "transfer_group": "177967"
+            },
+            {
+              "id": "tr_2N8tOE9e1RjUNIyY0gbEQXG8",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tOE9e1RjUNIyY06qyNVnc",
+              "created": 1684364655,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tOFS4gcql7bLmd7pP4t7M",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tOE9e1RjUNIyY0gbEQXG8/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tOE9e1RjUNIyY0WDes5w5",
+              "source_type": "card",
+              "transfer_group": "177966"
+            },
+            {
+              "id": "tr_2N8tOE9e1RjUNIyY1Wre0wZm",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tOE9e1RjUNIyY1nAZGc7g",
+              "created": 1684364654,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tOES4gcql7bLmD2Ds6n3D",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tOE9e1RjUNIyY1Wre0wZm/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tOE9e1RjUNIyY1qp8fQha",
+              "source_type": "card",
+              "transfer_group": "177965"
+            },
+            {
+              "id": "tr_2N8tOD9e1RjUNIyY04KsXa8Y",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tOD9e1RjUNIyY0fB5Y3ZC",
+              "created": 1684364654,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tOES4gcql7bLm60UQyRuv",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tOD9e1RjUNIyY04KsXa8Y/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tOD9e1RjUNIyY0E5UyhVX",
+              "source_type": "card",
+              "transfer_group": "177964"
+            },
+            {
+              "id": "tr_2N8tKh9e1RjUNIyY1360y6lH",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tKh9e1RjUNIyY16dK7X9M",
+              "created": 1684364435,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tKhS4gcql7bLmadaiN3rf",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tKh9e1RjUNIyY1360y6lH/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tKh9e1RjUNIyY1OJYKfI7",
+              "source_type": "card",
+              "transfer_group": "177958"
+            },
+            {
+              "id": "tr_2N8tGg9e1RjUNIyY1sR91hdg",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tGg9e1RjUNIyY1dmVM9z2",
+              "created": 1684364186,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tGgS4gcql7bLmGye30GME",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tGg9e1RjUNIyY1sR91hdg/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tGg9e1RjUNIyY1xU4CVyp",
+              "source_type": "card",
+              "transfer_group": "177951"
+            },
+            {
+              "id": "tr_2N8tE59e1RjUNIyY0U7fjqHY",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tE59e1RjUNIyY0kkOeDkB",
+              "created": 1684364025,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tE5S4gcql7bLmYSkjS1Pq",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tE59e1RjUNIyY0U7fjqHY/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tE59e1RjUNIyY0q63p4Op",
+              "source_type": "card",
+              "transfer_group": "177945"
+            },
+            {
+              "id": "tr_2N8tE19e1RjUNIyY0u1ygyti",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tE19e1RjUNIyY0h4HNpft",
+              "created": 1684364021,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tE1S4gcql7bLmUC9D1Jx4",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tE19e1RjUNIyY0u1ygyti/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tE19e1RjUNIyY0KiXwm5D",
+              "source_type": "card",
+              "transfer_group": "177944"
+            },
+            {
+              "id": "tr_2N8tDw9e1RjUNIyY0Ea7KMbc",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tDw9e1RjUNIyY0UwsLTzF",
+              "created": 1684364016,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tDwS4gcql7bLmg0MADpUl",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tDw9e1RjUNIyY0Ea7KMbc/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tDw9e1RjUNIyY009Un011",
+              "source_type": "card",
+              "transfer_group": "177942"
+            },
+            {
+              "id": "tr_2N8tDv9e1RjUNIyY0XaTFty3",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8tDv9e1RjUNIyY0gUdgMDI",
+              "created": 1684364016,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8tDwS4gcql7bLmqNXRqfKF",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8tDv9e1RjUNIyY0XaTFty3/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8tDv9e1RjUNIyY0IAZaR1c",
+              "source_type": "card",
+              "transfer_group": "177941"
+            },
+            {
+              "id": "tr_2N8qw59e1RjUNIyY0RytW3LW",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8qw59e1RjUNIyY0ODPc853",
+              "created": 1684355222,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8qw6S4gcql7bLmOVUyyH2X",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8qw59e1RjUNIyY0RytW3LW/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8qw59e1RjUNIyY0uZVlN3x",
+              "source_type": "card",
+              "transfer_group": "177912"
+            },
+            {
+              "id": "tr_2N8pw59e1RjUNIyY1XSCyZWW",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8pw59e1RjUNIyY1yfa2nMp",
+              "created": 1684351378,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8pw6S4gcql7bLmmsAtOjqW",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8pw59e1RjUNIyY1XSCyZWW/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8pw59e1RjUNIyY1lkllFHm",
+              "source_type": "card",
+              "transfer_group": "177890"
+            },
+            {
+              "id": "tr_2N8pw29e1RjUNIyY1glygBF4",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8pw29e1RjUNIyY1gzr7tVH",
+              "created": 1684351374,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8pw2S4gcql7bLmUZKJvwwC",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8pw29e1RjUNIyY1glygBF4/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8pw29e1RjUNIyY1GXbCUHv",
+              "source_type": "card",
+              "transfer_group": "177889"
+            },
+            {
+              "id": "tr_2N8pw19e1RjUNIyY1OoY0pHU",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8pw19e1RjUNIyY1MhWrGwb",
+              "created": 1684351374,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8pw2S4gcql7bLmzdL3DA9O",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8pw19e1RjUNIyY1OoY0pHU/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8pw19e1RjUNIyY1FFCJ9ZT",
+              "source_type": "card",
+              "transfer_group": "177888"
+            },
+            {
+              "id": "tr_2N8pw19e1RjUNIyY1nJNRFpG",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8pw19e1RjUNIyY1aQTEu0u",
+              "created": 1684351374,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8pw2S4gcql7bLmhN7M2YKj",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8pw19e1RjUNIyY1nJNRFpG/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8pw19e1RjUNIyY1AK7H9Dn",
+              "source_type": "card",
+              "transfer_group": "177887"
+            },
+            {
+              "id": "tr_2N8oTP9e1RjUNIyY0KIT46BY",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 2583,
+              "balance_transaction": "txn_2N8oTP9e1RjUNIyY00xh4odU",
+              "created": 1684345756,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8oTQS4gcql7bLmoPOZOQW6",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8oV99e1RjUNIyY0J8vXv0f",
+                    "object": "transfer_reversal",
+                    "amount": 2583,
+                    "balance_transaction": "txn_0N8oV99e1RjUNIyYH8r0Umf9",
+                    "created": 1684345863,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8oV9S4gcql7bLmxR9TpejG",
+                    "metadata": {},
+                    "source_refund": "re_2N8oTP9e1RjUNIyY0qXIg8r6",
+                    "transfer": "tr_2N8oTP9e1RjUNIyY0KIT46BY"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8oTP9e1RjUNIyY0KIT46BY/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N8oTP9e1RjUNIyY0Dzx9Keb",
+              "source_type": "card",
+              "transfer_group": "177838"
+            },
+            {
+              "id": "tr_2N8oPC9e1RjUNIyY0GdhF0qv",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8oPC9e1RjUNIyY0tXftQ0M",
+              "created": 1684345494,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8oPCS4gcql7bLmXqIzUYG7",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8oPC9e1RjUNIyY0GdhF0qv/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8oPC9e1RjUNIyY0uCcRh9R",
+              "source_type": "card",
+              "transfer_group": "177837"
+            },
+            {
+              "id": "tr_2N8nkY9e1RjUNIyY1QccZBZ0",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nkY9e1RjUNIyY1QLAX5m7",
+              "created": 1684342975,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nkZS4gcql7bLm4ufSQLTN",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nkY9e1RjUNIyY1QccZBZ0/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nkY9e1RjUNIyY15lqwccc",
+              "source_type": "card",
+              "transfer_group": "177825"
+            },
+            {
+              "id": "tr_2N8nkW9e1RjUNIyY0VR7wIPM",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nkW9e1RjUNIyY0YrBY8EA",
+              "created": 1684342972,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nkWS4gcql7bLmR2Y3UhUi",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nkW9e1RjUNIyY0VR7wIPM/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nkW9e1RjUNIyY0jOexsbE",
+              "source_type": "card",
+              "transfer_group": "177824"
+            },
+            {
+              "id": "tr_2N8nk99e1RjUNIyY0Ra3jckX",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nk99e1RjUNIyY0TCc33tx",
+              "created": 1684342950,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nkAS4gcql7bLmqDuLePy2",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nk99e1RjUNIyY0Ra3jckX/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nk99e1RjUNIyY0tPCBaNO",
+              "source_type": "card",
+              "transfer_group": "177820"
+            },
+            {
+              "id": "tr_2N8nk59e1RjUNIyY0iizQ5n0",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nk59e1RjUNIyY0JHRlRdg",
+              "created": 1684342945,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nk5S4gcql7bLmDo0TXRIC",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nk59e1RjUNIyY0iizQ5n0/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nk59e1RjUNIyY0d4x7MCa",
+              "source_type": "card",
+              "transfer_group": "177819"
+            },
+            {
+              "id": "tr_2N8nhz9e1RjUNIyY1F6YltNE",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nhz9e1RjUNIyY1yNDGFOf",
+              "created": 1684342815,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nhzS4gcql7bLmAOkD7gvp",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nhz9e1RjUNIyY1F6YltNE/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nhz9e1RjUNIyY1jfxsAYJ",
+              "source_type": "card",
+              "transfer_group": "177810"
+            },
+            {
+              "id": "tr_2N8neO9e1RjUNIyY1CMGFllr",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8neO9e1RjUNIyY1ua9Naor",
+              "created": 1684342593,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nePS4gcql7bLm3T7WGACw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8neO9e1RjUNIyY1CMGFllr/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8neO9e1RjUNIyY1g7JYmAu",
+              "source_type": "card",
+              "transfer_group": "177809"
+            },
+            {
+              "id": "tr_2N8neH9e1RjUNIyY0pEico1y",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8neH9e1RjUNIyY0tBYEJT8",
+              "created": 1684342585,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8neHS4gcql7bLmng8oDuTK",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8neH9e1RjUNIyY0pEico1y/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8neH9e1RjUNIyY0a7YIxmu",
+              "source_type": "card",
+              "transfer_group": "177808"
+            },
+            {
+              "id": "tr_2N8nb89e1RjUNIyY06z52LRv",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nb89e1RjUNIyY0irr7uHC",
+              "created": 1684342390,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nb8S4gcql7bLmZxXU5l9S",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nb89e1RjUNIyY06z52LRv/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nb89e1RjUNIyY0N3E4f94",
+              "source_type": "card",
+              "transfer_group": "177807"
+            },
+            {
+              "id": "tr_2N8nWG9e1RjUNIyY0EjPhYyO",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nWG9e1RjUNIyY0mBo3XS6",
+              "created": 1684342088,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nWGS4gcql7bLmHJvk8uyE",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nWG9e1RjUNIyY0EjPhYyO/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nWG9e1RjUNIyY0zzFf3sy",
+              "source_type": "card",
+              "transfer_group": "177799"
+            },
+            {
+              "id": "tr_2N8nRy9e1RjUNIyY0lBttWXL",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nRy9e1RjUNIyY0yDkenBK",
+              "created": 1684341822,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nRyS4gcql7bLmIWXEUGTH",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nRy9e1RjUNIyY0lBttWXL/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nRy9e1RjUNIyY0doI1eRV",
+              "source_type": "card",
+              "transfer_group": "177798"
+            },
+            {
+              "id": "tr_2N8nOr9e1RjUNIyY1yQHaHhz",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nOr9e1RjUNIyY1Piv2DJ2",
+              "created": 1684341630,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nOsS4gcql7bLmSj8SvJU1",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nOr9e1RjUNIyY1yQHaHhz/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nOr9e1RjUNIyY1oBRJf5I",
+              "source_type": "card",
+              "transfer_group": "177797"
+            },
+            {
+              "id": "tr_2N8nMa9e1RjUNIyY1BTs3BGG",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nMa9e1RjUNIyY1ByRyRFt",
+              "created": 1684341488,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nMaS4gcql7bLmAYILXakP",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nMa9e1RjUNIyY1BTs3BGG/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nMa9e1RjUNIyY1rqfZpKi",
+              "source_type": "card",
+              "transfer_group": "177796"
+            },
+            {
+              "id": "tr_2N8nLV9e1RjUNIyY1LyxwLu6",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 60078,
+              "balance_transaction": "txn_2N8nLV9e1RjUNIyY1WKVXgpi",
+              "created": 1684341422,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nLWS4gcql7bLmdjbZNPmY",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8nMu9e1RjUNIyYUTiMZ2Ju",
+                    "object": "transfer_reversal",
+                    "amount": 60078,
+                    "balance_transaction": "txn_0N8nMu9e1RjUNIyYZq2WGCOp",
+                    "created": 1684341508,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8nMuS4gcql7bLmRsjW2nbP",
+                    "metadata": {},
+                    "source_refund": "re_2N8nLV9e1RjUNIyY1WRu8FtO",
+                    "transfer": "tr_2N8nLV9e1RjUNIyY1LyxwLu6"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8nLV9e1RjUNIyY1LyxwLu6/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nLV9e1RjUNIyY1YDKmGfd",
+              "source_type": "card",
+              "transfer_group": "177795"
+            },
+            {
+              "id": "tr_2N8nKC9e1RjUNIyY1jTZDElT",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nKC9e1RjUNIyY1AXo387i",
+              "created": 1684341341,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nKDS4gcql7bLmdBWGcXBK",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nKC9e1RjUNIyY1jTZDElT/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nKC9e1RjUNIyY1G447lba",
+              "source_type": "card",
+              "transfer_group": "177794"
+            },
+            {
+              "id": "tr_2N8nK99e1RjUNIyY1RIIF7TM",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nK99e1RjUNIyY1DzRna3H",
+              "created": 1684341337,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nK9S4gcql7bLm5FgIIdfe",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nK99e1RjUNIyY1RIIF7TM/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nK99e1RjUNIyY1XJm7H66",
+              "source_type": "card",
+              "transfer_group": "177793"
+            },
+            {
+              "id": "tr_2N8nJn9e1RjUNIyY1hUsX8yD",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nJn9e1RjUNIyY1vb4U3es",
+              "created": 1684341316,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nJoS4gcql7bLmGiowH1Pt",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nJn9e1RjUNIyY1hUsX8yD/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nJn9e1RjUNIyY1W12sfzB",
+              "source_type": "card",
+              "transfer_group": "177792"
+            },
+            {
+              "id": "tr_2N8nJh9e1RjUNIyY1aVhAbeZ",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nJh9e1RjUNIyY1ArzhSA0",
+              "created": 1684341310,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nJiS4gcql7bLmqNLqIgfH",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nJh9e1RjUNIyY1aVhAbeZ/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nJh9e1RjUNIyY14Ek4wjS",
+              "source_type": "card",
+              "transfer_group": "177790"
+            },
+            {
+              "id": "tr_2N8nJg9e1RjUNIyY0i9dWrx0",
+              "object": "transfer",
+              "amount": 57,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nJg9e1RjUNIyY0MG0QKOx",
+              "created": 1684341308,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nJgS4gcql7bLmbG14FM3a",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nJg9e1RjUNIyY0i9dWrx0/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nJg9e1RjUNIyY0TxP9OF5",
+              "source_type": "card",
+              "transfer_group": "177789"
+            },
+            {
+              "id": "tr_2N8nJV9e1RjUNIyY0GCwzHwK",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nJV9e1RjUNIyY0bjb9Otp",
+              "created": 1684341297,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nJVS4gcql7bLmG8tJLOxw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nJV9e1RjUNIyY0GCwzHwK/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nJV9e1RjUNIyY0EMz5STG",
+              "source_type": "card",
+              "transfer_group": "177787"
+            },
+            {
+              "id": "tr_2N8nHA9e1RjUNIyY19mW5KPY",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nHA9e1RjUNIyY1Kg9fosI",
+              "created": 1684341152,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nHAS4gcql7bLm3QffOXls",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nHA9e1RjUNIyY19mW5KPY/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nHA9e1RjUNIyY14hqKNEI",
+              "source_type": "card",
+              "transfer_group": "177783"
+            },
+            {
+              "id": "tr_2N8nH99e1RjUNIyY0QjzaLbk",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nH99e1RjUNIyY0kKooEd0",
+              "created": 1684341151,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nH9S4gcql7bLmXOgyUGYs",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nH99e1RjUNIyY0QjzaLbk/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nH99e1RjUNIyY0M1KaYga",
+              "source_type": "card",
+              "transfer_group": "177782"
+            },
+            {
+              "id": "tr_2N8nH39e1RjUNIyY1dziUBJA",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nH39e1RjUNIyY19KjQNNe",
+              "created": 1684341145,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nH3S4gcql7bLmO44wWGTs",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nH39e1RjUNIyY1dziUBJA/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nH39e1RjUNIyY1fEWkJYs",
+              "source_type": "card",
+              "transfer_group": "177780"
+            },
+            {
+              "id": "tr_2N8nGs9e1RjUNIyY09gMFb7w",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nGs9e1RjUNIyY0pBCI3bf",
+              "created": 1684341135,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nGtS4gcql7bLmuzM0BtJr",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nGs9e1RjUNIyY09gMFb7w/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nGs9e1RjUNIyY09V9vbub",
+              "source_type": "card",
+              "transfer_group": "177779"
+            },
+            {
+              "id": "tr_2N8nGm9e1RjUNIyY1pmU9Irj",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nGm9e1RjUNIyY1Hg1Lyh0",
+              "created": 1684341129,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nGnS4gcql7bLmmSU78L7i",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nGm9e1RjUNIyY1pmU9Irj/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nGm9e1RjUNIyY1dXKnrvo",
+              "source_type": "card",
+              "transfer_group": "177776"
+            },
+            {
+              "id": "tr_2N8nEF9e1RjUNIyY1Njld9C8",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nEF9e1RjUNIyY1KNjf9WK",
+              "created": 1684340971,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nEFS4gcql7bLmI9WGTLJn",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nEF9e1RjUNIyY1Njld9C8/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nEF9e1RjUNIyY1DXye4G4",
+              "source_type": "card",
+              "transfer_group": "177773"
+            },
+            {
+              "id": "tr_2N8nCc9e1RjUNIyY1XLujh4e",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 2583,
+              "balance_transaction": "txn_2N8nCc9e1RjUNIyY1mgE4qW4",
+              "created": 1684340871,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nCdS4gcql7bLm1KxBzqUQ",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8nEN9e1RjUNIyYnvvxC3b2",
+                    "object": "transfer_reversal",
+                    "amount": 2583,
+                    "balance_transaction": "txn_0N8nEN9e1RjUNIyYVN6PN0Rg",
+                    "created": 1684340979,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8nENS4gcql7bLmpmRBAYN2",
+                    "metadata": {},
+                    "source_refund": "re_2N8nCc9e1RjUNIyY17391lFv",
+                    "transfer": "tr_2N8nCc9e1RjUNIyY1XLujh4e"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8nCc9e1RjUNIyY1XLujh4e/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N8nCc9e1RjUNIyY1WeihLvZ",
+              "source_type": "card",
+              "transfer_group": "177765"
+            },
+            {
+              "id": "tr_2N8nBr9e1RjUNIyY1lEusYes",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nBr9e1RjUNIyY1HfQQoR1",
+              "created": 1684340823,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nBrS4gcql7bLmPzhBlc9T",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nBr9e1RjUNIyY1lEusYes/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nBr9e1RjUNIyY1PF5v9NM",
+              "source_type": "card",
+              "transfer_group": "177760"
+            },
+            {
+              "id": "tr_2N8nBI9e1RjUNIyY1oqx3Y6W",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nBI9e1RjUNIyY1Xm6nC1o",
+              "created": 1684340789,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nBJS4gcql7bLmkgKrlDRe",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nBI9e1RjUNIyY1oqx3Y6W/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nBI9e1RjUNIyY1yao7jgw",
+              "source_type": "card",
+              "transfer_group": "177751"
+            },
+            {
+              "id": "tr_2N8nBH9e1RjUNIyY10iC4Tja",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8nBH9e1RjUNIyY1AmVEPmI",
+              "created": 1684340788,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8nBIS4gcql7bLm6Eq5gFr6",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8nBH9e1RjUNIyY10iC4Tja/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8nBH9e1RjUNIyY1ZJvMJQJ",
+              "source_type": "card",
+              "transfer_group": "177750"
+            },
+            {
+              "id": "tr_2N8mjt9e1RjUNIyY1lR7tABR",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 8620,
+              "balance_transaction": "txn_2N8mjt9e1RjUNIyY13KR33Zh",
+              "created": 1684339090,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8mjuS4gcql7bLmRyejtNWy",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8nBg9e1RjUNIyYxQhZT4a1",
+                    "object": "transfer_reversal",
+                    "amount": 8620,
+                    "balance_transaction": "txn_0N8nBg9e1RjUNIyYVeWYptDM",
+                    "created": 1684340812,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8nBgS4gcql7bLmf6okNvCP",
+                    "metadata": {},
+                    "source_refund": "re_2N8mjt9e1RjUNIyY1tOVmrdM",
+                    "transfer": "tr_2N8mjt9e1RjUNIyY1lR7tABR"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8mjt9e1RjUNIyY1lR7tABR/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8mjt9e1RjUNIyY1IShofF5",
+              "source_type": "card",
+              "transfer_group": "177749"
+            },
+            {
+              "id": "tr_2N8mS89e1RjUNIyY0ot5kdqX",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8mS89e1RjUNIyY0zXFFlRc",
+              "created": 1684337988,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8mS8S4gcql7bLmxnHGKDP0",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8mS89e1RjUNIyY0ot5kdqX/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8mS89e1RjUNIyY0GCJVlcb",
+              "source_type": "card",
+              "transfer_group": "177748"
+            },
+            {
+              "id": "tr_2N8m649e1RjUNIyY1oHOfMvn",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8m649e1RjUNIyY16zUe1Rb",
+              "created": 1684336621,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8m65S4gcql7bLmZqImKTGY",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8m649e1RjUNIyY1oHOfMvn/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8m649e1RjUNIyY1tcdt6Si",
+              "source_type": "card",
+              "transfer_group": "177747"
+            },
+            {
+              "id": "tr_2N8m4w9e1RjUNIyY1bYGs8ZC",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 64345,
+              "balance_transaction": "txn_2N8m4w9e1RjUNIyY1VK6sUtL",
+              "created": 1684336550,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8m4wS4gcql7bLm3qdVbVbk",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8m6N9e1RjUNIyYSp9WVHeI",
+                    "object": "transfer_reversal",
+                    "amount": 64345,
+                    "balance_transaction": "txn_0N8m6O9e1RjUNIyYBvIwTJAL",
+                    "created": 1684336639,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8m6NS4gcql7bLm6g0qXilD",
+                    "metadata": {},
+                    "source_refund": "re_2N8m4w9e1RjUNIyY11Ce7qWP",
+                    "transfer": "tr_2N8m4w9e1RjUNIyY1bYGs8ZC"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8m4w9e1RjUNIyY1bYGs8ZC/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8m4w9e1RjUNIyY1xG4zVuC",
+              "source_type": "card",
+              "transfer_group": "177745"
+            },
+            {
+              "id": "tr_2N8l4n9e1RjUNIyY1BRcmOLi",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8l4n9e1RjUNIyY1gtWac69",
+              "created": 1684332698,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8l4oS4gcql7bLmqZq4M4qs",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8l4n9e1RjUNIyY1BRcmOLi/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8l4n9e1RjUNIyY12v6e8oL",
+              "source_type": "card",
+              "transfer_group": "177717"
+            },
+            {
+              "id": "tr_2N8l3J9e1RjUNIyY1Cdhu9KH",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 841,
+              "balance_transaction": "txn_2N8l3J9e1RjUNIyY1hxBexff",
+              "created": 1684332606,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8l3KS4gcql7bLmp1sNownQ",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8l3b9e1RjUNIyYtzSu0R9M",
+                    "object": "transfer_reversal",
+                    "amount": 841,
+                    "balance_transaction": "txn_0N8l3b9e1RjUNIyYxevCaKZE",
+                    "created": 1684332623,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8l3bS4gcql7bLmeHVsGJHA",
+                    "metadata": {},
+                    "source_refund": "re_2N8l3J9e1RjUNIyY1Ubq4weI",
+                    "transfer": "tr_2N8l3J9e1RjUNIyY1Cdhu9KH"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8l3J9e1RjUNIyY1Cdhu9KH/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N8l3J9e1RjUNIyY1tIvPnCz",
+              "source_type": "card",
+              "transfer_group": "177709"
+            },
+            {
+              "id": "tr_2N8l2k9e1RjUNIyY0wDjIef4",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 49020,
+              "balance_transaction": "txn_2N8l2k9e1RjUNIyY0I9vq9YE",
+              "created": 1684332571,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8l2lS4gcql7bLmyy7m2eWb",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8l349e1RjUNIyYp8YcBoIG",
+                    "object": "transfer_reversal",
+                    "amount": 49020,
+                    "balance_transaction": "txn_0N8l359e1RjUNIyYamCzLNcg",
+                    "created": 1684332590,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8l34S4gcql7bLmb9Re82TU",
+                    "metadata": {},
+                    "source_refund": "re_2N8l2k9e1RjUNIyY0Zm3NNIx",
+                    "transfer": "tr_2N8l2k9e1RjUNIyY0wDjIef4"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8l2k9e1RjUNIyY0wDjIef4/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8l2k9e1RjUNIyY0dAyb7I2",
+              "source_type": "card",
+              "transfer_group": "177706"
+            },
+            {
+              "id": "tr_2N8l2Y9e1RjUNIyY0NDamhhI",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 2583,
+              "balance_transaction": "txn_2N8l2Y9e1RjUNIyY0ggsQJmJ",
+              "created": 1684332558,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8l2YS4gcql7bLm4YVHLh91",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8l499e1RjUNIyY423OcAeB",
+                    "object": "transfer_reversal",
+                    "amount": 2583,
+                    "balance_transaction": "txn_0N8l4A9e1RjUNIyYd5FA9SpS",
+                    "created": 1684332657,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8l49S4gcql7bLmkWkiorR7",
+                    "metadata": {},
+                    "source_refund": "re_2N8l2Y9e1RjUNIyY0c77R4MY",
+                    "transfer": "tr_2N8l2Y9e1RjUNIyY0NDamhhI"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8l2Y9e1RjUNIyY0NDamhhI/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N8l2Y9e1RjUNIyY08mc4XAY",
+              "source_type": "card",
+              "transfer_group": "177704"
+            },
+            {
+              "id": "tr_2N8kDx9e1RjUNIyY04h2JJ7C",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8kDx9e1RjUNIyY0FSWex7o",
+              "created": 1684329422,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8kDyS4gcql7bLmO3LCVQGO",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8kDx9e1RjUNIyY04h2JJ7C/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8kDx9e1RjUNIyY0FCZBX2v",
+              "source_type": "card",
+              "transfer_group": "177693"
+            },
+            {
+              "id": "tr_2N8kDM9e1RjUNIyY0S6jAGns",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8kDM9e1RjUNIyY0k8cnjBG",
+              "created": 1684329385,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8kDNS4gcql7bLmvJCkvmen",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8kDM9e1RjUNIyY0S6jAGns/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8kDM9e1RjUNIyY03p8E0Ha",
+              "source_type": "card",
+              "transfer_group": "177691"
+            },
+            {
+              "id": "tr_2N8kCW9e1RjUNIyY0ptKPrpx",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8kCW9e1RjUNIyY092HjOW4",
+              "created": 1684329332,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8kCWS4gcql7bLmTcMe7QWs",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8kCW9e1RjUNIyY0ptKPrpx/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8kCW9e1RjUNIyY0V9Tau8C",
+              "source_type": "card",
+              "transfer_group": "177686"
+            },
+            {
+              "id": "tr_2N8kBc9e1RjUNIyY0HKW6Ruc",
+              "object": "transfer",
+              "amount": 86983,
+              "amount_reversed": 86983,
+              "balance_transaction": "txn_2N8kBc9e1RjUNIyY0jRCku62",
+              "created": 1684329277,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8kBdS4gcql7bLmPkkrqFgt",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8kCT9e1RjUNIyY8huEwwjz",
+                    "object": "transfer_reversal",
+                    "amount": 79321,
+                    "balance_transaction": "txn_0N8kCT9e1RjUNIyY9Z9JD6SQ",
+                    "created": 1684329329,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8kCTS4gcql7bLmZJWthiEk",
+                    "metadata": {},
+                    "source_refund": "re_2N8kBc9e1RjUNIyY0JxWjSdg",
+                    "transfer": "tr_2N8kBc9e1RjUNIyY0HKW6Ruc"
+                  },
+                  {
+                    "id": "trr_0N8kBx9e1RjUNIyY977TbY8D",
+                    "object": "transfer_reversal",
+                    "amount": 7662,
+                    "balance_transaction": "txn_0N8kBx9e1RjUNIyYXnSNtbWV",
+                    "created": 1684329297,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8kBxS4gcql7bLmboddsi9o",
+                    "metadata": {},
+                    "source_refund": "re_2N8kBc9e1RjUNIyY0gB7TdKt",
+                    "transfer": "tr_2N8kBc9e1RjUNIyY0HKW6Ruc"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 2,
+                "url": "/v1/transfers/tr_2N8kBc9e1RjUNIyY0HKW6Ruc/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N8kBc9e1RjUNIyY0Gfsova4",
+              "source_type": "card",
+              "transfer_group": "177680"
+            },
+            {
+              "id": "tr_2N8k929e1RjUNIyY00rhFAkQ",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 2583,
+              "balance_transaction": "txn_2N8k929e1RjUNIyY0zu7qO0Y",
+              "created": 1684329116,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8k92S4gcql7bLmCluEK3Ge",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "trr_0N8kAZ9e1RjUNIyYU7Si1wMH",
+                    "object": "transfer_reversal",
+                    "amount": 2583,
+                    "balance_transaction": "txn_0N8kAa9e1RjUNIyY2Uyd7iGB",
+                    "created": 1684329211,
+                    "currency": "usd",
+                    "destination_payment_refund": "pyr_1N8kAZS4gcql7bLmB3ZMMn8M",
+                    "metadata": {},
+                    "source_refund": "re_2N8k929e1RjUNIyY00LokpLU",
+                    "transfer": "tr_2N8k929e1RjUNIyY00rhFAkQ"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/transfers/tr_2N8k929e1RjUNIyY00rhFAkQ/reversals"
+              },
+              "reversed": true,
+              "source_transaction": "ch_2N8k929e1RjUNIyY0px6Wq3j",
+              "source_type": "card",
+              "transfer_group": "177673"
+            },
+            {
+              "id": "tr_2N8k5g9e1RjUNIyY0osWitDz",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8k5g9e1RjUNIyY0FZjlUzx",
+              "created": 1684328909,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8k5hS4gcql7bLm7Ov81CLa",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8k5g9e1RjUNIyY0osWitDz/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8k5g9e1RjUNIyY01FjIxlz",
+              "source_type": "card",
+              "transfer_group": "177666"
+            },
+            {
+              "id": "tr_2N8k5f9e1RjUNIyY1dcaMC50",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8k5f9e1RjUNIyY1YCtVDpa",
+              "created": 1684328908,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8k5gS4gcql7bLmFUJc62Rw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8k5f9e1RjUNIyY1dcaMC50/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8k5f9e1RjUNIyY19CCLiI7",
+              "source_type": "card",
+              "transfer_group": "177665"
+            },
+            {
+              "id": "tr_2N8k5f9e1RjUNIyY1uefAAR9",
+              "object": "transfer",
+              "amount": 3454,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8k5f9e1RjUNIyY16W9dVwr",
+              "created": 1684328907,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8k5fS4gcql7bLmNull8cnw",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8k5f9e1RjUNIyY1uefAAR9/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8k5f9e1RjUNIyY1VWPr7W6",
+              "source_type": "card",
+              "transfer_group": "177664"
+            },
+            {
+              "id": "tr_2N8k2O9e1RjUNIyY11Ix2YLa",
+              "object": "transfer",
+              "amount": 2583,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8k2O9e1RjUNIyY1O8pSZf6",
+              "created": 1684328704,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8k2OS4gcql7bLmpADp0TqZ",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8k2O9e1RjUNIyY11Ix2YLa/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8k2O9e1RjUNIyY1Ur0s00x",
+              "source_type": "card",
+              "transfer_group": "177660"
+            },
+            {
+              "id": "tr_2N8hXi9e1RjUNIyY1XEAyNwI",
+              "object": "transfer",
+              "amount": 841,
+              "amount_reversed": 0,
+              "balance_transaction": "txn_2N8hXi9e1RjUNIyY1RgTvDjb",
+              "created": 1684319115,
+              "currency": "usd",
+              "description": null,
+              "destination": "acct_1MdawPS4gcql7bLm",
+              "destination_payment": "py_1N8hXjS4gcql7bLmwySR0bAd",
+              "livemode": false,
+              "metadata": {},
+              "reversals": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/transfers/tr_2N8hXi9e1RjUNIyY1XEAyNwI/reversals"
+              },
+              "reversed": false,
+              "source_transaction": "ch_2N8hXi9e1RjUNIyY1BQkX33k",
+              "source_type": "card",
+              "transfer_group": "177645"
+            }
+          ],
+          "has_more": true,
+          "url": "/v1/transfers"
+        }
+  recorded_at: Fri, 06 Oct 2023 00:00:00 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/transfers/tr_2N91qf9e1RjUNIyY0ONPodmq/reversals
+    body:
+      encoding: UTF-8
+      string: amount=1000
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_8SrPohgwp0T03S","request_duration_ms":1185}}'
+      Idempotency-Key:
+      - 70616720-76a6-416e-8e96-b2df5393042e
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:58:56 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '348'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Ftransfers%2F%3Aid%2Freversals;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Idempotency-Key:
+      - 70616720-76a6-416e-8e96-b2df5393042e
+      Original-Request:
+      - req_Exdrch5lxEG2FT
+      Request-Id:
+      - req_Exdrch5lxEG2FT
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "trr_0O6ynk9e1RjUNIyYCVl3lO83",
+          "object": "transfer_reversal",
+          "amount": 1000,
+          "balance_transaction": "txn_0O6ynk9e1RjUNIyY19vZxjeN",
+          "created": 1698685136,
+          "currency": "usd",
+          "destination_payment_refund": "pyr_1O6ynjS4gcql7bLmySnMMdxk",
+          "metadata": {},
+          "source_refund": null,
+          "transfer": "tr_2N91qf9e1RjUNIyY0ONPodmq"
+        }
+  recorded_at: Fri, 06 Oct 2023 00:00:00 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/refunds/pyr_1O6ynjS4gcql7bLmySnMMdxk
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_Exdrch5lxEG2FT","request_duration_ms":1139}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1MdawPS4gcql7bLm
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:58:57 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '458'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Frefunds%2F%3Arefund; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_CaA534ScRmcqVp
+      Stripe-Account:
+      - acct_1MdawPS4gcql7bLm
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "pyr_1O6ynjS4gcql7bLmySnMMdxk",
+          "object": "refund",
+          "amount": 1000,
+          "balance_transaction": "txn_1O6ynkS4gcql7bLmoA3ab9iU",
+          "charge": "py_1N91qgS4gcql7bLmKFnyaT14",
+          "created": 1698685135,
+          "currency": "usd",
+          "metadata": {},
+          "payment_intent": null,
+          "reason": null,
+          "receipt_number": null,
+          "source_transfer_reversal": "trr_0O6ynk9e1RjUNIyYCVl3lO83",
+          "status": "succeeded",
+          "transfer_reversal": "trr_0O6ynk9e1RjUNIyYCVl3lO83"
+        }
+  recorded_at: Fri, 06 Oct 2023 00:00:00 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/balance_transactions/txn_1O6ynkS4gcql7bLmoA3ab9iU
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_CaA534ScRmcqVp","request_duration_ms":345}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1MdawPS4gcql7bLm
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 16:58:57 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '416'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fbalance_transactions%2F%3Aid;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Request-Id:
+      - req_LTwqSyJCe4bOhV
+      Stripe-Account:
+      - acct_1MdawPS4gcql7bLm
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "txn_1O6ynkS4gcql7bLmoA3ab9iU",
+          "object": "balance_transaction",
+          "amount": -1000,
+          "available_on": 1698685135,
+          "created": 1698685135,
+          "currency": "usd",
+          "description": "REFUND FOR PAYMENT",
+          "exchange_rate": null,
+          "fee": 0,
+          "fee_details": [],
+          "net": -1000,
+          "reporting_category": "refund",
+          "source": "pyr_1O6ynjS4gcql7bLmySnMMdxk",
+          "status": "available",
+          "type": "payment_refund"
+        }
+  recorded_at: Fri, 06 Oct 2023 00:00:00 GMT
+recorded_with: VCR 6.2.0

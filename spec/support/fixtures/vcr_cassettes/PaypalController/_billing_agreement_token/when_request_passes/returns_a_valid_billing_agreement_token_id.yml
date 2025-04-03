@@ -1,0 +1,54 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/billing-agreements/agreement-tokens
+    body:
+      encoding: UTF-8
+      string: '{"payer":{"payment_method":"PAYPAL"},"plan":{"type":"CHANNEL_INITIATED_BILLING","merchant_preferences":{"return_url":"https://example.com/return","cancel_url":"https://example.com/cancel","notify_url":"https://example.com/notify","accepted_pymt_type":"INSTANT","skip_shipping_address":true}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAEDl9G2o2QaCF5yJlFoyyqpFNEjVza7fkmWy0mTpAtIZCPPS0b_gUu3UDBn-t1YMS_KFdJr-fmBQfSCujRn5RsjASG0sA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1572552322'
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.5.8
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.5.8p224-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '298'
+      Content-Type:
+      - application/json;charset=UTF-8
+      Date:
+      - Sun, 26 Jul 2020 09:20:17 GMT
+      Paypal-Debug-Id:
+      - e4a6f5be1d47d
+    body:
+      encoding: UTF-8
+      string: '{"links":[{"href":"https://www.sandbox.paypal.com/agreements/approve?ba_token=BA-7TR16712TA5219609","rel":"approval_url","method":"POST"},{"href":"https://api.sandbox.paypal.com/v1/billing-agreements/BA-7TR16712TA5219609/agreements","rel":"self","method":"POST"}],"token_id":"BA-7TR16712TA5219609"}'
+  recorded_at: Sun, 26 Jul 2020 09:20:17 GMT
+recorded_with: VCR 6.0.0

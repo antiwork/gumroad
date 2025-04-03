@@ -1,0 +1,8 @@
+<%= header_section("Your requested data") %>
+<div>
+  <% if @payout_data_url.present? %>
+    <p>Please click this <%= link_to "link", @payout_data_url %> to download the payout data you requested.</p>
+  <% else %>
+    <p>We've attached the payout data you requested to this email.</p>
+  <% end %>
+</div>

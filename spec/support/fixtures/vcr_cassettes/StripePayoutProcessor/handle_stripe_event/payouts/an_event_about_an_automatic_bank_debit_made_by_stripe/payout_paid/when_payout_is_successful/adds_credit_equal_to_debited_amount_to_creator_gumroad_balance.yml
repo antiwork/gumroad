@@ -1,0 +1,319 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/payouts/po_1MjvG6S3ZeAbEknFg2elYwet
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_cEZvdabZAThsWu","request_duration_ms":347}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1Mid1dS3ZeAbEknF
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 18:57:38 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '665'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayouts%2F%3Apayout; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_hZAfS5oKB9af9R
+      Stripe-Account:
+      - acct_1Mid1dS3ZeAbEknF
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "po_1MjvG6S3ZeAbEknFg2elYwet",
+          "object": "payout",
+          "amount": -10000,
+          "arrival_date": 1678406400,
+          "automatic": true,
+          "balance_transaction": "txn_1MjvG6S3ZeAbEknFPvZRik6K",
+          "created": 1678413638,
+          "currency": "usd",
+          "description": "STRIPE PAYOUT",
+          "destination": "ba_1Mid1dS3ZeAbEknFLNPfy4rl",
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "livemode": false,
+          "metadata": {},
+          "method": "standard",
+          "original_payout": null,
+          "reconciliation_status": "completed",
+          "reversed_by": null,
+          "source_type": "card",
+          "statement_descriptor": null,
+          "status": "paid",
+          "type": "bank_account"
+        }
+  recorded_at: Mon, 30 Oct 2023 18:57:38 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/payouts/po_1MjvG6S3ZeAbEknFg2elYwet?expand%5B%5D=balance_transaction
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_hZAfS5oKB9af9R","request_duration_ms":342}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1Mid1dS3ZeAbEknF
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 18:57:38 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1069'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayouts%2F%3Apayout; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_ABoBnIvAmG2q0O
+      Stripe-Account:
+      - acct_1Mid1dS3ZeAbEknF
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "po_1MjvG6S3ZeAbEknFg2elYwet",
+          "object": "payout",
+          "amount": -10000,
+          "arrival_date": 1678406400,
+          "automatic": true,
+          "balance_transaction": {
+            "id": "txn_1MjvG6S3ZeAbEknFPvZRik6K",
+            "object": "balance_transaction",
+            "amount": 10000,
+            "available_on": 1678413638,
+            "created": 1678413638,
+            "currency": "usd",
+            "description": "STRIPE PAYOUT",
+            "exchange_rate": null,
+            "fee": 0,
+            "fee_details": [],
+            "net": 10000,
+            "reporting_category": "payout",
+            "source": "po_1MjvG6S3ZeAbEknFg2elYwet",
+            "status": "available",
+            "type": "payout"
+          },
+          "created": 1678413638,
+          "currency": "usd",
+          "description": "STRIPE PAYOUT",
+          "destination": "ba_1Mid1dS3ZeAbEknFLNPfy4rl",
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "livemode": false,
+          "metadata": {},
+          "method": "standard",
+          "original_payout": null,
+          "reconciliation_status": "completed",
+          "reversed_by": null,
+          "source_type": "card",
+          "statement_descriptor": null,
+          "status": "paid",
+          "type": "bank_account"
+        }
+  recorded_at: Mon, 30 Oct 2023 18:57:38 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/payouts/po_1MjvG6S3ZeAbEknFg2elYwet
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_ABoBnIvAmG2q0O","request_duration_ms":353}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1Mid1dS3ZeAbEknF
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Mon, 30 Oct 2023 18:57:39 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '665'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayouts%2F%3Apayout; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_ywmm5YYKKyYdQL
+      Stripe-Account:
+      - acct_1Mid1dS3ZeAbEknF
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "po_1MjvG6S3ZeAbEknFg2elYwet",
+          "object": "payout",
+          "amount": -10000,
+          "arrival_date": 1678406400,
+          "automatic": true,
+          "balance_transaction": "txn_1MjvG6S3ZeAbEknFPvZRik6K",
+          "created": 1678413638,
+          "currency": "usd",
+          "description": "STRIPE PAYOUT",
+          "destination": "ba_1Mid1dS3ZeAbEknFLNPfy4rl",
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "livemode": false,
+          "metadata": {},
+          "method": "standard",
+          "original_payout": null,
+          "reconciliation_status": "completed",
+          "reversed_by": null,
+          "source_type": "card",
+          "statement_descriptor": null,
+          "status": "paid",
+          "type": "bank_account"
+        }
+  recorded_at: Mon, 30 Oct 2023 18:57:39 GMT
+recorded_with: VCR 6.2.0

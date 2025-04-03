@@ -1,0 +1,9 @@
+<h2><%= @subject %></h2>
+
+<% if @post_purchase_custom_fields_attributes.present? %>
+  <%= render("customer_mailer/receipt/attributes", attributes: @post_purchase_custom_fields_attributes) %>
+<% end %>
+
+<h3>Customer information</h3>
+
+<%= render("customer_mailer/receipt/attributes", attributes: @customer_information_attributes) %>

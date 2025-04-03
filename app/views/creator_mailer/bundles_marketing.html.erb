@@ -1,0 +1,40 @@
+<%= header_section("Ready-made bundles for you!") %>
+<div>
+  <p>We've put together some awesome bundles of your top products - they're ready and waiting for you. Gumroad creators have already made over $300,000 selling bundles. Launch your bundles now with just a few clicks!</p>
+  <% @bundles.each do |bundle| %>
+    <div class="item">
+      <div class="product-checkout-cell">
+        <div class="figure">
+          <%= image_tag(asset_url("bundles_marketing/#{bundle[:type]}.png")) %>
+        </div>
+        <div class="section">
+          <div class="content">
+            <div class="section">
+              <h4><%= Product::BundlesMarketing::BUNDLE_NAMES[bundle[:type]] %></h4>
+            </div>
+            <div class="section">
+              <div class="footer">
+                <s><%= MoneyFormatter.format(bundle[:price], @currency_type, no_cents_if_whole: true, symbol: true) %></s>
+                <%= MoneyFormatter.format(bundle[:discounted_price], @currency_type, no_cents_if_whole: true, symbol: true) %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="details">
+        <div>
+          <p>This bundle contains...</p>
+          <ul>
+            <% bundle[:products].each do |product| %>
+              <li>
+                <%= link_to product[:name], product[:url] %>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+        <%= link_to "Edit and launch", create_from_email_bundles_url(type: bundle[:type], price: bundle[:discounted_price], products: bundle[:products].map { _1[:id] }), class: "button primary" %>
+      </div>
+    </div>
+  <% end %>
+</div>

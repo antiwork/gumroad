@@ -1,0 +1,218 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://ec.europa.eu/taxation_customs/vies/checkVatService.wsdl
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      Connection:
+      - close
+      Host:
+      - ec.europa.eu
+      User-Agent:
+      - http.rb/4.4.1
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 21 Dec 2020 22:20:31 GMT
+      Accept-Ranges:
+      - bytes
+      Content-Length:
+      - '11631'
+      Last-Modified:
+      - Tue, 08 Dec 2020 14:05:51 GMT
+      Server:
+      - Europa
+      Connection:
+      - close
+    body:
+      encoding: ASCII-8BIT
+      string: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<wsdl:definitions targetNamespace=\"urn:ec.europa.eu:taxud:vies:services:checkVat\"
+        xmlns:tns1=\"urn:ec.europa.eu:taxud:vies:services:checkVat:types\" xmlns:soapenc=\"http://schemas.xmlsoap.org/soap/encoding/\"
+        xmlns:impl=\"urn:ec.europa.eu:taxud:vies:services:checkVat\" xmlns:apachesoap=\"http://xml.apache.org/xml-soap\"
+        xmlns:wsdl=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"
+        xmlns:wsdlsoap=\"http://schemas.xmlsoap.org/wsdl/soap/\">\n  <xsd:documentation>\n\t
+        The objective of this Internet site is to allow persons involved in the intra-Community
+        supply of goods or of services to obtain confirmation of the validity of the
+        VAT identification number of any specified person, in accordance to article
+        31 of Council Regulation (EC) No. 904/2010 of 7 October 2010. \\n\n    Any
+        other use and any extraction and use of the data which is not in conformity
+        with the objective of this site is strictly forbidden. \n    Any retransmission
+        of the contents of this site, whether for a commercial purpose or otherwise,
+        as well as any more general use other than as far as is necessary to support
+        the activity of a legitimate user (for example: to draw up their own invoices)
+        is expressly forbidden. In addition, any copying or reproduction of the contents
+        of this site is strictly forbidden. \n    The European Commission maintains
+        this website to enhance the access by taxable persons making intra-Community
+        supplies to verification of their customers' VAT identification numbers. Our
+        goal is to supply instantaneous and accurate information. \n    However the
+        Commission accepts no responsibility or liability whatsoever with regard to
+        the information obtained using this site. This information: \n    - is obtained
+        from Member States' databases over which the Commission services have no control
+        and for which the Commission assumes no responsibility; it is the responsibility
+        of the Member States to keep their databases complete, accurate and up to
+        date; \n    - is not professional or legal advice (if you need specific advice,
+        you should always consult a suitably qualified professional); \n    - does
+        not in itself give a right to exempt intra-Community supplies from Value Added
+        Tax; \n    - does not change any obligations imposed on taxable persons in
+        relation to intra-Community supplies. \n    It is our goal to minimise disruption
+        caused by technical errors. However some data or information on our site may
+        have been created or structured in files or formats which are not error-free
+        and we cannot guarantee that our service will not be interrupted or otherwise
+        affected by such problems. The Commission accepts no responsibility with regard
+        to such problems incurred as a result of using this site or any linked external
+        sites. \n    This disclaimer is not intended to limit the liability of the
+        Commission in contravention of any requirements laid down in applicable national
+        law nor to exclude its liability for matters which may not be excluded under
+        that law. \n    Collecting or handling personal data falls under the Data
+        Protection Notice. This data protection declaration explains the Processing
+        in the VIES-on-the-web Internet Website of VAT Identification Numbers for
+        intra-Community Transaction on Goods or Services. Details of your legal rights
+        associated with the collection, processing and use of this data are also provided:
+        http://ec.europa.eu/dpo-register/details.htm?id=40647 . \n    \n    Usage:
+        \n    The countryCode input parameter must follow the pattern [A-Z]{2} \n
+        \   The vatNumber input parameter must follow the pattern [0-9A-Za-z\\+\\*\\.]{2,12}
+        \n    In case of problems, the returned FaultString can take the following
+        specific values: \n    - INVALID_INPUT: The provided CountryCode is invalid
+        or the VAT number is empty; \n    - GLOBAL_MAX_CONCURRENT_REQ: Your Request
+        for VAT validation has not been processed; the maximum number of concurrent
+        requests has been reached. Please re-submit your request later or contact
+        TAXUD-VIESWEB@ec.europa.eu for further information\": Your request cannot
+        be processed due to high traffic on the web application. Please try again
+        later; \n    - MS_MAX_CONCURRENT_REQ: Your Request for VAT validation has
+        not been processed; the maximum number of concurrent requests for this Member
+        State has been reached. Please re-submit your request later or contact TAXUD-VIESWEB@ec.europa.eu
+        for further information\": Your request cannot be processed due to high traffic
+        towards the Member State you are trying to reach. Please try again later.
+        \n    - SERVICE_UNAVAILABLE: an error was encountered either at the network
+        level or the Web application level, try again later; \n    - MS_UNAVAILABLE:
+        The application at the Member State is not replying or not available. Please
+        refer to the Technical Information page to check the status of the requested
+        Member State, try again later; \n    - TIMEOUT: The application did not receive
+        a reply within the allocated time period, try again later. \n\t</xsd:documentation>\n
+        \ \n  <wsdl:types>\n    <xsd:schema attributeFormDefault=\"qualified\" elementFormDefault=\"qualified\"
+        targetNamespace=\"urn:ec.europa.eu:taxud:vies:services:checkVat:types\" xmlns=\"urn:ec.europa.eu:taxud:vies:services:checkVat:types\">\n\t\t\t<xsd:element
+        name=\"checkVat\">\n\t\t\t\t<xsd:complexType>\n\t\t\t\t\t<xsd:sequence>\n\t\t\t\t\t\t<xsd:element
+        name=\"countryCode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element name=\"vatNumber\"
+        type=\"xsd:string\"/>\n\t\t\t\t\t</xsd:sequence>\n\t\t\t\t</xsd:complexType>\n\t\t\t</xsd:element>\n\t\t\t<xsd:element
+        name=\"checkVatResponse\">\n\t\t\t\t<xsd:complexType>\n\t\t\t\t\t<xsd:sequence>\n\t\t\t\t\t\t<xsd:element
+        name=\"countryCode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element name=\"vatNumber\"
+        type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element name=\"requestDate\" type=\"xsd:date\"/>\n\t\t\t\t\t\t<xsd:element
+        name=\"valid\" type=\"xsd:boolean\"/>\n\t\t\t\t\t\t<xsd:element maxOccurs=\"1\"
+        minOccurs=\"0\" name=\"name\" nillable=\"true\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"address\" nillable=\"true\" type=\"xsd:string\"/>\n\t\t\t\t\t</xsd:sequence>\n\t\t\t\t</xsd:complexType>\n\t\t\t</xsd:element>\n\t\t\t<xsd:element
+        name=\"checkVatApprox\">\n\t\t\t\t<xsd:complexType>\n\t\t\t\t\t<xsd:sequence>\n\t\t\t\t\t\t<xsd:element
+        name=\"countryCode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element name=\"vatNumber\"
+        type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element maxOccurs=\"1\" minOccurs=\"0\"
+        name=\"traderName\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element maxOccurs=\"1\"
+        minOccurs=\"0\" name=\"traderCompanyType\" type=\"tns1:companyTypeCode\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderStreet\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderPostcode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderCity\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"requesterCountryCode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"requesterVatNumber\" type=\"xsd:string\"/>\n\t\t\t\t\t</xsd:sequence>\n\t\t\t\t</xsd:complexType>\n\t\t\t</xsd:element>\n\t\t\t<xsd:element
+        name=\"checkVatApproxResponse\">\n\t\t\t\t<xsd:complexType>\n\t\t\t\t\t<xsd:sequence>\n\t\t\t\t\t\t<xsd:element
+        name=\"countryCode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element name=\"vatNumber\"
+        type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element name=\"requestDate\" type=\"xsd:date\"/>\n\t\t\t\t\t\t<xsd:element
+        name=\"valid\" type=\"xsd:boolean\"/>\n\t\t\t\t\t\t<xsd:element maxOccurs=\"1\"
+        minOccurs=\"0\" name=\"traderName\" nillable=\"true\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderCompanyType\" nillable=\"true\"
+        type=\"tns1:companyTypeCode\"/>\n\t\t\t\t\t\t<xsd:element maxOccurs=\"1\"
+        minOccurs=\"0\" name=\"traderAddress\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderStreet\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderPostcode\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderCity\" type=\"xsd:string\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderNameMatch\" type=\"tns1:matchCode\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderCompanyTypeMatch\" type=\"tns1:matchCode\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderStreetMatch\" type=\"tns1:matchCode\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderPostcodeMatch\" type=\"tns1:matchCode\"/>\n\t\t\t\t\t\t<xsd:element
+        maxOccurs=\"1\" minOccurs=\"0\" name=\"traderCityMatch\" type=\"tns1:matchCode\"/>\n\t\t\t\t\t\t<xsd:element
+        name=\"requestIdentifier\" type=\"xsd:string\"/>\n\t\t\t\t\t</xsd:sequence>\n\t\t\t\t</xsd:complexType>\n\t\t\t</xsd:element>\n\t\t\t<xsd:simpleType
+        name=\"companyTypeCode\">\n\t\t\t\t<xsd:restriction base=\"xsd:string\">\n\t\t\t\t\t<xsd:pattern
+        value=\"[A-Z]{2}\\-[1-9][0-9]?\"/>\n\t\t\t\t</xsd:restriction>\n\t\t\t</xsd:simpleType>\n\t\t\t<xsd:simpleType
+        name=\"matchCode\">\n\t\t\t\t<xsd:restriction base=\"xsd:string\">\n\t\t\t\t\t<xsd:enumeration
+        value=\"1\">\n\t\t\t\t\t\t<xsd:annotation>\n\t\t\t\t\t\t\t<xsd:documentation>VALID</xsd:documentation>\n\t\t\t\t\t\t</xsd:annotation>\n\t\t\t\t\t</xsd:enumeration>\n\t\t\t\t\t<xsd:enumeration
+        value=\"2\">\n                        <xsd:annotation>\n                            <xsd:documentation>INVALID</xsd:documentation>\n
+        \                       </xsd:annotation>\n                    </xsd:enumeration>\n
+        \                   <xsd:enumeration value=\"3\">\n                        <xsd:annotation>\n
+        \                           <xsd:documentation>NOT_PROCESSED</xsd:documentation>\n
+        \                       </xsd:annotation>\n                    </xsd:enumeration>\n\t\t\t\t</xsd:restriction>\n\t\t\t</xsd:simpleType>\n\t\t</xsd:schema>\n
+        \ </wsdl:types>\n  <wsdl:message name=\"checkVatRequest\">\n    <wsdl:part
+        name=\"parameters\" element=\"tns1:checkVat\">\n    </wsdl:part>\n  </wsdl:message>\n
+        \ <wsdl:message name=\"checkVatApproxResponse\">\n    <wsdl:part name=\"parameters\"
+        element=\"tns1:checkVatApproxResponse\">\n    </wsdl:part>\n  </wsdl:message>\n
+        \ <wsdl:message name=\"checkVatApproxRequest\">\n    <wsdl:part name=\"parameters\"
+        element=\"tns1:checkVatApprox\">\n    </wsdl:part>\n  </wsdl:message>\n  <wsdl:message
+        name=\"checkVatResponse\">\n    <wsdl:part name=\"parameters\" element=\"tns1:checkVatResponse\">\n
+        \   </wsdl:part>\n  </wsdl:message>\n  <wsdl:portType name=\"checkVatPortType\">\n
+        \   <wsdl:operation name=\"checkVat\">\n      <wsdl:input name=\"checkVatRequest\"
+        message=\"impl:checkVatRequest\">\n    </wsdl:input>\n      <wsdl:output name=\"checkVatResponse\"
+        message=\"impl:checkVatResponse\">\n    </wsdl:output>\n    </wsdl:operation>\n
+        \   <wsdl:operation name=\"checkVatApprox\">\n      <wsdl:input name=\"checkVatApproxRequest\"
+        message=\"impl:checkVatApproxRequest\">\n    </wsdl:input>\n      <wsdl:output
+        name=\"checkVatApproxResponse\" message=\"impl:checkVatApproxResponse\">\n
+        \   </wsdl:output>\n    </wsdl:operation>\n  </wsdl:portType>\n  <wsdl:binding
+        name=\"checkVatBinding\" type=\"impl:checkVatPortType\">\n    <wsdlsoap:binding
+        style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/>\n
+        \   <wsdl:operation name=\"checkVat\">\n      <wsdlsoap:operation soapAction=\"\"/>\n
+        \     <wsdl:input name=\"checkVatRequest\">\n        <wsdlsoap:body use=\"literal\"/>\n
+        \     </wsdl:input>\n      <wsdl:output name=\"checkVatResponse\">\n        <wsdlsoap:body
+        use=\"literal\"/>\n      </wsdl:output>\n    </wsdl:operation>\n    <wsdl:operation
+        name=\"checkVatApprox\">\n      <wsdlsoap:operation soapAction=\"\"/>\n      <wsdl:input
+        name=\"checkVatApproxRequest\">\n        <wsdlsoap:body use=\"literal\"/>\n
+        \     </wsdl:input>\n      <wsdl:output name=\"checkVatApproxResponse\">\n
+        \       <wsdlsoap:body use=\"literal\"/>\n      </wsdl:output>\n    </wsdl:operation>\n
+        \ </wsdl:binding>\n  <wsdl:service name=\"checkVatService\">\n    <wsdl:port
+        name=\"checkVatPort\" binding=\"impl:checkVatBinding\">\n      <wsdlsoap:address
+        location=\"http://ec.europa.eu/taxation_customs/vies/services/checkVatService\"/>\n
+        \   </wsdl:port>\n  </wsdl:service>\n</wsdl:definitions>\n"
+  recorded_at: Mon, 21 Dec 2020 22:20:29 GMT
+- request:
+    method: post
+    uri: http://ec.europa.eu/taxation_customs/vies/services/checkVatService
+    body:
+      encoding: UTF-8
+      string: <?xml version="1.0" encoding="UTF-8"?><env:Envelope xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns1="urn:ec.europa.eu:taxud:vies:services:checkVat"
+        xmlns:env="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ins0="urn:ec.europa.eu:taxud:vies:services:checkVat:types"><env:Body><ins0:checkVat><ins0:countryCode>IE</ins0:countryCode><ins0:vatNumber>6388047V</ins0:vatNumber></ins0:checkVat></env:Body></env:Envelope>
+    headers:
+      Soapaction:
+      - '"checkVat"'
+      Content-Type:
+      - text/xml;charset=UTF-8
+      Content-Length:
+      - '476'
+      Connection:
+      - close
+      Host:
+      - ec.europa.eu
+      User-Agent:
+      - http.rb/4.4.1
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 21 Dec 2020 22:20:31 GMT
+      Transfer-Encoding:
+      - chunked
+      Content-Type:
+      - text/xml; charset=UTF-8
+      Server:
+      - Europa
+      Connection:
+      - close
+    body:
+      encoding: UTF-8
+      string: <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><checkVatResponse
+        xmlns="urn:ec.europa.eu:taxud:vies:services:checkVat:types"><countryCode>IE</countryCode><vatNumber>6388047V</vatNumber><requestDate>2020-12-21+01:00</requestDate><valid>true</valid><name>GOOGLE
+        IRELAND LIMITED</name><address>3RD FLOOR, GORDON HOUSE, BARROW STREET, DUBLIN
+        4</address></checkVatResponse></soap:Body></soap:Envelope>
+  recorded_at: Mon, 21 Dec 2020 22:20:29 GMT
+recorded_with: VCR 6.0.0

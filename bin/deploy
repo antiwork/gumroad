@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+
+require "./nomad/gumroad_deployer/wizard"
+
+GumroadDeployer::Wizard.run

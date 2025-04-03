@@ -1,0 +1,51 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: ASCII-8BIT
+      string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"CA","to_state":"BC","to_zip":null,"shipping":0.0,"line_items":[{"quantity":1,"unit_price":1.0,"discount":0,"product_tax_code":"31000"}],"nexus_addresses":[{"country":"CA","state":"BC"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.2.2-p53; OpenSSL 1.1.1u  30 May 2023) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=UTF-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sun, 26 Nov 2023 10:04:18 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '975'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"a72d1f07173cf083aa756236b5cb8ed7"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - 38da1dd4-6a8f-45a6-8d2a-4928f524d031
+      X-Runtime:
+      - '0.018517'
+    body:
+      encoding: UTF-8
+      string: '{"tax":{"order_total_amount":1.0,"shipping":0.0,"taxable_amount":1.0,"amount_to_collect":0.12,"rate":0.12,"has_nexus":true,"freight_taxable":true,"tax_source":"destination","jurisdictions":{"country":"CA","state":"BC"},"breakdown":{"taxable_amount":1.0,"tax_collectable":0.12,"combined_tax_rate":0.12,"gst_taxable_amount":1.0,"gst_tax_rate":0.05,"gst":0.05,"pst_taxable_amount":1.0,"pst_tax_rate":0.07,"pst":0.07,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0,"shipping":{"taxable_amount":0.0,"tax_collectable":0.0,"combined_tax_rate":0.12,"gst_taxable_amount":0.0,"gst_tax_rate":0.05,"gst":0.0,"pst_taxable_amount":0.0,"pst_tax_rate":0.07,"pst":0.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0},"line_items":[{"id":"1","taxable_amount":1.0,"tax_collectable":0.12,"combined_tax_rate":0.12,"gst_taxable_amount":1.0,"gst_tax_rate":0.05,"gst":0.05,"pst_taxable_amount":1.0,"pst_tax_rate":0.07,"pst":0.07,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0}]}}}'
+  recorded_at: Sun, 26 Nov 2023 10:04:18 GMT
+recorded_with: VCR 6.2.0

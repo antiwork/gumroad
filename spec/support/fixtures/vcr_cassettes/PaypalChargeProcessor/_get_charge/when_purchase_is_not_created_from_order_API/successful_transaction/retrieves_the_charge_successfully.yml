@@ -1,0 +1,113 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/2.0/
+    body:
+      encoding: US-ASCII
+      string: <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:ns="urn:ebay:api:PayPalAPI" xmlns:ebl="urn:ebay:apis:eBLBaseComponents"
+        xmlns:cc="urn:ebay:apis:CoreComponentTypes" xmlns:ed="urn:ebay:apis:EnhancedDataTypes"><soapenv:Header><ns:RequesterCredentials><ebl:Credentials><ebl:Username><PAYPAL_USERNAME></ebl:Username><ebl:Password><PAYPAL_PASSWORD></ebl:Password><ebl:Signature><PAYPAL_SIGNATURE></ebl:Signature></ebl:Credentials></ns:RequesterCredentials></soapenv:Header><soapenv:Body><ns:GetTransactionDetailsReq><ns:GetTransactionDetailsRequest><ebl:Version>117.0</ebl:Version><ns:TransactionID>0MK73950Y39198240</ns:TransactionID></ns:GetTransactionDetailsRequest></ns:GetTransactionDetailsReq></soapenv:Body></soapenv:Envelope>
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '7423'
+      Content-Type:
+      - text/xml; charset=utf-8
+      Date:
+      - Mon, 18 Nov 2019 07:17:06 GMT
+      Paypal-Debug-Id:
+      - 19594d524b788
+      X-Paypal-Api-Rc:
+      - ''
+      X-Paypal-Operation-Name:
+      - GetTransactionDetails
+      X-Slr-Retry-Api:
+      - GetTransactionDetails
+    body:
+      encoding: UTF-8
+      string: <?xml version="1.0" encoding="UTF-8"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns:cc="urn:ebay:apis:CoreComponentTypes" xmlns:wsu="http://schemas.xmlsoap.org/ws/2002/07/utility"
+        xmlns:saml="urn:oasis:names:tc:SAML:1.0:assertion" xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+        xmlns:wsse="http://schemas.xmlsoap.org/ws/2002/12/secext" xmlns:ed="urn:ebay:apis:EnhancedDataTypes"
+        xmlns:ebl="urn:ebay:apis:eBLBaseComponents" xmlns:ns="urn:ebay:api:PayPalAPI"><SOAP-ENV:Header><Security
+        xmlns="http://schemas.xmlsoap.org/ws/2002/12/secext" xsi:type="wsse:SecurityType"></Security><RequesterCredentials
+        xmlns="urn:ebay:api:PayPalAPI" xsi:type="ebl:CustomSecurityHeaderType"><Credentials
+        xmlns="urn:ebay:apis:eBLBaseComponents" xsi:type="ebl:UserIdPasswordType"><Username
+        xsi:type="xs:string"></Username><Password xsi:type="xs:string"></Password><Signature
+        xsi:type="xs:string"></Signature><Subject xsi:type="xs:string"></Subject></Credentials></RequesterCredentials></SOAP-ENV:Header><SOAP-ENV:Body
+        id="_0"><GetTransactionDetailsResponse xmlns="urn:ebay:api:PayPalAPI"><Timestamp
+        xmlns="urn:ebay:apis:eBLBaseComponents">2019-11-18T07:17:08Z</Timestamp><Ack
+        xmlns="urn:ebay:apis:eBLBaseComponents">Success</Ack><CorrelationID xmlns="urn:ebay:apis:eBLBaseComponents">19594d524b788</CorrelationID><Version
+        xmlns="urn:ebay:apis:eBLBaseComponents">117.0</Version><Build xmlns="urn:ebay:apis:eBLBaseComponents">53802284</Build><PaymentTransactionDetails
+        xmlns="urn:ebay:apis:eBLBaseComponents" xsi:type="ebl:PaymentTransactionType"><ReceiverInfo
+        xsi:type="ebl:ReceiverInfoType"><Business xsi:type="ebl:EmailAddressType"><PAYPAL_MERCHANT_EMAIL></Business><Receiver
+        xsi:type="ebl:EmailAddressType"><PAYPAL_MERCHANT_EMAIL></Receiver><ReceiverID
+        xsi:type="ebl:UserIDType">5SCHBGJUCTP2U</ReceiverID></ReceiverInfo><PayerInfo
+        xsi:type="ebl:PayerInfoType"><Payer xsi:type="ebl:EmailAddressType">paypal-gr-integspecs@gumroad.com</Payer><PayerID
+        xsi:type="ebl:UserIDType">92SVVJSWYT72E</PayerID><PayerStatus xsi:type="ebl:PayPalUserStatusCodeType">verified</PayerStatus><PayerName
+        xsi:type="ebl:PersonNameType"><Salutation xmlns="urn:ebay:apis:eBLBaseComponents"></Salutation><FirstName
+        xmlns="urn:ebay:apis:eBLBaseComponents">Gumbot</FirstName><MiddleName xmlns="urn:ebay:apis:eBLBaseComponents"></MiddleName><LastName
+        xmlns="urn:ebay:apis:eBLBaseComponents">Gumstein</LastName><Suffix xmlns="urn:ebay:apis:eBLBaseComponents"></Suffix></PayerName><PayerCountry
+        xsi:type="ebl:CountryCodeType">US</PayerCountry><PayerBusiness xsi:type="xs:string"></PayerBusiness><Address
+        xsi:type="ebl:AddressType"><Name xsi:type="xs:string">Gumbot Gumstein</Name><Street1
+        xsi:type="xs:string">1 Main St</Street1><Street2 xsi:type="xs:string"></Street2><CityName
+        xsi:type="xs:string">San Jose</CityName><StateOrProvince xsi:type="xs:string">CA</StateOrProvince><Country
+        xsi:type="ebl:CountryCodeType">US</Country><CountryName>United States</CountryName><PostalCode
+        xsi:type="xs:string">95131</PostalCode><AddressOwner xsi:type="ebl:AddressOwnerCodeType">PayPal</AddressOwner><AddressStatus
+        xsi:type="ebl:AddressStatusCodeType">Unconfirmed</AddressStatus></Address><ContactPhone
+        xsi:type="xs:string"></ContactPhone></PayerInfo><TPLReferenceID xsi:type="xs:string"></TPLReferenceID><PaymentInfo
+        xsi:type="ebl:PaymentInfoType"><TransactionID>0MK73950Y39198240</TransactionID><ParentTransactionID
+        xsi:type="ebl:TransactionId">O-06B64911AG055733G</ParentTransactionID><ReceiptID></ReceiptID><TransactionType
+        xsi:type="ebl:PaymentTransactionCodeType">cart</TransactionType><PaymentType
+        xsi:type="ebl:PaymentCodeType">instant</PaymentType><PaymentDate xsi:type="xs:dateTime">2019-10-31T18:30:45Z</PaymentDate><GrossAmount
+        xsi:type="cc:BasicAmountType" currencyID="USD">5.00</GrossAmount><FeeAmount
+        xsi:type="cc:BasicAmountType" currencyID="USD">0.45</FeeAmount><TaxAmount
+        xsi:type="cc:BasicAmountType" currencyID="USD">0.00</TaxAmount><ExchangeRate
+        xsi:type="xs:string"></ExchangeRate><PaymentStatus xsi:type="ebl:PaymentStatusCodeType">Completed</PaymentStatus><PendingReason
+        xsi:type="ebl:PendingStatusCodeType">none</PendingReason><ReasonCode xsi:type="ebl:ReversalReasonCodeType">none</ReasonCode><ShippingMethod
+        xsi:type="xs:string">Default</ShippingMethod><ProtectionEligibility xsi:type="xs:string">Eligible</ProtectionEligibility><ProtectionEligibilityType
+        xsi:type="xs:string">ItemNotReceivedEligible,UnauthorizedPaymentEligible</ProtectionEligibilityType><ShipAmount
+        xsi:type="xs:string">0.00</ShipAmount><ShipHandleAmount xsi:type="xs:string">0.00</ShipHandleAmount><ShipDiscount
+        xsi:type="xs:string"></ShipDiscount><InsuranceAmount xsi:type="xs:string">0.00</InsuranceAmount><Subject
+        xsi:type="xs:string"></Subject><ReceiptReferenceNumber xsi:type="xs:string"></ReceiptReferenceNumber><POSTransactionType
+        xsi:type="xs:string"></POSTransactionType><StoreID xsi:type="xs:string"></StoreID><TerminalID
+        xsi:type="xs:string"></TerminalID><BinEligibility xsi:type="xs:string"></BinEligibility></PaymentInfo><PaymentItemInfo
+        xsi:type="ebl:PaymentItemInfoType"><InvoiceID xsi:type="xs:string"></InvoiceID><Custom
+        xsi:type="xs:string"></Custom><Memo xsi:type="xs:string"></Memo><SalesTax
+        xsi:type="xs:string">0.00</SalesTax><PaymentItem xmlns="urn:ebay:apis:eBLBaseComponents"
+        xsi:type="ebl:PaymentItemType"><EbayItemTxnId xsi:type="xs:string"></EbayItemTxnId><Name
+        xsi:type="xs:string">The Works of Edgar Gumstein</Name><Number xsi:type="xs:string">aa</Number><Quantity
+        xsi:type="xs:string">1</Quantity><SalesTax xsi:type="xs:string">0.00</SalesTax><ShippingAmount
+        xsi:type="xs:string">0.00</ShippingAmount><HandlingAmount xsi:type="xs:string">0.00</HandlingAmount><CouponID
+        xsi:type="xs:string"></CouponID><CouponAmount xsi:type="xs:string"></CouponAmount><CouponAmountCurrency
+        xsi:type="xs:string"></CouponAmountCurrency><LoyaltyCardDiscountAmount xsi:type="xs:string"></LoyaltyCardDiscountAmount><LoyaltyCardDiscountCurrency
+        xsi:type="xs:string"></LoyaltyCardDiscountCurrency><InvoiceItem xsi:type="ebl:InvoiceItemType"><ItemCountUnit
+        xsi:type="ebl:UnitOfMeasure"></ItemCountUnit><Taxable xsi:type="xs:string">false</Taxable><TaxRate
+        xsi:type="xs:string">0.0</TaxRate><MPN xsi:type="xs:string"></MPN><ISBN xsi:type="xs:string"></ISBN><PLU
+        xsi:type="xs:string"></PLU><ModelNumber xsi:type="xs:string"></ModelNumber><StyleNumber
+        xsi:type="xs:string"></StyleNumber></InvoiceItem><Amount xsi:type="cc:BasicAmountType"
+        currencyID="USD">5.00</Amount></PaymentItem><Subscription xsi:type="ebl:SubscriptionInfoType"
+        recurring="" reattempt=""><SubscriptionID></SubscriptionID><Username xsi:type="xs:string"></Username><Password
+        xsi:type="xs:string"></Password><Recurrences xsi:type="xs:string"></Recurrences></Subscription><Auction
+        xsi:type="ebl:AuctionInfoType" multiItem=""><BuyerID xsi:type="xs:string"></BuyerID></Auction></PaymentItemInfo><OfferCouponInfo
+        xsi:type="ebl:OfferCouponInfoType"><Type xsi:type="xs:string"></Type><ID xsi:type="xs:string"></ID><Amount
+        xsi:type="xs:string"></Amount><AmountCurrency xsi:type="xs:string"></AmountCurrency></OfferCouponInfo><GiftReceipt
+        xsi:type="xs:string">0</GiftReceipt></PaymentTransactionDetails></GetTransactionDetailsResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
+    http_version: 
+  recorded_at: Mon, 18 Nov 2019 07:17:09 GMT
+recorded_with: VCR 3.0.3

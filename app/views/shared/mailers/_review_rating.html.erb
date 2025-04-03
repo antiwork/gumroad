@@ -1,0 +1,9 @@
+<div aria-label="<%=  pluralize(rating, "star") %>" style="display: flex;">
+  <% star_style = "width: 1.25em; height: 1.25em; display: inline;" %>
+  <% rating.times do %>
+    <%= image_tag("email/solid-star.png", style: star_style) %>
+  <% end %>
+  <% (5 - rating).times do %>
+    <%= image_tag("email/outline-star.png", style: star_style) %>
+  <% end %>
+</div>

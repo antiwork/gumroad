@@ -1,0 +1,77 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.unsplash.com/photos/Tu1AchSx2Hc/download
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Client-ID <UNSPLASH_CLIENT_ID>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Connection:
+      - keep-alive
+      Server:
+      - Cowboy
+      Content-Type:
+      - application/json
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Request-Method:
+      - "*"
+      Access-Control-Allow-Headers:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Link,X-Total,X-Per-Page,X-RateLimit-Limit,X-RateLimit-Remaining
+      Cache-Control:
+      - private,max-age=0,stale-if-error=3600,stale-while-revalidate=60
+      X-Unsplash-Version:
+      - v1
+      Content-Language:
+      - en
+      Etag:
+      - W/"398739472f206767bf51db1eba06370a"
+      X-Ratelimit-Limit:
+      - '5000'
+      X-Ratelimit-Remaining:
+      - '4999'
+      X-Request-Id:
+      - 7737f78c-efc0-4cd8-8651-66128e44ed5f
+      X-Runtime:
+      - '0.018396'
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      Via:
+      - 1.1 vegur, 1.1 varnish, 1.1 varnish
+      Accept-Ranges:
+      - bytes
+      Date:
+      - Mon, 03 Oct 2022 18:12:42 GMT
+      X-Served-By:
+      - cache-iad-kjyo7100036-IAD, cache-yyc1430024-YYC
+      X-Cache:
+      - MISS, MISS
+      X-Cache-Hits:
+      - 0, 0
+      X-Timer:
+      - S1664820763.527871,VS0,VE97
+      Vary:
+      - Accept-Encoding, Origin,Authorization,Accept-Language,Accept
+      Transfer-Encoding:
+      - chunked
+    body:
+      encoding: ASCII-8BIT
+      string: '{"url":"https://images.unsplash.com/photo-1587502536575-6dfba0a6e017?ixlib=rb-1.2.1\u0026q=80\u0026cs=tinysrgb\u0026fm=jpg\u0026crop=entropy"}'
+  recorded_at: Mon, 03 Oct 2022 18:12:42 GMT
+recorded_with: VCR 6.1.0

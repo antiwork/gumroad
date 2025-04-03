@@ -1,0 +1,30 @@
+{
+  "id": "file:/api/mobile/product_file.json",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "name_displayable": { "type": "string" },
+    "description": { "type": ["string", "null"] },
+    "filetype": { "type": "string" },
+    "filegroup": { "type": "string" },
+    "size": { "type": ["number", "null"] },
+    "pagelength": { "type": ["number", "null"] },
+    "duration": { "type": ["number", "null"] },
+    "download_url": { "type": "string" },
+    "created_at": { "type": "string" }
+  },
+  "required": [
+    "id",
+    "name",
+    "name_displayable",
+    "description",
+    "filetype",
+    "filegroup",
+    "size",
+    "pagelength",
+    "duration",
+    "download_url",
+    "created_at"
+  ]
+}

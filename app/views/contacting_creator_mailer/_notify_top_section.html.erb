@@ -1,0 +1,25 @@
+<div>
+  <div style="text-align: center;">
+    <%= image_tag asset_path("email/gumroad_coins.png"), alt: "Cha-ching!" %>
+    <h1>
+      <% if @purchase.present? %>
+        <% commission = @purchase.commission %>
+        <% if commission.present? %>
+          <% deposit_purchase = commission.deposit_purchase %>
+          <%= format_just_price_in_cents(deposit_purchase.displayed_price_cents + commission.completion_display_price_cents, deposit_purchase.displayed_price_currency_type) %>
+        <% else %>
+          <%= @purchase.formatted_display_price %>
+        <% end %>
+      <% else %>
+        <%= @product.price_formatted %>
+      <% end %>
+    </h1>
+    <p><%= @product.name %></p>
+  </div>
+
+  <% unless @is_preorder %>
+    <p>
+      <%= link_to "View account balance", balance_url, class: "button primary" %>
+    </p>
+  <% end %>
+</div>

@@ -1,0 +1,109 @@
+{
+  "currencies": {
+    "usd": {
+      "symbol": "$",
+      "display_format": "$ (US Dollars)",
+      "min_price": 99
+    },
+    "gbp": {
+      "symbol": "£",
+      "display_format": "£ (GBP)",
+      "min_price": 59
+    },
+    "eur": {
+      "symbol": "€",
+      "display_format": "€ (Euro)",
+      "min_price": 79
+    },
+    "jpy": {
+      "symbol": "¥",
+      "display_format": "¥ (Yen)",
+      "min_price": 99,
+      "single_unit": true
+    },
+    "inr": {
+      "symbol": "₹",
+      "display_format": "₹ (Rupees)",
+      "min_price": 7300
+    },
+    "aud": {
+      "symbol": "A$",
+      "display_format": "A$ (Australian Dollars)",
+      "short_symbol": "$",
+      "min_price": 99
+    },
+    "cad": {
+      "symbol": "CAD$",
+      "display_format": "CAD$ (Canadian Dollars)",
+      "short_symbol": "$",
+      "min_price": 99
+    },
+    "hkd": {
+      "symbol": "HK$",
+      "display_format": "HK$ (Hong Kong Dollars)",
+      "short_symbol": "$",
+      "min_price": 799
+    },
+    "sgd": {
+      "symbol": "SGD$",
+      "display_format": "SGD$ (Singapore Dollars)",
+      "short_symbol": "$",
+      "min_price": 99
+    },
+    "twd": {
+      "symbol": "NT$",
+      "display_format": "NT$ (Taiwanese Dollars)",
+      "short_symbol": "$",
+      "min_price": 2999
+    },
+    "nzd": {
+      "symbol": "NZ$",
+      "display_format": "NZ$ (New Zealand Dollars)",
+      "short_symbol": "$",
+      "min_price": 99
+    },
+    "brl": {
+      "symbol": "R$",
+      "display_format": "R$ (Brazilian Real)",
+      "short_symbol": "$",
+      "min_price": 533
+    },
+    "zar": {
+      "symbol": "ZAR",
+      "display_format": "ZAR (South African Rand)",
+      "min_price": 1300
+    },
+    "chf": {
+      "symbol": "CHF",
+      "display_format": "CHF (Swiss Franc)",
+      "min_price": 100
+    },
+    "ils": {
+      "symbol": "₪",
+      "display_format": "₪ (Israeli Shekel)",
+      "short_symbol": "₪",
+      "min_price": 700
+    },
+    "php": {
+      "symbol": "₱",
+      "display_format": "₱ (Philippine Peso)",
+      "short_symbol": "₱",
+      "min_price": 4500
+    },
+    "krw": {
+      "symbol": "₩",
+      "display_format": "₩ (Korean Won)",
+      "min_price": 111000
+    },
+    "pln": {
+      "symbol": "zł",
+      "display_format": "zł (Polish zloty)",
+      "min_price": 379
+    },
+    "czk": {
+      "symbol": "Kč",
+      "display_format": "Kč (Czech koruna)",
+      "min_price": 2149
+    }
+  }
+}

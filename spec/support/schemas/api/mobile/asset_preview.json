@@ -1,0 +1,28 @@
+{
+  "id": "file:/api/mobile/asset_preview.json",
+  "type": "object",
+  "properties": {
+    "url": { "type": "string" },
+    "original_url": { "type": "string" },
+    "thumbnail": { "type": ["string", "null"] },
+    "id": { "type": "string" },
+    "type": { "type": "string" },
+    "filetype": { "type": ["string", "null"] },
+    "width": { "type": ["number", "null"] },
+    "height": { "type": ["number", "null"] },
+    "native_width": { "type": ["number", "null"] },
+    "native_height": { "type": ["number", "null"] }
+  },
+  "required": [
+    "url",
+    "original_url",
+    "thumbnail",
+    "id",
+    "type",
+    "filetype",
+    "width",
+    "height",
+    "native_width",
+    "native_height"
+  ]
+}

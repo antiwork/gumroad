@@ -1,0 +1,34 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    Congratulations, you are now an official affiliate for <%= @affiliate_request.seller.display_name %>!
+  </p>
+  <p>
+    You can now promote these products using these unique URLs:
+  </p>
+  <ul>
+    <% @affiliated_products.each do |affiliated_product| %>
+      <li>
+        <p>
+          <strong><%= affiliated_product[:name] %></strong>
+          (<%= affiliated_product[:commission] %> commission)
+          <br>
+          <%= link_to affiliated_product[:url], affiliated_product[:url], clicktracking: "off" %>
+          <br>
+        </p>
+      </li>
+    <% end %>
+  </ul>
+  <h3>How do you share products with your audience?</h3>
+  <p>
+    You can direct them
+    to any of the URLs provided above, and they will be redirected to that specific
+    product. That's it!
+  </p>
+  <%= render("affiliate_mailer/notify_affiliate_footer") %>
+</div>
+<div>
+  <p>
+    <%= link_to "View all affiliated products", products_affiliated_index_url, class: "button primary" %>
+  </p>
+</div>

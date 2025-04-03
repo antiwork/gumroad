@@ -1,0 +1,20 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("Your installment plan has been restarted.") %>
+<% else %>
+  <%= header_section("Your subscription has been restarted.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <% if @reason == Subscription::ResubscriptionReason::PAYMENT_ISSUE_RESOLVED %>
+      <p>Your installment plan for <%= @subscription.link.name %> has been restarted because a payment issue has been resolved.</p>
+    <% else %>
+      <p>You have restarted your installment plan for <%= @subscription.link.name %>.</p>
+    <% end %>
+  <% else %>
+    <% if @reason == Subscription::ResubscriptionReason::PAYMENT_ISSUE_RESOLVED %>
+      <p>Your subscription to <%= @subscription.link.name %> has been restarted because a payment issue has been resolved. If you would like to cancel your subscription, you may do so <%= link_to "here", @edit_card_url %>.</p>
+    <% else %>
+      <p>You have restarted your subscription to <%= @subscription.link.name %>.</p>
+    <% end %>
+  <% end %>
+</div>

@@ -1,0 +1,14 @@
+<%= header_section(@subject) %>
+<div>
+  <p><strong>Name:</strong> <%= @affiliate_request.name %></p>
+  <p><strong>Email:</strong> <%= @affiliate_request.email %></p>
+  <p>
+    <em>"<%= Rinku.auto_link(strip_tags(@affiliate_request.promotion_text)) %>"</em>
+  </p>
+  <p>
+    <%= link_to "Approve", approve_affiliate_request_url(@affiliate_request), class: "button primary" %>
+  </p>
+  <p>
+    <%= link_to "Ignore", ignore_affiliate_request_url(@affiliate_request), class: "button" %>
+  </p>
+</div>

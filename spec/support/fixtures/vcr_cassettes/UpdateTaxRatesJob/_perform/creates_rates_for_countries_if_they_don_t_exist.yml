@@ -1,0 +1,161 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.sandbox.taxjar.com/v2/summary_rates
+    body:
+      encoding: ASCII-8BIT
+      string: ''
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.2.2-p53; OpenSSL 1.1.1u  30 May 2023) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 29 Nov 2023 00:22:30 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '16208'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"e37b629cd4bb4ff95bc96bb6f5fae72b"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - 4f95f9c1-1f25-4ea3-bbda-55bb7266ab2c
+      X-Runtime:
+      - '0.020803'
+    body:
+      encoding: UTF-8
+      string: '{"summary_rates":[{"country_code":"AT","country":"Austria","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.2},"average_rate":{"label":"VAT","rate":0.2}},{"country_code":"BE","country":"Belgium","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.21},"average_rate":{"label":"VAT","rate":0.21}},{"country_code":"BG","country":"Bulgaria","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.2},"average_rate":{"label":"VAT","rate":0.2}},{"country_code":"CA","country":"Canada","region_code":"AB","region":"Alberta","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST","rate":0.05}},{"country_code":"CA","country":"Canada","region_code":"BC","region":"British
+        Columbia","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST/PST","rate":0.12}},{"country_code":"CA","country":"Canada","region_code":"MB","region":"Manitoba","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST/PST","rate":0.13}},{"country_code":"US","country":"United
+        States","region_code":"SC","region":"South Carolina","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.0736}},{"country_code":"CA","country":"Canada","region_code":"NS","region":"Nova
+        Scotia","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"HST","rate":0.15}},{"country_code":"CA","country":"Canada","region_code":"NT","region":"Northwest
+        Territories","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST","rate":0.05}},{"country_code":"CA","country":"Canada","region_code":"NU","region":"Nunavut","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST","rate":0.05}},{"country_code":"CA","country":"Canada","region_code":"ON","region":"Ontario","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"HST","rate":0.13}},{"country_code":"CA","country":"Canada","region_code":"QC","region":"Quebec","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST/QST","rate":0.1498}},{"country_code":"CA","country":"Canada","region_code":"YT","region":"Yukon","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST","rate":0.05}},{"country_code":"CY","country":"Cyprus","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.19},"average_rate":{"label":"VAT","rate":0.19}},{"country_code":"CZ","country":"Czech
+        Republic","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.21},"average_rate":{"label":"VAT","rate":0.21}},{"country_code":"DE","country":"Germany","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.19},"average_rate":{"label":"VAT","rate":0.19}},{"country_code":"DK","country":"Denmark","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.25},"average_rate":{"label":"VAT","rate":0.25}},{"country_code":"EE","country":"Estonia","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.2},"average_rate":{"label":"VAT","rate":0.2}},{"country_code":"EL","country":"Greece","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.24},"average_rate":{"label":"VAT","rate":0.24}},{"country_code":"ES","country":"Spain","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.21},"average_rate":{"label":"VAT","rate":0.21}},{"country_code":"FI","country":"Finland","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.24},"average_rate":{"label":"VAT","rate":0.24}},{"country_code":"FR","country":"France","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.2},"average_rate":{"label":"VAT","rate":0.2}},{"country_code":"HR","country":"Croatia","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.25},"average_rate":{"label":"VAT","rate":0.25}},{"country_code":"HU","country":"Hungary","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.27},"average_rate":{"label":"VAT","rate":0.27}},{"country_code":"IE","country":"Ireland","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.23},"average_rate":{"label":"VAT","rate":0.23}},{"country_code":"IT","country":"Italy","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.22},"average_rate":{"label":"VAT","rate":0.22}},{"country_code":"LT","country":"Lithuania","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.21},"average_rate":{"label":"VAT","rate":0.21}},{"country_code":"LU","country":"Luxembourg","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.17},"average_rate":{"label":"VAT","rate":0.17}},{"country_code":"LV","country":"Latvia","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.21},"average_rate":{"label":"VAT","rate":0.21}},{"country_code":"MT","country":"Malta","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.18},"average_rate":{"label":"VAT","rate":0.18}},{"country_code":"NL","country":"Netherlands","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.21},"average_rate":{"label":"VAT","rate":0.21}},{"country_code":"PL","country":"Poland","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.23},"average_rate":{"label":"VAT","rate":0.23}},{"country_code":"PT","country":"Portugal","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.23},"average_rate":{"label":"VAT","rate":0.23}},{"country_code":"US","country":"United
+        States","region_code":"NC","region":"North Carolina","minimum_rate":{"label":"State
+        Tax","rate":0.0475},"average_rate":{"label":"Tax","rate":0.069}},{"country_code":"SE","country":"Sweden","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.25},"average_rate":{"label":"VAT","rate":0.25}},{"country_code":"SI","country":"Slovenia","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.22},"average_rate":{"label":"VAT","rate":0.22}},{"country_code":"SK","country":"Slovakia","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.2},"average_rate":{"label":"VAT","rate":0.2}},{"country_code":"UK","country":"United
+        Kingdom","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.2},"average_rate":{"label":"VAT","rate":0.2}},{"country_code":"US","country":"United
+        States","region_code":"CT","region":"Connecticut","minimum_rate":{"label":"State
+        Tax","rate":0.0635},"average_rate":{"label":"Tax","rate":0.0635}},{"country_code":"US","country":"United
+        States","region_code":"DC","region":"District of Columbia","minimum_rate":{"label":"State
+        Tax","rate":0.0575},"average_rate":{"label":"Tax","rate":0.0575}},{"country_code":"US","country":"United
+        States","region_code":"DE","region":"Delaware","minimum_rate":{"label":"State
+        Tax","rate":0.0},"average_rate":{"label":"Tax","rate":0.0}},{"country_code":"US","country":"United
+        States","region_code":"HI","region":"Hawaii","minimum_rate":{"label":"State
+        Tax","rate":0.04},"average_rate":{"label":"Tax","rate":0.0424}},{"country_code":"US","country":"United
+        States","region_code":"IN","region":"Indiana","minimum_rate":{"label":"State
+        Tax","rate":0.07},"average_rate":{"label":"Tax","rate":0.07}},{"country_code":"US","country":"United
+        States","region_code":"KY","region":"Kentucky","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.06}},{"country_code":"US","country":"United
+        States","region_code":"MA","region":"Massachusetts","minimum_rate":{"label":"State
+        Tax","rate":0.0625},"average_rate":{"label":"Tax","rate":0.0625}},{"country_code":"US","country":"United
+        States","region_code":"MD","region":"Maryland","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.06}},{"country_code":"US","country":"United
+        States","region_code":"ME","region":"Maine","minimum_rate":{"label":"State
+        Tax","rate":0.055},"average_rate":{"label":"Tax","rate":0.055}},{"country_code":"US","country":"United
+        States","region_code":"MI","region":"Michigan","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.06}},{"country_code":"US","country":"United
+        States","region_code":"ID","region":"Idaho","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.0604}},{"country_code":"US","country":"United
+        States","region_code":"MT","region":"Montana","minimum_rate":{"label":"State
+        Tax","rate":0.0},"average_rate":{"label":"Tax","rate":0.0}},{"country_code":"CA","country":"Canada","region_code":"SK","region":"Saskatchewan","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"GST/PST","rate":0.11}},{"country_code":"US","country":"United
+        States","region_code":"NV","region":"Nevada","minimum_rate":{"label":"State
+        Tax","rate":0.046},"average_rate":{"label":"Tax","rate":0.0778}},{"country_code":"US","country":"United
+        States","region_code":"NH","region":"New Hampshire","minimum_rate":{"label":"State
+        Tax","rate":0.0},"average_rate":{"label":"Tax","rate":0.0}},{"country_code":"US","country":"United
+        States","region_code":"NJ","region":"New Jersey","minimum_rate":{"label":"State
+        Tax","rate":0.07},"average_rate":{"label":"Tax","rate":0.0663}},{"country_code":"US","country":"United
+        States","region_code":"OR","region":"Oregon","minimum_rate":{"label":"State
+        Tax","rate":0.0},"average_rate":{"label":"Tax","rate":0.0}},{"country_code":"US","country":"United
+        States","region_code":"PR","region":"Puerto Rico","minimum_rate":{"label":"State
+        Tax","rate":0.115},"average_rate":{"label":"Tax","rate":0.115}},{"country_code":"US","country":"United
+        States","region_code":"RI","region":"Rhode Island","minimum_rate":{"label":"State
+        Tax","rate":0.07},"average_rate":{"label":"Tax","rate":0.07}},{"country_code":"US","country":"United
+        States","region_code":"TN","region":"Tennessee","minimum_rate":{"label":"State
+        Tax","rate":0.07},"average_rate":{"label":"Tax","rate":0.095}},{"country_code":"US","country":"United
+        States","region_code":"VA","region":"Virginia","minimum_rate":{"label":"State
+        Tax","rate":0.043},"average_rate":{"label":"Tax","rate":0.0546}},{"country_code":"US","country":"United
+        States","region_code":"NM","region":"New Mexico","minimum_rate":{"label":"State
+        Tax","rate":0.0513},"average_rate":{"label":"Tax","rate":0.0703}},{"country_code":"US","country":"United
+        States","region_code":"NY","region":"New York","minimum_rate":{"label":"State
+        Tax","rate":0.04},"average_rate":{"label":"Tax","rate":0.0819}},{"country_code":"US","country":"United
+        States","region_code":"LA","region":"Louisiana","minimum_rate":{"label":"State
+        Tax","rate":0.05},"average_rate":{"label":"Tax","rate":0.0958}},{"country_code":"US","country":"United
+        States","region_code":"IL","region":"Illinois","minimum_rate":{"label":"State
+        Tax","rate":0.0625},"average_rate":{"label":"Tax","rate":0.075}},{"country_code":"US","country":"United
+        States","region_code":"MS","region":"Mississippi","minimum_rate":{"label":"State
+        Tax","rate":0.07},"average_rate":{"label":"Tax","rate":0.0702}},{"country_code":"US","country":"United
+        States","region_code":"IA","region":"Iowa","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.0689}},{"country_code":"US","country":"United
+        States","region_code":"AL","region":"Alabama","minimum_rate":{"label":"State
+        Tax","rate":0.04},"average_rate":{"label":"Tax","rate":0.0836}},{"country_code":"CA","country":"Canada","region_code":"NL","region":"Newfoundland
+        and Labrador","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"HST","rate":0.15}},{"country_code":"US","country":"United
+        States","region_code":"UT","region":"Utah","minimum_rate":{"label":"State
+        Tax","rate":0.047},"average_rate":{"label":"Tax","rate":0.0661}},{"country_code":"CA","country":"Canada","region_code":"PE","region":"Prince
+        Edward Island","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"HST","rate":0.15}},{"country_code":"US","country":"United
+        States","region_code":"CA","region":"California","minimum_rate":{"label":"State
+        Tax","rate":0.0625},"average_rate":{"label":"Tax","rate":0.0826}},{"country_code":"US","country":"United
+        States","region_code":"WV","region":"West Virginia","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.061}},{"country_code":"US","country":"United
+        States","region_code":"NE","region":"Nebraska","minimum_rate":{"label":"State
+        Tax","rate":0.055},"average_rate":{"label":"Tax","rate":0.0586}},{"country_code":"US","country":"United
+        States","region_code":"FL","region":"Florida","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.0682}},{"country_code":"US","country":"United
+        States","region_code":"VT","region":"Vermont","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.0604}},{"country_code":"US","country":"United
+        States","region_code":"TX","region":"Texas","minimum_rate":{"label":"State
+        Tax","rate":0.0625},"average_rate":{"label":"Tax","rate":0.0744}},{"country_code":"US","country":"United
+        States","region_code":"WY","region":"Wyoming","minimum_rate":{"label":"State
+        Tax","rate":0.04},"average_rate":{"label":"Tax","rate":0.0529}},{"country_code":"US","country":"United
+        States","region_code":"WI","region":"Wisconsin","minimum_rate":{"label":"State
+        Tax","rate":0.05},"average_rate":{"label":"Tax","rate":0.0546}},{"country_code":"US","country":"United
+        States","region_code":"PA","region":"Pennsylvania","minimum_rate":{"label":"State
+        Tax","rate":0.06},"average_rate":{"label":"Tax","rate":0.061}},{"country_code":"US","country":"United
+        States","region_code":"KS","region":"Kansas","minimum_rate":{"label":"State
+        Tax","rate":0.065},"average_rate":{"label":"Tax","rate":0.0805}},{"country_code":"US","country":"United
+        States","region_code":"AR","region":"Arkansas","minimum_rate":{"label":"State
+        Tax","rate":0.065},"average_rate":{"label":"Tax","rate":0.0857}},{"country_code":"US","country":"United
+        States","region_code":"MO","region":"Missouri","minimum_rate":{"label":"State
+        Tax","rate":0.0423},"average_rate":{"label":"Tax","rate":0.0728}},{"country_code":"US","country":"United
+        States","region_code":"AZ","region":"Arizona","minimum_rate":{"label":"State
+        Tax","rate":0.056},"average_rate":{"label":"Tax","rate":0.0787}},{"country_code":"US","country":"United
+        States","region_code":"OK","region":"Oklahoma","minimum_rate":{"label":"State
+        Tax","rate":0.045},"average_rate":{"label":"Tax","rate":0.0786}},{"country_code":"US","country":"United
+        States","region_code":"MN","region":"Minnesota","minimum_rate":{"label":"State
+        Tax","rate":0.0688},"average_rate":{"label":"Tax","rate":0.0718}},{"country_code":"US","country":"United
+        States","region_code":"AK","region":"Alaska","minimum_rate":{"label":"State
+        Tax","rate":0.0},"average_rate":{"label":"Tax","rate":0.0154}},{"country_code":"US","country":"United
+        States","region_code":"ND","region":"North Dakota","minimum_rate":{"label":"State
+        Tax","rate":0.05},"average_rate":{"label":"Tax","rate":0.0551}},{"country_code":"US","country":"United
+        States","region_code":"WA","region":"Washington","minimum_rate":{"label":"State
+        Tax","rate":0.065},"average_rate":{"label":"Tax","rate":0.0876}},{"country_code":"US","country":"United
+        States","region_code":"GA","region":"Georgia","minimum_rate":{"label":"State
+        Tax","rate":0.04},"average_rate":{"label":"Tax","rate":0.0733}},{"country_code":"US","country":"United
+        States","region_code":"OH","region":"Ohio","minimum_rate":{"label":"State
+        Tax","rate":0.0575},"average_rate":{"label":"Tax","rate":0.071}},{"country_code":"US","country":"United
+        States","region_code":"CO","region":"Colorado","minimum_rate":{"label":"State
+        Tax","rate":0.029},"average_rate":{"label":"Tax","rate":0.0647}},{"country_code":"CA","country":"Canada","region_code":"NB","region":"New
+        Brunswick","minimum_rate":{"label":"GST","rate":0.05},"average_rate":{"label":"HST","rate":0.15}},{"country_code":"US","country":"United
+        States","region_code":"SD","region":"South Dakota","minimum_rate":{"label":"State
+        Tax","rate":0.045},"average_rate":{"label":"Tax","rate":0.056}},{"country_code":"RO","country":"Romania","region_code":null,"region":null,"minimum_rate":{"label":"VAT","rate":0.19},"average_rate":{"label":"VAT","rate":0.19}}]}'
+  recorded_at: Wed, 29 Nov 2023 00:22:30 GMT
+recorded_with: VCR 6.2.0

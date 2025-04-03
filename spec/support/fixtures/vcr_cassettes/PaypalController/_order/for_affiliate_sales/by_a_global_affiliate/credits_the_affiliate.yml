@@ -1,0 +1,62 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"usd","value":"17.5","breakdown":{"shipping":{"currency_code":"USD","value":"1.5"},"tax_total":{"currency_code":"USD","value":"1.0"},"item_total":{"currency_code":"USD","value":"15.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"5.0"},"quantity":3,"sku":"v"}],"soft_descriptor":"gumbo","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":0},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]}}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAF5T7EesDXLWLuLRvWyMYLvqXkVxpL_exqSEColXRRl47BxzjIKhdWgw-rD2NT_hXvDyKa1bz9FBNCP24WDrd33dtD0kg
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1572552322'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.4
+      Sdk-Tech-Stack:
+      - Ruby3.0.3
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.4 (paypal-checkout-sdk 1.0.4; ruby 3.0.3p157-arm64-darwin21;OpenSSL
+        1.1.1l  24 Aug 2021)
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '79'
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 27 Jul 2022 13:49:06 GMT
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - aefc44ea92721
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: '{"error":"invalid_token","error_description":"Access Token not found
+        in cache"}'
+  recorded_at: Wed, 27 Jul 2022 13:49:06 GMT
+recorded_with: VCR 6.1.0

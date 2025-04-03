@@ -1,0 +1,15 @@
+<div>
+  <img src="<%= @seller.avatar_url %>" class="user-avatar header-badge" style="width: 3em;">
+  <h2 style="text-align: center;"><%= @subject %></h2>
+</div>
+
+<% product_affiliates = @collaborator.product_affiliates %>
+
+<div class="squished">
+  <h3>What is a collaborator?</h3>
+  <p>A collaborator is someone who has contributed to the creation of a product and therefore earns a percentage of its sales.</p>
+
+  <%= render("affiliate_mailer/collaborator/table", product_affiliates: product_affiliates) %>
+</div>
+
+<%= render("affiliate_mailer/collaborator/footer", product_affiliates: product_affiliates) %>

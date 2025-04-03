@@ -1,0 +1,18 @@
+<%= header_section("Your pre-order will be released shortly") %>
+<div>
+  <p>
+    <%= "Your pre-order, #{@product.name} #{!@product.is_physical && !@product.has_content? ? "is scheduled for a release" : "will be released"} on #{displayable_release_at_date_and_time(@preorder_link.release_at, @seller.timezone)}." %>
+    <% if @product.is_physical %>
+      Charges will occur at that time. Your customers will be excited for <%= @product.name %> to ship shortly after they are charged.
+    <% elsif @product.has_content? %>
+      Once released all credit cards will be charged.
+    <% end %>
+  </p>
+  <p>
+    <% if !@product.is_physical && !@product.has_content? %>
+      You will need to <%= link_to "upload files or specify a redirect URL", edit_link_url(@product) %> before its release, or we won't be able to release the product and charge your customers.
+    <% else %>
+      To make changes or update the <%= @product.is_physical ? "product" : "file that will be released" %>, <%= link_to "click here", edit_link_url(@product) %>.
+    <% end %>
+  </p>
+</div>

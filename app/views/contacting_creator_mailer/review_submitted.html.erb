@@ -1,0 +1,11 @@
+<%= header_section("New review") %>
+<div>
+  <div><%= @buyer %> reviewed <%= link_to @product.name, @product.long_url %></div>
+  <%= render("shared/mailers/review_rating", rating: @review.rating) %>
+  <% if @review.message.present? %>
+    <div>
+      <i><%= "\"#{@review.message}\"" %></i>
+    </div>
+  <% end %>
+  <%= link_to "View all reviews", @product.long_url, class: "button primary" %>
+</div>

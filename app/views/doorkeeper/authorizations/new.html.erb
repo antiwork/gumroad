@@ -1,0 +1,60 @@
+<main class="stack">
+  <header>
+    <div>
+      <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || asset_path("gumroad_app.png"), size: "72" %>
+    </div>
+    <h2>
+      Authorize
+      <strong><%= @pre_auth.client.name %></strong>
+      to use your account?
+    </h2>
+  </header>
+  <% if @pre_auth.scopes.present? %>
+    <div class="paragraphs">
+      <h4>This application will be able to:</h4>
+      <ul>
+        <% @pre_auth.scopes.each do |scope| %>
+          <li>
+            <%=
+            case scope
+              when "creator_api" then "Creator API"
+              when "edit_products" then "Create new products and edit your existing products."
+              when "ifttt" then "See your sales data."
+              when "mark_sales_as_shipped" then "Mark your sales as shipped."
+              when "mobile_api" then "Mobile API"
+              when "refund_sales" then "Refund your sales."
+              when "revenue_share" then "Revenue Share"
+              when "unfurl" then "Fetch public information of any product to preview it in Notion."
+              when "view_profile" then "See your profile data."
+              when "view_public" then "See your public information (name, Facebook profile, bio, Twitter handle)."
+              when "view_sales" then "See your sales data."
+            end
+            %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+  <footer>
+    <%= form_tag oauth_authorization_path, method: :post, style: "display: contents" do %>
+      <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
+      <%= hidden_field_tag :redirect_uri, @pre_auth.redirect_uri %>
+      <%= hidden_field_tag :state, @pre_auth.state %>
+      <%= hidden_field_tag :response_type, @pre_auth.response_type %>
+      <%= hidden_field_tag :scope, @pre_auth.scope %>
+      <%= button_tag "Authorize", class: "button accent" %>
+    <% end %>
+    <%= form_tag oauth_authorization_path, method: :delete, style: "display: contents" do %>
+      <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
+      <%= hidden_field_tag :redirect_uri, @pre_auth.redirect_uri %>
+      <%= hidden_field_tag :state, @pre_auth.state %>
+      <%= hidden_field_tag :response_type, @pre_auth.response_type %>
+      <%= hidden_field_tag :scope, @pre_auth.scope %>
+      <%= button_tag "Deny", class: "button primary" %>
+    <% end %>
+  </footer>
+</main>
+
+<% content_for :footer do %>
+  <%= render("doorkeeper/authorizations/footer", logged_in_user: logged_in_user) %>
+<% end %>

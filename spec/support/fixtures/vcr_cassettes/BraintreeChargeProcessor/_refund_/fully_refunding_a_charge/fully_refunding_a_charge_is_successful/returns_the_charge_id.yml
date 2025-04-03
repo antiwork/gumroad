@@ -1,0 +1,310 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/customers
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <customer>
+          <credit-card>
+            <payment-method-nonce>fake-paypal-future-nonce</payment-method-nonce>
+          </credit-card>
+        </customer>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:47:13 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Etag:
+      - W/"3a69b273c581d071cdefab1be0f0f4ec"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Runtime:
+      - '0.283110'
+      X-Request-Id:
+      - 01-1572493632.313-157.34.125.172-5347238
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 01-1572493632.313-157.34.125.172-5347238
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        H4sIAEFZul0AA6RTy27bMBC8+ysM3WlaUdLYhqz0UNhoARcokCaNL8GKXMlMKFIhKT/69aUkO04s51DkyJlZLndmGd9sC9lfo7FCq2kQDoZBHxXTXKh8Gvy+nZFRcJP0YlZZpws0Sa/fjwVPLi7CYXT95TKMqT/VoCfZCpQj/jzi2cuWFWOeRopt7GVM37K1OhPGOqKgwL4Scho4U2FAG0rCRwzTRQlq18GxACE7aLnSqntHBtsOtsHUCnemn0FwyAm4vtuVOA24PzpRYJBcDMMxCYckCm+H0eTyehJGy5geC5r6quT/V38saPs3ppNMoOS2fVIudQqydvEhuvvL52O3/PMjWzx93y6+LaKfT7+2MT1q9kNw4QgDw+3+GWAM7A4uwa70YmBMV8q9V9SCjqQFPZwKKf2WEMgNYoFNtqcWNsJP2tjesd8/8n733sIHKccMKnnolWotEVSQ1I+K6Z58FTerkzyBwgHX+BW3UJQSB37TYtpyB+XRVTafXaX3dxWfh5LPV+vlbLxhs1EI0fMVu384CaApFgXkSCojk5VzpZ1QCtais4PUgFDOG5j7iTewqztTb3jt52OBbqX5o9S5pm0Ig1LlN6jWwmhVS6YWFE+1D/3Y4dDTVqllRpTO/+wzyTcap59RJVfPu/FLFtP2dOA+ub3t3JbU316hd0MJJ2r+NJgMpPXJnJO+3uOnb0I+u197UmX6LC1FIepnVRaJNvzjewyuvQHNwB06pt1fcIrZBgTODfpwO5YftzXp/QMAAP//AwA8PR+8dwUAAA==
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:47:13 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/transactions
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <transaction>
+          <merchant-account-id><BRAINTREE_MERCHANT_ACCOUNT_ID_FOR_SUPPLIERS></merchant-account-id>
+          <amount>225.0</amount>
+          <customer-id>221037641</customer-id>
+          <order-id>product-id</order-id>
+          <device-data nil="true"/>
+          <options>
+            <submit-for-settlement type="boolean">true</submit-for-settlement>
+            <paypal>
+              <description nil="true"/>
+            </paypal>
+          </options>
+          <custom-fields>
+            <purchase-external-id>product-id</purchase-external-id>
+            <description nil="true"/>
+          </custom-fields>
+          <channel>GUMROAD_SP</channel>
+          <descriptor>
+            <name>GUM*dummy</name>
+            <phone>(650)742-3913</phone>
+            <url>gum.co/cc</url>
+          </descriptor>
+          <type>sale</type>
+        </transaction>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:47:15 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Etag:
+      - W/"e9eb4a5abe39d191cef1d37a66a09af6"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Runtime:
+      - '0.609871'
+      X-Request-Id:
+      - 01-1572493633.970-157.34.125.172-5347524
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 01-1572493633.970-157.34.125.172-5347524
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        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
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:47:15 GMT
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/2.0/
+    body:
+      encoding: US-ASCII
+      string: <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:ns="urn:ebay:api:PayPalAPI" xmlns:ebl="urn:ebay:apis:eBLBaseComponents"
+        xmlns:cc="urn:ebay:apis:CoreComponentTypes" xmlns:ed="urn:ebay:apis:EnhancedDataTypes"><soapenv:Header><ns:RequesterCredentials><ebl:Credentials><ebl:Username><PAYPAL_USERNAME></ebl:Username><ebl:Password><PAYPAL_PASSWORD></ebl:Password><ebl:Signature><PAYPAL_SIGNATURE></ebl:Signature></ebl:Credentials></ns:RequesterCredentials></soapenv:Header><soapenv:Body><ns:GetTransactionDetailsReq><ns:GetTransactionDetailsRequest><ebl:Version>116.0</ebl:Version><ns:TransactionID>CAPTURE-fbdb9655b95a</ns:TransactionID></ns:GetTransactionDetailsRequest></ns:GetTransactionDetailsReq></soapenv:Body></soapenv:Envelope>
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:47:17 GMT
+      Server:
+      - Apache
+      X-Slr-Retry-Api:
+      - GetTransactionDetails
+      X-Paypal-Operation-Name:
+      - GetTransactionDetails
+      X-Paypal-Api-Rc:
+      - '10004'
+      Connection:
+      - close
+      Http-X-Pp-Az-Locator:
+      - sandbox.slc
+      Paypal-Debug-Id:
+      - 42278f63178a4
+      Set-Cookie:
+      - X-PP-SILOVER=; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+      - X-PP-SILOVER=name%3DSANDBOX3.API.1%26silo_version%3D1880%26app%3Dappdispatcher_apit%26TIME%3D1163508317%26HTTP_X_PP_AZ_LOCATOR%3Dsandbox.slc;
+        Expires=Thu, 31 Oct 2019 04:17:17 GMT; domain=.paypal.com; path=/; Secure;
+        HttpOnly
+      Content-Length:
+      - '3311'
+      Content-Type:
+      - text/xml; charset=utf-8
+    body:
+      encoding: UTF-8
+      string: <?xml version="1.0" encoding="UTF-8"?><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns:cc="urn:ebay:apis:CoreComponentTypes" xmlns:wsu="http://schemas.xmlsoap.org/ws/2002/07/utility"
+        xmlns:saml="urn:oasis:names:tc:SAML:1.0:assertion" xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+        xmlns:wsse="http://schemas.xmlsoap.org/ws/2002/12/secext" xmlns:ed="urn:ebay:apis:EnhancedDataTypes"
+        xmlns:ebl="urn:ebay:apis:eBLBaseComponents" xmlns:ns="urn:ebay:api:PayPalAPI"><SOAP-ENV:Header><Security
+        xmlns="http://schemas.xmlsoap.org/ws/2002/12/secext" xsi:type="wsse:SecurityType"></Security><RequesterCredentials
+        xmlns="urn:ebay:api:PayPalAPI" xsi:type="ebl:CustomSecurityHeaderType"><Credentials
+        xmlns="urn:ebay:apis:eBLBaseComponents" xsi:type="ebl:UserIdPasswordType"><Username
+        xsi:type="xs:string"></Username><Password xsi:type="xs:string"></Password><Signature
+        xsi:type="xs:string"></Signature><Subject xsi:type="xs:string"></Subject></Credentials></RequesterCredentials></SOAP-ENV:Header><SOAP-ENV:Body
+        id="_0"><GetTransactionDetailsResponse xmlns="urn:ebay:api:PayPalAPI"><Timestamp
+        xmlns="urn:ebay:apis:eBLBaseComponents">2019-10-31T03:47:17Z</Timestamp><Ack
+        xmlns="urn:ebay:apis:eBLBaseComponents">Failure</Ack><CorrelationID xmlns="urn:ebay:apis:eBLBaseComponents">42278f63178a4</CorrelationID><Errors
+        xmlns="urn:ebay:apis:eBLBaseComponents" xsi:type="ebl:ErrorType"><ShortMessage
+        xsi:type="xs:string">Transaction refused because of an invalid argument. See
+        additional error messages for details.</ShortMessage><LongMessage xsi:type="xs:string">The
+        transaction id is not valid</LongMessage><ErrorCode xsi:type="xs:token">10004</ErrorCode><SeverityCode
+        xmlns="urn:ebay:apis:eBLBaseComponents">Error</SeverityCode></Errors><Version
+        xmlns="urn:ebay:apis:eBLBaseComponents">116.0</Version><Build xmlns="urn:ebay:apis:eBLBaseComponents">53779744</Build><PaymentTransactionDetails
+        xmlns="urn:ebay:apis:eBLBaseComponents" xsi:type="ebl:PaymentTransactionType"><ReceiverInfo
+        xsi:type="ebl:ReceiverInfoType"></ReceiverInfo><PayerInfo xsi:type="ebl:PayerInfoType"><PayerStatus
+        xsi:type="ebl:PayPalUserStatusCodeType">verified</PayerStatus><PayerName xsi:type="ebl:PersonNameType"></PayerName><Address
+        xsi:type="ebl:AddressType"><AddressOwner xsi:type="ebl:AddressOwnerCodeType">PayPal</AddressOwner><AddressStatus
+        xsi:type="ebl:AddressStatusCodeType">None</AddressStatus></Address></PayerInfo><PaymentInfo
+        xsi:type="ebl:PaymentInfoType"><TransactionType xsi:type="ebl:PaymentTransactionCodeType">none</TransactionType><PaymentType
+        xsi:type="ebl:PaymentCodeType">none</PaymentType><PaymentStatus xsi:type="ebl:PaymentStatusCodeType">None</PaymentStatus><PendingReason
+        xsi:type="ebl:PendingStatusCodeType">none</PendingReason><ReasonCode xsi:type="ebl:ReversalReasonCodeType">none</ReasonCode></PaymentInfo><PaymentItemInfo
+        xsi:type="ebl:PaymentItemInfoType"><Subscription xsi:type="ebl:SubscriptionInfoType"></Subscription><Auction
+        xsi:type="ebl:AuctionInfoType"></Auction></PaymentItemInfo></PaymentTransactionDetails></GetTransactionDetailsResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:47:17 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/transactions/5sed8qpf/refund
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <transaction>
+          <amount nil="true"/>
+        </transaction>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:47:19 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Etag:
+      - W/"74125bc030f2b0d12fab6a05c12ecd5d"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Runtime:
+      - '0.466664'
+      X-Request-Id:
+      - 02-1572493638.450-157.34.125.172-5412942
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 02-1572493638.450-157.34.125.172-5412942
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        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
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:47:20 GMT
+recorded_with: VCR 3.0.3

@@ -1,0 +1,90 @@
+<%
+  def nav_link(text, path, options = {})
+    is_current = current_page?(path)
+    if options[:category] == "button"
+      link_to text, path, class: "flex w-full items-center justify-center #{
+        if text == 'Dashboard'
+          'lg:bg-black lg:text-white lg:hover:bg-pink dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white'
+        elsif options[:context] != 'primary'
+          'lg:border-l-black lg:bg-white lg:text-black lg:hover:bg-pink dark:lg:border-l-white/[.35] dark:lg:bg-black dark:lg:text-white'
+        else
+          'lg:bg-black lg:text-white lg:hover:bg-pink'
+        end
+      } border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:px-12 #{
+        if options[:context] == 'primary' && text != 'Dashboard'
+          'dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white'
+        else
+          'dark:lg:hover:bg-white dark:lg:hover:text-black'
+        end
+      }"
+    else
+      link_to text, path, class: "flex w-full items-center justify-center border #{
+        is_current ? 'border-black' : 'border-transparent'
+      } #{
+        is_current ? 'lg:bg-black lg:text-white dark:lg:bg-white dark:lg:text-black' : 'lg:bg-transparent lg:text-black dark:lg:text-white'
+      } bg-black p-4 text-lg text-white no-underline transition-all duration-200 hover:border-black lg:w-auto lg:rounded-full lg:py-2 lg:px-4 dark:text-white lg:dark:hover:border-white/[.35]"
+    end
+  end
+
+  def logo_link(options = {})
+    link_to "/", class: options[:class] do
+      image_tag "logo.svg",
+        loading: "lazy",
+        alt: "",
+        class: "#{options[:image_class]} dark:invert"
+    end
+  end
+
+  def toggle_button
+    content_tag :div, class: "flex items-center lg:hidden" do
+      content_tag :button,
+        class: "relative flex h-8 w-8 flex-col items-center justify-center focus:outline-none",
+        data: { toggle: "mobile-menu" } do
+          content_tag(:div, "",
+            class: "mb-1 h-0.5 w-8 origin-center bg-black transition-transform duration-200 dark:bg-white",
+            data: { menu_line: "1" }
+          ) +
+          content_tag(:div, "",
+            class: "mt-1 h-0.5 w-8 origin-center bg-black transition-transform duration-200 dark:bg-white",
+            data: { menu_line: "2" }
+          )
+      end
+    end
+  end
+
+  def nav_links
+    content_tag :div, class: "flex flex-col justify-center items-center lg:flex-row lg:gap-4 lg:px-8" do
+      nav_link("Home", "/") +
+      nav_link("About", "/about") +
+      nav_link("Features", "/features") +
+      nav_link("Pricing", "/pricing") +
+      nav_link("Taxes", "/taxes")
+    end
+  end
+
+  def auth_links
+    content_tag :div, class: "flex flex-col lg:flex-row" do
+      if signed_in?
+        nav_link("Dashboard", "https://gumroad.com", category: "button", context: "primary")
+      else
+        nav_link("Log in", new_user_session_path, category: "button") +
+        nav_link("Start selling", new_user_registration_path, category: "button", context: "primary")
+      end
+    end
+  end
+%>
+
+<div class="justify-between bg-white border-b border-black top-0 left-0 right-0 z-50 pr-4 pl-4 h-20 sticky flex lg:pl-8 lg:pr-0 dark:bg-black">
+  <%= logo_link(class: "flex items-center", image_class: "h-8") %>
+  <div class="override hidden lg:gap-4 lg:items-center lg:justify-center lg:flex-1 lg:flex">
+    <%= nav_links %>
+  </div>
+  <div class="override hidden lg:flex">
+    <%= auth_links %>
+  </div>
+  <%= toggle_button %>
+</div>
+<div class="override hidden justify-between border-b border-black flex-col top-20 left-0 right-0 z-50 sticky bg-black dark:border-white/[.35]" id="mobile-menu">
+  <%= nav_links %>
+  <%= auth_links %>
+</div>

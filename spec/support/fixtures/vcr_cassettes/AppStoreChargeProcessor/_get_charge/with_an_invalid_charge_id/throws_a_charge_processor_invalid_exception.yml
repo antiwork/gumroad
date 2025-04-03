@@ -1,0 +1,241 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/invalid
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer eyJraWQiOiJVNUZTS0hOM1VRIiwiYWxnIjoiRVMyNTYifQ.eyJleHAiOjE3MTUzNTgxODYsImlzcyI6IjY5YTZkZTc5LTEzNTYtNDdlMy1lMDUzLTViOGM3YzExYTRkMSIsImF1ZCI6ImFwcHN0b3JlY29ubmVjdC12MSIsImJpZCI6ImNvbS5HUkQuR3Vtcm9hZCJ9.spMCkX2TqYuva_THfs8bs5_yvcQfelljShwNWkALJ3Q5T0FjyV8Ors6Q5L_irvCosLUwAaFydUbeoYo15jjPJg
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.storekit-sandbox.itunes.apple.com
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Server:
+      - daiquiri/5
+      Date:
+      - Fri, 10 May 2024 16:03:06 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '62'
+      Connection:
+      - keep-alive
+      X-Apple-Jingle-Correlation-Key:
+      - 3GLLMYYKJGO2OTSJY42CS63S6A
+      X-Apple-Request-Uuid:
+      - d996b663-0a49-9da7-4e49-c734297b72f0
+      B3:
+      - d996b6630a499da74e49c734297b72f0-840a76b04e08076c
+      X-B3-Traceid:
+      - d996b6630a499da74e49c734297b72f0
+      X-B3-Spanid:
+      - 840a76b04e08076c
+      Apple-Seq:
+      - '0.0'
+      Apple-Tk:
+      - 'false'
+      Apple-Originating-System:
+      - CommerceGateway
+      X-Responding-Instance:
+      - 'CommerceGateway:20105:::'
+      Apple-Timing-App:
+      - 3 ms
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      X-Daiquiri-Instance:
+      - daiquiri:45824002:st44p00it-hyhk15104701:7987:24RELEASE108:daiquiri-amp-commerce-clients-ext-001-st
+    body:
+      encoding: UTF-8
+      string: '{"errorCode":4000006,"errorMessage":"Invalid transaction id."}'
+  recorded_at: Fri, 10 May 2024 16:03:06 GMT
+- request:
+    method: get
+    uri: https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/invalid
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer eyJraWQiOiJVNUZTS0hOM1VRIiwiYWxnIjoiRVMyNTYifQ.eyJleHAiOjE3MTUzNTgxODYsImlzcyI6IjY5YTZkZTc5LTEzNTYtNDdlMy1lMDUzLTViOGM3YzExYTRkMSIsImF1ZCI6ImFwcHN0b3JlY29ubmVjdC12MSIsImJpZCI6ImNvbS5HUkQuR3Vtcm9hZCJ9.ix-b5x5rXfMLpjmmLosYncy62ze-IL3w-DRyUpaWnThMRfr4Krqbr1yPH1HcdCR9Yh9_AoxaNeR4Ng1eNrpbCA
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.storekit-sandbox.itunes.apple.com
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Server:
+      - daiquiri/5
+      Date:
+      - Fri, 10 May 2024 16:03:07 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '62'
+      Connection:
+      - keep-alive
+      X-Apple-Jingle-Correlation-Key:
+      - XR5RNVKUDCQ4SNEUGT2PVGKYNU
+      X-Apple-Request-Uuid:
+      - bc7b16d5-5418-a1c9-3494-34f4fa99586d
+      B3:
+      - bc7b16d55418a1c9349434f4fa99586d-c287bbfc5a50c949
+      X-B3-Traceid:
+      - bc7b16d55418a1c9349434f4fa99586d
+      X-B3-Spanid:
+      - c287bbfc5a50c949
+      Apple-Seq:
+      - '0.0'
+      Apple-Tk:
+      - 'false'
+      Apple-Originating-System:
+      - CommerceGateway
+      X-Responding-Instance:
+      - 'CommerceGateway:20112:::'
+      Apple-Timing-App:
+      - 9 ms
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      X-Daiquiri-Instance:
+      - daiquiri:45824001:st44p00it-hyhk16034901:7987:24RELEASE108:daiquiri-amp-commerce-clients-ext-001-st
+    body:
+      encoding: UTF-8
+      string: '{"errorCode":4000006,"errorMessage":"Invalid transaction id."}'
+  recorded_at: Fri, 10 May 2024 16:03:07 GMT
+- request:
+    method: get
+    uri: https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/invalid
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer eyJraWQiOiJVNUZTS0hOM1VRIiwiYWxnIjoiRVMyNTYifQ.eyJleHAiOjE3MTUzNTgxODcsImlzcyI6IjY5YTZkZTc5LTEzNTYtNDdlMy1lMDUzLTViOGM3YzExYTRkMSIsImF1ZCI6ImFwcHN0b3JlY29ubmVjdC12MSIsImJpZCI6ImNvbS5HUkQuR3Vtcm9hZCJ9.jUaI3URWfkUN99zevuAnRTagQmB4VQdIrnE6ZYzY5a8M939a5slY560BTzAwTeIVh5W__By0XsD4mzkiUUFLDg
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.storekit-sandbox.itunes.apple.com
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Server:
+      - daiquiri/5
+      Date:
+      - Fri, 10 May 2024 16:03:07 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '62'
+      Connection:
+      - keep-alive
+      X-Apple-Jingle-Correlation-Key:
+      - 753U724KQVU2TRYREJQYGYJOCI
+      X-Apple-Request-Uuid:
+      - ff774feb-8a85-69a9-c711-226183612e12
+      B3:
+      - ff774feb8a8569a9c711226183612e12-95900d465898edbb
+      X-B3-Traceid:
+      - ff774feb8a8569a9c711226183612e12
+      X-B3-Spanid:
+      - 95900d465898edbb
+      Apple-Seq:
+      - '0.0'
+      Apple-Tk:
+      - 'false'
+      Apple-Originating-System:
+      - CommerceGateway
+      X-Responding-Instance:
+      - 'CommerceGateway:20105:::'
+      Apple-Timing-App:
+      - 3 ms
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      X-Daiquiri-Instance:
+      - daiquiri:47578002:st44p00it-hyhk16094801:7987:24RELEASE108:daiquiri-amp-commerce-clients-ext-002-st
+    body:
+      encoding: UTF-8
+      string: '{"errorCode":4000006,"errorMessage":"Invalid transaction id."}'
+  recorded_at: Fri, 10 May 2024 16:03:07 GMT
+- request:
+    method: get
+    uri: https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/invalid
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer eyJraWQiOiJVNUZTS0hOM1VRIiwiYWxnIjoiRVMyNTYifQ.eyJleHAiOjE3MjAwMjQ3NTAsImlzcyI6IjY5YTZkZTc5LTEzNTYtNDdlMy1lMDUzLTViOGM3YzExYTRkMSIsImF1ZCI6ImFwcHN0b3JlY29ubmVjdC12MSIsImJpZCI6ImNvbS5HUkQuR3Vtcm9hZCJ9.gRB80lsuwrRO-4bc4NlR9uyUvzq6pgm63V5Htci-6E1TiwhQUMF2NOxWFFVTSvQ2hfB9wllG0CGpXFDK3sG_0Q
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Server:
+      - daiquiri/5
+      Date:
+      - Wed, 03 Jul 2024 16:19:11 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '62'
+      Connection:
+      - keep-alive
+      X-Apple-Jingle-Correlation-Key:
+      - YR6WYI5Y4I5IL2RM7OXRYBCRHM
+      X-Apple-Request-Uuid:
+      - c47d6c23-b8e2-3a85-ea2c-fbaf1c04513b
+      B3:
+      - c47d6c23b8e23a85ea2cfbaf1c04513b-67251422c5eb2ded
+      X-B3-Traceid:
+      - c47d6c23b8e23a85ea2cfbaf1c04513b
+      X-B3-Spanid:
+      - 67251422c5eb2ded
+      Apple-Seq:
+      - '0.0'
+      Apple-Tk:
+      - 'false'
+      Apple-Originating-System:
+      - CommerceGateway
+      X-Responding-Instance:
+      - 'CommerceGateway:20101:::'
+      Apple-Timing-App:
+      - 10 ms
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      X-Daiquiri-Instance:
+      - daiquiri:45824001:st44p00it-hyhk16034901:7987:24RELEASE127:daiquiri-amp-commerce-clients-ext-001-st
+    body:
+      encoding: UTF-8
+      string: '{"errorCode":4000006,"errorMessage":"Invalid transaction id."}'
+  recorded_at: Wed, 03 Jul 2024 16:19:11 GMT
+recorded_with: VCR 6.2.0

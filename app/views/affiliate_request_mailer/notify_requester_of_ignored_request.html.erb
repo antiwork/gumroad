@@ -1,0 +1,7 @@
+<%= header_section(@subject) %>
+<div>
+  <p>We are sorry, but your request to become an affiliate for <%= @affiliate_request.seller.display_name %> was not approved.</p>
+  <p><strong>Name:</strong> <%= @affiliate_request.name %></p>
+  <p><strong>Email:</strong> <%= @affiliate_request.email %></p>
+  <p><em>"<%= Rinku.auto_link(strip_tags(@affiliate_request.promotion_text)) %>"</em></p>
+</div>

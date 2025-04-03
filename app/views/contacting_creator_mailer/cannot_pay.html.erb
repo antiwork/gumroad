@@ -1,0 +1,7 @@
+<%= header_section("We were unable to pay you.") %>
+<div>
+  <p>Hi there. We just tried to pay you <%= @amount %>, but were not able to.</p>
+  <p>
+    Please <a href='<%= settings_payments_url %>'>check that your payout settings</a> are complete, so your payout can be sent at the next pay period.
+  </p>
+</div>

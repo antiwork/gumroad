@@ -1,0 +1,9 @@
+<main class="stack single-page-form horizontal-form">
+  <header>
+    <h2>You will no longer receive emails from this seller.</h2>
+    <p>This will include emails that contain posts to products that you have purchased from this seller. If you wish to resubscribe to all posts and file changes, please click <a href="<%= subscribe_purchase_url(@purchase.external_id) %>">here</a>.</p>
+  </header>
+</main>
+<% content_for :footer do %>
+  <%= default_footer_content %>
+<% end %>

@@ -1,0 +1,7 @@
+<%= header_section("A subscription has been downgraded.") %>
+<div>
+  <p>
+    Your customer (<%= link_to @subscription.email, customers_url(query: @subscription.email) %>) has elected to downgrade their subscription to <%= @subscription.link.name %>.
+    At the end of their current billing cycle (<%= @subscription.formatted_end_time_of_subscription %>), they will be transitioned to<%= @subscription.original_purchase.is_multiseat_license ? " #{@subscription_plan_change.quantity} of" : "" %> tier <%= @subscription_plan_change.tier.name %> and will be charged <%= @subscription_plan_change.formatted_display_price %> going forward.
+  </p>
+</div>

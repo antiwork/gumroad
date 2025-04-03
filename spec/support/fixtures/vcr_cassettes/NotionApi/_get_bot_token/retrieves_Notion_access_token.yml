@@ -1,0 +1,112 @@
+---
+http_interactions:
+  - request:
+      method: post
+      uri: https://api.notion.com/v1/oauth/token
+      body:
+        encoding: UTF-8
+        string: '{"grant_type":"authorization_code","external_account":{"key":"8479280492347","name":"user@example.com"}}'
+      headers:
+        Authorization:
+          - Basic NGUwNjZmODYtNjRlZS00MDNjLWJjMTgtNjQ0ZWVlZmYzN2FjOnNlY3JldF8yek5hOEp6TU9UWktZekN5TjBpUUt0aHVDVHAwb2tqT3BnSksxTG5PTEZt
+        Content-Type:
+          - application/json
+        Accept-Encoding:
+          - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+        Accept:
+          - "*/*"
+        User-Agent:
+          - Ruby
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        Date:
+          - Fri, 16 Dec 2022 08:13:29 GMT
+        Content-Type:
+          - application/json; charset=utf-8
+        Content-Length:
+          - "127"
+        Connection:
+          - keep-alive
+        Set-Cookie:
+          - notion_browser_id=b620007d-f467-4192-a36e-88f18cb03b90; Domain=www.notion.so;
+            Path=/; Expires=Sat, 16 Dec 2023 08:13:29 GMT; Secure
+          - notion_check_cookie_consent=false; Domain=www.notion.so; Path=/; Expires=Sat,
+            17 Dec 2022 08:13:29 GMT; Secure
+        Content-Security-Policy:
+          - "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://gist.github.com https://apis.google.com
+            https://www.google.com https://www.gstatic.com https://cdn.amplitude.com https://api.amplitude.com
+            https://hkfxbbdzib.notion.so https://widget.intercom.io https://js.intercomcdn.com
+            https://static.zdassets.com https://api.smooch.io\t https://logs-01.loggly.com
+            https://http-inputs-notion.splunkcloud.com https://cdn.segment.com https://analytics.pgncs.notion.so
+            https://o324374.ingest.sentry.io https://checkout.stripe.com https://js.stripe.com
+            https://embed.typeform.com https://admin.typeform.com https://public.profitwell.com
+            js.sentry-cdn.com https://js.chilipiper.com https://platform.twitter.com https://cdn.syndication.twimg.com
+            https://accounts.google.com https://www.googletagmanager.com https://www.googleadservices.com
+            https://googleads.g.doubleclick.net https://api-v2.mutinyhq.io https://client-registry.mutinycdn.com
+            https://client.mutinycdn.com https://user-data.mutinycdn.com https://metadata-static-files.sfo2.cdn.digitaloceanspaces.com
+            https://platformapi.metadata.io https://d2hrivdxn8ekm8.cloudfront.net https://d1lu3pmaz2ilpx.cloudfront.net
+            https://dvqigh9b7wa32.cloudfront.net https://d330aiyvva2oww.cloudfront.net
+            https://cdn.transcend.io https://cdn01.boxcdn.net;connect-src 'self' https://msgstore.www.notion.so
+            wss://msgstore.www.notion.so ws://localhost:* ws://127.0.0.1:* https://notion-emojis.s3-us-west-2.amazonaws.com
+            https://s3-us-west-2.amazonaws.com https://s3.us-west-2.amazonaws.com https://notion-production-snapshots-2.s3.us-west-2.amazonaws.com
+            https://cdn.amplitude.com https://api.amplitude.com https://hkfxbbdzib.notion.so
+            https://www.notion.so https://api.embed.ly https://js.intercomcdn.com https://api-iam.intercom.io
+            https://uploads.intercomcdn.com wss://nexus-websocket-a.intercom.io https://ekr.zdassets.com
+            https://ekr.zendesk.com\t https://makenotion.zendesk.com\t https://api.smooch.io\t
+            wss://api.smooch.io\t https://logs-01.loggly.com https://http-inputs-notion.splunkcloud.com
+            https://cdn.segment.com https://api.segment.io https://analytics.pgncs.notion.so
+            https://api.pgncs.notion.so https://o324374.ingest.sentry.io https://checkout.stripe.com
+            https://js.stripe.com https://cdn.contentful.com https://preview.contentful.com
+            https://images.ctfassets.net https://www2.profitwell.com https://tracking.chilipiper.com
+            https://api.chilipiper.com https://api.unsplash.com https://boards-api.greenhouse.io
+            https://accounts.google.com https://oauth2.googleapis.com https://www.googletagmanager.com
+            https://analytics.google.com https://www.googleadservices.com https://googleads.g.doubleclick.net
+            https://region1.google-analytics.com https://region1.analytics.google.com
+            https://www.google-analytics.com https://api-v2.mutinyhq.io https://client-registry.mutinycdn.com
+            https://client.mutinycdn.com https://user-data.mutinycdn.com https://metadata-static-files.sfo2.cdn.digitaloceanspaces.com
+            https://platformapi.metadata.io https://d2hrivdxn8ekm8.cloudfront.net https://d1lu3pmaz2ilpx.cloudfront.net
+            https://dvqigh9b7wa32.cloudfront.net https://d330aiyvva2oww.cloudfront.net
+            https://cdn.transcend.io https://api.statuspage.io https://pgncd.notion.so
+            https://api.statsig.com https://statsigapi.net https://exp.notion.so https://file.notion.so
+            https://api.box.com;font-src 'self' data: https://cdnjs.cloudflare.com https://js.intercomcdn.com
+            https://cdn01.boxcdn.net;img-src 'self' data: blob: https: https://platform.twitter.com
+            https://syndication.twitter.com https://pbs.twimg.com https://ton.twimg.com
+            https://region1.google-analytics.com https://region1.analytics.google.com;style-src
+            'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://github.githubassets.com
+            https://js.chilipiper.com https://platform.twitter.com https://ton.twimg.com
+            https://accounts.google.com https://cdn01.boxcdn.net;frame-src https: http:
+            https://accounts.google.com;media-src https: http: https://file.notion.so"
+        X-Dns-Prefetch-Control:
+          - "off"
+        X-Frame-Options:
+          - SAMEORIGIN
+        Strict-Transport-Security:
+          - max-age=5184000; includeSubDomains
+        X-Download-Options:
+          - noopen
+        X-Content-Type-Options:
+          - nosniff
+        X-Permitted-Cross-Domain-Policies:
+          - none
+        Referrer-Policy:
+          - strict-origin-when-cross-origin
+        X-Xss-Protection:
+          - "0"
+        Etag:
+          - W/"7f-Vah/qw/W2Cr/oRRfvxcQ3JZEqOA"
+        Vary:
+          - Accept-Encoding
+        Cf-Cache-Status:
+          - DYNAMIC
+        Server:
+          - cloudflare
+        Cf-Ray:
+          - 77a5f5bfb94f2ea4-SIN
+      body:
+        encoding: UTF-8
+        string: '{"access_token":"secret_cKEExFXDe4r0JxyDDwdqhO9rpMKJ_SAMPLE","token_type":"bearer","bot_id":"e511ea88-8c43-410d-848f-0e2804aab14d","workspace_name":"Gumroad","workspace_icon":"https://s3-us-west-2.amazonaws.com/public.notion-static.com/38a1e418-4746-4a1a-9de7-b144db49f20e/Avatar.png","workspace_id":"e13669ed-91b9-4eec-9ae2-4896167e4cde","owner":{"type":"workspace","workspace":true},"duplicated_template_id":null}'
+    recorded_at: Fri, 16 Dec 2022 08:13:28 GMT
+recorded_with: VCR 6.1.0

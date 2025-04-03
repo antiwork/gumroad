@@ -1,0 +1,13 @@
+<% detail_style = "flex-grow:unset;flex:1;font-size:16px;" %>
+<div>
+  <p>You recently reported as fraud the transaction for your purchase of <%= link_to @product.name, @product.long_url %> for <%= @price %>, made on <%= @purchase_date %>. A receipt was sent to <%= @purchase.email %> — please check your Spam folder if you are unable to locate it.</p>
+  <p>If you reported this purchase because you didn't recognize "GUMRD.COM" on your account statement, or if you didn't report this purchase, you can contact your bank to cancel the report.</p>
+  <p>If you would like to manage your membership you can visit <%= link_to "subscription settings", @edit_card_url %>.</p>
+</div>
+<div>
+  <a class="button primary" href="<%= @edit_card_url %>">Manage membership</a>
+</div>
+<div>
+  <p>Questions about your product?</p>
+  <p>Contact <%= @subscription.link.user.display_name %> by replying to this email</p>
+</div>

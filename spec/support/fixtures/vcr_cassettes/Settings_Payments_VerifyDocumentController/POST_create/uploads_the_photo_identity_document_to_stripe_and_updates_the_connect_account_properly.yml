@@ -1,0 +1,1078 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=6682016945707&metadata[tos_agreement_id]=iLh8Fr2w2RkHsmp2T304ug%3D%3D&metadata[user_compliance_info_id]=uQQ90uzrq-D3ZgK35b_nUA%3D%3D&metadata[bank_account_id]=KYvETFMsWuMr1oJPBKMQUw%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar7bb3ffe1_6818%40gumroad.com&individual[phone]=0000000000&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[dob][day]=2&individual[dob][month]=1&individual[dob][year]=1901&individual[id_number]=000000000&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=000123456789&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_nkHOAKVhfMDA0G","request_duration_ms":1045}}'
+      Idempotency-Key:
+      - 3fdbc001-ab56-4c66-b297-678404123e36
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:46:26 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '8330'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - 3fdbc001-ab56-4c66-b297-678404123e36
+      Original-Request:
+      - req_WTApQ3diwe1DWR
+      Request-Id:
+      - req_WTApQ3diwe1DWR
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1O7NtKS5VoeqIG1U",
+          "object": "account",
+          "business_profile": {
+            "mcc": "5192",
+            "name": null,
+            "product_description": "Chuck Bartowski",
+            "support_address": null,
+            "support_email": null,
+            "support_phone": null,
+            "support_url": null,
+            "url": "https://vipul.gumroad.com/"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "card_payments": "pending",
+            "transfers": "pending"
+          },
+          "charges_enabled": false,
+          "company": {
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": null,
+            "owners_provided": true,
+            "phone": "+10000000000",
+            "tax_id_provided": false,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              }
+            }
+          },
+          "country": "US",
+          "created": 1698781583,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1O7NtKS5VoeqIG1UqNT77MyE",
+                "object": "bank_account",
+                "account": "acct_1O7NtKS5VoeqIG1U",
+                "account_holder_name": null,
+                "account_holder_type": null,
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "dx7dqwoGHEQDKLLK",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "new"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1O7NtKS5VoeqIG1U/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": 1712084400,
+            "currently_due": [
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.phone"
+            ],
+            "disabled_reason": null,
+            "errors": [
+              {
+                "code": "invalid_dob_age_over_maximum",
+                "reason": "Date of birth must be within the past 120 years.",
+                "requirement": "individual.dob.day"
+              },
+              {
+                "code": "invalid_dob_age_over_maximum",
+                "reason": "Date of birth must be within the past 120 years.",
+                "requirement": "individual.dob.month"
+              },
+              {
+                "code": "invalid_dob_age_over_maximum",
+                "reason": "Date of birth must be within the past 120 years.",
+                "requirement": "individual.dob.year"
+              },
+              {
+                "code": "invalid_phone_number",
+                "reason": "This phone number has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
+                "requirement": "individual.phone"
+              }
+            ],
+            "eventually_due": [
+              "individual.dob.day",
+              "individual.dob.month",
+              "individual.dob.year",
+              "individual.phone"
+            ],
+            "past_due": [],
+            "pending_verification": [
+              "business_profile.url",
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state"
+            ]
+          },
+          "individual": {
+            "id": "person_1O7NtKS5VoeqIG1UcyK4Q7Mw",
+            "object": "person",
+            "account": "acct_1O7NtKS5VoeqIG1U",
+            "address": {
+              "city": "San Francisco",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "94107",
+              "state": "California"
+            },
+            "created": 1698781583,
+            "dob": {
+              "day": 2,
+              "month": 1,
+              "year": 1901
+            },
+            "email": "edgar7bb3ffe1_6818@gumroad.com",
+            "first_name": "Chuck",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [
+                "dob.day",
+                "dob.month",
+                "dob.year",
+                "phone"
+              ],
+              "errors": [
+                {
+                  "code": "invalid_dob_age_over_maximum",
+                  "reason": "Date of birth must be within the past 120 years.",
+                  "requirement": "dob.day"
+                },
+                {
+                  "code": "invalid_dob_age_over_maximum",
+                  "reason": "Date of birth must be within the past 120 years.",
+                  "requirement": "dob.month"
+                },
+                {
+                  "code": "invalid_dob_age_over_maximum",
+                  "reason": "Date of birth must be within the past 120 years.",
+                  "requirement": "dob.year"
+                },
+                {
+                  "code": "invalid_phone_number",
+                  "reason": "This phone number has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
+                  "requirement": "phone"
+                }
+              ],
+              "eventually_due": [
+                "dob.day",
+                "dob.month",
+                "dob.year",
+                "phone"
+              ],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state"
+              ]
+            },
+            "id_number_provided": true,
+            "last_name": "Bartowski",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "director": false,
+              "executive": false,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": [
+                "address.city",
+                "address.line1",
+                "address.postal_code",
+                "address.state",
+                "id_number",
+                "verification.document"
+              ]
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "status": "pending"
+            }
+          },
+          "metadata": {
+            "bank_account_id": "KYvETFMsWuMr1oJPBKMQUw==",
+            "tos_agreement_id": "iLh8Fr2w2RkHsmp2T304ug==",
+            "user_compliance_info_id": "uQQ90uzrq-D3ZgK35b_nUA==",
+            "user_id": "6682016945707"
+          },
+          "payouts_enabled": false,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": "requirements.pending_verification",
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": [
+              "individual.address.city",
+              "individual.address.line1",
+              "individual.address.postal_code",
+              "individual.address.state",
+              "individual.id_number",
+              "individual.verification.document"
+            ]
+          },
+          "settings": {
+            "bacs_debit_payments": {},
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": "VIPUL.GUMR",
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "vipul.gumroad",
+              "timezone": "Etc/UTC"
+            },
+            "payments": {
+              "statement_descriptor": "VIPUL.GUMROAD.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 1,
+                "interval": "manual"
+              },
+              "statement_descriptor": null
+            },
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1427846400,
+            "ip": "54.234.242.13",
+            "user_agent": null
+          },
+          "type": "custom"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:46:26 GMT
+- request:
+    method: post
+    uri: https://files.stripe.com/v1/files
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        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
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - multipart/form-data; boundary=aecd1dea29b6609a9ebbc8691dd1e1454146ba5e622c9b6cee5a047f338c
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_WTApQ3diwe1DWR","request_duration_ms":4684}}'
+      Idempotency-Key:
+      - d49052ee-1c81-41e5-a4b9-78d86f116b2f
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Stripe-Account:
+      - acct_1O7NtKS5VoeqIG1U
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:46:28 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '407'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Ffiles; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Request-Id:
+      - req_3jxkxletNoHMyT
+      Stripe-Account:
+      - acct_1O7NtKS5VoeqIG1U
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Api-Gateway-Reached:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - livemode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "file_1O7NtPS5VoeqIG1U0yFtvw2B",
+          "object": "file",
+          "created": 1698781587,
+          "expires_at": null,
+          "filename": "RackMultipart20231101-12090-nrdiv9.png",
+          "links": {
+            "object": "list",
+            "data": [],
+            "has_more": false,
+            "url": "/v1/file_links?file=file_1O7NtPS5VoeqIG1U0yFtvw2B"
+          },
+          "purpose": "identity_document",
+          "size": 5818,
+          "title": null,
+          "type": "png",
+          "url": null
+        }
+  recorded_at: Tue, 31 Oct 2023 19:46:28 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NtKS5VoeqIG1U/persons
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_3jxkxletNoHMyT","request_duration_ms":1418}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:46:28 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3294'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Request-Id:
+      - req_QKq7a434tG80te
+      Stripe-Account:
+      - acct_1O7NtKS5VoeqIG1U
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "person_1O7NtKS5VoeqIG1UcyK4Q7Mw",
+              "object": "person",
+              "account": "acct_1O7NtKS5VoeqIG1U",
+              "additional_tos_acceptances": {
+                "account": {
+                  "date": null,
+                  "ip": null,
+                  "user_agent": null
+                }
+              },
+              "address": {
+                "city": "San Francisco",
+                "country": "US",
+                "line1": "address_full_match",
+                "line2": null,
+                "postal_code": "94107",
+                "state": "California"
+              },
+              "created": 1698781583,
+              "dob": {
+                "day": 2,
+                "month": 1,
+                "year": 1901
+              },
+              "email": "edgar7bb3ffe1_6818@gumroad.com",
+              "first_name": "Chuck",
+              "future_requirements": {
+                "alternatives": [],
+                "currently_due": [
+                  "dob.day",
+                  "dob.month",
+                  "dob.year",
+                  "phone"
+                ],
+                "errors": [
+                  {
+                    "code": "invalid_dob_age_over_maximum",
+                    "reason": "Date of birth must be within the past 120 years.",
+                    "requirement": "dob.day"
+                  },
+                  {
+                    "code": "invalid_dob_age_over_maximum",
+                    "reason": "Date of birth must be within the past 120 years.",
+                    "requirement": "dob.month"
+                  },
+                  {
+                    "code": "invalid_dob_age_over_maximum",
+                    "reason": "Date of birth must be within the past 120 years.",
+                    "requirement": "dob.year"
+                  },
+                  {
+                    "code": "invalid_phone_number",
+                    "reason": "This phone number has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
+                    "requirement": "phone"
+                  }
+                ],
+                "eventually_due": [
+                  "dob.day",
+                  "dob.month",
+                  "dob.year",
+                  "phone"
+                ],
+                "past_due": [],
+                "pending_verification": [
+                  "address.city",
+                  "address.line1",
+                  "address.postal_code",
+                  "address.state"
+                ]
+              },
+              "id_number_provided": true,
+              "last_name": "Bartowski",
+              "metadata": {},
+              "phone": "+10000000000",
+              "relationship": {
+                "director": false,
+                "executive": false,
+                "legal_guardian": false,
+                "owner": false,
+                "percent_ownership": null,
+                "representative": true,
+                "title": null
+              },
+              "requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": [
+                  "address.city",
+                  "address.line1",
+                  "address.postal_code",
+                  "address.state",
+                  "id_number",
+                  "verification.document"
+                ]
+              },
+              "ssn_last_4_provided": true,
+              "verification": {
+                "additional_document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "details": null,
+                "details_code": null,
+                "document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "status": "pending"
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1O7NtKS5VoeqIG1U/persons"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:46:28 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NtKS5VoeqIG1U/persons/person_1O7NtKS5VoeqIG1UcyK4Q7Mw
+    body:
+      encoding: UTF-8
+      string: verification[document][front]=file_1O7NtPS5VoeqIG1U0yFtvw2B
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_QKq7a434tG80te","request_duration_ms":391}}'
+      Idempotency-Key:
+      - b853455e-4a6d-41ae-a011-0bccb6782454
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:46:33 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '2505'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons%2F%3Aperson;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Idempotency-Key:
+      - b853455e-4a6d-41ae-a011-0bccb6782454
+      Original-Request:
+      - req_8S4dRq1uOljFCy
+      Request-Id:
+      - req_8S4dRq1uOljFCy
+      Stripe-Account:
+      - acct_1O7NtKS5VoeqIG1U
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "person_1O7NtKS5VoeqIG1UcyK4Q7Mw",
+          "object": "person",
+          "account": "acct_1O7NtKS5VoeqIG1U",
+          "additional_tos_acceptances": {
+            "account": {
+              "date": null,
+              "ip": null,
+              "user_agent": null
+            }
+          },
+          "address": {
+            "city": "San Francisco",
+            "country": "US",
+            "line1": "address_full_match",
+            "line2": null,
+            "postal_code": "94107",
+            "state": "California"
+          },
+          "created": 1698781583,
+          "dob": {
+            "day": 2,
+            "month": 1,
+            "year": 1901
+          },
+          "email": "edgar7bb3ffe1_6818@gumroad.com",
+          "first_name": "Chuck",
+          "future_requirements": {
+            "alternatives": [],
+            "currently_due": [
+              "dob.day",
+              "dob.month",
+              "dob.year",
+              "phone"
+            ],
+            "errors": [
+              {
+                "code": "invalid_dob_age_over_maximum",
+                "reason": "Date of birth must be within the past 120 years.",
+                "requirement": "dob.day"
+              },
+              {
+                "code": "invalid_dob_age_over_maximum",
+                "reason": "Date of birth must be within the past 120 years.",
+                "requirement": "dob.month"
+              },
+              {
+                "code": "invalid_dob_age_over_maximum",
+                "reason": "Date of birth must be within the past 120 years.",
+                "requirement": "dob.year"
+              },
+              {
+                "code": "invalid_phone_number",
+                "reason": "This phone number has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
+                "requirement": "phone"
+              }
+            ],
+            "eventually_due": [
+              "dob.day",
+              "dob.month",
+              "dob.year",
+              "phone"
+            ],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "id_number_provided": true,
+          "last_name": "Bartowski",
+          "metadata": {},
+          "phone": "+10000000000",
+          "relationship": {
+            "director": false,
+            "executive": false,
+            "legal_guardian": false,
+            "owner": false,
+            "percent_ownership": null,
+            "representative": true,
+            "title": null
+          },
+          "requirements": {
+            "alternatives": [],
+            "currently_due": [],
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": [
+              "id_number"
+            ]
+          },
+          "ssn_last_4_provided": true,
+          "verification": {
+            "additional_document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": null
+            },
+            "details": null,
+            "details_code": null,
+            "document": {
+              "back": null,
+              "details": null,
+              "details_code": null,
+              "front": "file_1O7NtPS5VoeqIG1U0yFtvw2B"
+            },
+            "status": "verified"
+          }
+        }
+  recorded_at: Tue, 31 Oct 2023 19:46:33 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1O7NtKS5VoeqIG1U/persons
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_8S4dRq1uOljFCy","request_duration_ms":4568}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:46:33 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '3053'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts%2F%3Aaccount%2Fpersons;
+        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
+        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
+        style-src 'self'
+      Request-Id:
+      - req_TV0CfOPeKEkZZs
+      Stripe-Account:
+      - acct_1O7NtKS5VoeqIG1U
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "person_1O7NtKS5VoeqIG1UcyK4Q7Mw",
+              "object": "person",
+              "account": "acct_1O7NtKS5VoeqIG1U",
+              "additional_tos_acceptances": {
+                "account": {
+                  "date": null,
+                  "ip": null,
+                  "user_agent": null
+                }
+              },
+              "address": {
+                "city": "San Francisco",
+                "country": "US",
+                "line1": "address_full_match",
+                "line2": null,
+                "postal_code": "94107",
+                "state": "California"
+              },
+              "created": 1698781583,
+              "dob": {
+                "day": 2,
+                "month": 1,
+                "year": 1901
+              },
+              "email": "edgar7bb3ffe1_6818@gumroad.com",
+              "first_name": "Chuck",
+              "future_requirements": {
+                "alternatives": [],
+                "currently_due": [
+                  "dob.day",
+                  "dob.month",
+                  "dob.year",
+                  "phone"
+                ],
+                "errors": [
+                  {
+                    "code": "invalid_dob_age_over_maximum",
+                    "reason": "Date of birth must be within the past 120 years.",
+                    "requirement": "dob.day"
+                  },
+                  {
+                    "code": "invalid_dob_age_over_maximum",
+                    "reason": "Date of birth must be within the past 120 years.",
+                    "requirement": "dob.month"
+                  },
+                  {
+                    "code": "invalid_dob_age_over_maximum",
+                    "reason": "Date of birth must be within the past 120 years.",
+                    "requirement": "dob.year"
+                  },
+                  {
+                    "code": "invalid_phone_number",
+                    "reason": "This phone number has too many repeating or sequential numbers. +10000000000 is not a valid phone number.",
+                    "requirement": "phone"
+                  }
+                ],
+                "eventually_due": [
+                  "dob.day",
+                  "dob.month",
+                  "dob.year",
+                  "phone"
+                ],
+                "past_due": [],
+                "pending_verification": []
+              },
+              "id_number_provided": true,
+              "last_name": "Bartowski",
+              "metadata": {},
+              "phone": "+10000000000",
+              "relationship": {
+                "director": false,
+                "executive": false,
+                "legal_guardian": false,
+                "owner": false,
+                "percent_ownership": null,
+                "representative": true,
+                "title": null
+              },
+              "requirements": {
+                "alternatives": [],
+                "currently_due": [],
+                "errors": [],
+                "eventually_due": [],
+                "past_due": [],
+                "pending_verification": [
+                  "id_number"
+                ]
+              },
+              "ssn_last_4_provided": true,
+              "verification": {
+                "additional_document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": null
+                },
+                "details": null,
+                "details_code": null,
+                "document": {
+                  "back": null,
+                  "details": null,
+                  "details_code": null,
+                  "front": "file_1O7NtPS5VoeqIG1U0yFtvw2B"
+                },
+                "status": "verified"
+              }
+            }
+          ],
+          "has_more": false,
+          "url": "/v1/accounts/acct_1O7NtKS5VoeqIG1U/persons"
+        }
+  recorded_at: Tue, 31 Oct 2023 19:46:33 GMT
+recorded_with: VCR 6.2.0

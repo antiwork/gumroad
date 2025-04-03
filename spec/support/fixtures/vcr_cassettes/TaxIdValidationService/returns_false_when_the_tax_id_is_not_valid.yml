@@ -1,0 +1,50 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://v3.api.taxid.pro/validate?country=IS&tin=1234567890
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Bearer <TAX_ID_PRO_API_KEY>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 18 Dec 2024 08:20:44 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 8f3dbc3f0aadf644-LAX
+      Cf-Cache-Status:
+      - DYNAMIC
+      Vary:
+      - Accept-Encoding
+      Rndr-Id:
+      - f40de8ef-ef73-4499
+      X-Render-Origin-Server:
+      - uvicorn
+      Server:
+      - cloudflare
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: '{"country_name":null,"tin_compact":null,"tin_standard":null,"format_name":null,"is_valid":false,"message":"Invalid
+        KN or VSK."}'
+  recorded_at: Wed, 18 Dec 2024 08:20:44 GMT
+recorded_with: VCR 6.2.0

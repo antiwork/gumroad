@@ -1,0 +1,4 @@
+<%= header_section("Your free trial is ending soon") %>
+<div>
+  <p>Your free trial to <%= @subscription.link.name %> is expiring on <%= @subscription.free_trial_end_date_formatted %>, at which point you will be charged. If you wish to cancel your membership, you can do so at any time <%= link_to "here", manage_subscription_url(@subscription.external_id, token: @subscription.token) %>.</p>
+</div>

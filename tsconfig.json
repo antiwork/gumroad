@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "module": "es2020",
+    "target": "es2021",
+    "strict": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "jsx": "react",
+    "paths": {
+      "$app/*": ["./app/javascript/*"]
+    },
+    "typeRoots": ["./node_modules/@types", "./app/javascript/types"],
+    "types": [
+      "grecaptcha",
+      "facebook-pixel",
+      "google.analytics",
+      "facebook-js-sdk",
+      "gtag.js",
+      "webpack-env",
+      "jwplayer"
+    ],
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["app/javascript"],
+  "exclude": ["**/*.spec.ts", "node_modules", "vendor", "public"]
+}

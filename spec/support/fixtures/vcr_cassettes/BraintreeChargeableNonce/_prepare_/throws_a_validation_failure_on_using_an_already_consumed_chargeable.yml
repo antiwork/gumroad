@@ -1,0 +1,71 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/customers
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <customer>
+          <credit-card>
+            <payment-method-nonce>fake-consumed-nonce</payment-method-nonce>
+          </credit-card>
+        </customer>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 422
+      message: Unprocessable Entity
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:53:22 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Cache-Control:
+      - no-cache
+      X-Runtime:
+      - '0.052300'
+      X-Request-Id:
+      - 02-1572494001.395-157.34.125.172-5494587
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 02-1572494001.395-157.34.125.172-5494587
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        H4sIALJaul0AA9xUzW7CMAy+9ymi3EOpOLBJaTlM2hNsZ2QSA9FIUjkpWt9+AQotrEzTttNu8ef/z3bk4t3u2B4pGO9KXkymnKFTXhu3Kfnry7N44Isqk1AbgUSeBGGovQtYZYzJIxQOz4vAYltjyYEIWp53KtWE6C3SSfzSNilraC26KCzGrddneNyr1571Q+SQ2musHmfFdC7z4/taDTGSWTURu6ihtSu/41VXw/JUw9J5p1DmF+ubKBZDgA1WT+Ccj6wJyICNhWDWU0q1BccO4kTmZ9dhH/lNIx0QLgzl4xRJRahNFArob2gr5rPiP9H2iZ8EDVZz6JC2kMCGews8zvT1WMSx9moNbyhUupnGYofdDrCz7ANp3BuFIqQu02EKo5kzu5JHarA/lGS3Jmh0CkIqcRPv2H2j777Znw8l+80Y05KMfDEfAAAA//8DAPSzTr6fBAAA
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:53:22 GMT
+recorded_with: VCR 3.0.3

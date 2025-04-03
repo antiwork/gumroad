@@ -1,0 +1,83 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://www.tiktok.com/oembed?format=json&maxwidth=670&url=https://www.tiktok.com/@soflofooodie/video/7164885074863787307
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.16.1)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Content-Type:
+      - application/json; charset=utf-8
+      X-Tt-Logid:
+      - 2023011215593278E6F4088915372B5430
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      Strict-Transport-Security:
+      - max-age=31536000
+      X-Tt-Trace-Host:
+      - 01d57fd261f4b8e4963d06e31e7f6b3466170caa235be977958224053576d22a1b85a925e8ce21baf84339e3761da18ce02974d0710e06da260889e57aeddd0ef55883186dc51abc014d1a8c7462e9b4ffdec8d55dd4764da095f067e2a0006095fbd17e5b7f8f879dd41595b398491858
+      Access-Control-Allow-Origin:
+      - "*"
+      X-Origin-Response-Time:
+      - 109,23.62.6.191
+      X-Akamai-Request-Id:
+      - 46d2496.6cb1f07
+      Vary:
+      - Accept-Encoding
+      Expires:
+      - Thu, 12 Jan 2023 15:59:33 GMT
+      Cache-Control:
+      - max-age=0, no-cache, no-store
+      Pragma:
+      - no-cache
+      Date:
+      - Thu, 12 Jan 2023 15:59:33 GMT
+      Content-Length:
+      - '1826'
+      X-Cache:
+      - TCP_MISS from a23-213-1-54.deploy.akamaitechnologies.com (AkamaiGHost/10.10.3-45298580)
+        (-)
+      Connection:
+      - keep-alive
+      X-Cache-Remote:
+      - TCP_MISS from a23-62-6-191.deploy.akamaitechnologies.com (AkamaiGHost/10.10.3-45298580)
+        (-)
+      X-Tt-Trace-Tag:
+      - id=16;cdn-cache=miss;type=dyn
+      Server-Timing:
+      - cdn-cache; desc=MISS, edge; dur=224, origin; dur=108
+      - inner; dur=104
+      X-Parent-Response-Time:
+      - 322,23.213.1.54
+      Set-Cookie:
+      - _abck=4DC7E2E0EAC5A3F767A7001EC7540775~-1~YAAQNgHVF4V2MKOFAQAAPz61pgkgkGhG6UfjqMQk1p5rtX1fkTYs+h+fVBNQK9m8UqXwcedYRnJVn7JZvLeb0YU57S8xEBdUSRsWcE0DQd1ygqKNOKNojvhXsSYnV0Z9iMt78IbmgBpRy0c5zTX6XGj+1oKbi3bJEOke168/OsgSL41zcAryrJuTVjKh4VATKhvpx4hUpVTFh7ypsP3aU0Rc+ws2qzYtNMqLqg3a6sl6O6oVeQogEaKURy8NKVAgoMtjsRkP+rTEJOjjVBc5eDuvArgvQLs4hXipP+MdNXw2T2JRWR6ogifW6RDrHMRTENbWwuK5wFr/LT7cTMusNIC2pSOK81uOtSNW/usjOEIyEgTBkCBapiI=~-1~-1~-1;
+        Domain=.tiktok.com; Path=/; Expires=Fri, 12 Jan 2024 15:59:33 GMT; Max-Age=31536000;
+        Secure
+      - bm_sz=B9C9F25D0B1A6F58CBB5BE04BEB7703A~YAAQNgHVF4Z2MKOFAQAAPz61phJcPUnttGTgMdjQmFF0g67v3SY956sU/iLwJS0+7LbHLZYtMY1XMHdL4+l9nUa4W8ipUWEuqzy9NDCEKLWOlOhuxicLZA2NDSXhGrv943bbbUVP2LX2wG03CN0hnslaoFY8lZMlSFUUNQ9Nz7Gr9mdJlpHCqPq49fYvzl8kHQFHeYEbWo1JB02UYgG5JG+e8Ib2GnmnE9+HqtvaPjuMN0Czeo/phUq4XNILGXI5U8G0A7nqB132XB0BdPH/wa8k9r61f4tmdNMZgDF1OA52XzU=~3682869~3420211;
+        Domain=.tiktok.com; Path=/; Expires=Thu, 12 Jan 2023 19:59:33 GMT; Max-Age=14400
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        eyJ2ZXJzaW9uIjoiMS4wIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJPTkxZIFRXTyBET1dOIPCfmLMgaG93IGFib3V0IHlvdT8gI2Rlc3NlcnQgI2ljZWNyZWFtICNidWJibGV3YWZmbGUgI3B1dGFmaW5nZXJkb3duY2hhbGxlbmdlICIsImF1dGhvcl91cmwiOiJodHRwczovL3d3dy50aWt0b2suY29tL0Bzb2Zsb2Zvb29kaWUiLCJhdXRob3JfbmFtZSI6IlNvRmxvRm9vb2RpZS0gU2hheSAmIFN0ZXBoIiwid2lkdGgiOiIxMDAlIiwiaGVpZ2h0IjoiMTAwJSIsImh0bWwiOiI8YmxvY2txdW90ZSBjbGFzcz1cInRpa3Rvay1lbWJlZFwiIGNpdGU9XCJodHRwczovL3d3dy50aWt0b2suY29tL0Bzb2Zsb2Zvb29kaWUvdmlkZW8vNzE2NDg4NTA3NDg2Mzc4NzMwN1wiIGRhdGEtdmlkZW8taWQ9XCI3MTY0ODg1MDc0ODYzNzg3MzA3XCIgZGF0YS1lbWJlZC1mcm9tPVwib2VtYmVkXCIgc3R5bGU9XCJtYXgtd2lkdGg6IDYwNXB4O21pbi13aWR0aDogMzI1cHg7XCIgPiA8c2VjdGlvbj4gPGEgdGFyZ2V0PVwiX2JsYW5rXCIgdGl0bGU9XCJAc29mbG9mb29vZGllXCIgaHJlZj1cImh0dHBzOi8vd3d3LnRpa3Rvay5jb20vQHNvZmxvZm9vb2RpZT9yZWZlcj1lbWJlZFwiPkBzb2Zsb2Zvb29kaWU8L2E+IDxwPk9OTFkgVFdPIERPV04g8J+YsyBob3cgYWJvdXQgeW91PyA8YSB0aXRsZT1cImRlc3NlcnRcIiB0YXJnZXQ9XCJfYmxhbmtcIiBocmVmPVwiaHR0cHM6Ly93d3cudGlrdG9rLmNvbS90YWcvZGVzc2VydD9yZWZlcj1lbWJlZFwiPiNkZXNzZXJ0PC9hPiA8YSB0aXRsZT1cImljZWNyZWFtXCIgdGFyZ2V0PVwiX2JsYW5rXCIgaHJlZj1cImh0dHBzOi8vd3d3LnRpa3Rvay5jb20vdGFnL2ljZWNyZWFtP3JlZmVyPWVtYmVkXCI+I2ljZWNyZWFtPC9hPiA8YSB0aXRsZT1cImJ1YmJsZXdhZmZsZVwiIHRhcmdldD1cIl9ibGFua1wiIGhyZWY9XCJodHRwczovL3d3dy50aWt0b2suY29tL3RhZy9idWJibGV3YWZmbGU/cmVmZXI9ZW1iZWRcIj4jYnViYmxld2FmZmxlPC9hPiA8YSB0aXRsZT1cInB1dGFmaW5nZXJkb3duY2hhbGxlbmdlXCIgdGFyZ2V0PVwiX2JsYW5rXCIgaHJlZj1cImh0dHBzOi8vd3d3LnRpa3Rvay5jb20vdGFnL3B1dGFmaW5nZXJkb3duY2hhbGxlbmdlP3JlZmVyPWVtYmVkXCI+I3B1dGFmaW5nZXJkb3duY2hhbGxlbmdlPC9hPiA8L3A+IDxhIHRhcmdldD1cIl9ibGFua1wiIHRpdGxlPVwi4pmsIG9yaWdpbmFsIHNvdW5kIC0gc2FtYW50aGFqb1wiIGhyZWY9XCJodHRwczovL3d3dy50aWt0b2suY29tL211c2ljL29yaWdpbmFsLXNvdW5kLTY5MDI1OTMxNzA3Mjc1NzAxODI/cmVmZXI9ZW1iZWRcIj7imawgb3JpZ2luYWwgc291bmQgLSBzYW1hbnRoYWpvPC9hPiA8L3NlY3Rpb24+IDwvYmxvY2txdW90ZT4gPHNjcmlwdCBhc3luYyBzcmM9XCJodHRwczovL3d3dy50aWt0b2suY29tL2VtYmVkLmpzXCI+PC9zY3JpcHQ+IiwidGh1bWJuYWlsX3dpZHRoIjo1NzYsInRodW1ibmFpbF9oZWlnaHQiOjEwMjQsInRodW1ibmFpbF91cmwiOiJodHRwczovL3AxNi1zaWduLnRpa3Rva2Nkbi11cy5jb20vb2JqL3Rvcy11c2Vhc3Q1LXAtMDA2OC10eC82YmIxMDczNWRiZjc0ZDBjYmQ2Njc1M2Y4YTA0NDdjNl8xNjY4MjA0ODEzP3gtZXhwaXJlcz0xNjczNTU3MjAwJngtc2lnbmF0dXJlPTJONFhaRTZ6UFZVR1dkb2FzeGVQU1k0VXRjayUzRCIsInByb3ZpZGVyX3VybCI6Imh0dHBzOi8vd3d3LnRpa3Rvay5jb20iLCJwcm92aWRlcl9uYW1lIjoiVGlrVG9rIiwiYXV0aG9yX3VuaXF1ZV9pZCI6InNvZmxvZm9vb2RpZSIsImVtYmVkX3Byb2R1Y3RfaWQiOiI3MTY0ODg1MDc0ODYzNzg3MzA3IiwiZW1iZWRfdHlwZSI6InZpZGVvIn0=
+  recorded_at: Thu, 12 Jan 2023 15:59:33 GMT
+recorded_with: VCR 6.1.0

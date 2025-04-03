@@ -1,0 +1,3 @@
+<%= load_pack("product") %>
+
+<%= react_component "ProductCartItemsCountPage", props: { cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props } %>

@@ -1,0 +1,43 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/nvp
+    body:
+      encoding: UTF-8
+      string: USER=<PAYPAL_USERNAME>&PWD=<PAYPAL_PASSWORD>&SIGNATURE=<PAYPAL_SIGNATURE>&VERSION=90.0&CURRENCYCODE=USD&METHOD=TransactionSearch&TRANSACTIONCLASS=Sent&AMT=897.71&EMAIL=sb-dmsfs3088295%40business.example.com&STARTDATE=2023-12-27T00%3A00%3A00Z&ENDDATE=2023-12-29T23%3A59%3A59Z
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - text/plain; charset=utf-8
+      Content-Length:
+      - '714'
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 29 Dec 2023 07:39:27 GMT
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Paypal-Debug-Id:
+      - 9f064bb83a484
+      Vary:
+      - Accept-Encoding
+      X-Paypal-Operation-Name:
+      - TransactionSearch
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: UTF-8
+      string: L_TIMESTAMP0=2023%2d12%2d28T09%3a42%3a40Z&L_TIMESTAMP1=2023%2d12%2d28T09%3a42%3a14Z&L_TIMEZONE0=GMT&L_TIMEZONE1=GMT&L_TYPE0=Payment&L_TYPE1=Payment&L_EMAIL0=sb%2ddmsfs3088295%40business%2eexample%2ecom&L_EMAIL1=sb%2ddmsfs3088295%40business%2eexample%2ecom&L_NAME0=John%20Doe%27s%20Test%20Store&L_NAME1=John%20Doe%27s%20Test%20Store&L_TRANSACTIONID0=50A467751K5025920&L_TRANSACTIONID1=0V263533HG227440T&L_STATUS0=Completed&L_STATUS1=Completed&L_AMT0=%2d897%2e71&L_AMT1=%2d897%2e71&L_CURRENCYCODE0=USD&L_CURRENCYCODE1=USD&L_FEEAMT0=%2d17%2e95&L_FEEAMT1=%2d17%2e95&L_NETAMT0=%2d915%2e66&L_NETAMT1=%2d915%2e66&TIMESTAMP=2023%2d12%2d29T07%3a39%3a27Z&CORRELATIONID=9f064bb83a484&ACK=Success&VERSION=90%2e0&BUILD=57991821
+  recorded_at: Fri, 29 Dec 2023 07:39:27 GMT
+recorded_with: VCR 6.2.0

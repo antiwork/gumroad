@@ -1,0 +1,65 @@
+{
+  "provider": "facebook",
+  "uid": "509129169",
+  "info": {
+    "nickname": "sshanker1",
+    "email": "sps2133@columbia.edu",
+    "name": "Sidharth Shanker",
+    "first_name": "Sidharth",
+    "last_name": "Shanker",
+    "image": "http://graph.facebook.com/509129169/picture?type=square",
+    "urls": { "Facebook": "http://www.facebook.com/sshanker1" },
+    "location": "San Francisco, California",
+    "verified": true
+  },
+  "credentials": {
+    "token": "AAADsrCCDsPgBAF18zyoJ71ZBZCVHVV0ZAvmEPAIYIk2DNuOirozkZCRvZAh0vEQJ862c8ezmh8NCE5XR4AjQwMhhJmFKABUlSKgjiEG34QgZDZD",
+    "expires_at": 1345836510,
+    "expires": true
+  },
+  "extra": {
+    "raw_info": {
+      "id": "509129169",
+      "name": "Sidharth Shanker",
+      "first_name": "Sidharth",
+      "last_name": "Shanker",
+      "link": "http://www.facebook.com/sshanker1",
+      "username": "sshanker1",
+      "location": { "id": "114952118516947", "name": "San Francisco, California" },
+      "quotes": "\"Advertising has us chasing cars and clothes, working jobs we hate so we can buy shit we don't need. We're the middle children of history, man. No purpose or place. We \"have no Great War. No Great Depression. Our Great War's a spiritual war... our Great Depression is our lives. We've all been raised on television to believe that one day we'd all be millionaires, and movie gods, and rock stars. But we won't. And we're slowly learning that fact. And we're very, very pissed off\" --Fight Club\r\n\r\nStarting in the late 1990's in well into the 21st Century, the American Right wing have tried to amend or even dismiss the Constitution. The biggest reason for their animosity is because you can't say \"Constitution\" without saying \"tit\", which makes many conservatives uncomfortable.\r\n\r\n\"Don't touch her!\" --Kelly Zhang",
+      "work": [
+        {
+          "employer": { "id": "207002865984963", "name": "Gumroad" },
+          "location": { "id": "114952118516947", "name": "San Francisco, California" },
+          "position": { "id": "109542932398298", "name": "Software Engineer" },
+          "start_date": "0000-00"
+        },
+        {
+          "employer": { "id": "114755515228661", "name": "Children's Technology Workshop" },
+          "position": { "id": "129505640427348", "name": "Camp Instructor" },
+          "start_date": "2007-06",
+          "end_date": "2009-08"
+        },
+        { "employer": { "id": "102471088936", "name": "Columbia University in the City of New York" } }
+      ],
+      "education": [
+        {
+          "school": { "id": "111902882169022", "name": "Singapore American School" },
+          "year": { "id": "142963519060927", "name": "2010" },
+          "type": "High School"
+        },
+        {
+          "school": { "id": "112029865489801", "name": "Columbia University" },
+          "year": { "id": "143641425651920", "name": "2014" },
+          "type": "College"
+        }
+      ],
+      "gender": "male",
+      "email": "sps2133@columbia.edu",
+      "timezone": -7,
+      "locale": "en_US",
+      "verified": true,
+      "updated_time": "2012-05-27T07:08:45+0000"
+    }
+  }
+}

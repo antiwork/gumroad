@@ -1,0 +1,58 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+body {
+  background-color: #f4f4f0;
+  margin: 2.5rem 1rem 0 1rem;
+  display: grid;
+  gap: 2rem;
+  justify-content: center;
+  text-align: center;
+  font-family: "ABC Favorit", sans-serif;
+}
+
+a {
+  text-decoration: underline;
+  color: currentColor;
+  cursor: pointer;
+}
+
+nav > ul {
+  list-style: none;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  nav > ul {
+    grid-auto-flow: column;
+    gap: 1.5rem;
+  }
+}
+
+h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+  font-weight: normal;
+}
+
+hr {
+  border: none;
+  border-top: solid 0.125rem currentColor;
+  width: 12.5rem;
+  margin: auto;
+}
+
+img {
+  height: auto;
+  max-width: 100%;
+}
+
+@font-face {
+  font-family: "ABC Favorit";
+  src: url("ABCFavorit-Regular.woff2");
+}

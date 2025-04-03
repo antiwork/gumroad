@@ -1,0 +1,46 @@
+---
+http_interactions:
+  - request:
+      method: post
+      uri: https://elastictranscoder.us-east-1.amazonaws.com/2012-09-25/jobs
+      body:
+        encoding: UTF-8
+        string: '{"PipelineId":"1390090734092-rg9pq5","Input":{"Key":"specs/ScreenRecording.mov","FrameRate":"auto","Resolution":"auto","AspectRatio":"auto","Interlaced":"auto","Container":"auto"},"Outputs":[{"Key":"hls_480p_","ThumbnailPattern":"","Rotate":"auto","PresetId":"1591945700851-ma7v1l","SegmentDuration":"10"},{"Key":"hls_1080p_","ThumbnailPattern":"","Rotate":"auto","PresetId":"1591945283540-xff1kg","SegmentDuration":"10"}],"OutputKeyPrefix":"specs/ScreenRecording/hls/","Playlists":[{"Name":"index","Format":"HLSv3","OutputKeys":["hls_480p_","hls_1080p_"]}]}'
+      headers:
+        Accept-Encoding:
+          - ""
+        User-Agent:
+          - aws-sdk-ruby3/3.131.1 ruby/3.0.3 arm64-darwin21 aws-sdk-elastictranscoder/1.38.0
+        Content-Type:
+          - application/json
+        Host:
+          - elastictranscoder.us-east-1.amazonaws.com
+        X-Amz-Date:
+          - 20220608T220436Z
+        X-Amz-Content-Sha256:
+          - eee18af632f8dfd9f89924a3b62c8e0b2e37085f87af5ed2981496181e027b61
+        Authorization:
+          - AWS4-HMAC-SHA256 Credential=<AWS_ACCESS_KEY_ID>/20220608/us-east-1/elastictranscoder/aws4_request,
+            SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=2a973f8744333218d19933497ffbdbb8d061d4472b12bed5a50b3cf375fe7028
+        Content-Length:
+          - "558"
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 201
+        message: Created
+      headers:
+        X-Amzn-Requestid:
+          - 28c5bd8d-a8af-48a6-91e3-7fb0c4bd49ff
+        Content-Type:
+          - application/json
+        Content-Length:
+          - "2220"
+        Date:
+          - Wed, 08 Jun 2022 22:04:37 GMT
+      body:
+        encoding: UTF-8
+        string: '{"Job":{"Arn":"arn:aws:elastictranscoder:us-east-1:<AWS_ACCOUNT_ID>:job/1654725877602-a64suz","Id":"1654725877602-a64suz","Input":{"AspectRatio":"auto","Container":"auto","DetectedProperties":null,"Encryption":null,"FrameRate":"auto","InputCaptions":null,"Interlaced":"auto","Key":"specs/ScreenRecording.mov","Resolution":"auto","TimeSpan":null},"Inputs":[{"AspectRatio":"auto","Container":"auto","DetectedProperties":null,"Encryption":null,"FrameRate":"auto","InputCaptions":null,"Interlaced":"auto","Key":"specs/ScreenRecording.mov","Resolution":"auto","TimeSpan":null}],"Output":{"AlbumArt":null,"AppliedColorSpaceConversion":null,"Captions":null,"Composition":null,"Duration":null,"DurationMillis":null,"Encryption":null,"FileSize":null,"FrameRate":null,"Height":null,"Id":"1","Key":"hls_480p_","PresetId":"1591945700851-ma7v1l","Rotate":"auto","SegmentDuration":"10.0","Status":"Submitted","StatusDetail":null,"ThumbnailEncryption":null,"ThumbnailPattern":"","Watermarks":[],"Width":null},"OutputKeyPrefix":"specs/ScreenRecording/hls/","Outputs":[{"AlbumArt":null,"AppliedColorSpaceConversion":null,"Captions":null,"Composition":null,"Duration":null,"DurationMillis":null,"Encryption":null,"FileSize":null,"FrameRate":null,"Height":null,"Id":"1","Key":"hls_480p_","PresetId":"1591945700851-ma7v1l","Rotate":"auto","SegmentDuration":"10.0","Status":"Submitted","StatusDetail":null,"ThumbnailEncryption":null,"ThumbnailPattern":"","Watermarks":[],"Width":null},{"AlbumArt":null,"AppliedColorSpaceConversion":null,"Captions":null,"Composition":null,"Duration":null,"DurationMillis":null,"Encryption":null,"FileSize":null,"FrameRate":null,"Height":null,"Id":"2","Key":"hls_1080p_","PresetId":"1591945283540-xff1kg","Rotate":"auto","SegmentDuration":"10.0","Status":"Submitted","StatusDetail":null,"ThumbnailEncryption":null,"ThumbnailPattern":"","Watermarks":[],"Width":null}],"PipelineId":"1390090734092-rg9pq5","Playlists":[{"Format":"HLSv3","HlsContentProtection":null,"Name":"index","OutputKeys":["hls_480p_","hls_1080p_"],"PlayReadyDrm":null,"Status":"Submitted","StatusDetail":null}],"Status":"Submitted","Timing":{"FinishTimeMillis":null,"StartTimeMillis":null,"SubmitTimeMillis":1654725877627},"UserMetadata":null}}'
+    recorded_at: Wed, 08 Jun 2022 22:04:37 GMT
+recorded_with: VCR 6.1.0

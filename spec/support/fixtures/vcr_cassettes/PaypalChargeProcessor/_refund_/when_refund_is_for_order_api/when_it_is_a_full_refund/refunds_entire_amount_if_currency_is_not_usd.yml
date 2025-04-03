@@ -1,0 +1,58 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/payments/captures/9XP40559459729230/refund
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAL06s7fnzUBSno_W2rutRyK3Dgft20hPBGmvzpCtMGX1nfrR01W2y__gIW5BPxDzx8Q_H2E-2qmK4FMxFoOZwtWnmD0xw
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - refund-9XP40559459729230-0-1620309253646583
+      Prefer:
+      - return=representation
+      Paypal-Auth-Assertion:
+      - eyJhbGciOiJub25lIn0=.eyJwYXllcl9pZCI6Ik1WOUtXQUpXTVo3MjIiLCJpc3MiOiJBYUR2TEl5RjBUVGVVQmpQQjAzcEFWR2NEUzVLQk16cWRyS3I1T1VFc3ZNZ0E2czlzM1M0d1pjVTRybVVQMjRaNzN4STZ4dGVjYjYyNWJsNiJ9.
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '766'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 06 May 2021 13:54:18 GMT
+      Paypal-Debug-Id:
+      - f8fc25563c772
+    body:
+      encoding: UTF-8
+      string: '{"id":"26U38775L58993353","amount":{"currency_code":"GBP","value":"14.65"},"seller_payable_breakdown":{"gross_amount":{"currency_code":"GBP","value":"14.65"},"paypal_fee":{"currency_code":"GBP","value":"0.57"},"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.88"}}],"net_amount":{"currency_code":"GBP","value":"13.20"},"total_refunded_amount":{"currency_code":"GBP","value":"14.65"}},"invoice_id":"LPMwJbMMmOeySF_Teu9lQw==","status":"COMPLETED","create_time":"2021-05-06T06:54:17-07:00","update_time":"2021-05-06T06:54:17-07:00","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/refunds/26U38775L58993353","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/9XP40559459729230","rel":"up","method":"GET"}]}'
+  recorded_at: Thu, 06 May 2021 13:54:18 GMT
+recorded_with: VCR 6.0.0

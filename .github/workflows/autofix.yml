@@ -1,0 +1,46 @@
+name: autofix.ci
+
+on:
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  autofix:
+    runs-on: ubicloud-standard-2
+    env:
+      RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+
+      - run: npm ci
+
+      - uses: ruby/setup-ruby@v1
+        env:
+          BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.CONTRIBSYS_CREDENTIALS }}
+        with:
+          bundler-cache: true
+
+      - run: npm run setup
+
+      - name: Run TSC
+        run: npx tsc
+
+      - name: Run eslint
+        run: npx eslint --fix --max-warnings 0
+
+      - name: Run prettier
+        run: npx prettier --write '**/*.{css,scss,md,json}'
+
+      - run: bundle exec rubocop -a
+
+      - name: Run SVGO
+        run: npx svgo --multipass app/assets/**/*.svg
+
+      - uses: autofix-ci/action@ff86a557419858bb967097bfc916833f5647fa8c

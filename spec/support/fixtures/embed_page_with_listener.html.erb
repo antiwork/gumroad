@@ -1,0 +1,22 @@
+<html>
+  <head>
+    <title>Embed test</title>
+    <script src="/js/gumroad-embed.js"></script>
+    <script nonce="<%= js_nonce %>">
+      var listener = function(ev) {
+        try {
+          if (ev.data && JSON.parse(ev.data).post_message_name == "sale") {
+            document.getElementById('post-message-data').innerHTML = ev.data;
+          }
+        } catch(e) {}
+      };
+      window.addEventListener('message', listener, false);
+    </script>
+  </head>
+  <body>
+    <div id="post-message-data"></div>
+    <div class="gumroad-product-embed" data-gumroad-product-id="<%= unique_permalink %>">
+      <a href="<%= url %>">Loading...</a>
+    </div>
+  </body>
+</html>

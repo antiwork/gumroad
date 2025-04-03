@@ -1,0 +1,11 @@
+<% charge_info = receipt_presenter.charge_info %>
+<div>
+  <p style="display: inline-block">
+    <%= charge_info.formatted_created_at %>
+    <% if charge_info.formatted_total_transaction_amount.present? %>
+      <div style="float: right; margin-top: 0">
+        <%= charge_info.formatted_total_transaction_amount %>
+      </div>
+    <% end %>
+  </p>
+</div>

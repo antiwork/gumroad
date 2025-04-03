@@ -1,0 +1,94 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v1/oauth2/token
+    body:
+      encoding: UTF-8
+      string: grant_type=client_credentials
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+      Authorization:
+      - Basic QWFEdkxJeUYwVFRlVUJqUEIwM3BBVkdjRFM1S0JNenFkcktyNU9VRXN2TWdBNnM5czNTNHdaY1U0cm1VUDI0WjczeEk2eHRlY2I2MjVibDY6RVBMQ2dJOE9CY2g2RzUyeHRTeHNBSVVDbGdobVJqZ3o2T2FvNndmT1RXMGtZN3F1UXFCa1ZsT3c0RFdqU2NlWnNQQ0x4OWczSEEyOFhUbzU=
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1615'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 15 Sep 2020 16:14:49 GMT
+      Paypal-Debug-Id:
+      - 141740bf8b288
+      X-Paypal-Token-Service:
+      - IAAS
+    body:
+      encoding: UTF-8
+      string: '{"scope":"https://uri.paypal.com/services/customer/partner-referrals/readwrite
+        https://uri.paypal.com/services/invoicing https://uri.paypal.com/services/payments/realtimepayment
+        https://uri.paypal.com/services/customer/onboarding/user https://api.paypal.com/v1/vault/credit-card
+        https://api.paypal.com/v1/payments/.* https://uri.paypal.com/services/payments/referenced-payouts-items/readwrite
+        https://uri.paypal.com/services/reporting/search/read https://uri.paypal.com/services/customer/partner
+        https://uri.paypal.com/services/customer/merchant-integrations/read https://uri.paypal.com/services/applications/webhooks
+        https://uri.paypal.com/services/disputes/update-seller https://uri.paypal.com/services/payments/payment/authcapture
+        openid https://uri.paypal.com/services/disputes/read-seller https://uri.paypal.com/services/payments/refund
+        https://uri.paypal.com/services/risk/raas/transaction-context https://uri.paypal.com/services/customer/consumer-referrals/create
+        https://uri.paypal.com/services/partners/merchant-accounts/readwrite https://uri.paypal.com/services/identity/grantdelegation
+        https://uri.paypal.com/services/customer/onboarding/account https://uri.paypal.com/payments/payouts
+        https://uri.paypal.com/services/customer/onboarding/sessions https://api.paypal.com/v1/vault/credit-card/.*
+        https://uri.paypal.com/services/subscriptions","access_token":"A21AAJoK-4Xn7FLIA8bOvWNbVZsxfNYqVQ_wRiJZII1RKWwajrjDdW5tEpcf5Uy5RreZL5F50QE0dhiuTHALUY2U_OqRuenCg","token_type":"Bearer","app_id":"APP-80W284485P519543T","expires_in":32400,"nonce":"2020-09-15T16:14:49ZKzjd_H1fU-BJdYaTNXoJ0DbGiyGYchbiyphYpm-FAo4"}'
+  recorded_at: Tue, 15 Sep 2020 16:14:49 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/customer/partner-referrals
+    body:
+      encoding: UTF-8
+      string: '{"tracking_id":"9691135495140-1600186489","email":"sb-oy4cl2265599@business.example.com","partner_config_override":{"return_url":"http://example.com","partner_logo_url":"https://gumroad.com/button/button_logo.png"},"operations":[{"operation":"API_INTEGRATION","api_integration_preference":{"rest_api_integration":{"integration_method":"PAYPAL","integration_type":"THIRD_PARTY","third_party_details":{"features":["PAYMENT","REFUND","PARTNER_FEE","DELAY_FUNDS_DISBURSEMENT","ACCESS_MERCHANT_INFORMATION","READ_SELLER_DISPUTE","UPDATE_SELLER_DISPUTE"]}}}}],"products":["EXPRESS_CHECKOUT"],"legal_consents":[{"type":"SHARE_DATA_CONSENT","granted":true}]}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer A21AAJoK-4Xn7FLIA8bOvWNbVZsxfNYqVQ_wRiJZII1RKWwajrjDdW5tEpcf5Uy5RreZL5F50QE0dhiuTHALUY2U_OqRuenCg
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '623'
+      Content-Type:
+      - application/json;charset=utf-8
+      Date:
+      - Tue, 15 Sep 2020 16:14:50 GMT
+      Etag:
+      - W/"26f-Gh7gmVgdm11L7iGefOjG067zti4"
+      Paypal-Debug-Id:
+      - c8ea1851baa3
+    body:
+      encoding: UTF-8
+      string: '{"links":[{"href":"https://api.sandbox.paypal.com/v2/customer/partner-referrals/ZDU5YmFhNWEtZDcxNi00OGI4LWFjYzYtYmY3NzI5YTJmYTUwZzZyd3N5L2R1SzdhRkdoelJCcm9jNzRuTnk4OERGNGtXV2ROc1NJWTBtVT12Mg==","rel":"self","method":"GET","description":"Read
+        Referral Data shared by the Caller."},{"href":"https://www.sandbox.paypal.com/partnerexp/appEntry?referralToken=ZDU5YmFhNWEtZDcxNi00OGI4LWFjYzYtYmY3NzI5YTJmYTUwZzZyd3N5L2R1SzdhRkdoelJCcm9jNzRuTnk4OERGNGtXV2ROc1NJWTBtVT12Mg==","rel":"action_url","method":"GET","description":"Target
+        WEB REDIRECT URL for the next action. Customer should be redirected to this
+        URL in the browser."}]}'
+  recorded_at: Tue, 15 Sep 2020 16:14:50 GMT
+recorded_with: VCR 6.0.0

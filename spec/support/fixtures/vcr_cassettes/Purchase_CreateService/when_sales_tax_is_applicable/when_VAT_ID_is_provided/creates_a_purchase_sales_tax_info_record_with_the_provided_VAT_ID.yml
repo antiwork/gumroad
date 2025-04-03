@@ -1,0 +1,63 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://ec.europa.eu/taxation_customs/vies/services/checkVatService
+    body:
+      encoding: UTF-8
+      string: |
+        <soapenv:Envelope
+        xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:urn="urn:ec.europa.eu:taxud:vies:services:checkVat:types">
+        <soapenv:Header/>
+        <soapenv:Body>
+        <urn:checkVatApprox>
+        <urn:countryCode>IE</urn:countryCode>
+        <urn:vatNumber>6388047V</urn:vatNumber>
+
+        <urn:requesterCountryCode>IE</urn:requesterCountryCode>
+        <urn:requesterVatNumber>6388047V</urn:requesterVatNumber>
+
+        </urn:checkVatApprox>
+        </soapenv:Body>
+        </soapenv:Envelope>
+    headers:
+      Accept:
+      - text/xml;charset=UTF-8
+      Content-Type:
+      - text/xml;charset=UTF-8
+      Soapaction:
+      - ''
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 30 Oct 2023 11:09:07 GMT
+      Content-Type:
+      - text/xml; charset=UTF-8
+      Soapaction:
+      - '""'
+      Accept:
+      - text/xml
+      Server:
+      - Europa
+      Transfer-Encoding:
+      - chunked
+      Proxy-Connection:
+      - Keep-Alive
+      Connection:
+      - keep-alive
+    body:
+      encoding: ASCII-8BIT
+      string: <env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"><env:Header/><env:Body><ns2:checkVatApproxResponse
+        xmlns:ns2="urn:ec.europa.eu:taxud:vies:services:checkVat:types"><ns2:countryCode>IE</ns2:countryCode><ns2:vatNumber>6388047V</ns2:vatNumber><ns2:requestDate>2023-10-30+01:00</ns2:requestDate><ns2:valid>true</ns2:valid><ns2:traderName>GOOGLE
+        IRELAND LIMITED</ns2:traderName><ns2:traderCompanyType>---</ns2:traderCompanyType><ns2:traderAddress>3RD
+        FLOOR, GORDON HOUSE, BARROW STREET, DUBLIN 4</ns2:traderAddress><ns2:requestIdentifier>WAPIAAAAYuARervc</ns2:requestIdentifier></ns2:checkVatApproxResponse></env:Body></env:Envelope>
+  recorded_at: Mon, 30 Oct 2023 11:09:07 GMT
+recorded_with: VCR 6.2.0

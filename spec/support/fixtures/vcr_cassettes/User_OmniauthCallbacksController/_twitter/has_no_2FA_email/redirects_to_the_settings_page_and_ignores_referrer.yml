@@ -1,0 +1,52 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.twitter.com/1.1/users/show.json?user_id=279418691
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - TwitterRubyGem/8.0.0
+      Authorization:
+      - Bearer AAAAAAAAAAAAAAAAAAAAAG8sQAAAAAAATVKrheAhORxFqHbbYrZKdu28BYA%3DGkn2MGrX8Vx4zcV4ZKFr0nrFdyltrv81RDiX5kX3dOd1BFthel
+      Connection:
+      - close
+      Host:
+      - api.twitter.com
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Date:
+      - Tue, 18 Jul 2023 13:45:34 GMT
+      Perf:
+      - '7626143928'
+      Server:
+      - tsa_o
+      Set-Cookie:
+      - guest_id=v1%3A168968793478038096; Max-Age=34214400; Expires=Sat, 17 Aug 2024
+        13:45:34 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      Content-Type:
+      - application/json; charset=utf-8
+      Cache-Control:
+      - no-cache, no-store, max-age=0
+      Content-Length:
+      - '64'
+      X-Transaction-Id:
+      - c5c397ec4a9854fd
+      Strict-Transport-Security:
+      - max-age=631138519
+      X-Response-Time:
+      - '172'
+      X-Connection-Hash:
+      - da25077f16f47c19cc5f2dba5a8c3b4557829e72338e2d33022550ca6e9798ba
+      Connection:
+      - close
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"code":32,"message":"Could not authenticate you."}]}'
+  recorded_at: Tue, 18 Jul 2023 13:45:34 GMT
+recorded_with: VCR 6.2.0

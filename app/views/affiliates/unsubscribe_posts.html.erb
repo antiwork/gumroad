@@ -1,0 +1,9 @@
+<main class="stack single-page-form horizontal-form">
+  <header>
+    <h2>You will no longer receive emails.</h2>
+    <p>This will include emails that contain posts to products that you are affiliated with. If you wish to resubscribe to posts from this creator, please click <%= link_to "here", subscribe_posts_affiliate_url(@direct_affiliate.external_id) %>.</p>
+  </header>
+</main>
+<% content_for :footer do %>
+  <%= default_footer_content %>
+<% end %>

@@ -1,0 +1,130 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You
+        are an AI assistant that creates concise, informative weekly summaries of
+        community chat conversations.\n\nYour task is to analyze the provided daily
+        summaries and create a weekly summary with minimum 1 and maximum 5 bullet
+        points (maximum 500 characters) highlighting key discussions, questions answered,
+        important announcements, or decisions made. Make important words/phrases bold
+        using \u003cstrong\u003e tags.\n\nFormat your response in an HTML unordered
+        list exactly like this:\n\n\u003cul\u003e\n  \u003cli\u003eSummary bullet
+        point 1\u003c/li\u003e\n  \u003cli\u003eSummary bullet point 2\u003c/li\u003e\n\u003c/ul\u003e\n\nKeep
+        the summary conversational and easy to read.\nMake sure to include all significant
+        topics discussed.\nDon''t include usernames or timestamps in your summary.\nIf
+        there are very few daily summaries, keep the weekly summary brief but informative.\n"},{"role":"user","content":"Here
+        are the daily summaries:\n\n\u003cul\u003e\u003cli\u003eCreator share a new
+        version of the app.\u003c/li\u003e\u003cli\u003eA customer asked about when
+        the app will be released on Android.\u003c/li\u003e\u003cli\u003eCreator shared
+        the release date.\u003c/li\u003e\u003c/ul\u003e\n\u003cul\u003e\u003cli\u003eCustomers
+        discussed about various issues with the product.\u003c/li\u003e\u003cli\u003eCreator
+        confirmed that the issue is known and will be fixed in the next version.\u003c/li\u003e\u003c/ul\u003e"}],"temperature":0.7}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer sk-gumroad-dev-service-account-xxxxxxx
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 26 Mar 2025 13:06:02 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '1218'
+      Openai-Version:
+      - '2020-10-01'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999703'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_0485f25b8d266de46ab52f4aaf1323be
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=y0_2_ktiZYQO.zWVoLiTNHLwB3px7btxBOFF2nbbU8Q-1742994362-1.0.1.1-xxxx;
+        path=/; expires=Wed, 26-Mar-25 13:36:02 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=fga1AvGGMu1UVinp5Uia7pw.fkCk6q0JRvndayWQNzU-1742994362081-0.0.1.1-xxxx;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9266dce0aed63c5e-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-BFKkC2izXJd9w9L4TRl9XkvYzQbSG",
+          "object": "chat.completion",
+          "created": 1742994360,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "<ul>\n  <li>The **new version of the app** was shared by the creator, along with a confirmed **release date** for Android.</li>\n  <li>Customers raised concerns regarding various **product issues**, which the creator acknowledged and assured would be addressed in the **next version**.</li>\n</ul>",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 255,
+            "completion_tokens": 67,
+            "total_tokens": 322,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_b8bc95a0ac"
+        }
+  recorded_at: Wed, 26 Mar 2025 13:06:02 GMT
+recorded_with: VCR 6.2.0

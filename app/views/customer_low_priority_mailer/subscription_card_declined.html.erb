@@ -1,0 +1,10 @@
+<%= header_section("Your card was declined.") %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>We attempted to charge your card for your installment payment for <%= @subscription.link.name %>, but were unable. Please <%= link_to "re-authorize or update your card", @edit_card_url %> to complete the transaction.</p>
+    <p>If a charge to your credit card is not successful within 5 days, your installment plan for <%= @subscription.link.name %> will be paused and you will lose access to the product.</p>
+  <% else %>
+    <p>We attempted to charge your card for your subscription to <%= @subscription.link.name %>, but were unable. Please <%= link_to "re-authorize or update your card", @edit_card_url %> to complete the transaction.</p>
+    <p>If a charge to your credit card is not successful within 5 days, your subscription to <%= @subscription.link.name %> will be canceled.</p>
+  <% end %>
+</div>

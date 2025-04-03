@@ -1,0 +1,45 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://svcnab2b.revenuquebec.ca/2019/02/ValidationTVQ/NR00005576
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Date:
+      - Wed, 07 Aug 2024 03:08:51 GMT
+      Content-Type:
+      - text/plain
+      Content-Length:
+      - '20'
+      Connection:
+      - keep-alive
+      Set-Cookie:
+      - __cf_bm=qf6AM3sy400ZosK.y_n0MD0wlMG7Fo3lX2.i4vbAroQ-1723000131-1.0.1.1-HoNuZunTyBi7nGiJUC3YC_Bp4X1LB4IGsksbpvuDM1v0j_baX7o2iXFi5IjfqGPaYCTsD9WfdodjFzZsVB0fGA;
+        path=/; expires=Wed, 07-Aug-24 03:38:51 GMT; domain=.revenuquebec.ca; HttpOnly;
+        Secure; SameSite=None
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8af41085bc7aaac6-YYZ
+    body:
+      encoding: UTF-8
+      string: demande non conforme
+  recorded_at: Wed, 07 Aug 2024 03:08:51 GMT
+recorded_with: VCR 6.2.0

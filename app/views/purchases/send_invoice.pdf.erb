@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <style>
+      .container {
+        width: 960px;
+        margin: 0 auto;
+      }
+
+      .invoice {
+        background: white;
+        font-size: 17px;
+        line-height: 27px;
+      }
+
+      strong {
+        display: block;
+        color: #454545;
+        margin-top: 10px;
+      }
+
+      h1 {
+        font-size: 36px;
+        line-height: 36px;
+        font-weight: bold;
+        color: #454545;
+        margin-bottom: 54px;
+      }
+
+      div {
+        display: inline-block;
+        vertical-align: top;
+      }
+
+      .sidebar {
+        width: 280px;
+      }
+
+      .with-line-breaks {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="admin">
+      <div class="container invoice">
+        <div class="sidebar">
+          <% supplier_info = invoice_presenter.supplier_info %>
+          <h2>Supplier</h2>
+          <% supplier_info.attributes.each do |attribute| %>
+            <p>
+              <% if attribute[:label].present? %>
+                <strong><%= attribute[:label] %></strong>
+              <% end %>
+              <%= attribute[:value] %>
+            </p>
+          <% end %>
+          <h2>Creator</h2>
+          <% seller_info = invoice_presenter.seller_info %>
+          <% seller_info.attributes.each do |attribute| %>
+            <p>
+              <% if attribute[:label].present? %>
+                <strong><%= attribute[:label] %></strong>
+              <% end %>
+              <% if attribute[:link].present? %>
+                <a href="<%= attribute[:link] %>"><%= attribute[:value] %></a>
+              <% else %>
+                <%= attribute[:value] %>
+              <% end %>
+            </p>
+          <% end %>
+        </div>
+        <div>
+          <% order_info = invoice_presenter.order_info %>
+          <h1><%= order_info.heading %></h1>
+          <% order_info.pdf_attributes.each do |attribute| %>
+            <% if attribute[:label].present? %>
+              <p>
+                <strong><%= attribute[:label] %></strong>
+              </p>
+            <% end %>
+            <p><%= attribute[:value] %></p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

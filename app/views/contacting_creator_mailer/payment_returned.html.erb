@@ -1,0 +1,7 @@
+<%= header_section("Gumroad payout returned") %>
+<div>
+  <p>Hi,</p>
+  <p>My name is Sahil and I work at Gumroad. We attempted to pay you but were not able to because your financial institution was unable to locate your account based on the information you have given us.</p>
+  <p>Please visit <%= link_to "your payout settings", settings_payments_url %> and update your bank account information.</p>
+  <p>In the meantime <%= @payment.displayed_amount %> has been deposited back into your Gumroad account balance.</p>
+</div>

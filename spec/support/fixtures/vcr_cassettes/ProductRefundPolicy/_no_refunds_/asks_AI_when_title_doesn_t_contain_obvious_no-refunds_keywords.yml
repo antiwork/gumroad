@@ -1,0 +1,117 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"messages":[{"role":"user","content":"Analyze this refund policy and
+        return {\"no_refunds\": true} if you are 100% confident\n(has words like \"no
+        refunds\", \"refunds not allowed\", \"no returns\", \"returns not allowed\",
+        \"final\" etc.) it''s a\nno-refunds policy, otherwise {\"no_refunds\": false}.\n\nProduct
+        name: The Works of Edgar Gumstein\nProduct type: digital\nRefund policy title:
+        Custom policy\n\u003crefund policy fine print\u003e\n  This is a product-level
+        refund policy\n\u003c/refund policy fine print\u003e\n"}],"model":"gpt-4o-mini","temperature":0.0,"max_tokens":10}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sat, 28 Dec 2024 17:53:30 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '283'
+      Openai-Version:
+      - '2020-10-01'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999877'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_7dcef8595224708cd8601e526eb88e38
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=F0bpbC3FQ8FJBC0VleyNp.GxfCe955dk4AgcyRFk0MI-1735408410-1.0.1.1-u.rvxfo9TuatYl.U0P2UCJLs8lCzNHWBWbmFZBR0jjptG7wojlvDv4fdpm9Mx33_ap6JT7p5Qk9ZnwOFJMmyGQ;
+        path=/; expires=Sat, 28-Dec-24 18:23:30 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=epcKkULDyXHztnelQ6.UB3hIF8vvyijO3c3Z_6dK.cI-1735408410438-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8f936902cce22d6c-YVR
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-AjVIAioFU4cgTC6Yifncn4WU0Nmcq",
+          "object": "chat.completion",
+          "created": 1735408410,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "{\"no_refunds\": false}",
+                "refusal": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 115,
+            "completion_tokens": 8,
+            "total_tokens": 123,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "system_fingerprint": "fp_0aa8d3e20b"
+        }
+  recorded_at: Sat, 28 Dec 2024 17:53:30 GMT
+recorded_with: VCR 6.2.0

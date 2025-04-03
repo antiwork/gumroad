@@ -1,0 +1,6 @@
+<%= header_section("Your Gumroad account email is being changed") %>
+<div>
+  <p>We're contacting you to notify that your Gumroad account email is being changed from <%= @resource.email %> to <%= @resource.unconfirmed_email %>.</p>
+  <p>If you did not make this change, please contact support immediately by replying to this email.</p>
+  <p>User ID: <%= @resource.external_id %></p>
+</div>

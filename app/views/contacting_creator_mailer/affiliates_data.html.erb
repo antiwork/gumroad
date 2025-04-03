@@ -1,0 +1,8 @@
+<%= header_section("Your requested data") %>
+<div>
+  <% if @affiliates_file_url.present? %>
+    <p>Please click this <%= link_to "link", @affiliates_file_url %> to download</p>
+  <% else %>
+    <p>We've attached the affiliates data you requested</p>
+  <% end %>
+</div>

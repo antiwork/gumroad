@@ -1,0 +1,238 @@
+<%= header_section(@mail_heading, @mail_subheading) %>
+<%= render("notify_top_section") %>
+
+<% affiliate = @purchase&.affiliate %>
+<% call = @purchase&.call %>
+
+<div class="squished">
+  <% if @purchase.present? %>
+    <table>
+      <tbody>
+        <% if @shipping_info.nil? && @purchase.quantity > 1 %>
+          <tr>
+            <td>
+              <h4>Quantity</h4>
+            </td>
+            <td><%= @purchase.quantity %></td>
+          </tr>
+        <% end %>
+        <% if @buyer_name.present? %>
+          <tr>
+            <td>
+              <h4>Customer</h4>
+            </td>
+            <td><%= @buyer_name %></td>
+          </tr>
+        <% end %>
+        <tr>
+          <td>
+            <h4>Email</h4>
+          </td>
+          <td><%= @purchaser_email %></td>
+        </tr>
+        <% if call.present? %>
+          <tr>
+            <td>
+              <h4>
+                Call schedule
+              </h4>
+            </td>
+            <td>
+              <%= call.formatted_time_range %>
+              <br>
+              <%= call.formatted_date_range %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @shipping_info.present? %>
+          <tr>
+            <td>
+              <h4>Shipping address</h4>
+            </td>
+            <td>
+              <%= @shipping_info["full_name"] %>
+              <br>
+              <%= @shipping_info["street_address"] %>
+              <br>
+              <%= @shipping_info["city"] %>, <%= @shipping_info["state"] %> <%= @shipping_info["zip_code"] %>
+              <br>
+              <%= @shipping_info["country"] %>
+            </td>
+          </tr>
+        <% else %>
+          <%= render partial: "notify_table_discount_upsell_rows" %>
+        <% end %>
+        <% is_coffee = @product.native_type == Link::NATIVE_TYPE_COFFEE %>
+        <% if @quantity.present? && !is_coffee && call.blank? %>
+          <tr>
+            <td>
+              <h4>Quantity</h4>
+            </td>
+            <td><%= @quantity %></td>
+          </tr>
+        <% end %>
+        <% if @variants.present? && !is_coffee && call.blank? %>
+          <tr>
+            <td>
+              <h4><%= @product.is_tiered_membership ? "Tier" : "Variant".pluralize(@variants_count) %></h4>
+            </td>
+            <td><%= @variants %></td>
+          </tr>
+        <% end %>
+
+        <% if @purchase.commission.present? %>
+          <tr>
+            <td>
+              <h4>
+                Deposit paid
+              </h4>
+            </td>
+            <td><%= @purchase.formatted_display_price %></td>
+          </tr>
+        <% end %>
+
+        <% if @purchase.tip.present? %>
+          <tr>
+            <td>
+              <h4>
+                Tip
+              </h4>
+            </td>
+            <td><%= format_just_price_in_cents(@purchase.tip.value_cents, @purchase.displayed_price_currency_type) %></td>
+          </tr>
+        <% end %>
+        <% if call.present? %>
+          <tr>
+            <td>
+              <h4>
+                Duration
+              </h4>
+            </td>
+            <td><%= @purchase.variant_attributes.first.name %></td>
+          </tr>
+        <% end %>
+        <% if affiliate.present? && !@purchase.affiliate_credit_cents.zero? && @purchase.affiliate_credit.present? %>
+          <tr>
+            <td>
+              <h4><%= affiliate.collaborator? ? "Collaborator email" : "Affiliate email" %></h4>
+            </td>
+            <td><%= affiliate.affiliate_user.form_email %></td>
+          </tr>
+          <tr>
+            <td>
+              <h4><%= affiliate.collaborator? ? "Collaborator commission" : "Affiliate commission" %></h4>
+            </td>
+            <td><%= "#{Money.new(@purchase.affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{@purchase.affiliate_credit.basis_points / 100}%)" %></td>
+          </tr>
+        <% end %>
+        <% if @purchase.utm_link.present? %>
+          <tr>
+            <td><h4><%= link_to "UTM link", @purchase.utm_link.utm_url, rel: "noopener noreferrer nofollow", target: "_blank" %> driven sale</h4></td>
+            <td>
+              <span style="font-weight: bold">Link</span>: <%= link_to @purchase.utm_link.title, utm_links_dashboard_url(query: @purchase.utm_link.title), target: "_blank" %>
+              <br>
+              <span style="font-weight: bold">Source</span>: <%= @purchase.utm_link.utm_source %>
+              <br>
+              <span style="font-weight: bold">Medium</span>: <%= @purchase.utm_link.utm_medium %>
+              <br>
+              <span style="font-weight: bold">Campaign</span>: <%= @purchase.utm_link.utm_campaign %>
+              <br>
+              <% if @purchase.utm_link.utm_term.present? %>
+                <span style="font-weight: bold">Term</span>: <%= @purchase.utm_link.utm_term %>
+                <br>
+              <% end %>
+              <% if @purchase.utm_link.utm_content.present? %>
+                <span style="font-weight: bold">Content</span>: <%= @purchase.utm_link.utm_content %>
+                <br>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+        <tr>
+          <td>
+            <h4>Referrer</h4>
+          </td>
+          <td>
+            <% if @purchase.referrer == "direct" %>
+              Direct
+            <% elsif @referrer_name.present? %>
+              <% if @purchase.referrer.present? %>
+                <a href="<%= @purchase.referrer %>" target="_blank"><%= @referrer_name %></a>
+              <% else %>
+                <%= @referrer_name %>
+              <% end %>
+            <% end %>
+          </td>
+        </tr>
+        <% if @purchase.try(:is_gift_sender_purchase) %>
+          <tr>
+            <td>
+              <h4>Giftee email</h4>
+            </td>
+            <td><%= @purchase.giftee_email %></td>
+          </tr>
+        <% end %>
+        <% @custom_fields&.each do |field| %>
+          <tr>
+            <td>
+              <h4><%= field[:name] %></h4>
+            </td>
+            <td><%= field[:value] %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</div>
+
+<% if @product.is_physical || @purchase.try(:was_purchase_taxable) %>
+  <div class="squished">
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <h4>Product price</h4>
+          </td>
+          <td><%= @purchase.formatted_display_price %></td>
+        </tr>
+        <% if @purchase.quantity > 1 %>
+          <tr>
+            <td>
+              <h4>Quantity</h4>
+            </td>
+            <td><%= @purchase.quantity %></td>
+          </tr>
+        <% end %>
+        <% if @product.is_physical %>
+          <tr>
+            <td>
+              <h4>Shipping rate</h4>
+            </td>
+            <td><%= @purchase.formatted_shipping_amount %></td>
+          </tr>
+        <% end %>
+        <%= render partial: "notify_table_discount_upsell_rows" %>
+        <% if @purchase.seller_tax_amount > 0 %>
+          <tr>
+            <td>
+              <h4><%= @purchase.seller_tax_label %></h4>
+            </td>
+            <td><%= @purchase.formatted_seller_tax_amount %></td>
+          </tr>
+        <% end %>
+        <tr>
+          <td>
+            <h4>Order total</h4>
+          </td>
+          <td><%= @purchase.formatted_total_price %></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% if @purchase.nil? || @purchase.is_test_purchase? %>
+  <div>
+    <p>Because this was a test sale, this amount will not be added to your account balance.</p>
+  </div>
+<% end %>

@@ -1,0 +1,211 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"gbp","value":"13.5","breakdown":{"shipping":{"currency_code":"GBP","value":"1.5"},"tax_total":{"currency_code":"GBP","value":"2.0"},"item_total":{"currency_code":"GBP","value":"10.0"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"GBP","value":"5.0"},"quantity":2,"sku":"U"}],"soft_descriptor":"Gumroad","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.6"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAIkyQeglGs7U79PgF9ATkZAxpJMwNgaMjQXIqfcoDUSdfNhAD7JCnRpgxU0fMpz_i4ooLRs5v6FA7hF4pMXpELi5mZJgA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1614681395369191'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1170'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 02 Mar 2021 10:36:39 GMT
+      Paypal-Debug-Id:
+      - 2813d51afccb3
+    body:
+      encoding: UTF-8
+      string: '{"id":"6BW60388D3711062R","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"GBP","value":"13.50","breakdown":{"item_total":{"currency_code":"GBP","value":"10.00"},"shipping":{"currency_code":"GBP","value":"1.50"},"tax_total":{"currency_code":"GBP","value":"2.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.60"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"soft_descriptor":"Gumroad","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"GBP","value":"5.00"},"quantity":"2","sku":"U"}]}],"create_time":"2021-03-02T10:36:38Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=6BW60388D3711062R","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Tue, 02 Mar 2021 10:36:39 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAIkyQeglGs7U79PgF9ATkZAxpJMwNgaMjQXIqfcoDUSdfNhAD7JCnRpgxU0fMpz_i4ooLRs5v6FA7hF4pMXpELi5mZJgA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '16146813993849542'
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1200'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 02 Mar 2021 10:36:41 GMT
+      Paypal-Debug-Id:
+      - 14253d068fff2
+    body:
+      encoding: UTF-8
+      string: '{"id":"6BW60388D3711062R","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"GBP","value":"13.50","breakdown":{"item_total":{"currency_code":"GBP","value":"10.00"},"shipping":{"currency_code":"GBP","value":"1.50"},"tax_total":{"currency_code":"GBP","value":"2.00"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.60"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"soft_descriptor":"Gumroad","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"GBP","value":"5.00"},"quantity":"2","sku":"U"}]}],"create_time":"2021-03-02T10:36:38Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=6BW60388D3711062R","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Tue, 02 Mar 2021 10:36:41 GMT
+- request:
+    method: patch
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R
+    body:
+      encoding: UTF-8
+      string: '[{"op":"add","path":"/purchase_units/@reference_id==''default''/invoice_id","value":"updated-invoice-id"}]'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAIkyQeglGs7U79PgF9ATkZAxpJMwNgaMjQXIqfcoDUSdfNhAD7JCnRpgxU0fMpz_i4ooLRs5v6FA7hF4pMXpELi5mZJgA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1614681401637991'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 204
+      message: No Content
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Date:
+      - Tue, 02 Mar 2021 10:36:42 GMT
+      Paypal-Debug-Id:
+      - c0e0f7e74ffbb
+    body:
+      encoding: UTF-8
+      string: ''
+  recorded_at: Tue, 02 Mar 2021 10:36:43 GMT
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAIkyQeglGs7U79PgF9ATkZAxpJMwNgaMjQXIqfcoDUSdfNhAD7JCnRpgxU0fMpz_i4ooLRs5v6FA7hF4pMXpELi5mZJgA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1614681403882093'
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1289'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 02 Mar 2021 10:36:45 GMT
+      Paypal-Debug-Id:
+      - c895cef3b9de2
+    body:
+      encoding: UTF-8
+      string: '{"id":"6BW60388D3711062R","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"GBP","value":"13.50","breakdown":{"item_total":{"currency_code":"GBP","value":"10.00"},"shipping":{"currency_code":"GBP","value":"1.50"},"tax_total":{"currency_code":"GBP","value":"2.00"}}},"payee":{"email_address":"sb-cuv033075110@personal.example.com","merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.60"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"invoice_id":"updated-invoice-id","soft_descriptor":"Gumroad","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"GBP","value":"5.00"},"quantity":"2","sku":"U"}]}],"create_time":"2021-03-02T10:36:38Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=6BW60388D3711062R","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/6BW60388D3711062R/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Tue, 02 Mar 2021 10:36:45 GMT
+recorded_with: VCR 6.0.0

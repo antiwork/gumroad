@@ -1,0 +1,106 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://www.googleapis.com/oauth2/v4/token
+    body:
+      encoding: ASCII-8BIT
+      string: grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJwbGF5LWJpbGxpbmctYXBpQGd1bXJvYWQtbGlicmFyeS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsImF1ZCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92NC90b2tlbiIsImV4cCI6MTcyMDEzNjUwNywiaWF0IjoxNzIwMTM2Mzg3LCJzY29wZSI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL2F1dGgvYW5kcm9pZHB1Ymxpc2hlciJ9.DbJKz6H1IppmgRnRnuJWdvTWFwPh9p5PG7AZ4JXIjPklPOffTdJkO6ieca5s2PMcXAKu-j2DAa_9N8UPUVEOOtZ24sGPYd79fl1tWgP72lxjP9oS6SGwWWnyK6Sx1q3os7jOSU-mUudV0yYPBNYJG3IZoT4KsOsMhP9oXM3HrVcFLf-XxpAtBkcD1mGwGGjWjH13Wm4IvTLyywjsVC56ofZ3jT24Vc-Vrsaz9aQ3dN6PhiRkHqUdrgu6Nbu47Byx6HhfLBvPPSfkhobMOwD5gzIooNgt9GmbdBVtZKdfdeUdTVPkzaBlc45ybgLitK2zP0UjGmVLy0Cqwn-XOrs0Ow
+    headers:
+      User-Agent:
+      - Faraday v1.10.3
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json; charset=UTF-8
+      Vary:
+      - Origin
+      - Referer
+      - X-Origin
+      Date:
+      - Thu, 04 Jul 2024 23:40:47 GMT
+      Server:
+      - scaffolding on HTTPServer2
+      Cache-Control:
+      - private
+      X-Xss-Protection:
+      - '0'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Transfer-Encoding:
+      - chunked
+    body:
+      encoding: ASCII-8BIT
+      string: '{"access_token":"ya29.c.c0AY_VpZjSEqqVYO5hhBpaJz070ovhJdlrlTe-XU1MfKE1QaWzo68pvlebjX2v2EtmKSAVLovhUAaf7kzmwKVkkdDWlgv8X059w79qml9ihpL4hw3113_hUD_BUDFVzzri_atB2PEiGeYfTcy9YcEq5iwHRSARjMr-79etYVclzrEP6Vovf3KxQkqiLKx4HkkhJhPpjECNkzdRpj2LLaMbnTumgSov3w0OAlUvE13RZTZcSmljPqNFuHBY4wwjkxcT3wMxC_KIZiXfvQnT_brlL7hJNC-LtoDon9KafGTzSgS0TYaSr0as4CbxRsfV302fwSSAbRu6eSDSzAfZCsgFSITmJ_hLQMTyqsHzCVgQ-4o5TnGr3Bh7-AE383PY4bMyl72_Wx7FWIMgBu3lp5VgjRy52jhZfw-2m4Sdyr7jIjueWg6S1caM3Iyhf8BprwO3i1dOzWpe1wJmuQV-R_fYBSxQVQj_d-fVUZpeS6e-_uBriY1W1ygq1vm-VWi1WOrZgm_phR1r3jfwZvVY178k8hWi8XhpYrkvvdfljhU40baeMX-n5_fi-lrnrWpjzaZ4We5RZcI04iR8lgdhXIbcWuyfeOXll-r__wxVRM1mjXlznuOW7tg4b5j-BMjvrUyYze6e7ocljzxlIZmqocsxogciY_VxrquiOy6ZIZ6sarrxdYOM1M1uOsdkyoV9bOeVkswzFkm5l7airqf2IjxsY1mtU1-trjZZqFU5xc1apepodtyXmIZc17jFQcdyU59n6BWcx-bj_5p26_JUjdhbpmIJd6bJici1RM0tS9v73hZYOjou67SYQFg2_tUvSZ4mUoYJ58wmI_y9pZbkvdItUh27pjjJQn7zn8cfvpdvSZ96SdjiYej80sXUSh_8re2iZ4moh2JkdWzd0vzYhI5-RBjdwjhnmO8flBu0dezFMVv6gs5yF5cRtag7ijBqxFO4bajX0OBl4btRYQRx6t30hrjoWUm60pR8mlXaqvYBv8QY92dUi744jqW","expires_in":3599,"token_type":"Bearer"}'
+  recorded_at: Thu, 04 Jul 2024 23:40:47 GMT
+- request:
+    method: get
+    uri: https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.gumroad.app/purchases/products//tokens/
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - unknown/0.0.0 google-apis-androidpublisher_v3/0.66.0 Mac OS X/14.5 (gzip)
+      Accept:
+      - "*/*"
+      Accept-Encoding:
+      - gzip,deflate
+      Date:
+      - Thu, 04 Jul 2024 23:40:47 GMT
+      X-Goog-Api-Client:
+      - gl-ruby/3.3.3 gdcl/1.66.0
+      Authorization:
+      - Bearer ya29.c.c0AY_VpZjSEqqVYO5hhBpaJz070ovhJdlrlTe-XU1MfKE1QaWzo68pvlebjX2v2EtmKSAVLovhUAaf7kzmwKVkkdDWlgv8X059w79qml9ihpL4hw3113_hUD_BUDFVzzri_atB2PEiGeYfTcy9YcEq5iwHRSARjMr-79etYVclzrEP6Vovf3KxQkqiLKx4HkkhJhPpjECNkzdRpj2LLaMbnTumgSov3w0OAlUvE13RZTZcSmljPqNFuHBY4wwjkxcT3wMxC_KIZiXfvQnT_brlL7hJNC-LtoDon9KafGTzSgS0TYaSr0as4CbxRsfV302fwSSAbRu6eSDSzAfZCsgFSITmJ_hLQMTyqsHzCVgQ-4o5TnGr3Bh7-AE383PY4bMyl72_Wx7FWIMgBu3lp5VgjRy52jhZfw-2m4Sdyr7jIjueWg6S1caM3Iyhf8BprwO3i1dOzWpe1wJmuQV-R_fYBSxQVQj_d-fVUZpeS6e-_uBriY1W1ygq1vm-VWi1WOrZgm_phR1r3jfwZvVY178k8hWi8XhpYrkvvdfljhU40baeMX-n5_fi-lrnrWpjzaZ4We5RZcI04iR8lgdhXIbcWuyfeOXll-r__wxVRM1mjXlznuOW7tg4b5j-BMjvrUyYze6e7ocljzxlIZmqocsxogciY_VxrquiOy6ZIZ6sarrxdYOM1M1uOsdkyoV9bOeVkswzFkm5l7airqf2IjxsY1mtU1-trjZZqFU5xc1apepodtyXmIZc17jFQcdyU59n6BWcx-bj_5p26_JUjdhbpmIJd6bJici1RM0tS9v73hZYOjou67SYQFg2_tUvSZ4mUoYJ58wmI_y9pZbkvdItUh27pjjJQn7zn8cfvpdvSZ96SdjiYej80sXUSh_8re2iZ4moh2JkdWzd0vzYhI5-RBjdwjhnmO8flBu0dezFMVv6gs5yF5cRtag7ijBqxFO4bajX0OBl4btRYQRx6t30hrjoWUm60pR8mlXaqvYBv8QY92dUi744jqW
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Date:
+      - Thu, 04 Jul 2024 23:40:47 GMT
+      Content-Type:
+      - text/html; charset=UTF-8
+      Server:
+      - ESF
+      Content-Length:
+      - '1638'
+      X-Xss-Protection:
+      - '0'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Content-Type-Options:
+      - nosniff
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+    body:
+      encoding: UTF-8
+      string: |
+        <!DOCTYPE html>
+        <html lang=en>
+          <meta charset=utf-8>
+          <meta name=viewport content="initial-scale=1, minimum-scale=1, width=device-width">
+          <title>Error 404 (Not Found)!!1</title>
+          <style>
+            *{margin:0;padding:0}html,code{font:15px/22px arial,sans-serif}html{background:#fff;color:#222;padding:15px}body{margin:7% auto 0;max-width:390px;min-height:180px;padding:30px 0 15px}* > body{background:url(//www.google.com/images/errors/robot.png) 100% 5px no-repeat;padding-right:205px}p{margin:11px 0 22px;overflow:hidden}ins{color:#777;text-decoration:none}a img{border:0}@media screen and (max-width:772px){body{background:none;margin-top:0;max-width:none;padding-right:0}}#logo{background:url(//www.google.com/images/branding/googlelogo/1x/googlelogo_color_150x54dp.png) no-repeat;margin-left:-5px}@media only screen and (min-resolution:192dpi){#logo{background:url(//www.google.com/images/branding/googlelogo/2x/googlelogo_color_150x54dp.png) no-repeat 0% 0%/100% 100%;-moz-border-image:url(//www.google.com/images/branding/googlelogo/2x/googlelogo_color_150x54dp.png) 0}}@media only screen and (-webkit-min-device-pixel-ratio:2){#logo{background:url(//www.google.com/images/branding/googlelogo/2x/googlelogo_color_150x54dp.png) no-repeat;-webkit-background-size:100% 100%}}#logo{display:inline-block;height:54px;width:150px}
+          </style>
+          <a href=//www.google.com/><span id=logo aria-label=Google></span></a>
+          <p><b>404.</b> <ins>That’s an error.</ins>
+          <p>The requested URL <code>/androidpublisher/v3/applications/com.gumroad.app/purchases/products//tokens/?</code> was not found on this server.  <ins>That’s all we know.</ins>
+  recorded_at: Thu, 04 Jul 2024 23:40:47 GMT
+recorded_with: VCR 6.2.0

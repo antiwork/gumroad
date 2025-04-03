@@ -1,0 +1,9 @@
+<%= header_section("Your purchase with PayPal failed.") %>
+<div>
+  <p>Hi there,</p>
+  <p>My name is Sahil. I'm part of the Gumroad team, and we power the payment process you tried to complete recently.</p>
+  <p>I got a notification that you attempted to purchase <%= @product.name %> using PayPal, but it looks like the transaction ultimately did not go through.</p>
+  <p>Sometimes your PayPal statement will say 'pending' even in this scenario — rest assured, this will go away in a few days' time.</p>
+  <p>Please try again by clicking here (if it still doesn't go through, please try with another credit card):</p>
+  <p><%= link_to "Try purchasing again", @product.long_url, class: "button primary" %></p>
+</div>

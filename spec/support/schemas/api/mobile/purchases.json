@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "user_id": { "type": "string" },
+    "products": {
+      "type": "array",
+      "items": { "$ref": "file:/api/mobile/product.json#" }
+    }
+  },
+  "required": ["success", "user_id"]
+}

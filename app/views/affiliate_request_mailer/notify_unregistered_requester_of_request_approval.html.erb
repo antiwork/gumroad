@@ -1,0 +1,5 @@
+<%= header_section(@subject) %>
+<div>
+  <p>Congratulations, <%= @affiliate_request.seller.display_name %> has approved your request to become an affiliate. In order to receive your affiliate links, you must first <%= link_to "create your Gumroad account", signup_url(email: @affiliate_request.email) %> using email <%= @affiliate_request.email %> and confirm it.</p>
+</div>
+

@@ -1,0 +1,11 @@
+<%= header_section("We need more information from you.") %>
+<div>
+  <p>To continue paying you out, we need some more information from you. Please complete the following fields before your next payout.</p>
+  <ul>
+    <% @fields_needed_tags.each do |field_needed_tag| %>
+      <li><%= field_needed_tag %></li>
+    <% end %>
+  </ul>
+  <p><%= link_to("Provide your information", settings_payments_url, class: "button primary") %></p>
+  <p>Or you can click here: <%= link_to settings_payments_url, settings_payments_url %></p>
+</div>

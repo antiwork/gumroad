@@ -1,0 +1,45 @@
+<%= header_section(@mail_heading, @mail_subheading) %>
+<%= render("contacting_creator_mailer/notify_top_section") %>
+
+<div class="squished">
+  <% if @purchase.present? %>
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <h4>Product price</h4>
+          </td>
+          <td><%= @purchase.formatted_display_price %></td>
+        </tr>
+        <tr>
+          <td>
+            <h4>Your cut</h4>
+          </td>
+          <td><%= @cut %></td>
+        </tr>
+        <% if @quantity.present? %>
+          <tr>
+            <td>
+              <h4>Quantity</h4>
+            </td>
+            <td><%= @quantity %></td>
+          </tr>
+        <% end %>
+        <% if @variants.present? %>
+          <tr>
+            <td>
+              <h4><%= @product.is_tiered_membership ? "Tier" : "Variant".pluralize(@variants_count) %></h4>
+            </td>
+            <td><%= @variants %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</div>
+
+<% if @purchase.nil? || @purchase.is_test_purchase? %>
+  <div>
+    <p>Because this was a test sale, this amount will not be added to your account balance.</p>
+  </div>
+<% end %>

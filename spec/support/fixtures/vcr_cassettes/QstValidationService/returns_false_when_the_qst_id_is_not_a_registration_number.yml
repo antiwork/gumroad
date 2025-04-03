@@ -1,0 +1,55 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://svcnab2b.revenuquebec.ca/2019/02/ValidationTVQ/1002092821TQ0002
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Date:
+      - Sat, 15 Jun 2024 21:47:55 GMT
+      Content-Type:
+      - application/json;charset=utf-8
+      Content-Length:
+      - '158'
+      Connection:
+      - keep-alive
+      Cache-Control:
+      - no-cache
+      Pragma:
+      - no-cache
+      Expires:
+      - "-1"
+      Gx-Temps-Execution:
+      - '00:00:00.0359183'
+      Server-Timing:
+      - NASystContribEx;dur=28,total;dur=44
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=zWnU0Lp8HBpCGM5WlWb5U3EqyPNLS80ctJW7fUPzG6c-1718488075-1.0.1.1-_S1ZbdroVq0_IYYHkR_GCAt2cH.D3lxdPjmW8KirqbSBJqPS1ejIAo3A7SeVIay171O_W2dLU412CQZvf9qe_w;
+        path=/; expires=Sat, 15-Jun-24 22:17:55 GMT; domain=.revenuquebec.ca; HttpOnly;
+        Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8945c2e55d1f8437-YVR
+    body:
+      encoding: ASCII-8BIT
+      string: '{"Resultat":null,"OperationReussie":true,"MessagesFonctionnels":[{"DescriptionMessage":null,"CodeMessage":"GX.AucuneDonneeTrouvee"}],"MessagesInformatifs":[]}'
+  recorded_at: Sat, 15 Jun 2024 21:47:55 GMT
+recorded_with: VCR 6.2.0

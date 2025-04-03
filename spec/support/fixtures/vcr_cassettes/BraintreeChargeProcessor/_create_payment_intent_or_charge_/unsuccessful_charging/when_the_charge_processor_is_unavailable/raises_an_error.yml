@@ -1,0 +1,73 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.braintreegateway.com/merchants/<BRAINTREE_MERCHANT_ID>/customers
+    body:
+      encoding: UTF-8
+      string: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <customer>
+          <credit-card>
+            <payment-method-nonce>fake-paypal-future-nonce</payment-method-nonce>
+          </credit-card>
+        </customer>
+    headers:
+      Accept-Encoding:
+      - gzip
+      Accept:
+      - application/xml
+      User-Agent:
+      - Braintree Ruby Gem 2.98.0
+      X-Apiversion:
+      - '5'
+      Content-Type:
+      - application/xml
+      Authorization:
+      - Basic ZGN5ZzVubTd0czNmOWZ3NTo5MjIwOTM0NWNjOGNiYzA5YmNhNDUzOGIxYTEzOGI1NQ==
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Thu, 31 Oct 2019 03:46:36 GMT
+      Content-Type:
+      - application/xml; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Authentication:
+      - basic_auth
+      X-User:
+      - 8dzk2kdcvcf5n8bt
+      Vary:
+      - Accept-Encoding
+      Content-Encoding:
+      - gzip
+      Etag:
+      - W/"0266aa91bbc76e03dea2f61bb43b0cad"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Runtime:
+      - '0.346014'
+      X-Request-Id:
+      - 01-1572493595.340-157.34.125.172-5339270
+      Content-Security-Policy:
+      - frame-ancestors 'self'
+      X-Broxyid:
+      - 01-1572493595.340-157.34.125.172-5339270
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        H4sIABxZul0AA6RTTU/jMBC98yuq3F23FKq2SsNetpVWglOXXbigiT1JDf4IttMPfv06SUOhKYcVUnLwe29mPG/G8c1Oyd4GrRNGz6NhfxD1UDPDhc7n0e/Vgkyim+QiZqXzRqFNLnq9WPDkejoI3+V4FNNwqsBAsjVoT8J5wrPXHVNTno4027qrmH5kK3UmrPNEg8KeFnIeeVtiRGtKwlcMM6oAve/gqEDIDlqsje7myGDXwbaYOuHP1LMIHjkB3/P7AucRD0cvFEbJ5WA4JcMBGQ1Xg9HsajwbjR9jegyo48uC/1/8MaCpX5tOMoGSu+ZKuTQpyMrFh9H9G19O/ePfX9nd6mVb/bfPD28xPWoOTXDhCQPL3eEaYC3sW5dgXwQxMGZK7T8rKkFH0oABToWUYUsI5BZRYT3bUwtr4TdtbHIc9o983r2PcCvlmEEp21qpMRJBR0l1qZgeyHdxvTrJM2jsc4M/cAeqkNgPmxbThmuVR1fZcnGd/rkv+XIo+XK9eVxMt2wxVXfq9irVP08GUAcLBTmS0spk7X3hZpSCc+hdP7UgtA8G5qHjLeyryjQYXvn5pNCvDX+SJje0GUK/0PkN6o2wRleSuQPNU7MLr/C9QlvTlaljVhQ+vOwzk6813rygTrIxm+jXmDanlvvm9jZ9O1I9e43BDS28qPjTwWQgXZjMOel7ntB9PeSz+3UgdWbO0lIoUV2rdEiM5V/nsbgJBtQNd+iYdl/BKeZqEDi3GIbbsfy4rcnFPwAAAP//AwBECpp4dwUAAA==
+    http_version: 
+  recorded_at: Thu, 31 Oct 2019 03:46:36 GMT
+recorded_with: VCR 3.0.3

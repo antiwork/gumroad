@@ -1,0 +1,77 @@
+<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
+  function initCarousel() {
+    if (window._gumroadCarouselInitialized) return;
+
+    const carousel = document.querySelector('[data-carousel]');
+    if (!carousel) return;
+
+    const slides = carousel.querySelector('[data-carousel-slides]');
+    const prevButton = carousel.querySelector('[data-carousel-prev]');
+    const nextButton = carousel.querySelector('[data-carousel-next]');
+    const indicators = carousel.querySelectorAll('[data-carousel-indicator]');
+    let currentSlide = 0;
+    let autoplayInterval;
+
+    function showSlide(index) {
+      slides.style.transform = `translateX(-${index * 100}%)`;
+
+      indicators.forEach((indicator, i) => {
+        if (i === index) {
+          indicator.classList.add('bg-black');
+        } else {
+          indicator.classList.remove('bg-black');
+        }
+      });
+    }
+
+    function nextSlide() {
+      currentSlide = (currentSlide + 1) % indicators.length;
+      showSlide(currentSlide);
+    }
+
+    function previousSlide() {
+      currentSlide = (currentSlide - 1 + indicators.length) % indicators.length;
+      showSlide(currentSlide);
+    }
+
+    function startAutoplay() {
+      autoplayInterval = setInterval(nextSlide, 5000);
+    }
+
+    function stopAutoplay() {
+      clearInterval(autoplayInterval);
+    }
+
+    nextButton.addEventListener('click', () => {
+      stopAutoplay();
+      nextSlide();
+      startAutoplay();
+    });
+
+    prevButton.addEventListener('click', () => {
+      stopAutoplay();
+      previousSlide();
+      startAutoplay();
+    });
+
+    indicators.forEach((indicator, index) => {
+      indicator.addEventListener('click', () => {
+        stopAutoplay();
+        currentSlide = index;
+        showSlide(currentSlide);
+        startAutoplay();
+      });
+    });
+
+    showSlide(currentSlide);
+    startAutoplay();
+
+    window._gumroadCarouselInitialized = true;
+  }
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('load', initCarousel);
+  } else {
+    initCarousel();
+  }
+<% end %>

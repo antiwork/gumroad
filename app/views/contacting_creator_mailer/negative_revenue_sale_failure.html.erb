@@ -1,0 +1,7 @@
+<%= header_section(@subject) %>
+<div>
+  <p>A customer (<%= @purchase.email %>) attempted to purchase your product (<%= @purchase.link.name %>) for <%= @purchase.formatted_display_price %>.</p>
+  <p>But the purchase was blocked because your net revenue from it was not positive.</p>
+  <p>You should either increase the sale price of your product, or reduce the applicable discount and/or affiliate commission.</p>
+</div>
+

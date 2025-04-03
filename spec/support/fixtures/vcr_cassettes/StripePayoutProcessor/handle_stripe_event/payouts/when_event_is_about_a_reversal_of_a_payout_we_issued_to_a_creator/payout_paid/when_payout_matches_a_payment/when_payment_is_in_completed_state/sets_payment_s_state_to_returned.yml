@@ -1,0 +1,189 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: <SLACK_WEBHOOK_URL>
+    body:
+      encoding: US-ASCII
+      string: payload=%7B%22channel%22%3A%22%23test%22%2C%22username%22%3A%22STRIPE%22%2C%22text%22%3A%22%22%2C%22attachments%22%3A%5B%7B%22fallback%22%3A%22Payment+ID+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fgumroad.com%2Fadmin%2Fpayments%2F174%5C%22%5Cu003e174%5Cu003c%2Fa%5Cu003e+of+%241.50+to+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fadmin%2Fusers%2F851%5C%22%5Cu003e%5Cu003c%2Fa%5Cu003e+is+processing%22%2C%22color%22%3A%22%23808080%22%2C%22text%22%3A%22Payment+ID+%5Cu003chttp%3A%2F%2Fgumroad.com%2Fadmin%2Fpayments%2F174%7C174%5Cu003e+of+%241.50+to+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fadmin%2Fusers%2F851%5C%22%5Cu003e%5Cu003c%2Fa%5Cu003e+is+processing%22%7D%5D%7D
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 30 Oct 2023 18:57:51 GMT
+      Server:
+      - Apache
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Referrer-Policy:
+      - no-referrer
+      X-Slack-Unique-Id:
+      - ZT_8r1ViL4SGcz6JouuJ8gAAAB8
+      X-Slack-Backend:
+      - r
+      Access-Control-Allow-Origin:
+      - "*"
+      X-Frame-Options:
+      - SAMEORIGIN
+      Content-Type:
+      - text/html
+      Content-Length:
+      - '2'
+      Via:
+      - 1.1 slack-prod.tinyspeck.com, envoy-www-iad-axpyafni, envoy-edge-bom-forcutvw
+      X-Envoy-Attempt-Count:
+      - '1'
+      X-Envoy-Upstream-Service-Time:
+      - '230'
+      X-Backend:
+      - main_normal main_canary_with_overflow main_control_with_overflow
+      X-Server:
+      - slack-www-hhvm-main-iad-rkui
+      X-Slack-Shared-Secret-Outcome:
+      - no-match
+      X-Edge-Backend:
+      - envoy-www
+      X-Slack-Edge-Shared-Secret-Outcome:
+      - no-match
+    body:
+      encoding: UTF-8
+      string: ok
+  recorded_at: Mon, 30 Oct 2023 18:57:51 GMT
+- request:
+    method: post
+    uri: <SLACK_WEBHOOK_URL>
+    body:
+      encoding: US-ASCII
+      string: payload=%7B%22channel%22%3A%22%23test%22%2C%22username%22%3A%22STRIPE%22%2C%22text%22%3A%22%22%2C%22attachments%22%3A%5B%7B%22fallback%22%3A%22Payment+ID+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fgumroad.com%2Fadmin%2Fpayments%2F174%5C%22%5Cu003e174%5Cu003c%2Fa%5Cu003e+of+%241.50+to+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fadmin%2Fusers%2F851%5C%22%5Cu003e%5Cu003c%2Fa%5Cu003e+is+completed%22%2C%22color%22%3A%22%23008000%22%2C%22text%22%3A%22Payment+ID+%5Cu003chttp%3A%2F%2Fgumroad.com%2Fadmin%2Fpayments%2F174%7C174%5Cu003e+of+%241.50+to+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fadmin%2Fusers%2F851%5C%22%5Cu003e%5Cu003c%2Fa%5Cu003e+is+completed%22%7D%5D%7D
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 30 Oct 2023 18:57:52 GMT
+      Server:
+      - Apache
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Referrer-Policy:
+      - no-referrer
+      X-Slack-Unique-Id:
+      - ZT_8sBHwacnSRdxFwjLxdgAAAAg
+      X-Slack-Backend:
+      - r
+      Access-Control-Allow-Origin:
+      - "*"
+      X-Frame-Options:
+      - SAMEORIGIN
+      Content-Type:
+      - text/html
+      Content-Length:
+      - '2'
+      Via:
+      - 1.1 slack-prod.tinyspeck.com, envoy-www-iad-efczuqxd, envoy-edge-bom-daukpped
+      X-Envoy-Attempt-Count:
+      - '1'
+      X-Envoy-Upstream-Service-Time:
+      - '236'
+      X-Backend:
+      - main_normal main_canary_with_overflow main_control_with_overflow
+      X-Server:
+      - slack-www-hhvm-main-iad-ctos
+      X-Slack-Shared-Secret-Outcome:
+      - no-match
+      X-Edge-Backend:
+      - envoy-www
+      X-Slack-Edge-Shared-Secret-Outcome:
+      - no-match
+    body:
+      encoding: UTF-8
+      string: ok
+  recorded_at: Mon, 30 Oct 2023 18:57:52 GMT
+- request:
+    method: post
+    uri: <SLACK_WEBHOOK_URL>
+    body:
+      encoding: US-ASCII
+      string: payload=%7B%22channel%22%3A%22%23test%22%2C%22username%22%3A%22STRIPE%22%2C%22text%22%3A%22%22%2C%22attachments%22%3A%5B%7B%22fallback%22%3A%22Payment+ID+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fgumroad.com%2Fadmin%2Fpayments%2F174%5C%22%5Cu003e174%5Cu003c%2Fa%5Cu003e+of+%241.50+to+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fadmin%2Fusers%2F851%5C%22%5Cu003e%5Cu003c%2Fa%5Cu003e+is+returned%22%2C%22color%22%3A%22%23ffff00%22%2C%22text%22%3A%22Payment+ID+%5Cu003chttp%3A%2F%2Fgumroad.com%2Fadmin%2Fpayments%2F174%7C174%5Cu003e+of+%241.50+to+%5Cu003ca+href%3D%5C%22http%3A%2F%2Fapp.test.gumroad.com%3A31337%2Fadmin%2Fusers%2F851%5C%22%5Cu003e%5Cu003c%2Fa%5Cu003e+is+returned%22%7D%5D%7D
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 30 Oct 2023 18:57:52 GMT
+      Server:
+      - Apache
+      Vary:
+      - Accept-Encoding
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Referrer-Policy:
+      - no-referrer
+      X-Slack-Unique-Id:
+      - ZT_8sADg1Ckqc5AB3kQqDwAAACQ
+      X-Slack-Backend:
+      - r
+      Access-Control-Allow-Origin:
+      - "*"
+      X-Frame-Options:
+      - SAMEORIGIN
+      Content-Type:
+      - text/html
+      Content-Length:
+      - '2'
+      Via:
+      - 1.1 slack-prod.tinyspeck.com, envoy-www-iad-hdhgvlgy, envoy-edge-bom-xyujwzqt
+      X-Envoy-Attempt-Count:
+      - '1'
+      X-Envoy-Upstream-Service-Time:
+      - '222'
+      X-Backend:
+      - main_normal main_canary_with_overflow main_control_with_overflow
+      X-Server:
+      - slack-www-hhvm-main-iad-caym
+      X-Slack-Shared-Secret-Outcome:
+      - no-match
+      X-Edge-Backend:
+      - envoy-www
+      X-Slack-Edge-Shared-Secret-Outcome:
+      - no-match
+    body:
+      encoding: UTF-8
+      string: ok
+  recorded_at: Mon, 30 Oct 2023 18:57:52 GMT
+recorded_with: VCR 6.2.0

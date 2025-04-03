@@ -1,0 +1,27 @@
+@if "<%= font %>" != "ABC Favorit" {
+  @import url(<%= Addressable::URI::encode("https://fonts.googleapis.com/css2?family=#{font}:wght@400;600&display=swap") %>);
+}
+
+@function split-color($color) {
+  @return red($color) green($color) blue($color);
+}
+
+:root {
+  --accent: #{split-color(<%= highlight_color %>)};
+  --contrast-accent: #{split-color(if(lightness(<%= highlight_color %>) < 55%, #fff, #000))};
+  --font-family: <%= font_family %>;
+  --color: #{split-color(if(lightness(<%= background_color %>) < 55%, #fff, #000))};
+    --primary: var(--color);
+  --contrast-primary: #{split-color(if(lightness(<%= background_color %>) < 55%, #000, #fff))};
+  --filled: #{split-color(<%= background_color %>)};
+  --contrast-filled: var(--color);
+  --body-bg: <%= background_color %>;
+  --active-bg: rgb(var(--color) / var(--gray-1));
+  --border-alpha: 1;
+}
+
+body {
+  background-color: <%= background_color %>;
+  color: #{if(lightness(<%= background_color %>) < 55%, #fff, #000)};
+  font-family: <%= font_family %>;
+}

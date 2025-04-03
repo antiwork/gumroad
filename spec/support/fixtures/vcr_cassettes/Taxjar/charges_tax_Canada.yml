@@ -1,0 +1,99 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: UTF-8
+      string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"CA","to_state":"ON","to_zip":null,"shipping":0.0,"line_items":[{"quantity":1,"unit_price":100.0,"discount":0,"product_tax_code":"31000"}],"nexus_addresses":[{"country":"CA","state":"ON"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=utf-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 18 Sep 2024 06:59:34 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '987'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"9d1a40f16f4f3b961eb1956e1e215a1d"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - 8206ae14-d780-4f82-a2bf-ec0f1a8b61b2
+      X-Runtime:
+      - '0.024399'
+    body:
+      encoding: UTF-8
+      string: '{"tax":{"order_total_amount":100.0,"shipping":0.0,"taxable_amount":100.0,"amount_to_collect":13.0,"rate":0.13,"has_nexus":true,"freight_taxable":true,"tax_source":"destination","jurisdictions":{"country":"CA","state":"ON"},"breakdown":{"taxable_amount":100.0,"tax_collectable":13.0,"combined_tax_rate":0.13,"gst_taxable_amount":100.0,"gst_tax_rate":0.05,"gst":5.0,"pst_taxable_amount":100.0,"pst_tax_rate":0.08,"pst":8.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0,"shipping":{"taxable_amount":0.0,"tax_collectable":0.0,"combined_tax_rate":0.13,"gst_taxable_amount":0.0,"gst_tax_rate":0.05,"gst":0.0,"pst_taxable_amount":0.0,"pst_tax_rate":0.08,"pst":0.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0},"line_items":[{"id":"1","taxable_amount":100.0,"tax_collectable":13.0,"combined_tax_rate":0.13,"gst_taxable_amount":100.0,"gst_tax_rate":0.05,"gst":5.0,"pst_taxable_amount":100.0,"pst_tax_rate":0.08,"pst":8.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0}]}}}'
+  recorded_at: Wed, 18 Sep 2024 06:59:34 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: UTF-8
+      string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"CA","to_state":"QC","to_zip":null,"shipping":0.0,"line_items":[{"quantity":1,"unit_price":100.0,"discount":0,"product_tax_code":"31000"}],"nexus_addresses":[{"country":"CA","state":"QC"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=utf-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 18 Sep 2024 06:59:36 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '1013'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"e9bb90579e4f002aeb97aa5f3477e8f8"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - 350fd37e-39db-4e43-b376-9a8dddcbd762
+      X-Runtime:
+      - '0.026191'
+    body:
+      encoding: UTF-8
+      string: '{"tax":{"order_total_amount":100.0,"shipping":0.0,"taxable_amount":100.0,"amount_to_collect":14.98,"rate":0.14975,"has_nexus":true,"freight_taxable":true,"tax_source":"destination","jurisdictions":{"country":"CA","state":"QC"},"breakdown":{"taxable_amount":100.0,"tax_collectable":14.98,"combined_tax_rate":0.14975,"gst_taxable_amount":100.0,"gst_tax_rate":0.05,"gst":5.0,"pst_taxable_amount":0.0,"pst_tax_rate":0.0,"pst":0.0,"qst_taxable_amount":100.0,"qst_tax_rate":0.09975,"qst":9.98,"shipping":{"taxable_amount":0.0,"tax_collectable":0.0,"combined_tax_rate":0.14975,"gst_taxable_amount":0.0,"gst_tax_rate":0.05,"gst":0.0,"pst_taxable_amount":0.0,"pst_tax_rate":0.0,"pst":0.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.09975,"qst":0.0},"line_items":[{"id":"1","taxable_amount":100.0,"tax_collectable":14.98,"combined_tax_rate":0.14975,"gst_taxable_amount":100.0,"gst_tax_rate":0.05,"gst":5.0,"pst_taxable_amount":0.0,"pst_tax_rate":0.0,"pst":0.0,"qst_taxable_amount":100.0,"qst_tax_rate":0.09975,"qst":9.98}]}}}'
+  recorded_at: Wed, 18 Sep 2024 06:59:36 GMT
+recorded_with: VCR 6.2.0

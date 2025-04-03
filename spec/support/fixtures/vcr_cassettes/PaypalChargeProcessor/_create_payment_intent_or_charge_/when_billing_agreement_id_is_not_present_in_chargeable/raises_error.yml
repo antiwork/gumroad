@@ -1,0 +1,117 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"reference_id":"P5ppE6H8XIjy2JSCgUhbAw==","amount":{"currency_code":"USD","value":"1.00","breakdown":{"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"item_total":{"currency_code":"USD","value":"1.00"}}},"payee":{"merchant_id":null},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"1.00"},"quantity":1,"sku":"S"}],"soft_descriptor":"You
+        bought /l/S","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"0.30"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]}}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAF5T7EesDXLWLuLRvWyMYLvqXkVxpL_exqSEColXRRl47BxzjIKhdWgw-rD2NT_hXvDyKa1bz9FBNCP24WDrd33dtD0kg
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1595801525'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.5.8
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.5.8p224-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1246'
+      Content-Type:
+      - application/json
+      Date:
+      - Sun, 26 Jul 2020 22:12:07 GMT
+      Paypal-Debug-Id:
+      - e5928f012653f
+    body:
+      encoding: UTF-8
+      string: '{"id":"32282982JP489843F","intent":"CAPTURE","purchase_units":[{"reference_id":"P5ppE6H8XIjy2JSCgUhbAw==","amount":{"currency_code":"USD","value":"1.00","breakdown":{"item_total":{"currency_code":"USD","value":"1.00"},"shipping":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"0.30"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"soft_descriptor":"You
+        bought /l/S","items":[{"name":"The Works of Edgar Gumstein","unit_amount":{"currency_code":"USD","value":"1.00"},"quantity":"1","sku":"S"}]}],"create_time":"2020-07-26T22:12:07Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/32282982JP489843F","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=32282982JP489843F","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/32282982JP489843F","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/32282982JP489843F/capture","rel":"capture","method":"POST"}],"status":"CREATED"}'
+  recorded_at: Sun, 26 Jul 2020 22:12:08 GMT
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/32282982JP489843F/capture
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAF5T7EesDXLWLuLRvWyMYLvqXkVxpL_exqSEColXRRl47BxzjIKhdWgw-rD2NT_hXvDyKa1bz9FBNCP24WDrd33dtD0kg
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1595801528'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.5.8
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.5.8p224-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+  response:
+    status:
+      code: 422
+      message: Unprocessable Entity
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '584'
+      Content-Type:
+      - application/json
+      Date:
+      - Sun, 26 Jul 2020 22:12:09 GMT
+      Paypal-Debug-Id:
+      - 1131b21541e68
+    body:
+      encoding: UTF-8
+      string: '{"name":"UNPROCESSABLE_ENTITY","details":[{"issue":"ORDER_NOT_APPROVED","description":"Payer
+        has not yet approved the Order for payment. Please redirect the payer to the
+        ''rel'':''approve'' url returned as part of the HATEOAS links within the Create
+        Order call or provide a valid payment_source in the request."}],"message":"The
+        requested action could not be performed, semantically incorrect, or failed
+        business validation.","debug_id":"1131b21541e68","links":[{"href":"https://developer.paypal.com/docs/api/orders/v2/#error-ORDER_NOT_APPROVED","rel":"information_link","method":"GET"}]}'
+  recorded_at: Sun, 26 Jul 2020 22:12:10 GMT
+recorded_with: VCR 6.0.0

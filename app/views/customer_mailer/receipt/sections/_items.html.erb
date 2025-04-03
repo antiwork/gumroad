@@ -1,0 +1,14 @@
+<% charge_info = receipt_presenter.charge_info %>
+<div>
+  <% receipt_presenter.items_infos.each do |item_info| %>
+    <div class="item">
+      <%= render("customer_mailer/receipt/item", item_info: item_info) %>
+    </div>
+  <% end %>
+
+  <% if charge_info.product_questions_note.present? %>
+    <div>
+      <%= charge_info.product_questions_note %>
+    </div>
+  <% end %>
+</div>

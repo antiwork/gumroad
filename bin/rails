@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+load File.expand_path("spring", __dir__)
+
+APP_PATH = File.expand_path('../config/application', __dir__)
+require 'bundler/setup'
+require 'dotenv/load'
+require_relative '../config/boot'
+require 'rails/commands'

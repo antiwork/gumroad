@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Overlay test</title>
+    <% if custom_domain_base_uri.present? %>
+      <script src="<%= custom_domain_base_uri %>/js/gumroad.js"></script>
+    <% else %>
+      <script src="/js/gumroad.js"></script>
+    <% end %>
+  </head>
+  <body>
+    <% urls.each do |url| %>
+      <a class="gumroad-button" href="<%= url %>" data-gumroad-single-product="<%= single_mode ? 'true' : nil %>" data-gumroad-overlay-checkout="<%= trigger_checkout ? 'true' : nil %>">Buy my product</a>
+    <% end %>
+  </body>
+</html>

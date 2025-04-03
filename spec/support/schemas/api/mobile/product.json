@@ -1,0 +1,41 @@
+{
+  "id": "file:/api/mobile/product.json",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "unique_permalink": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "creator_name": { "type": "string" },
+    "preview_url": { "type": "string" },
+    "preview_oembed_url": { "type": "string" },
+    "preview_height": { "type": "number" },
+    "preview_width": { "type": "number" },
+    "url_redirect_external_id": { "type": "string" },
+    "purchase_id": { "type": "string" },
+    "purchased_at": { "type": "string" },
+    "product_updates_data": { "type": "array" },
+    "file_data": {
+      "type": "array",
+      "items": { "$ref": "file:/api/mobile/product_file.json#" }
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "unique_permalink",
+    "created_at",
+    "updated_at",
+    "creator_name",
+    "preview_url",
+    "preview_oembed_url",
+    "preview_height",
+    "preview_width",
+    "url_redirect_external_id",
+    "purchase_id",
+    "purchased_at",
+    "product_updates_data",
+    "file_data"
+  ]
+}

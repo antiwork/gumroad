@@ -1,0 +1,15 @@
+<main class="stack single-page-form horizontal-form">
+  <header>
+    <h2>Confirm your email address</h2>
+    <p>Please enter the email address used to purchase this product to view your receipt.</p>
+  </header>
+  <div class="mini-rule legacy-only"></div>
+  <%= form_tag(receipt_purchase_path(@purchase.external_id), method: "get") do %>
+    <%= label_tag :email, "Email address:", class: "form-label" %>
+    <%= email_field_tag :email, nil, placeholder: "Email address", required: true %>
+    <%= button_tag "View receipt", type: "submit", class: "button primary", name: nil %>
+  <% end %>
+</main>
+<% content_for :footer do %>
+  <%= default_footer_content %>
+<% end %>

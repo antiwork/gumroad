@@ -1,0 +1,363 @@
+# Every minute
+find_expired_subscriptions_to_set_as_deactivated_worker:
+  cron: "* * * * *" # Every minute
+  class: FindExpiredSubscriptionsToSetAsDeactivatedWorker
+
+# Hourly
+renew_custom_domain_ssl_certificates:
+  cron: "0 * * * *" # Every hour
+  class: RenewCustomDomainSslCertificates
+generate_large_sellers_analytics_cache_worker:
+  cron: "0 * * * *" # Every hour
+  class: GenerateLargeSellersAnalyticsCacheWorker
+find_subscriptions_with_missing_charge_worker:
+  cron: "0 */6 * * *" # Every 6 hours
+  class: FindSubscriptionsWithMissingChargeWorker
+verify_custom_domains:
+  cron: "0 */6 * * *" # Every 6 hours
+  class: CustomDomainsVerificationWorker
+update_currencies:
+  cron: "0 * * * *" # Every hour
+  class: UpdateCurrenciesWorker
+fight_purchase_chargebacks_worker:
+  cron: "0 * * * *" # Every hour
+  class: FightDisputesJob
+  description: Enqueues jobs to fight disputes for purchases
+sync_stuck_purchases:
+  cron: "0 */6 * * *" # Every 6 hours
+  class: SyncStuckPurchasesJob
+forcefully_finish_long_running_community_chat_recap_runs:
+  cron: "0 */2 * * *" # Every 2 hours
+  class: ForceFinishLongRunningCommunityChatRecapRunsJob
+  description: Forcefully finishes long running community chat recap runs
+
+# Daily in format: [minute] [hour] * * *
+large_sellers_update_user_balance_stats_cache_worker: # Duration: <1sec
+  cron: "0 8 * * *" # UTC 08:00
+  class: LargeSellersUpdateUserBalanceStatsCacheWorker
+delete_unused_public_files:
+  cron: "0 9 * * *" # UTC 09:00
+  class: DeleteUnusedPublicFilesJob
+  description: Deletes unused public files that are scheduled for deletion
+remove_deleted_files_from_s3:
+  cron: "0 10 * * *" # UTC 10:00
+  class: RemoveDeletedFilesFromS3Job
+  description: Removes deleted files from S3
+generate_daily_community_chat_recaps:
+  cron: "0 10 * * *" # UTC 10:00
+  class: TriggerCommunityChatRecapRunJob
+  args:
+    - daily
+  description: Generates daily community chat recaps
+send_reminders_for_outstanding_user_compliance_info_requests: # Duration: 5min
+  cron: "0 2 * * *" # UTC 02:00
+  class: SendRemindersForOutstandingUserComplianceInfoRequestsWorker
+  description: Sends reminder emails for outstanding user compliance info requests.
+stripe_transfer_gumroads_available_balances_to_gumroads_bank_account: # Duration: <1sec
+  cron: "0 11 * * *" # UTC 11:00
+  class: StripeTransferGumroadsAvailableBalancesToGumroadsBankAccountWorker
+  description: Transfers the available balances of Gumroad's Stripe account to the Gumroad bank account
+expire_rental_purchases: # Duration: 45sec
+  cron: "0 12 * * *" # UTC 12:00
+  class: ExpireRentalPurchasesWorker
+  description: update rental purchases that have expired in the last one day
+daily_flagged_and_suspended_users: # Duration: 5sec
+  cron: "0 15 * * *" # UTC 15:00
+  class: DailyRefundQueueNotifyWorker
+  description: Suspended users to refund
+delete_old_versions_records_worker: # Duration: 5min
+  cron: "30 9 * * *" # UTC 09:30
+  class: DeleteOldVersionsRecordsWorker
+  description: Deletes old records from the versions table
+delete_old_unused_events_worker: # Duration: 3min
+  cron: "40 9 * * *" # UTC 09:40
+  class: DeleteOldUnusedEventsWorker
+  description: Deletes old unused events
+sitemap_refresh_daily: # Duration: 15min
+  cron: "0 0 * * *" # UTC 00:00
+  class: RefreshSitemapDailyWorker
+  description: Refresh Sitemap everyday
+create_missing_purchase_events_worker: # Duration: 2sec
+  cron: "5 10 * * *" # UTC 10:05
+  class: CreateMissingPurchaseEventsWorker
+  description: Creates yesterday's missing purchase events
+purge_old_deleted_asset_previews: # Duration: 1min
+  cron: "30 10 * * *" # UTC 10:30
+  class: PurgeOldDeletedAssetPreviewsWorker
+  description: Removes old asset previews that have been marked as deleted
+reissue_ssl_certificate_for_updated_custom_domains: # Duration: 10min
+  cron: "0 0 * * *" # UTC 00:00
+  class: ReissueSslCertificateForUpdatedCustomDomains
+  description: Check and reissue SSL certificate for custom domains with updated DNS records
+update_tax_rates:
+  cron: "0 0 * * *" # UTC 00:00
+  class: UpdateTaxRatesJob
+compile_gumroad_daily_analytics: # Duration: 5 minutes
+  cron: "10 8 * * *" # UTC 08:10
+  class: CompileGumroadDailyAnalyticsJob
+  description: Compiles and caches internal analytics
+update_taxonomy_stats: # Duration: <1min (estimated)
+  cron: "30 8 * * *" # UTC 08:30
+  class: UpdateTaxonomyStatsJob
+  description: Fetches and stores taxonomy stats
+schedule_abandoned_cart_emails:
+  cron: "0 14 * * *" # UTC 14:00
+  class: ScheduleAbandonedCartEmailsJob
+  description: Schedules abandoned cart emails for users who have not completed their purchase
+memberships_price_update_emails:
+  cron: "10 8 * * *" # UTC 08:10
+  class: SendMembershipsPriceUpdateEmailsJob
+  description: Notify customers via email that their membership price has been updated
+expire_stamped_pdfs:
+  cron: "45 8 * * *" # UTC 08:45
+  class: ExpireStampedPdfsJob
+  description: Marks old stamped pdfs as deleted
+expire_transcoded_videos:
+  cron: "50 8 * * *" # UTC 08:50
+  class: ExpireTranscodedVideosJob
+  description: Marks old (in term of access) transcoded videos as deleted
+
+# Weekly (Payouts)
+payouts_cross_border_stripe:
+  cron: "0 10 * * 2" # UTC 10:00 TUE
+  class: PerformPayoutsUpToDelayDaysAgoWorker
+  args:
+    - "STRIPE"
+    -
+      - "AlbaniaBankAccount"
+      - "AlgeriaBankAccount"
+      - "AngolaBankAccount"
+      - "AntiguaAndBarbudaBankAccount"
+      - "ArgentinaBankAccount"
+      - "ArmeniaBankAccount"
+      - "AzerbaijanBankAccount"
+      - "BahamasBankAccount"
+      - "BahrainBankAccount"
+      - "BangladeshBankAccount"
+      - "BeninBankAccount"
+      - "BhutanBankAccount"
+      - "BoliviaBankAccount"
+      - "BosniaAndHerzegovinaBankAccount"
+      - "BotswanaBankAccount"
+      - "BruneiBankAccount"
+      - "CambodiaBankAccount"
+      - "ChileBankAccount"
+      - "ColombiaBankAccount"
+      - "CostaRicaBankAccount"
+      - "CoteDIvoireBankAccount"
+      - "DominicanRepublicBankAccount"
+      - "EcuadorBankAccount"
+      - "EgyptBankAccount"
+      - "EthiopiaBankAccount"
+      - "ElSalvadorBankAccount"
+      - "GabonBankAccount"
+      - "GhanaBankAccount"
+      - "GuatemalaBankAccount"
+      - "GuyanaBankAccount"
+      - "HongKongBankAccount"
+      - "IcelandBankAccount"
+      - "IndianBankAccount"
+      - "IndonesiaBankAccount"
+      - "IsraelBankAccount"
+      - "JamaicaBankAccount"
+      - "JapanBankAccount"
+      - "JordanBankAccount"
+      - "KazakhstanBankAccount"
+      - "KenyaBankAccount"
+      - "KuwaitBankAccount"
+      - "LaosBankAccount"
+      - "MacaoBankAccount"
+      - "MadagascarBankAccount"
+      - "MalaysiaBankAccount"
+      - "MauritiusBankAccount"
+      - "MexicoBankAccount"
+      - "MoldovaBankAccount"
+      - "MonacoBankAccount"
+      - "MongoliaBankAccount"
+      - "MoroccoBankAccount"
+      - "MozambiqueBankAccount"
+      - "NamibiaBankAccount"
+      - "NewZealandBankAccount"
+      - "NigerBankAccount"
+      - "NigeriaBankAccount"
+      - "NorthMacedoniaBankAccount"
+      - "OmanBankAccount"
+      - "PakistanBankAccount"
+      - "PanamaBankAccount"
+      - "ParaguayBankAccount"
+      - "PeruBankAccount"
+      - "PhilippinesBankAccount"
+      - "QatarBankAccount"
+      - "RomaniaBankAccount"
+      - "RwandaBankAccount"
+      - "SaintLuciaBankAccount"
+      - "SanMarinoBankAccount"
+      - "SaudiArabiaBankAccount"
+      - "SenegalBankAccount"
+      - "SerbiaBankAccount"
+      - "SouthAfricaBankAccount"
+      - "SriLankaBankAccount"
+      - "TaiwanBankAccount"
+      - "TanzaniaBankAccount"
+      - "ThailandBankAccount"
+      - "TrinidadAndTobagoBankAccount"
+      - "TunisiaBankAccount"
+      - "TurkeyBankAccount"
+      - "UruguayBankAccount"
+      - "UzbekistanBankAccount"
+      - "VietnamBankAccount"
+
+payouts_non_us_stripe:
+  cron: "0 10 * * 3" # UTC 10:00 WED
+  class: PerformPayoutsUpToDelayDaysAgoWorker
+  args:
+    - "STRIPE"
+    -
+      - "AustralianBankAccount"
+      - "UkBankAccount"
+      - "CanadianBankAccount"
+      - "EuropeanBankAccount"
+      - "SingaporeanBankAccount"
+      - "SwissBankAccount"
+      - "PolandBankAccount"
+      - "CzechRepublicBankAccount"
+      - "BulgariaBankAccount"
+      - "DenmarkBankAccount"
+      - "HungaryBankAccount"
+      - "KoreaBankAccount"
+      - "UaeBankAccount"
+      - "SwedenBankAccount"
+      - "LiechtensteinBankAccount"
+      - "NorwayBankAccount"
+      - "GibraltarBankAccount"
+payouts_us_stripe:
+  cron: "0 10 * * 4" # UTC 10:00 THU
+  class: PerformPayoutsUpToDelayDaysAgoWorker
+  args:
+    - "STRIPE"
+    -
+      - "AchAccount"
+      - "CardBankAccount"
+payouts_paypal:
+  cron: "0 10 * * 5" # UTC 10:00 FRI
+  class: PerformPayoutsUpToDelayDaysAgoWorker
+  args: "PAYPAL"
+payouts_stripe_connect:
+  cron: "0 10 * * 5" # UTC 10:00 FRI
+  class: PerformPayoutsUpToDelayDaysAgoWorker
+  args:
+    - "STRIPE"
+retry_failed_paypal_payouts:
+  cron: "0 14 * * 5" # UTC 14:00 FRI
+  class: RetryFailedPaypalPayoutsWorker
+
+# Weekly (Non-Payouts)
+reindex_recommendable_products:
+  cron: "0 15 * * 0" # UTC 15:00 SUN
+  class: ReindexRecommendableProductsWorker
+recalculate_recent_wishlist_follower_count:
+  cron: "0 15 * * 6" # UTC 15:00 SAT
+  class: RecalculateRecentWishlistFollowerCountJob
+update_tax_rate_cache_for_product_edit:
+  cron: "0 15  * * 1"
+  class: BuildTaxRateCacheWorker
+  description: Re-build tax rate cache used for creator guidance during product creation/edit
+renew_facebook_access_tokens:
+  cron: "0 15 * * 1" # UTC 15:00 Monday
+  class: RenewFacebookAccessTokensWorker
+  description: Renew Facebook access tokens for connected accounts
+stripe_merchant_account_registration:
+  cron: "0 0 * * 1" # UTC 00:00 Monday
+  class: StripeCreateMerchantAccountsWorker
+  description: Create's Merchant Accounts for user's who they can be created for.
+seller_update:
+  cron: "0 15  * * 1" # UTC 15:00 Monday
+  class: SellerUpdatesWorker
+  description: Update creators with stats for the week
+calculate_sale_numbers: # Duration: 40min
+  cron: "0 10 * * 2" # UTC 10:00 TUE
+  class: CalculateSaleNumbersWorker
+  description: Update sale numbers for home/company pages
+calculate_payout_numbers_worker:
+  cron: "5 8 * * 1,2,3" # UTC 08:05 Monday, Tuesday, Wednesday
+  class: CalculatePayoutNumbersWorker
+  description: Update payout numbers for the home page
+send_paypal_topup_notification:
+  cron: "0 15 * * 5,6" # UTC 15:00 FRI and SAT
+  class: SendPaypalTopupNotificationJob
+  description: Send a slack notification for the weekly PayPal topup
+sync_all_paypal_payouts:
+  cron: "0 15 * * 4" # UTC 15:00 Thursday
+  class: SyncStuckPayoutsJob
+  description: Syncs all PayPal payouts that are stuck in processing
+  args:
+    - "PAYPAL"
+delete_expired_product_cached_values:
+  cron: "0 16 * * 0" # UTC 16:00 Sunday
+  class: DeleteExpiredProductCachedValuesWorker
+  description: Deletes unused product cached values
+update_purchasing_power_parity_factors:
+  cron: "0 0 * * 0" # UTC 00:00 Sunday
+  class: UpdatePurchasingPowerParityFactorsWorker
+million_dollar_milestone_check:
+  cron: "0 0 * * 1" # UTC 00:00 Monday
+  class: MillionDollarMilestoneCheckWorker
+  description: Send Slack notifications about creators that cross the million-dollar milestone
+
+# Monthly
+finances_report:
+  cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
+  class: SendFinancesReportWorker
+  description: Email with finance numbers for the previous month
+deferred_refunds_report:
+  cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
+  class: SendDeferredRefundsReportWorker
+  description: Email with defferred refunds numbers for the previous month
+stripe_currency_balances_report:
+  cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
+  class: SendStripeCurrencyBalancesReportJob
+  description: Email with Stripe currency balances report
+reset_admin_action_call_counts:
+  cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
+  class: ResetAdminActionCallCountsJob
+  description: Reset admin controller action call counts
+outstanding_balances:
+  cron: "0 0 1 * *" # UTC 00:00 on 1st of every month
+  class: EmailOutstandingBalancesCsvWorker
+  description: Email with all outstanding balances (positive and negative)
+payment_details_reminder:
+  cron: "0 15 1 * *" # UTC 15:00 on 1st of every month
+  class: SendPaymentReminderWorker
+  description: Remind sellers to add payment details
+expiring_credit_cards_message:
+  cron: "0 15 1 * *" # UTC 15:00 on 1st of every month
+  class: ExpiringCreditCardMessageWorker
+  description: Email users with soon to expire credit cards
+sitemap_refresh_monthly:
+  cron: "0 0 1 * *" # UTC 00:00 on 1st of every month
+  class: RefreshSitemapMonthlyWorker
+  description: Refresh Sitemap monthly
+monthly_financial_reports:
+  cron: "0 1 1 * *" # UTC 01:00 on 1st of every month
+  class: GenerateFinancialReportsForPreviousMonthJob
+  description: Generate financial reports for the previous month
+delete_old_sent_email_info_records:
+  cron: "0 1 1 * *" # UTC 01:00 on 1st of every month
+  class: DeleteOldSentEmailInfoRecordsJob
+  description: Deletes old records from the sent_email_infos table
+australia_backtax_transfer:
+  cron: "0 10 7 * *" # UTC 10:00 on 7th of every month
+  class: RecoverAusBacktaxesFromStripeAccountsJob
+  description: Transfer funds for creators who have a negative credit applied for Australia backtaxes
+
+# Quarterly
+generate_financial_reports:
+  cron: "0 10 2 1,4,7,10 *" # UTC 10:00 on 2nd of January, April, July, and October.
+  class: GenerateFinancialReportsForPreviousQuarterJob
+  description: Generate financial reports for the previous quarter
+
+# Yearly
+send_bundles_marketing_email:
+  cron: "0 10 2 1 *" # UTC 10:00 on 2nd of January every year.
+  class: SendBundlesMarketingEmailJob
+  description: Send marketing emails for bundles every January 2nd

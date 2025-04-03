@@ -1,0 +1,57 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/taxes
+    body:
+      encoding: UTF-8
+      string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"CA","to_state":"BC","to_zip":null,"shipping":0.0,"line_items":[{"quantity":1,"unit_price":100.0,"discount":0,"product_tax_code":"31000"}],"nexus_addresses":[{"country":"CA","state":"BC"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=utf-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '987'
+      Connection:
+      - close
+      Date:
+      - Sun, 19 Jan 2025 03:07:42 GMT
+      X-Amzn-Trace-Id:
+      - Root=1-678c6c7e-3d5447364399729e0917614c
+      X-Amzn-Requestid:
+      - b03620ce-0da7-4ed2-bd93-4ddaf09fafd5
+      Access-Control-Allow-Origin:
+      - https://developers.taxjar.com
+      X-Amz-Apigw-Id:
+      - EnXj0Hd2IAMEGng=
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 1c00f072ce3ea50db20b7e5f7ab3fc00.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - LAX54-P7
+      X-Amz-Cf-Id:
+      - oW7_fcQiuFKeTa96WOm_y6e6bpCZ0RVFSL9pFB9SPIuPP79ys-OAKA==
+    body:
+      encoding: UTF-8
+      string: '{"tax":{"order_total_amount":100.0,"shipping":0.0,"taxable_amount":100.0,"amount_to_collect":12.0,"rate":0.12,"has_nexus":true,"freight_taxable":true,"tax_source":"destination","jurisdictions":{"country":"CA","state":"BC"},"breakdown":{"taxable_amount":100.0,"tax_collectable":12.0,"combined_tax_rate":0.12,"gst_taxable_amount":100.0,"gst_tax_rate":0.05,"gst":5.0,"pst_taxable_amount":100.0,"pst_tax_rate":0.07,"pst":7.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0,"shipping":{"taxable_amount":0.0,"tax_collectable":0.0,"combined_tax_rate":0.12,"gst_taxable_amount":0.0,"gst_tax_rate":0.05,"gst":0.0,"pst_taxable_amount":0.0,"pst_tax_rate":0.07,"pst":0.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0},"line_items":[{"id":"1","taxable_amount":100.0,"tax_collectable":12.0,"combined_tax_rate":0.12,"gst_taxable_amount":100.0,"gst_tax_rate":0.05,"gst":5.0,"pst_taxable_amount":100.0,"pst_tax_rate":0.07,"pst":7.0,"qst_taxable_amount":0.0,"qst_tax_rate":0.0,"qst":0.0}]}}}'
+  recorded_at: Sun, 19 Jan 2025 03:07:42 GMT
+recorded_with: VCR 6.2.0

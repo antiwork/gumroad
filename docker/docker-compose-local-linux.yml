@@ -1,0 +1,54 @@
+# https://docs.docker.com/compose/compose-file/
+
+services:
+  db:
+    image: mysql:8.0.32
+    volumes:
+      - ./tmp/mysql:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+    command:
+      - "mysqld"
+      - "--default-authentication-plugin=mysql_native_password"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--character-set-server=utf8mb4"
+
+  redis:
+    image: redis:7.0.7
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./tmp/redis:/data
+
+  mongo:
+    image: mongo:3.6.16
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./tmp/mongo:/data/db
+    command: "mongod --smallfiles"
+
+  elasticsearch:
+    image: elasticsearch:7.9.3
+    ports:
+      - "9200:9200"
+    environment:
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "discovery.type=single-node"
+    volumes:
+      - elasticsearch7data:/data
+
+  nginx:
+    image: nginx:1.23.3
+    network_mode: host
+    volumes:
+      - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf
+      - ./local-nginx/certs:/etc/ssl/certs/
+    extra_hosts:
+      - "host.docker.internal:127.0.0.1"
+
+volumes:
+  elasticsearch7data:

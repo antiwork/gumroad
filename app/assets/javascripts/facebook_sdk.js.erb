@@ -1,0 +1,16 @@
+if ($('meta[property="gr:facebook_sdk:enabled"]').attr('content') == 'true') {
+  $(window).load(function () {
+
+    window.fbAsyncInit = function () {
+      FB.getLoginStatus(function (response) {});
+    };
+
+    (function (d, s, id) {
+      var js, fjs = d.getElementsByTagName(s)[0];
+      if (d.getElementById(id)) return;
+      js = d.createElement(s); js.id = id; js.async = true;
+      js.src = "https://connect.facebook.net/en_US/sdk.js#version=v2.8&xfbml=1&appId=<%= FACEBOOK_APP_ID %>";
+      fjs.parentNode.insertBefore(js, fjs);
+    }(document, 'script', 'facebook-jssdk'));
+  });
+}

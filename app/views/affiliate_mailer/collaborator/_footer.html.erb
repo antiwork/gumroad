@@ -1,0 +1,11 @@
+<% truncated_count = [product_affiliates.count - @max_products, 0].max %>
+
+<div>
+  <a href="<%= products_collabs_url %>" class="button accent">
+    <% if truncated_count > 0 %>
+      Log in to see <%= truncated_count %> more
+    <% else %>
+      Log in to Gumroad
+    <% end %>
+  </a>
+</div>

@@ -1,0 +1,13 @@
+<%= header_section("Outstanding balances are attached.") %>
+<div>
+  <p>These balances are amounts due to sellers. Therefore, they do not include VAT (that is remitted to the EU separately).</p>
+  <p>
+    Total Outstanding Balances for Stripe(Held by Stripe): Active $<%= @balance_stats[:stripe][:held_by_stripe][:active] / 100.0 %>, Suspended $<%= @balance_stats[:stripe][:held_by_stripe][:suspended] / 100.0 %>
+  </p>
+  <p>
+    Total Outstanding Balances for Stripe(Held by Gumroad): Active $<%= @balance_stats[:stripe][:held_by_gumroad][:active] / 100.0 %>, Suspended $<%= @balance_stats[:stripe][:held_by_gumroad][:suspended] / 100.0 %>
+  </p>
+  <p>
+    Total Outstanding Balances for Paypal: Active $<%= @balance_stats[:paypal][:active] / 100.0 %>, Suspended $<%= @balance_stats[:paypal][:suspended] / 100.0 %>
+  </p>
+</div>

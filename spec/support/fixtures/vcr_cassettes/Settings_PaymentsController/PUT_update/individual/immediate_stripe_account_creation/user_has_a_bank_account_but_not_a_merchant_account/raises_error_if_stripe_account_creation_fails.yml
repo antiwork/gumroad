@@ -1,0 +1,92 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/accounts
+    body:
+      encoding: UTF-8
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=6&metadata[tos_agreement_id]=-fhDVuxkKNzFQrMWfbOOqA%3D%3D&metadata[user_compliance_info_id]=9UnCMvhTLeUoLhHslwCDWA%3D%3D&metadata[bank_account_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&tos_acceptance[date]=1698781725&tos_acceptance[ip]=0.0.0.0&business_type=individual&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=barnabas+barnabastein&individual[first_name]=barnabas&individual[last_name]=barnabastein&individual[email]=seller%40example.com&individual[phone]=%2B16507423913&individual[address][line1]=123+barnabas+st&individual[address][city]=barnabasville&individual[address][state]=NY&individual[address][postal_code]=94104&individual[address][country]=US&individual[dob][day]=4&individual[dob][month]=3&individual[dob][year]=1955&individual[ssn_last_4]=6789&bank_account[country]=US&bank_account[currency]=usd&bank_account[account_number]=123123123&bank_account[routing_number]=110000000&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=true
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/10.0.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_wCxGGD1XELglxn","request_duration_ms":4202}}'
+      Idempotency-Key:
+      - 7623c682-e7f8-4cb0-b9b1-7323e5901135
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"10.0.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
+        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 31 Oct 2023 19:48:46 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '483'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET,HEAD,PUT,PATCH,POST,DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy-Report-Only:
+      - report-uri https://q.stripe.com/csp-report?p=v1%2Faccounts; block-all-mixed-content;
+        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      Idempotency-Key:
+      - 7623c682-e7f8-4cb0-b9b1-7323e5901135
+      Original-Request:
+      - req_uErkbUINYR3fCt
+      Request-Id:
+      - req_uErkbUINYR3fCt
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "code": "account_number_invalid",
+            "doc_url": "https://stripe.com/docs/error-codes/account-number-invalid",
+            "message": "You must use a test bank account number in test mode. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.",
+            "param": "bank_account[account_number]",
+            "request_log_url": "https://dashboard.stripe.com/test/logs/req_uErkbUINYR3fCt?t=1698781725",
+            "type": "invalid_request_error"
+          }
+        }
+  recorded_at: Tue, 31 Oct 2023 19:48:46 GMT
+recorded_with: VCR 6.2.0

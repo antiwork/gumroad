@@ -1,0 +1,100 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Print
+        a numbered list of 5 things that I could buy with $1,300. Don''t include their
+        prices. Don''t start the answer with any introduction, just list the items."}],"max_tokens":125}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Mon, 22 Jul 2024 06:25:46 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '896'
+      Openai-Version:
+      - '2020-10-01'
+      Strict-Transport-Security:
+      - max-age=15552000; includeSubDomains; preload
+      X-Ratelimit-Limit-Requests:
+      - '10000'
+      X-Ratelimit-Limit-Tokens:
+      - '15000000'
+      X-Ratelimit-Remaining-Requests:
+      - '9999'
+      X-Ratelimit-Remaining-Tokens:
+      - '14999833'
+      X-Ratelimit-Reset-Requests:
+      - 6ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_5c93dc60075dc50771c33684139d1679
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=tqWQJsinROtM2aFhVJ2ZuN8N0abzuoy83z528w5DS_U-1721629546-1.0.1.1-uW87Z6GB89Z5AK5K8bY39FzMQsRL5BoT6n2Ij34IR5Wu9vR5hOg14aZeJ3kdtyUFR725fp.Zd03DyDP_poRd7w;
+        path=/; expires=Mon, 22-Jul-24 06:55:46 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=A2a3.FdianM6pQ6VPeecvO5JwFMWoyErzMDn919R6E4-1721629546881-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 8a715af3ea6947c1-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-9ngmQsJ5DaMfhrRs5hp1E2agihF2W",
+          "object": "chat.completion",
+          "created": 1721629546,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "1. High-end laptop  \n2. Premium smartphone  \n3. Designer handbag  \n4. A pair of high-quality running shoes  \n5. 65-inch smart TV  "
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 43,
+            "completion_tokens": 34,
+            "total_tokens": 77
+          },
+          "system_fingerprint": "fp_8b761cb050"
+        }
+  recorded_at: Mon, 22 Jul 2024 06:25:46 GMT
+recorded_with: VCR 6.2.0

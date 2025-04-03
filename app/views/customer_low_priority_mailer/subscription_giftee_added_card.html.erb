@@ -1,0 +1,18 @@
+<div>
+  <p>
+    <%= Time.current.to_fs(:formatted_date_abbrev_month) %>
+  </p>
+</div>
+
+<%= render("customer_mailer/receipt/sections/items", receipt_presenter: @receipt_presenter) %>
+
+<div>
+  <h3><%= @receipt_presenter.payment_info.title %></h3>
+  <% @receipt_presenter.payment_info.notes.each do |note| %>
+    <div>
+      <%= note %>
+    </div>
+  <% end %>
+
+  <%= render("customer_mailer/receipt/attributes", attributes: @attributes) %>
+</div>

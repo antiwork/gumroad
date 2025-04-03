@@ -1,0 +1,234 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: http://soundcloud.com/oembed?format=json&maxwidth=670&url=https://soundcloud.com/user1912008/here-comes-the-new-year
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.8.14)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Access-Control-Allow-Headers:
+      - Accept, Authorization, Content-Type, Origin
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Date
+      Cache-Control:
+      - private, max-age=0, must-revalidate
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Tue, 17 Nov 2015 05:58:53 GMT
+      Etag:
+      - '"73dffdac56b5630ae91b1a29bd90ee2d"'
+      Server:
+      - am/2
+      Set-Cookie:
+      - sc_anonymous_id=339608-932311-854767-549271; path=/; expires=Fri, 14 Nov 2025
+        05:58:53 GMT; domain=.soundcloud.com
+      Status:
+      - 200 OK
+      X-Frame-Options:
+      - SAMEORIGIN
+      Content-Length:
+      - '436'
+    body:
+      encoding: ASCII-8BIT
+      string: '{"version":1.0,"type":"rich","provider_name":"SoundCloud","provider_url":"http://soundcloud.com","height":400,"width":670,"title":"Here
+        Comes the New Year by Toasted Heretic by Simon Roche","description":"Never
+        mind your Christmas songs, this is the greatest New Years song ever written.","thumbnail_url":"http://a1.sndcdn.com/images/fb_placeholder.png?1447687261","html":"\u003Ciframe
+        width=\"670\" height=\"400\" scrolling=\"no\" frameborder=\"no\" src=\"https://w.soundcloud.com/player/?visual=true\u0026url=http%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F73149008\u0026show_artwork=true\u0026maxwidth=670\"\u003E\u003C/iframe\u003E","author_name":"Simon
+        Roche","author_url":"http://soundcloud.com/user1912008"}'
+    http_version: 
+  recorded_at: Tue, 17 Nov 2015 05:58:53 GMT
+- request:
+    method: get
+    uri: https://soundcloud.com/oembed?format=json&maxwidth=670&url=https://soundcloud.com/user1912008/here-comes-the-new-year
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.12.0)
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Content-Type:
+      - text/html; charset=utf-8
+      Content-Length:
+      - '1'
+      Connection:
+      - keep-alive
+      Status:
+      - 404 Not Found
+      Access-Control-Allow-Headers:
+      - Accept, Authorization, Content-Type, Origin
+      Cache-Control:
+      - no-cache
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE
+      Access-Control-Expose-Headers:
+      - Date
+      Date:
+      - Sat, 01 Feb 2020 11:58:09 GMT
+      Strict-Transport-Security:
+      - max-age=63072000
+      Server:
+      - am/2
+      X-Cache:
+      - Error from cloudfront
+      Via:
+      - 1.1 c9908e99b6335448f71939aff5c700d2.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BOM50-C1
+      X-Amz-Cf-Id:
+      - 3ikOdfLtN6ai0gRR3JhPb_y0fXT6Bw5fQW6M2ektD4xByR3_WpRAcA==
+    body:
+      encoding: UTF-8
+      string: " "
+    http_version: 
+  recorded_at: Sat, 01 Feb 2020 11:58:09 GMT
+- request:
+    method: get
+    uri: https://soundcloud.com/user1912008/here-comes-the-new-year
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Content-Type:
+      - text/html
+      Content-Length:
+      - '11684'
+      Connection:
+      - keep-alive
+      Set-Cookie:
+      - sc_anonymous_id=470541-191222-60403-112873; path=/; expires=Tue, 29 Jan 2030
+        11:58:09 GMT; domain=.soundcloud.com
+      X-Pants:
+      - distant-towel
+      X-Xss-Protection:
+      - 1; mode=block
+      Cache-Control:
+      - private, max-age=0, no-cache, no-store
+      X-Frame-Options:
+      - SAMEORIGIN
+      Server-Timing:
+      - rollouts; dur=5.411136; desc="api-v2/rollouts", geoip; dur=0.984982; desc="geoip/geoip",
+        experiments; dur=6.685745; desc="api-v2/experiments", privacySettings; dur=5.04088;
+        desc="api-v2/privacySettings", geoip; dur=1.890447; desc="geoip/geoip"
+      Date:
+      - Sat, 01 Feb 2020 11:58:09 GMT
+      Strict-Transport-Security:
+      - max-age=63072000
+      Server:
+      - am/2
+      X-Cache:
+      - Error from cloudfront
+      Via:
+      - 1.1 2e5c0a1d8bd388d881d5a8729d1272d6.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BOM50-C1
+      X-Amz-Cf-Id:
+      - Awaes3O2_vjHXPWFgpmLCbhXYCxXfaAbqoWay217GmgWX6Wt2iLlgQ==
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        PCFET0NUWVBFIGh0bWw+Cgo8aHRtbCBsYW5nPSJlbiI+CjxoZWFkPgogIDxtZXRhIGNoYXJzZXQ9InV0Zi04Ij4KICA8bWV0YSBuYW1lPSJ0aGVtZS1jb2xvciIgY29udGVudD0iIzMzMyI+CgogIAogIDxtZXRhIGh0dHAtZXF1aXY9IlgtVUEtQ29tcGF0aWJsZSIgY29udGVudD0iSUU9ZWRnZSxjaHJvbWU9MSI+CgogIAogIDxsaW5rIHJlbD0iZG5zLXByZWZldGNoIiBocmVmPSIvL3N0eWxlLnNuZGNkbi5jb20iPgogIDxsaW5rIHJlbD0iZG5zLXByZWZldGNoIiBocmVmPSIvL2EtdjIuc25kY2RuLmNvbSI+CiAgPGxpbmsgcmVsPSJkbnMtcHJlZmV0Y2giIGhyZWY9Ii8vYXBpLXYyLnNvdW5kY2xvdWQuY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iLy9zYi5zY29yZWNhcmRyZXNlYXJjaC5jb20iPgogIDxsaW5rIHJlbD0iZG5zLXByZWZldGNoIiBocmVmPSIvL3NlY3VyZS5xdWFudHNlcnZlLmNvbSI+CiAgPGxpbmsgcmVsPSJkbnMtcHJlZmV0Y2giIGhyZWY9Ii8vZXZlbnRsb2dnZXIuc291bmRjbG91ZC5jb20iPgogIDxsaW5rIHJlbD0iZG5zLXByZWZldGNoIiBocmVmPSIvL2FwaS5zb3VuZGNsb3VkLmNvbSI+CiAgPGxpbmsgcmVsPSJkbnMtcHJlZmV0Y2giIGhyZWY9Ii8vc3NsLmdvb2dsZS1hbmFseXRpY3MuY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iLy9pMS5zbmRjZG4uY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iLy9pMi5zbmRjZG4uY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iLy9pMy5zbmRjZG4uY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iLy9pNC5zbmRjZG4uY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iLy93aXMuc25kY2RuLmNvbSI+CiAgPGxpbmsgcmVsPSJkbnMtcHJlZmV0Y2giIGhyZWY9Ii8vdmEuc25kY2RuLmNvbSI+CiAgPGxpbmsgcmVsPSJkbnMtcHJlZmV0Y2giIGhyZWY9Ii8vcGl4ZWwucXVhbnRzZXJ2ZS5jb20iPgoKICA8dGl0bGU+U291bmRDbG91ZCAtIEhlYXIgdGhlIHdvcmxk4oCZcyBzb3VuZHM8L3RpdGxlPgoKICA8bWV0YSBjb250ZW50PSJyZWNvcmQsIHNvdW5kcywgc2hhcmUsIHNvdW5kLCBhdWRpbywgdHJhY2tzLCBtdXNpYywgc291bmRjbG91ZCIgbmFtZT0ia2V5d29yZHMiPgogIDxtZXRhIG5hbWU9InJlZmVycmVyIiBjb250ZW50PSJvcmlnaW4iPgoKICAKICA8bWV0YSBuYW1lPSJnb29nbGUtc2l0ZS12ZXJpZmljYXRpb24iIGNvbnRlbnQ9ImRZMENpZ3FNOEludWJzX2hncllNd2stekdjaEt3cnZKTGN2SV9HODYzMVEiPgoKICAKICA8bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLG1pbmltdW0tc2NhbGU9MSxtYXhpbXVtLXNjYWxlPTEsdXNlci1zY2FsYWJsZT1ubyI+CgogIDwhLS1baWYgSUVdPgogICAgPG1ldGEgY29udGVudD0idHJ1ZSIgbmFtZT0iTVNTbWFydFRhZ3NQcmV2ZW50UGFyc2luZyI+CiAgICA8bWV0YSBjb250ZW50PSJmYWxzZSIgaHR0cC1lcXVpdj0iaW1hZ2V0b29sYmFyIj4KICA8IVtlbmRpZl0tLT4KCiAgCiAgPG1ldGEgY29udGVudD0iMTk1MDc5NjE3OTgiIHByb3BlcnR5PSJmYjphcHBfaWQiPgogIDxtZXRhIGNvbnRlbnQ9IlNvdW5kQ2xvdWQiIHByb3BlcnR5PSJvZzpzaXRlX25hbWUiPgogIDxtZXRhIGNvbnRlbnQ9IlNvdW5kQ2xvdWQiIHByb3BlcnR5PSJ0d2l0dGVyOnNpdGUiPgogIDxtZXRhIGNvbnRlbnQ9IlNvdW5kQ2xvdWQiIHByb3BlcnR5PSJ0d2l0dGVyOmFwcDpuYW1lOmlwaG9uZSI+CiAgPG1ldGEgY29udGVudD0iMzM2MzUzMTUxIiBwcm9wZXJ0eT0idHdpdHRlcjphcHA6aWQ6aXBob25lIj4KICA8bWV0YSBjb250ZW50PSJTb3VuZENsb3VkIiBwcm9wZXJ0eT0idHdpdHRlcjphcHA6bmFtZTppcGFkIj4KICA8bWV0YSBjb250ZW50PSIzMzYzNTMxNTEiIHByb3BlcnR5PSJ0d2l0dGVyOmFwcDppZDppcGFkIj4KICA8bWV0YSBjb250ZW50PSJTb3VuZENsb3VkIiBwcm9wZXJ0eT0idHdpdHRlcjphcHA6bmFtZTpnb29nbGVwbGF5Ij4KICA8bWV0YSBjb250ZW50PSJjb20uc291bmRjbG91ZC5hbmRyb2lkIiBwcm9wZXJ0eT0idHdpdHRlcjphcHA6aWQ6Z29vZ2xlcGxheSI+CiAgPGxpbmsgaHJlZj0iL3NjLW9wZW5zZWFyY2gueG1sIiByZWw9InNlYXJjaCIgdGl0bGU9IlNvdW5kQ2xvdWQgc2VhcmNoIiB0eXBlPSJhcHBsaWNhdGlvbi9vcGVuc2VhcmNoZGVzY3JpcHRpb24reG1sIj4KCiAgPG1ldGEgbmFtZT0icm9ib3RzIiBjb250ZW50PSJub2luZGV4LCBub2ZvbGxvdyI+CiAgCgogIDxtZXRhIG5hbWU9ImFwcGxpY2F0aW9uLW5hbWUiIGNvbnRlbnQ9IlNvdW5kQ2xvdWQiPgogIDxtZXRhIG5hbWU9Im1zYXBwbGljYXRpb24tdG9vbHRpcCIgY29udGVudD0iTGF1bmNoIFNvdW5kQ2xvdWQiPgogIDxtZXRhIG5hbWU9Im1zYXBwbGljYXRpb24tVGlsZUltYWdlIiBjb250ZW50PSJodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvaW1hZ2VzL3NjLWljb25zL3dpbjgtMmRjOTc0YTE4YS5wbmciPgogIDxtZXRhIG5hbWU9Im1zYXBwbGljYXRpb24tVGlsZUNvbG9yIiBjb250ZW50PSIjZmY1NTAwIj4KICA8bWV0YSBuYW1lPSJtc2FwcGxpY2F0aW9uLXN0YXJ0dXJsIiBjb250ZW50PSJodHRwczovL3NvdW5kY2xvdWQuY29tIj4KCiAgPGxpbmsgaHJlZj0iaHR0cHM6Ly9hLXYyLnNuZGNkbi5jb20vYXNzZXRzL2ltYWdlcy9zYy1pY29ucy9mYXZpY29uLTJjYWRkMTRiZGIuaWNvIiByZWw9Imljb24iPgogIDxsaW5rIGhyZWY9Imh0dHBzOi8vYS12Mi5zbmRjZG4uY29tL2Fzc2V0cy9pbWFnZXMvc2MtaWNvbnMvaW9zLWE2MmRmYzhmZTcucG5nIiByZWw9ImFwcGxlLXRvdWNoLWljb24iPgogIDxsaW5rIGhyZWY9Imh0dHBzOi8vYS12Mi5zbmRjZG4uY29tL2Fzc2V0cy9pbWFnZXMvc2MtaWNvbnMvZmx1aWQtYjRlN2E2NGI4Yi5wbmciIHJlbD0iZmx1aWQtaWNvbiI+CgogIAogIDxzY3JpcHQgdHlwZT0idGV4dC9qYXZhc2NyaXB0Ij4hZnVuY3Rpb24oKXt2YXIgYSxvLGU7ZnVuY3Rpb24gaShvKXtyZXR1cm4gby50ZXN0KGEpfWE9d2luZG93Lm5hdmlnYXRvci51c2VyQWdlbnQudG9Mb3dlckNhc2UoKTt2YXIgcixuLHQscz12b2lkIDAhPT13aW5kb3cub3BlcmEmJiJbb2JqZWN0IE9wZXJhXSI9PT13aW5kb3cub3BlcmEudG9TdHJpbmcoKSxwPWEubWF0Y2goL1xzb3ByXC8oWzAtOV0rKVwuLyksZD1pKC9jaHJvbWUvKSxjPWkoL3dlYmtpdC8pLG09IWQmJmkoL3NhZmFyaS8pLHc9IXMmJmkoL21zaWUvKSxmPSFjJiZpKC9nZWNrby8pO3I9cD9wYXJzZUludChwWzFdLDEwKToodD1hLm1hdGNoKC8ob3BlcmF8Y2hyb21lfHNhZmFyaXxmaXJlZm94fG1zaWUpXC8/XHMqKFwuP1xkKyhcLlxkKykqKS9pKSkmJihuPWEubWF0Y2goL3ZlcnNpb25cLyhbLlxkXSspL2kpKT9wYXJzZUludChuWzFdLDEwKTp0P3BhcnNlSW50KHRbMl0sMTApOm51bGw7dmFyIGg9aSgvbW9iaWxlfGFuZHJvaWR8aXBob25lfGlwb2R8c3ltYmlhbm9zfG5va2lhfHM2MHxwbGF5Ym9va3xwbGF5c3RhdGlvbi8pO2YmJihlPShvPWEubWF0Y2goLyhmaXJlZm94KVwvP1xzKihcLj9cZCsoXC5cZCspKikvaSkpJiYxPG8ubGVuZ3RoJiY0MTw9cGFyc2VJbnQob1syXSwxMCkpLHImJiFoJiYoZCYmIXAmJnI8NDB8fGYmJiFwJiYhMT09PWV8fG0mJnI8OHx8dyYmcjwxMXx8cyYmcjwxM3x8cCYmcjwyNykmJih3aW5kb3cuX19zY19hYm9ydEFwcD0hMCl9KCk7PC9zY3JpcHQ+CiAgCgogIAogIDxsaW5rIHJlbD0ic3R5bGVzaGVldCIgaHJlZj0iaHR0cHM6Ly9zdHlsZS5zbmRjZG4uY29tL2Nzcy9pbnRlcnN0YXRlLWE4NmYwN2NmOTRhZTVhNDk2YjI0LmNzcyI+CgogIAogIDxsaW5rIHJlbD0ic3R5bGVzaGVldCIgaHJlZj0iaHR0cHM6Ly9hLXYyLnNuZGNkbi5jb20vYXNzZXRzL2Nzcy9hcHAtYjc2ODE2ODc4ODNiZjQ3NTIyZGEuY3NzIj4KICA8bGluayByZWw9InN0eWxlc2hlZXQiIGhyZWY9Imh0dHBzOi8vYS12Mi5zbmRjZG4uY29tL2Fzc2V0cy9jc3MvaTE4bi1sb2NhbGUtc3dpdGNoZXItZmMwYjg4YTFmMGRiNGVmYzExMzEuY3NzIj4KICAKPC9oZWFkPgo8Ym9keT4KICA8ZGl2IGlkPSJhcHAiPgogICAgPHN0eWxlPgogICAgICAvKiBUT0RPOiBJbmNsdWRlIHRoaXMgY3NzIHZpYSB0ZW1wbGF0aW5nIG9yIHdlYnBhY2sgKi8KICAgICAgLyoKICAgICAgICBUaGUgcGxhY2Vob2xkZXIgZW5oYW5jZXMgdGhlIHBlcmNlaXZlZCBsb2FkaW5nIHRpbWUsIGl0IGFsc28gcGVybWl0cyBwZW9wbGUgd2hvIGFyZSB1c2luZyBhbiBvdXRkYXRlZCBicm93c2VyIG9yCiAgICAgICAgd2hvIGRvbid0IGhhdmUgSlMgZW5hYmxlZCB0byBzZWUgYXQgbGVhc3QgdGhlIGhlYWRlciBhbmQgbm90IGEgdG90YWwgYmxhbmsgcGFnZS4KCiAgICAgICAgT25jZSB0aGUgSlMgYXBwbGljYXRpb24gaXMgc3RhcnRlZCB0aGlzIGFuZCBldmVyeXRoaW5nIGVsc2UgaW4gI2FwcCBnZXRzIG92ZXJ3cml0dGVuCiAgICAgICovCiAgICAgIC5oZWFkZXIgewogICAgICAgIHdpZHRoOiAxMDAlOwogICAgICAgIGJhY2tncm91bmQ6ICMzMzM7CiAgICAgICAgaGVpZ2h0OiA0NnB4OwogICAgICB9CgogICAgICAuaGVhZGVyX19sb2dvIHsKICAgICAgICBiYWNrZ3JvdW5kOiAjMzMzOwogICAgICB9CgogICAgICAuaGVhZGVyX19sb2dvTGluayB7CiAgICAgICAgYmFja2dyb3VuZDogdHJhbnNwYXJlbnQgdXJsKGh0dHBzOi8vYS12Mi5zbmRjZG4uY29tL2Fzc2V0cy9pbWFnZXMvaGVhZGVyL2Nsb3VkLWUzNjVhNDcyYmYucG5nKSBuby1yZXBlYXQgMTJweCAxMXB4OwogICAgICAgIGJhY2tncm91bmQtc2l6ZTogNDhweCAyMnB4OwogICAgICAgIGRpc3BsYXk6IGJsb2NrOwogICAgICAgIGhlaWdodDogNDZweDsKICAgICAgICB3aWR0aDogNjlweDsKICAgICAgfQoKICAgICAgLmhlYWRlcl9fbG9nb0xpbms6Zm9jdXMgewogICAgICAgIGJhY2tncm91bmQtY29sb3I6IHJnYmEoMjU1LCA3MiwgMCwgMC44KTsKICAgICAgICBvdXRsaW5lOiAwOwogICAgICB9CgogICAgICAjaGVhZGVyX19sb2FkaW5nIHsKICAgICAgICBtYXJnaW46IDEzcHggYXV0byAwOwogICAgICAgIHdpZHRoOiAxNnB4OwogICAgICAgIGJhY2tncm91bmQ6IHVybChodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvaW1hZ2VzL2xvYWRlci1kYXJrLTQ1OTQwYWUzZDQuZ2lmKSBjZW50ZXIgbm8tcmVwZWF0OwogICAgICAgIGJhY2tncm91bmQtc2l6ZTogMTZweCAxNnB4OwogICAgICB9CgogICAgICBAbWVkaWEgKC13ZWJraXQtbWluLWRldmljZS1waXhlbC1yYXRpbzogMiksIChtaW4tcmVzb2x1dGlvbjogMTkyZHBpKSwgKG1pbi1yZXNvbHV0aW9uOiAyZHBweCkgewogICAgICAgIC5oZWFkZXJfX2xvZ29MaW5rIHsKICAgICAgICAgIGJhY2tncm91bmQtaW1hZ2U6IHVybChodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvaW1hZ2VzL2hlYWRlci9jbG91ZEAyeC1lNWZiYTQ2MDZkLnBuZyk7CiAgICAgICAgfQogICAgICB9CiAgICA8L3N0eWxlPgogICAgPGRpdiByb2xlPSJiYW5uZXIiIGNsYXNzPSJoZWFkZXIgc2Mtc2VsZWN0aW9uLWRpc2FibGVkIHNob3cgZml4ZWQgZy1kYXJrIGctei1pbmRleC1oZWFkZXIiPgogICAgICA8ZGl2IGNsYXNzPSJoZWFkZXJfX2lubmVyIGwtY29udGFpbmVyIGwtZnVsbHdpZHRoIj4KICAgICAgICA8ZGl2IGNsYXNzPSJoZWFkZXJfX2xlZnQgbGVmdCI+CiAgICAgICAgICA8ZGl2IGNsYXNzPSJoZWFkZXJfX2xvZ28gbGVmdCI+CiAgICAgICAgICAgIDxhIGhyZWY9Ii8iIHRpdGxlPSJIb21lIiBjbGFzcz0iaGVhZGVyX19sb2dvTGluayBzYy1ib3JkZXItYm94IHNjLWlyIj5Tb3VuZENsb3VkPC9hPgogICAgICAgICAgPC9kaXY+CiAgICAgICAgPC9kaXY+CiAgICAgICAgPGRpdiBpZD0iaGVhZGVyX19sb2FkaW5nIiBjbGFzcz0ic2MtaGlkZGVuIj48L2Rpdj4KICAgICAgPC9kaXY+CiAgICA8L2Rpdj4KICAgIAogICAgPHNjcmlwdCB0eXBlPSJ0ZXh0L2phdmFzY3JpcHQiPndpbmRvdy5zZXRUaW1lb3V0KGZ1bmN0aW9uKCl7aWYoIXdpbmRvdy5fX3NjX2Fib3J0QXBwKXt2YXIgZT13aW5kb3cuZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImhlYWRlcl9fbG9hZGluZyIpO2UmJihlLmNsYXNzTmFtZT0iIil9fSw2ZTMpOzwvc2NyaXB0PgogICAgCgogICAgPHN0eWxlPgogICAgICAvKiBUT0RPOiBJbmNsdWRlIHRoaXMgY3NzIHZpYSB0ZW1wbGF0aW5nIG9yIHdlYnBhY2sgKi8KICAgICAgLmVycm9yUGFnZV9faW5uZXIgewogICAgICAgIHdpZHRoOiA1ODBweDsKICAgICAgICBtYXJnaW46IDAgYXV0bzsKICAgICAgICBwb3NpdGlvbjogcmVsYXRpdmU7CiAgICAgICAgcGFkZGluZy10b3A6IDQ2MHB4OwogICAgICAgIGJhY2tncm91bmQ6IHVybChodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvaW1hZ2VzL2Vycm9ycy81MDAtZTVhMTgwYjdhOC5wbmcpIG5vLXJlcGVhdCA1MCUgODBweDsKICAgICAgICB0ZXh0LWFsaWduOiBjZW50ZXI7CiAgICAgICAgdHJhbnNpdGlvbjogYWxsIDFzIGxpbmVhcjsKICAgICAgfQoKICAgICAgLmVycm9yVGl0bGUgewogICAgICAgIG1hcmdpbi1ib3R0b206IDEwcHg7CiAgICAgICAgZm9udC1zaXplOiAzMHB4OwogICAgICB9CgogICAgICAuZXJyb3JUZXh0IHsKICAgICAgICBsaW5lLWhlaWdodDogMjhweDsKICAgICAgICBjb2xvcjogIzY2NjsKICAgICAgICBmb250LXNpemU6IDIwcHg7CiAgICAgIH0KCiAgICAgIC5lcnJvckJ1dHRvbnMgewogICAgICAgIG1hcmdpbi10b3A6IDMwcHg7CiAgICAgIH0KCiAgICAgICN1cGRhdGVCcm93c2VyTWVzc2FnZSB7CiAgICAgICAgd2lkdGg6IDYwMHB4OwogICAgICAgIG1hcmdpbjogMCBhdXRvOwogICAgICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKICAgICAgICBwYWRkaW5nLXRvcDogNDEwcHg7CiAgICAgICAgYmFja2dyb3VuZDogdXJsKGh0dHBzOi8vYS12Mi5zbmRjZG4uY29tL2Fzc2V0cy9pbWFnZXMvZXJyb3JzL2Jyb3dzZXItOWNkZDRlNmRmNy5wbmcpIG5vLXJlcGVhdCA1MCUgMTMwcHg7CiAgICAgICAgdGV4dC1hbGlnbjogY2VudGVyOwogICAgICAgIGRpc3BsYXk6IG5vbmU7CiAgICAgIH0KCiAgICAgICN1cGRhdGVCcm93c2VyTWVzc2FnZSAubWVzc2FnZVRleHQgewogICAgICAgIGxpbmUtaGVpZ2h0OiAyNnB4OwogICAgICAgIGZvbnQtc2l6ZTogMjBweDsKICAgICAgICBtYXJnaW4tYm90dG9tOiA1cHg7CiAgICAgIH0KCiAgICAgICN1cGRhdGVCcm93c2VyTWVzc2FnZSAuZG93bmxvYWRMaW5rcyB7CiAgICAgICAgbWFyZ2luLXRvcDogMDsKICAgICAgfQoKICAgICAgQG1lZGlhIChtYXgtd2lkdGg6MTI4MHB4KXsKICAgICAgICAuZXJyb3JQYWdlX19pbm5lciB7CiAgICAgICAgICBiYWNrZ3JvdW5kLXNpemU6IDgwJTsKICAgICAgICB9CiAgICAgIH0KICAgIDwvc3R5bGU+CgogICAgCiAgICA8bm9zY3JpcHQgY2xhc3M9ImVycm9yUGFnZV9faW5uZXIiPgogIDxkaXYgY2xhc3M9ImVycm9yUGFnZV9faW5uZXIiPgogICAgPHAgY2xhc3M9ImVycm9yVGl0bGUiPkphdmFTY3JpcHQgaXMgZGlzYWJsZWQ8L3A+CiAgICA8cCBjbGFzcz0iZXJyb3JUZXh0IHNjLWZvbnQtbGlnaHQiPllvdSBuZWVkIHRvIGVuYWJsZSBKYXZhU2NyaXB0IHRvIHVzZSBTb3VuZENsb3VkPC9wPgogICAgPGRpdiBjbGFzcz0iZXJyb3JCdXR0b25zIj4KICAgICAgPGEgaHJlZj0iaHR0cDovL3d3dy5lbmFibGUtamF2YXNjcmlwdC5jb20vIiB0YXJnZXQ9Il9ibGFuayIgY2xhc3M9InNjLWJ1dHRvbiBzYy1idXR0b24tbWVkaXVtIj5TaG93IG1lIGhvdyB0byBlbmFibGUgaXQ8L2E+CiAgICA8L2Rpdj4KICA8L2Rpdj4KPC9ub3NjcmlwdD4KCiAgICAKCiAgICA8bm9zY3JpcHQ+PC9ub3NjcmlwdD4KCiAgICAKICAgIDxkaXYgaWQ9InVwZGF0ZUJyb3dzZXJNZXNzYWdlIj4KICA8cCBjbGFzcz0ibWVzc2FnZVRleHQgc2MtdGV4dC1saWdodCI+CiAgICBZb3VyIGN1cnJlbnQgYnJvd3NlciBpc24ndCBjb21wYXRpYmxlIHdpdGggU291bmRDbG91ZC4gPGJyPgogICAgUGxlYXNlIGRvd25sb2FkIG9uZSBvZiBvdXIgc3VwcG9ydGVkIGJyb3dzZXJzLiA8YSBocmVmPSJodHRwczovL2hlbHAuc291bmRjbG91ZC5jb20vaGMvYXJ0aWNsZXMvMTE1MDAzNTY0MzA4LVRlY2huaWNhbC1yZXF1aXJlbWVudHMiPk5lZWQgaGVscD88L2E+CiAgPC9wPgoKICA8ZGl2IGNsYXNzPSJkb3dubG9hZExpbmtzIHNjLXR5cGUtaDMgc2MtdGV4dC1saWdodCI+CiAgICA8YSBocmVmPSJodHRwOi8vZ29vZ2xlLmNvbS9jaHJvbWUiIHRhcmdldD0iX2JsYW5rIiB0aXRsZT0iQ2hyb21lIj5DaHJvbWU8L2E+IHwgPGEgaHJlZj0iaHR0cDovL2ZpcmVmb3guY29tIiB0YXJnZXQ9Il9ibGFuayIgdGl0bGU9IkZpcmVmb3giPkZpcmVmb3g8L2E+IHwgPGEgaHJlZj0iaHR0cDovL2FwcGxlLmNvbS9zYWZhcmkiIHRhcmdldD0iX2JsYW5rIiB0aXRsZT0iU2FmYXJpIj5TYWZhcmk8L2E+IHwgPGEgaHJlZj0iaHR0cDovL3dpbmRvd3MubWljcm9zb2Z0LmNvbS9pZSIgdGFyZ2V0PSJfYmxhbmsiIHRpdGxlPSJJbnRlcm5ldCBFeHBsb3JlciI+SW50ZXJuZXQgRXhwbG9yZXI8L2E+CiAgPC9kaXY+CjwvZGl2PgoKICAgIAoKICAgIAogICAgPGRpdiBpZD0iZXJyb3JfX3RpbWVvdXQiIGNsYXNzPSJlcnJvclBhZ2VfX2lubmVyIHNjLWhpZGRlbiI+CiAgPHAgY2xhc3M9ImVycm9yVGl0bGUgc2MtdHlwZS1oMSI+U29ycnkhIFNvbWV0aGluZyB3ZW50IHdyb25nPC9wPgogIDxkaXYgY2xhc3M9ImVycm9yVGV4dCBzYy1mb250LWxpZ2h0Ij4KICAgIDxwPklzIHlvdXIgbmV0d29yayBjb25uZWN0aW9uIHVuc3RhYmxlIG9yIGJyb3dzZXIgb3V0ZGF0ZWQ/PC9wPgogIDwvZGl2PgogIDxkaXYgY2xhc3M9ImVycm9yQnV0dG9ucyI+CiAgICA8YSBjbGFzcz0ic2MtYnV0dG9uIiBocmVmPSJodHRwczovL2hlbHAuc291bmRjbG91ZC5jb20iIHRhcmdldD0iX2JsYW5rIiBpZD0idHJ5LWFnYWluIj5JIG5lZWQgaGVscDwvYT4KICA8L2Rpdj4KPC9kaXY+CgogICAgCgogICAgCiAgICA8c2NyaXB0IHR5cGU9InRleHQvamF2YXNjcmlwdCI+d2luZG93Ll9fc2NfYWJvcnRBcHAmJih3aW5kb3cuZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInVwZGF0ZUJyb3dzZXJNZXNzYWdlIikuc3R5bGUuZGlzcGxheT0iYmxvY2siKTs8L3NjcmlwdD4KICAgIAoKICAgIAogICAgPHNjcmlwdCB0eXBlPSJ0ZXh0L2phdmFzY3JpcHQiPmZ1bmN0aW9uIGRpc3BsYXlFcnJvcigpe2lmKCF3aW5kb3cuX19zY19hYm9ydEFwcCl7dmFyIHI9d2luZG93LmRvY3VtZW50LGU9ci5nZXRFbGVtZW50QnlJZCgiZXJyb3JfX3RpbWVvdXQiKSxvPXIuZ2V0RWxlbWVudEJ5SWQoImhlYWRlcl9fbG9hZGluZyIpO2UmJm8mJihlLmNsYXNzTmFtZT0iZXJyb3JQYWdlX19pbm5lciIsby5jbGFzc05hbWU9InNjLWhpZGRlbiIpfX13aW5kb3cuc2V0VGltZW91dChkaXNwbGF5RXJyb3IsMTVlMyksd2luZG93Lm9uZXJyb3I9ZGlzcGxheUVycm9yOzwvc2NyaXB0PgogICAgCgogICAgCiAgICA8cD4KICA8YSBocmVmPSIvcG9wdWxhci9zZWFyY2hlcyIgdGl0bGU9IlBvcHVsYXIgc2VhcmNoZXMiPlBvcHVsYXIgc2VhcmNoZXM8L2E+CjwvcD4KCiAgICAKICA8L2Rpdj4KCiAgCgogIAogIAogIAoKICAKICAgIAogIAoKICAKICAgIDxzY3JpcHQgdHlwZT0idGV4dC9qYXZhc2NyaXB0Ij53aW5kb3cuX19zY192ZXJzaW9uID0gIjE1ODA0NjA2NjciOzwvc2NyaXB0PgogICAgCgogIAogICAgPHNjcmlwdCBjcm9zc29yaWdpbiBzcmM9Imh0dHBzOi8vYS12Mi5zbmRjZG4uY29tL2Fzc2V0cy81MC1jY2NkMmJkNy0zLmpzIj48L3NjcmlwdD4KICAgIDxzY3JpcHQgY3Jvc3NvcmlnaW4gc3JjPSJodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvMC0yODgyNTA2Zi0zLmpzIj48L3NjcmlwdD4KICAgIDxzY3JpcHQgY3Jvc3NvcmlnaW4gc3JjPSJodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvMS0xZmEyZDcyZC0zLmpzIj48L3NjcmlwdD4KICAgIDxzY3JpcHQgY3Jvc3NvcmlnaW4gc3JjPSJodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvMi03NmExNjBkYy0zLmpzIj48L3NjcmlwdD4KICAgIDxzY3JpcHQgY3Jvc3NvcmlnaW4gc3JjPSJodHRwczovL2EtdjIuc25kY2RuLmNvbS9hc3NldHMvNDktOTFiZjFmMDEtMy5qcyI+PC9zY3JpcHQ+CiAgICA8c2NyaXB0IGNyb3Nzb3JpZ2luIHNyYz0iaHR0cHM6Ly9hLXYyLnNuZGNkbi5jb20vYXNzZXRzLzQ4LTQ5YmY1ZGQwLTMuanMiPjwvc2NyaXB0PgogICAgCgoKICA8c2NyaXB0PiFmdW5jdGlvbihlLG4pe2lmKGU9ZS5iaW5kKG51bGwsbiksImZ1bmN0aW9uIj09dHlwZW9mIHdpbmRvdy53ZWJwYWNrSnNvbnApd2luZG93LndlYnBhY2tKc29ucChbXSx7MDplfSk7ZWxzZXt2YXIgdD1uLnJlZHVjZShmdW5jdGlvbihlLG4pe3JldHVybiBlLmNvbmNhdChuLmNodW5rcyl9LFtdKS5maWx0ZXIoZnVuY3Rpb24oZSxuLHQpe3JldHVybiB0LmluZGV4T2YoZSk9PT1ufSksYz0iX19zY19kYXRhX3JlaHlkcmF0aW9uX21vZHVsZV9fIixvPXt9O29bY109ZSwod2luZG93LndlYnBhY2tKc29ucD13aW5kb3cud2VicGFja0pzb25wfHxbXSkucHVzaChbW10sbyxbW2NdLmNvbmNhdCh0KV1dKX19KGZ1bmN0aW9uKGUsbix0LGMpe2Z1bmN0aW9uIG8oZSl7cmV0dXJuIGkuZXZlcnkoZnVuY3Rpb24obil7cmV0dXJuIG4gaW4gZS5wcm90b3R5cGV9KX1mdW5jdGlvbiByKGUpe3ZhciBuPW8oZSk7cmV0dXJuIG4/ZnVuY3Rpb24obil7dmFyIHQsYz1hO24ubGFzdEZldGNoVGltZSYmKGM9bi5sYXN0RmV0Y2hUaW1lLGRlbGV0ZSBuLmxhc3RGZXRjaFRpbWUpLHQ9bmV3IGUobix7cGFyc2U6ITAsX19oeWRyYXRlOiEwfSksdC5sYXN0RmV0Y2hUaW1lPWMsdC5yZWxlYXNlKCl9OmV9dmFyIGE9RGF0ZS5ub3coKSxpPVsicmVzb3VyY2VfdHlwZSIsImdldCIsInNldCIsImFkZFN1Ym1vZGVsIiwicmVsZWFzZSJdO2UuZm9yRWFjaChmdW5jdGlvbihlKXt0cnl7dmFyIG49cihjKGUuaWQpKTtlLmRhdGEuZm9yRWFjaChmdW5jdGlvbihlKXtuKGUpfSl9Y2F0Y2godCl7fX0pfSxbeyJpZCI6MjA2LCJjaHVua3MiOls0OF0sImRhdGEiOlt7ImFsbG93c19tZXNzYWdlc19mcm9tX3VuZm9sbG93ZWRfdXNlcnMiOmZhbHNlLCJhbmFseXRpY3Nfb3B0X2luIjp0cnVlLCJjb21tdW5pY2F0aW9uc19vcHRfaW4iOnRydWUsInRhcmdldGVkX2FkdmVydGlzaW5nX29wdF9pbiI6ZmFsc2UsImxlZ2lzbGF0aW9uIjpbXX1dfSx7ImlkIjoxMDY2LCJjaHVua3MiOls0OF0sImRhdGEiOlt7ImNvdW50cnlfY29kZSI6IklOIiwiY291bnRyeV9uYW1lIjoiSW5kaWEiLCJyZWdpb24iOiIxNiIsImNpdHkiOiJNdW1iYWkiLCJwb3N0YWxfY29kZSI6IjQwMDA3MiIsImxhdGl0dWRlIjoxOS4wNzQ3OTg1ODM5ODQzNzUsImxvbmdpdHVkZSI6NzIuODg1NjA0ODU4Mzk4NDR9XX0seyJpZCI6OTczLCJjaHVua3MiOls0OV0sImRhdGEiOlt7fV19LHsiaWQiOjk3NiwiY2h1bmtzIjpbNDldLCJkYXRhIjpbeyJ2Ml90ZXN0X2ZlYXR1cmVfdG9nZ2xlIjp0cnVlLCJ2Ml9vc2NwX2dlcm1hbl90YXhfZmllbGRzX3N1cHBvcnQiOnRydWUsInYyX3VzZV9uZXdfY29ubmVjdCI6dHJ1ZSwidjJfc2hvd19kaXN0cmlidXRlX2J1dHRvbiI6dHJ1ZSwidjJfaHFfZmlsZV9zdG9yYWdlX3JlbGVhc2UiOnRydWV9XX1dKTs8L3NjcmlwdD4KCjwvYm9keT4KPC9odG1sPgo=
+    http_version: 
+  recorded_at: Sat, 01 Feb 2020 11:58:10 GMT
+- request:
+    method: get
+    uri: https://soundcloud.com/oembed?format=json&maxwidth=670&url=https://soundcloud.com/user-656397481/tbl31-here-comes-the-new-year
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.12.0)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Status:
+      - 200 OK
+      Access-Control-Allow-Headers:
+      - Accept, Authorization, Content-Type, Origin
+      Cache-Control:
+      - private, max-age=0, must-revalidate
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE
+      Access-Control-Expose-Headers:
+      - Date
+      Etag:
+      - '"a1d5e538d10eaaf7cfa788c71ee2355d"'
+      Date:
+      - Sat, 01 Feb 2020 17:54:42 GMT
+      X-Frame-Options:
+      - SAMEORIGIN
+      Strict-Transport-Security:
+      - max-age=63072000
+      Vary:
+      - Accept-Encoding
+      Server:
+      - am/2
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 50cac58b596cabc9a79db20889c98bc1.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BOM52-C1
+      X-Amz-Cf-Id:
+      - bGN8Ztutcm7muaFgvKfV6Rx6vaPyW7477IUp2yjOjO4VlqpgG1sIDA==
+    body:
+      encoding: ASCII-8BIT
+      string: '{"version":1.0,"type":"rich","provider_name":"SoundCloud","provider_url":"https://soundcloud.com","height":400,"width":670,"title":"TBL31,
+        Here Comes the New Year by mikemeyeruk","description":"","thumbnail_url":"https://i1.sndcdn.com/artworks-000278260091-nbg7dg-t500x500.jpg","html":"\u003Ciframe
+        width=\"670\" height=\"400\" scrolling=\"no\" frameborder=\"no\" src=\"https://w.soundcloud.com/player/?visual=true\u0026url=https%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F376574774\u0026show_artwork=true\u0026maxwidth=670\"\u003E\u003C/iframe\u003E","author_name":"mikemeyeruk","author_url":"https://soundcloud.com/user-656397481"}'
+    http_version: 
+  recorded_at: Sat, 01 Feb 2020 17:54:42 GMT
+recorded_with: VCR 5.0.0

@@ -1,0 +1,304 @@
+:root,
+:host {
+  color-scheme: light dark;
+  @include globals;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: bottom;
+  background-origin: padding-box;
+  border-style: solid;
+  border-width: 0;
+  --border: #{$border};
+  --outline: #{$outline};
+  @for $i from 1 through length($grays) {
+    --gray-#{$i}: #{nth($grays, $i)};
+  }
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+body {
+  @include font-size(2);
+  font-family: var(--font-family);
+  font-feature-settings: "ss11", "ss04";
+  background-color: var(--body-bg);
+  -webkit-font-smoothing: antialiased;
+  color: full-color(color);
+}
+
+body:not(.mac) * {
+  &::-webkit-scrollbar {
+    width: size(0.75);
+    background-color: gray(1);
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: gray(3);
+    border-radius: border-radius(2);
+  }
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+}
+
+@for $i from 1 through 5 {
+  h#{$i} {
+    @include font-size(6 - $i);
+    font-weight: normal;
+  }
+}
+
+.text-singleline {
+  @include text-singleline;
+}
+
+a {
+  color: var(--color);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link {
+  @extend a;
+}
+
+sub {
+  vertical-align: sub;
+}
+
+sup {
+  vertical-align: super;
+}
+
+small {
+  display: block;
+  @include font-size(1);
+}
+
+hr {
+  border: none;
+  border-top: $border;
+}
+
+ol,
+ul {
+  padding-left: spacer(6);
+}
+
+ul.inline {
+  padding: 0;
+  list-style: none;
+
+  & > li {
+    display: inline;
+
+    &:not(:last-child)::after {
+      content: " · ";
+    }
+  }
+}
+
+menu > li {
+  list-style: none;
+}
+
+details {
+  & > summary {
+    all: inherit;
+    outline: revert;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    cursor: pointer;
+    list-style: none;
+
+    &::marker,
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::before {
+      @extend %icon, .icon-outline-cheveron-right;
+      margin-right: spacer(1);
+    }
+  }
+  &[open] > summary {
+    // details elements do not support display: grid in all browsers
+    margin-bottom: spacer(2);
+
+    &::before {
+      @extend .icon-outline-cheveron-down;
+    }
+  }
+
+  &.toggle {
+    & > summary {
+      grid-template-columns: 1fr;
+
+      &::before {
+        content: none;
+      }
+    }
+    &[open] > summary {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.user-avatar {
+  border-radius: border-radius(3);
+  width: $big-icon-size;
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  border: $border;
+}
+
+.application-icon {
+  border: $border;
+  border-radius: border-radius(1);
+  flex-shrink: 0;
+}
+
+[role^="menuitem"] {
+  cursor: pointer;
+}
+
+[role="menu"] {
+  @include bg-color(filled);
+  padding: spacer(2) 0;
+  border: $border;
+  border-radius: border-radius(1);
+  box-shadow: box-shadow(1);
+
+  [role^="menuitem"] {
+    display: block;
+    padding: spacer(2) spacer(4);
+    border: none;
+    @include text-singleline;
+
+    // Not using flex with gap here as text-overflow does not work correctly for it
+    > :not(:last-child) {
+      margin-right: spacer(2);
+    }
+
+    &:hover {
+      background-color: var(--active-bg);
+    }
+
+    @each $name in $states {
+      &.#{$name} {
+        color: full-color($name);
+      }
+    }
+  }
+
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"] {
+    &[aria-checked="true"] {
+      font-weight: bold;
+    }
+  }
+}
+
+%stretched {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+}
+
+a.stretched-link {
+  text-decoration: none;
+  &::before {
+    @extend %stretched;
+  }
+}
+
+.text-muted {
+  @include text-muted;
+}
+
+.dummy {
+  @include dummy;
+}
+
+// Since we use alpha values to control the intensity of colours, when overlaying elements the background can shine through.
+// This helper class applies a solid background to mix the colour with to prevent that.
+.bg-filled {
+  background: linear-gradient(full-color(filled), full-color(filled));
+  background-blend-mode: overlay;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: fit-content(40%);
+  column-gap: spacer(3);
+
+  dt {
+    grid-column: 1;
+
+    &::after {
+      content: ":";
+    }
+  }
+
+  dd {
+    grid-column: 2;
+  }
+}
+
+[inert] {
+  cursor: not-allowed;
+  opacity: $disabled-opacity;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+[draggable="true"],
+[aria-grabbed] {
+  cursor: move;
+}
+
+meter {
+  height: 1lh;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: $border;
+  border-radius: border-radius(1);
+  --optimum-value-background: #{full-color(accent)};
+
+  &::-webkit-meter-inner-element,
+  &::-webkit-meter-bar {
+    display: contents;
+  }
+
+  @mixin value {
+    background: var(--optimum-value-background);
+    border-radius: border-radius(1);
+  }
+
+  &::-webkit-meter-optimum-value {
+    @include value;
+  }
+
+  // specify this separately as otherwise Chrome disregards the entire selector
+  &::-moz-meter-bar {
+    @include value;
+  }
+}

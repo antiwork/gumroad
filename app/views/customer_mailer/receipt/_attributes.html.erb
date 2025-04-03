@@ -1,0 +1,24 @@
+<% if attributes.present? %>
+  <table class="table-stack">
+    <tbody>
+      <% attributes.each do |attribute| %>
+        <tr>
+          <td>
+            <% if attribute[:label].present? %>
+              <span style="font-weight: bold"><%= attribute[:label] %></span>
+              <br>
+            <% end %>
+            <% if attribute[:value].is_a?(Array) %>
+              <% attribute[:value].each do |item| %>
+                <%= auto_link(item.to_s, html: { target: "_blank" }) %>
+                <br>
+              <% end %>
+            <% else %>
+              <%= auto_link(attribute[:value].to_s, html: { target: "_blank" }) %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

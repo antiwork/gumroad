@@ -1,0 +1,89 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/nvp
+    body:
+      encoding: UTF-8
+      string: USER=<PAYPAL_USERNAME>&PWD=<PAYPAL_PASSWORD>&SIGNATURE=<PAYPAL_SIGNATURE>&VERSION=90.0&METHOD=MassPay&RECEIVERTYPE=EmailAddress&CURRENCYCODE=USD&L_EMAIL0=sahil%40gumroad.com&L_AMT0=159.75&L_UNIQUEID0=4
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sat, 14 Nov 2015 18:09:10 GMT
+      Server:
+      - Apache
+      X-Paypal-Operation-Name:
+      - MassPay
+      X-Paypal-Api-Rc:
+      - ''
+      Connection:
+      - close
+      Content-Length:
+      - '107'
+      Paypal-Debug-Id:
+      - cc3cfd51b32a
+      Set-Cookie:
+      - X-PP-SILOVER=; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+      - X-PP-SILOVER=name%3DSANDBOX3.API.1%26silo_version%3D880%26app%3Dappdispatcher_apit%26TIME%3D3329771350;
+        domain=.paypal.com; path=/; Secure; HttpOnly
+      Content-Type:
+      - text/plain; charset=utf-8
+    body:
+      encoding: UTF-8
+      string: TIMESTAMP=2015%2d11%2d14T18%3a09%3a10Z&CORRELATIONID=cc3cfd51b32a&ACK=Success&VERSION=90%2e0&BUILD=18308778
+    http_version: 
+  recorded_at: Sat, 14 Nov 2015 18:09:10 GMT
+- request:
+    method: post
+    uri: https://api-3t.sandbox.paypal.com/nvp
+    body:
+      encoding: UTF-8
+      string: USER=<PAYPAL_USERNAME>&PWD=<PAYPAL_PASSWORD>&SIGNATURE=<PAYPAL_SIGNATURE>&VERSION=90.0&METHOD=MassPay&RECEIVERTYPE=EmailAddress&CURRENCYCODE=USD&L_EMAIL0=balance%40gumroad.com&L_AMT0=30.0&L_UNIQUEID0=5
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sat, 14 Nov 2015 18:09:10 GMT
+      Server:
+      - Apache
+      X-Paypal-Operation-Name:
+      - MassPay
+      X-Paypal-Api-Rc:
+      - ''
+      Connection:
+      - close
+      Content-Length:
+      - '108'
+      Paypal-Debug-Id:
+      - 50d7daabcfb4f
+      Set-Cookie:
+      - X-PP-SILOVER=; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+      - X-PP-SILOVER=name%3DSANDBOX3.API.1%26silo_version%3D880%26app%3Dappdispatcher_apit%26TIME%3D3329771350;
+        domain=.paypal.com; path=/; Secure; HttpOnly
+      Content-Type:
+      - text/plain; charset=utf-8
+    body:
+      encoding: UTF-8
+      string: TIMESTAMP=2015%2d11%2d14T18%3a09%3a11Z&CORRELATIONID=50d7daabcfb4f&ACK=Success&VERSION=90%2e0&BUILD=18308778
+    http_version: 
+  recorded_at: Sat, 14 Nov 2015 18:09:11 GMT
+recorded_with: VCR 2.9.3

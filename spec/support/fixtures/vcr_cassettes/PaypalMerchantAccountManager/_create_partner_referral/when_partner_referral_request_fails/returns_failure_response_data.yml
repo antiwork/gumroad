@@ -1,0 +1,35 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/customer/partner-referrals
+    body:
+      encoding: UTF-8
+      string: '{"tracking_id":"6076771098307","email":"edgar54b29a25_2@gumroad.com","partner_config_override":{"return_url":"http://redirecturl.com","partner_logo_url":"https://gumroad.com/button/button_logo.png"},"operations":[{"operation":"API_INTEGRATION","api_integration_preference":{"rest_api_integration":{"integration_method":"PAYPAL","integration_type":"THIRD_PARTY","third_party_details":{"features":["PAYMENT","REFUND","PARTNER_FEE","DELAY_FUNDS_DISBURSEMENT"]}}}}],"products":["EXPRESS_CHECKOUT"],"legal_consents":[{"type":"SHARE_DATA_CONSENT","granted":true}]}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - ''
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '244'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 27 Feb 2020 07:42:52 GMT
+      Paypal-Debug-Id:
+      - 4a403177793a0
+    body:
+      encoding: UTF-8
+      string: '{"name":"AUTHENTICATION_FAILURE","message":"Authentication failed due
+        to invalid authentication credentials or a missing Authorization header.","links":[{"href":"https://developer.paypal.com/docs/api/overview/#error","rel":"information_link"}]}'
+    http_version: 
+  recorded_at: Thu, 27 Feb 2020 07:42:52 GMT
+recorded_with: VCR 3.0.3

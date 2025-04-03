@@ -1,0 +1,8 @@
+<% name = "#{object}[#{key}]" %>
+<% is_disabled ||= false %>
+
+<input type="hidden" name="<%= name %>" value="0">
+<label for="<%= key %>">
+  <input id="<%= key %>" class="<%= defined?(class_name) && class_name %>" type="checkbox" role="switch" checked="<%= checked %>" name="<%= name %>" value="1" disabled="<%= is_disabled %>">
+  <%= yield %>
+</label>

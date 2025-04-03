@@ -1,0 +1,15 @@
+<header>
+  <h1><%= title %></h1>
+  <div role="tablist">
+    <% %w(widgets ping api).each do |page| %>
+      <% active = instance_variable_get(:"@on_#{page}_page") %>
+      <% route_path = self.send(:"#{page}_path") %>
+      <% title = page == api ? "API" : page.humanize %>
+      <% if active %>
+        <span role="tab" aria-selected="true"><%= title %></span>
+      <% else %>
+        <%= link_to(title, route_path, role: "tab") %>
+      <% end %>
+    <% end %>
+  </div>
+</header>

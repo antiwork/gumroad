@@ -1,0 +1,57 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/9J862133JL8076730
+    body:
+      encoding: UTF-8
+      string: "{}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAI0voI7lUfAhh7zxjIOM32FDiibOJABpmM1Xv3lfLgkTvj4KdYgA3fFj0L071C2zPormfa3KwOEEfFC78d3rVEiXUHf7A
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1614621610153837'
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '3365'
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 01 Mar 2021 18:00:12 GMT
+      Paypal-Debug-Id:
+      - 55289db2c91af
+    body:
+      encoding: UTF-8
+      string: '{"id":"9J862133JL8076730","intent":"CAPTURE","status":"COMPLETED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"USD","value":"10.00","breakdown":{"item_total":{"currency_code":"USD","value":"10.00"},"shipping":{"currency_code":"USD","value":"0.00"},"handling":{"currency_code":"USD","value":"0.00"},"tax_total":{"currency_code":"USD","value":"0.00"},"insurance":{"currency_code":"USD","value":"0.00"},"shipping_discount":{"currency_code":"USD","value":"0.00"},"discount":{"currency_code":"USD","value":"0.00"}}},"payee":{"email_address":"sb-6intt2962376@business.example.com","merchant_id":"GSQ5PDPXZCWGW"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"USD","value":"0.60"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>","merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}]},"description":"Classic-Digital","items":[{"name":"Classic-Digital","unit_amount":{"currency_code":"USD","value":"10.00"},"tax":{"currency_code":"USD","value":"0.00"},"quantity":"1","sku":"E"}],"shipping":{"name":{"full_name":"John
+        Doe"},"address":{"address_line_1":"Spitalfields Arts Market, Spitalfields
+        Arts Market","admin_area_2":"London","admin_area_1":"ABERDEEN CITY","postal_code":"E1
+        6RL","country_code":"GB"}},"payments":{"captures":[{"id":"8SH22738FC417170C","status":"PARTIALLY_REFUNDED","amount":{"currency_code":"USD","value":"10.00"},"final_capture":true,"disbursement_mode":"INSTANT","seller_protection":{"status":"ELIGIBLE","dispute_categories":["ITEM_NOT_RECEIVED","UNAUTHORIZED_TRANSACTION"]},"seller_receivable_breakdown":{"gross_amount":{"currency_code":"USD","value":"10.00"},"paypal_fee":{"currency_code":"USD","value":"0.69"},"platform_fees":[{"amount":{"currency_code":"USD","value":"0.60"},"payee":{"merchant_id":"<PAYPAL_PARTNER_MERCHANT_ID>"}}],"net_amount":{"currency_code":"USD","value":"8.71"}},"links":[{"href":"https://api.sandbox.paypal.com/v2/payments/captures/8SH22738FC417170C","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/8SH22738FC417170C/refund","rel":"refund","method":"POST"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/9J862133JL8076730","rel":"up","method":"GET"}],"create_time":"2021-02-23T11:26:57Z","update_time":"2021-02-23T11:30:30Z"}],"refunds":[{"id":"8R581125GP434505G","amount":{"currency_code":"USD","value":"5.00"},"seller_payable_breakdown":{"gross_amount":{"currency_code":"USD","value":"5.00"},"paypal_fee":{"currency_code":"USD","value":"0.19"},"platform_fees":[{"amount":{"currency_code":"USD","value":"0.30"}}],"net_amount":{"currency_code":"USD","value":"4.51"},"total_refunded_amount":{"currency_code":"USD","value":"5.00"}},"status":"COMPLETED","links":[{"href":"https://api.sandbox.paypal.com/v2/payments/refunds/8R581125GP434505G","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/payments/captures/8SH22738FC417170C","rel":"up","method":"GET"}],"create_time":"2021-02-23T03:30:30-08:00","update_time":"2021-02-23T03:30:30-08:00"}]}}],"payer":{"name":{"given_name":"John","surname":"Doe"},"email_address":"sb-jn4r62968811@personal.example.com","payer_id":"H86ASAPYE8DZA","phone":{"phone_number":{"national_number":"07911123456"}},"address":{"country_code":"GB"}},"update_time":"2021-02-23T11:30:30Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/9J862133JL8076730","rel":"self","method":"GET"}]}'
+  recorded_at: Mon, 01 Mar 2021 18:00:13 GMT
+recorded_with: VCR 6.0.0

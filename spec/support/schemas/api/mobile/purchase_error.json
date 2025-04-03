@@ -1,0 +1,9 @@
+{
+  "id": "file:/api/mobile/purchase_error.json",
+  "type": "object",
+  "properties": {
+    "success": { "const": false },
+    "error_message": { "type": ["string", "null"] }
+  },
+  "required": ["success", "error_message"]
+}

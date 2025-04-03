@@ -1,0 +1,46 @@
+---
+http_interactions:
+  - request:
+      method: post
+      uri: https://elastictranscoder.us-east-1.amazonaws.com/2012-09-25/jobs
+      body:
+        encoding: UTF-8
+        string: '{"PipelineId":"1390090734092-rg9pq5","Input":{"Key":"specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+audience+without+much+of+a+hassle.mov","FrameRate":"auto","Resolution":"auto","AspectRatio":"auto","Interlaced":"auto","Container":"auto"},"Outputs":[{"Key":"hls_480p_","ThumbnailPattern":"","Rotate":"auto","PresetId":"1591945700851-ma7v1l","SegmentDuration":"10"}],"OutputKeyPrefix":"specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+a/hls/","Playlists":[{"Name":"index","Format":"HLSv3","OutputKeys":["hls_480p_"]}]}'
+      headers:
+        Content-Type:
+          - ""
+        Accept-Encoding:
+          - ""
+        User-Agent:
+          - aws-sdk-ruby3/3.113.1 ruby/2.7.2 x86_64-darwin19 aws-sdk-elastictranscoder/1.29.0
+        Host:
+          - elastictranscoder.us-east-1.amazonaws.com
+        X-Amz-Date:
+          - 20210415T143520Z
+        X-Amz-Content-Sha256:
+          - 130e0a38ad5ec4128b9601ef678391e5271c1902f58ccc11c5ba55a98f5fb9ae
+        Authorization:
+          - AWS4-HMAC-SHA256 Credential=<AWS_ACCESS_KEY_ID>/20210415/us-east-1/elastictranscoder/aws4_request,
+            SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=8a552754bb561ff16ac6e79420f7e5288e03caa4dec66fa024002203e3068511
+        Content-Length:
+          - "919"
+        Accept:
+          - "*/*"
+    response:
+      status:
+        code: 201
+        message: ""
+      headers:
+        X-Amzn-Requestid:
+          - 81e13068-00ef-4771-a412-6a4760955e58
+        Content-Type:
+          - application/json
+        Content-Length:
+          - "2545"
+        Date:
+          - Thu, 15 Apr 2021 14:35:21 GMT
+      body:
+        encoding: UTF-8
+        string: '{"Job":{"Arn":"arn:aws:elastictranscoder:us-east-1:<AWS_ACCOUNT_ID>:job/1618497321951-d0mjs1","Id":"1618497321951-d0mjs1","Input":{"AspectRatio":"auto","Container":"auto","DetectedProperties":null,"Encryption":null,"FrameRate":"auto","InputCaptions":null,"Interlaced":"auto","Key":"specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+audience+without+much+of+a+hassle.mov","Resolution":"auto","TimeSpan":null},"Inputs":[{"AspectRatio":"auto","Container":"auto","DetectedProperties":null,"Encryption":null,"FrameRate":"auto","InputCaptions":null,"Interlaced":"auto","Key":"specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+audience+without+much+of+a+hassle.mov","Resolution":"auto","TimeSpan":null}],"Output":{"AlbumArt":null,"AppliedColorSpaceConversion":null,"Captions":null,"Composition":null,"Duration":null,"DurationMillis":null,"Encryption":null,"FileSize":null,"FrameRate":null,"Height":null,"Id":"1","Key":"hls_480p_","PresetId":"1591945700851-ma7v1l","Rotate":"auto","SegmentDuration":"10.0","Status":"Submitted","StatusDetail":null,"ThumbnailEncryption":null,"ThumbnailPattern":"","Watermarks":[],"Width":null},"OutputKeyPrefix":"specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+a/hls/","Outputs":[{"AlbumArt":null,"AppliedColorSpaceConversion":null,"Captions":null,"Composition":null,"Duration":null,"DurationMillis":null,"Encryption":null,"FileSize":null,"FrameRate":null,"Height":null,"Id":"1","Key":"hls_480p_","PresetId":"1591945700851-ma7v1l","Rotate":"auto","SegmentDuration":"10.0","Status":"Submitted","StatusDetail":null,"ThumbnailEncryption":null,"ThumbnailPattern":"","Watermarks":[],"Width":null}],"PipelineId":"1390090734092-rg9pq5","Playlists":[{"Format":"HLSv3","HlsContentProtection":null,"Name":"index","OutputKeys":["hls_480p_"],"PlayReadyDrm":null,"Status":"Submitted","StatusDetail":null}],"Status":"Submitted","Timing":{"FinishTimeMillis":null,"StartTimeMillis":null,"SubmitTimeMillis":1618497321965},"UserMetadata":null}}'
+    recorded_at: Thu, 15 Apr 2021 14:35:22 GMT
+recorded_with: VCR 6.0.0

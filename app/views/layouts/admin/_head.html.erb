@@ -1,0 +1,21 @@
+<head>
+  <% if Rails.application.config.asset_host %>
+    <link rel="dns-prefetch" href="<%= "//#{URI.parse(Rails.application.config.asset_host).host}" %>">
+  <% end %>
+  <% if CDN_S3_PROXY_HOST %>
+    <link rel="dns-prefetch" href="<%= "//#{URI.parse(CDN_S3_PROXY_HOST).host}" %>">
+  <% end %>
+  <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
+    <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
+  <% end %>
+  <title><%= "#{@title} - Admin" %></title>
+  <%= stylesheet_pack_tag(:admin) %>
+  <%= yield :style %>
+  <%= csrf_meta_tags %>
+  <meta charset="utf-8">
+  <meta property="gr:environment" value="<%= Rails.env %>">
+  <meta content="initial-scale = 1.0, width = device-width" name="viewport">
+  <link href="<%= asset_url("pink-icon.png") %>" rel="shortcut icon">
+  <link href="<%= asset_url("pink-icon.png") %>" rel="apple-touch-icon">
+  <%= yield :meta %>
+</head>

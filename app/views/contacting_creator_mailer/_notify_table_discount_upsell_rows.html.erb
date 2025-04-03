@@ -1,0 +1,23 @@
+<% if @offer_code&.code.present? %>
+  <tr>
+    <td>
+      <h4>Discount</h4>
+    </td>
+    <td><%= @offer_code.name %> (<%= @offer_code.displayed_amount_off(@product.price_currency_type, with_symbol: true) %> off)</td>
+  </tr>
+<% end %>
+<% if @offer_code&.upsell.present? %>
+  <tr>
+    <td>
+      <h4>Upsell</h4>
+    </td>
+    <td><%= @offer_code.upsell.name %> (<%= @offer_code.displayed_amount_off(@product.price_currency_type, with_symbol: true) %> off)</td>
+  </tr>
+<% elsif @purchase.upsell_purchase.present? %>
+  <tr>
+    <td>
+      <h4>Upsell</h4>
+    </td>
+    <td><%= @purchase.upsell_purchase.upsell.name %></td>
+  </tr>
+<% end %>

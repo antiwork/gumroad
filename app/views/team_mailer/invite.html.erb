@@ -1,0 +1,41 @@
+<div>
+  <p>
+    <%= image_tag("email/wordmark_logo.png", alt: "Gumroad", style: "height: 22px; margin: 0 auto;", height: 22) %>
+  </p>
+</div>
+<div style="background-color: #f4f4f0">
+  <p>
+    <%= image_tag(@seller.avatar_url, alt: @seller_name, style: "height: 80px; width: 80px; margin: 0 auto;", class: "user-avatar") %>
+    <h2 style="text-align: center;">
+      <%= @subject %>
+    </h2>
+  </p>
+</div>
+<div>
+  <p><%= @seller_name %> (<%= @seller_email %>) has invited you to join the team at <%= link_to @seller_username, @seller.subdomain_with_protocol, target: "_blank" %> with the role of <%= @team_invitation.role.humanize %>.</p>
+  <p>
+    <strong>This invitation will expire in <%= (@team_invitation.expires_at.to_date - Time.current.to_date).to_i %> days.</strong>
+  </p>
+  <p>
+    If you are not expecting an invitation, please ignore this email.
+  </p>
+  <p>
+    <%= link_to "Accept invitation", accept_settings_team_invitation_url(@team_invitation.external_id, email: @team_invitation.email), class: "button primary" %>
+  </p>
+</div>
+<div>
+  <p>
+    <strong>Button not working?</strong>
+  </p>
+  <p>
+    Copy and paste this link into your browser: <%= link_to accept_settings_team_invitation_url(@team_invitation.external_id, email: @team_invitation.email), accept_settings_team_invitation_url(@team_invitation.external_id, email: @team_invitation.email), target: "_blank" %>
+  </p>
+</div>
+<div>
+  <p>
+    <strong>Invitation expired?</strong>
+  </p>
+  <p>
+    Contact <%= @seller_name %> (<%= link_to @seller_email, "mailto:#{@seller_email}" %>) by replying to this email to receive a new invitation.
+  </p>
+</div>

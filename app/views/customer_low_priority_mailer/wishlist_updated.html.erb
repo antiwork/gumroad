@@ -1,0 +1,32 @@
+<%= header_section(@title) %>
+<div>
+  <div class="product-card horizontal">
+    <div class="figure">
+      <% if @thumbnail_products.size == 4 %>
+        <%= link_to @wishlist_url, class: "thumbnails", style: "text-decoration: none" do %>
+          <% @thumbnail_products.map do |product| %>
+            <%= image_tag(product.for_email_thumbnail_url, alt: product.name) %>
+          <% end %>
+        <% end %>
+      <% elsif @thumbnail_products.size > 0 %>
+        <%= link_to @wishlist_url, class: "thumbnails" do %>
+          <%= image_tag(@thumbnail_products.first.for_email_thumbnail_url, alt: @thumbnail_products.first.name) %>
+        <% end %>
+      <% end %>
+    </div>
+    <div class="section">
+      <div class="header">
+        <h3>
+          <%= link_to(@wishlist_follower.wishlist.name, @wishlist_url, target: "_blank", style: "text-decoration: none") %>
+        </h3>
+        <div class="user">
+          <% if @wishlist_follower.wishlist.user.avatar_url.present? %>
+            <%= link_to(image_tag(@wishlist_follower.wishlist.user.avatar_url, alt: "Avatar of #{@wishlist_follower.wishlist.user.name_or_username}", class: "user-avatar"), @wishlist_follower.wishlist.user.profile_url, target: "_blank") %>
+          <% end %>
+          <%= link_to(@wishlist_follower.wishlist.user.name_or_username, @wishlist_follower.wishlist.user.profile_url, target: "_blank") %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <%= link_to "View content", @wishlist_url, class: "button primary" %>
+</div>

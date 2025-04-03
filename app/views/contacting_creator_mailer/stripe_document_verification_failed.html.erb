@@ -1,0 +1,9 @@
+<div>
+  <p>Sorry about this! We ran into the following issue when trying to verify the document you uploaded on your payout settings page:</p>
+  <p>
+    <i><%= @error_message %></i>
+  </p>
+  <p>Please upload a valid document at:</p>
+  <p><%= link_to("Provide your information", settings_payments_url, class: "button primary") %></p>
+  <p>Or you can click here: <%= link_to settings_payments_url, settings_payments_url %></p>
+</div>

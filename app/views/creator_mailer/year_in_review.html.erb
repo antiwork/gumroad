@@ -1,0 +1,135 @@
+<% formatted_total_amount = Money.new(@analytics_data[:total_amount_cents] * get_rate(@seller.currency_type).to_f, @seller.currency_type.to_sym).format(no_cents_if_whole: true, symbol: true) %>
+
+<div>
+  <%= image_tag("email/badge_year_#{@year}.png", alt: @year, class: "header-badge") %>
+  <h2 style="text-align: center;">Your year on Gumroad in review</h2>
+</div>
+<div>
+  <table class="reset stats">
+    <tbody>
+      <tr>
+        <td>
+          <div>Sales</div>
+          <div><%= number_with_delimiter(@analytics_data[:total_sales_count]) %></div>
+        </td>
+        <td>
+          <div>Views</div>
+          <div><%= number_with_delimiter(@analytics_data[:total_views_count]) %></div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div>Unique customers</div>
+          <div><%= number_with_delimiter(@analytics_data[:total_unique_customers_count]) %></div>
+        </td>
+        <td>
+          <div>Products sold</div>
+          <div><%= number_with_delimiter(@analytics_data[:total_products_sold_count]) %></div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<% if @analytics_data[:top_selling_products].present? %>
+  <div>
+    <h2 style="text-align: center;">Your top <%= @analytics_data[:top_selling_products].count > 1 ? "#{@analytics_data[:top_selling_products].count} products" : "product" %></h2>
+  </div>
+
+  <% @analytics_data[:top_selling_products].each do |product| %>
+    <div class="item" style="display: contents">
+      <%= render("shared/mailers/product_as_checkout_cell", product: product) do %>
+        <% views, sales, total = product[:stats] %>
+        <div class="footer product-stats" title="Analytics">
+          <span>
+            <%= image_tag("email/eye-fill.png", alt: "Views") %>
+            <%= number_to_si(views) %>
+          </span>
+          <span>
+            <%= image_tag("email/cart3-fill.png", alt: "Sales") %>
+            <%= number_to_si(sales) %>
+          </span>
+          <span>
+            <%= image_tag("email/solid-currency-dollar.png", alt: "Total") %>
+            <%= number_to_si(total) %>
+          </span>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>
+
+<div>
+  <h2 style="text-align: center;">You sold products in <%= pluralize(@analytics_data[:total_countries_with_sales_count], "country") %></h2>
+</div>
+
+<div>
+  <table class="reset list">
+    <thead>
+      <tr>
+        <th>Country</th>
+        <th style="text-align: center; white-space: nowrap;">
+          Views
+        </th>
+        <th style="text-align: center; white-space: nowrap;">
+          Sales
+        </th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @analytics_data[:by_country].each do |(country, (views, sales, total))|
+        money = Money.new(total * 100 * get_rate(@seller.currency_type).to_f, @seller.currency_type.to_sym)
+      %>
+        <tr>
+          <td><%= country %></td>
+          <td style="text-align: center; white-space: nowrap;">
+            <%= number_to_si(views) %>
+          </td>
+          <td style="text-align: center; white-space: nowrap;">
+            <%= number_to_si(sales) %>
+          </td>
+          <td style="white-space: nowrap">
+            <%= "#{money.symbol}#{number_to_si(money.dollars)}" %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<div>
+  <h2 style="text-align: center;">You earned a total of <%= formatted_total_amount %></h2>
+</div>
+
+<% if @seller.from_us? %>
+  <div>
+    <div role="status" class="info">
+      <div>
+        <table class="reset">
+          <tbody>
+            <tr>
+              <td>
+                <%= image_tag("email/icon_info_circle_fill.png") %>
+              </td>
+              <td>
+                <% if @seller.eligible_for_1099?(@year) %>
+                  You'll be receiving a 1099 from us in the next few weeks.
+                <% else %>
+                  You do not qualify for a 1099 this year.
+                <% end %>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+<% end %>
+
+<% if @payout_csv_url.present? %>
+  <div>
+    <h2 style="text-align: center;">Here's your financial report for <%= @year %>!</h2>
+    <p>Please click this <%= link_to "link", @payout_csv_url %> to download the payout summary.</p>
+  </div>
+<% end %>

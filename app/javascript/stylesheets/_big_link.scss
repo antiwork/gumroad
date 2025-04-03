@@ -1,0 +1,34 @@
+%big-link {
+  text-decoration: none;
+  display: grid;
+  grid-template-columns: 1fr;
+  padding-top: spacer(6);
+  padding-bottom: spacer(6);
+  gap: spacer(4);
+
+  .icon {
+    grid-column: -3;
+    grid-row: 1;
+    font-size: $big-icon-size;
+  }
+
+  &::after {
+    @extend %icon, .icon-arrow-diagonal-up-right;
+    font-size: $big-icon-size;
+    grid-column: -1;
+  }
+}
+
+.big-links > a {
+  @extend %big-link;
+  border-bottom: $border;
+
+  &:first-child {
+    padding-top: 0;
+  }
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+}

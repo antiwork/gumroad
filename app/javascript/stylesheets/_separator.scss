@@ -1,0 +1,12 @@
+[role="separator"] {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: spacer(3);
+
+  &::before,
+  &::after {
+    content: "";
+    border-bottom: $border;
+  }
+}

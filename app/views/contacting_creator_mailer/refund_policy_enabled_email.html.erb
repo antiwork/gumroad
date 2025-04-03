@@ -1,0 +1,58 @@
+<div>
+  <p>Hey <%= @seller.name_or_username %>,</p>
+  <p>
+    We've updated how refund policies work on Gumroad. Instead of individual product policies, all your products now use a single account-level policy,
+    which is set to <strong><%= @seller.refund_policy.title %></strong>, effective <%= @postponed_date.present? ? @postponed_date.to_fs(:formatted_date_full_month) : "immediately" %>.
+  </p>
+  <% if @postponed_date.present? %>
+    <p>
+      <strong>Note!</strong>
+      Please refer to these instructions on <%= @postponed_date.to_fs(:formatted_date_full_month) %>.
+    </p>
+  <% end %>
+  <p>
+    This means every product in your account automatically follows this same refund policy for new purchases.
+    It also means that—soon—we'll be able to handle refund requests on your behalf, saving you time and energy.
+  </p>
+  <p>
+    Two refund policy options will be available:
+    <ul>
+      <li>30-day money back guarantee</li>
+      <li>No refunds allowed</li>
+    </ul>
+  </p>
+  <p>
+    To review or update your account-level refund policy:
+    <ol>
+      <li>Log in to your Gumroad account</li>
+      <li>Go to <%= link_to "Settings", settings_main_url %></li>
+      <li>Update the refund policy information</li>
+      <li>Click <strong>Update settings</strong></li>
+    </ol>
+  </p>
+  <p><strong>Frequently asked questions</strong></p>
+  <p>
+    <strong>Can I set different refund policies for different products?</strong><br>
+    No, all your products will share the same refund policy to simplify the experience for you and your customers.
+  </p>
+  <p>
+    <strong>Can I use an old refund policy fine print?</strong><br>
+    Yes! You can find an old refund policy fine print on a receipt from a previous sale. Receipts can be found under <%= link_to "Sales", customers_url %>.<br>
+    Open the sale drawer and look for the <em>Email received</em> section at the bottom of the drawer.
+  </p>
+  <p>
+    <strong>Can I change my refund policy?</strong><br>
+    Yes, you can switch between the two options anytime using the instructions above. The new policy will apply to all new purchases.
+  </p>
+  <p>
+    <strong>What happens to existing purchases?</strong><br>
+    Purchases made before this change will keep their original refund policy that was in place at the time of purchase.
+  </p>
+  <p>
+    More questions? Just reply to this email.
+  </p>
+  <p>
+    Best,<br>
+    The Gumroad Team
+  </p>
+</div>

@@ -1,0 +1,7 @@
+<%= header_section("We were unable to pay you.") %>
+<div>
+  <p>Hi there. We just tried to pay you <%= @amount %>, but were not able to as your payout is greater than the <%= @limit %> limit on debit card payouts.</p>
+  <p>
+    Please <%= link_to "update your payout method to be a bank account", settings_payments_url %>, so your payout can be sent at the next pay period.
+  </p>
+</div>

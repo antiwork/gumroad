@@ -1,0 +1,74 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses?verify%5B%5D=delivery
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"255 King Street #602","city":"San Francisco","state":"CA","zip":"94107","country":"US"}}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/3.2.0 Ruby/2.7.2-p137
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - 7fbf8bcf60cba1b7ec50757b0032b7a0
+      Cache-Control:
+      - no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_54683f9a30314d40bf675e2021e0ed80"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"79d8795c974def1bf6853526bb4250f4"
+      X-Request-Id:
+      - 126b2eee-d4e8-4674-aa4b-eab36fd4ccbf
+      X-Runtime:
+      - '0.078538'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb1nuq
+      X-Version-Label:
+      - easypost-202106161905-7b7dcd08bf-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb2wdc 15c8815ace
+      - intlb2nuq 15c8815ace
+      - intlb2wdc 15c8815ace
+      Strict-Transport-Security:
+      - max-age=15768000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_54683f9a30314d40bf675e2021e0ed80","object":"Address","created_at":"2021-06-17T19:25:43+00:00","updated_at":"2021-06-17T19:25:43+00:00","name":null,"company":null,"street1":"255
+        KING ST APT 602","street2":"","city":"SAN FRANCISCO","state":"CA","zip":"94107-5400","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":true,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":37.77704,"longitude":-122.39292,"time_zone":"America/Los_Angeles"}}}}'
+  recorded_at: Thu, 17 Jun 2021 19:25:43 GMT
+recorded_with: VCR 6.0.0

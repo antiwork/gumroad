@@ -1,0 +1,11 @@
+<%= header_section("#{@charge_processor_display_name} account disconnected") %>
+<div>
+  <p>
+    <%= "It looks like you disconnected your #{@charge_processor_display_name} account from your Gumroad account, meaning we can no longer charge your customers via #{@charge_processor_display_name}. If you did this in error, please reconnect it" %>
+    <%= link_to "here", settings_payments_url %>.</p>
+  <p>
+    <% unless @user.can_publish_products? %>
+      Because both credit cards and PayPal are now turned off for your account, we've disabled your products for sale. You will have to republish them to enable sales.
+    <% end %>
+  </p>
+</div>

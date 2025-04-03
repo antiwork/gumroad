@@ -1,0 +1,8 @@
+<%= header_section("Confirm your email address") %>
+<div>
+  <p>Please confirm your account by clicking the button below.</p>
+  <% url = confirmation_url(@resource, confirmation_token: @resource.confirmation_token) %>
+  <p><%= link_to("Confirm email", url, class: "button primary") %></p>
+  <p>Or you can click here: <%= link_to(url, url) %></p>
+  <p>If you didn't request this, please ignore this email. You won't get another one!</p>
+</div>

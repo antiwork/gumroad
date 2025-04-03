@@ -1,0 +1,8 @@
+<% max_length = 250 %>
+<% padding = text.length >= max_length ? 1 : max_length - text.length %>
+<div style="display:none;max-height:0;overflow:hidden">
+  <%= text %>
+</div>
+<div style="display:none;max-height:0;overflow:hidden">
+  <%= raw("&#847; " * padding) %>
+</div>

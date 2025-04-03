@@ -1,0 +1,12 @@
+<main class="stack">
+  <header>
+    <h2>An error has occurred</h2>
+  </header>
+  <div>
+    <%= @pre_auth.error_response.body[:error_description] %>
+  </div>
+</main>
+
+<% content_for :footer do %>
+  <%= render("doorkeeper/authorizations/footer", logged_in_user: logged_in_user) %>
+<% end %>

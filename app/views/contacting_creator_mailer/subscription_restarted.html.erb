@@ -1,0 +1,12 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("An installment plan has been restarted.") %>
+<% else %>
+  <%= header_section("A subscription has been restarted.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>Your customer (<%= link_to @subscription.email, customers_url(query: @subscription.email) %>) has restarted their installment plan for <%= @subscription.link.name %>.</p>
+  <% else %>
+    <p>Your customer (<%= link_to @subscription.email, customers_url(query: @subscription.email) %>) has restarted their subscription to <%= @subscription.link.name %>.</p>
+  <% end %>
+</div>

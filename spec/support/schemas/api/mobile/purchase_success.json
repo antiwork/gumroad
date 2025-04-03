@@ -1,0 +1,28 @@
+{
+  "id": "file:/api/mobile/purchase_success.json",
+  "type": "object",
+  "properties": {
+    "success": { "const": true },
+    "id": { "type": "string" },
+    "redirect_token": { "type": ["string", "null"] },
+    "seller_id": { "type": "string" },
+    "permalink": { "type": "string" },
+    "name": { "type": "string" },
+    "currency_type": { "type": "string" },
+    "quantity": { "type": "number" },
+    "non_formatted_price": { "type": "number" },
+    "non_formatted_seller_tax_amount": { "type": "string" }
+  },
+  "required": [
+    "success",
+    "id",
+    "redirect_token",
+    "seller_id",
+    "permalink",
+    "name",
+    "currency_type",
+    "quantity",
+    "non_formatted_price",
+    "non_formatted_seller_tax_amount"
+  ]
+}

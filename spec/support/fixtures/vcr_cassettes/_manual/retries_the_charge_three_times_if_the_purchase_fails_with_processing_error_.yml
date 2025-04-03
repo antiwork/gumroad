@@ -1,0 +1,2063 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_methods
+    body:
+      encoding: UTF-8
+      string: type=card&card[number]=4242+4242+4242+4242&card[exp_month]=12&card[exp_year]=2021&card[cvc]=123
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:48 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '935'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_TM658iir9IYZnx
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '1'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "pm_0IIvi09e1RjUNIyY1kBb0m17",
+          "object": "payment_method",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "card": {
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": null,
+              "cvc_check": "unchecked"
+            },
+            "country": "US",
+            "exp_month": 12,
+            "exp_year": 2021,
+            "fingerprint": "W691J2Ye3VDoq6Ij",
+            "funding": "credit",
+            "generated_from": null,
+            "last4": "4242",
+            "networks": {
+              "available": [
+                "visa"
+              ],
+              "preferred": null
+            },
+            "three_d_secure_usage": {
+              "supported": true
+            },
+            "wallet": null
+          },
+          "created": 1612875168,
+          "customer": null,
+          "livemode": false,
+          "metadata": {
+          },
+          "type": "card"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:48 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_methods
+    body:
+      encoding: UTF-8
+      string: type=card&card[number]=4000+0000+0000+0341&card[exp_month]=12&card[exp_year]=2021&card[cvc]=123
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_TM658iir9IYZnx","request_duration_ms":962}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:49 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '935'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_p5O6NkwxHAffjY
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '1'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+          "object": "payment_method",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "card": {
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": null,
+              "cvc_check": "unchecked"
+            },
+            "country": "US",
+            "exp_month": 12,
+            "exp_year": 2021,
+            "fingerprint": "waikMtIz0irgsfaY",
+            "funding": "credit",
+            "generated_from": null,
+            "last4": "0341",
+            "networks": {
+              "available": [
+                "visa"
+              ],
+              "preferred": null
+            },
+            "three_d_secure_usage": {
+              "supported": true
+            },
+            "wallet": null
+          },
+          "created": 1612875169,
+          "customer": null,
+          "livemode": false,
+          "metadata": {
+          },
+          "type": "card"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:49 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/payment_methods/pm_0IIvi09e1RjUNIyY1kBb0m17
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_p5O6NkwxHAffjY","request_duration_ms":778}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:52 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '935'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_TSMYu74KfiBV0x
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '0'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "pm_0IIvi09e1RjUNIyY1kBb0m17",
+          "object": "payment_method",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "card": {
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": null,
+              "cvc_check": "unchecked"
+            },
+            "country": "US",
+            "exp_month": 12,
+            "exp_year": 2021,
+            "fingerprint": "W691J2Ye3VDoq6Ij",
+            "funding": "credit",
+            "generated_from": null,
+            "last4": "4242",
+            "networks": {
+              "available": [
+                "visa"
+              ],
+              "preferred": null
+            },
+            "three_d_secure_usage": {
+              "supported": true
+            },
+            "wallet": null
+          },
+          "created": 1612875168,
+          "customer": null,
+          "livemode": false,
+          "metadata": {
+          },
+          "type": "card"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:52 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/customers
+    body:
+      encoding: UTF-8
+      string: description=&payment_method=pm_0IIvi09e1RjUNIyY1kBb0m17
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_TSMYu74KfiBV0x","request_duration_ms":454}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:53 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '569'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_qHyAUakjGZz10V
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '12'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "cus_IulEYQodx5tiJV",
+          "object": "customer",
+          "address": null,
+          "balance": 0,
+          "created": 1612875172,
+          "currency": null,
+          "default_source": null,
+          "delinquent": false,
+          "description": null,
+          "discount": null,
+          "email": null,
+          "invoice_prefix": "7DE3DAD3",
+          "invoice_settings": {
+            "custom_fields": null,
+            "default_payment_method": null,
+            "footer": null
+          },
+          "livemode": false,
+          "metadata": {
+          },
+          "name": null,
+          "next_invoice_sequence": 1,
+          "phone": null,
+          "preferred_locales": [
+
+          ],
+          "shipping": null,
+          "tax_exempt": "none"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:53 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/setup_intents
+    body:
+      encoding: UTF-8
+      string: confirm=true&usage=off_session&payment_method=pm_0IIvi09e1RjUNIyY1kBb0m17&customer=cus_IulEYQodx5tiJV
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_qHyAUakjGZz10V","request_duration_ms":1211}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:54 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '767'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_fnlAgzFS6JBxl6
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '1'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "seti_0IIvi69e1RjUNIyYWgA9mLMT",
+          "object": "setup_intent",
+          "application": null,
+          "cancellation_reason": null,
+          "client_secret": "seti_0IIvi69e1RjUNIyYWgA9mLMT_secret_IulEBoqwLvQMFGqIL2G68TunhHybc1f",
+          "created": 1612875174,
+          "customer": "cus_IulEYQodx5tiJV",
+          "description": null,
+          "last_setup_error": null,
+          "latest_attempt": "setatt_0IIvi69e1RjUNIyYqWbod4xQ",
+          "livemode": false,
+          "mandate": null,
+          "metadata": {
+          },
+          "next_action": null,
+          "on_behalf_of": null,
+          "payment_method": "pm_0IIvi09e1RjUNIyY1kBb0m17",
+          "payment_method_options": {
+            "card": {
+              "request_three_d_secure": "automatic"
+            }
+          },
+          "payment_method_types": [
+            "card"
+          ],
+          "single_use_mandate": null,
+          "status": "succeeded",
+          "usage": "off_session"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:54 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/payment_methods/pm_0IIvi19e1RjUNIyYRBs4YUDY
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_fnlAgzFS6JBxl6","request_duration_ms":1233}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:55 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '935'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_jy4aN9lzz9avOj
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '0'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+          "object": "payment_method",
+          "billing_details": {
+            "address": {
+              "city": null,
+              "country": null,
+              "line1": null,
+              "line2": null,
+              "postal_code": null,
+              "state": null
+            },
+            "email": null,
+            "name": null,
+            "phone": null
+          },
+          "card": {
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": null,
+              "cvc_check": "unchecked"
+            },
+            "country": "US",
+            "exp_month": 12,
+            "exp_year": 2021,
+            "fingerprint": "waikMtIz0irgsfaY",
+            "funding": "credit",
+            "generated_from": null,
+            "last4": "0341",
+            "networks": {
+              "available": [
+                "visa"
+              ],
+              "preferred": null
+            },
+            "three_d_secure_usage": {
+              "supported": true
+            },
+            "wallet": null
+          },
+          "created": 1612875169,
+          "customer": null,
+          "livemode": false,
+          "metadata": {
+          },
+          "type": "card"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:56 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/customers
+    body:
+      encoding: UTF-8
+      string: description=&payment_method=pm_0IIvi19e1RjUNIyYRBs4YUDY
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_jy4aN9lzz9avOj","request_duration_ms":630}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:57 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '569'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_NPV6XnwRI18wcs
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '12'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "id": "cus_IulEobGC5MjIrw",
+          "object": "customer",
+          "address": null,
+          "balance": 0,
+          "created": 1612875176,
+          "currency": null,
+          "default_source": null,
+          "delinquent": false,
+          "description": null,
+          "discount": null,
+          "email": null,
+          "invoice_prefix": "94381FBB",
+          "invoice_settings": {
+            "custom_fields": null,
+            "default_payment_method": null,
+            "footer": null
+          },
+          "livemode": false,
+          "metadata": {
+          },
+          "name": null,
+          "next_invoice_sequence": 1,
+          "phone": null,
+          "preferred_locales": [
+
+          ],
+          "shipping": null,
+          "tax_exempt": "none"
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:57 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_intents
+    body:
+      encoding: UTF-8
+      string: amount=600&currency=usd&description=You+bought+http%3A%2F%2F127.0.0.1%3A31337%2Fl%2FH&metadata[purchase]=P5ppE6H8XIjy2JSCgUhbAw%3D%3D&transfer_group=2&confirmation_method=manual&confirm=true&off_session=true&customer=cus_IulEobGC5MjIrw&payment_method=pm_0IIvi19e1RjUNIyYRBs4YUDY&statement_descriptor_suffix=Gumroad
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NPV6XnwRI18wcs","request_duration_ms":1309}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 402
+      message: Payment Required
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 12:52:59 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '8102'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_ovKLxoTmLpqGID
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '2'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "charge": "ch_0IIviA9e1RjUNIyYPEZVjwZZ",
+            "code": "processing_error",
+            "decline_code": "generic_decline",
+            "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+            "message": "Your card was declined.",
+            "payment_intent": {
+              "id": "pi_0IIviA9e1RjUNIyYxdvbqBF8",
+              "object": "payment_intent",
+              "amount": 600,
+              "amount_capturable": 0,
+              "amount_received": 0,
+              "application": null,
+              "application_fee_amount": null,
+              "canceled_at": null,
+              "cancellation_reason": null,
+              "capture_method": "automatic",
+              "charges": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "ch_0IIviA9e1RjUNIyYPEZVjwZZ",
+                    "object": "charge",
+                    "amount": 600,
+                    "amount_captured": 0,
+                    "amount_refunded": 0,
+                    "amount_updates": [
+
+                    ],
+                    "application": null,
+                    "application_fee": null,
+                    "application_fee_amount": null,
+                    "balance_transaction": null,
+                    "billing_details": {
+                      "address": {
+                        "city": null,
+                        "country": null,
+                        "line1": null,
+                        "line2": null,
+                        "postal_code": null,
+                        "state": null
+                      },
+                      "email": null,
+                      "name": null,
+                      "phone": null
+                    },
+                    "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                    "captured": false,
+                    "created": 1612875178,
+                    "currency": "usd",
+                    "customer": "cus_IulEobGC5MjIrw",
+                    "description": "You bought http://127.0.0.1:31337/l/H",
+                    "destination": null,
+                    "dispute": null,
+                    "disputed": false,
+                    "failure_code": "processing_error",
+                    "failure_message": "Your card was declined.",
+                    "fraud_details": {
+                    },
+                    "invoice": null,
+                    "livemode": false,
+                    "metadata": {
+                      "purchase": "P5ppE6H8XIjy2JSCgUhbAw=="
+                    },
+                    "on_behalf_of": null,
+                    "order": null,
+                    "outcome": {
+                      "network_status": "declined_by_network",
+                      "reason": "generic_decline",
+                      "risk_level": "normal",
+                      "risk_score": 31,
+                      "seller_message": "The bank did not return any further details with this decline.",
+                      "type": "issuer_declined"
+                    },
+                    "paid": false,
+                    "payment_intent": "pi_0IIviA9e1RjUNIyYxdvbqBF8",
+                    "payment_method": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                    "payment_method_details": {
+                      "card": {
+                        "brand": "visa",
+                        "checks": {
+                          "address_line1_check": null,
+                          "address_postal_code_check": null,
+                          "cvc_check": "pass"
+                        },
+                        "country": "US",
+                        "exp_month": 12,
+                        "exp_year": 2021,
+                        "fingerprint": "waikMtIz0irgsfaY",
+                        "funding": "credit",
+                        "installments": null,
+                        "last4": "0341",
+                        "network": "visa",
+                        "three_d_secure": null,
+                        "wallet": null
+                      },
+                      "type": "card"
+                    },
+                    "receipt_email": null,
+                    "receipt_number": null,
+                    "receipt_url": null,
+                    "refunded": false,
+                    "refunds": {
+                      "object": "list",
+                      "data": [
+
+                      ],
+                      "has_more": false,
+                      "total_count": 0,
+                      "url": "/v1/charges/ch_0IIviA9e1RjUNIyYPEZVjwZZ/refunds"
+                    },
+                    "review": null,
+                    "shipping": null,
+                    "source": null,
+                    "source_transfer": null,
+                    "statement_descriptor": null,
+                    "statement_descriptor_suffix": "Gumroad",
+                    "status": "failed",
+                    "transfer_data": null,
+                    "transfer_group": "2"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/charges?payment_intent=pi_0IIviA9e1RjUNIyYxdvbqBF8"
+              },
+              "client_secret": "pi_0IIviA9e1RjUNIyYxdvbqBF8_secret_vgoFSmc9802jERjuExXsAMHJR",
+              "confirmation_method": "manual",
+              "created": 1612875178,
+              "currency": "usd",
+              "customer": "cus_IulEobGC5MjIrw",
+              "description": "You bought http://127.0.0.1:31337/l/H",
+              "invoice": null,
+              "last_payment_error": {
+                "charge": "ch_0IIviA9e1RjUNIyYPEZVjwZZ",
+                "code": "processing_error",
+                "decline_code": "generic_decline",
+                "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+                "message": "Your card was declined.",
+                "payment_method": {
+                  "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                  "object": "payment_method",
+                  "billing_details": {
+                    "address": {
+                      "city": null,
+                      "country": null,
+                      "line1": null,
+                      "line2": null,
+                      "postal_code": null,
+                      "state": null
+                    },
+                    "email": null,
+                    "name": null,
+                    "phone": null
+                  },
+                  "card": {
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "fingerprint": "waikMtIz0irgsfaY",
+                    "funding": "credit",
+                    "generated_from": null,
+                    "last4": "0341",
+                    "networks": {
+                      "available": [
+                        "visa"
+                      ],
+                      "preferred": null
+                    },
+                    "three_d_secure_usage": {
+                      "supported": true
+                    },
+                    "wallet": null
+                  },
+                  "created": 1612875169,
+                  "customer": "cus_IulEobGC5MjIrw",
+                  "livemode": false,
+                  "metadata": {
+                  },
+                  "type": "card"
+                },
+                "type": "card_error"
+              },
+              "livemode": false,
+              "metadata": {
+                "purchase": "P5ppE6H8XIjy2JSCgUhbAw=="
+              },
+              "next_action": null,
+              "on_behalf_of": null,
+              "payment_method": null,
+              "payment_method_options": {
+                "card": {
+                  "installments": null,
+                  "network": null,
+                  "request_three_d_secure": "automatic"
+                }
+              },
+              "payment_method_types": [
+                "card"
+              ],
+              "receipt_email": null,
+              "review": null,
+              "setup_future_usage": null,
+              "shipping": null,
+              "source": null,
+              "statement_descriptor": null,
+              "statement_descriptor_suffix": "Gumroad",
+              "status": "requires_payment_method",
+              "transfer_data": null,
+              "transfer_group": "2"
+            },
+            "payment_method": {
+              "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+              "object": "payment_method",
+              "billing_details": {
+                "address": {
+                  "city": null,
+                  "country": null,
+                  "line1": null,
+                  "line2": null,
+                  "postal_code": null,
+                  "state": null
+                },
+                "email": null,
+                "name": null,
+                "phone": null
+              },
+              "card": {
+                "brand": "visa",
+                "checks": {
+                  "address_line1_check": null,
+                  "address_postal_code_check": null,
+                  "cvc_check": "pass"
+                },
+                "country": "US",
+                "exp_month": 12,
+                "exp_year": 2021,
+                "fingerprint": "waikMtIz0irgsfaY",
+                "funding": "credit",
+                "generated_from": null,
+                "last4": "0341",
+                "networks": {
+                  "available": [
+                    "visa"
+                  ],
+                  "preferred": null
+                },
+                "three_d_secure_usage": {
+                  "supported": true
+                },
+                "wallet": null
+              },
+              "created": 1612875169,
+              "customer": "cus_IulEobGC5MjIrw",
+              "livemode": false,
+              "metadata": {
+              },
+              "type": "card"
+            },
+            "type": "card_error"
+          }
+        }
+  recorded_at: Tue, 09 Feb 2021 12:52:59 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_intents
+    body:
+      encoding: UTF-8
+      string: amount=600&currency=usd&description=You+bought+http%3A%2F%2F127.0.0.1%3A31337%2Fl%2Fy&metadata[purchase]=bfi_30HLgGWL8H2wo_Gzlg%3D%3D&transfer_group=3&confirmation_method=manual&confirm=true&off_session=true&customer=cus_IulEobGC5MjIrw&payment_method=pm_0IIvi19e1RjUNIyYRBs4YUDY&statement_descriptor_suffix=Gumroad
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NPV6XnwRI18wcs","request_duration_ms":4}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 402
+      message: Payment Required
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 13:10:51 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '8100'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_8j8acsF4y3Wfsp
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '2'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "charge": "ch_0IIvzS9e1RjUNIyYl85ussAs",
+            "code": "processing_error",
+            "decline_code": "generic_decline",
+            "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+            "message": "Your card was declined.",
+            "payment_intent": {
+              "id": "pi_0IIvzS9e1RjUNIyYqUOb4eSY",
+              "object": "payment_intent",
+              "amount": 600,
+              "amount_capturable": 0,
+              "amount_received": 0,
+              "application": null,
+              "application_fee_amount": null,
+              "canceled_at": null,
+              "cancellation_reason": null,
+              "capture_method": "automatic",
+              "charges": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "ch_0IIvzS9e1RjUNIyYl85ussAs",
+                    "object": "charge",
+                    "amount": 600,
+                    "amount_captured": 0,
+                    "amount_refunded": 0,
+                    "amount_updates": [
+
+                    ],
+                    "application": null,
+                    "application_fee": null,
+                    "application_fee_amount": null,
+                    "balance_transaction": null,
+                    "billing_details": {
+                      "address": {
+                        "city": null,
+                        "country": null,
+                        "line1": null,
+                        "line2": null,
+                        "postal_code": null,
+                        "state": null
+                      },
+                      "email": null,
+                      "name": null,
+                      "phone": null
+                    },
+                    "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                    "captured": false,
+                    "created": 1612876250,
+                    "currency": "usd",
+                    "customer": "cus_IulEobGC5MjIrw",
+                    "description": "You bought http://127.0.0.1:31337/l/y",
+                    "destination": null,
+                    "dispute": null,
+                    "disputed": false,
+                    "failure_code": "processing_error",
+                    "failure_message": "Your card was declined.",
+                    "fraud_details": {
+                    },
+                    "invoice": null,
+                    "livemode": false,
+                    "metadata": {
+                      "purchase": "bfi_30HLgGWL8H2wo_Gzlg=="
+                    },
+                    "on_behalf_of": null,
+                    "order": null,
+                    "outcome": {
+                      "network_status": "declined_by_network",
+                      "reason": "generic_decline",
+                      "risk_level": "normal",
+                      "risk_score": 16,
+                      "seller_message": "The bank did not return any further details with this decline.",
+                      "type": "issuer_declined"
+                    },
+                    "paid": false,
+                    "payment_intent": "pi_0IIvzS9e1RjUNIyYqUOb4eSY",
+                    "payment_method": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                    "payment_method_details": {
+                      "card": {
+                        "brand": "visa",
+                        "checks": {
+                          "address_line1_check": null,
+                          "address_postal_code_check": null,
+                          "cvc_check": null
+                        },
+                        "country": "US",
+                        "exp_month": 12,
+                        "exp_year": 2021,
+                        "fingerprint": "waikMtIz0irgsfaY",
+                        "funding": "credit",
+                        "installments": null,
+                        "last4": "0341",
+                        "network": "visa",
+                        "three_d_secure": null,
+                        "wallet": null
+                      },
+                      "type": "card"
+                    },
+                    "receipt_email": null,
+                    "receipt_number": null,
+                    "receipt_url": null,
+                    "refunded": false,
+                    "refunds": {
+                      "object": "list",
+                      "data": [
+
+                      ],
+                      "has_more": false,
+                      "total_count": 0,
+                      "url": "/v1/charges/ch_0IIvzS9e1RjUNIyYl85ussAs/refunds"
+                    },
+                    "review": null,
+                    "shipping": null,
+                    "source": null,
+                    "source_transfer": null,
+                    "statement_descriptor": null,
+                    "statement_descriptor_suffix": "Gumroad",
+                    "status": "failed",
+                    "transfer_data": null,
+                    "transfer_group": "3"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/charges?payment_intent=pi_0IIvzS9e1RjUNIyYqUOb4eSY"
+              },
+              "client_secret": "pi_0IIvzS9e1RjUNIyYqUOb4eSY_secret_98BjAZaIfagAnRF4KIQJnWU0S",
+              "confirmation_method": "manual",
+              "created": 1612876250,
+              "currency": "usd",
+              "customer": "cus_IulEobGC5MjIrw",
+              "description": "You bought http://127.0.0.1:31337/l/y",
+              "invoice": null,
+              "last_payment_error": {
+                "charge": "ch_0IIvzS9e1RjUNIyYl85ussAs",
+                "code": "processing_error",
+                "decline_code": "generic_decline",
+                "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+                "message": "Your card was declined.",
+                "payment_method": {
+                  "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                  "object": "payment_method",
+                  "billing_details": {
+                    "address": {
+                      "city": null,
+                      "country": null,
+                      "line1": null,
+                      "line2": null,
+                      "postal_code": null,
+                      "state": null
+                    },
+                    "email": null,
+                    "name": null,
+                    "phone": null
+                  },
+                  "card": {
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "fingerprint": "waikMtIz0irgsfaY",
+                    "funding": "credit",
+                    "generated_from": null,
+                    "last4": "0341",
+                    "networks": {
+                      "available": [
+                        "visa"
+                      ],
+                      "preferred": null
+                    },
+                    "three_d_secure_usage": {
+                      "supported": true
+                    },
+                    "wallet": null
+                  },
+                  "created": 1612875169,
+                  "customer": "cus_IulEobGC5MjIrw",
+                  "livemode": false,
+                  "metadata": {
+                  },
+                  "type": "card"
+                },
+                "type": "card_error"
+              },
+              "livemode": false,
+              "metadata": {
+                "purchase": "bfi_30HLgGWL8H2wo_Gzlg=="
+              },
+              "next_action": null,
+              "on_behalf_of": null,
+              "payment_method": null,
+              "payment_method_options": {
+                "card": {
+                  "installments": null,
+                  "network": null,
+                  "request_three_d_secure": "automatic"
+                }
+              },
+              "payment_method_types": [
+                "card"
+              ],
+              "receipt_email": null,
+              "review": null,
+              "setup_future_usage": null,
+              "shipping": null,
+              "source": null,
+              "statement_descriptor": null,
+              "statement_descriptor_suffix": "Gumroad",
+              "status": "requires_payment_method",
+              "transfer_data": null,
+              "transfer_group": "3"
+            },
+            "payment_method": {
+              "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+              "object": "payment_method",
+              "billing_details": {
+                "address": {
+                  "city": null,
+                  "country": null,
+                  "line1": null,
+                  "line2": null,
+                  "postal_code": null,
+                  "state": null
+                },
+                "email": null,
+                "name": null,
+                "phone": null
+              },
+              "card": {
+                "brand": "visa",
+                "checks": {
+                  "address_line1_check": null,
+                  "address_postal_code_check": null,
+                  "cvc_check": "pass"
+                },
+                "country": "US",
+                "exp_month": 12,
+                "exp_year": 2021,
+                "fingerprint": "waikMtIz0irgsfaY",
+                "funding": "credit",
+                "generated_from": null,
+                "last4": "0341",
+                "networks": {
+                  "available": [
+                    "visa"
+                  ],
+                  "preferred": null
+                },
+                "three_d_secure_usage": {
+                  "supported": true
+                },
+                "wallet": null
+              },
+              "created": 1612875169,
+              "customer": "cus_IulEobGC5MjIrw",
+              "livemode": false,
+              "metadata": {
+              },
+              "type": "card"
+            },
+            "type": "card_error"
+          }
+        }
+  recorded_at: Tue, 09 Feb 2021 13:10:51 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_intents
+    body:
+      encoding: UTF-8
+      string: amount=600&currency=usd&description=You+bought+http%3A%2F%2F127.0.0.1%3A31337%2Fl%2FF&metadata[purchase]=mN7CdHiwHaR9FlxKvF-n-g%3D%3D&transfer_group=4&confirmation_method=manual&confirm=true&off_session=true&customer=cus_IulEobGC5MjIrw&payment_method=pm_0IIvi19e1RjUNIyYRBs4YUDY&statement_descriptor_suffix=Gumroad
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NPV6XnwRI18wcs","request_duration_ms":2}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 402
+      message: Payment Required
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 13:11:22 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '8100'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_RLXTYnWSmBWNJ4
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '2'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "charge": "ch_0IIvzx9e1RjUNIyYoJBabGcN",
+            "code": "processing_error",
+            "decline_code": "generic_decline",
+            "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+            "message": "Your card was declined.",
+            "payment_intent": {
+              "id": "pi_0IIvzx9e1RjUNIyYT8aeDa3f",
+              "object": "payment_intent",
+              "amount": 600,
+              "amount_capturable": 0,
+              "amount_received": 0,
+              "application": null,
+              "application_fee_amount": null,
+              "canceled_at": null,
+              "cancellation_reason": null,
+              "capture_method": "automatic",
+              "charges": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "ch_0IIvzx9e1RjUNIyYoJBabGcN",
+                    "object": "charge",
+                    "amount": 600,
+                    "amount_captured": 0,
+                    "amount_refunded": 0,
+                    "amount_updates": [
+
+                    ],
+                    "application": null,
+                    "application_fee": null,
+                    "application_fee_amount": null,
+                    "balance_transaction": null,
+                    "billing_details": {
+                      "address": {
+                        "city": null,
+                        "country": null,
+                        "line1": null,
+                        "line2": null,
+                        "postal_code": null,
+                        "state": null
+                      },
+                      "email": null,
+                      "name": null,
+                      "phone": null
+                    },
+                    "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                    "captured": false,
+                    "created": 1612876281,
+                    "currency": "usd",
+                    "customer": "cus_IulEobGC5MjIrw",
+                    "description": "You bought http://127.0.0.1:31337/l/F",
+                    "destination": null,
+                    "dispute": null,
+                    "disputed": false,
+                    "failure_code": "processing_error",
+                    "failure_message": "Your card was declined.",
+                    "fraud_details": {
+                    },
+                    "invoice": null,
+                    "livemode": false,
+                    "metadata": {
+                      "purchase": "mN7CdHiwHaR9FlxKvF-n-g=="
+                    },
+                    "on_behalf_of": null,
+                    "order": null,
+                    "outcome": {
+                      "network_status": "declined_by_network",
+                      "reason": "generic_decline",
+                      "risk_level": "normal",
+                      "risk_score": 13,
+                      "seller_message": "The bank did not return any further details with this decline.",
+                      "type": "issuer_declined"
+                    },
+                    "paid": false,
+                    "payment_intent": "pi_0IIvzx9e1RjUNIyYT8aeDa3f",
+                    "payment_method": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                    "payment_method_details": {
+                      "card": {
+                        "brand": "visa",
+                        "checks": {
+                          "address_line1_check": null,
+                          "address_postal_code_check": null,
+                          "cvc_check": null
+                        },
+                        "country": "US",
+                        "exp_month": 12,
+                        "exp_year": 2021,
+                        "fingerprint": "waikMtIz0irgsfaY",
+                        "funding": "credit",
+                        "installments": null,
+                        "last4": "0341",
+                        "network": "visa",
+                        "three_d_secure": null,
+                        "wallet": null
+                      },
+                      "type": "card"
+                    },
+                    "receipt_email": null,
+                    "receipt_number": null,
+                    "receipt_url": null,
+                    "refunded": false,
+                    "refunds": {
+                      "object": "list",
+                      "data": [
+
+                      ],
+                      "has_more": false,
+                      "total_count": 0,
+                      "url": "/v1/charges/ch_0IIvzx9e1RjUNIyYoJBabGcN/refunds"
+                    },
+                    "review": null,
+                    "shipping": null,
+                    "source": null,
+                    "source_transfer": null,
+                    "statement_descriptor": null,
+                    "statement_descriptor_suffix": "Gumroad",
+                    "status": "failed",
+                    "transfer_data": null,
+                    "transfer_group": "4"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/charges?payment_intent=pi_0IIvzx9e1RjUNIyYT8aeDa3f"
+              },
+              "client_secret": "pi_0IIvzx9e1RjUNIyYT8aeDa3f_secret_H5pkNHLBbu2aR3LwXst3LdcQr",
+              "confirmation_method": "manual",
+              "created": 1612876281,
+              "currency": "usd",
+              "customer": "cus_IulEobGC5MjIrw",
+              "description": "You bought http://127.0.0.1:31337/l/F",
+              "invoice": null,
+              "last_payment_error": {
+                "charge": "ch_0IIvzx9e1RjUNIyYoJBabGcN",
+                "code": "processing_error",
+                "decline_code": "generic_decline",
+                "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+                "message": "Your card was declined.",
+                "payment_method": {
+                  "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                  "object": "payment_method",
+                  "billing_details": {
+                    "address": {
+                      "city": null,
+                      "country": null,
+                      "line1": null,
+                      "line2": null,
+                      "postal_code": null,
+                      "state": null
+                    },
+                    "email": null,
+                    "name": null,
+                    "phone": null
+                  },
+                  "card": {
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "fingerprint": "waikMtIz0irgsfaY",
+                    "funding": "credit",
+                    "generated_from": null,
+                    "last4": "0341",
+                    "networks": {
+                      "available": [
+                        "visa"
+                      ],
+                      "preferred": null
+                    },
+                    "three_d_secure_usage": {
+                      "supported": true
+                    },
+                    "wallet": null
+                  },
+                  "created": 1612875169,
+                  "customer": "cus_IulEobGC5MjIrw",
+                  "livemode": false,
+                  "metadata": {
+                  },
+                  "type": "card"
+                },
+                "type": "card_error"
+              },
+              "livemode": false,
+              "metadata": {
+                "purchase": "mN7CdHiwHaR9FlxKvF-n-g=="
+              },
+              "next_action": null,
+              "on_behalf_of": null,
+              "payment_method": null,
+              "payment_method_options": {
+                "card": {
+                  "installments": null,
+                  "network": null,
+                  "request_three_d_secure": "automatic"
+                }
+              },
+              "payment_method_types": [
+                "card"
+              ],
+              "receipt_email": null,
+              "review": null,
+              "setup_future_usage": null,
+              "shipping": null,
+              "source": null,
+              "statement_descriptor": null,
+              "statement_descriptor_suffix": "Gumroad",
+              "status": "requires_payment_method",
+              "transfer_data": null,
+              "transfer_group": "4"
+            },
+            "payment_method": {
+              "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+              "object": "payment_method",
+              "billing_details": {
+                "address": {
+                  "city": null,
+                  "country": null,
+                  "line1": null,
+                  "line2": null,
+                  "postal_code": null,
+                  "state": null
+                },
+                "email": null,
+                "name": null,
+                "phone": null
+              },
+              "card": {
+                "brand": "visa",
+                "checks": {
+                  "address_line1_check": null,
+                  "address_postal_code_check": null,
+                  "cvc_check": "pass"
+                },
+                "country": "US",
+                "exp_month": 12,
+                "exp_year": 2021,
+                "fingerprint": "waikMtIz0irgsfaY",
+                "funding": "credit",
+                "generated_from": null,
+                "last4": "0341",
+                "networks": {
+                  "available": [
+                    "visa"
+                  ],
+                  "preferred": null
+                },
+                "three_d_secure_usage": {
+                  "supported": true
+                },
+                "wallet": null
+              },
+              "created": 1612875169,
+              "customer": "cus_IulEobGC5MjIrw",
+              "livemode": false,
+              "metadata": {
+              },
+              "type": "card"
+            },
+            "type": "card_error"
+          }
+        }
+  recorded_at: Tue, 09 Feb 2021 13:11:22 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/payment_intents
+    body:
+      encoding: UTF-8
+      string: amount=600&currency=usd&description=You+bought+http%3A%2F%2F127.0.0.1%3A31337%2Fl%2Fk&metadata[purchase]=RwtKZN3ru9U9In38aZSD2g%3D%3D&transfer_group=5&confirmation_method=manual&confirm=true&off_session=true&customer=cus_IulEobGC5MjIrw&payment_method=pm_0IIvi19e1RjUNIyYRBs4YUDY&statement_descriptor_suffix=Gumroad
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/5.29.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_NPV6XnwRI18wcs","request_duration_ms":3}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"5.29.0","lang":"ruby","lang_version":"2.7.2 p137 (2020-10-01)","platform":"x86_64-darwin18","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Irinas-MacBook.local 18.0.0 Darwin Kernel Version 18.0.0: Wed Aug 22 20:13:40
+        PDT 2018; root:xnu-4903.201.2~1/RELEASE_X86_64 x86_64","hostname":"Irinas-MacBook.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 402
+      message: Payment Required
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 09 Feb 2021 13:11:42 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '8099'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, POST, HEAD, OPTIONS, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Request-Id:
+      - req_1rV4z9Vh9jI5zD
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-C-Cost:
+      - '2'
+      Strict-Transport-Security:
+      - max-age=31556926; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "charge": "ch_0IIw0H9e1RjUNIyY65d0llPp",
+            "code": "processing_error",
+            "decline_code": "generic_decline",
+            "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+            "message": "Your card was declined.",
+            "payment_intent": {
+              "id": "pi_0IIw0H9e1RjUNIyYjUpoR2C1",
+              "object": "payment_intent",
+              "amount": 600,
+              "amount_capturable": 0,
+              "amount_received": 0,
+              "application": null,
+              "application_fee_amount": null,
+              "canceled_at": null,
+              "cancellation_reason": null,
+              "capture_method": "automatic",
+              "charges": {
+                "object": "list",
+                "data": [
+                  {
+                    "id": "ch_0IIw0H9e1RjUNIyY65d0llPp",
+                    "object": "charge",
+                    "amount": 600,
+                    "amount_captured": 0,
+                    "amount_refunded": 0,
+                    "amount_updates": [
+
+                    ],
+                    "application": null,
+                    "application_fee": null,
+                    "application_fee_amount": null,
+                    "balance_transaction": null,
+                    "billing_details": {
+                      "address": {
+                        "city": null,
+                        "country": null,
+                        "line1": null,
+                        "line2": null,
+                        "postal_code": null,
+                        "state": null
+                      },
+                      "email": null,
+                      "name": null,
+                      "phone": null
+                    },
+                    "calculated_statement_descriptor": "GUM.CO/CC* GUMROAD",
+                    "captured": false,
+                    "created": 1612876301,
+                    "currency": "usd",
+                    "customer": "cus_IulEobGC5MjIrw",
+                    "description": "You bought http://127.0.0.1:31337/l/k",
+                    "destination": null,
+                    "dispute": null,
+                    "disputed": false,
+                    "failure_code": "processing_error",
+                    "failure_message": "Your card was declined.",
+                    "fraud_details": {
+                    },
+                    "invoice": null,
+                    "livemode": false,
+                    "metadata": {
+                      "purchase": "RwtKZN3ru9U9In38aZSD2g=="
+                    },
+                    "on_behalf_of": null,
+                    "order": null,
+                    "outcome": {
+                      "network_status": "declined_by_network",
+                      "reason": "generic_decline",
+                      "risk_level": "normal",
+                      "risk_score": 5,
+                      "seller_message": "The bank did not return any further details with this decline.",
+                      "type": "issuer_declined"
+                    },
+                    "paid": false,
+                    "payment_intent": "pi_0IIw0H9e1RjUNIyYjUpoR2C1",
+                    "payment_method": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                    "payment_method_details": {
+                      "card": {
+                        "brand": "visa",
+                        "checks": {
+                          "address_line1_check": null,
+                          "address_postal_code_check": null,
+                          "cvc_check": null
+                        },
+                        "country": "US",
+                        "exp_month": 12,
+                        "exp_year": 2021,
+                        "fingerprint": "waikMtIz0irgsfaY",
+                        "funding": "credit",
+                        "installments": null,
+                        "last4": "0341",
+                        "network": "visa",
+                        "three_d_secure": null,
+                        "wallet": null
+                      },
+                      "type": "card"
+                    },
+                    "receipt_email": null,
+                    "receipt_number": null,
+                    "receipt_url": null,
+                    "refunded": false,
+                    "refunds": {
+                      "object": "list",
+                      "data": [
+
+                      ],
+                      "has_more": false,
+                      "total_count": 0,
+                      "url": "/v1/charges/ch_0IIw0H9e1RjUNIyY65d0llPp/refunds"
+                    },
+                    "review": null,
+                    "shipping": null,
+                    "source": null,
+                    "source_transfer": null,
+                    "statement_descriptor": null,
+                    "statement_descriptor_suffix": "Gumroad",
+                    "status": "failed",
+                    "transfer_data": null,
+                    "transfer_group": "5"
+                  }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/charges?payment_intent=pi_0IIw0H9e1RjUNIyYjUpoR2C1"
+              },
+              "client_secret": "pi_0IIw0H9e1RjUNIyYjUpoR2C1_secret_PXkJ2ssoUghiCE7zWTvHVvw2p",
+              "confirmation_method": "manual",
+              "created": 1612876301,
+              "currency": "usd",
+              "customer": "cus_IulEobGC5MjIrw",
+              "description": "You bought http://127.0.0.1:31337/l/k",
+              "invoice": null,
+              "last_payment_error": {
+                "charge": "ch_0IIw0H9e1RjUNIyY65d0llPp",
+                "code": "processing_error",
+                "decline_code": "generic_decline",
+                "doc_url": "https://stripe.com/docs/error-codes/card-declined",
+                "message": "Your card was declined.",
+                "payment_method": {
+                  "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+                  "object": "payment_method",
+                  "billing_details": {
+                    "address": {
+                      "city": null,
+                      "country": null,
+                      "line1": null,
+                      "line2": null,
+                      "postal_code": null,
+                      "state": null
+                    },
+                    "email": null,
+                    "name": null,
+                    "phone": null
+                  },
+                  "card": {
+                    "brand": "visa",
+                    "checks": {
+                      "address_line1_check": null,
+                      "address_postal_code_check": null,
+                      "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2021,
+                    "fingerprint": "waikMtIz0irgsfaY",
+                    "funding": "credit",
+                    "generated_from": null,
+                    "last4": "0341",
+                    "networks": {
+                      "available": [
+                        "visa"
+                      ],
+                      "preferred": null
+                    },
+                    "three_d_secure_usage": {
+                      "supported": true
+                    },
+                    "wallet": null
+                  },
+                  "created": 1612875169,
+                  "customer": "cus_IulEobGC5MjIrw",
+                  "livemode": false,
+                  "metadata": {
+                  },
+                  "type": "card"
+                },
+                "type": "card_error"
+              },
+              "livemode": false,
+              "metadata": {
+                "purchase": "RwtKZN3ru9U9In38aZSD2g=="
+              },
+              "next_action": null,
+              "on_behalf_of": null,
+              "payment_method": null,
+              "payment_method_options": {
+                "card": {
+                  "installments": null,
+                  "network": null,
+                  "request_three_d_secure": "automatic"
+                }
+              },
+              "payment_method_types": [
+                "card"
+              ],
+              "receipt_email": null,
+              "review": null,
+              "setup_future_usage": null,
+              "shipping": null,
+              "source": null,
+              "statement_descriptor": null,
+              "statement_descriptor_suffix": "Gumroad",
+              "status": "requires_payment_method",
+              "transfer_data": null,
+              "transfer_group": "5"
+            },
+            "payment_method": {
+              "id": "pm_0IIvi19e1RjUNIyYRBs4YUDY",
+              "object": "payment_method",
+              "billing_details": {
+                "address": {
+                  "city": null,
+                  "country": null,
+                  "line1": null,
+                  "line2": null,
+                  "postal_code": null,
+                  "state": null
+                },
+                "email": null,
+                "name": null,
+                "phone": null
+              },
+              "card": {
+                "brand": "visa",
+                "checks": {
+                  "address_line1_check": null,
+                  "address_postal_code_check": null,
+                  "cvc_check": "pass"
+                },
+                "country": "US",
+                "exp_month": 12,
+                "exp_year": 2021,
+                "fingerprint": "waikMtIz0irgsfaY",
+                "funding": "credit",
+                "generated_from": null,
+                "last4": "0341",
+                "networks": {
+                  "available": [
+                    "visa"
+                  ],
+                  "preferred": null
+                },
+                "three_d_secure_usage": {
+                  "supported": true
+                },
+                "wallet": null
+              },
+              "created": 1612875169,
+              "customer": "cus_IulEobGC5MjIrw",
+              "livemode": false,
+              "metadata": {
+              },
+              "type": "card"
+            },
+            "type": "card_error"
+          }
+        }
+  recorded_at: Tue, 09 Feb 2021 13:11:42 GMT
+recorded_with: VCR 6.0.0

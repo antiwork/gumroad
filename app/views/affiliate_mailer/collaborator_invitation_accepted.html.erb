@@ -1,0 +1,23 @@
+<div>
+  <img src="<%= @invitee.avatar_url %>" class="user-avatar header-badge" style="width: 3em;">
+  <h2 style="text-align: center;"><%= @subject %></h2>
+</div>
+
+<div class="squished">
+  <p>
+    They can now co-manage the products with you, earn their share from every
+    sale, and be displayed as a co-creator (if selected).
+  </p>
+
+  <p>
+    Need to make changes? You can update or remove a collaborator at any time,
+    and we'll keep them informed.
+  </p>
+</div>
+
+<div>
+  <a href="<%= collaborators_url %>" class="button accent">
+    Manage collaborators
+  </a>
+</div>
+

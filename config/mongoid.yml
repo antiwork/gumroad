@@ -1,0 +1,47 @@
+development:
+  clients:
+    default:
+      hosts:
+        - <%= ENV.fetch("MONGO_DATABASE_URL") %>
+      database: <%= ENV.fetch("MONGO_DATABASE_NAME") %>
+  options:
+    use_utc: true
+    raise_not_found_error: false
+
+test:
+  clients:
+    default:
+      hosts:
+        - <%= ENV.fetch("MONGO_DATABASE_URL") %>
+      database: <%= ENV.fetch("MONGO_DATABASE_NAME") %>
+  options:
+    use_utc: true
+    raise_not_found_error: false
+
+staging:
+  clients:
+    default:
+      hosts:
+        - <%= ENV.fetch("MONGO_DATABASE_URL") %>
+      database: <%= ENV.fetch("MONGO_DATABASE_NAME") %>
+      options:
+        user: <%= ENV.fetch("MONGO_DATABASE_USERNAME") %>
+        password: <%= ENV.fetch("MONGO_DATABASE_PASSWORD") %>
+        replica_set: <%= ENV["MONGO_REPLICA_SET"] %>
+  options:
+    use_utc: true
+    raise_not_found_error: false
+
+production:
+  clients:
+    default:
+      hosts:
+        - <%= ENV.fetch("MONGO_DATABASE_URL") %>
+      database: <%= ENV.fetch("MONGO_DATABASE_NAME") %>
+      options:
+        user: <%= ENV.fetch("MONGO_DATABASE_USERNAME") %>
+        password: <%= ENV.fetch("MONGO_DATABASE_PASSWORD") %>
+        replica_set: <%= ENV["MONGO_REPLICA_SET"] %>
+  options:
+    use_utc: true
+    raise_not_found_error: false

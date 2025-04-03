@@ -1,0 +1,72 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.easypost.com/v2/addresses
+    body:
+      encoding: UTF-8
+      string: '{"address":{"street1":"9384 Cardston Ct","city":"Burnaby","state":"BC","zip":"V3N
+        4H4","country":"Canada"},"verify":["delivery"]}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - EasyPost/v2 RubyClient/4.3.0 Ruby/3.0.3-p157
+      Content-Type:
+      - application/json
+      Authorization:
+      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Xss-Protection:
+      - 1; mode=block
+      X-Content-Type-Options:
+      - nosniff
+      X-Download-Options:
+      - noopen
+      X-Permitted-Cross-Domain-Policies:
+      - none
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      X-Ep-Request-Uuid:
+      - 60001ed8629e0113e2c497d9000606e7
+      Cache-Control:
+      - no-cache, no-store
+      Pragma:
+      - no-cache
+      Expires:
+      - '0'
+      Location:
+      - "/api/v2/addresses/adr_9af3632be59c11ec8c85ac1f6bc7b362"
+      Content-Type:
+      - application/json; charset=utf-8
+      Etag:
+      - W/"0a3176045a7e9fdc8ebca95be5178b92"
+      X-Runtime:
+      - '0.178245'
+      Transfer-Encoding:
+      - chunked
+      X-Node:
+      - bigweb1nuq
+      X-Version-Label:
+      - easypost-202206030043-0fd9609f83-master
+      X-Backend:
+      - easypost
+      X-Proxied:
+      - extlb1nuq 0910011e7e
+      - intlb2nuq 570dfcbc0a
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+    body:
+      encoding: ASCII-8BIT
+      string: '{"id":"adr_9af3632be59c11ec8c85ac1f6bc7b362","object":"Address","created_at":"2022-06-06T13:28:51+00:00","updated_at":"2022-06-06T13:28:51+00:00","name":null,"company":null,"street1":"9384
+        CARDSTON CT","street2":"","city":"BURNABY","state":"BC","zip":"V3N 4H4","country":"CA","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":null,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":49.24794,"longitude":-122.90166,"time_zone":"America/Vancouver"}}}}'
+  recorded_at: Mon, 06 Jun 2022 13:28:52 GMT
+recorded_with: VCR 6.1.0

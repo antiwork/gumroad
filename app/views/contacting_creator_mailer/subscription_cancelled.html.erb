@@ -1,0 +1,13 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("An installment plan has been canceled.") %>
+<% else %>
+  <%= header_section("A subscription has been canceled.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>You have canceled your customer's (<%= link_to @subscription.email, customers_url(query: @subscription.email) %>) installment plan for <%= @subscription.link.name %>. They will no longer be charged and will lose access to the product immediately.</p>
+  <% else %>
+    <p>You have canceled your customer's (<%= link_to @subscription.email, customers_url(query: @subscription.email) %>) subscription to <%= @subscription.link.name %>. They will no longer be charged. Please note that they will continue to receive any posts you send to subscribers until the end of their billing cycle (<%= @subscription.formatted_end_time_of_subscription %>).</p>
+  <% end %>
+</div>
+

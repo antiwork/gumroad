@@ -1,0 +1,24 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("An installment plan has been paused.") %>
+<% else %>
+  <%= header_section("A subscription has been canceled.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>
+      An installment plan for <%= @subscription.link.name %> has been paused due to multiple failed payments. Your customer (<%= @subscription.email %>) will no longer be charged.
+    </p>
+  <% else %>
+    <p>
+      A subscription to <%= @subscription.link.name %> has been canceled due to multiple failed payments. Your customer (<%= @subscription.email %>) will no longer be charged.
+    </p>
+  <% end %>
+  <% if @last_failed_purchase %>
+    <p><%= "For reference, #{@last_failed_purchase.card_type == CardType::PAYPAL ? "PayPal" : "your card issuer"} gave us this error message for the last failure:" %></p>
+    <p>
+      <em>
+        <%= @last_failed_purchase.formatted_error_code %>
+      </em>
+    </p>
+  <% end %>
+</div>

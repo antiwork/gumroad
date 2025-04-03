@@ -1,0 +1,12 @@
+<% if @subscription.is_installment_plan %>
+  <%= header_section("Your installment plan has been canceled.") %>
+<% else %>
+  <%= header_section("Your subscription has been canceled.") %>
+<% end %>
+<div>
+  <% if @subscription.is_installment_plan %>
+    <p>Your installment plan for <%= @subscription.link.name %> has been canceled due to the creator deleting the product. You will no longer be charged.</p>
+  <% else %>
+    <p>Your subscription to <%= @subscription.link.name %> has been canceled due to the creator deleting the product. You will no longer be charged.</p>
+  <% end %>
+</div>

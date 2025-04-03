@@ -1,0 +1,58 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders
+    body:
+      encoding: UTF-8
+      string: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"gbp","value":"12.09","breakdown":{"shipping":{"currency_code":"GBP","value":"0.98"},"tax_total":{"currency_code":"GBP","value":"1.31"},"item_total":{"currency_code":"GBP","value":"9.8"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"GBP","value":"4.9"},"quantity":2,"sku":"r"}],"soft_descriptor":"Gumroad","payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.59"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]}}],"application_context":{"brand_name":"Gumroad","shipping_preference":"NO_SHIPPING"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Language:
+      - en_US
+      Authorization:
+      - Bearer A21AAJtzFAwjssg2Zi2VNSbxST_Pb_Yrb0dfu0Enh199BW5J_Gwvvv2SbExT2Nh6s1Y7EIsxXPKvfuN4IEzyyoRW9m-Lin1rA
+      Content-Type:
+      - application/json
+      Paypal-Partner-Attribution-Id:
+      - Gumroad_SP_PCPP
+      Paypal-Request-Id:
+      - '1620046659632276'
+      Prefer:
+      - return=representation
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.7.2
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.7.2p137-x86_64-darwin20;OpenSSL
+        1.1.1i  8 Dec 2020)
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '1169'
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 03 May 2021 12:57:44 GMT
+      Paypal-Debug-Id:
+      - db604d92eb438
+    body:
+      encoding: UTF-8
+      string: '{"id":"74D27963G6302254H","intent":"CAPTURE","status":"CREATED","purchase_units":[{"reference_id":"default","amount":{"currency_code":"GBP","value":"12.09","breakdown":{"item_total":{"currency_code":"GBP","value":"9.80"},"shipping":{"currency_code":"GBP","value":"0.98"},"tax_total":{"currency_code":"GBP","value":"1.31"}}},"payee":{"merchant_id":"CJS32DZ7NDN5L"},"payment_instruction":{"platform_fees":[{"amount":{"currency_code":"GBP","value":"0.59"},"payee":{"email_address":"<PAYPAL_PARTNER_MERCHANT_EMAIL>"}}]},"soft_descriptor":"Gumroad","items":[{"name":"The
+        Works of Edgar Gumstein","unit_amount":{"currency_code":"GBP","value":"4.90"},"quantity":"2","sku":"r"}]}],"create_time":"2021-05-03T12:57:42Z","links":[{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/74D27963G6302254H","rel":"self","method":"GET"},{"href":"https://www.sandbox.paypal.com/checkoutnow?token=74D27963G6302254H","rel":"approve","method":"GET"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/74D27963G6302254H","rel":"update","method":"PATCH"},{"href":"https://api.sandbox.paypal.com/v2/checkout/orders/74D27963G6302254H/capture","rel":"capture","method":"POST"}]}'
+  recorded_at: Mon, 03 May 2021 12:57:44 GMT
+recorded_with: VCR 6.0.0

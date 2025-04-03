@@ -1,0 +1,17 @@
+<% recommended_products_info = receipt_presenter.recommended_products_info %>
+<% if recommended_products_info.present? %>
+  <div>
+    <h3><%= recommended_products_info.title %></h3>
+    <table class="reset two-product-card-table">
+      <tbody>
+        <tr>
+          <% recommended_products_info.products.each do |product| %>
+            <td>
+              <%= render("customer_mailer/receipt/product_card", product: product) %>
+            </td>
+          <% end %>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+<% end %>

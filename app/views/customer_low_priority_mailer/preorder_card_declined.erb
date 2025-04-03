@@ -1,0 +1,5 @@
+<%= header_section("Could not charge your credit card for #{@product.name}") %>
+<div>
+  <p><%= @product.name %> was released today and we attemped to charge your credit card but it was declined. You can purchase the product directly <%= link_to "here", @product.long_url %>.</p>
+</div>
+

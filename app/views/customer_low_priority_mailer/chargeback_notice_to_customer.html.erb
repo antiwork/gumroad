@@ -1,0 +1,16 @@
+<%= header_section("Regarding your recent dispute.") %>
+<div>
+  <p>
+    You recently filed a dispute for your purchase of <%= @disputable.multiple_purchases? ? "the following items" : link_to(@disputable.purchase_for_dispute_evidence.link.name, @disputable.purchase_for_dispute_evidence.link.long_url) %> for <%= @disputable.formatted_disputed_amount %>. A receipt was sent to <%= @disputable.customer_email %> — please check your Spam folder if you are unable to locate it.
+    <% if @disputable.multiple_purchases? %>
+      <% @disputable.disputed_purchases.each do |purchase| %>
+        <p>
+          <%= link_to purchase.link.name, purchase.link.long_url %>
+        </p>
+      <% end %>
+    <% end %>
+  </p>
+  <p>
+    If you filed this dispute because you didn't recognize "Gumroad" on your account statement, you can contact your bank or PayPal to cancel the dispute.
+  </p>
+</div>

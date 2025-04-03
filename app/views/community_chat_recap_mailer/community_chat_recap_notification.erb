@@ -1,0 +1,27 @@
+<div style="margin: 1em;">
+  <% if @recap_frequency == "daily" %>
+    <%= header_section("Here's a quick daily summary of what's been happening in #{@seller.name} community.") %>
+  <% else %>
+    <%= header_section("Here's a weekly summary of what happened in #{@seller.name} community.") %>
+  <% end %>
+
+  <% @recaps.each do |recap| %>
+    <table class="table-stack">
+      <tbody>
+        <tr>
+          <td>
+            <h3 style="margin-bottom: 1em;"># <%= link_to recap.community.name, community_url(@seller.external_id, recap.community.external_id), target: "_blank", style: "text-decoration: none;" %></h3>
+            <%= sanitize(Rinku.auto_link(recap.summary, :all, 'target="_blank" rel="nofollow"'), tags: %w[ul ol li strong b em a], attributes: %w[href target rel]) %>
+          </td>
+        </tr>
+        <tr>
+          <td><%= pluralize(recap.summarized_message_count, "message") %> summarised</td>
+        </tr>
+      </tbody>
+    </table>
+  <% end %>
+
+  <%= link_to "Join the conversation", community_url(@seller.external_id, @recaps.first.community.external_id), class: "button primary", target: "_blank" %>
+
+  <p>You are receiving this email because you're part of the <%= @seller.name %> community. To stop receiving <%= @recap_frequency %> recap emails, please <%= link_to "update your notification settings", community_url(@seller.external_id, @recaps.first.community.external_id, notifications: "true"), target: "_blank" %>.</p>
+</div>

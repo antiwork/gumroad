@@ -1,0 +1,14 @@
+<%= header_section("Your pre-order was successfully released!") %>
+<div>
+  <p>
+    You made <%= formatted_dollar_amount(@revenue_cents) %> from <%= pluralize(@preorders_charged_successfully_count, "pre-order") %>.
+    <%= @preorders_charged_successfully_count > 1 ? "Buyers have" : "The buyer has" %> been charged, and <%= @product.is_physical ? "they're ready to have #{@product.name} shipped to them." : "they have received the product." %>
+    You can view your new <%= "customers".pluralize(@preorders_charged_successfully_count) %> by <a href="<%= customers_url %>">clicking here</a>.
+  </p>
+  <% if @failed_preorder_emails.count > 0 %>
+    <p>
+      Unfortunately, <%= @failed_preorder_emails.count > 1 ? "#{pluralize(@failed_preorder_emails.count, "customers'")} credit cards were" : "a customer's credit card was" %> declined. We have sent <%= @failed_preorder_emails.count > 1 ? "emails" : "an email" %> asking them to update their information. Once corrected, the <%= "sale".pluralize(@failed_preorder_emails.count) %> will appear in your account and <%= @product.is_physical ? "#{@product.name} can be shipped to them." : "they will receive the product instantly." %>
+      They are: <%= @failed_preorder_emails.join(", ") %>
+    </p>
+  <% end %>
+</div>

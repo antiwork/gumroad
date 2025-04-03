@@ -1,0 +1,13 @@
+<% if chargeable.is_recurring_subscription_charge %>
+  <%= render("customer_mailer/receipt/sections/header", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/payment", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/items", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/shipping", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/recommended_products", receipt_presenter: receipt_presenter) %>
+<% else %>
+  <%= render("customer_mailer/receipt/sections/header", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/items", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/shipping", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/payment", receipt_presenter: receipt_presenter) %>
+  <%= render("customer_mailer/receipt/sections/recommended_products", receipt_presenter: receipt_presenter) %>
+<% end %>

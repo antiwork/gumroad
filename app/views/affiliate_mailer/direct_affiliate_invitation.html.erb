@@ -1,0 +1,33 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    You are now able to share <%= @product_name %> with your audience. For every sale you make, you will get <%= @affiliate_percentage_text %> of the total sale as your commission.
+  </p>
+  <h3>How do you share products with your audience?</h3>
+  <p>
+    You can direct them to this link:
+    <%= link_to @affiliate_referral_url, @affiliate_referral_url, clicktracking: "off" %>
+    <% if @direct_affiliate.products.count > 1 || @direct_affiliate.destination_url.present? %>
+      — after they click, we'll redirect them to
+      <%= link_to @final_destination_url, @final_destination_url, clicktracking: "off" %>.
+      <br>
+      <br>
+      <% if @products.count == 1 %>
+        Or, if you'd like to share the product, you can use this link:
+      <% else %>
+        Or, if you'd like to share individual products, you can use these links:
+      <% end %>
+      <ul>
+      <% @products.each do |product| %>
+        <li>
+          <strong><%= product[:name] %></strong>
+          <span> - Your commission: <%= product[:fee_percent] %>%</span>
+          <br>
+          <%= link_to product[:referral_url], product[:referral_url], clicktracking: "off" %>
+        </li>
+      <% end %>
+      </ul>
+    <% end %>
+  </p>
+  <%= render("notify_affiliate_footer") %>
+</div>

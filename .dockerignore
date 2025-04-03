@@ -1,0 +1,12 @@
+.bundle
+.DS_Store
+.git
+vendor/cache/
+vendor/bundle/
+tmp/
+log/
+ci_scripts/
+.githooks/
+docker/tmp/
+.env
+.env.*.local

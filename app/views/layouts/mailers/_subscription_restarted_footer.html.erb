@@ -1,0 +1,29 @@
+<p>
+  <% if @purchase %>
+    <% if @purchase.is_test_purchase? %>
+      <div>
+        <div class="warning" role="alert">
+          <div>
+            <table class="reset">
+              <tr>
+                <td>
+                  <%= image_tag("email/solid-shield-exclamation.png", alt: "Warning") %>
+                </td>
+                <td style="text-align: left;">
+                  This was a test purchase — you have not been charged (you are seeing this message because you are logged in as the creator).
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    <% end %>
+    <% if !@purchase.is_gift_receiver_purchase && @purchase.link.is_recurring_billing %>
+      You'll be charged once <%= recurrence_long_indicator(@purchase.subscription.recurrence) %>
+      <a href="<%= manage_subscription_url(@purchase.subscription.external_id) %>">Manage membership</a>
+    <% else %>
+      You'll get posts from this creator in the future.
+      <a href="<%= unsubscribe_purchase_url(@purchase.external_id) %>">Unsubscribe</a>
+    <% end %>
+  <% end %>
+</p>

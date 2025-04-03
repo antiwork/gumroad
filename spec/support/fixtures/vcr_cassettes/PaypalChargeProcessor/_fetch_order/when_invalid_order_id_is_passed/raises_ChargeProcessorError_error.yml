@@ -1,0 +1,51 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.sandbox.paypal.com/v2/checkout/orders/invalid_order_id
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer A21AAEoHdxMrfOn2fqQGB61AqZmJby4k19FR7F58IsuDEeAVR7UeXVfTiazgv1SeBaZdLp2ErjifHB6zmIUPA59bO2wwTVQDw
+      Accept-Encoding:
+      - gzip
+      Sdk-Name:
+      - Checkout SDK
+      Sdk-Version:
+      - 1.0.3
+      Sdk-Tech-Stack:
+      - Ruby2.5.8
+      Api-Integration-Type:
+      - PAYPALSDK
+      User-Agent:
+      - PayPalSDK/rest-sdk-ruby 1.0.3 (paypal-checkout-sdk 1.0.3; ruby 2.5.8p224-x86_64-linux;OpenSSL
+        1.0.2r  26 Feb 2019)
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 404
+      message: Not Found
+    headers:
+      Cache-Control:
+      - max-age=0, no-cache, no-store, must-revalidate
+      Content-Length:
+      - '385'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 17 Jun 2020 18:26:36 GMT
+      Paypal-Debug-Id:
+      - 3bb2cb1caa3a5
+    body:
+      encoding: UTF-8
+      string: '{"name":"RESOURCE_NOT_FOUND","details":[{"issue":"INVALID_RESOURCE_ID","description":"Specified
+        resource ID does not exist. Please check the resource ID and try again."}],"message":"The
+        specified resource does not exist.","debug_id":"3bb2cb1caa3a5","links":[{"href":"https://developer.paypal.com/docs/api/orders/v2/#error-INVALID_RESOURCE_ID","rel":"information_link","method":"GET"}]}'
+    http_version: 
+  recorded_at: Wed, 17 Jun 2020 18:26:36 GMT
+recorded_with: VCR 3.0.3

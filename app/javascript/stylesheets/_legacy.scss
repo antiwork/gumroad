@@ -1,0 +1,286 @@
+// This file contains legacy stuff as we're migrating away from the old design.
+// It should be removed once everything uses the new stuff.
+@use "sass:math";
+
+.soft-hidden {
+  display: none;
+}
+
+.hidden:not(.override),
+.legacy-only {
+  display: none !important;
+}
+
+// Work around a strange Chromium issue where dragging doesn't work due to `all: unset`
+button[draggable="true"] {
+  -webkit-user-drag: element;
+}
+
+// jQuery Chosen
+.chosen-container {
+  min-width: 100%;
+  position: relative;
+
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .chosen-choices {
+    @extend .input;
+    flex-wrap: wrap;
+    row-gap: spacer(1);
+    padding: spacer(1) math.div($form-element-padding-x, 2);
+
+    .search-field input {
+      padding: 0 math.div($form-element-padding-x, 2);
+      margin: 0;
+    }
+
+    .search-choice {
+      @extend .pill, .primary;
+      margin: 0 !important;
+      display: inline-flex;
+
+      span {
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+
+      .search-choice-close {
+        @extend %icon, .icon-x;
+        cursor: pointer;
+        margin-left: spacer(2);
+      }
+    }
+  }
+
+  .chosen-drop {
+    display: none;
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    border-radius: 0 0 $form-element-border-radius $form-element-border-radius;
+    z-index: z-index(tooltip);
+    @include bg-color(filled);
+
+    .chosen-results {
+      width: 100%;
+      max-height: 5 * $form-element-height;
+      overflow: auto;
+      scroll-behavior: auto;
+
+      &:not(:empty) {
+        border: $border;
+        box-shadow: box-shadow(1);
+      }
+
+      .active-result {
+        padding: $form-element-padding-y $form-element-padding-x;
+        border-top: $border;
+        cursor: pointer;
+
+        &.highlighted {
+          @include bg-color(primary);
+        }
+      }
+
+      .result-selected {
+        display: none;
+      }
+    }
+  }
+
+  &.chosen-with-drop {
+    .chosen-drop {
+      display: flex;
+    }
+
+    .chosen-choices {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+  }
+
+  &.chosen-disabled {
+    cursor: not-allowed;
+    opacity: $disabled-opacity;
+  }
+}
+
+// jQuery Chosen is disabled on mobile see here: https://stackoverflow.com/questions/22016578/chosen-plugin-doesnt-seem-to-work-on-mobile-browsers/22016765#22016765
+// quick UX improvement for native select[multiple] while we're migrating to the new design
+select[multiple].chosen-fallback {
+  background-image: none;
+  max-height: $form-element-height * 4;
+  option {
+    white-space: normal;
+  }
+}
+
+// Fix dropdown arrow positioning for post publish date input
+.post-letter--create > .popover[open] {
+  &::before {
+    left: 25%;
+  }
+}
+
+.profile > header h1 p {
+  margin: 0;
+}
+
+[role="tab"][aria-selected="true"][draggable="true"]::after {
+  transform: translate(-50%);
+  visibility: hidden;
+}
+
+.jwplayer {
+  position: absolute !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@include breakpoint-up(lg) {
+  .profile main > * {
+    padding-left: $body-padding-desktop-center;
+    padding-right: $body-padding-desktop-center;
+  }
+}
+
+[role="tree"] [role="treeitem"].sortable-ghost {
+  background-color: gray(1);
+  border: dashed $border-width $border-color;
+  display: grid !important;
+  opacity: $disabled-opacity;
+}
+
+// Temporary styles until we have `:has`
+@each $name, $color in $states {
+  label.#{$name} {
+    color: $color;
+    a {
+      color: $color;
+    }
+
+    input[type="checkbox"]:not([role="switch"]) {
+      border-color: $color;
+    }
+  }
+}
+
+body#overlay-page {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+
+  &:not(.gumroad-minimized) {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .product-display {
+    overflow: auto;
+  }
+}
+
+.rich-text {
+  .embed {
+    > .preview {
+      padding: calc(56.25% + spacer(4)) 0 0 0;
+      > :first-child {
+        &.placeholder {
+          position: absolute;
+          width: calc(100% - 2 * spacer(4));
+        }
+      }
+    }
+  }
+}
+
+// So that the `jwplayer` time tooltip isn't squished
+.jwplayer .jw-time-tip {
+  min-width: max-content;
+}
+
+body > header,
+header.sticky-top,
+main > header {
+  [role="tablist"] a[role="tab"] {
+    text-decoration: none;
+  }
+}
+
+// Temporary fix for the files view under the "Content" tab on the product edit
+// page when the content editor is disabled. It is needed to enforce the
+// "form > section" styles on the files view which is now wrapped in "form > main".
+// See https://github.com/gumroad/web/pull/26111#discussion_r1232782397 for more
+// details.
+form > main section {
+  $y-gap: spacer(6);
+  display: grid;
+  padding: spacer(7) 0;
+  border-top: $border;
+  gap: $y-gap;
+  & > header {
+    display: grid;
+    gap: spacer(3);
+    align-content: start;
+  }
+
+  &:not(form + form section):first-of-type {
+    padding-top: 0;
+    border-top: none;
+  }
+}
+
+// Adds fallback styles to the .product-content class when @container
+// queries are not supported, ensuring consistent scrollbar behavior
+// across all browsers.
+.product-content {
+  .has-sidebar {
+    @include breakpoint-up(lg) {
+      & > :first-child {
+        max-height: min(100%, 100vh);
+      }
+    }
+  }
+}
+
+// Firefox-specific fix to avoid showing node content as selected text
+.rich-text .selected *::selection {
+  background: none;
+}
+
+article.product-card {
+  .thumbnails > * {
+    // Firefox doesn't stretch the image to full width without this (even though justify-items should default to stretch)
+    width: 100%;
+  }
+
+  &.horizontal {
+    @include breakpoint-up(lg) {
+      // grid-template-columns doesn't work with aspect-ratio in Firefox and Safari; the images collapse to 0px wide
+      // instead of stretching to their preferred size. Using flexbox for now achieves the intended effect in all browsers.
+      display: flex;
+
+      > figure {
+        height: 100%;
+
+        img {
+          // (Sometimes) prevents the image stretching to the full width of the container in Safari
+          width: unset;
+          min-width: 100%;
+        }
+      }
+
+      .thumbnails {
+        // aspect-ratio in flexbox/grid in Safari is very broken for wishlist cards; even the fix above doesn't work. Setting
+        // an explicit width ratio is the only way I've found to avoid the image stretching either immediately or on hover.
+        flex: 1;
+      }
+
+      section {
+        flex: 2;
+      }
+    }
+  }
+}

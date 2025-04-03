@@ -1,0 +1,51 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.sandbox.taxjar.com/v2/transactions/orders
+    body:
+      encoding: UTF-8
+      string: '{"transaction_id":"G_-mnBf9b1j9A7a4ub4nFQ==","transaction_date":"2023-08-28T20:06:20Z","provider":"api","from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"PA","to_zip":"19106","amount":15.0,"shipping":5.0,"sales_tax":1.0,"line_items":[{"quantity":1,"unit_price":10.0,"sales_tax":1.0,"product_tax_code":"31000"}]}'
+    headers:
+      User-Agent:
+      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
+        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
+        arm64; ruby 3.3.2-p78; OpenSSL 3.3.0 9 Apr 2024) taxjar-ruby/3.0.4'
+      Authorization:
+      - Bearer <TAXJAR_API_KEY>
+      X-Api-Version:
+      - '2022-01-24'
+      Connection:
+      - close
+      Content-Type:
+      - application/json; charset=utf-8
+      Host:
+      - api.sandbox.taxjar.com
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Date:
+      - Sat, 15 Jun 2024 02:35:42 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '599'
+      Connection:
+      - close
+      Vary:
+      - Origin
+      Etag:
+      - W/"4ca66b027588440d0337dffe999cbb56"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      X-Request-Id:
+      - d0af097a-3c05-482f-8af3-7f8cdcff3d4d
+      X-Runtime:
+      - '0.027604'
+    body:
+      encoding: UTF-8
+      string: '{"order":{"transaction_id":"G_-mnBf9b1j9A7a4ub4nFQ==","user_id":126159,"provider":"api","transaction_date":"2023-08-28T20:06:20.000Z","transaction_reference_id":null,"customer_id":null,"exemption_type":null,"from_country":"US","from_zip":"94104","from_state":"CA","from_city":null,"from_street":null,"to_country":"US","to_zip":"19106","to_state":"PA","to_city":null,"to_street":null,"amount":"15.0","shipping":"5.0","sales_tax":"1.0","line_items":[{"id":0,"quantity":1,"product_identifier":null,"product_tax_code":"31000","description":null,"unit_price":"10.0","discount":"0.0","sales_tax":"1.0"}]}}'
+  recorded_at: Sat, 15 Jun 2024 02:35:42 GMT
+recorded_with: VCR 6.2.0

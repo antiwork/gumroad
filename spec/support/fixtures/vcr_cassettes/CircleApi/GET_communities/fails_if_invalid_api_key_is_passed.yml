@@ -1,0 +1,63 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://app.circle.so/api/v1/communities
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Authorization:
+      - Token invalid_api_key
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Wed, 18 Aug 2021 09:15:43 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Accept-Encoding
+      X-Frame-Options:
+      - ALLOWALL
+      Etag:
+      - W/"6bedfc7e5218477213d78515401e193b"
+      Cache-Control:
+      - max-age=0, private, must-revalidate
+      Set-Cookie:
+      - ahoy_visit=c2fa9597-b585-4bc8-8485-b226524b4beb; domain=.circle.so; path=/;
+        expires=Wed, 18 Aug 2021 09:20:42 GMT; Secure; SameSite=None
+      - ahoy_visitor=ebfba576-6ca1-40ba-8c33-8bb912d1f6f7; domain=.circle.so; path=/;
+        expires=Fri, 18 Aug 2023 09:15:42 GMT; Secure; SameSite=None
+      - cookies_enabled=true; path=/; Secure; SameSite=None
+      X-Request-Id:
+      - '0813e9afcc3dd009c113c1061d5f2885'
+      X-Runtime:
+      - '0.008877'
+      Strict-Transport-Security:
+      - max-age=15724800; includeSubDomains
+      Cf-Cache-Status:
+      - DYNAMIC
+      Expect-Ct:
+      - max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 680a0a0449e2318d-BOM
+    body:
+      encoding: ASCII-8BIT
+      string: '{"status":"unauthorized","message":"Your account could not be authenticated."}'
+  recorded_at: Wed, 18 Aug 2021 09:15:43 GMT
+recorded_with: VCR 6.0.0

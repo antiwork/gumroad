@@ -1,0 +1,139 @@
+{
+  "provider": "stripe_connect",
+  "uid": "acct_1Nh9n7IEYOlyTu0E",
+  "info": {
+    "name": null,
+    "email": null,
+    "nickname": null,
+    "scope": "read_write",
+    "livemode": false,
+    "stripe_publishable_key": "pk_test_51Nh9n7IEYOlyTu0EWPTYIMQANfwzb6RWcq6Bzn5Am1yyOKYnaNJVRP0P0tKsVNKJlCcSnHehxYSfwKQkvFGJ3RNQ00adYo3l6i"
+  },
+  "credentials": {
+    "token": "sk_test_51Nh9n7IEYOlyTu0ENnNJLxkFOD4ISaOEl84zP0TsRjp2fQ5ctZaPjXwYawTvqMHfjUetBIbxyMVqOch0XqkxH72500A1wddFc7",
+    "expires": false,
+    "refresh_token": "rt_OU83FDksxpMUeK8820YWsY5RePHHu1LGz3xuUdHdrb4x8mek"
+  },
+  "extra": {
+    "raw_info": {
+      "livemode": false,
+      "token_type": "bearer",
+      "stripe_publishable_key": "pk_test_51Nh9n7IEYOlyTu0EWPTYIMQANfwzb6RWcq6Bzn5Am1yyOKYnaNJVRP0P0tKsVNKJlCcSnHehxYSfwKQkvFGJ3RNQ00adYo3l6i",
+      "stripe_user_id": "acct_1Nh9n7IEYOlyTu0E",
+      "scope": "read_write"
+    },
+    "extra_info": {
+      "id": "acct_1Nh9n7IEYOlyTu0E",
+      "object": "account",
+      "business_profile": {
+        "mcc": "5192",
+        "name": "Gumroad",
+        "support_address": null,
+        "support_email": null,
+        "support_phone": null,
+        "support_url": null,
+        "url": null
+      },
+      "capabilities": {},
+      "charges_enabled": false,
+      "controller": {
+        "is_controller": true,
+        "type": "application"
+      },
+      "country": "FI",
+      "created": 1692530855,
+      "default_currency": "eur",
+      "details_submitted": false,
+      "email": null,
+      "external_accounts": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "total_count": 0,
+        "url": "/v1/accounts/acct_1Nh9n7IEYOlyTu0E/external_accounts"
+      },
+      "future_requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [],
+        "disabled_reason": null,
+        "errors": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "metadata": {},
+      "payouts_enabled": false,
+      "requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [
+          "business_profile.product_description",
+          "business_profile.support_phone",
+          "business_profile.url",
+          "external_account",
+          "tos_acceptance.date",
+          "tos_acceptance.ip"
+        ],
+        "disabled_reason": "requirements.past_due",
+        "errors": [],
+        "eventually_due": [
+          "business_profile.product_description",
+          "business_profile.support_phone",
+          "business_profile.url",
+          "external_account",
+          "tos_acceptance.date",
+          "tos_acceptance.ip"
+        ],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "settings": {
+        "bacs_debit_payments": {},
+        "branding": {
+          "icon": null,
+          "logo": null,
+          "primary_color": null,
+          "secondary_color": null
+        },
+        "card_issuing": {
+          "tos_acceptance": {
+            "date": null,
+            "ip": null
+          }
+        },
+        "card_payments": {
+          "decline_on": {
+            "avs_failure": false,
+            "cvc_failure": false
+          },
+          "statement_descriptor_prefix": null,
+          "statement_descriptor_prefix_kana": null,
+          "statement_descriptor_prefix_kanji": null
+        },
+        "dashboard": {
+          "display_name": null,
+          "timezone": "Etc/UTC"
+        },
+        "payments": {
+          "statement_descriptor": null,
+          "statement_descriptor_kana": null,
+          "statement_descriptor_kanji": null
+        },
+        "payouts": {
+          "debit_negative_balances": true,
+          "schedule": {
+            "delay_days": 7,
+            "interval": "daily"
+          },
+          "statement_descriptor": null
+        },
+        "sepa_debit_payments": {}
+      },
+      "tos_acceptance": {
+        "date": null
+      },
+      "type": "standard"
+    }
+  }
+}
