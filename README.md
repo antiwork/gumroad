@@ -56,6 +56,8 @@ We use `docker` and `docker compose` to setup the services for development envir
 sudo wget -qO- https://get.docker.com/ | sh
 sudo usermod -aG docker $(whoami)
 ```
+> [!WARNING]
+> Adding yourself to the `docker` group is not without risks: anyone who has access to your user can become root without requiring any password. See the [official Docker documentation](https://docs.docker.com/engine/security/#docker-daemon-attack-surface) for more details.
 
 #### MySQL & Percona Toolkit
 
