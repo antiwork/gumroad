@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://public-files.gumroad.com/logo/gumroad.svg" height="100" alt="Gumroad logo">
+  <picture>
+    <source srcset="https://public-files.gumroad.com/logo/gumroad-dark.svg" media="(prefers-color-scheme: dark)">
+    <source srcset="https://public-files.gumroad.com/logo/gumroad.svg" media="(prefers-color-scheme: light)">
+    <img src="https://public-files.gumroad.com/logo/gumroad.svg" height="100" alt="Gumroad logo">
+  </picture>
 </p>
 
 <p align="center">
@@ -9,7 +13,7 @@
 <p align="center">
   <a href="./LICENSE.md">License</a> •
   <a href="./CODE_OF_CONDUCT.md">Code of Conduct</a> •
-  <a href="./CONTRIBUTING.md">Contributing</a> •
+  <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
 ## Table of Contents
