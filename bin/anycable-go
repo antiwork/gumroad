@@ -19,4 +19,4 @@ if [[ "$version" != "latest" ]]; then
   fi
 fi
 
-./bin/dist/anycable-go $@
+exec ./bin/dist/anycable-go $@
