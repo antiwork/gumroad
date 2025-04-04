@@ -1,0 +1,35 @@
+name: vet OSS Components
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  # Required for actions/checkout@v4
+  contents: read
+
+  # Required for writing pull request comment
+  issues: write
+  pull-requests: write
+
+jobs:
+  vet:
+    name: vet
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Run vet
+        id: vet
+        uses: safedep/vet-action@v1
+        with:
+          policy: .github/vet/policy.yml
+        env:
+          # Required for writing pull request comment
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

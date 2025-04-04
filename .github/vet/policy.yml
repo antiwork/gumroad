@@ -1,0 +1,23 @@
+name: General Purpose OSS Best Practices
+description: |
+  This filter suite contains rules for implementing minimum
+  security guardrails against risky OSS components.
+tags:
+  - general
+  - gumroad
+filters:
+  - name: critical-or-high-vulns
+    check_type: CheckTypeVulnerability
+    summary: Critical or high risk vulnerabilities were found
+    value: |
+      vulns.critical.exists(p, true) || vulns.high.exists(p, true)
+  - name: low-popularity
+    check_type: CheckTypePopularity
+    summary: Component popularity is low by Github stars count
+    value: |
+      projects.exists(p, (p.type == "GITHUB") && (p.stars < 10))
+  - name: osv-malware
+    check_type: CheckTypeMalware
+    summary: Malicious (malware) component detected
+    value: |
+      vulns.all.exists(v, v.id.startsWith("MAL-"))
