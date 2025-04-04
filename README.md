@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://public-files.gumroad.com/logo/gumroad.svg" height="100" alt="Gumroad logo">
+  <picture>
+    <source srcset="https://public-files.gumroad.com/logo/gumroad-dark.svg" media="(prefers-color-scheme: dark)">
+    <source srcset="https://public-files.gumroad.com/logo/gumroad.svg" media="(prefers-color-scheme: light)">
+    <img src="https://public-files.gumroad.com/logo/gumroad.svg" height="100" alt="Gumroad logo">
+  </picture>
 </p>
 
 <p align="center">
@@ -9,8 +13,7 @@
 <p align="center">
   <a href="./LICENSE.md">License</a> •
   <a href="./CODE_OF_CONDUCT.md">Code of Conduct</a> •
-  <a href="./CONTRIBUTING.md">Contributing</a> •
-  <a href="#community">Community</a>
+  <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
 ## Table of Contents
@@ -26,7 +29,6 @@
   - [Push Notifications](#push-notifications)
   - [Common Development Tasks](#common-development-tasks)
   - [Linting](#linting)
-- [Community](#community)
 
 ## Getting Started
 
@@ -259,9 +261,3 @@ bin/rake task_name
 We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
 
 If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
-
-## Community
-
-- [Twitter](https://twitter.com/gumroad)
-- [Feature Requests](https://gumroad.canny.io/feature-requests)
-- [Bug Reports](https://github.com/gumroad/gumroad/issues)
