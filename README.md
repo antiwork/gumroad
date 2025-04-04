@@ -259,9 +259,3 @@ bin/rake task_name
 We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
 
 If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
-
-## Community
-
-- [Twitter](https://twitter.com/gumroad)
-- [Feature Requests](https://gumroad.canny.io/feature-requests)
-- [Bug Reports](https://github.com/gumroad/gumroad/issues)
