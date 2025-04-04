@@ -13,7 +13,7 @@
 <p align="center">
   <a href="./LICENSE.md">License</a> •
   <a href="./CODE_OF_CONDUCT.md">Code of Conduct</a> •
-  <a href="./CONTRIBUTING.md">Contributing</a> •
+  <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
 ## Table of Contents
