@@ -409,11 +409,7 @@ const CartItemComponent = ({
   );
 
   const saveChanges = () => {
-    if (
-      isPWYW &&
-      (selection.price.value === null || selection.price.value < priceCents) &&
-      !(item.product.native_type === "coffee" && selection.optionId)
-    )
+    if (isPWYW && (selection.price.value === null || selection.price.value < priceCents))
       return setSelection({ ...selection, price: { ...selection.price, error: true } });
     if (selection.optionId !== item.option_id && findCartItem(cart, item.product.permalink, selection.optionId))
       return setError("You already have this item in your cart.");

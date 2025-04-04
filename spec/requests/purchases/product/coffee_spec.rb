@@ -53,6 +53,14 @@ describe "Coffee", type: :feature, js: true do
       expect(purchase.link).to eq(coffee)
       expect(purchase.variant_attributes).to eq([])
     end
+
+    it "rejects zero price" do
+      visit coffee.long_url
+      fill_in "Price", with: "0"
+
+      click_on "Donate"
+      expect(find_field("Price")["aria-invalid"]).to eq("true")
+    end
   end
 
   context "multiple suggested amounts" do

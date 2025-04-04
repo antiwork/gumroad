@@ -5078,6 +5078,22 @@ describe Link, :vcr do
         expect(coffee).to be_valid
       end
     end
+
+    context "with zero price" do
+      let(:coffee) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE) }
+      let(:variant_category) { create(:variant_category, link: coffee) }
+
+      it "validates minimum price for variants" do
+        variant = build(:variant, variant_category: variant_category, price_difference_cents: 0)
+        expect(variant).not_to be_valid
+      end
+
+      it "prevents updating to zero price" do
+        variant = create(:variant, variant_category: variant_category, price_difference_cents: 100)
+        variant.price_difference_cents = 0
+        expect(variant).not_to be_valid
+      end
+    end
   end
 
   describe "calls validations" do

@@ -173,7 +173,13 @@ class BaseVariant < ApplicationRecord
     end
 
     def price_difference_cents_validation
-      errors.add(:base, "Please enter a price that is equal to or greater than the price of the product.") if price_difference_cents && price_difference_cents < 0
+      if price_difference_cents && price_difference_cents < 0
+        errors.add(:base, "Please enter a price that is equal to or greater than the price of the product.")
+      end
+
+      if link.native_type == Link::NATIVE_TYPE_COFFEE && price_difference_cents && price_difference_cents <= 0
+        errors.add(:base, "Price difference cents must be greater than 0")
+      end
     end
 
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold

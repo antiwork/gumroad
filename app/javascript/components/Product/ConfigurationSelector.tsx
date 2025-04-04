@@ -612,7 +612,11 @@ export const ConfigurationSelector = React.forwardRef<
               style={{ justifyContent: "center" }}
               aria-checked={selection.optionId === option.id}
               onClick={() =>
-                setSelection?.({ ...selection, optionId: option.id, price: { value: null, error: false } })
+                setSelection?.({
+                  ...selection,
+                  optionId: option.id,
+                  price: { value: option.price_difference_cents ?? 100, error: false },
+                })
               }
               key={option.id}
             >
