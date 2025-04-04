@@ -25,7 +25,6 @@
   - [Push Notifications](#push-notifications)
   - [Common Development Tasks](#common-development-tasks)
   - [Linting](#linting)
-- [Community](#community)
 
 ## Getting Started
 
