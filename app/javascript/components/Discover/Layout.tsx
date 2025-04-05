@@ -29,8 +29,7 @@ export const Layout: React.FC<{
   const rootTaxonomy = getRootTaxonomy(taxonomyPath);
 
   setQuery ??= (query) => (window.location.href = Routes.discover_url({ host: discoverDomain, query }));
-  onTaxonomyChange ??= (newTaxonomyPath) =>
-    (window.location.href = Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath }));
+  onTaxonomyChange ??= (newTaxonomyPath) => (window.location.href = newTaxonomyPath ? newTaxonomyPath : "/");
 
   const headerCta = currentSeller && (
     <a href={Routes.library_url()} className="button">
@@ -69,17 +68,15 @@ export const Layout: React.FC<{
           <Search query={query} setQuery={setQuery} />
           {isDesktop ? headerCta : nav}
           {isDesktop ? (
-            <div
-              style={{ display: "flex", justifyContent: "space-between", flexGrow: 1, alignItems: "center", order: 1 }}
-            >
+            <div className="order-1 flex flex-grow items-center justify-between">
               {nav}
               {avatar}
             </div>
           ) : null}
         </div>
         {showTaxonomy && taxonomyPath ? (
-          <div style={{ display: "grid", gridColumn: "1" }}>
-            <div style={{ gridColumn: "1" }}>
+          <div className="col-start-1 grid">
+            <div className="col-start-1">
               <TaxonomyCategoryBreadcrumbs
                 taxonomyPath={taxonomyPath}
                 taxonomies={taxonomiesForNav}
