@@ -9,7 +9,6 @@ gem "rake", "13.2.1"
 
 group :development do
   gem "derailed_benchmarks", "~> 2.1"
-  gem "rack-mini-profiler", "~> 3.0", require: false
   gem "stackprof", "~> 0.2"
 end
 
@@ -146,6 +145,7 @@ gem "pundit", "~> 2.3"
 gem "public_suffix", "~> 5.0"
 gem "rack-attack", "~> 6.6"
 gem "rack-cors", "~> 2.0"
+gem "rack-mini-profiler", "~> 3.0", require: false
 gem "rack-ssl", "~> 1.4"
 gem "rack-timeout", "~> 0.6", require: "rack/timeout/base"
 gem "rack-utf8_sanitizer", "~> 1.8"

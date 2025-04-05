@@ -16,6 +16,7 @@ class ApplicationController < ActionController::Base
   include CurrentSeller
   include HelperWidget
   include UtmLinkTracking
+  include RackMiniProfilerAuthorization
 
   before_action :save_us_from_ddos
   before_action :debug_headers
