@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { getRootTaxonomy, getRootTaxonomyCss, getRootTaxonomyImage, Taxonomy } from "$app/utils/discover";
 
+import { useDomains } from "$app/components/DomainSettings";
 import { MenuItem, NestedMenu } from "$app/components/NestedMenu";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
@@ -16,7 +17,13 @@ export const Nav = ({
   onClickTaxonomy: (taxonomySlugPath?: string) => void;
   footer?: React.ReactNode;
 }) => {
-  const menuItems = React.useMemo(() => generateTaxonomyItemsForMenu(wholeTaxonomy), [wholeTaxonomy]);
+  const { discoverDomain } = useDomains();
+  const discoverUrl = Routes.discover_url({ host: discoverDomain });
+
+  const menuItems = React.useMemo(
+    () => generateTaxonomyItemsForMenu(wholeTaxonomy, discoverUrl),
+    [wholeTaxonomy, discoverUrl],
+  );
   const selectedCategory = menuItems.find((menuItem) => menuItem.href === `/${currentTaxonomyPath ?? ""}`)?.key;
 
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -39,7 +46,7 @@ export const Nav = ({
   );
 };
 
-const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[]) => {
+const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], discoverUrl: string) => {
   const taxonomyMap = new Map(wholeTaxonomy.map((tc) => [tc.key, tc]));
   const generateHref = (taxonomyCategory: Taxonomy): string => {
     const slugs = [];
@@ -48,7 +55,7 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[]) => {
       slugs.unshift(curr.slug);
       curr = curr.parent_key ? taxonomyMap.get(curr.parent_key) : undefined;
     }
-    return `/${slugs.join("/")}`;
+    return `${discoverUrl}${slugs.join("/")}`;
   };
 
   return [
