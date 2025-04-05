@@ -908,6 +908,13 @@ Rails.application.routes.draw do
           resource :last_read_chat_message, only: [:create], controller: "communities/last_read_chat_messages"
           resource :notification_setting, only: [:update], controller: "communities/notification_settings", as: "notification_setting"
         end
+
+        resources :product_review_videos, only: [] do
+          scope module: :product_review_videos do
+            resources :approvals, only: [:create]
+            resources :rejections, only: [:create]
+          end
+        end
       end
     end
 

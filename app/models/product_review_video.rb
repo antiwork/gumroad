@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class ProductReviewVideo < ApplicationRecord
+  include ExternalId
   include Deletable
 
   belongs_to :product_review
