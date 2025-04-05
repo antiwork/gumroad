@@ -16,6 +16,16 @@
   <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
+## About Gumroad
+
+Gumroad is an e-commerce platform that helps creators sell products directly to their audience. This repository contains the source code for the Gumroad web application, which is built using Ruby on Rails, React, and a suite of supporting technologies.
+
+The platform enables:
+- Digital product sales (e-books, courses, software, etc.)
+- Physical product sales
+- Subscription management
+- Creator analytics and audience management
+
 ## Table of Contents
 
 - [Getting Started](#getting-started)
@@ -261,3 +271,21 @@ bin/rake task_name
 We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
 
 If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
+
+## Troubleshooting
+
+### Common Issues
+
+#### Elasticsearch Connection Problems
+If you see `index_not_found_exception` errors or cannot connect to Elasticsearch:
+```bash
+# Check if Elasticsearch is running
+curl localhost:9200
+# Reset indices in Rails console
+bin/rails c
+DevTools.delete_all_indices_and_reindex_all
+```
+'
+#### Docker Services Not Starting
+Ensure ports `80` and `443` are available and Docker has permissions to use them.
+For more detailed troubleshooting, refer to our [Troubleshooting Guide](docs/troubleshooting.md).
