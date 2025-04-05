@@ -5,11 +5,11 @@ require "shared_examples/authentication_required"
 
 describe Api::Internal::ProductReviewVideos::RejectionsController do
   let!(:seller) { create(:user) }
-  let!(:buyer) { create(:user) }
-  let!(:product) { create(:product, user: seller) }
-  let!(:purchase) { create(:purchase, link: product, seller: seller) }
-  let!(:product_review) { create(:product_review, purchase: purchase, link: product) }
-  let!(:product_review_video) { create(:product_review_video, product_review: product_review) }
+  let(:buyer) { create(:user) }
+  let(:product) { create(:product, user: seller) }
+  let(:purchase) { create(:purchase, link: product, seller:) }
+  let(:product_review) { create(:product_review, purchase:, link: product) }
+  let(:product_review_video) { create(:product_review_video, product_review:, approval_status: :pending_review) }
 
   describe "POST create" do
     it_behaves_like "authentication required for action", :post, :create do
