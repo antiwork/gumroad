@@ -82,7 +82,7 @@ describe ProductReviewVideoPolicy do
       ]
     end
 
-    context "when the video belongs to another seller" do
+    context "when the video is for another seller's product review" do
       let(:record) { product_review_video_for_another_seller }
 
       it_behaves_like "an access-denying policy for roles", [
