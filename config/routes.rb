@@ -909,9 +909,11 @@ Rails.application.routes.draw do
           resource :notification_setting, only: [:update], controller: "communities/notification_settings", as: "notification_setting"
         end
 
-        namespace :product_review_videos do
-          resources :approvals, only: [:create]
-          resources :rejections, only: [:create]
+        resources :product_review_videos, only: [] do
+          scope module: :product_review_videos do
+            resources :approvals, only: [:create]
+            resources :rejections, only: [:create]
+          end
         end
       end
     end
