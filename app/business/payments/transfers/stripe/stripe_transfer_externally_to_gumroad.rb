@@ -10,7 +10,7 @@ module StripeTransferExternallyToGumroad
   private_constant :MAX_TRANSFER_AMOUNT
 
   # Public: Returns a hash of currencies to balance amounts in cents
-  # of the balances avaiable at Stripe on our master account.
+  # of the balances available at Stripe on our master account.
   # The balances returned are only the balance available for transfer.
   def self.available_balances
     balance = Stripe::Balance.retrieve
