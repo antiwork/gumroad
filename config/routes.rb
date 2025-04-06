@@ -1110,5 +1110,14 @@ Rails.application.routes.draw do
     end
   end
 
+  # Help Center routes
+  get "/help", to: "help#index", as: :help
+  get "/help/category/:id", to: "help#category", as: :help_category
+  get "/help/article/:id", to: "help#article", as: :help_article
+
+  # Redirect old help center paths to new paths
+  get "/help/category/:id.html", to: redirect("/help/category/%{id}")
+  get "/help/article/:id.html", to: redirect("/help/article/%{id}")
+
   get "/(*path)", to: "application#e404_page" unless Rails.env.development?
 end

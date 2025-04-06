@@ -1,0 +1,37 @@
+<section id="contentArea" class="container-fluid">
+  <div class="row-fluid">
+    <section id="main-content" class="span9">
+      <div class="contentWrapper">
+        <% if @page_content && @page_content[:main_content] %>
+          <%= @page_content[:main_content].html_safe %>
+        <% else %>
+          <div class="error-message">
+            <h2>Category Not Found</h2>
+            <p>Sorry, the requested category could not be found.</p>
+            <p><a href="<%= help_path %>">Return to Help Center</a></p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <aside id="sidebar" class="span3">
+      <div class="related">
+        <h3>Categories</h3>
+        <ul class="related-nav">
+          <% Dir.glob(File.join(Rails.root, "public", "help", "category", "*.html")).each do |category_file| %>
+            <%
+            category_html = File.read(category_file)
+            category_doc = Nokogiri::HTML(category_html)
+            category_title = category_doc.at_css("h1")&.content
+            category_id = File.basename(category_file, ".html")
+            current = category_id == params[:id] ? "active" : ""
+            %>
+            <li class="<%= current %>">
+              <a href="<%= help_category_path(id: category_id) %>"><%= category_title %></a>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</section>

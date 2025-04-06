@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title><%= @page_title %> - Gumroad Help Center</title>
+  <meta name="viewport" content="width=device-width, maximum-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="format-detection" content="telephone=no">
+  <meta name="description" content="Common questions and support documentation" />
+  <meta name="author" content="Gumroad" />
+
+  <%= csrf_meta_tags %>
+  <%= csp_meta_tag %>
+
+  <%= stylesheet_link_tag "application", media: "all" %>
+
+  <!-- Help Center specific CSS -->
+  <link rel="stylesheet" href="/help/css/launch-1721905284936.css">
+  <link rel="stylesheet" href="/help/css/stylesheet.css">
+
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+
+    .navbar .nav li a,
+    .navbar .icon-private-w {
+      color: #c0c0c0;
+    }
+
+    .navbar .brand,
+    .navbar .nav li a:hover,
+    .navbar .nav li a:focus,
+    .navbar .nav .active a,
+    .navbar .nav .active a:hover,
+    .navbar .nav .active a:focus {
+      color: #000000;
+    }
+
+    .navbar a:hover .icon-private-w,
+    .navbar a:focus .icon-private-w,
+    .navbar .active a .icon-private-w,
+    .navbar .active a:hover .icon-private-w,
+    .navbar .active a:focus .icon-private-w {
+      color: #000000;
+    }
+
+    #serp-dd .result a:hover,
+    #serp-dd .result>li.active,
+    #fullArticle strong a,
+    #fullArticle a strong,
+    .collection a,
+    .contentWrapper a,
+    .most-pop-articles .popArticles a,
+    .most-pop-articles .popArticles a:hover span,
+    .category-list .category .article-count,
+    .category-list .category:hover .article-count {
+      color: #000000;
+    }
+
+    #fullArticle,
+    #fullArticle p,
+    #fullArticle ul,
+    #fullArticle ol,
+    #fullArticle li,
+    #fullArticle div,
+    #fullArticle blockquote,
+    #fullArticle dd,
+    #fullArticle table {
+      color: #000000;
+    }
+
+    /* Layout adjustments for the main nav */
+    .main-container {
+      display: flex;
+    }
+
+    .main-nav {
+      width: 250px;
+      flex-shrink: 0;
+    }
+
+    .help-content {
+      flex-grow: 1;
+    }
+
+    @media (max-width: 768px) {
+      .main-container {
+        flex-direction: column;
+      }
+
+      .main-nav {
+        width: 100%;
+      }
+    }
+  </style>
+
+  <!-- Help Center JS -->
+  <%= javascript_include_tag "application" %>
+</head>
+<body>
+  <% if current_user.present? %>
+    <div class="main-container">
+      <div class="main-nav">
+        <!-- This will render the Nav component for logged-in users -->
+        <%= react_component("Nav", { title: "Help Center" }) %>
+      </div>
+      <div class="help-content">
+        <%= yield %>
+      </div>
+    </div>
+  <% else %>
+    <header id="mainNav" class="navbar">
+      <div class="navbar-inner">
+        <div class="container-fluid">
+          <a class="brand" href="https://app.gumroad.com/products">
+            <img src="https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61a0dd739ccf62287e5fa408/Color.png" alt="Gumroad Help Center" width="75" height="75">
+          </a>
+
+          <button type="button" class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="sr-only">Toggle Navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+
+          <div class="nav-collapse collapse">
+            <nav role="navigation">
+              <ul class="nav">
+                <li id="home"><a href="<%= help_path %>">Home <b class="caret"></b></a></li>
+              </ul>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <%= yield %>
+  <% end %>
+
+  <script>
+    // Apply any JS needed for Help Center functionality
+    $(document).ready(function() {
+      // Check auth status
+      $.get('/users/session_info');
+    });
+  </script>
+</body>
+</html>

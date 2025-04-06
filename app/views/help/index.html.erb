@@ -1,0 +1,47 @@
+<%
+# Load and parse the static help index page to extract the content
+index_file = File.join(Rails.root, "public", "help", "index.html")
+index_html = File.read(index_file)
+doc = Nokogiri::HTML(index_html)
+
+# Extract the search container and article-list-container
+search_container = doc.at_css("#searchContainer")
+article_list_container = doc.at_css(".article-list-container")
+%>
+
+<section id="contentArea" class="container-fluid">
+  <div class="row-fluid">
+    <section id="main-content" class="span12">
+      <%= search_container.to_html.html_safe if search_container %>
+
+      <div class="category-list">
+        <h1>Help Center</h1>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style="gap: 1.5rem; width: 100%;">
+          <% Dir.glob(File.join(Rails.root, "public", "help", "category", "*.html")).each do |category_file| %>
+            <%
+            category_html = File.read(category_file)
+            category_doc = Nokogiri::HTML(category_html)
+            category_title = category_doc.at_css("h1")&.content
+            category_id = File.basename(category_file, ".html")
+            %>
+
+            <div class="category-box">
+              <h2><a href="<%= help_category_path(id: category_id) %>"><%= category_title %></a></h2>
+              <%
+              articles = category_doc.css(".articleList li a")
+              articles.take(5).each do |article|
+                article_id = article["href"].to_s.gsub("/help/article/", "").gsub(".html", "")
+              %>
+                <div class="article-item">
+                  <h3><a href="<%= help_article_path(id: article_id) %>"><%= article.at_css("span")&.content %></a></h3>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <%= article_list_container.to_html.html_safe if article_list_container %>
+    </section>
+  </div>
+</section>

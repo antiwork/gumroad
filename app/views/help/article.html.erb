@@ -1,0 +1,69 @@
+<section id="contentArea" class="container-fluid">
+  <div class="row-fluid">
+    <section id="main-content" class="span9">
+      <div class="contentWrapper withRelated">
+        <% if @page_content && @page_content[:main_content] %>
+          <%= @page_content[:main_content].html_safe %>
+        <% else %>
+          <div class="error-message">
+            <h2>Article Not Found</h2>
+            <p>Sorry, the requested article could not be found.</p>
+            <p><a href="<%= help_path %>">Return to Help Center</a></p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <aside id="sidebar" class="span3">
+      <div class="related">
+        <%
+        # Find the category this article belongs to
+        category_id = nil
+        article_title = nil
+
+        Dir.glob(File.join(Rails.root, "public", "help", "category", "*.html")).each do |category_file|
+          category_html = File.read(category_file)
+          category_doc = Nokogiri::HTML(category_html)
+
+          article_links = category_doc.css(".articleList li a")
+          article_links.each do |link|
+            href = link["href"].to_s
+            if href.include?(params[:id])
+              category_id = File.basename(category_file, ".html")
+              article_title = link.at_css("span")&.content
+              break
+            end
+          end
+
+          break if category_id
+        end
+        %>
+
+        <% if category_id %>
+          <%
+          category_html = File.read(File.join(Rails.root, "public", "help", "category", "#{category_id}.html"))
+          category_doc = Nokogiri::HTML(category_html)
+          category_title = category_doc.at_css("h1")&.content
+          %>
+
+          <h3>Category: <a href="<%= help_category_path(id: category_id) %>"><%= category_title %></a></h3>
+
+          <h4>Related Articles</h4>
+          <ul class="related-nav">
+            <%
+            article_links = category_doc.css(".articleList li a")
+            article_links.each do |link|
+              href = link["href"].to_s
+              article_id = href.gsub("/help/article/", "").gsub(".html", "")
+              current = article_id == params[:id] ? "active" : ""
+            %>
+              <li class="<%= current %>">
+                <a href="<%= help_article_path(id: article_id) %>"><%= link.at_css("span")&.content %></a>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+      </div>
+    </aside>
+  </div>
+</section>
