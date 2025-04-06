@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
+ActiveRecord::Schema[7.1].define(version: 2025_04_06_055017) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -140,7 +140,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
   create_table "audience_members", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.string "email", null: false
-    t.text "details", size: :long, collation: "utf8mb4_bin"
+    t.json "details"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "customer", default: false, null: false
@@ -162,7 +162,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.index ["seller_id", "min_created_at", "max_created_at"], name: "idx_audience_on_seller_and_minmax_created_at"
     t.index ["seller_id", "min_paid_cents", "max_paid_cents"], name: "idx_audience_on_seller_and_minmax_paid_cents"
     t.index ["seller_id", "min_purchase_created_at", "max_purchase_created_at"], name: "idx_audience_on_seller_and_minmax_purchase_created_at"
-    t.check_constraint "json_valid(`details`)", name: "details"
   end
 
   create_table "australia_backtax_email_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -348,11 +347,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
 
   create_table "cached_sales_related_products_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "product_id", null: false
-    t.text "counts", size: :long, collation: "utf8mb4_bin"
+    t.json "counts"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["product_id"], name: "index_cached_sales_related_products_infos_on_product_id", unique: true
-    t.check_constraint "json_valid(`counts`)", name: "counts"
   end
 
   create_table "call_availabilities", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -395,27 +393,25 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.string "recurrence"
     t.string "recommended_by"
     t.boolean "rent", default: false, null: false
-    t.text "url_parameters", size: :long, collation: "utf8mb4_bin"
+    t.json "url_parameters"
     t.text "referrer", size: :long, null: false
     t.string "recommender_model_name"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "deleted_at"
     t.datetime "call_start_time"
-    t.text "accepted_offer_details", size: :long, collation: "utf8mb4_bin"
+    t.json "accepted_offer_details"
     t.boolean "pay_in_installments", default: false, null: false
     t.index ["cart_id", "product_id", "deleted_at"], name: "index_cart_products_on_cart_id_and_product_id_and_deleted_at", unique: true
     t.index ["cart_id"], name: "index_cart_products_on_cart_id"
     t.index ["product_id"], name: "index_cart_products_on_product_id"
-    t.check_constraint "json_valid(`accepted_offer_details`)", name: "accepted_offer_details"
-    t.check_constraint "json_valid(`url_parameters`)", name: "url_parameters"
   end
 
   create_table "carts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "user_id"
     t.bigint "order_id"
     t.text "return_url", size: :long
-    t.text "discount_codes", size: :long, collation: "utf8mb4_bin"
+    t.json "discount_codes"
     t.boolean "reject_ppp_discount", default: false, null: false
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
@@ -429,7 +425,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.index ["order_id"], name: "index_carts_on_order_id"
     t.index ["updated_at"], name: "index_carts_on_updated_at"
     t.index ["user_id"], name: "index_carts_on_user_id"
-    t.check_constraint "json_valid(`discount_codes`)", name: "discount_codes"
   end
 
   create_table "charge_purchases", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -581,7 +576,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.index ["user_id"], name: "index_community_notification_settings_on_user_id"
   end
 
-  create_table "computed_sales_analytics_days", id: :integer, charset: "latin1", collation: "latin1_swedish_ci", force: :cascade do |t|
+  create_table "computed_sales_analytics_days", id: :integer, charset: "latin1", force: :cascade do |t|
     t.string "key", limit: 191, null: false
     t.text "data", size: :medium
     t.datetime "created_at", precision: nil, null: false
@@ -627,10 +622,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.string "funding_type", limit: 191
     t.string "paypal_billing_agreement_id", limit: 191
     t.string "processor_payment_method_id"
-    t.text "json_data", size: :long, collation: "utf8mb4_bin"
+    t.json "json_data"
     t.index ["preorder_id"], name: "index_credit_cards_on_preorder_id"
     t.index ["stripe_fingerprint"], name: "index_credit_cards_on_stripe_fingerprint"
-    t.check_constraint "json_valid(`json_data`)", name: "json_data"
   end
 
   create_table "credits", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -822,7 +816,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.index ["purchase_id"], name: "index_email_infos_on_purchase_id"
   end
 
-  create_table "events", id: :integer, charset: "latin1", collation: "latin1_swedish_ci", force: :cascade do |t|
+  create_table "events", id: :integer, charset: "latin1", force: :cascade do |t|
     t.integer "visit_id"
     t.string "ip_address"
     t.string "event_name"
@@ -881,9 +875,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.datetime "confirmed_at", precision: nil
     t.datetime "deleted_at", precision: nil
     t.index ["email", "followed_id"], name: "index_followers_on_email_and_followed_id", unique: true
-    t.index ["followed_id", "email"], name: "index_follows_on_followed_id_and_email"
-    t.index ["followed_id", "follower_user_id"], name: "index_followers_on_followed_id_and_follower_user_id"
-    t.index ["follower_user_id", "followed_id"], name: "index_followers_on_follower_user_id_and_followed_id"
+    t.index ["followed_id", "confirmed_at"], name: "index_followers_on_followed_id_and_confirmed_at"
+    t.index ["followed_id", "email"], name: "index_followers_on_followed_id_and_email"
   end
 
   create_table "friendly_id_slugs", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1506,7 +1499,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.datetime "updated_at", precision: nil, null: false
     t.bigint "link_id"
     t.text "message"
-    t.boolean "has_message", null: false
+    t.virtual "has_message", type: :boolean, null: false, as: "if((`message` is null),false,true)", stored: true
     t.datetime "deleted_at"
     t.index ["link_id", "has_message", "created_at"], name: "idx_on_link_id_has_message_created_at_2fcf6c0c64"
     t.index ["purchase_id"], name: "index_product_reviews_on_purchase_id", unique: true
@@ -1828,7 +1821,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.integer "fee_cents"
     t.bigint "flags", default: 0, null: false
     t.bigint "seller_id"
-    t.integer "retained_fee_cents_value", default: 0
     t.index ["link_id"], name: "index_refunds_on_link_id"
     t.index ["processor_refund_id"], name: "index_refunds_on_processor_refund_id"
     t.index ["purchase_id"], name: "index_refunds_on_purchase_id"
@@ -1851,14 +1843,13 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
   create_table "rich_contents", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "entity_id", null: false
     t.string "entity_type", null: false
-    t.text "description", size: :long, null: false, collation: "utf8mb4_bin"
+    t.json "description", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "deleted_at", precision: nil
     t.string "title"
     t.integer "position", default: 0, null: false
     t.index ["entity_id", "entity_type"], name: "index_rich_contents_on_entity_id_and_entity_type"
-    t.check_constraint "json_valid(`description`)", name: "description"
   end
 
   create_table "sales_export_chunks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1910,12 +1901,11 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "flags", default: 0, null: false
-    t.text "json_data", size: :long, collation: "utf8mb4_bin"
+    t.json "json_data"
     t.string "type", default: "SellerProfileProductsSection", null: false
     t.bigint "product_id"
     t.index ["product_id"], name: "index_seller_profile_sections_on_product_id"
     t.index ["seller_id"], name: "index_seller_profile_sections_on_seller_id"
-    t.check_constraint "json_valid(`json_data`)", name: "json_data"
   end
 
   create_table "seller_profiles", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1925,9 +1915,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.string "font"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.text "json_data", size: :long, collation: "utf8mb4_bin"
+    t.json "json_data"
     t.index ["seller_id"], name: "index_seller_profiles_on_seller_id"
-    t.check_constraint "json_valid(`json_data`)", name: "json_data"
   end
 
   create_table "sent_abandoned_cart_emails", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1939,7 +1928,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.index ["installment_id"], name: "index_sent_abandoned_cart_emails_on_installment_id"
   end
 
-  create_table "sent_email_infos", id: :integer, charset: "latin1", collation: "latin1_swedish_ci", force: :cascade do |t|
+  create_table "sent_email_infos", id: :integer, charset: "latin1", force: :cascade do |t|
     t.string "key", limit: 40, null: false
     t.datetime "created_at", precision: nil, null: false
     t.datetime "updated_at", precision: nil, null: false
@@ -2028,7 +2017,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
     t.index ["user_id"], name: "index_shipping_destinations_on_user_id"
   end
 
-  create_table "signup_events", charset: "latin1", collation: "latin1_swedish_ci", force: :cascade do |t|
+  create_table "signup_events", charset: "latin1", force: :cascade do |t|
     t.integer "visit_id"
     t.string "ip_address"
     t.integer "user_id"
@@ -2192,8 +2181,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
   create_table "taxonomies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "parent_id"
     t.string "slug", null: false
+    t.index "(ifnull(`parent_id`,0)), `slug`", name: "index_taxonomies_on_parent_id_and_slug", unique: true
     t.index ["parent_id"], name: "index_taxonomies_on_parent_id"
-    t.index ["slug"], name: "index_taxonomies_on_slug"
   end
 
   create_table "taxonomy_hierarchies", id: false, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2688,11 +2677,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_06_000001) do
 
   create_table "yearly_stats", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "user_id", null: false
-    t.text "analytics_data", size: :long, null: false, collation: "utf8mb4_bin"
+    t.json "analytics_data", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["user_id"], name: "index_yearly_stats_on_user_id", unique: true
-    t.check_constraint "json_valid(`analytics_data`)", name: "analytics_data"
   end
 
   create_table "zip_tax_rates", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
