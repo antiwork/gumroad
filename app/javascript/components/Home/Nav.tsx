@@ -25,13 +25,13 @@ const NavLink = ({
     return (
       <a
         href={href}
-        className={`flex w-full items-center justify-center ${
+        className={`flex w-full items-center justify-center whitespace-nowrap ${
           text === "Dashboard"
             ? "lg:bg-black lg:text-white lg:hover:bg-pink dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white"
             : context !== "primary"
               ? "lg:border-l-black lg:bg-white lg:text-black lg:hover:bg-pink dark:lg:border-l-white/[.35] dark:lg:bg-black dark:lg:text-white"
               : "lg:bg-black lg:text-white lg:hover:bg-pink"
-        } border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:px-12 ${
+        } border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:px-8 xl:px-12 ${
           context === "primary" && text !== "Dashboard"
             ? "dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white"
             : "dark:lg:hover:bg-white dark:lg:hover:text-black"
@@ -45,7 +45,7 @@ const NavLink = ({
   return (
     <a
       href={href}
-      className={`flex w-full items-center justify-center border ${isCurrent ? "border-black" : "border-transparent"} ${
+      className={`flex w-full items-center justify-center whitespace-nowrap border ${isCurrent ? "border-black" : "border-transparent"} ${
         isCurrent
           ? "lg:bg-black lg:text-white dark:lg:bg-white dark:lg:text-black"
           : "lg:bg-transparent lg:text-black dark:lg:text-white"
@@ -87,7 +87,7 @@ export const Nav = () => {
           <img src={logo} alt="Gumroad" className="h-8 dark:invert" />
         </a>
         <div className="override hidden lg:flex lg:flex-1 lg:items-center lg:justify-center lg:gap-4">
-          <div className="flex flex-col items-center justify-center lg:flex-row lg:gap-4 lg:px-8">{navLinks}</div>
+          <div className="flex flex-col items-center justify-center lg:flex-row lg:gap-2 lg:px-8">{navLinks}</div>
         </div>
         <div className="override hidden lg:flex">
           <div className="flex flex-col lg:flex-row">{authLinks}</div>
@@ -105,7 +105,7 @@ export const Nav = () => {
       <div
         className={`override sticky left-0 right-0 top-20 z-50 flex-col justify-between border-b border-black bg-black dark:border-white/[.35] ${isMobileMenuOpen ? "flex" : "hidden"} `}
       >
-        <div className="flex flex-col items-center justify-center lg:flex-row lg:gap-4 lg:px-8">
+        <div className="flex flex-col items-center justify-center lg:flex-row lg:gap-2 lg:px-8">
           {navLinks}
           {authLinks}
         </div>
