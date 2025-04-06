@@ -193,12 +193,40 @@ const NewProductPage = ({
                   placeholder="Price your product"
                   value={price}
                   onChange={(e) => {
-                    setPrice(e.target.value);
+                    const inputValue = e.target.value;
+                    if (currencyCode === "jpy") {
+                      const numericOnly = inputValue.replace(/[^0-9]/gu, "");
+                      setPrice(numericOnly);
+                      errors.delete("price");
+                      return;
+                    }
+                    const hasPeriod = inputValue.includes(".");
+                    if (hasPeriod) {
+                      const parts = inputValue.split(".");
+                      const wholePart = parts[0].replace(/[^0-9,]/gu, "");
+                      const decimalPart = parts
+                        .slice(1)
+                        .join("")
+                        .replace(/[^0-9]/gu, "");
+                      setPrice(`${wholePart}.${decimalPart}`);
+                    } else {
+                      const filteredValue = inputValue.replace(/[^0-9,]/gu, "");
+                      setPrice(filteredValue);
+                    }
                     errors.delete("price");
+                  }}
+                  onKeyDown={(e) => {
+                    if (!/[0-9.,]|Backspace|Delete|ArrowLeft|ArrowRight|Tab|Home|End/u.test(e.key)) {
+                      e.preventDefault();
+                    }
+                    if (currencyCode === "jpy" && /[.,]/u.test(e.key)) {
+                      e.preventDefault();
+                    }
                   }}
                   autoComplete="off"
                   aria-invalid={errors.has("price")}
                 />
+
 
                 {isRecurringBilling ? (
                   <label className="pill select" style={{ border: "unset" }}>
