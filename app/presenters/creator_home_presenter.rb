@@ -116,27 +116,37 @@ class CreatorHomePresenter
     #   }
     # }
     def followers_activity_items
-      results = ConfirmedFollowerEvent.search(
-        query: { bool: { filter: [{ term: { followed_user_id: seller.id } }] } },
-        sort: [{ timestamp: { order: :desc } }],
-        size: ACTIVITY_ITEMS_LIMIT,
-        _source: [:name, :email, :timestamp, :follower_user_id],
-      ).map { |result| result["_source"] }
+      begin
+        results = ConfirmedFollowerEvent.search(
+          query: { bool: { filter: [{ term: { followed_user_id: seller.id } }] } },
+          sort: [{ timestamp: { order: :desc } }],
+          size: ACTIVITY_ITEMS_LIMIT,
+          _source: [:name, :email, :timestamp, :follower_user_id],
+        ).map { |result| result["_source"] }
 
-      # Collect followers' users in one DB query
-      followers_user_ids = results.map { |result| result["follower_user_id"] }.compact.uniq
-      followers_users_by_id = User.where(id: followers_user_ids).select(:id, :name, :timezone).index_by(&:id)
+        # Collect followers' users in one DB query
+        followers_user_ids = results.map { |result| result["follower_user_id"] }.compact.uniq
+        followers_users_by_id = User.where(id: followers_user_ids).select(:id, :name, :timezone).index_by(&:id)
 
-      results.map do |result|
-        follower_user = followers_users_by_id[result["follower_user_id"]]
-        {
-          "type" => "follower_#{result["name"]}",
-          "timestamp" => result["timestamp"],
-          "details" => {
-            "email" => result["email"],
-            "name" => follower_user&.name,
+        results.map do |result|
+          follower_user = followers_users_by_id[result["follower_user_id"]]
+          {
+            "type" => "follower_#{result["name"]}",
+            "timestamp" => result["timestamp"],
+            "details" => {
+              "email" => result["email"],
+              "name" => follower_user&.name,
+            }
           }
-        }
+        end
+      rescue Elasticsearch::Transport::Transport::Errors::NotFound => e
+        # Handle missing index gracefully
+        Rails.logger.warn "Elasticsearch index not found: #{e.message}"
+        []
+      rescue => e
+        # Handle other Elasticsearch errors
+        Rails.logger.error "Elasticsearch error in followers_activity_items: #{e.message}"
+        []
       end
     end
 end

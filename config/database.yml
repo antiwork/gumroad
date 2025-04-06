@@ -22,8 +22,9 @@ development: &development
   username: <%= ENV.fetch("DATABASE_USERNAME") %>
   password: <%= ENV.fetch("DATABASE_PASSWORD", "") %>
   variables:
-    max_execution_time: <%= 5 * 60000 %> # 5 minutes
     sql_mode: 'NO_ENGINE_SUBSTITUTION'
+    <%= "max_execution_time: #{5 * 60000}" if ENV.fetch("DATABASE_SUPPORTS_MAX_EXECUTION_TIME", "false") == "true" %> # 5 minutes, conditional
+  mariadb: true # Add this flag to indicate we're using MariaDB
 
   makara:
     id: mysql

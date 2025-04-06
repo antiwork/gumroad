@@ -239,7 +239,16 @@ module User::Stats
     refunded_sales = sales.is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
     refunded_fee = refunded_sales.joins(:refunds).sum("refunds.fee_cents")
     refunded_sales_fee_not_waived = sales.not_is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+
+    # Use the dedicated column if it exists, otherwise fall back to the json_data version
+    if column_exists_for_model?("Refund", "retained_fee_cents_value")
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - IFNULL(refunds.retained_fee_cents_value, 0)")
+    elsif ActiveRecord::Base.connection.adapter_name.to_s.downcase.include?('mariadb')
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - IFNULL(refunds.json_data->'$.retained_fee_cents', 0)")
+    else
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+    end
+
     disputed_sales = sales.where("purchase_chargeback_balance_id IN (?)", balance_ids)
     disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:refunds).sum("refunds.fee_cents")
     refunded_fee + disputed_fee
@@ -630,7 +639,16 @@ module User::Stats
     refunded_sales = sales.was_discover_fee_charged.is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
     refunded_fee = refunded_sales.joins(:refunds).sum("refunds.fee_cents")
     refunded_sales_fee_not_waived = sales.was_discover_fee_charged.not_is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+
+    # Use the dedicated column if it exists, otherwise fall back to the json_data version
+    if column_exists_for_model?("Refund", "retained_fee_cents_value")
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - IFNULL(refunds.retained_fee_cents_value, 0)")
+    elsif ActiveRecord::Base.connection.adapter_name.to_s.downcase.include?('mariadb')
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - IFNULL(refunds.json_data->'$.retained_fee_cents', 0)")
+    else
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+    end
+
     disputed_sales = sales.was_discover_fee_charged.where("purchase_chargeback_balance_id IN (?)", balance_ids)
     disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:refunds).sum("refunds.fee_cents")
     refunded_fee + disputed_fee
@@ -645,7 +663,16 @@ module User::Stats
     refunded_sales = sales.not_was_discover_fee_charged.is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
     refunded_fee = refunded_sales.joins(:refunds).sum("refunds.fee_cents")
     refunded_sales_fee_not_waived = sales.not_was_discover_fee_charged.not_is_refund_chargeback_fee_waived.where("purchase_refund_balance_id IN (?)", balance_ids)
-    refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+
+    # Use the dedicated column if it exists, otherwise fall back to the json_data version
+    if column_exists_for_model?("Refund", "retained_fee_cents_value")
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - IFNULL(refunds.retained_fee_cents_value, 0)")
+    elsif ActiveRecord::Base.connection.adapter_name.to_s.downcase.include?('mariadb')
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - IFNULL(refunds.json_data->'$.retained_fee_cents', 0)")
+    else
+      refunded_fee += refunded_sales_fee_not_waived.joins(:refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
+    end
+
     disputed_sales = sales.not_was_discover_fee_charged.where("purchase_chargeback_balance_id IN (?)", balance_ids)
     disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:refunds).sum("refunds.fee_cents")
     refunded_fee + disputed_fee
@@ -720,5 +747,13 @@ module User::Stats
 
     def page_basis_points_ceil(page_number:, total_page_count:)
       (page_number / total_page_count.to_f * 10_000).ceil
+    end
+
+    def column_exists_for_model?(model_name, column_name)
+      @column_existence ||= {}
+      @column_existence["#{model_name}.#{column_name}"] ||= begin
+        model_class = model_name.constantize rescue nil
+        model_class && model_class.column_names.include?(column_name)
+      end
     end
 end

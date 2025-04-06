@@ -20,6 +20,9 @@ class ProductReview < ApplicationRecord
 
   validate :message_cannot_contain_adult_keywords, if: :message_changed?
 
+  # Fix for MariaDB virtual column
+  before_validation :set_has_message_value, if: -> { respond_to?(:has_message=) }
+
   before_create do
     next if purchase.allows_review_to_be_counted?
     raise RestrictedOperationError.new("Creating a review for an invalid purchase is not handled")
@@ -41,5 +44,9 @@ class ProductReview < ApplicationRecord
 
     def message_cannot_contain_adult_keywords
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(message)
+    end
+
+    def set_has_message_value
+      self.has_message = !message.blank?
     end
 end

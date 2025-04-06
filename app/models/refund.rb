@@ -26,6 +26,23 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :debited_stripe_transfer
   attr_json_data_accessor :retained_fee_cents
 
+  # Keep retained_fee_cents_value in sync with the json_data
+  before_save :sync_retained_fee_cents_value, if: :has_column_retained_fee_cents_value?
+
+  def retained_fee_cents=(value)
+    super(value)
+    self.retained_fee_cents_value = value if has_column_retained_fee_cents_value?
+  end
+
+  # Returns the retained_fee_cents value, preferring the column over json_data if available
+  def retained_fee_cents
+    if has_column_retained_fee_cents_value? && retained_fee_cents_value.present?
+      retained_fee_cents_value
+    else
+      super
+    end
+  end
+
   private
     def assign_product
       self.link_id = purchase.link_id
@@ -34,4 +51,17 @@ class Refund < ApplicationRecord
     def assign_seller
       self.seller_id = purchase.seller_id
     end
+
+    def sync_retained_fee_cents_value
+      # Keep the column in sync with json_data
+      self.retained_fee_cents_value = super_retained_fee_cents
+    end
+
+    # Check if the retained_fee_cents_value column exists in the database
+    def has_column_retained_fee_cents_value?
+      @has_column_retained_fee_cents_value ||= self.class.column_names.include?('retained_fee_cents_value')
+    end
+
+    # Store the original method to access it later
+    alias_method :super_retained_fee_cents, :retained_fee_cents
 end
