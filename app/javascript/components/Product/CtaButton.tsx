@@ -84,7 +84,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
 
-    const { selectedOption, pppDiscounted } = applySelection(
+    const { selectedOption, pppDiscounted, discountedPriceCents } = applySelection(
       product,
       discountCode?.valid ? discountCode.discount : null,
       selection,
@@ -165,7 +165,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
             {showInstallmentPlanNotes ? (
               <small className="text-center">
                 {formatInstallmentPaymentSchedule(
-                  price,
+                  discountedPriceCents,
                   product.currency_code,
                   product.installment_plan.number_of_installments,
                 )}
