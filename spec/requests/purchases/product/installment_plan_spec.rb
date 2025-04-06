@@ -9,6 +9,7 @@ describe "Product with installment plan", type: :feature, js: true do
 
   it "allows paying in installments" do
     visit product.long_url
+    expect(page).to have_text("First installment of $3.34, followed by 2 monthly installments of $3.33", normalize_ws: true)
 
     click_on "Pay in 3 installments"
 
@@ -168,6 +169,7 @@ describe "Product with installment plan", type: :feature, js: true do
 
     it "applies the discount to all charges even if it's only for one memebership cycle" do
       visit product.long_url + "/" + offer_code_valid_for_one_billing_cycle.code
+      expect(page).to have_text("First installment of $3.34, followed by 2 monthly installments of $3.33", normalize_ws: true)
 
       click_on "Pay in 3 installments"
 
