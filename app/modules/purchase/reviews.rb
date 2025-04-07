@@ -46,9 +46,6 @@ module Purchase::Reviews
 
   def add_review!(rating, message = nil)
     review = ProductReview.create!(link:, purchase: true_original_purchase, rating:, message:)
-
-    return if review.link.user.disable_reviews_email?
-    ContactingCreatorMailer.review_submitted(review.id).deliver_later
   end
 
   # Important: The logic needs to be the same as the one in the scope `allowing_reviews_to_be_counted`

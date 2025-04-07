@@ -126,4 +126,37 @@ describe ProductReview do
         .to contain_exactly(only_has_message.id, only_has_approved_video.id)
     end
   end
+
+  describe "seller notification emails" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product) }
+    let(:product_review) { build(:product_review, purchase:) }
+
+    it "sends if the seller has enabled the email" do
+      product.user.update!(disable_reviews_email: false)
+
+      expect do
+        product_review.save!
+      end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with(product_review.id)
+    end
+
+    it "doesn't send if the seller has disabled the email" do
+      product.user.update!(disable_reviews_email: true)
+
+      expect do
+        product_review.save!
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
+    it "doesn't send emails on updates" do
+      product.user.update!(disable_reviews_email: false)
+
+      product_review.save!
+
+      expect do
+        product_review.update!(rating: 5)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+  end
 end

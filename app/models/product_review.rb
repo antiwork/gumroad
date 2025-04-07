@@ -43,6 +43,8 @@ class ProductReview < ApplicationRecord
   end
   after_save :update_product_review_stat
 
+  after_create_commit :notify_seller
+
   private
     def update_product_review_stat
       return if rating_previous_change.nil?
@@ -51,5 +53,10 @@ class ProductReview < ApplicationRecord
 
     def message_cannot_contain_adult_keywords
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(message)
+    end
+
+    def notify_seller
+      return if link.user.disable_reviews_email?
+      ContactingCreatorMailer.review_submitted(id).deliver_later
     end
 end
