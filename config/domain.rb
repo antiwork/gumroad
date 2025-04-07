@@ -15,7 +15,8 @@ configuration_by_env = {
     valid_discover_host: "gumroad.com",
     valid_cors_origins: ["gumroad.com"],
     internal_gumroad_domain: "gumroad.net",
-    default_email_domain: "gumroad.com"
+    default_email_domain: "gumroad.com",
+    anycable_host: "cable.gumroad.com",
   },
   staging: {
     protocol: "https",
@@ -31,7 +32,8 @@ configuration_by_env = {
     valid_discover_host: "staging.gumroad.com",
     valid_cors_origins: ["staging.gumroad.com"],
     internal_gumroad_domain: "gumroad.net",
-    default_email_domain: "staging.gumroad.com"
+    default_email_domain: "staging.gumroad.com",
+    anycable_host: "cable.staging.gumroad.com",
   },
   test: {
     protocol: "http",
@@ -47,7 +49,8 @@ configuration_by_env = {
     valid_discover_host: "test.gumroad.com",
     valid_cors_origins: ["help.test.gumroad.com", "customers.test.gumroad.com"],
     internal_gumroad_domain: "test.gumroad.net",
-    default_email_domain: "test.gumroad.com" # unused
+    default_email_domain: "test.gumroad.com", # unused
+    anycable_host: "cable.test.gumroad.com",
   },
   development: {
     protocol: "https",
@@ -63,7 +66,8 @@ configuration_by_env = {
     valid_discover_host: "gumroad.dev",
     valid_cors_origins: [],
     internal_gumroad_domain: "internal.gumroad.dev",
-    default_email_domain: "staging.gumroad.com"
+    default_email_domain: "staging.gumroad.com",
+    anycable_host: "cable.gumroad.dev",
   }
 }
 
@@ -84,6 +88,7 @@ VALID_API_REQUEST_HOSTS = config[:valid_api_request_hosts]
 VALID_CORS_ORIGINS = config[:valid_cors_origins]
 INTERNAL_GUMROAD_DOMAIN = config[:internal_gumroad_domain]
 DEFAULT_EMAIL_DOMAIN    = config[:default_email_domain]
+ANYCABLE_HOST           = config[:anycable_host]
 
 if custom_domain
   VALID_REQUEST_HOSTS << custom_domain
