@@ -30,7 +30,7 @@ development:
   # WebSocket endpoint of your AnyCable server for clients to connect to
   # Make sure you have the `action_cable_meta_tag` in your HTML layout
   # to propogate this value to the client app ($ANYCABLE_WEBSOCKET_URL)
-  # websocket_url: "wss://gumroad.dev:8081/cable"
+  # websocket_url: "wss://cable.gumroad.dev:8081/cable"
 
 test:
   <<: *default

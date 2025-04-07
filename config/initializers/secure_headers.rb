@@ -192,8 +192,8 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:script_src] << "'unsafe-inline'" # Allow react-on-rails to inject server-rendering logs into the browser
     config.csp[:connect_src] << "gumroad.dev:3035" # Required by webpack-dev-server
     config.csp[:connect_src] << "wss://gumroad.dev:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "ws://gumroad.dev:8081" # Required by AnyCable
-    config.csp[:connect_src] << "wss://gumroad.dev:8081" # Required by AnyCable
+    config.csp[:connect_src] << "ws://cable.gumroad.dev:8081" # Required by AnyCable
+    config.csp[:connect_src] << "wss://cable.gumroad.dev:8081" # Required by AnyCable
     config.csp[:connect_src] << "localhost:3010" # Required by Helper widget
     config.csp[:connect_src] << "app.helperai.dev" # Required by Helper widget
     config.csp[:connect_src] << "http:"
