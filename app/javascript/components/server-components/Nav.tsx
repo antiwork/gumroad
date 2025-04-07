@@ -157,7 +157,7 @@ export const Nav = (props: Props) => {
           <NavLink text="Payouts" icon="solid-currency-dollar" href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Communities" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
+          <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
         ) : null}
       </section>
       <section>
