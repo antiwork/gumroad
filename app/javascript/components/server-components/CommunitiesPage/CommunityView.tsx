@@ -875,7 +875,7 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
           customers, answer questions, and build relationships.
         </p>
         <NavigationButton href={hasProducts ? Routes.products_path() : Routes.new_product_path()} color="accent">
-          {hasProducts ? "Enable community chat for your product" : "Create a product with community"}
+          {hasProducts ? "Enable community chat for your products" : "Create a product with community"}
         </NavigationButton>
         <p>
           or <a data-helper-prompt="How do I enable community chat for my product?">learn more about community chats</a>

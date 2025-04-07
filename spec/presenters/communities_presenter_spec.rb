@@ -16,8 +16,9 @@ RSpec.describe CommunitiesPresenter do
     context "when user has no accessible communities" do
       it "returns appropriate props" do
         expect(props).to eq(
+          has_products: false,
           communities: [],
-          notification_settings: {}
+          notification_settings: {},
         )
       end
     end
@@ -34,6 +35,7 @@ RSpec.describe CommunitiesPresenter do
 
       it "returns appropriate props" do
         expect(props).to eq(
+          has_products: false,
           communities: [
             CommunityPresenter.new(community:, current_user:).props
           ],
