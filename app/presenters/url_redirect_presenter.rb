@@ -136,7 +136,7 @@ class UrlRedirectPresenter
         discord: purchase.present? && DiscordIntegration.is_enabled_for(purchase) ? {
           connected: DiscordIntegration.discord_user_id_for(purchase).present?
         } : nil,
-        community_chat_url: purchase.present? && purchase.purchaser_id.present? && Feature.active?(:communities, purchase.seller) && product.community_chat_enabled? && product.active_community.present? ? community_path(purchase.seller.external_id, product.active_community.external_id) : nil,
+        community_chat_url:,
         ios_app_url: IOS_APP_STORE_URL,
         android_app_url: ANDROID_APP_STORE_URL,
         download_all_button: product_files.any? && url_redirect.with_product_files&.is_a?(Installment) && url_redirect.with_product_files&.is_downloadable? && url_redirect.entity_archive ? {
@@ -279,5 +279,15 @@ class UrlRedirectPresenter
         processing: false,
         thumbnail_url: nil,
       }
+    end
+
+    def community_chat_url
+      return unless purchase.present? && Feature.active?(:communities, purchase.seller) && product.community_chat_enabled? && product.active_community.present?
+
+      path = community_path(purchase.seller.external_id, product.active_community.external_id)
+
+      return signup_path(email: purchase.email, next: path) if purchase.purchaser_id.blank?
+
+      logged_in_user.present? ? path : login_path(email: purchase.email, next: path)
     end
 end
