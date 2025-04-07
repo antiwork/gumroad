@@ -7,18 +7,20 @@ Rails.application.config.lograge.custom_options = lambda do |event|
 
   payload_params = event.payload[:params]
 
-  if payload_params["controller"] == "logins" && payload_params["action"] == "create"
-    if payload_params["user"]
-      params[:login_identifier] = payload_params["user"]["login_identifier"]
-      params[:login] = payload_params["user"]["login"]
+  if payload_params.present?
+    if payload_params["controller"] == "logins" && payload_params["action"] == "create"
+      if payload_params["user"]
+        params[:login_identifier] = payload_params["user"]["login_identifier"]
+        params[:login] = payload_params["user"]["login"]
+      end
     end
-  end
 
-  if payload_params["controller"] == "signup" && payload_params["action"] == "create"
-    if payload_params["user"]
-      params[:email] = payload_params.dig("user", "email")
-      params[:buyer_signup] = payload_params.dig("user", "buyer_signup")
-      params["g-recaptcha-response"] = payload_params["g-recaptcha-response"]
+    if payload_params["controller"] == "signup" && payload_params["action"] == "create"
+      if payload_params["user"]
+        params[:email] = payload_params.dig("user", "email")
+        params[:buyer_signup] = payload_params.dig("user", "buyer_signup")
+        params["g-recaptcha-response"] = payload_params["g-recaptcha-response"]
+      end
     end
   end
 
