@@ -249,11 +249,11 @@ class Rack::Attack
                  period: 60.seconds
 
   # Throttle community chat messages
-  # Initial: 20rpm, Max: 100 requests/9 hours (per community, per IP)
-  throttle_by_ip path: /\A\/internal\/communities\/.*\/chat_messages\z/,
-                 method: :post,
-                 requests: 20,
-                 period: 60.seconds
+  # 60 requests per 60 seconds (per community, per IP)
+  throttle_by_ip_for_period path: /\A\/internal\/communities\/.*\/chat_messages\z/,
+                           method: :post,
+                           requests: 60,
+                           period: 60.seconds
 
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)
