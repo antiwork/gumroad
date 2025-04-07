@@ -85,16 +85,31 @@ const DeleteRecordingButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 );
 
-export default function VideoReviewClientOnly({ formState, videoUrl }: VideoReviewProps) {
+export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChange }: VideoReviewProps) {
+  const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(videoUrl);
+
+  const setRecordedVideo = (_blobUrl: string, blob: Blob) => {
+    const videoFile = new File([blob], "video-review.webm", { type: "video/webm" });
+    onVideoChange(videoFile);
+  };
+
+  const clearRecordedVideo = () => {
+    onVideoChange(null);
+    setOriginalVideoUrl(null);
+  };
+
   const { startRecording, stopRecording, clearBlobUrl, mediaBlobUrl, previewStream } = useReactMediaRecorder({
     audio: true,
     video: true,
     askPermissionOnMount: true,
     stopStreamsOnStop: true,
+    blobPropertyBag: {
+      type: "video/webm",
+    },
+    onStop: setRecordedVideo,
   });
-
-  const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
-  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (liveVideoRef.current && previewStream) {
@@ -103,7 +118,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl }: VideoRevi
   }, [previewStream]);
 
   if (formState === "viewing") {
-    const source = mediaBlobUrl || videoUrl;
+    const source = mediaBlobUrl || originalVideoUrl;
     if (source) {
       return (
         <div className="w-full">
@@ -153,6 +168,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl }: VideoRevi
           <DeleteRecordingButton
             onClick={() => {
               clearBlobUrl();
+              clearRecordedVideo();
               setUiState("idle");
             }}
           />
@@ -170,7 +186,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl }: VideoRevi
       />
       <video
         className={cx("h-full w-full object-cover", { hidden: uiState !== "preview" })}
-        src={mediaBlobUrl || videoUrl || undefined}
+        src={mediaBlobUrl || originalVideoUrl || undefined}
         controls
         autoPlay
         muted

@@ -8,8 +8,8 @@ const VideoReviewClientOnly = lazy(() => import("$app/components/ReviewForm/Vide
 // most of the time and the spinner ended up making the UI feel jumpy.
 const VideoReviewFallback = () => <VideoReviewContainer />;
 
-export const VideoReview = ({ formState, videoUrl }: VideoReviewProps) => (
+export const VideoReview = (props: VideoReviewProps) => (
   <Suspense fallback={<VideoReviewFallback />}>
-    <VideoReviewClientOnly formState={formState} videoUrl={videoUrl} />
+    <VideoReviewClientOnly {...props} />
   </Suspense>
 );

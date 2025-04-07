@@ -2,6 +2,7 @@ import * as React from "react";
 export type VideoReviewProps = {
   formState: "viewing" | "editing";
   videoUrl: string | null;
+  onVideoChange: (videoReview: File | null) => void;
 };
 
 export const VideoReviewContainer = ({ children }: { children?: React.ReactNode }) => (

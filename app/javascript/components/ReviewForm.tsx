@@ -46,6 +46,7 @@ export const ReviewForm = React.forwardRef<
     const [message, setMessage] = React.useState(review?.message ?? "");
     const [reviewMode, setReviewMode] = React.useState<"text" | "video">("text");
     const [formState, setFormState] = React.useState<"viewing" | "editing">(review ? "viewing" : "editing");
+    const video = React.useRef<string | File | null>(null);
 
     const uid = React.useId();
     const disabled = isLoading || preview || !!disabledStatus;
@@ -108,7 +109,9 @@ export const ReviewForm = React.forwardRef<
       />
     );
 
-    const videoReview = <VideoReview formState={formState} videoUrl={null} />;
+    const videoReview = (
+      <VideoReview formState={formState} videoUrl={null} onVideoChange={(newVideo) => (video.current = newVideo)} />
+    );
 
     const reviewButton = viewing ? (
       <Button onClick={() => setFormState("editing")} key="edit" type="button">
