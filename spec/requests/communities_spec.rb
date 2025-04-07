@@ -27,8 +27,8 @@ describe "Communities", :js, type: :feature do
 
     expect(page).to have_text("Build your community, one product at a time!")
     expect(page).to have_text("When you publish a product, we automatically create a dedicated community chat—your own space to connect with customers, answer questions, and build relationships.")
-    expect(page).to have_link("Create your first product", href: new_product_path)
-    expect(find("a", text: "learn more about community chats")["data-helper-prompt"]).to eq("How do I create a community chat?")
+    expect(page).to have_link("Enable community chat for your products", href: products_path)
+    expect(find("a", text: "learn more about community chats")["data-helper-prompt"]).to eq("How do I enable community chat for my product?")
     expect(page).to have_button("Go back")
   end
 
