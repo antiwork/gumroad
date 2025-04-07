@@ -28,7 +28,7 @@ describe "Main Navigation", type: :feature, js: true do
 
         expect(page).to have_link("Collaborators")
 
-        expect(page).not_to have_link("Communities")
+        expect(page).not_to have_link("Community")
 
         toggle_disclosure("Gum")
         within "div[role='menu']" do
@@ -40,8 +40,8 @@ describe "Main Navigation", type: :feature, js: true do
       end
     end
 
-    context "Communities link" do
-      it "renders the Communities link if the logged in seller has an active community" do
+    context "Community link" do
+      it "renders the Community link if the logged in seller has an active community" do
         Feature.activate_user(:communities, user)
 
         product = create(:product, user:, community_chat_enabled: true)
@@ -50,11 +50,11 @@ describe "Main Navigation", type: :feature, js: true do
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Communities", href: community_path)
+          expect(page).to have_link("Community", href: community_path)
         end
       end
 
-      it "renders the Communities link if the logged in user has an access to a community" do
+      it "renders the Community link if the logged in user has an access to a community" do
         seller = create(:user)
         Feature.activate_user(:communities, seller)
 
@@ -65,18 +65,18 @@ describe "Main Navigation", type: :feature, js: true do
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Communities")
+          expect(page).to have_link("Community", href: community_path)
         end
       end
 
-      it "renders the Communities link if the logged in user is a seller but has no active communities" do
+      it "renders the Community link if the logged in user is a seller but has no active communities" do
         Feature.activate_user(:communities, user)
         create(:product, user:)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Communities")
+          expect(page).to have_link("Community", href: community_path)
         end
       end
     end
