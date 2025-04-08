@@ -6,7 +6,7 @@ describe PostEmailApi do
   let(:seller) { create(:named_user) }
   let(:post) { create(:audience_installment, seller: seller) }
   let(:recipients) do
-    10.times.map { |i| { email: "recipient#{i}@example.com" } }
+    10.times.map { |i| { email: "recipient#{i}@gumroad-example.com" } }
   end
   let(:args) { { post: post, recipients: recipients } }
 
@@ -37,7 +37,7 @@ describe PostEmailApi do
         # Set to resend to test the fallback
         allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
 
-        non_ascii_recipients = [{ email: "récipient@example.com" }]
+        non_ascii_recipients = [{ email: "récipient@gumroad-example.com" }]
         non_ascii_args = { post: post, recipients: non_ascii_recipients }
 
         expect(PostSendgridApi).to receive(:process).with(non_ascii_args)
@@ -52,7 +52,7 @@ describe PostEmailApi do
 
         # Create an email with local part longer than 64 characters
         long_local_part = "a" * 65 # 65 characters
-        long_email_recipient = [{ email: "#{long_local_part}@example.com" }]
+        long_email_recipient = [{ email: "#{long_local_part}@gumroad-example.com" }]
         long_email_args = { post: post, recipients: long_email_recipient }
 
         expect(PostSendgridApi).to receive(:process).with(long_email_args)
@@ -67,12 +67,12 @@ describe PostEmailApi do
 
         # Test with various special characters that should be rejected by the regex
         special_char_emails = [
-          { email: "recipient!@example.com" },   # exclamation mark
-          { email: "recipient*@example.com" },   # asterisk
-          { email: "recipient=@example.com" },   # equals sign
-          { email: "recipient$@example.com" },   # dollar sign
-          { email: "recipient{@example.com" },   # curly brace
-          { email: "recipient-name@example.com" } # hyphen
+          { email: "recipient!@gumroad-example.com" },   # exclamation mark
+          { email: "recipient*@gumroad-example.com" },   # asterisk
+          { email: "recipient=@gumroad-example.com" },   # equals sign
+          { email: "recipient$@gumroad-example.com" },   # dollar sign
+          { email: "recipient{@gumroad-example.com" },   # curly brace
+          { email: "recipient-name@gumroad-example.com" } # hyphen
         ]
 
         special_char_emails.each do |email_recipient|
@@ -95,11 +95,11 @@ describe PostEmailApi do
           { email: nil },                          # nil email
           { email: "userexample.com" },            # missing @ symbol
           { email: "user@example@domain.com" },    # multiple @ symbols
-          { email: "@example.com" },               # blank local part
+          { email: "@gumroad-example.com" },               # blank local part
           { email: "user@" },                      # blank domain part
-          { email: "user@example" },               # domain without period
-          { email: "user@.example.com" },          # domain starting with period
-          { email: "user@example.com." }           # domain ending with period
+          { email: "user@gumroad-example" },               # domain without period
+          { email: "user@.gumroad-example.com" },          # domain starting with period
+          { email: "user@gumroad-example.com." }           # domain ending with period
         ]
 
         invalid_format_emails.each do |email_recipient|
@@ -112,12 +112,32 @@ describe PostEmailApi do
         end
       end
 
+      it "routes emails from excluded domains through SendGrid" do
+        # Set to resend to test the fallback
+        allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
+
+        # Test with emails from excluded domains
+        excluded_domains = ["example.com", "example.org", "example.net", "test.com"]
+        excluded_domain_emails = excluded_domains.map do |domain|
+          { email: "user@#{domain}" }
+        end
+
+        excluded_domain_emails.each do |email_recipient|
+          excluded_domain_args = { post: post, recipients: [email_recipient] }
+
+          expect(PostSendgridApi).to receive(:process).with(excluded_domain_args)
+          expect(PostResendApi).not_to receive(:process)
+
+          PostEmailApi.process(**excluded_domain_args)
+        end
+      end
+
       it "routes emails exceeding maximum length through SendGrid" do
         # Set to resend to test the fallback
         allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
 
         # Test email with total length exceeding 254 characters
-        long_domain = "example.com"
+        long_domain = "gumroad-example.com"
         long_local_part = "a" * 245  # Makes total email length > 254 characters
         long_email_args = { post: post, recipients: [{ email: "#{long_local_part}@#{long_domain}" }] }
 
@@ -129,7 +149,7 @@ describe PostEmailApi do
 
       it "routes valid emails through Resend when determined by the router" do
         # Valid email with only permitted special characters
-        valid_recipient = { email: "user.name+tag@example.com" }
+        valid_recipient = { email: "user.name+tag@gumroad-example.com" }
         valid_args = { post: post, recipients: [valid_recipient] }
 
         # Configure router to choose Resend
@@ -145,7 +165,7 @@ describe PostEmailApi do
 
       it "routes valid emails through SendGrid when determined by the router" do
         # Valid email with only permitted special characters
-        valid_recipient = { email: "user_name_123@example.com" }
+        valid_recipient = { email: "user_name_123@gumroad-example.com" }
         valid_args = { post: post, recipients: [valid_recipient] }
 
         # Configure router to choose SendGrid
