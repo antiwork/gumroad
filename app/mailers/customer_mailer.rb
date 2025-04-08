@@ -121,7 +121,7 @@ class CustomerMailer < ApplicationMailer
       to: kindle_email,
       from: "noreply@#{CUSTOMERS_MAIL_DOMAIN}",
       subject: "convert",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: creator)
+      delivery_method_options: MailerInfo.default_delivery_method_options(domain: :customers)
     )
   end
 
