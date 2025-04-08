@@ -197,7 +197,7 @@ export const ProductTab = () => {
                       onChange={(newValue) => updateProduct({ community_chat_enabled: newValue })}
                       help={{
                         label: "Learn more",
-                        dataHelperPrompt: "What is a community chat?",
+                        dataHelperPrompt: "What is Gumroad community chat?",
                       }}
                     />
                   )}
