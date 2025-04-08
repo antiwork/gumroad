@@ -29,7 +29,7 @@ module Purchase::Reviews
     purchase&.true_original_purchase&.product_review
   end
 
-  def post_review(rating, message = nil)
+  def post_review(rating:, message: nil)
     review = original_product_review || true_original_purchase.build_product_review(link:)
     ProductReview::UpdateService.new(review, rating:, message:).update
   end

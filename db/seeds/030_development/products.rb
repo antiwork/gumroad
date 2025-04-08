@@ -67,7 +67,7 @@ def load_products
     purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
 
     # create review w/ rating
-    purchase.post_review(i % 5 + 1)
+    purchase.post_review(rating: i % 5 + 1)
   end
 end
 

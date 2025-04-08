@@ -62,7 +62,7 @@ class ProductReviewsController < ApplicationController
         return
       end
 
-      purchase.post_review(params[:rating].to_i, params[:message])
+      purchase.post_review(rating: params[:rating].to_i, message: params[:message])
 
       render json: { success: true }
     rescue ActiveRecord::RecordInvalid => e
