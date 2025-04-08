@@ -59,7 +59,7 @@ if [[ ! $(docker images -q --filter "reference=$WEB_REPO:web-$WEB_TAG") ]]; then
   pull_web_image || exit 1
 fi
 
-if [[ $BUILDKITE_PARALLEL_JOB = 0 ]]; then
+if [[ $BUILDKITE_PARALLEL_JOB = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   logger "Building staging assets"
   docker rm staging-assets || :
   COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_staging \

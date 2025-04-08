@@ -195,6 +195,10 @@ export const ProductTab = () => {
                       label="Invite your customers to your Gumroad community chat"
                       value={product.community_chat_enabled}
                       onChange={(newValue) => updateProduct({ community_chat_enabled: newValue })}
+                      help={{
+                        label: "Learn more",
+                        dataHelperPrompt: "What is Gumroad community chat?",
+                      }}
                     />
                   )}
                   <CircleIntegrationEditor

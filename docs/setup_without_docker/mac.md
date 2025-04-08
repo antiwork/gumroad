@@ -107,4 +107,4 @@ brew install mongodb/brew/mongodb-community@3.6
    brew services restart nginx
    ```
 
-Now follow the rest of the [README.md](https://github.com/gumroad/web/blob/main/README.md) for the installation process. Once done open https://gumroad.dev after running the `foreman` command and it should point to your Gumroad server!
+Now follow the rest of the [README.md](https://github.com/antiwork/gumroad/blob/main/README.md) for the installation process. Once done open https://gumroad.dev after running the `foreman` command and it should point to your Gumroad server!

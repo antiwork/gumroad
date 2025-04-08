@@ -61,13 +61,13 @@ describe CommunityPolicy do
         expect(subject).to permit(seller_context, Community)
       end
 
-      it "grants access to seller who has at least one product but no active communities" do
+      it "denies access to seller who has at least one product but no active communities" do
         another_seller = create(:user)
         create(:product, user: another_seller)
         Feature.activate_user(:communities, another_seller)
         seller_context = SellerContext.new(user: another_seller, seller:)
 
-        expect(subject).to permit(seller_context, Community)
+        expect(subject).not_to permit(seller_context, Community)
       end
     end
 

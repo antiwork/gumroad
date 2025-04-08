@@ -21,7 +21,12 @@ copy_secrets() {
 
   logger "Copying files"
   cd "$CREDENTIALS_TMP_DIR"
-  rm -rf .git
+
+  files_to_remove=(".git" ".gitignore" "README.md" "copy_into" "docs")
+  for file in "${files_to_remove[@]}"; do
+    rm -rf "$file"
+  done
+
   find . -type f | while read -r src_path; do
     dest_path="${app_dir}/${src_path}"
     dest_dir=$(dirname "$dest_path")

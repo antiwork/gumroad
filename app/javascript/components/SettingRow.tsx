@@ -7,7 +7,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 type ToggleProps = {
   label: string;
   value: boolean;
-  help?: { url: string; label: string | React.ReactNode; tooltip?: string };
+  help?: { url?: string; dataHelperPrompt?: string; label: string | React.ReactNode; tooltip?: string };
   onChange?: (newValue: boolean) => void;
   dropdown?: React.ReactNode;
   disabled?: boolean;
@@ -16,12 +16,26 @@ export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disab
   const toggle = (
     <Toggle value={value} onChange={onChange} disabled={Boolean(disabled)}>
       {label}
-      {help ? (
-        <WithTooltip tip={help.tooltip || null} position="top">
-          <a href={help.url} target="_blank" rel="noopener noreferrer" className="learn-more" style={{ flexShrink: 0 }}>
-            {help.label}
-          </a>
-        </WithTooltip>
+      {help?.url || help?.dataHelperPrompt ? (
+        <span className="ml-2">
+          <WithTooltip tip={help.tooltip || null} position="top">
+            {help.url ? (
+              <a
+                href={help.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="learn-more"
+                style={{ flexShrink: 0 }}
+              >
+                {help.label}
+              </a>
+            ) : (
+              <a data-helper-prompt={help.dataHelperPrompt} className="learn-more" style={{ flexShrink: 0 }}>
+                {help.label}
+              </a>
+            )}
+          </WithTooltip>
+        </span>
       ) : null}
     </Toggle>
   );

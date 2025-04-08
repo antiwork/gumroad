@@ -159,7 +159,7 @@ Use `domains-staging.gumroad.com` instead of `domains.gumroad.com` in the DNS re
 
 2. Configure sample-custom-domain.example.com as a custom domain in [gumroad.dev/settings/advanced](https://gumroad.dev/settings/advanced)
 
-3. Remove `Rails.env.development? ||` part from this [line](https://github.com/gumroad/web/blob/3a63b5bd586f38761cc395a3318f34a8216c64b4/lib/gumroad_domain_constraint.rb#L5)
+3. Remove `Rails.env.development? ||` part from this [line](https://github.com/antiwork/gumroad/blob/main/lib/gumroad_domain_constraint.rb#L5)
 
 4. Restart the server and navigate to http://sample-custom-domain.example.com:3000
 
@@ -240,7 +240,7 @@ Both widgets now detect the Rails application environment automatically -- simpl
 
 ### Testing locally
 
-There is a simple web app in our repository called [web-overlay-test](https://github.com/gumroad/web-overlay-test). Once you check it out, follow these instructions to test the overlay and/or embed.
+There is a simple web app in our repository called [web-overlay-test](https://github.com/antiwork/web-overlay-test). Once you check it out, follow these instructions to test the overlay and/or embed.
 
 - Edit `index.html` to include the permalinks of your products
 - Run `ruby web.rb`
