@@ -622,6 +622,12 @@ Rails.application.routes.draw do
     put "/product_reviews/set", to: "product_reviews#set", format: :json
     resources :product_reviews, only: [:index, :show]
     resource :product_review_response, only: [:update], format: :json
+    resources :product_review_videos, only: [] do
+      scope module: :product_review_videos do
+        resource :stream, only: [:show]
+      end
+    end
+
     resources :calls, only: [:update]
 
     resources :purchase_custom_fields, only: [:create]
@@ -1104,6 +1110,11 @@ Rails.application.routes.draw do
 
   resources :product_reviews, only: [:index, :show]
   resource :product_review_response, only: [:update], format: :json
+  resources :product_review_videos, only: [] do
+    scope module: :product_review_videos do
+      resource :stream, only: [:show]
+    end
+  end
 
   namespace :checkout do
     namespace :upsells do

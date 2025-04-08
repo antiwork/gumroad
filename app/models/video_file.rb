@@ -5,6 +5,7 @@ class VideoFile < ApplicationRecord
   include Deletable
   include S3Retrievable
   include CdnDeletable, CdnUrlHelper
+  include SignedUrlHelper
   include FlagShihTzu
 
   has_s3_fields :url
@@ -19,6 +20,18 @@ class VideoFile < ApplicationRecord
   validate :url_is_s3
 
   after_create_commit :schedule_file_analysis
+
+  def smil_xml
+    smil_xml = ::Builder::XmlMarkup.new
+
+    smil_xml.smil do |smil|
+      smil.body do |body|
+        body.switch do |switch|
+          switch.video(src: signed_cloudfront_url(s3_key, is_video: true))
+        end
+      end
+    end
+  end
 
   private
     def schedule_file_analysis
