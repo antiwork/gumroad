@@ -14,6 +14,8 @@ class RefundPolicy < ApplicationRecord
   }.freeze
   DEFAULT_REFUND_PERIOD_IN_DAYS = 30
 
+  attribute :max_refund_period_in_days, :integer, default: RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
+
   belongs_to :seller, class_name: "User"
 
   stripped_fields :title, :fine_print, transform: -> { ActionController::Base.helpers.strip_tags(_1) }
