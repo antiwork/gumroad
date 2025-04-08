@@ -37,7 +37,7 @@ export const RefundPolicySelector = ({
       open={isEnabled}
       summary={
         <Toggle value={isEnabled} onChange={setIsEnabled}>
-          Specify a refund policy for this product
+          Specify a refund policy for this product{" "}
           <a data-helper-prompt="How do I specify a custom refund policy for my product?">Learn more</a>
         </Toggle>
       }
