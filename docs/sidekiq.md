@@ -64,7 +64,7 @@ Origins: https://gumroad.slack.com/archives/C0B4VNR0B/p1591816778064300
 
 ## Queuing batches of long running jobs
 
-Situation: we need to run the [`AnnualPayoutExportWorker` job](https://github.com/gumroad/web/blob/develop/app/workers/annual_payout_export_worker.rb) for all creators that have received at least one payout last year, so we can send them out the year in review email afterward.
+Situation: we need to run the [`AnnualPayoutExportWorker` job](https://github.com/antiwork/gumroad/blob/main/app/sidekiq/annual_payout_export_worker.rb) for all creators that have received at least one payout last year, so we can send them out the year in review email afterward.
 
 <aside>
 🚨 It’s best to have this reviewed by at least one engineer who’s already done this before. Add the script in a `Post-deploy` section of a GitHub issue or PR (if it’s a new Sidekiq worker), so this can be reviewed and approved or improved.

@@ -2,7 +2,7 @@
 
 Check to see if certain EC2 instances are unhealthy by [listing all the individual EC2 instances matching the blue|green clusters](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:search=blue%7Cgreen;sort=tag:Name) and clicking monitoring.
 
-Recycle the unhealthy instances by [terminating them](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:sort=tag:Name) (50% first, then the other 50% after five minutes). Note: **Make sure not to terminate steward instances**. Please follow [these steps](https://github.com/gumroad/infrastructure/blob/master/docs/upgrading_stewards.md) to recycle steward instances.
+Recycle the unhealthy instances by [terminating them](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:sort=tag:Name) (50% first, then the other 50% after five minutes). Note: **Make sure not to terminate steward instances**. Please follow [these steps](https://github.com/antiwork/infrastructure/blob/master/docs/upgrading_stewards.md) to recycle steward instances.
 
 You can look into container statistics with Hashi-UI. Please follow these steps to access it:
 
@@ -63,7 +63,7 @@ After that, run:
 sudo find / -type f -size +20M -exec ls -lh {} \\;
 ```
 
-This will tell you all files larger than 20MB. Likely it will be a log directory that is exploding. If not, make sure to examine what you are removing before you actually remove it. If it is safe to remove, remove the files and/or directories. Check [New Relic](https://rpm.newrelic.com/accounts/85918/servers) to ensure the disk usage went down. If not, try starting the stopping the instance. HOWEVER, follow the directions [here](https://github.com/gumroad/web/wiki/Upgrading-AWS-instances#how-to-run-the-rolling-upgrade-on-production) to ensure the site does not go down.
+This will tell you all files larger than 20MB. Likely it will be a log directory that is exploding. If not, make sure to examine what you are removing before you actually remove it. If it is safe to remove, remove the files and/or directories. Check [New Relic](https://rpm.newrelic.com/accounts/85918/servers) to ensure the disk usage went down. If not, try starting the stopping the instance. HOWEVER, follow the directions [here](https://github.com/antiwork/gumroad/wiki/Upgrading-AWS-instances#how-to-run-the-rolling-upgrade-on-production) to ensure the site does not go down.
 
 ## Checking connectivity
 
