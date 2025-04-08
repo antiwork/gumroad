@@ -22,6 +22,7 @@ copy_secrets() {
   logger "Copying files"
   cd "$CREDENTIALS_TMP_DIR"
   rm -rf .git
+  rm -f .gitignore
   find . -type f | while read -r src_path; do
     dest_path="${app_dir}/${src_path}"
     dest_dir=$(dirname "$dest_path")
