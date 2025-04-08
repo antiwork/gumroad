@@ -16,10 +16,7 @@ class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseCo
 
     if message.save
       message_props = CommunityChatMessagePresenter.new(message:).props
-      CommunityChannel.broadcast_to(
-        "community_#{@community.external_id}",
-        { type: CommunityChannel::CREATE_CHAT_MESSAGE_TYPE, message: message_props },
-      )
+      broadcast_message(message_props, CommunityChannel::CREATE_CHAT_MESSAGE_TYPE)
       render json: { message: message_props }
     else
       render json: { error: message.errors.full_messages.first }, status: :unprocessable_entity
@@ -29,10 +26,7 @@ class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseCo
   def update
     if @message.update(permitted_params)
       message_props = CommunityChatMessagePresenter.new(message: @message).props
-      CommunityChannel.broadcast_to(
-        "community_#{@community.external_id}",
-        { type: CommunityChannel::UPDATE_CHAT_MESSAGE_TYPE, message: message_props },
-      )
+      broadcast_message(message_props, CommunityChannel::UPDATE_CHAT_MESSAGE_TYPE)
       render json: { message: message_props }
     else
       render json: { error: @message.errors.full_messages.first }, status: :unprocessable_entity
@@ -42,10 +36,7 @@ class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseCo
   def destroy
     @message.mark_deleted!
     message_props = CommunityChatMessagePresenter.new(message: @message).props
-    CommunityChannel.broadcast_to(
-      "community_#{@community.external_id}",
-      { type: CommunityChannel::DELETE_CHAT_MESSAGE_TYPE, message: message_props },
-    )
+    broadcast_message(message_props, CommunityChannel::DELETE_CHAT_MESSAGE_TYPE)
     head :ok
   end
 
@@ -66,5 +57,15 @@ class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseCo
 
     def permitted_params
       params.require(:community_chat_message).permit(:content)
+    end
+
+    def broadcast_message(message_props, type)
+      CommunityChannel.broadcast_to(
+        "community_#{@community.external_id}",
+        { type:, message: message_props },
+      )
+    rescue => e
+      Rails.logger.error("Error broadcasting message to community channel: #{e.message}")
+      Bugsnag.notify(e)
     end
 end

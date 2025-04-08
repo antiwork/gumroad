@@ -25,6 +25,7 @@ const sortByName = <T extends { name: string }>(items: readonly T[]) =>
 
 export const useCommunities = () => {
   const data = cast<{
+    has_products: boolean;
     communities: Community[];
     notification_settings: CommunityNotificationSettings;
     selectedCommunityId?: string;
@@ -135,6 +136,7 @@ export const useCommunities = () => {
   );
 
   return {
+    hasProducts: data.has_products,
     communities,
     notificationSettings,
     selectedCommunity,

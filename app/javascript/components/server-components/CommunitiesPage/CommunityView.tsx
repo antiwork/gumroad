@@ -116,6 +116,7 @@ export const CommunityView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const {
+    hasProducts,
     communities,
     notificationSettings,
     selectedCommunity,
@@ -590,7 +591,7 @@ export const CommunityView = () => {
         <GoBackHeader />
 
         {communities.length === 0 ? (
-          <EmptyCommunitiesPlaceholder />
+          <EmptyCommunitiesPlaceholder hasProducts={hasProducts} />
         ) : selectedCommunity ? (
           <div className="flex flex-1 overflow-hidden">
             <div
@@ -861,7 +862,7 @@ const GoBackHeader = () => {
   );
 };
 
-const EmptyCommunitiesPlaceholder = () => (
+const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) => (
   <main>
     <section>
       <div className="placeholder">
@@ -873,11 +874,11 @@ const EmptyCommunitiesPlaceholder = () => (
           When you publish a product, we automatically create a dedicated community chat—your own space to connect with
           customers, answer questions, and build relationships.
         </p>
-        <NavigationButton href={Routes.new_product_path()} color="accent">
-          Create your first product
+        <NavigationButton href={hasProducts ? Routes.products_path() : Routes.new_product_path()} color="accent">
+          {hasProducts ? "Enable community chat for your products" : "Create a product with community"}
         </NavigationButton>
         <p>
-          or <a data-helper-prompt="How do I create a community chat?">learn more about community chats</a>
+          or <a data-helper-prompt="How do I enable community chat for my product?">learn more about community chats</a>
         </p>
       </div>
     </section>

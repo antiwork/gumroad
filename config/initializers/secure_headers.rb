@@ -174,6 +174,9 @@ SecureHeaders::Configuration.default do |config|
   config.csp[:connect_src] << "#{DOMAIN}"
   config.csp[:script_src] << "#{DOMAIN}"
 
+  # Required by AnyCable
+  config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}"
+
   if Rails.application.config.asset_host.present?
     config.csp[:connect_src] << Rails.application.config.asset_host
     config.csp[:script_src] << Rails.application.config.asset_host
@@ -185,6 +188,8 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
     config.csp[:script_src] << "test-custom-domain.gumroad.com:#{URI("#{PROTOCOL}://#{DOMAIN}").port}" # To allow loading widget scripts from the custom domain
     config.csp[:script_src] << ROOT_DOMAIN # Required to load gumroad.js for overlay/embed.
+    config.csp[:connect_src] << "ws://#{ANYCABLE_HOST}:8080" # Required by AnyCable
+    config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8080" # Required by AnyCable
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
     config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
@@ -192,8 +197,7 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:script_src] << "'unsafe-inline'" # Allow react-on-rails to inject server-rendering logs into the browser
     config.csp[:connect_src] << "gumroad.dev:3035" # Required by webpack-dev-server
     config.csp[:connect_src] << "wss://gumroad.dev:3035" # Required by webpack-dev-server
-    config.csp[:connect_src] << "ws://gumroad.dev:8081" # Required by AnyCable
-    config.csp[:connect_src] << "wss://gumroad.dev:8081" # Required by AnyCable
+    config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8081" # Required by AnyCable
     config.csp[:connect_src] << "localhost:3010" # Required by Helper widget
     config.csp[:connect_src] << "app.helperai.dev" # Required by Helper widget
     config.csp[:connect_src] << "http:"

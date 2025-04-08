@@ -308,16 +308,17 @@ describe "Product creation", type: :feature, js: true do
     end
   end
 
-  it "automatically enables the community chat on creating a product" do
+  it "does not automatically enable the community chat on creating a product" do
     Feature.activate_user(:communities, seller)
     visit new_product_path
     choose "Digital product"
     fill_in "Name", with: "My product"
     fill_in "Price", with: 1
     click_on "Next: Customize"
-    expect(page).to have_checked_field("Invite your customers to your Gumroad community chat")
+    wait_for_ajax
+    expect(page).not_to have_checked_field("Invite your customers to your Gumroad community chat")
     product = seller.products.last
-    expect(product.community_chat_enabled?).to be(true)
-    expect(product.active_community).to be_present
+    expect(product.community_chat_enabled?).to be(false)
+    expect(product.active_community).to be_nil
   end
 end

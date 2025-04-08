@@ -54,6 +54,7 @@ class CommunitiesPresenter
     end
 
     {
+      has_products: current_user.products.visible_and_not_archived.exists?,
       communities: communities_props,
       notification_settings: notification_settings.each_with_object({}) do |(seller_id, settings), hash|
         seller_external_id = seller_id_to_external_id_map[seller_id]

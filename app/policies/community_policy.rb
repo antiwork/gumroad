@@ -2,7 +2,7 @@
 
 class CommunityPolicy < ApplicationPolicy
   def index?
-    user.accessible_communities_ids.any? || (Feature.active?(:communities, user) && !user.is_buyer?)
+    user.accessible_communities_ids.any?
   end
 
   def show?

@@ -46,6 +46,7 @@ export async function getCommunities({ abortSignal }: { abortSignal: AbortSignal
   });
   if (!response.ok) throw new ResponseError();
   return cast<{
+    has_products: boolean;
     communities: Community[];
     notification_settings: CommunityNotificationSettings;
   }>(await response.json());

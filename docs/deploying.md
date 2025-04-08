@@ -87,7 +87,7 @@ Example of a message in the channel:
 
 > Ershad Kunnakkadan has finished deploying `production-d6b4605`
 
-Find the git tag for that commit from the [tags page on GitHub](https://github.com/gumroad/web/tags). Let's say the tag name is `production-d6b4605/2018-05-02-13-16-03`.
+Find the git tag for that commit from the [tags page on GitHub](https://github.com/antiwork/gumroad/tags). Let's say the tag name is `production-d6b4605/2018-05-02-13-16-03`.
 Execute the following command to create a new branch from the tag:
 
 ```bash
