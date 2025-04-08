@@ -54,10 +54,15 @@ const RecordingTimer = () => {
   );
 };
 
-const StartRecordingButton = ({ onClick }: { onClick: () => void }) => (
+const disabledButtonClassNames = "cursor-not-allowed opacity-80";
+
+const StartRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className="absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full"
+    className={cx("absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full", {
+      [disabledButtonClassNames]: disabled,
+    })}
     onClick={onClick}
+    disabled={disabled}
   >
     <div className="flex h-full w-full items-center justify-center rounded-full border-[2px] border-white p-[2px]">
       <div className="h-full w-full rounded-full bg-red" />
@@ -65,10 +70,13 @@ const StartRecordingButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 );
 
-const StopRecordingButton = ({ onClick }: { onClick: () => void }) => (
+const StopRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className="absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full"
+    className={cx("absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full", {
+      [disabledButtonClassNames]: disabled,
+    })}
     onClick={onClick}
+    disabled={disabled}
   >
     <div className="flex h-full w-full items-center justify-center rounded-full border-[2px] border-white p-[6px]">
       <div className="h-full w-full rounded-sm bg-red" />
@@ -76,16 +84,24 @@ const StopRecordingButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 );
 
-const DeleteRecordingButton = ({ onClick }: { onClick: () => void }) => (
+const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded bg-black"
+    className={cx("absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded bg-black", {
+      [disabledButtonClassNames]: disabled,
+    })}
     onClick={onClick}
+    disabled={disabled}
   >
     <Icon name="trash2" className="text-sm text-white" />
   </button>
 );
 
-export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChange }: VideoReviewProps) {
+export default function VideoReviewClientOnly({
+  formState,
+  videoUrl,
+  onVideoChange,
+  disabled = false,
+}: VideoReviewProps) {
   const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(videoUrl);
@@ -122,7 +138,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChan
     if (source) {
       return (
         <div className="w-full">
-          <video className="w-full rounded-lg" src={source} controls />
+          <video className="w-full rounded-lg" src={source} controls={!disabled} />
         </div>
       );
     }
@@ -137,6 +153,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChan
             onClick={() => {
               setUiState("countdown");
             }}
+            disabled={disabled}
           />
         );
       case "countdown":
@@ -160,6 +177,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChan
                 stopRecording();
                 setUiState("preview");
               }}
+              disabled={disabled}
             />
           </>
         );
@@ -171,6 +189,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChan
               clearRecordedVideo();
               setUiState("idle");
             }}
+            disabled={disabled}
           />
         );
     }
@@ -187,7 +206,7 @@ export default function VideoReviewClientOnly({ formState, videoUrl, onVideoChan
       <video
         className={cx("h-full w-full object-cover", { hidden: uiState !== "preview" })}
         src={mediaBlobUrl || originalVideoUrl || undefined}
-        controls
+        controls={!disabled}
         autoPlay
         muted
       />

@@ -3,6 +3,7 @@ export type VideoReviewProps = {
   formState: "viewing" | "editing";
   videoUrl: string | null;
   onVideoChange: (videoReview: File | null) => void;
+  disabled?: boolean;
 };
 
 export const VideoReviewContainer = ({ children }: { children?: React.ReactNode }) => (

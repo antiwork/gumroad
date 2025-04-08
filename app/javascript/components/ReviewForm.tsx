@@ -110,7 +110,12 @@ export const ReviewForm = React.forwardRef<
     );
 
     const videoReview = (
-      <VideoReview formState={formState} videoUrl={null} onVideoChange={(newVideo) => (video.current = newVideo)} />
+      <VideoReview
+        formState={formState}
+        videoUrl={null}
+        onVideoChange={(newVideo) => (video.current = newVideo)}
+        disabled
+      />
     );
 
     const reviewButton = viewing ? (
