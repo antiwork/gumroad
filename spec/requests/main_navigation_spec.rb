@@ -76,7 +76,7 @@ describe "Main Navigation", type: :feature, js: true do
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).not_to have_link("Community", href: community_path)
         end
       end
     end
