@@ -57,7 +57,7 @@ describe ProductRefundPolicy do
       it "is valid with allowed refund period values" do
         RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.each do |days|
           refund_policy.max_refund_period_in_days = days
-          expect(refund_policy.valid?).to be true, "Expected #{days} to be a valid refund period"
+          expect(refund_policy.valid?).to be true
         end
       end
 
@@ -69,7 +69,7 @@ describe ProductRefundPolicy do
       it "is invalid with a refund period not in the allowed list" do
         [1, 15, 60, 200].each do |days|
           refund_policy.max_refund_period_in_days = days
-          expect(refund_policy.valid?).to be false, "Expected #{days} to be an invalid refund period"
+          expect(refund_policy.valid?).to be false
           expect(refund_policy.errors.details[:max_refund_period_in_days].first[:error]).to eq :inclusion
         end
       end
