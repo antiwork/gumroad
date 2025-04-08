@@ -30,20 +30,8 @@ module Purchase::Reviews
   end
 
   def post_review(rating, message = nil)
-    review = original_product_review
-    if review.present?
-      ProductReview::UpdateService.new(review, rating:, message:).update
-      true
-    elsif true_original_purchase.allows_review_to_be_counted?
-      add_review!(rating, message)
-      true
-    else
-      false
-    end
-  end
-
-  def add_review!(rating, message = nil)
-    ProductReview.create!(link:, purchase: true_original_purchase, rating:, message:)
+    review = original_product_review || true_original_purchase.build_product_review(link:)
+    ProductReview::UpdateService.new(review, rating:, message:).update
   end
 
   # Important: The logic needs to be the same as the one in the scope `allowing_reviews_to_be_counted`

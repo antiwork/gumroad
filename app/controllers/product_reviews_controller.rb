@@ -62,12 +62,9 @@ class ProductReviewsController < ApplicationController
         return
       end
 
-      succeeded = purchase.post_review(params[:rating].to_i, params[:message])
-      if succeeded
-        render json: { success: true }
-      else
-        render json: { success: false, message: "Sorry, you cannot review this product." }
-      end
+      purchase.post_review(params[:rating].to_i, params[:message])
+
+      render json: { success: true }
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.message }
     rescue StandardError

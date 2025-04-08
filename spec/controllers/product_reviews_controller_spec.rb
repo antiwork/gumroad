@@ -84,7 +84,7 @@ describe ProductReviewsController do
         put :set, params: valid_params
 
         expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("Sorry, you cannot review this product.")
+        expect(response.parsed_body["message"]).to eq("Sorry, something went wrong.")
         expect(purchase.reload.product_review).to be_nil
       end
     end
