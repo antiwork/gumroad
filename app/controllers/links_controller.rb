@@ -124,7 +124,6 @@ class LinksController < ApplicationController
 
     begin
       @product.save!
-      toggle_community_chat!(true)
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
       @error_message = if @product&.errors&.any?
         @product.errors.full_messages.first
