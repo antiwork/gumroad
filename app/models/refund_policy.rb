@@ -20,9 +20,8 @@ class RefundPolicy < ApplicationRecord
 
   validates_presence_of :seller
   validates :fine_print, length: { maximum: 3_000 }
-  attribute :max_refund_period_in_days, :integer, default: DEFAULT_REFUND_PERIOD_IN_DAYS
 
-  validates :max_refund_period_in_days, inclusion: { in: ALLOWED_REFUND_PERIODS_IN_DAYS }
+  validates :max_refund_period_in_days, inclusion: { in: ALLOWED_REFUND_PERIODS_IN_DAYS }, allow_nil: true
 
   def as_json(*)
     {

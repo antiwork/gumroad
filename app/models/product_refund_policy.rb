@@ -35,7 +35,7 @@ class ProductRefundPolicy < RefundPolicy
   end
 
   def determine_max_refund_period_in_days
-    return RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[0] if title.match?(/no refunds|final|no returns/i)
+    return 0 if title.match?(/no refunds|final|no returns/i)
 
     begin
       response = ask_ai(max_refund_period_in_days_prompt)

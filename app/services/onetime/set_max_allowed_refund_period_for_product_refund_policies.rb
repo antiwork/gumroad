@@ -22,12 +22,14 @@ class Onetime::SetMaxAllowedRefundPeriodForProductRefundPolicies < Onetime::Base
 
         max_refund_period_in_days = product_refund_policy.determine_max_refund_period_in_days
 
-        product_refund_policy.with_lock do
-          product_refund_policy.update!(max_refund_period_in_days:)
-          Rails.logger.info "ProductRefundPolicy: #{product_refund_policy.id}: updated with max allowed refund period of #{max_refund_period_in_days} days"
+        begin
+          product_refund_policy.with_lock do
+            product_refund_policy.update!(max_refund_period_in_days:)
+            Rails.logger.info "ProductRefundPolicy: #{product_refund_policy.id}: updated with max allowed refund period of #{max_refund_period_in_days} days"
+          end
+        rescue => e
+          invalid_policy_ids << { product_refund_policy.id => e.message }
         end
-      rescue => e
-        invalid_policy_ids << { product_refund_policy.id => e.message }
       end
 
       $redis.set(LAST_PROCESSED_ID_KEY, batch.last.id, ex: 1.month)
