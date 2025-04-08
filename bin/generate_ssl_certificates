@@ -5,7 +5,20 @@ set -euo pipefail
 # Check if mkcert is installed
 if ! command -v mkcert &> /dev/null; then
   echo "mkcert is not installed. Please install it first:"
+  echo "  # For MacOS:"
   echo "  brew install mkcert"
+  echo ""
+  echo "  # For Ubuntu/Debian:"
+  echo "  sudo apt install libnss3-tools"
+  echo "  curl -JLO \"https://dl.filippo.io/mkcert/latest?for=linux/amd64\""
+  echo "  chmod +x mkcert-v*-linux-amd64"
+  echo "  sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert"
+  echo ""
+  echo "  # For Fedora:"
+  echo "  sudo dnf install nss-tools"
+  echo "  curl -JLO \"https://dl.filippo.io/mkcert/latest?for=linux/amd64\""
+  echo "  chmod +x mkcert-v*-linux-amd64"
+  echo "  sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert"
   exit 1
 fi
 
