@@ -64,10 +64,9 @@ class ProductRefundPolicy < RefundPolicy
 
       Example 1: If the title is "30-day money back guarantee", return 30.
       Example 2: If from the fine print it clearly states that there are no refunds, return 0.
-      Example 3: If from the analysis is is determined that is a a 3-day refund policy, return 3.
-      Example 4: If from the analysis is is determined that is a a 2-month refund policy, return 30.
-      Example 5: If from the analysis is is determined that is a a 1-year refund policy, return 183.
-
+      Example 3: If the analysis determines that it is a 3-day refund policy, return 3.
+      Example 4: If the analysis determines that it is a 2-month refund policy, return 30.
+      Example 5: If the analysis determines that it is a 1-year refund policy, return 183.
       Return one of the allowed numbers only if you are 100% confident. If you are not 100% confident, return -1.
 
       The response MUST be just a number. The only allowed numbers are: -1, 0, 7, 14, 30, 183.
