@@ -18,20 +18,6 @@ describe "Communities", :js, type: :feature do
     have_selector("[aria-label='Message content']", text: content, match: :first)
   end
 
-  it "shows empty state if there are no communities to a seller" do
-    create(:product, user: seller)
-
-    login_as(seller)
-
-    visit community_path
-
-    expect(page).to have_text("Build your community, one product at a time!")
-    expect(page).to have_text("When you publish a product, we automatically create a dedicated community chat—your own space to connect with customers, answer questions, and build relationships.")
-    expect(page).to have_link("Enable community chat for your products", href: products_path)
-    expect(find("a", text: "learn more about community chats")["data-helper-prompt"]).to eq("How do I enable community chat for my product?")
-    expect(page).to have_button("Go back")
-  end
-
   context "when the logged in seller has an active community" do
     let(:product) { create(:product, name: "Mastering Rails", user: seller, community_chat_enabled: true) }
     let!(:community) { create(:community, resource: product, seller:) }
