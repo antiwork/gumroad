@@ -52,6 +52,28 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be false
       expect(refund_policy.errors.details[:product].first[:error]).to eq :invalid
     end
+
+    context "max_refund_period_in_days validation" do
+      it "is valid with allowed refund period values" do
+        RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.each do |days|
+          refund_policy.max_refund_period_in_days = days
+          expect(refund_policy.valid?).to be true
+        end
+      end
+
+      it "is valid with nil value" do
+        refund_policy.max_refund_period_in_days = nil
+        expect(refund_policy.valid?).to be true
+      end
+
+      it "is invalid with a refund period not in the allowed list" do
+        [1, 15, 60, 200].each do |days|
+          refund_policy.max_refund_period_in_days = days
+          expect(refund_policy.valid?).to be false
+          expect(refund_policy.errors.details[:max_refund_period_in_days].first[:error]).to eq :inclusion
+        end
+      end
+    end
   end
 
   describe "stripped_fields" do
@@ -145,6 +167,63 @@ describe ProductRefundPolicy do
       allow(refund_policy.product).to receive(:published?).and_return(true)
       allow(refund_policy).to receive(:no_refunds?).and_return(false)
       expect(refund_policy.published_and_no_refunds?).to be false
+    end
+  end
+
+  describe "#determine_max_refund_period_in_days" do
+    let(:refund_policy) { create(:product_refund_policy) }
+
+    it "returns 0 when title contains 'no refunds'" do
+      refund_policy.title = "No refunds allowed"
+      expect(refund_policy.determine_max_refund_period_in_days).to eq 0
+    end
+
+    it "returns 0 when title contains 'final'" do
+      refund_policy.title = "All sales final"
+      expect(refund_policy.determine_max_refund_period_in_days).to eq 0
+    end
+
+    it "returns 0 when title contains 'no returns'" do
+      refund_policy.title = "No returns accepted"
+      expect(refund_policy.determine_max_refund_period_in_days).to eq 0
+    end
+
+    it "asks AI when title doesn't contain obvious no-refunds keywords", :vcr do
+      refund_policy.title = "14-day money back guarantee"
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+        {
+          "choices" => [
+            {
+              "message" => {
+                "content" => "14"
+              }
+            }
+          ]
+        }
+      )
+      expect(refund_policy.determine_max_refund_period_in_days).to eq 14
+    end
+
+    it "returns default period when AI returns unrecognized value", :vcr do
+      refund_policy.title = "Custom policy"
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+        {
+          "choices" => [
+            {
+              "message" => {
+                "content" => "42"
+              }
+            }
+          ]
+        }
+      )
+      expect(refund_policy.determine_max_refund_period_in_days).to eq RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
+    end
+
+    it "returns default period when AI call fails" do
+      refund_policy.title = "Custom policy"
+      expect_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(StandardError)
+      expect(refund_policy.determine_max_refund_period_in_days).to eq RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
     end
   end
 end

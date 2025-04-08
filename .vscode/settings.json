@@ -14,5 +14,25 @@
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "eslint.format.enable": true
+  "eslint.format.enable": true,
+  "workbench.colorCustomizations": {
+    "activityBar.activeBackground": "#ffc3f3",
+    "activityBar.background": "#ffc3f3",
+    "activityBar.foreground": "#15202b",
+    "activityBar.inactiveForeground": "#15202b99",
+    "activityBarBadge.background": "#7f9f00",
+    "activityBarBadge.foreground": "#15202b",
+    "commandCenter.border": "#15202b99",
+    "sash.hoverBorder": "#ffc3f3",
+    "statusBar.background": "#ff90e8",
+    "statusBar.foreground": "#15202b",
+    "statusBarItem.hoverBackground": "#ff5ddd",
+    "statusBarItem.remoteBackground": "#ff90e8",
+    "statusBarItem.remoteForeground": "#15202b",
+    "titleBar.activeBackground": "#ff90e8",
+    "titleBar.activeForeground": "#15202b",
+    "titleBar.inactiveBackground": "#ff90e899",
+    "titleBar.inactiveForeground": "#15202b99"
+  },
+  "peacock.color": "#rgb(255 144 232)"
 }
