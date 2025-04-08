@@ -10,18 +10,30 @@ export const setProductRating = async ({
   purchaseEmailDigest,
   rating,
   message,
+  videoOptions,
 }: {
   permalink: string;
   purchaseId: string;
   purchaseEmailDigest: string;
   rating: number;
   message?: string | null;
+  videoOptions?: {
+    create_by_url?: string;
+    destroy_by_external_id?: string;
+  };
 }) => {
   const response = await request({
     method: "PUT",
     url: Routes.product_reviews_set_path(),
     accept: "json",
-    data: { link_id: permalink, purchase_id: purchaseId, purchase_email_digest: purchaseEmailDigest, rating, message },
+    data: {
+      link_id: permalink,
+      purchase_id: purchaseId,
+      purchase_email_digest: purchaseEmailDigest,
+      rating,
+      message,
+      video_options: videoOptions,
+    },
   });
 
   const json = cast<{ success: true } | { success: false; message: string }>(await response.json());
@@ -82,4 +94,22 @@ export const getStreamingUrls = async (id: string) => {
   if (!response.ok) throw new ResponseError();
 
   return cast<{ streaming_urls: string[] }>(await response.json());
+};
+
+export type ReviewVideoUploadContext = {
+  aws_access_key_id: string;
+  s3_url: string;
+  user_id: string;
+};
+
+export const getReviewVideoUploadContext = async (): Promise<ReviewVideoUploadContext> => {
+  const response = await request({
+    method: "GET",
+    url: Routes.internal_product_review_videos_upload_context_path(),
+    accept: "json",
+  });
+
+  if (!response.ok) throw new ResponseError();
+
+  return cast<ReviewVideoUploadContext>(await response.json());
 };

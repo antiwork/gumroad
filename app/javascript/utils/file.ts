@@ -63,7 +63,7 @@ const FileUtils = {
   determineAWSAccessKeyIdForForm: ($form: JQuery) => cast<string>($form[0]?.dataset.awsAccessKeyId),
   determineUserExternalIdForForm: ($form: JQuery) => cast<string>($form[0]?.dataset.userExternalId),
   isFileExtensionStreamable: (extension: string) => {
-    const streamableExtensions = ["mp4", "m4v", "mov", "mpeg", "mpeg4", "wmv", "movie", "ogv", "avi"];
+    const streamableExtensions = ["mp4", "m4v", "mov", "mpeg", "mpeg4", "wmv", "movie", "ogv", "avi", "webm"];
     return streamableExtensions.includes(extension.toLowerCase());
   },
   isAudioExtension: (extension: string | null) =>
