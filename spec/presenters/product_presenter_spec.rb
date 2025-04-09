@@ -297,6 +297,7 @@ describe ProductPresenter do
                   value: "6-month money back guarantee"
                 }
               ],
+              max_refund_period_in_days: 30,
               title: "30-day money back guarantee",
               fine_print: "This is a product-level refund policy",
               fine_print_enabled: true
