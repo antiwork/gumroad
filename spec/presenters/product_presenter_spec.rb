@@ -219,7 +219,7 @@ describe ProductPresenter do
     let!(:asset_previews) { create_list(:asset_preview, 2, link: product) }
     let!(:thumbnail) { create(:thumbnail, product:) }
     let!(:refund_policy) { create(:product_refund_policy, product:, seller: product.user) }
-    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), title: "Other refund policy", fine_print: "This is another refund policy") }
+    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), max_refund_period_in_days: 0, fine_print: "This is another refund policy") }
     let!(:variant_category) { create(:variant_category, link: product, title: "Version") }
     let!(:version1) { create(:variant, variant_category:, name: "Version 1", description: "I am version 1") }
     let!(:version2) { create(:variant, variant_category:, name: "Version 2", price_difference_cents: 100, max_purchase_count: 100) }
@@ -456,8 +456,32 @@ describe ProductPresenter do
               is_epublication: false,
               product_refund_policy_enabled: false,
               refund_policy: {
-                title: nil,
+                allowed_refund_periods_in_days: [
+                  {
+                    key: 0,
+                    value: "No refunds allowed"
+                  },
+                  {
+                    key: 7,
+                    value: "7-day money back guarantee"
+                  },
+                  {
+                    key: 14,
+                    value: "14-day money back guarantee"
+                  },
+                  {
+                    key: 30,
+                    value: "30-day money back guarantee"
+                  },
+                  {
+                    key: 183,
+                    value: "6-month money back guarantee"
+                  }
+                ],
+                max_refund_period_in_days: 30,
+                title: "30-day money back guarantee",
                 fine_print: nil,
+                fine_print_enabled: false,
               },
               is_published: true,
               covers: [],
@@ -685,8 +709,32 @@ describe ProductPresenter do
               is_adult: false,
               discover_fee_per_thousand: 100,
               refund_policy: {
-                title: nil,
+                allowed_refund_periods_in_days: [
+                  {
+                    key: 0,
+                    value: "No refunds allowed"
+                  },
+                  {
+                    key: 7,
+                    value: "7-day money back guarantee"
+                  },
+                  {
+                    key: 14,
+                    value: "14-day money back guarantee"
+                  },
+                  {
+                    key: 30,
+                    value: "30-day money back guarantee"
+                  },
+                  {
+                    key: 183,
+                    value: "6-month money back guarantee"
+                  }
+                ],
+                max_refund_period_in_days: 30,
+                title: "30-day money back guarantee",
                 fine_print: nil,
+                fine_print_enabled: false,
               },
               is_published: true,
               covers: [],
