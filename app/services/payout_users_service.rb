@@ -27,7 +27,13 @@ class PayoutUsersService
 
     user_ids.each do |user_id|
       user = User.find(user_id)
-      payment, payment_errors = Payouts.create_payment(date, processor_type, user, payout_type:)
+
+      effective_payout_type = payout_type
+      if user.payout_schedule == User::PayoutSchedule::DAILY
+        effective_payout_type = Payouts::PAYOUT_TYPE_INSTANT
+      end
+
+      payment, payment_errors = Payouts.create_payment(date, processor_type, user, payout_type: effective_payout_type)
 
       if payment_errors.blank? && payment.present?
         # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,

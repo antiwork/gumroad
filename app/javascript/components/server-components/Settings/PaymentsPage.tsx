@@ -37,6 +37,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import logo from "$assets/images/logo-g.svg";
+import { InstantPayoutStatus } from "$app/components/InstantPayoutStatus";
 
 export type PayoutDebitCardData = { type: "saved" } | { type: "new"; element: StripeCardElement } | undefined;
 
@@ -56,7 +57,7 @@ export type User = {
   joined_at: string;
 };
 
-const PAYOUT_FREQUENCIES = ["weekly", "monthly", "quarterly"] as const;
+const PAYOUT_FREQUENCIES = ["weekly", "monthly", "quarterly", "daily"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
 
 export type ComplianceInfo = {
@@ -890,6 +891,7 @@ const PaymentsPage = (props: Props) => {
                   label: frequency.charAt(0).toUpperCase() + frequency.slice(1),
                 }))}
               />
+              {payoutFrequency === "daily" && <InstantPayoutStatus />}
             </fieldset>
             <fieldset className={cx({ danger: payoutThresholdCents.error })}>
               <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>

@@ -8,6 +8,7 @@ module User::PayoutSchedule
   WEEKLY = "weekly"
   MONTHLY = "monthly"
   QUARTERLY = "quarterly"
+  DAILY = "daily"
 
   include CurrencyHelper
 
