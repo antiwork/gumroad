@@ -11,17 +11,19 @@ export const Nav = ({
   currentTaxonomyPath,
   onClickTaxonomy,
   footer,
+  forceDomain = false,
 }: {
   wholeTaxonomy: Taxonomy[];
   currentTaxonomyPath?: string | undefined;
   onClickTaxonomy: (taxonomySlugPath?: string) => void;
   footer?: React.ReactNode;
+  forceDomain?: boolean;
 }) => {
   const { discoverDomain } = useDomains();
   const discoverUrl = Routes.discover_url({ host: discoverDomain });
 
   const menuItems = React.useMemo(
-    () => generateTaxonomyItemsForMenu(wholeTaxonomy, discoverUrl),
+    () => generateTaxonomyItemsForMenu(wholeTaxonomy, forceDomain ? discoverUrl : ""),
     [wholeTaxonomy, discoverUrl],
   );
   const selectedCategory = menuItems.find((menuItem) => menuItem.href === `/${currentTaxonomyPath ?? ""}`)?.key;
