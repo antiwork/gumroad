@@ -41,7 +41,7 @@ RSpec.describe Onetime::EnableRefundPolicyForSellersWithRefundPolicies do
 
     context "when the seller has all eligible refund policies as no refunds" do
       before do
-        product_refund_policy.update!(title: "No refunds")
+        product_refund_policy.update!(max_refund_period_in_days: 0)
       end
 
       it "sets refund policy to no refunds for eligible sellers" do

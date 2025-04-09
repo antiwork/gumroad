@@ -394,7 +394,7 @@ describe BundlesController do
         put :update, params: bundle_params, as: :json
         bundle.reload
         expect(bundle.product_refund_policy_enabled).to be(true)
-        expect(bundle.product_refund_policy.title).to eq("New refund policy")
+        expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
       end
     end

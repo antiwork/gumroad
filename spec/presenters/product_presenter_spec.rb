@@ -351,9 +351,10 @@ describe ProductPresenter do
           refund_policies: [
             {
               id: other_refund_policy.external_id,
-              title: "Other refund policy",
+              title: "No refunds allowed",
               fine_print: "This is another refund policy",
               product_name: "Other product",
+              max_refund_period_in_days: 0,
             }
           ],
           is_tiered_membership: false,

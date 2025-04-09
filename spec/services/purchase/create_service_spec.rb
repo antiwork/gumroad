@@ -180,7 +180,7 @@ describe Purchase::CreateService, :vcr do
               buyer:
             ).perform
 
-            expect(purchase.purchase_refund_policy.title).to eq("Refund policy")
+            expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
             expect(purchase.purchase_refund_policy.fine_print).to eq("This is a product-level refund policy")
           end
         end
