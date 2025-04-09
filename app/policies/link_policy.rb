@@ -91,6 +91,7 @@ class LinkPolicy < ApplicationPolicy
       :community_chat_enabled,
       refund_policy: [
         :max_refund_period_in_days,
+        :title,
         :fine_print
       ],
       covers: [],
@@ -171,7 +172,7 @@ class LinkPolicy < ApplicationPolicy
       :is_epublication,
       :product_refund_policy_enabled,
       :seller_refund_policy_enabled,
-      refund_policy: [:max_refund_period_in_days, :fine_print],
+      refund_policy: [:max_refund_period_in_days, :title, :fine_print],
       section_ids: [],
       tags: [],
       covers: [],

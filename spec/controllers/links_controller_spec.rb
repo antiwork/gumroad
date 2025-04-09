@@ -737,6 +737,20 @@ describe LinksController, :vcr do
           expect(@product.product_refund_policy.title).to eq "7-day money back guarantee"
           expect(@product.product_refund_policy.fine_print).to eq "Sample fine print"
         end
+
+        context "with product refund policy enabled" do
+          before do
+            @product.update!(product_refund_policy_enabled: true)
+          end
+
+          it "disables the product refund policy" do
+            @params[:product_refund_policy_enabled] = false
+            put :update, params: @params, as: :json
+            @product.reload
+            expect(@product.product_refund_policy_enabled).to be(false)
+            expect(@product.product_refund_policy).to be_nil
+          end
+        end
       end
 
       it "updates a physical product" do

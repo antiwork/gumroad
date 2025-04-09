@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
+import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
@@ -97,9 +98,17 @@ export const RefundPolicySelector = ({
           <select
             id="max-refund-period-in-days"
             value={refundPolicy.max_refund_period_in_days}
-            onChange={(evt) =>
-              setRefundPolicy({ ...refundPolicy, max_refund_period_in_days: Number(evt.target.value) })
-            }
+            onChange={(evt) => {
+              const maxRefundPeriodInDays = Number(evt.target.value);
+              const title = refundPolicy.allowed_refund_periods_in_days.find(
+                ({ key }) => key === maxRefundPeriodInDays,
+              )?.value;
+              setRefundPolicy({
+                ...refundPolicy,
+                max_refund_period_in_days: maxRefundPeriodInDays,
+                title: assertDefined(title),
+              });
+            }}
           >
             {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
               <option key={key} value={key}>

@@ -358,9 +358,11 @@ class LinksController < ApplicationController
         @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
-        if !current_seller.account_level_refund_policy_enabled? && product_permitted_params[:refund_policy].present? && product_permitted_params[:product_refund_policy_enabled]
+        if !current_seller.account_level_refund_policy_enabled?
           @product.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
-          @product.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
+          if product_permitted_params[:refund_policy].present? && product_permitted_params[:product_refund_policy_enabled]
+            @product.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
+          end
         end
         @product.show_in_sections!(product_permitted_params[:section_ids] || [])
         @product.save_shipping_destinations!(product_permitted_params[:shipping_destinations] || []) if @product.is_physical
