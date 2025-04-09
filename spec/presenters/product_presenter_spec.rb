@@ -275,8 +275,31 @@ describe ProductPresenter do
             is_adult: true,
             discover_fee_per_thousand: 300,
             refund_policy: {
-              title: "Refund policy",
+              allowed_refund_periods_in_days: [
+                {
+                  key: 0,
+                  value: "No refunds allowed"
+                },
+                {
+                  key: 7,
+                  value: "7-day money back guarantee"
+                },
+                {
+                  key: 14,
+                  value: "14-day money back guarantee"
+                },
+                {
+                  key: 30,
+                  value: "30-day money back guarantee"
+                },
+                {
+                  key: 183,
+                  value: "6-month money back guarantee"
+                }
+              ],
+              title: "30-day money back guarantee",
               fine_print: "This is a product-level refund policy",
+              fine_print_enabled: true
             },
             is_published: true,
             covers: asset_previews.map(&:as_json),
