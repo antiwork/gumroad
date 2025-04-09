@@ -96,7 +96,7 @@ export const RefundPolicySelector = ({
             ) : null}
           </legend>
           <select
-            id="max-refund-period-in-days"
+            id={`${uid}-max-refund-period-in-days`}
             value={refundPolicy.max_refund_period_in_days}
             onChange={(evt) => {
               const maxRefundPeriodInDays = Number(evt.target.value);

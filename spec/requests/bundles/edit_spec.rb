@@ -131,10 +131,9 @@ describe("Bundle edit page", type: :feature, js: true) do
         select_combo_box_option "Other product"
         click_on "Copy"
       end
-      find_field("Refund policy", with: "Refund policy").fill_in with: "Hi I refund policy"
+      select "7-day money back guarantee", from: "Refund period"
       find_field("Fine print (optional)", with: "This is a product-level refund policy").fill_in with: "I hate being small"
-      in_preview { expect(page).to have_modal("Hi I refund policy", text: "I hate being small") }
-      find_field("Refund policy").click
+      in_preview { expect(page).to have_modal("7-day money back guarantee", text: "I hate being small") }
 
       product_page = window_opened_by { click_on "Preview" }
       expect(page).to have_alert(text: "Changes saved!")
@@ -142,7 +141,8 @@ describe("Bundle edit page", type: :feature, js: true) do
       within_window(product_page) { expect(page.current_url).to eq(bundle.long_url) }
 
       expect(bundle.product_refund_policy_enabled?).to eq(true)
-      expect(bundle.product_refund_policy.title).to eq("Hi I refund policy")
+      expect(bundle.product_refund_policy.max_refund_period_in_days).to eq(7)
+      expect(bundle.product_refund_policy.title).to eq("7-day money back guarantee")
       expect(bundle.product_refund_policy.fine_print).to eq("I hate being small")
     end
   end
