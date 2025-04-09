@@ -305,7 +305,7 @@ describe("ProductShowScenario", type: :feature, js: true) do
     let(:product_refund_policy) do
       create(
         :product_refund_policy,
-        title: "Hassle-free refunds",
+        max_refund_period_in_days: 7,
         fine_print: "Seriously, just email us and we'll refund you.",
       )
     end
@@ -322,8 +322,8 @@ describe("ProductShowScenario", type: :feature, js: true) do
         product_refund_policy.update!(updated_at: Time.current)
         visit product.long_url
 
-        click_on("Hassle-free refunds")
-        within_modal "Hassle-free refunds" do
+        click_on("7-day money back guarantee")
+        within_modal "7-day money back guarantee" do
           expect(page).to have_text("Seriously, just email us and we'll refund you.")
           expect(page).to have_text("Last updated Apr 17, 2023")
         end
@@ -372,7 +372,7 @@ describe("ProductShowScenario", type: :feature, js: true) do
           visit "#{product.long_url}#refund-policy"
         end.to change { Event.count }.by(1)
 
-        within_modal "Hassle-free refunds" do
+        within_modal "7-day money back guarantee" do
           expect(page).to have_text("Seriously, just email us and we'll refund you.")
         end
 
