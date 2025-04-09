@@ -5,7 +5,7 @@ class Api::Internal::Helper::IffyAppealsController < Api::Internal::Helper::Base
 
   CREATE_APPEAL_OPENAPI = {
     summary: "Create Iffy appeal",
-    description: "Create an appeal for a suspended user who believes they have been suspended in error",
+    description: "Create an Iffy appeal for a suspended user who believes they have been suspended in error",
     requestBody: {
       required: true,
       content: {
@@ -76,7 +76,8 @@ class Api::Internal::Helper::IffyAppealsController < Api::Internal::Helper::Base
       )
 
       if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        return render json: { success: false, error_message: "Failed to retrieve user" }, status: :service_unavailable
+        error_message = response.parsed_response.dig("error", "message") || "Failed to find user"
+        return render json: { success: false, error_message: }
       end
 
       user_data = response.parsed_response["data"].first
@@ -93,7 +94,8 @@ class Api::Internal::Helper::IffyAppealsController < Api::Internal::Helper::Base
       )
 
       if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        return render json: { success: false, error_message: "Failed to create appeal" }, status: :service_unavailable
+        error_message = response.parsed_response.dig("error", "message") || "Failed to create appeal"
+        return render json: { success: false, error_message: }
       end
 
       appeal_data = response.parsed_response["data"].first
