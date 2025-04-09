@@ -9,7 +9,13 @@ import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
-export type RefundPolicy = { title: string | null; fine_print: string | null };
+export type RefundPolicy = {
+  allowed_refund_periods_in_days: { key: number; value: string }[];
+  max_refund_period_in_days: number;
+  fine_print_enabled: boolean;
+  fine_print: string | null;
+  title: string;
+};
 
 export const RefundPolicySelector = ({
   refundPolicy,
@@ -45,7 +51,7 @@ export const RefundPolicySelector = ({
       <div className="dropdown paragraphs">
         <fieldset>
           <legend>
-            <label htmlFor={`${uid}-refund-policy-title`}>Refund policy</label>
+            <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
             {refundPolicies.length > 0 ? (
               <Popover
                 trigger={<div className="link">Copy from other products</div>}
@@ -72,7 +78,12 @@ export const RefundPolicySelector = ({
                     onClick={() => {
                       const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
                       if (otherRefundPolicy) {
-                        setRefundPolicy(otherRefundPolicy);
+                        setRefundPolicy({
+                          ...refundPolicy,
+                          title: otherRefundPolicy.title,
+                          fine_print: otherRefundPolicy.fine_print,
+                          max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
+                        });
                         setIsPopoverOpen(false);
                       }
                     }}
@@ -83,14 +94,19 @@ export const RefundPolicySelector = ({
               </Popover>
             ) : null}
           </legend>
-          <input
-            id={`${uid}-refund-policy-title`}
-            maxLength={50}
-            type="text"
-            placeholder="30-day money back guarantee"
-            value={refundPolicy.title || ""}
-            onChange={(evt) => setRefundPolicy({ ...refundPolicy, title: evt.target.value })}
-          />
+          <select
+            id="max-refund-period-in-days"
+            value={refundPolicy.max_refund_period_in_days}
+            onChange={(evt) =>
+              setRefundPolicy({ ...refundPolicy, max_refund_period_in_days: Number(evt.target.value) })
+            }
+          >
+            {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
+              <option key={key} value={key}>
+                {value}
+              </option>
+            ))}
+          </select>
         </fieldset>
         <fieldset>
           <legend>
@@ -117,7 +133,13 @@ export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy:
   return (
     <dialog open={!!refundPolicy.fine_print && open} aria-labelledby={uid}>
       <header>
-        <h2 id={uid}>{refundPolicy.title}</h2>
+        <h2 id={uid}>
+          {
+            refundPolicy.allowed_refund_periods_in_days.find(
+              ({ key }) => key === refundPolicy.max_refund_period_in_days,
+            )?.value
+          }
+        </h2>
         <button className="close" aria-label="Close" />
       </header>
       <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>

@@ -72,7 +72,7 @@ type Props = {
   google_client_id: string;
   google_calendar_enabled: boolean;
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: RefundPolicy;
+  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellation_discounts_enabled: boolean;
 };
 
