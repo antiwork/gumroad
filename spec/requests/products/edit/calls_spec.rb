@@ -36,6 +36,7 @@ describe "Calls Edit", type: :feature, js: true do
   end
 
   it "allows editing durations" do
+    call = create(:call_product, user: seller, durations: [])
     visit edit_link_path(call.unique_permalink)
 
     click_on "Add duration"
