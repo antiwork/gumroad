@@ -148,6 +148,7 @@ type Props = {
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
+  payout_frequency_daily_supported: boolean;
 };
 
 export type PayoutMethod = "bank" | "card" | "paypal" | "stripe";
@@ -885,18 +886,31 @@ const PaymentsPage = (props: Props) => {
                 name="Schedule"
                 value={payoutFrequency}
                 onChange={setPayoutFrequency}
-                options={PAYOUT_FREQUENCIES.map((frequency) => ({
+                // in the special case where daily is not supported, but it is currently selected,
+                // we should show it in the dropdown, but as a disabled option (with a warning below)
+                options={PAYOUT_FREQUENCIES.filter((frequency) => {
+                  if (frequency === "daily") {
+                    return props.payout_frequency_daily_supported || payoutFrequency === "daily";
+                  }
+                  return true;
+                }).map((frequency) => ({
                   id: frequency,
                   label: frequency.charAt(0).toUpperCase() + frequency.slice(1),
+                  disabled: frequency === "daily" && !props.payout_frequency_daily_supported,
                 }))}
               />
             </fieldset>
-            {payoutFrequency === "daily" && (
+            {payoutFrequency === "daily" && props.payout_frequency_daily_supported && (
               <div role="status" className="info">
                 <div>
                   Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
                   <b>3% fee</b>.
                 </div>
+              </div>
+            )}
+            {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
+              <div role="status" className="danger">
+                <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
               </div>
             )}
             <fieldset className={cx({ danger: payoutThresholdCents.error })}>

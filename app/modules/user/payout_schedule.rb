@@ -8,6 +8,7 @@ module User::PayoutSchedule
   WEEKLY = "weekly"
   MONTHLY = "monthly"
   QUARTERLY = "quarterly"
+  DAILY = "daily"
 
   include CurrencyHelper
 
@@ -81,6 +82,8 @@ module User::PayoutSchedule
 
     def get_initial_payout_date(date)
       case payout_frequency
+      # Daily payouts are handled separately, so this date is a fallback, for any amount not able to be paid instantly
+      when DAILY then last_friday_of_week(date)
       when WEEKLY then last_friday_of_week(date)
       when MONTHLY then last_friday_of_month(date)
       when QUARTERLY then last_friday_of_quarter(date)
@@ -89,6 +92,8 @@ module User::PayoutSchedule
 
     def advance_payout_date(date)
       case payout_frequency
+      # Daily payouts are handled separately, so this date is a fallback, for any amount not able to be paid instantly
+      when DAILY then last_friday_of_week(date.next_day(7))
       when WEEKLY then last_friday_of_week(date.next_day(7))
       when MONTHLY then last_friday_of_month(date.next_month)
       when QUARTERLY then last_friday_of_quarter(date.next_month(3))
