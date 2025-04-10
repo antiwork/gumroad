@@ -86,13 +86,10 @@ describe ProductRefundPolicy do
     let(:refund_policy) { create(:product_refund_policy) }
 
     it "returns a hash with refund details" do
-      # Stub the external_id since it's having issues in the test
-      allow(refund_policy).to receive(:external_id).and_return("test-id")
-
       expect(refund_policy.as_json).to eq(
         {
           fine_print: refund_policy.fine_print,
-          id: "test-id",
+          id: refund_policy.external_id,
           max_refund_period_in_days: refund_policy.max_refund_period_in_days,
           product_name: refund_policy.product.name,
           title: refund_policy.title,
@@ -148,63 +145,6 @@ describe ProductRefundPolicy do
       allow(refund_policy.product).to receive(:published?).and_return(true)
       allow(refund_policy).to receive(:no_refunds?).and_return(false)
       expect(refund_policy.published_and_no_refunds?).to be false
-    end
-  end
-
-  xdescribe "#determine_max_refund_period_in_days" do
-    let(:refund_policy) { create(:product_refund_policy) }
-
-    it "returns 0 when title contains 'no refunds'" do
-      refund_policy.title = "No refunds allowed"
-      expect(refund_policy.determine_max_refund_period_in_days).to eq 0
-    end
-
-    it "returns 0 when title contains 'final'" do
-      refund_policy.title = "All sales final"
-      expect(refund_policy.determine_max_refund_period_in_days).to eq 0
-    end
-
-    it "returns 0 when title contains 'no returns'" do
-      refund_policy.title = "No returns accepted"
-      expect(refund_policy.determine_max_refund_period_in_days).to eq 0
-    end
-
-    it "asks AI when title doesn't contain obvious no-refunds keywords", :vcr do
-      refund_policy.title = "14-day money back guarantee"
-      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
-        {
-          "choices" => [
-            {
-              "message" => {
-                "content" => "14"
-              }
-            }
-          ]
-        }
-      )
-      expect(refund_policy.determine_max_refund_period_in_days).to eq 14
-    end
-
-    it "returns default period when AI returns unrecognized value", :vcr do
-      refund_policy.title = "Custom policy"
-      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
-        {
-          "choices" => [
-            {
-              "message" => {
-                "content" => "42"
-              }
-            }
-          ]
-        }
-      )
-      expect(refund_policy.determine_max_refund_period_in_days).to eq RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
-    end
-
-    it "returns default period when AI call fails" do
-      refund_policy.title = "Custom policy"
-      expect_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(StandardError)
-      expect(refund_policy.determine_max_refund_period_in_days).to eq RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
     end
   end
 end

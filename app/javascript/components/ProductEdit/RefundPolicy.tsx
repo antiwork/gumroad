@@ -96,7 +96,7 @@ export const RefundPolicySelector = ({
             ) : null}
           </legend>
           <select
-            id={`${uid}-max-refund-period-in-days`}
+            id="{`${uid}-max-refund-period-in-days`}"
             value={refundPolicy.max_refund_period_in_days}
             onChange={(evt) => {
               const maxRefundPeriodInDays = Number(evt.target.value);
@@ -142,13 +142,7 @@ export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy:
   return (
     <dialog open={!!refundPolicy.fine_print && open} aria-labelledby={uid}>
       <header>
-        <h2 id={uid}>
-          {
-            refundPolicy.allowed_refund_periods_in_days.find(
-              ({ key }) => key === refundPolicy.max_refund_period_in_days,
-            )?.value
-          }
-        </h2>
+        <h2 id={uid}>{refundPolicy.title}</h2>
         <button className="close" aria-label="Close" />
       </header>
       <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>
