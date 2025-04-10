@@ -394,7 +394,7 @@ describe BundlesController do
         put :update, params: bundle_params, as: :json
         bundle.reload
         expect(bundle.product_refund_policy_enabled).to be(true)
-        expect(bundle.product_refund_policy.title).to eq("New refund policy")
+        expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
       end
     end
@@ -408,8 +408,22 @@ describe BundlesController do
         put :update, params: bundle_params, as: :json
         bundle.reload
         expect(bundle.product_refund_policy_enabled).to be(true)
-        expect(bundle.product_refund_policy.title).to eq("New refund policy")
+        expect(bundle.product_refund_policy.title).to eq("30-day money back guarantee")
         expect(bundle.product_refund_policy.fine_print).to eq("I really hate being small")
+      end
+
+      context "with bundle refund policy enabled" do
+        before do
+          bundle.update!(product_refund_policy_enabled: true)
+        end
+
+        it "disables the product refund policy" do
+          bundle_params[:product_refund_policy_enabled] = false
+          put :update, params: bundle_params, as: :json
+          bundle.reload
+          expect(bundle.product_refund_policy_enabled).to be(false)
+          expect(bundle.product_refund_policy).to be_nil
+        end
       end
     end
 

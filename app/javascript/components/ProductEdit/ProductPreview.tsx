@@ -121,12 +121,15 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     can_edit: false,
     refund_policy: seller_refund_policy_enabled
       ? {
-          title: seller_refund_policy.title ?? "",
+          title: seller_refund_policy.title,
           fine_print: seller_refund_policy.fine_print ?? "",
           updated_at: "",
         }
       : {
-          title: product.refund_policy.title ?? "",
+          title:
+            product.refund_policy.allowed_refund_periods_in_days.find(
+              ({ key }) => key === product.refund_policy.max_refund_period_in_days,
+            )?.value ?? "",
           fine_print: product.refund_policy.fine_print ?? "",
           updated_at: "",
         },

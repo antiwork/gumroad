@@ -136,7 +136,7 @@ describe Purchase::CreateService, :vcr do
 
     context "when the refund policy has a fine print" do
       let!(:refund_policy) do
-        create(:product_refund_policy, title: "Refund policy", fine_print: "This is a product-level refund policy", product:, seller: user)
+        create(:product_refund_policy, fine_print: "This is a product-level refund policy", product:, seller: user)
       end
 
       it "saves product refund policy fine print on purchase" do
@@ -146,7 +146,7 @@ describe Purchase::CreateService, :vcr do
           buyer:
         ).perform
 
-        expect(purchase.purchase_refund_policy.title).to eq("Refund policy")
+        expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
         expect(purchase.purchase_refund_policy.fine_print).to eq("This is a product-level refund policy")
       end
 
@@ -180,7 +180,7 @@ describe Purchase::CreateService, :vcr do
               buyer:
             ).perform
 
-            expect(purchase.purchase_refund_policy.title).to eq("Refund policy")
+            expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
             expect(purchase.purchase_refund_policy.fine_print).to eq("This is a product-level refund policy")
           end
         end
@@ -189,7 +189,7 @@ describe Purchase::CreateService, :vcr do
 
     context "when the refund policy has no fine print" do
       let!(:refund_policy) do
-        create(:product_refund_policy, title: "Refund policy", fine_print: "", product:, seller: user)
+        create(:product_refund_policy, fine_print: "", product:, seller: user)
       end
 
       it "saves product refund policy title on purchase" do
@@ -199,7 +199,7 @@ describe Purchase::CreateService, :vcr do
           buyer:
         ).perform
 
-        expect(purchase.purchase_refund_policy.title).to eq("Refund policy")
+        expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
         expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
       end
 

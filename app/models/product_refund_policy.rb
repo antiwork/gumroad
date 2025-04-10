@@ -3,7 +3,6 @@
 class ProductRefundPolicy < RefundPolicy
   belongs_to :product, class_name: "Link"
 
-  validates :title, presence: true, length: { maximum: 50 }
   validates :product, presence: true, uniqueness: true
   validate :product_must_belong_to_seller
 
@@ -13,6 +12,7 @@ class ProductRefundPolicy < RefundPolicy
     {
       fine_print:,
       id: external_id,
+      max_refund_period_in_days:,
       product_name: product.name,
       title:,
     }

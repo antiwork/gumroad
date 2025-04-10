@@ -14,7 +14,7 @@ describe BundlePresenter do
     let!(:thumbnail) { create(:thumbnail, product: bundle) }
     let!(:refund_policy) { create(:product_refund_policy, product: bundle, seller:) }
 
-    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: seller, name: "Other product"), title: "Other refund policy", fine_print: "This is another refund policy") }
+    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: seller, name: "Other product"), max_refund_period_in_days: 0, fine_print: "This is another refund policy") }
 
     before do
       create(:call_product, user: seller, name: "Call product does not count towards products_count")
@@ -53,8 +53,32 @@ describe BundlePresenter do
             is_epublication: false,
             product_refund_policy_enabled: false,
             refund_policy: {
-              title: "Refund policy",
+              allowed_refund_periods_in_days: [
+                {
+                  key: 0,
+                  value: "No refunds allowed"
+                },
+                {
+                  key: 7,
+                  value: "7-day money back guarantee"
+                },
+                {
+                  key: 14,
+                  value: "14-day money back guarantee"
+                },
+                {
+                  key: 30,
+                  value: "30-day money back guarantee"
+                },
+                {
+                  key: 183,
+                  value: "6-month money back guarantee"
+                }
+              ],
+              title: "30-day money back guarantee",
               fine_print: "This is a product-level refund policy",
+              fine_print_enabled: true,
+              max_refund_period_in_days: 30,
             },
             taxonomy_id: nil,
             tags: ["hi"],
@@ -103,9 +127,10 @@ describe BundlePresenter do
           refund_policies: [
             {
               id: other_refund_policy.external_id,
-              title: "Other refund policy",
+              title: "No refunds allowed",
               fine_print: "This is another refund policy",
               product_name: "Other product",
+              max_refund_period_in_days: 0,
             }
           ],
           seller_refund_policy_enabled: true,
