@@ -900,14 +900,14 @@ const PaymentsPage = (props: Props) => {
                 }))}
               />
             </fieldset>
-            {payoutFrequency === "daily" && props.payout_frequency_daily_supported && (
+            {payoutFrequency === "daily" && props.payout_frequency_daily_supported ? (
               <div role="status" className="info">
                 <div>
                   Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
                   <b>3% fee</b>.
                 </div>
               </div>
-            )}
+            ) : null}
             {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
               <div role="status" className="danger">
                 <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
