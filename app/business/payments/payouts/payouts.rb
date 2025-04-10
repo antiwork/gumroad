@@ -63,6 +63,11 @@ class Payouts
     end
   end
 
+  def self.create_daily_instant_payments_for_balances_up_to_date(date)
+    users = User.holding_balance.where("json_data->'$.payout_frequency' = 'daily'")
+    self.create_daily_instant_payments_for_balances_up_to_date_for_users(date, users, perform_async: true)
+  end
+
   def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, retrying: false, bank_account_type: nil, from_admin: false)
     raise ArgumentError.new("Cannot payout for today or future balances.") if date >= Date.current
 
@@ -98,6 +103,40 @@ class Payouts
       user_ids_to_pay.each do |user_id|
         payments << PayoutUsersService.new(date_string:,
                                            processor_type:,
+                                           user_ids: user_id).process
+      end
+      payments.compact
+    end
+  end
+
+  def self.create_daily_instant_payments_for_balances_up_to_date_for_users(date, users, perform_async: false, from_admin: false)
+    raise ArgumentError.new("Cannot payout for today or future balances.") if date >= Date.current
+
+    user_ids_to_pay = []
+
+    users.each do |user|
+      if self.is_user_payable(
+        user, date,
+        processor_type: PayoutProcessorType::STRIPE,
+        add_comment: true,
+        from_admin:
+      )
+        user_ids_to_pay << user.id
+        Rails.logger.info("Payouts: Payable user: #{user.id}")
+      else
+        Rails.logger.info("Payouts: Not payable user: #{user.id}")
+      end
+    end
+
+    date_string = date.to_s
+    if perform_async
+      StripePayoutProcessor.enqueue_payments(user_ids_to_pay, date_string, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+    else
+      payments = []
+      user_ids_to_pay.each do |user_id|
+        payments << PayoutUsersService.new(date_string:,
+                                           processor_type: PayoutProcessorType::STRIPE,
+                                           payout_type: Payouts::PAYOUT_TYPE_INSTANT,
                                            user_ids: user_id).process
       end
       payments.compact
