@@ -1830,4 +1830,16 @@ describe ContactingCreatorMailer do
       end
     end
   end
+
+  describe "product_level_refund_policies_reverted" do
+    let(:seller) { create(:user) }
+
+    it "sends the email correctly" do
+      mail = ContactingCreatorMailer.product_level_refund_policies_reverted(seller.id)
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "Important: Refund policy changes effective immediately"
+      expect(mail.body.encoded).to include "Hey #{seller.name_or_username},"
+    end
+  end
 end
