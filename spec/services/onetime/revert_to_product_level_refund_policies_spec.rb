@@ -31,7 +31,6 @@ RSpec.describe Onetime::RevertToProductLevelRefundPolicies do
 
   describe "#process" do
     let!(:seller_with_refund) { create(:user) }
-    let!(:deleted_seller) { create(:user, deleted_at: 1.day.ago) }
 
     before do
       described_class.reset_last_processed_id
@@ -55,14 +54,15 @@ RSpec.describe Onetime::RevertToProductLevelRefundPolicies do
       expect(Rails.logger).to have_received(:info).with(/Seller: #{seller_with_refund.id}.*skipped \(already processed in previous run\)/)
     end
 
-    it "skips deleted sellers" do
-      service = described_class.new(seller_ids: [deleted_seller.id])
+    it "skips inactive sellers" do
+      allow_any_instance_of(User).to receive(:account_active?).and_return(false)
+      service = described_class.new(seller_ids: [seller_with_refund.id])
 
       expect do
         service.process
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :product_level_refund_policies_reverted)
 
-      expect(Rails.logger).to have_received(:info).with(/Seller: #{deleted_seller.id}.*skipped \(deleted\)/)
+      expect(Rails.logger).to have_received(:info).with(/Seller: #{seller_with_refund.id}.*skipped \(not active\)/)
     end
 
     it "processes active sellers with refund_policy_enabled=true" do

@@ -31,8 +31,8 @@ class Onetime::RevertToProductLevelRefundPolicies < Onetime::Base
 
       message_prefix = "Seller: #{seller_id} (#{index + 1}/#{seller_ids.size})"
       seller = User.find(seller_id)
-      if seller.deleted?
-        Rails.logger.info "#{message_prefix}: skipped (deleted)"
+      if !seller.account_active?
+        Rails.logger.info "#{message_prefix}: skipped (not active)"
         next
       end
 
