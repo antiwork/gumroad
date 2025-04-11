@@ -254,9 +254,9 @@ describe Payouts do
     let(:payout_date) { Date.yesterday }
 
     it "calls create_daily_instant_payments_for_balances_up_to_date_for_users with all users holding balance with a payout frequency of daily" do
-      u1 = create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::WEEKLY)
-      u2 = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::WEEKLY)
-      u3 = create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::DAILY)
+      create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::WEEKLY)
+      create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::WEEKLY)
+      create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::DAILY)
       u4 = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::DAILY)
 
       expect(described_class).to receive(:create_daily_instant_payments_for_balances_up_to_date_for_users).with(payout_date, [u4], perform_async: true)
