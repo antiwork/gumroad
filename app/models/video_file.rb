@@ -36,6 +36,10 @@ class VideoFile < ApplicationRecord
     end
   end
 
+  def signed_download_url
+    signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video: true)
+  end
+
   private
     def schedule_file_analysis
       AnalyzeFileWorker.perform_async(id, self.class.name)
