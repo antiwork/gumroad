@@ -886,19 +886,16 @@ const PaymentsPage = (props: Props) => {
                 name="Schedule"
                 value={payoutFrequency}
                 onChange={setPayoutFrequency}
-                // in the special case where daily is not supported, but it is currently selected,
-                // we should show it in the dropdown, but as a disabled option (with a warning below)
-                options={PAYOUT_FREQUENCIES.filter((frequency) => {
-                  if (frequency === "daily") {
-                    return props.payout_frequency_daily_supported || payoutFrequency === "daily";
-                  }
-                  return true;
-                }).map((frequency) => ({
+                options={PAYOUT_FREQUENCIES.map((frequency) => ({
                   id: frequency,
                   label: frequency.charAt(0).toUpperCase() + frequency.slice(1),
                   disabled: frequency === "daily" && !props.payout_frequency_daily_supported,
                 }))}
               />
+              <small>
+                Daily payouts are only available for US users with eligible bank accounts and more than 4 previous
+                payouts.
+              </small>
             </fieldset>
             {payoutFrequency === "daily" && props.payout_frequency_daily_supported ? (
               <div role="status" className="info">
