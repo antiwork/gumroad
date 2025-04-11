@@ -32,6 +32,9 @@ class PaypalPayoutProcessor
     # Don't allow payout to PayPal if the user has given us a bank account.
     return false if user.active_bank_account
 
+    # PayPal does not support instant payouts.
+    return false if payout_type == Payouts::PAYOUT_TYPE_INSTANT
+
     # Don't allow payout to PayPal if the StripePayoutProcessor can handle it.
     return false if StripePayoutProcessor.is_user_payable(user, amount_payable_usd_cents)
 
