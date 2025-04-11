@@ -9,7 +9,7 @@ class Payouts
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
 
-  def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false)
+  def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     if user.suspended? && !from_admin
@@ -21,6 +21,13 @@ class Payouts
       paused_by = user.payouts_paused_internally? ? "admin" : "creator"
       user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by #{paused_by == 'admin' ? 'the admin' : 'you'}.") if add_comment
       return false
+    end
+
+    if payout_type == Payouts::PAYOUT_TYPE_INSTANT
+      if !user.instant_payouts_supported?
+        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts.") if add_comment
+        return false
+      end
     end
 
     amount_payable = user.unpaid_balance_cents_up_to_date(date) + user.paid_payments_cents_for_date(date)
@@ -36,7 +43,7 @@ class Payouts
 
     processor_types = processor_type ? [processor_type] : ::PayoutProcessorType.all
     processor_types.any? do |payout_processor_type|
-      ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:)
+      ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:, payout_type:)
     end
   end
 

@@ -288,7 +288,7 @@ describe StripePayoutProcessor, :vcr do
 
       expect(PayoutUsersWorker.jobs.size).to eq(user_ids.size)
       sidekiq_job_args = user_ids.each_with_object([]) do |user_id, accumulator|
-        accumulator << [yesterday, PayoutProcessorType::STRIPE, user_id]
+        accumulator << [yesterday, PayoutProcessorType::STRIPE, user_id, Payouts::PAYOUT_TYPE_STANDARD]
       end
       expect(PayoutUsersWorker.jobs.map { _1["args"] }).to match_array(sidekiq_job_args)
     end
