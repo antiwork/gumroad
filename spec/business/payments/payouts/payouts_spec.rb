@@ -111,6 +111,33 @@ describe Payouts do
       end
     end
 
+    describe "instant payouts" do
+      let(:seller) { create(:user) }
+
+      before do
+        allow(StripePayoutProcessor).to receive(:is_user_payable).and_return(true)
+        create(:balance, user: seller, amount_cents: 50_00, date: payout_date - 3)
+      end
+
+      it "returns true when instant payouts are supported and the user has an eligible balance" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
+        expect(described_class.is_user_payable(seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to be(true)
+      end
+
+      it "returns false when instant payouts are not supported" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
+        expect(described_class.is_user_payable(seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to be(false)
+      end
+
+      it "calls the stripe payout processor with only the instantly payable balance amount" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
+        allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents_up_to_date).and_return(100_00)
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents_up_to_date).and_return(200_00)
+        expect(StripePayoutProcessor).to receive(:is_user_payable).with(seller, 100_00, add_comment: false, from_admin: false, payout_type: anything)
+        described_class.is_user_payable(seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      end
+    end
+
     describe "payout processor logic" do
       let(:u1) { create(:user) }
 
@@ -220,6 +247,36 @@ describe Payouts do
       expect(described_class).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_date, PayoutProcessorType::STRIPE, [u3], perform_async: true)
 
       described_class.create_payments_for_balances_up_to_date(payout_date, PayoutProcessorType::STRIPE)
+    end
+  end
+
+  describe "create_daily_instant_payments_for_balances_up_to_date" do
+    let(:payout_date) { Date.yesterday }
+
+    it "calls create_daily_instant_payments_for_balances_up_to_date_for_users with all users holding balance with a payout frequency of daily" do
+      u1 = create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::WEEKLY)
+      u2 = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::WEEKLY)
+      u3 = create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::DAILY)
+      u4 = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::DAILY)
+
+      expect(described_class).to receive(:create_daily_instant_payments_for_balances_up_to_date_for_users).with(payout_date, [u4], perform_async: true)
+
+      described_class.create_daily_instant_payments_for_balances_up_to_date(payout_date)
+    end
+  end
+
+  describe "create_daily_instant_payments_for_balances_up_to_date_for_users" do
+    let(:payout_date) { Date.yesterday }
+
+    context "when the seller does not support instant payouts" do
+      it "does not create payments" do
+        creator = create(:user_with_compliance_info)
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(payout_date, PayoutProcessorType::STRIPE, [creator])
+        end.to_not change { Payment.count }
+      end
     end
   end
 
