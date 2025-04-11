@@ -56,8 +56,8 @@ describe PayoutsPresenter do
           pagination: {}
         )
         allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
-        allow_any_instance_of(User).to receive(:instantly_payable_balance_amount_cents).and_return(1000)
-        allow_any_instance_of(User).to receive(:instantly_payable_amount_cents_on_stripe).and_return(2000)
+        allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(1000)
+        allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).and_return(2000)
         allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("checking")
         allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
         allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("123456789")

@@ -854,10 +854,6 @@ class User < ApplicationRecord
     MoneyFormatter.format(saved_fee_cents, :usd, no_cents_if_whole: true, symbol: true)
   end
 
-  def instantly_payable_amount_cents_on_stripe
-    StripePayoutProcessor.instantly_payable_amount_cents_on_stripe(self)
-  end
-
   def eligible_for_instant_payouts?
     !suspended? &&
       !payouts_paused? &&
@@ -867,25 +863,6 @@ class User < ApplicationRecord
 
   def instant_payouts_supported?
     eligible_for_instant_payouts? && (active_bank_account&.supports_instant_payouts? || false)
-  end
-
-  def instantly_payable_balances
-    amount_cents_available_on_stripe = instantly_payable_amount_cents_on_stripe
-    first_unpayable_balance_held_by_stripe_date = nil
-    unpaid_balances.select { _1.merchant_account.holder_of_funds == HolderOfFunds::STRIPE }.sort_by(&:date).map(&:date).each do |date|
-      balance_cents_held_by_stripe_till_date = unpaid_balances.where("date <= ?", date).select { _1.merchant_account.holder_of_funds == HolderOfFunds::STRIPE }.sum(&:holding_amount_cents)
-      if (balance_cents_held_by_stripe_till_date * 100.0 / (100 + StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT)).floor > amount_cents_available_on_stripe
-        first_unpayable_balance_held_by_stripe_date = date
-        break
-      end
-    end
-    payable_balances = unpaid_balances
-    payable_balances = payable_balances.where("date < ?", first_unpayable_balance_held_by_stripe_date) if first_unpayable_balance_held_by_stripe_date.present?
-    payable_balances.select { _1.merchant_account.holder_of_funds.in?([HolderOfFunds::STRIPE, HolderOfFunds::GUMROAD]) }.sort_by(&:date)
-  end
-
-  def instantly_payable_balance_amount_cents
-    instantly_payable_balances.sum(&:holding_amount_cents)
   end
 
   def payouts_paused?

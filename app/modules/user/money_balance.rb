@@ -30,6 +30,33 @@ class User
       balances.unpaid.where("date <= ?", date).where(merchant_account_id: creator_stripe_account.id).sum(:holding_amount_cents)
     end
 
+    def instantly_payable_unpaid_balance_cents
+      instantly_payable_unpaid_balances.sum(&:holding_amount_cents)
+    end
+
+    def instantly_payable_unpaid_balance_cents_up_to_date(date)
+      instantly_payable_unpaid_balances_up_to_date(date).sum(&:holding_amount_cents)
+    end
+
+    def instantly_payable_unpaid_balances
+      instantly_payable_unpaid_balances_up_to_date(Date.today)
+    end
+
+    def instantly_payable_unpaid_balances_up_to_date(date)
+      amount_cents_available_on_stripe = StripePayoutProcessor.instantly_payable_amount_cents_on_stripe(self)
+      first_unpayable_balance_held_by_stripe_date = nil
+      unpaid_balances_up_to_date(date).select { _1.merchant_account.holder_of_funds == HolderOfFunds::STRIPE }.sort_by(&:date).map(&:date).each do |date|
+        balance_cents_held_by_stripe_till_date = unpaid_balances.where("date <= ?", date).select { _1.merchant_account.holder_of_funds == HolderOfFunds::STRIPE }.sum(&:holding_amount_cents)
+        if (balance_cents_held_by_stripe_till_date * 100.0 / (100 + StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT)).floor > amount_cents_available_on_stripe
+          first_unpayable_balance_held_by_stripe_date = date
+          break
+        end
+      end
+      payable_balances = unpaid_balances_up_to_date(date)
+      payable_balances = payable_balances.where("date < ?", first_unpayable_balance_held_by_stripe_date) if first_unpayable_balance_held_by_stripe_date.present?
+      payable_balances.select { _1.merchant_account.holder_of_funds.in?([HolderOfFunds::STRIPE, HolderOfFunds::GUMROAD]) }.sort_by(&:date)
+    end
+
     def unpaid_balances_up_to_date(date)
       balances.unpaid.where("date <= ?", date)
     end
