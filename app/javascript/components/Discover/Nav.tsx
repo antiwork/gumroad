@@ -26,7 +26,8 @@ export const Nav = ({
     () => generateTaxonomyItemsForMenu(wholeTaxonomy, forceDomain ? discoverUrl : ""),
     [wholeTaxonomy, discoverUrl],
   );
-  const selectedCategory = menuItems.find((menuItem) => menuItem.href === `/${currentTaxonomyPath ?? ""}`)?.key;
+
+  const selectedCategory = menuItems.find((menuItem) => menuItem.href === (currentTaxonomyPath ?? ""))?.key;
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
