@@ -5,6 +5,8 @@ class StripePayoutProcessor
 
   DEBIT_CARD_PAYOUT_MAX = 300_000
   INSTANT_PAYOUT_FEE_PERCENT = 3
+  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10_00
+  MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
 
   # Public: Determines if it's possible for this processor to payout
   # the user by checking that the user has provided us with the
@@ -36,6 +38,19 @@ class StripePayoutProcessor
       user.add_payout_note(content: "Payout on #{payout_date} was skipped because the payout bank account was not correctly set up.") if add_comment
       return false
     end
+
+    if payout_type == Payouts::PAYOUT_TYPE_INSTANT
+      if amount_payable_usd_cents < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance was less than the minimum instant payout amount of $10.") if add_comment
+        return false
+      end
+
+      if amount_payable_usd_cents > StripePayoutProcessor::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance was greater than the maximum instant payout amount of $9999.") if add_comment
+        return false
+      end
+    end
+
     true
   end
 

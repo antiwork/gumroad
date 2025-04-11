@@ -4,8 +4,6 @@ class Payouts
   extend ActionView::Helpers::NumberHelper
 
   MIN_AMOUNT_CENTS = 10_00
-  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10_00
-  MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
 
@@ -23,22 +21,26 @@ class Payouts
       return false
     end
 
+    amount_payable = user.unpaid_balance_cents_up_to_date(date)
+
+    account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+    if account_balance < user.minimum_payout_amount_cents
+      if add_comment && account_balance > 0
+        current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
+        minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
+        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.") if add_comment
+      end
+      is_payable_from_admin = from_admin && account_balance > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == total_amount_payable
+      return false unless is_payable_from_admin
+    end
+
     if payout_type == Payouts::PAYOUT_TYPE_INSTANT
       if !user.instant_payouts_supported?
         user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts.") if add_comment
         return false
       end
-    end
 
-    amount_payable = user.unpaid_balance_cents_up_to_date(date) + user.paid_payments_cents_for_date(date)
-    if amount_payable < user.minimum_payout_amount_cents
-      if add_comment && amount_payable > 0
-        current_balance = user.formatted_dollar_amount(amount_payable, with_currency: true)
-        minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
-        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.") if add_comment
-      end
-      is_payable_from_admin = from_admin && amount_payable > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == amount_payable
-      return false unless is_payable_from_admin
+      amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
     end
 
     processor_types = processor_type ? [processor_type] : ::PayoutProcessorType.all
@@ -126,7 +128,8 @@ class Payouts
         user, date,
         processor_type: PayoutProcessorType::STRIPE,
         add_comment: true,
-        from_admin:
+        from_admin:,
+        payout_type: Payouts::PAYOUT_TYPE_INSTANT
       )
         user_ids_to_pay << user.id
         Rails.logger.info("Payouts: Payable user: #{user.id}")
