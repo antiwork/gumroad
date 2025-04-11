@@ -30,7 +30,7 @@ class Payouts
         minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
         user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.") if add_comment
       end
-      is_payable_from_admin = from_admin && account_balance > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == total_amount_payable
+      is_payable_from_admin = from_admin && account_balance > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == account_balance
       return false unless is_payable_from_admin
     end
 
