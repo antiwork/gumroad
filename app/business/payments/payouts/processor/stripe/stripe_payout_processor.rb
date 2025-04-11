@@ -182,7 +182,7 @@ class StripePayoutProcessor
 
   def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     user_ids.each do |user_id|
-      PayoutUsersWorker.perform_async(date_string, PayoutProcessorType::STRIPE, user_id, payout_type:)
+      PayoutUsersWorker.perform_async(date_string, PayoutProcessorType::STRIPE, user_id, payout_type)
     end
   end
 
