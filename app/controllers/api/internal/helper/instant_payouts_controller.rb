@@ -55,7 +55,7 @@ class Api::Internal::Helper::InstantPayoutsController < Api::Internal::Helper::B
   }.freeze
 
   def index
-    balance_cents = @user.instantly_payable_balance_amount_cents
+    balance_cents = StripePayoutProcessor.instantly_payable_balance_amount_cents(@user)
     render json: {
       success: true,
       balance: formatted_dollar_amount(balance_cents)

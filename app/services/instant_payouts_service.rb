@@ -11,7 +11,7 @@ class InstantPayoutsService
   def perform
     return { success: false, error: "Your account is not eligible for instant payouts at this time." } unless seller.instant_payouts_supported?
 
-    balances = seller.instantly_payable_balances
+    balances = StripePayoutProcessor.instantly_payable_balances(seller)
       .filter { |balance| balance.date <= date }
       .sort_by(&:created_at)
     return { success: false, error: "You need at least $10 in your balance to request an instant payout." } if balances.sum(&:holding_amount_cents) < Payouts::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
