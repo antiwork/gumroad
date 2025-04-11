@@ -44,5 +44,4 @@ describe User::MoneyBalance, :vcr do
       expect(user.instantly_payable_unpaid_balances).to match_array([bal1, bal2, bal3, bal4, bal5, bal6, bal7, bal8])
     end
   end
-
 end
