@@ -121,15 +121,15 @@ describe Payouts do
 
       describe "no payout processor type specified" do
         it "asks all payout processors" do
-          expect(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything)
-          expect(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything)
+          expect(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false)
+          expect(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false)
           described_class.is_user_payable(u1, payout_date)
         end
 
         describe "all processors say no" do
           before do
-            allow(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(false)
-            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(false)
+            allow(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(false)
+            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(false)
           end
 
           it "considers the user NOT payable" do
@@ -139,8 +139,8 @@ describe Payouts do
 
         describe "one processor says yes, rest say no" do
           before do
-            allow(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(false)
-            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(true)
+            allow(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(false)
+            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(true)
           end
 
           it "considers the user payable" do
@@ -150,8 +150,8 @@ describe Payouts do
 
         describe "all processors say yes" do
           before do
-            allow(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(true)
-            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(true)
+            allow(PaypalPayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(true)
+            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(true)
           end
 
           it "considers the user payable" do
@@ -164,14 +164,14 @@ describe Payouts do
         let(:payout_processor_type) { PayoutProcessorType::STRIPE }
 
         it "asks only that payout processors" do
-          expect(PaypalPayoutProcessor).to_not receive(:is_user_payable).with(u1, 100_00, add_comment: anything, payout_type: anything)
-          expect(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything)
+          expect(PaypalPayoutProcessor).to_not receive(:is_user_payable).with(u1, 100_00, add_comment: anything)
+          expect(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false)
           described_class.is_user_payable(u1, payout_date, processor_type: payout_processor_type)
         end
 
         describe "processor says no" do
           before do
-            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(false)
+            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(false)
           end
 
           it "considers the user NOT payable" do
@@ -181,7 +181,7 @@ describe Payouts do
 
         describe "processor says yes" do
           before do
-            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false, payout_type: anything).and_return(true)
+            allow(StripePayoutProcessor).to receive(:is_user_payable).with(u1, 100_00, add_comment: false, from_admin: false).and_return(true)
           end
 
           it "considers the user payable" do
