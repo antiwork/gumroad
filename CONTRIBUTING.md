@@ -103,6 +103,7 @@ feat(cli): Add mobile testing support
 - Check existing discussions/issues/PRs before creating new ones
 - Start a discussion for questions or ideas
 - Open an [issue](https://github.com/antiwork/gumroad/issues) for bugs or problems
+- Any issue with label `help wanted` is open for contributions - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22)
 
 ## License
 
