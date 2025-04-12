@@ -51,8 +51,6 @@ class ApplicationController < ActionController::Base
     redirect_to safe_redirect_path(path), allow_other_host: true
   end
 
-
-
   def default_url_options(options = {})
     if DiscoverDomainConstraint.matches?(request)
       options.merge(host: DOMAIN, protocol: PROTOCOL)
