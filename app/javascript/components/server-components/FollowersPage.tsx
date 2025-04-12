@@ -60,7 +60,7 @@ const Layout = ({
 
 const ExportFollowers = ({ close }: { close: () => void }) => {
   const [followers, setFollowers] = React.useState(true);
-  const [customers, setCustomersChecked] = React.useState(false);
+  const [customers, setCustomers] = React.useState(false);
 
   const handleDownload = () => {
     // TODO: Trigger the export of followers and customers
@@ -91,7 +91,7 @@ const ExportFollowers = ({ close }: { close: () => void }) => {
             type="checkbox"
             checked={customers}
             onChange={(evt) => {
-              setCustomersChecked(evt.target.checked);
+              setCustomers(evt.target.checked);
             }}
           />
           Customers
