@@ -18,7 +18,6 @@ class ApplicationController < ActionController::Base
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
 
-
   before_action :debug_headers
   before_action :set_is_mobile
   before_action :set_title
