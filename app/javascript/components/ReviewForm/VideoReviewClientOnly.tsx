@@ -48,7 +48,7 @@ const RecordingTimer = () => {
   const pad = (num: number) => num.toString().padStart(2, "0");
 
   return (
-    <div className="absolute left-2 top-2 rounded bg-red px-2 py-1 text-xs text-white">
+    <div className="absolute left-2 top-2 rounded bg-red px-2 py-1 font-mono text-xs text-white">
       {pad(minutes)}:{pad(seconds)}
     </div>
   );
