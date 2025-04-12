@@ -2,7 +2,7 @@
 
 class Api::Mobile::BaseController < ApplicationController
   include Pagy::Backend
-  skip_before_action :save_us_from_ddos
+
   before_action :check_mobile_token
 
   rescue_from Pagy::VariableError do |exception|
