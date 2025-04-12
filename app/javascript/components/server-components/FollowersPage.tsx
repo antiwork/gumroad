@@ -1,8 +1,9 @@
 import debounce from "lodash/debounce";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast, createCast } from "ts-safe-cast";
 
 import { deleteFollower, fetchFollowers, Follower } from "$app/data/followers";
+import { ResponseError, assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
@@ -63,13 +64,34 @@ const ExportFollowers = ({ close }: { close: () => void }) => {
   const [customers, setCustomers] = React.useState(false);
   const [affiliates, setAffiliates] = React.useState(false);
 
-  const handleDownload = () => {
-    // TODO: Trigger the export of followers and customers
-    // This is a placeholder for the actual export logic
+  const handleDownload = async () => {
+    try {
+      const response = await request({
+        url: Routes.audience_export_path(),
+        method: "POST",
+        data: {
+          options: {
+            followers,
+            customers,
+            affiliates,
+          },
+        },
+        accept: "json",
+      });
 
-    showAlert("Your export is being prepared. You’ll receive an email with the download link shortly.", "success");
-    close();
+      if (!response.ok) {
+        const { message } = cast<{ message?: string }>(await response.json());
+        throw new ResponseError(message ?? "Something went wrong.");
+      }
+      showAlert("Your export is being prepared. You’ll receive an email with the download link shortly.", "success");
+      close();
+    } catch (error) {
+      assertResponseError(error);
+      showAlert(error.message, "error");
+    }
   };
+
+  const disabled = !followers && !customers && !affiliates;
 
   return (
     <div>
@@ -109,7 +131,7 @@ const ExportFollowers = ({ close }: { close: () => void }) => {
         </label>
       </div>
       <div className="grid">
-        <Button disabled={!followers && !customers} onClick={handleDownload}>
+        <Button disabled={disabled} onClick={() => void handleDownload()}>
           Download
         </Button>
       </div>
@@ -204,7 +226,6 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
             trigger={
               <WithTooltip tip="Export" position="bottom">
                 <Button aria-label="Export">
-                  {/* href={Routes.audience_export_path({ format: "csv" })}  */}
                   <Icon aria-label="Download" name="download" />
                 </Button>
               </WithTooltip>
