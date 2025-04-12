@@ -61,6 +61,7 @@ const Layout = ({
 const ExportFollowers = ({ close }: { close: () => void }) => {
   const [followers, setFollowers] = React.useState(true);
   const [customers, setCustomers] = React.useState(false);
+  const [affiliates, setAffiliates] = React.useState(false);
 
   const handleDownload = () => {
     // TODO: Trigger the export of followers and customers
@@ -95,6 +96,16 @@ const ExportFollowers = ({ close }: { close: () => void }) => {
             }}
           />
           Customers
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={affiliates}
+            onChange={(evt) => {
+              setAffiliates(evt.target.checked);
+            }}
+          />
+          Affiliates
         </label>
       </div>
       <div className="grid">
