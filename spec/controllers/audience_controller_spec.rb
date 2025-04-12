@@ -32,16 +32,16 @@ describe AudienceController do
     end
   end
 
-  describe "GET export" do
-    it_behaves_like "authorize called for action", :get, :export do
+  describe "POST export" do
+    it_behaves_like "authorize called for action", :post, :export do
       let(:record) { :audience }
     end
 
     let!(:follower) { create(:active_follower, user: seller) }
 
     it "returns a csv" do
-      get :export, format: :csv
-      expect(response.body).to match("Follower Email,Followed Time")
+      post :export, params: { options: { followers: true, customers: false, affiliates: false } }
+      expect(response.body).to match("Subscriber Email,Subscribed Time")
       expect(response.body).to match(follower.email)
     end
   end

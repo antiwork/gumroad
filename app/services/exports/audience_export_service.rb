@@ -3,17 +3,30 @@
 require "csv"
 
 class Exports::AudienceExportService
-  def initialize(user)
+  def initialize(user, options = {})
     @user = user
+    @options = options
   end
 
   def perform
     CSV.generate do |csv|
-      csv << ["Follower Email", "Followed Time"]
+      csv << ["Subscriber Email", "Subscribed Time"]
 
-      @user.followers.active.find_each do |follower|
-        csv << [follower.email, follower.created_at]
+      query = @user.audience_members.select(:id, :email, :min_created_at)
+
+      conditions = []
+      conditions << "follower = true" if @options[:followers]
+      conditions << "customer = true" if @options[:customers]
+      conditions << "affiliate = true" if @options[:affiliates]
+
+      query = query.where(conditions.join(" OR "))
+
+      query.order(:min_created_at).each do |member|
+        csv << [member.email, member.min_created_at]
       end
     end
   end
+
+  private
+    attr_reader :user, :options
 end

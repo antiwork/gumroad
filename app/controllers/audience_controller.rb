@@ -16,7 +16,10 @@ class AudienceController < Sellers::BaseController
   def export
     authorize :audience
 
-    audience_csv = Exports::AudienceExportService.new(current_seller).perform
+    options = params.required(:options).permit(:followers, :customers, :affiliates).to_h
+
+
+    audience_csv = Exports::AudienceExportService.new(current_seller, options).perform
     send_data audience_csv, type: "text/csv"
   end
 
