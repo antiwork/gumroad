@@ -5,7 +5,7 @@ import { createCast } from "ts-safe-cast";
 import { deleteFollower, fetchFollowers, Follower } from "$app/data/followers";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
@@ -55,6 +55,54 @@ const Layout = ({
       </header>
       {children}
     </main>
+  );
+};
+
+const ExportFollowers = ({ close }: { close: () => void }) => {
+  const [followers, setFollowers] = React.useState(true);
+  const [customers, setCustomersChecked] = React.useState(false);
+
+  const handleDownload = () => {
+    // TODO: Trigger the export of followers and customers
+    // This is a placeholder for the actual export logic
+
+    showAlert("Your export is being prepared. You’ll receive an email with the download link shortly.", "success");
+    close();
+  };
+
+  return (
+    <div>
+      <h4 className="mb-1 font-semibold">Download subscribers as CSV</h4>
+      <p className="mb-4">This will download a CSV file with one row per subscriber</p>
+
+      <div className="mb-4 flex flex-col gap-2">
+        <label>
+          <input
+            type="checkbox"
+            checked={followers}
+            onChange={(evt) => {
+              setFollowers(evt.target.checked);
+            }}
+          />
+          Followers
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={customers}
+            onChange={(evt) => {
+              setCustomersChecked(evt.target.checked);
+            }}
+          />
+          Customers
+        </label>
+      </div>
+      <div className="grid">
+        <Button disabled={!followers && !customers} onClick={handleDownload}>
+          Download
+        </Button>
+      </div>
+    </div>
   );
 };
 
@@ -140,11 +188,20 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               onChange={(evt) => setSearchQuery(evt.target.value)}
             />
           </Popover>
-          <WithTooltip tip="Export" position="bottom">
-            <NavigationButton href={Routes.audience_export_path({ format: "csv" })} aria-label="Export">
-              <Icon aria-label="Download" name="download" />
-            </NavigationButton>
-          </WithTooltip>
+          <Popover
+            aria-label="Export"
+            trigger={
+              <WithTooltip tip="Export" position="bottom">
+                <Button aria-label="Export">
+                  {/* href={Routes.audience_export_path({ format: "csv" })}  */}
+                  <Icon aria-label="Download" name="download" />
+                </Button>
+              </WithTooltip>
+            }
+          >
+            {(close) => <ExportFollowers close={close} />}
+          </Popover>
+
           {currentSeller ? (
             <CopyToClipboard
               tooltipPosition="bottom"
