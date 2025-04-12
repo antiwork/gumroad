@@ -16,11 +16,16 @@ class AudienceController < Sellers::BaseController
   def export
     authorize :audience
 
-    options = params.required(:options).permit(:followers, :customers, :affiliates).to_h
+    options = params.required(:options)
+                 .permit(:followers, :customers, :affiliates)
+                 .to_h
+                 .transform_keys(&:to_s)
 
+    options.transform_values! { |v| ActiveModel::Type::Boolean.new.cast(v) }
 
-    audience_csv = Exports::AudienceExportService.new(current_seller, options).perform
-    send_data audience_csv, type: "text/csv"
+    Exports::AudienceExportWorker.perform_async(current_seller.id, (impersonating_user || current_seller).id, { **options })
+
+    render json: { success: true }
   end
 
   def data_by_date

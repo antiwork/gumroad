@@ -38,11 +38,14 @@ describe AudienceController do
     end
 
     let!(:follower) { create(:active_follower, user: seller) }
+    let(:options) { { "followers" => true, "customers" => false, "affiliates" => false } }
 
-    it "returns a csv" do
-      post :export, params: { options: { followers: true, customers: false, affiliates: false } }
-      expect(response.body).to match("Subscriber Email,Subscribed Time")
-      expect(response.body).to match(follower.email)
+    it "enqueues a job for sending the CSV" do
+      post :export, params: { options: options }
+      expect(Exports::AudienceExportWorker).to have_enqueued_sidekiq_job(seller.id, seller.id, options)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({ "success" => true })
     end
   end
 

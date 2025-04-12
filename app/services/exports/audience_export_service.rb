@@ -7,7 +7,7 @@ class Exports::AudienceExportService
 
   def initialize(user, options = {})
     @user = user
-    @options = options
+    @options = options.with_indifferent_access
     timestamp = Time.current.to_fs(:db).gsub(/ |:/, "-")
     @filename = "Subscribers-#{@user.username}_#{timestamp}.csv"
   end
