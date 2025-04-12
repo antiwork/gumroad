@@ -40,7 +40,6 @@ export const Layout: React.FC<{
   const rootTaxonomy = getRootTaxonomy(taxonomyPath);
 
   setQuery ??= (query) => (window.location.href = Routes.discover_url({ host: discoverDomain, query }));
-  onTaxonomyChange ??= (newTaxonomyPath) => (window.location.href = newTaxonomyPath ? newTaxonomyPath : "/");
 
   onTaxonomyChange ??= (newTaxonomyPath) => {
     window.location.href = forceDomain
