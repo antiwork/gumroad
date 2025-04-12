@@ -18,7 +18,6 @@ class ApplicationController < ActionController::Base
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
 
-  before_action :save_us_from_ddos
   before_action :debug_headers
   before_action :set_is_mobile
   before_action :set_title
@@ -49,16 +48,6 @@ class ApplicationController < ActionController::Base
 
   def safe_redirect_to(path)
     redirect_to safe_redirect_path(path), allow_other_host: true
-  end
-
-  def save_us_from_ddos
-    ua_string = request.env["HTTP_USER_AGENT"]
-    is_wordpress_ddos = ua_string.present? && ua_string.start_with?("WordPress", "PHP")
-    is_paypal_attack = request.remote_ip.in?(["2601:c6:8300:a7b0:bd4d:8c:7da:105d",
-                                              "2601:c6:8300:a7b0:5935:1d8a:7cfd:1f9c",
-                                              "2601:c6:8300:a7b0:fc25:62a:fecb:1ce0",
-                                              "2601:42:602:241a:21d6:6681:fa97:e384"])
-    render plain: "We'll be right back." if is_wordpress_ddos || is_paypal_attack
   end
 
   def default_url_options(options = {})
