@@ -3,14 +3,22 @@
 require "csv"
 
 class Exports::AudienceExportService
+  FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
+
   def initialize(user, options = {})
     @user = user
     @options = options
+    timestamp = Time.current.to_fs(:db).gsub(/ |:/, "-")
+    @filename = "Subscribers-#{@user.username}_#{timestamp}.csv"
   end
 
+  attr_reader :filename, :tempfile
+
   def perform
-    CSV.generate do |csv|
-      csv << ["Subscriber Email", "Subscribed Time"]
+    @tempfile = Tempfile.new(["Subscribers", ".csv"], "tmp", encoding: "UTF-8")
+
+    CSV.open(@tempfile, "wb") do |csv|
+      csv << FIELDS
 
       query = @user.audience_members.select(:id, :email, :min_created_at)
 
@@ -25,6 +33,10 @@ class Exports::AudienceExportService
         csv << [member.email, member.min_created_at]
       end
     end
+
+    @tempfile.rewind
+
+    self
   end
 
   private

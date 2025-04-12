@@ -1572,6 +1572,44 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe ".subscribers_data" do
+    before do
+      @recipient = create(:user)
+      @filename = "subscribers-export-#{SecureRandom.hex}.csv"
+      @tempfile = Tempfile.new
+      @tempfile.puts "csv content"
+    end
+
+    let(:mail) do
+      described_class.subscribers_data(
+        recipient: @recipient,
+        tempfile: @tempfile,
+        filename: @filename,
+      )
+    end
+
+    it "contains the correct attachment and attributes" do
+      expect(mail.to).to eq([@recipient.email])
+      expect(mail.subject).to include("Here is your subscribers data")
+      expect(mail.attachments.size).to eq(1)
+      expect(mail.attachments.first.body.raw_source).to eq("csv content\r\n")
+    end
+
+    context "when attachment size is above threshold" do
+      before do
+        stub_const("MailerAttachmentOrLinkService::MAX_FILE_SIZE", 1.byte)
+      end
+
+      it "contains a link instead of an attachment" do
+        expect(mail.to).to eq([@recipient.email])
+        expect(mail.subject).to include("Here is your subscribers data")
+        expect(mail.attachments.size).to eq(0)
+        expect(mail.body).to include(@filename)
+        expect(Nokogiri::HTML(mail.body.encoded).text).to include("Please click this link")
+      end
+    end
+  end
+
   describe "video_transcode_failed" do
     before do
       @user = create(:user, name: "Person")

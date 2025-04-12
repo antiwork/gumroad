@@ -449,6 +449,21 @@ class ContactingCreatorMailer < ApplicationMailer
     end
   end
 
+  def subscribers_data(recipient:, tempfile:, filename:)
+    @subject = "Here is your subscribers data!"
+    @recipient = recipient
+    file_or_url = MailerAttachmentOrLinkService.new(
+      file: tempfile,
+      filename:,
+    ).perform
+    if file_or_url[:file]
+      file_or_url[:file].rewind
+      attachments[filename] = { data: file_or_url[:file].read }
+    else
+      @subscribers_file_url = file_or_url[:url]
+    end
+  end
+
   def review_submitted(review_id)
     @review = ProductReview.includes(:purchase, link: :user).find(review_id)
     @product = @review.link
