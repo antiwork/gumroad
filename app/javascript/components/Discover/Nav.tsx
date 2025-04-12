@@ -27,7 +27,9 @@ export const Nav = ({
     [wholeTaxonomy, discoverUrl],
   );
 
-  const selectedCategory = menuItems.find((menuItem) => menuItem.href === (currentTaxonomyPath ?? ""))?.key;
+  const selectedCategory = menuItems.find(
+    (menuItem) => menuItem.href?.replace(discoverUrl, "").replace(/^\//u, "") === (currentTaxonomyPath ?? ""),
+  )?.key;
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -62,7 +64,7 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], discoverUrl: st
   };
 
   return [
-    { key: "all#key", label: "All", href: "/" },
+    { key: "all#key", label: "All", href: discoverUrl || "/" },
     ...wholeTaxonomy.map((taxonomy): MenuItem => {
       const root = getRootTaxonomy(taxonomy.slug);
       return {
