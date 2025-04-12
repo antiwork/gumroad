@@ -923,6 +923,9 @@ Rails.application.routes.draw do
             resources :rejections, only: [:create]
           end
         end
+        namespace :product_review_videos do
+          resource :upload_context, only: [:show]
+        end
       end
     end
 
