@@ -10,16 +10,16 @@ class Exports::AudienceExportService
     @options = options.with_indifferent_access
     timestamp = Time.current.to_fs(:db).gsub(/ |:/, "-")
     @filename = "Subscribers-#{@user.username}_#{timestamp}.csv"
+
+    validate_options!
   end
 
   attr_reader :filename, :tempfile
 
   def perform
-    @tempfile = Tempfile.new(["Subscribers", ".csv"], "tmp", encoding: "UTF-8")
+    @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
-    CSV.open(@tempfile, "wb") do |csv|
-      csv << FIELDS
-
+    CSV.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
       query = @user.audience_members.select(:id, :email, :min_created_at)
 
       conditions = []
@@ -29,7 +29,7 @@ class Exports::AudienceExportService
 
       query = query.where(conditions.join(" OR "))
 
-      query.order(:min_created_at).each do |member|
+      query.order(:min_created_at).find_each do |member|
         csv << [member.email, member.min_created_at]
       end
     end
@@ -40,5 +40,9 @@ class Exports::AudienceExportService
   end
 
   private
-    attr_reader :user, :options
+    def validate_options!
+      unless @options[:followers] || @options[:customers] || @options[:affiliates]
+        raise ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected"
+      end
+    end
 end

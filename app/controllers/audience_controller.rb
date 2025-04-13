@@ -18,14 +18,11 @@ class AudienceController < Sellers::BaseController
 
     options = params.required(:options)
                  .permit(:followers, :customers, :affiliates)
-                 .to_h
-                 .transform_keys(&:to_s)
+                 .to_hash
 
-    options.transform_values! { |v| ActiveModel::Type::Boolean.new.cast(v) }
+    Exports::AudienceExportWorker.perform_async(current_seller.id, (impersonating_user || current_seller).id, options)
 
-    Exports::AudienceExportWorker.perform_async(current_seller.id, (impersonating_user || current_seller).id, { **options })
-
-    render json: { success: true }
+    head :ok
   end
 
   def data_by_date

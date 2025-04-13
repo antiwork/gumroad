@@ -1,9 +1,8 @@
 import debounce from "lodash/debounce";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { createCast } from "ts-safe-cast";
 
 import { deleteFollower, fetchFollowers, Follower } from "$app/data/followers";
-import { ResponseError, assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
@@ -14,6 +13,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -56,86 +56,6 @@ const Layout = ({
       </header>
       {children}
     </main>
-  );
-};
-
-const ExportFollowers = ({ close }: { close: () => void }) => {
-  const [followers, setFollowers] = React.useState(true);
-  const [customers, setCustomers] = React.useState(false);
-  const [affiliates, setAffiliates] = React.useState(false);
-
-  const handleDownload = async () => {
-    try {
-      const response = await request({
-        url: Routes.audience_export_path(),
-        method: "POST",
-        data: {
-          options: {
-            followers,
-            customers,
-            affiliates,
-          },
-        },
-        accept: "json",
-      });
-
-      if (!response.ok) {
-        const { message } = cast<{ message?: string }>(await response.json());
-        throw new ResponseError(message ?? "Something went wrong.");
-      }
-      showAlert("Your export is being prepared. You’ll receive an email with the download link shortly.", "success");
-      close();
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    }
-  };
-
-  const disabled = !followers && !customers && !affiliates;
-
-  return (
-    <div>
-      <h4 className="mb-1 font-semibold">Download subscribers as CSV</h4>
-      <p className="mb-4">This will download a CSV file with one row per subscriber</p>
-
-      <div className="mb-4 flex flex-col gap-2">
-        <label>
-          <input
-            type="checkbox"
-            checked={followers}
-            onChange={(evt) => {
-              setFollowers(evt.target.checked);
-            }}
-          />
-          Followers
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={customers}
-            onChange={(evt) => {
-              setCustomers(evt.target.checked);
-            }}
-          />
-          Customers
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={affiliates}
-            onChange={(evt) => {
-              setAffiliates(evt.target.checked);
-            }}
-          />
-          Affiliates
-        </label>
-      </div>
-      <div className="grid">
-        <Button disabled={disabled} onClick={() => void handleDownload()}>
-          Download
-        </Button>
-      </div>
-    </div>
   );
 };
 
@@ -231,7 +151,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               </WithTooltip>
             }
           >
-            {(close) => <ExportFollowers close={close} />}
+            {(close) => <ExportSubscribersPopover closePopover={close} />}
           </Popover>
 
           {currentSeller ? (
