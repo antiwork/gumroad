@@ -39,6 +39,9 @@ class PayoutsPresenter
         account_number: seller.active_bank_account.account_number_visual,
       } : nil,
       show_instant_payouts_notice: seller.eligible_for_instant_payouts? && !seller.active_bank_account&.supports_instant_payouts?,
+      payout_frequency: seller.payout_frequency,
+      next_daily_payout_date_formatted: Date.tomorrow.strftime("%B #{Date.tomorrow.day.ordinalize}, %Y"),
+      daily_payout_cutoff_date_formatted: Date.current.strftime("%B #{Date.current.day.ordinalize}, %Y"),
       pagination:,
     }
   end
