@@ -1595,8 +1595,12 @@ describe ContactingCreatorMailer do
     end
 
     context "when attachment size is above threshold" do
+      let(:download_url) { "https://example.com/download/subscribers_data.csv" }
+
       before do
-        stub_const("MailerAttachmentOrLinkService::MAX_FILE_SIZE", 1.byte)
+        allow_any_instance_of(MailerAttachmentOrLinkService).to receive(:perform).and_return(
+          { file: nil, url: download_url }
+        )
       end
 
       it "contains a link instead of an attachment" do
@@ -1609,8 +1613,7 @@ describe ContactingCreatorMailer do
         expect(mail.to).to eq([recipient.email])
         expect(mail.subject).to include("Here is your subscribers data")
         expect(mail.attachments.size).to eq(0)
-        expect(mail.body).to include(filename)
-        expect(mail.body).to have_link("Please click this link")
+        expect(Nokogiri::HTML(mail.body.encoded).text).to include("Please click this link")
       end
     end
   end
