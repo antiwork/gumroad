@@ -1613,7 +1613,7 @@ describe ContactingCreatorMailer do
         expect(mail.to).to eq([recipient.email])
         expect(mail.subject).to include("Here is your subscribers data")
         expect(mail.attachments.size).to eq(0)
-        expect(Nokogiri::HTML(mail.body.encoded).text).to include("Please click this link")
+        expect(mail.body).to have_link("link", href: download_url)
       end
     end
   end
