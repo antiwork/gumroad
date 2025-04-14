@@ -1,0 +1,35 @@
+<div>
+  <p>Hey <%= @seller.name_or_username %>,</p>
+  <p>
+    We've improved how refund policies work on Gumroad. You can now set a unique refund policy for each product instead of using a single account-level one. This change is effective immediately, giving you more flexibility for each product's refund terms.
+  </p>
+  <p>
+    If you previously set an account-level refund policy, please review your products to ensure the desired policies are applied.
+  <p>
+    Soon, we'll be able to process refund requests on your behalf.
+  </p>
+  <p>
+    You can review your current refund policies or add new ones by editing a product on the  <%= link_to("Products", products_url) %> page.<br>
+    For more information, see <%= link_to("Set a custom refund policy", "https://gumroad.com/help/article/335-custom-refund-policy.html") %> help article.
+  </p>
+  <p><strong>Frequently asked questions</strong></p>
+  <p>
+    <strong>What happened to my old product-level refund policies?</strong><br>
+    Your previous product-level refund policies have been automatically restored to your products.
+  </p>
+  <p>
+    <strong>Can I keep the account-level refund policy?</strong><br>
+    The account-level refund policy option has been discontinued. We recommend creating specific refund policies for each of your <%= link_to("products", products_url) %>.
+  </p>
+  <p>
+    <strong>What happens to existing purchases?</strong><br>
+    Purchases made before this change will keep their original refund policy that was in place at the time of purchase.
+  </p>
+  <p>
+    More questions? Just reply to this email.
+  </p>
+  <p>
+    Best,<br>
+    The Gumroad Team
+  </p>
+</div>

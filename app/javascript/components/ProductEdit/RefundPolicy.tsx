@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
+import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
@@ -9,7 +10,13 @@ import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
-export type RefundPolicy = { title: string | null; fine_print: string | null };
+export type RefundPolicy = {
+  allowed_refund_periods_in_days: { key: number; value: string }[];
+  max_refund_period_in_days: number;
+  fine_print_enabled: boolean;
+  fine_print: string | null;
+  title: string;
+};
 
 export const RefundPolicySelector = ({
   refundPolicy,
@@ -37,7 +44,7 @@ export const RefundPolicySelector = ({
       open={isEnabled}
       summary={
         <Toggle value={isEnabled} onChange={setIsEnabled}>
-          Specify a refund policy for this product
+          Specify a refund policy for this product{" "}
           <a data-helper-prompt="How do I specify a custom refund policy for my product?">Learn more</a>
         </Toggle>
       }
@@ -45,7 +52,7 @@ export const RefundPolicySelector = ({
       <div className="dropdown paragraphs">
         <fieldset>
           <legend>
-            <label htmlFor={`${uid}-refund-policy-title`}>Refund policy</label>
+            <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
             {refundPolicies.length > 0 ? (
               <Popover
                 trigger={<div className="link">Copy from other products</div>}
@@ -72,7 +79,12 @@ export const RefundPolicySelector = ({
                     onClick={() => {
                       const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
                       if (otherRefundPolicy) {
-                        setRefundPolicy(otherRefundPolicy);
+                        setRefundPolicy({
+                          ...refundPolicy,
+                          title: otherRefundPolicy.title,
+                          fine_print: otherRefundPolicy.fine_print,
+                          max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
+                        });
                         setIsPopoverOpen(false);
                       }
                     }}
@@ -83,14 +95,27 @@ export const RefundPolicySelector = ({
               </Popover>
             ) : null}
           </legend>
-          <input
-            id={`${uid}-refund-policy-title`}
-            maxLength={50}
-            type="text"
-            placeholder="30-day money back guarantee"
-            value={refundPolicy.title || ""}
-            onChange={(evt) => setRefundPolicy({ ...refundPolicy, title: evt.target.value })}
-          />
+          <select
+            id={`${uid}-max-refund-period-in-days`}
+            value={refundPolicy.max_refund_period_in_days}
+            onChange={(evt) => {
+              const maxRefundPeriodInDays = Number(evt.target.value);
+              const title = refundPolicy.allowed_refund_periods_in_days.find(
+                ({ key }) => key === maxRefundPeriodInDays,
+              )?.value;
+              setRefundPolicy({
+                ...refundPolicy,
+                max_refund_period_in_days: maxRefundPeriodInDays,
+                title: assertDefined(title),
+              });
+            }}
+          >
+            {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
+              <option key={key} value={key}>
+                {value}
+              </option>
+            ))}
+          </select>
         </fieldset>
         <fieldset>
           <legend>

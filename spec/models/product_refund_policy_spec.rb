@@ -12,7 +12,6 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be false
       expect(refund_policy.errors.details[:seller].first[:error]).to eq :blank
       expect(refund_policy.errors.details[:product].first[:error]).to eq :blank
-      expect(refund_policy.errors.details[:title].first[:error]).to eq :blank
     end
 
     context "when refund policy for product exists" do
@@ -24,12 +23,6 @@ describe ProductRefundPolicy do
       end
     end
 
-    it "validates title length" do
-      refund_policy.title = "a" * 51
-      expect(refund_policy.valid?).to be false
-      expect(refund_policy.errors.details[:title].first[:error]).to eq :too_long
-    end
-
     it "validates fine_print length" do
       refund_policy.fine_print = "a" * 3001
       expect(refund_policy.valid?).to be false
@@ -37,11 +30,9 @@ describe ProductRefundPolicy do
     end
 
     it "strips tags" do
-      refund_policy.title = "<h1>Refund policy</h1>"
       refund_policy.fine_print = "<p>This is a product-level refund policy</p>"
       refund_policy.save!
 
-      expect(refund_policy.title).to eq "Refund policy"
       expect(refund_policy.fine_print).to eq "This is a product-level refund policy"
     end
 
@@ -52,13 +43,35 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be false
       expect(refund_policy.errors.details[:product].first[:error]).to eq :invalid
     end
+
+    context "max_refund_period_in_days validation" do
+      it "is valid with allowed refund period values" do
+        RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.each do |days|
+          refund_policy.max_refund_period_in_days = days
+          expect(refund_policy.valid?).to be true
+        end
+      end
+
+      it "is invalid with nil value" do
+        refund_policy.max_refund_period_in_days = nil
+        expect(refund_policy.valid?).to be false
+        expect(refund_policy.errors.details[:max_refund_period_in_days].first[:error]).to eq :inclusion
+      end
+
+      it "is invalid with a refund period not in the allowed list" do
+        [1, 15, 60, 200].each do |days|
+          refund_policy.max_refund_period_in_days = days
+          expect(refund_policy.valid?).to be false
+          expect(refund_policy.errors.details[:max_refund_period_in_days].first[:error]).to eq :inclusion
+        end
+      end
+    end
   end
 
   describe "stripped_fields" do
-    it "strips leading and trailing spaces for title and fine_print" do
-      refund_policy = create(:product_refund_policy, title: "  Refund policy  ", fine_print: "  This is a product-level refund policy  ")
+    it "strips leading and trailing spaces for fine_print" do
+      refund_policy = create(:product_refund_policy, fine_print: "  This is a product-level refund policy  ")
 
-      expect(refund_policy.title).to eq "Refund policy"
       expect(refund_policy.fine_print).to eq "This is a product-level refund policy"
     end
 
@@ -77,6 +90,7 @@ describe ProductRefundPolicy do
         {
           fine_print: refund_policy.fine_print,
           id: refund_policy.external_id,
+          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
           product_name: refund_policy.product.name,
           title: refund_policy.title,
         }
@@ -99,30 +113,16 @@ describe ProductRefundPolicy do
   describe "#no_refunds?" do
     let(:refund_policy) { create(:product_refund_policy) }
 
-    it "returns true when title contains 'no refunds'" do
-      refund_policy.title = "No refunds allowed"
+    it "returns true when max_refund_period_in_days is 0" do
+      refund_policy.max_refund_period_in_days = 0
       expect(refund_policy.no_refunds?).to be true
     end
 
-    it "returns true when title contains 'final'" do
-      refund_policy.title = "All sales final"
-      expect(refund_policy.no_refunds?).to be true
-    end
-
-    it "returns true when title contains 'no returns'" do
-      refund_policy.title = "No returns accepted"
-      expect(refund_policy.no_refunds?).to be true
-    end
-
-    it "asks AI when title doesn't contain obvious no-refunds keywords", :vcr do
-      refund_policy.title = "Custom policy"
-      expect(refund_policy.no_refunds?).to be false
-    end
-
-    it "returns false when AI call fails" do
-      refund_policy.title = "Custom policy"
-      expect_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(StandardError)
-      expect(refund_policy.no_refunds?).to be false
+    it "returns false when max_refund_period_in_days is not 0" do
+      [7, 14, 30, 183].each do |days|
+        refund_policy.max_refund_period_in_days = days
+        expect(refund_policy.no_refunds?).to be false
+      end
     end
   end
 

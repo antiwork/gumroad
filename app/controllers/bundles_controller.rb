@@ -87,9 +87,11 @@ class BundlesController < Sellers::BaseController
       @bundle.save_custom_attributes(bundle_permitted_params[:custom_attributes]) unless bundle_permitted_params[:custom_attributes].nil?
       @bundle.save_tags!(bundle_permitted_params[:tags]) unless bundle_permitted_params[:tags].nil?
       @bundle.reorder_previews(bundle_permitted_params[:covers].map.with_index.to_h) if bundle_permitted_params[:covers].present?
-      if !current_seller.account_level_refund_policy_enabled? && bundle_permitted_params[:refund_policy].present? && bundle_permitted_params[:product_refund_policy_enabled]
+      if !current_seller.account_level_refund_policy_enabled?
         @bundle.product_refund_policy_enabled = bundle_permitted_params[:product_refund_policy_enabled]
-        @bundle.find_or_initialize_product_refund_policy.update!(bundle_permitted_params[:refund_policy])
+        if bundle_permitted_params[:refund_policy].present? && bundle_permitted_params[:product_refund_policy_enabled]
+          @bundle.find_or_initialize_product_refund_policy.update!(bundle_permitted_params[:refund_policy])
+        end
       end
       @bundle.show_in_sections!(bundle_permitted_params[:section_ids]) if bundle_permitted_params[:section_ids]
 

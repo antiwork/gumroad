@@ -160,7 +160,7 @@ npm install
 
 ### Configuration
 
-#### Setup Custom credentials
+#### Set up Custom credentials
 
 App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
 
@@ -195,7 +195,7 @@ If you are on Linux, or installed Docker via a package manager on a mac, you may
 This command will not terminate. You run this in one tab and start the application in another tab.
 If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
 
-#### Setup the database
+#### Set up the database
 
 ```shell
 bin/rails db:prepare

@@ -488,6 +488,11 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject += " (effective #{@postponed_date.to_fs(:formatted_date_full_month)})" if @postponed_date.present?
   end
 
+  def product_level_refund_policies_reverted(seller_id)
+    @seller = User.find(seller_id)
+    @subject = "Important: Refund policy changes effective immediately"
+  end
+
   def upcoming_refund_policy_change(user_id)
     @seller = User.find(user_id)
     @subject = "Important: Upcoming refund policy changes effective January 1, 2025"

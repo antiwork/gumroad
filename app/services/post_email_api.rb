@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class PostEmailApi
+  RESEND_EXCLUDED_DOMAINS = ["example.com", "example.org", "example.net", "test.com"]
+  private_constant :RESEND_EXCLUDED_DOMAINS
+
   def self.process(**args)
     post = args[:post]
     recipients = args[:recipients]
@@ -51,6 +54,7 @@ class PostEmailApi
       return false if local_part.length > 64
       return false if local_part.match?(/[^a-zA-Z0-9.+_]/)
       return false unless domain.include?(".")
+      return false if RESEND_EXCLUDED_DOMAINS.include?(domain)
 
       # Use Rails' built-in email validation regex
       email_regex = URI::MailTo::EMAIL_REGEXP

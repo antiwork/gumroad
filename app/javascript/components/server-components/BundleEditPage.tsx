@@ -52,7 +52,7 @@ type Props = {
   is_bundle: boolean;
   has_outdated_purchases: boolean;
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: RefundPolicy;
+  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
 };
 
 const BundleEditPage = ({

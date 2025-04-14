@@ -1540,7 +1540,7 @@ class Link < ApplicationRecord
     end
 
     def reset_moderated_by_iffy_flag
-      update!(moderated_by_iffy: false)
+      update_attribute(:moderated_by_iffy, false)
     end
 
     def queue_iffy_ingest_job_if_unpublished_by_admin

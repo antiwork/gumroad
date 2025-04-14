@@ -90,6 +90,7 @@ class LinkPolicy < ApplicationPolicy
       :is_multiseat_license,
       :community_chat_enabled,
       refund_policy: [
+        :max_refund_period_in_days,
         :title,
         :fine_print
       ],
@@ -171,7 +172,7 @@ class LinkPolicy < ApplicationPolicy
       :is_epublication,
       :product_refund_policy_enabled,
       :seller_refund_policy_enabled,
-      refund_policy: [:title, :fine_print],
+      refund_policy: [:max_refund_period_in_days, :title, :fine_print],
       section_ids: [],
       tags: [],
       covers: [],

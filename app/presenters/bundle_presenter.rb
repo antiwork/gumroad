@@ -31,8 +31,16 @@ class BundlePresenter
         is_epublication: bundle.is_epublication?,
         product_refund_policy_enabled: bundle.product_refund_policy_enabled?,
         refund_policy: {
-          title: refund_policy.title,
+          allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
+            {
+              key: _1,
+              value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1]
+            }
+          end,
+          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
           fine_print: refund_policy.fine_print,
+          fine_print_enabled: refund_policy.fine_print.present?,
+          title: refund_policy.title,
         },
         covers: bundle.display_asset_previews.as_json,
         taxonomy_id: bundle.taxonomy_id&.to_s,

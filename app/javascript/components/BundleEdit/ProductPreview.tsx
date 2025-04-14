@@ -80,12 +80,15 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           can_edit: false,
           refund_policy: seller_refund_policy_enabled
             ? {
-                title: seller_refund_policy.title ?? "",
+                title: seller_refund_policy.title,
                 fine_print: seller_refund_policy.fine_print ?? "",
                 updated_at: "",
               }
             : {
-                title: bundle.refund_policy.title ?? "",
+                title:
+                  bundle.refund_policy.allowed_refund_periods_in_days.find(
+                    ({ key }) => key === bundle.refund_policy.max_refund_period_in_days,
+                  )?.value ?? "",
                 fine_print: bundle.refund_policy.fine_print ?? "",
                 updated_at: "",
               },

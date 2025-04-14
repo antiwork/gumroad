@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { getRootTaxonomy, getRootTaxonomyCss, getRootTaxonomyImage, Taxonomy } from "$app/utils/discover";
 
+import { useDomains } from "$app/components/DomainSettings";
 import { MenuItem, NestedMenu } from "$app/components/NestedMenu";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
@@ -10,14 +11,25 @@ export const Nav = ({
   currentTaxonomyPath,
   onClickTaxonomy,
   footer,
+  forceDomain = false,
 }: {
   wholeTaxonomy: Taxonomy[];
   currentTaxonomyPath?: string | undefined;
   onClickTaxonomy: (taxonomySlugPath?: string) => void;
   footer?: React.ReactNode;
+  forceDomain?: boolean;
 }) => {
-  const menuItems = React.useMemo(() => generateTaxonomyItemsForMenu(wholeTaxonomy), [wholeTaxonomy]);
-  const selectedCategory = menuItems.find((menuItem) => menuItem.href === `/${currentTaxonomyPath ?? ""}`)?.key;
+  const { discoverDomain } = useDomains();
+  const discoverUrl = Routes.discover_url({ host: discoverDomain });
+
+  const menuItems = React.useMemo(
+    () => generateTaxonomyItemsForMenu(wholeTaxonomy, forceDomain ? discoverUrl : ""),
+    [wholeTaxonomy, discoverUrl],
+  );
+
+  const selectedCategory = menuItems.find(
+    (menuItem) => menuItem.href?.replace(discoverUrl, "/") === (currentTaxonomyPath ? `/${currentTaxonomyPath}` : "/"),
+  )?.key;
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -39,7 +51,7 @@ export const Nav = ({
   );
 };
 
-const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[]) => {
+const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], discoverUrl: string) => {
   const taxonomyMap = new Map(wholeTaxonomy.map((tc) => [tc.key, tc]));
   const generateHref = (taxonomyCategory: Taxonomy): string => {
     const slugs = [];
@@ -48,11 +60,11 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[]) => {
       slugs.unshift(curr.slug);
       curr = curr.parent_key ? taxonomyMap.get(curr.parent_key) : undefined;
     }
-    return `/${slugs.join("/")}`;
+    return `${discoverUrl.replace(/\/$/u, "")}/${slugs.join("/")}`;
   };
 
   return [
-    { key: "all#key", label: "All", href: "/" },
+    { key: "all#key", label: "All", href: discoverUrl || "/" },
     ...wholeTaxonomy.map((taxonomy): MenuItem => {
       const root = getRootTaxonomy(taxonomy.slug);
       return {
