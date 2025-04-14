@@ -648,12 +648,12 @@ describe "Balance Pages Scenario", js: true, type: :feature do
       context "when user's balance is greater than the maximum instant payout amount but a single balance does not exceed the maximum instant payout amount" do
         before do
           allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
-          allow_any_instance_of(User).to receive(:instantly_payable_balance_amount_cents).and_return(1500000)
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(1500000)
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("ACH")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("110000000")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :account_number_visual).and_return("******6789")
-          allow_any_instance_of(User).to receive(:instantly_payable_balances).and_return(
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balances).and_return(
             [
               OpenStruct.new(
                 external_id: "1",
@@ -711,12 +711,12 @@ describe "Balance Pages Scenario", js: true, type: :feature do
       context "when the user has a single balance that exceeds the maximum instant payout amount" do
         before do
           allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
-          allow_any_instance_of(User).to receive(:instantly_payable_balance_amount_cents).and_return(1500000)
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(1500000)
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("ACH")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("110000000")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :account_number_visual).and_return("******6789")
-          allow_any_instance_of(User).to receive(:instantly_payable_balances).and_return(
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balances).and_return(
             [
               OpenStruct.new(
                 external_id: "1",
@@ -738,8 +738,8 @@ describe "Balance Pages Scenario", js: true, type: :feature do
       context "when user's balance is less than the minimum instant payout amount" do
         before do
           allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
-          allow_any_instance_of(User).to receive(:instantly_payable_balance_amount_cents).and_return(500)
-          allow_any_instance_of(User).to receive(:instantly_payable_amount_cents_on_stripe).and_return(485)
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(500)
+          allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).and_return(485)
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("ACH")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("110000000")

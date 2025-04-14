@@ -11,17 +11,17 @@ class InstantPayoutsService
   def perform
     return { success: false, error: "Your account is not eligible for instant payouts at this time." } unless seller.instant_payouts_supported?
 
-    balances = seller.instantly_payable_balances
+    balances = seller.instantly_payable_unpaid_balances
       .filter { |balance| balance.date <= date }
       .sort_by(&:created_at)
-    return { success: false, error: "You need at least $10 in your balance to request an instant payout." } if balances.sum(&:holding_amount_cents) < Payouts::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+    return { success: false, error: "You need at least $10 in your balance to request an instant payout." } if balances.sum(&:holding_amount_cents) < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
 
-    if balances.any? { |balance| balance.holding_amount_cents > Payouts::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS }
+    if balances.any? { |balance| balance.holding_amount_cents > StripePayoutProcessor::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS }
       return { success: false, error: "Your balance exceeds the maximum instant payout amount. Please contact support for assistance." }
     end
 
     balances.each_with_object([[]]) do |balance, batches|
-      if batches.last.sum(&:holding_amount_cents) + balance.holding_amount_cents > Payouts::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+      if batches.last.sum(&:holding_amount_cents) + balance.holding_amount_cents > StripePayoutProcessor::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
         batches << []
       end
       batches.last << balance
