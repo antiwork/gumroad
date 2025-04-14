@@ -39,7 +39,7 @@ export const ExportSubscribersPopover = ({ closePopover }: { closePopover: () =>
   return (
     <div>
       <h4 className="mb-1 font-semibold">Download subscribers as CSV</h4>
-      <p className="mb-4">This will download a CSV file with one row per subscriber</p>
+      <p className="mb-4">This will download a CSV file with one row per subscriber.</p>
 
       <div className="mb-4 flex flex-col gap-2">
         <label>

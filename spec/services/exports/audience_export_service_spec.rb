@@ -5,11 +5,11 @@ require "spec_helper"
 describe Exports::AudienceExportService do
   describe "#perform" do
     let!(:user) { create(:user) }
-    let!(:follower) { create(:active_follower, email: "follower@gumroad.com", user: user) }
+    let!(:follower) { create(:active_follower, email: "follower@gumroad.com", user: user, created_at: 1.day.ago) }
     let(:product) { create(:product, user: user, name: "Product 1", price_cents: 100) }
-    let!(:customer) { create(:purchase, seller: user, link: product) }
-    let(:affiliate_user) { create(:affiliate_user) }
-    let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller: user) }
+    let!(:customer) { create(:purchase, seller: user, link: product, created_at: 2.days.ago) }
+    let(:affiliate_user) { create(:affiliate_user, created_at: 4.days.ago) }
+    let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller: user, created_at: 3.days.ago) }
     let!(:product_affiliate) { create(:product_affiliate, product:, affiliate: direct_affiliate, affiliate_basis_points: 10_00) }
 
     subject { described_class.new(user, options) }
@@ -23,7 +23,7 @@ describe Exports::AudienceExportService do
         expect(rows.size).to eq(2)
         headers, data_row = rows.first, rows.second
 
-        expect(headers).to match_array(described_class::FIELDS)
+        expect(headers).to eq(described_class::FIELDS)
         expect(data_row.first).to eq(follower.email)
         expect(data_row.second).to eq(follower.created_at.to_s)
       end
@@ -38,7 +38,7 @@ describe Exports::AudienceExportService do
         expect(rows.size).to eq(2)
         headers, data_row = rows.first, rows.second
 
-        expect(headers).to match_array(described_class::FIELDS)
+        expect(headers).to eq(described_class::FIELDS)
         expect(data_row.first).to eq(customer.email)
         expect(data_row.second).to eq(customer.created_at.to_s)
       end
@@ -53,7 +53,7 @@ describe Exports::AudienceExportService do
         expect(rows.size).to eq(2)
         headers, data_row = rows.first, rows.second
 
-        expect(headers).to match_array(described_class::FIELDS)
+        expect(headers).to eq(described_class::FIELDS)
         expect(data_row.first).to eq(affiliate_user.email)
         expect(data_row.second).to eq(direct_affiliate.created_at.to_s)
       end
@@ -68,7 +68,7 @@ describe Exports::AudienceExportService do
         expect(rows.size).to eq(4)
         headers = rows.first
 
-        expect(headers).to match_array(described_class::FIELDS)
+        expect(headers).to eq(described_class::FIELDS)
 
         expect(rows[1].first).to eq(follower.email)
         expect(rows[1].second).to eq(follower.created_at.to_s)
