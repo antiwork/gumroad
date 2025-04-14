@@ -69,13 +69,30 @@ describe Exports::AudienceExportService do
         headers = rows.first
 
         expect(headers).to eq(described_class::FIELDS)
-
         expect(rows[1].first).to eq(follower.email)
         expect(rows[1].second).to eq(follower.created_at.to_s)
         expect(rows[2].first).to eq(customer.email)
         expect(rows[2].second).to eq(customer.created_at.to_s)
         expect(rows[3].first).to eq(affiliate_user.email)
         expect(rows[3].second).to eq(direct_affiliate.created_at.to_s)
+      end
+    end
+
+    context "when user is both a follower and a customer" do
+      let(:options) { { followers: true, customers: true } }
+      let!(:follower_customer) { create(:active_follower, email: customer.email, user:, created_at: 1000.day.ago) }
+
+      it "generates csv with unique entries with minimum created_at" do
+        rows = CSV.parse(subject.perform.tempfile.read)
+
+        expect(rows.size).to eq(3)
+        headers = rows.first
+
+        expect(headers).to eq(described_class::FIELDS)
+        expect(rows[1].first).to eq(follower.email)
+        expect(rows[1].second).to eq(follower.created_at.to_s)
+        expect(rows[2].first).to eq(follower_customer.email)
+        expect(rows[2].second).to eq(follower_customer.created_at.to_s)
       end
     end
 
