@@ -6,7 +6,6 @@ require "shared_examples/policy_examples"
 describe S3UtilityPolicy do
   subject { described_class }
 
-  let(:buyer) { create(:user) }
   let(:seller) { create(:named_seller) }
   let(:another_user) { create(:user) }
 
@@ -56,16 +55,9 @@ describe S3UtilityPolicy do
 
       it_behaves_like "an access-denying policy for roles", [
         :accountant_for_seller,
-        :support_for_seller
+        :support_for_seller,
+        :another_user
       ]
-    end
-
-    context "in a non-seller context" do
-      let(:context_seller) { nil }
-      let(:record) { { external_ids: [buyer.external_id] } }
-
-      it_behaves_like "an access-granting policy for roles", [:buyer]
-      it_behaves_like "an access-denying policy for roles", [:another_user]
     end
 
     context "anonymous user" do
@@ -92,12 +84,6 @@ describe S3UtilityPolicy do
         :accountant_for_seller,
         :support_for_seller
       ]
-    end
-
-    context "in a non-seller context" do
-      let(:context_seller) { nil }
-
-      it_behaves_like "an access-granting policy for roles", [:buyer]
     end
 
     context "anonymous user" do

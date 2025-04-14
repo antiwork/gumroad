@@ -24,7 +24,8 @@ class S3UtilityPolicy < ApplicationPolicy
     end
 
     def authorized_to_sign_for_seller?
-      return false if seller.blank?
       user.role_admin_for?(seller) || user.role_marketing_for?(seller)
+    rescue ActiveRecord::RecordNotFound
+      false
     end
 end
