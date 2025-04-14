@@ -26,6 +26,9 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         },
       },
       paths: {
+        "/users/create_appeal": {
+          post: Api::Internal::Helper::UsersController::CREATE_USER_APPEAL_OPENAPI,
+        },
         "/users/send_reset_password_instructions": {
           post: Api::Internal::Helper::UsersController::SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI,
         },
@@ -55,9 +58,6 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         },
         "/purchases/auto_refund_purchase": {
           post: Api::Internal::Helper::PurchasesController::AUTO_REFUND_PURCHASE_OPENAPI,
-        },
-        "/users/create_appeal": {
-          post: Api::Internal::Helper::IffyAppealsController::CREATE_APPEAL_OPENAPI,
         },
         "/payouts": {
           post: Api::Internal::Helper::PayoutsController::CREATE_PAYOUT_OPENAPI,
