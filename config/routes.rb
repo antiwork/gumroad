@@ -231,6 +231,7 @@ Rails.application.routes.draw do
           resources :users, only: [] do
             collection do
               get :user_info
+              post :create_appeal
               post :user_suspension_info
               post :send_reset_password_instructions
               post :update_email

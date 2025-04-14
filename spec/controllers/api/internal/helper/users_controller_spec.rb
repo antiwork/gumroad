@@ -172,6 +172,189 @@ describe Api::Internal::Helper::UsersController do
     end
   end
 
+  describe "POST create_appeal" do
+    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
+
+    before do
+      request.headers.merge!(auth_headers)
+    end
+
+    context "when email parameter is missing" do
+      it "returns a bad request error" do
+        post :create_appeal
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'email' parameter is required")
+      end
+    end
+
+    context "when reason parameter is missing" do
+      it "returns a bad request error" do
+        post :create_appeal, params: { email: user.email }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'reason' parameter is required")
+      end
+    end
+
+    context "when user is not found on Gumroad" do
+      it "returns an error message" do
+        post :create_appeal, params: { email: "nonexistent@example.com", reason: "test" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+      end
+    end
+
+    context "when user is not found on Iffy" do
+      it "returns an error message" do
+        successful_response = instance_double(
+          HTTParty::Response,
+          code: 200,
+          success?: true,
+          parsed_response: { "data" => [] }
+        )
+        allow(HTTParty).to receive(:get).and_return(successful_response)
+
+        post :create_appeal, params: { email: user.email, reason: "test" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("Failed to find user")
+      end
+    end
+
+    context "when user is found but not suspended" do
+      it "returns appeal creation failed" do
+        successful_response = instance_double(
+          HTTParty::Response,
+          code: 200,
+          success?: true,
+          parsed_response: { "data" => [{ "id" => "user123" }] }
+        )
+        allow(HTTParty).to receive(:get).and_return(successful_response)
+
+        failed_response = instance_double(
+          HTTParty::Response,
+          code: 400,
+          success?: false,
+          parsed_response: { "error" => { "message" => "User is not suspended" } }
+        )
+        allow(HTTParty).to receive(:post).and_return(failed_response)
+
+        post :create_appeal, params: { email: user.email, reason: "test" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("User is not suspended")
+      end
+    end
+
+    context "when user is found but user is banned" do
+      it "returns appeal creation failed" do
+        successful_response = instance_double(
+          HTTParty::Response,
+          code: 200,
+          success?: true,
+          parsed_response: { "data" => [{ "id" => "user123" }] }
+        )
+        allow(HTTParty).to receive(:get).and_return(successful_response)
+
+        failed_response = instance_double(
+          HTTParty::Response,
+          code: 400,
+          success?: false,
+          parsed_response: { "error" => { "message" => "Banned users may not appeal" } }
+        )
+        allow(HTTParty).to receive(:post).and_return(failed_response)
+
+        post :create_appeal, params: { email: user.email, reason: "test" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("Banned users may not appeal")
+      end
+    end
+
+    context "when user is found but appeal already exists" do
+      it "returns appeal creation failed" do
+        successful_response = instance_double(
+          HTTParty::Response,
+          code: 200,
+          success?: true,
+          parsed_response: { "data" => [{ "id" => "user123" }] }
+        )
+        allow(HTTParty).to receive(:get).and_return(successful_response)
+
+        failed_response = instance_double(
+          HTTParty::Response,
+          code: 400,
+          success?: false,
+          parsed_response: { "error" => { "message" => "Appeal already exists" } }
+        )
+        allow(HTTParty).to receive(:post).and_return(failed_response)
+
+        post :create_appeal, params: { email: user.email, reason: "test" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("Appeal already exists")
+      end
+    end
+
+    context "when user is found and appeal creation is successful" do
+      it "returns appeal id and url" do
+        appeal_url = "https://appeal.example.com/123"
+
+        user_data = {
+          "id" => "appeal123",
+          "actionStatus" => "Suspended",
+          "appealUrl" => appeal_url
+        }
+
+        successful_response = instance_double(
+          HTTParty::Response,
+          code: 200,
+          success?: true,
+          parsed_response: { "data" => [{ "id" => "user123" }] }
+        )
+        allow(HTTParty).to receive(:get).and_return(successful_response)
+
+        successful_response = instance_double(
+          HTTParty::Response,
+          code: 200,
+          success?: true,
+          parsed_response: { "data" => user_data }
+        )
+        allow(HTTParty).to receive(:post).and_return(successful_response)
+
+        post :create_appeal, params: { email: user.email, reason: "test" }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["id"]).to eq("appeal123")
+        expect(response.parsed_body["appeal_url"]).to eq(appeal_url)
+      end
+    end
+
+    context "when api call to iffy raises a network error" do
+      it "notifies Bugsnag and returns an error response" do
+        network_error = HTTParty::Error.new("Connection failed")
+        allow(HTTParty).to receive(:get).and_raise(network_error)
+        expect(Bugsnag).to receive(:notify).with(network_error)
+
+        post :create_appeal, params: { email: user.email, reason: "test" }
+
+        expect(response).to have_http_status(:service_unavailable)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("Failed to create appeal")
+      end
+    end
+  end
+
   describe "POST send_reset_password_instructions" do
     let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
 
