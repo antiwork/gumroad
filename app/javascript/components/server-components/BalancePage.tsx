@@ -183,8 +183,7 @@ type CurrentPayoutsDataWithUserNotPayable = {
 type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed";
 type PayoutType = "standard" | "instant";
 
-const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
-type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
+type PayoutFrequency = "daily" | "weekly" | "monthly" | "quarterly";
 
 type CurrentPeriodPayoutData = (
   | { status: "processing"; payment_external_id: string; arrival_date: string | null; type: PayoutType }
@@ -626,7 +625,7 @@ const InstantPayoutsNotice = () => (
 
 const InstantPayoutsPrompt = ({ instant_payout }: { instant_payout: InstantPayout }) => {
   const [isInstantPayoutModalOpen, setIsInstantPayoutModalOpen] = React.useState(false);
-  const [instantPayoutId, setInstantPayoutId] = React.useState<string>(instant_payout?.payable_balances[0]?.id ?? "");
+  const [instantPayoutId, setInstantPayoutId] = React.useState<string>(instant_payout.payable_balances[0]?.id ?? "");
   const [isLoading, setIsLoading] = React.useState(false);
 
   const instantPayoutAmountCents = instant_payout.payable_balances.reduce((sum, balance) => {
@@ -637,7 +636,6 @@ const InstantPayoutsPrompt = ({ instant_payout }: { instant_payout: InstantPayou
     instantPayoutAmountCents - Math.floor(instantPayoutAmountCents / (1 + INSTANT_PAYOUT_FEE_PERCENTAGE));
 
   const onRequestInstantPayout = async () => {
-    if (!instant_payout) return;
     setIsLoading(true);
     try {
       await createInstantPayout(
@@ -776,15 +774,14 @@ const InstantPayoutsPrompt = ({ instant_payout }: { instant_payout: InstantPayou
 const DailyInstantPeriod = ({
   instant_payout,
   next_daily_payout_date_formatted,
-  daily_payout_cutoff_date_formatted,
 }: {
   instant_payout: InstantPayout;
   next_daily_payout_date_formatted: string;
-  daily_payout_cutoff_date_formatted: string;
 }) => {
-  const instantPayoutAmountCents = instant_payout.payable_balances.reduce((sum, balance) => {
-    return sum + balance.amount_cents;
-  }, 0);
+  const instantPayoutAmountCents = instant_payout.payable_balances.reduce(
+    (sum, balance) => sum + balance.amount_cents,
+    0,
+  );
   return (
     <section style={{ display: "grid", gap: "var(--spacer-4)" }}>
       {instantPayoutAmountCents < MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
@@ -813,7 +810,7 @@ const DailyInstantPeriod = ({
           >
             <h2>Next payout: {next_daily_payout_date_formatted}</h2>
             <div className="pill small">Instant</div>
-            <span style={{ marginLeft: "auto" }}>Up to {daily_payout_cutoff_date_formatted}</span>
+            <span style={{ marginLeft: "auto" }}>Activity up to now</span>
           </div>
           <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
             <div>
@@ -863,7 +860,6 @@ const BalancePage = ({
   payout_frequency,
   pagination: initialPagination,
   next_daily_payout_date_formatted,
-  daily_payout_cutoff_date_formatted,
 }: {
   next_payout_period_data:
     | CurrentPayoutsDataWithUserNotPayable
@@ -877,7 +873,6 @@ const BalancePage = ({
   payout_frequency: PayoutFrequency;
   pagination: PaginationProps;
   next_daily_payout_date_formatted: string;
-  daily_payout_cutoff_date_formatted: string;
 }) => {
   const loggedInUser = useLoggedInUser();
 
@@ -938,10 +933,10 @@ const BalancePage = ({
         ) : null}
       </header>
       <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
-        {nextPayoutType == "standard" && !instant_payout && show_instant_payouts_notice ? (
+        {nextPayoutType === "standard" && !instant_payout && show_instant_payouts_notice ? (
           <InstantPayoutsNotice />
         ) : null}
-        {nextPayoutType == "standard" &&
+        {nextPayoutType === "standard" &&
         instant_payout &&
         instant_payout.payable_amount_cents > MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
           <InstantPayoutsPrompt instant_payout={instant_payout} />
@@ -953,19 +948,18 @@ const BalancePage = ({
             </p>
           </div>
         ) : null}
-        {nextPayoutType == "stripe_connect" ? (
+        {nextPayoutType === "stripe_connect" ? (
           <div className="info" role="status">
             <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
           </div>
         ) : null}
-        {nextPayoutType == "daily_instant" && instant_payout ? (
+        {nextPayoutType === "daily_instant" && instant_payout ? (
           <DailyInstantPeriod
             instant_payout={instant_payout}
             next_daily_payout_date_formatted={next_daily_payout_date_formatted}
-            daily_payout_cutoff_date_formatted={daily_payout_cutoff_date_formatted}
           />
         ) : null}
-        {nextPayoutType == "standard" && next_payout_period_data != null ? (
+        {nextPayoutType === "standard" && next_payout_period_data != null ? (
           <section style={{ display: "grid", gap: "var(--spacer-4)" }}>
             {next_payout_period_data.payout_note &&
             !["processing", "paused"].includes(next_payout_period_data.status) ? (
