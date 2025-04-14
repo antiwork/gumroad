@@ -7,19 +7,21 @@ require "shared_examples/authorize_called"
 describe S3UtilityController do
   include CdnUrlHelper
 
-  let(:seller) { create(:user) }
+  let(:seller) { create(:named_seller) }
   let(:another_user) { create(:user) }
 
-  before { sign_in seller }
-
-  it_behaves_like "authorize called for controller", S3UtilityPolicy do
-    let(:record) { :s3_utility }
-  end
+  include_context "with user signed in as admin for seller"
 
   describe "GET generate_multipart_signature" do
     it_behaves_like "authentication required for action", :get, :generate_multipart_signature
 
-    it "doesn't allow users to sign request for buckets they do not own" do
+    it_behaves_like "authorize called for action", :get, :generate_multipart_signature do
+      let(:request_params) { { to_sign: payload_to_sign(seller.external_id) } }
+      let(:record) { { external_ids: [seller.external_id] } }
+      let(:policy_klass) { S3UtilityPolicy }
+    end
+
+    it "doesn't allow sellers to sign request for buckets they do not own" do
       get :generate_multipart_signature, params: {
         to_sign: payload_to_sign(another_user.external_id)
       }
@@ -34,60 +36,12 @@ describe S3UtilityController do
       expect(response).to have_http_status(:forbidden)
     end
 
-    it "allows users to sign request for their own buckets" do
+    it "allows sellers to sign request for buckets they own" do
       get :generate_multipart_signature, params: {
         to_sign: payload_to_sign(seller.external_id)
       }
 
       expect(response).to have_http_status(:ok)
-    end
-
-    context "when the user has admin access to the seller" do
-      include_context "with user signed in as admin for seller"
-
-      it "allows signing" do
-        get :generate_multipart_signature, params: {
-          to_sign: payload_to_sign(seller.external_id)
-        }
-
-        expect(response).to have_http_status(:ok)
-      end
-    end
-
-    context "when the user has marketing access to the seller" do
-      include_context "with user signed in as marketing for seller"
-
-      it "allows signing" do
-        get :generate_multipart_signature, params: {
-          to_sign: payload_to_sign(seller.external_id)
-        }
-
-        expect(response).to have_http_status(:ok)
-      end
-    end
-
-    context "when the user has accountant access to the seller" do
-      include_context "with user signed in as accountant for seller"
-
-      it "does not allow signing" do
-        get :generate_multipart_signature, params: {
-          to_sign: payload_to_sign(seller.external_id)
-        }
-
-        expect(response).to have_http_status(:forbidden)
-      end
-    end
-
-    context "when the user has support access to the seller" do
-      include_context "with user signed in as support for seller"
-
-      it "does not allow signing" do
-        get :generate_multipart_signature, params: {
-          to_sign: payload_to_sign(seller.external_id)
-        }
-
-        expect(response).to have_http_status(:forbidden)
-      end
     end
   end
 
