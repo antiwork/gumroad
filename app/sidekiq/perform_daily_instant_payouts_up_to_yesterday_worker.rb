@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-class PerformDailyInstantPayoutsUpToYesterdayWorker
+class PerformDailyInstantPayoutsUpToTodayWorker
   include Sidekiq::Job
   sidekiq_options retry: 0, queue: :critical, lock: :until_executed
 
   def perform
-    payout_period_end_date = Date.yesterday
+    payout_period_end_date = Date.current
 
     Rails.logger.info("AUTOMATED DAILY INSTANT PAYOUTS: #{payout_period_end_date} (Started)")
 
