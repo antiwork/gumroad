@@ -5,6 +5,8 @@ class StripePayoutProcessor
 
   DEBIT_CARD_PAYOUT_MAX = 300_000
   INSTANT_PAYOUT_FEE_PERCENT = 3
+  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10_00
+  MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
 
   # Public: Determines if it's possible for this processor to payout
   # the user by checking that the user has provided us with the

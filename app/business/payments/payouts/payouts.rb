@@ -4,8 +4,6 @@ class Payouts
   extend ActionView::Helpers::NumberHelper
 
   MIN_AMOUNT_CENTS = 10_00
-  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10_00
-  MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
 

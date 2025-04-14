@@ -25,8 +25,8 @@ class PayoutsPresenter
       payouts_status: seller.payouts_status,
       past_payout_period_data: past_payouts.map { payout_period_data(seller, _1) },
       instant_payout: seller.instant_payouts_supported? ? {
-        payable_amount_cents: seller.instantly_payable_balance_amount_cents,
-        payable_balances: seller.instantly_payable_balances.sort_by(&:date).reverse.map do |balance|
+        payable_amount_cents: seller.instantly_payable_unpaid_balance_cents,
+        payable_balances: seller.instantly_payable_unpaid_balances.sort_by(&:date).reverse.map do |balance|
           {
             id: balance.external_id,
             date: balance.date,
