@@ -312,6 +312,28 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     }
   }.freeze
 
+  def update_two_factor_authentication_enabled
+    if params[:email].blank?
+      return render json: { success: false, error_message: "Email is required." }, status: :unprocessable_entity
+    end
+
+    if params[:enabled].nil?
+      return render json: { success: false, error_message: "Enabled status is required." }, status: :unprocessable_entity
+    end
+
+    user = User.alive.by_email(params[:email]).first
+    if user.present?
+      user.two_factor_authentication_enabled = params[:enabled]
+      if user.save
+        render json: { success: true, message: "Two-factor authentication #{user.two_factor_authentication_enabled? ? "enabled" : "disabled"}." }
+      else
+        render json: { success: false, error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity
+      end
+    else
+      render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+  end
+
   CREATE_USER_APPEAL_OPENAPI = {
     summary: "Create user appeal",
     description: "Create an appeal for a suspended user who believes they have been suspended in error",
@@ -347,8 +369,22 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           }
         }
       },
+      '400': {
+        description: "Invalid parameters",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
       '422': {
-        description: "Invalid parameters or appeal creation failed",
+        description: "User not found or appeal creation failed",
         content: {
           'application/json': {
             schema: {
@@ -364,31 +400,13 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     }
   }.freeze
 
-  def update_two_factor_authentication_enabled
-    if params[:email].blank?
-      return render json: { success: false, error_message: "Email is required." }, status: :unprocessable_entity
-    end
-
-    if params[:enabled].nil?
-      return render json: { success: false, error_message: "Enabled status is required." }, status: :unprocessable_entity
-    end
-
-    user = User.alive.by_email(params[:email]).first
-    if user.present?
-      user.two_factor_authentication_enabled = params[:enabled]
-      if user.save
-        render json: { success: true, message: "Two-factor authentication #{user.two_factor_authentication_enabled? ? "enabled" : "disabled"}." }
-      else
-        render json: { success: false, error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity
-      end
-    else
-      render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
-    end
-  end
-
   def create_appeal
-    if params[:email].blank? || params[:reason].blank?
-      return render json: { success: false, error_message: "Email and reason are required" }, status: :unprocessable_entity
+    if params[:email].blank?
+      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
+    end
+
+    if params[:reason].blank?
+      return render json: { success: false, error_message: "'reason' parameter is required" }, status: :bad_request
     end
 
     user = User.alive.by_email(params[:email]).first
@@ -407,8 +425,8 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       )
 
       if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") : "Failed to find user"
-        return render json: { success: false, error_message: error_message }
+        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") || "Failed to find user" : "Failed to find user"
+        return render json: { success: false, error_message: error_message }, status: :unprocessable_entity
       end
 
       user_data = response.parsed_response["data"].first
@@ -427,7 +445,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
 
       if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
         error_message = response.parsed_response.dig("error", "message") || "Failed to create appeal"
-        return render json: { success: false, error_message: }
+        return render json: { success: false, error_message: }, status: :unprocessable_entity
       end
 
       appeal_data = response.parsed_response["data"]
