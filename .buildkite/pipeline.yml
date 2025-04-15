@@ -44,6 +44,12 @@ steps:
           username: "gumroadteam"
           password-env: DOCKERHUB_PASSWORD
 
+  - block: "Approval required for production deployment"
+    key: require-approval
+    branches: "main"
+    prompt: "Are you sure you want to proceed with the deployment?"
+    blocked_state: running
+
   - label: ":rocket: Deploy to Production"
     key: production-deployment
     depends_on: compile-assets
