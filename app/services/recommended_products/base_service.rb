@@ -34,13 +34,16 @@ class RecommendedProducts::BaseService
         associated_ids
       end
 
-      RecommendedProductsService.fetch(
+      products = RecommendedProductsService.fetch(
         model: recommender_model_name,
         ids:,
         exclude_ids: exclude_product_ids,
         user_ids: for_seller_ids,
         number_of_results: NUMBER_OF_RESULTS,
       )
+
+      # Filter out draft, deleted, and purchase-disabled products
+      products.where(draft: false, deleted_at: nil, purchase_disabled_at: nil)
     end
 
     def all_associated_product_ids

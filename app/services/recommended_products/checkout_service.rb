@@ -33,6 +33,18 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
     recommended_products = recommended_products.alive.not_archived
     recommended_products = recommended_products.reject(&:rated_as_adult?) if affiliated_users.present? && Link.includes(:user).where(id: cart_product_ids).none?(&:rated_as_adult?)
 
+    # Don't recommend products that aren't shown on profile
+    # This filters out products that creators have chosen not to display on their profile
+    search_result = search_products(
+      {
+        size: 1000,
+        is_alive_on_profile: true,
+        ids: recommended_products.pluck(:id)
+      }
+    )
+    shown_on_profile_ids = search_result[:products].pluck(:id)
+    recommended_products = recommended_products.select { |product| shown_on_profile_ids.include?(product.id) }
+
     product_infos = recommended_products.filter_map do |product|
       direct_affiliate_id = affiliated_users.present? ? product.direct_affiliates.find { affiliated_users.ids.include?(_1.affiliate_user_id) }&.external_id_numeric : nil
 

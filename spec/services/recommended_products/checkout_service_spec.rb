@@ -306,5 +306,96 @@ describe RecommendedProducts::CheckoutService do
         end
       end
     end
+
+    context "when products with different publishing states are returned" do
+      let!(:published_product) { create(:product, :recommendable) }
+      let!(:draft_product) { create(:product, :recommendable, draft: true) }
+      let!(:purchase_disabled_product) { create(:product, :recommendable, purchase_disabled_at: Time.current) }
+
+      before do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(
+          Link.where(id: [published_product.id, draft_product.id, purchase_disabled_product.id])
+        )
+        # Mock the filter in base_service to simulate the behavior
+        allow_any_instance_of(RecommendedProducts::BaseService).to receive(:fetch_recommended_products).and_return(
+          Link.where(id: [published_product.id])
+        )
+      end
+
+      it "only includes published products" do
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [create(:product, user: create(:user, recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)).id],
+          recommender_model_name:,
+          limit: 5
+        )
+
+        # Should only include the published_product, filtering out draft, and purchase-disabled products
+        expect(product_infos.map(&:product)).to eq([published_product])
+        expect(product_infos.map(&:product)).not_to include(draft_product, purchase_disabled_product)
+      end
+    end
+
+    context "when products not shown on profile are returned" do
+      let!(:visible_product) { create(:product, user: seller1) }
+      let!(:hidden_product) { create(:product, user: seller1) }
+
+      before do
+        # Mock the fetch_recommended_products to return both products
+        allow_any_instance_of(RecommendedProducts::BaseService).to receive(:fetch_recommended_products).and_return(
+          Link.where(id: [visible_product.id, hidden_product.id])
+        )
+
+        # Mock search_products to simulate the Elasticsearch filtering
+        allow_any_instance_of(RecommendedProducts::CheckoutService).to receive(:search_products).and_return({
+          products: Link.where(id: visible_product.id) # Only return the visible product
+        })
+      end
+
+      it "does not include products that are not shown on profile" do
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [product1.id],
+          recommender_model_name:,
+          limit: 5
+        )
+
+        # Verify only visible products are recommended
+        expect(product_infos.map(&:product)).to include(visible_product)
+        expect(product_infos.map(&:product)).not_to include(hidden_product)
+      end
+    end
+
+    context "when both publishing state and profile visibility filters apply" do
+      let!(:visible_published_product) { create(:product, user: seller1) }
+      let!(:visible_draft_product) { create(:product, user: seller1, draft: true) }
+      let!(:hidden_published_product) { create(:product, user: seller1) }
+
+      before do
+        # Simulate the base_service filter (published products only)
+        allow_any_instance_of(RecommendedProducts::BaseService).to receive(:fetch_recommended_products).and_return(
+          Link.where(id: [visible_published_product.id, hidden_published_product.id])
+        )
+
+        # Simulate the Elasticsearch profile visibility filter
+        allow_any_instance_of(RecommendedProducts::CheckoutService).to receive(:search_products).and_return({
+          products: Link.where(id: visible_published_product.id) # Only the visible published product
+        })
+      end
+
+      it "only includes products that are both published and shown on profile" do
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [product1.id],
+          recommender_model_name:,
+          limit: 5
+        )
+
+        # Verify only visible published products are recommended
+        expect(product_infos.map(&:product)).to eq([visible_published_product])
+        expect(product_infos.map(&:product)).not_to include(hidden_published_product)
+        expect(product_infos.map(&:product)).not_to include(visible_draft_product)
+      end
+    end
   end
 end

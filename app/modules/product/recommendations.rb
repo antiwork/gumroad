@@ -14,7 +14,8 @@ module Product::Recommendations
       not_archived: !archived?,
       reviews_displayed: display_product_reviews?,
       not_sold_out: max_purchase_count.present? ? sales_count_for_inventory < max_purchase_count : true,
-      taxonomy_filled: taxonomy.present?
+      taxonomy_filled: taxonomy.present?,
+      published: published?
     }
 
     user.recommendable_reasons.each do |reason, value|
@@ -22,5 +23,10 @@ module Product::Recommendations
     end
 
     reasons
+  end
+
+  # Check if a product is published (not draft, not deleted, not purchase disabled)
+  def published?
+    !draft && deleted_at.nil? && purchase_disabled_at.nil?
   end
 end
