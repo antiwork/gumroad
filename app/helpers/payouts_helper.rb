@@ -52,6 +52,11 @@ module PayoutsHelper
       payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
       payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
+      payout_period_data[:type] = if user.payout_frequency == User::DAILY && Payouts.is_user_payable(user, payout_period_end_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+                                    Payouts::PAYOUT_TYPE_INSTANT
+                                  else
+                                    Payouts::PAYOUT_TYPE_STANDARD
+                                  end
 
       balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
       payout_period_data.merge!(payout_sales_data(user:, balance_ids:,
