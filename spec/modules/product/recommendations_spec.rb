@@ -38,6 +38,22 @@ describe Product::Recommendations, :elasticsearch_wait_for_refresh do
     expect(@product.recommendable?).to be(false)
   end
 
+  it "is false if product is in draft mode" do
+    create(:purchase, :with_review, link: @product, created_at: 1.week.ago)
+    @product.update_attribute(:draft, true)
+
+    expect(@product.recommendable_reasons[:published]).to be(false)
+    expect(@product.recommendable?).to be(false)
+  end
+
+  it "is false if product has purchase disabled" do
+    create(:purchase, :with_review, link: @product, created_at: 1.week.ago)
+    @product.update_attribute(:purchase_disabled_at, Time.current)
+
+    expect(@product.recommendable_reasons[:published]).to be(false)
+    expect(@product.recommendable?).to be(false)
+  end
+
   context "when taxonomy is not set" do
     before do
       @product.update_attribute(:taxonomy, nil)

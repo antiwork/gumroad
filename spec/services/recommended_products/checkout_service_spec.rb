@@ -306,5 +306,30 @@ describe RecommendedProducts::CheckoutService do
         end
       end
     end
+
+    context "when products with different publishing states are returned" do
+      let!(:published_product) { create(:product, :recommendable) }
+      let!(:draft_product) { create(:product, :recommendable, draft: true) }
+      let!(:purchase_disabled_product) { create(:product, :recommendable, purchase_disabled_at: Time.current) }
+
+      before do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(
+          Link.where(id: [published_product.id, draft_product.id, purchase_disabled_product.id])
+        )
+      end
+
+      it "only includes published products" do
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [create(:product, user: create(:user, recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)).id],
+          recommender_model_name:,
+          limit: 5
+        )
+
+        # Should only include the published_product, filtering out draft, and purchase-disabled products
+        expect(product_infos.map(&:product)).to eq([published_product])
+        expect(product_infos.map(&:product)).not_to include(draft_product, purchase_disabled_product)
+      end
+    end
   end
 end
