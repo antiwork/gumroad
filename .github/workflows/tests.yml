@@ -427,7 +427,7 @@ jobs:
     name: Unblock deployment from Buildkite
     runs-on: self-hosted
     needs: [test_fast, test_slow]
-    if: success()
+    if: success() && github.ref == 'refs/heads/main'
     steps:
       - name: Unblock corresponding Buildkite build
         uses: nick-fields/retry@v3
