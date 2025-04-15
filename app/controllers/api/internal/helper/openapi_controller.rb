@@ -26,6 +26,9 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         },
       },
       paths: {
+        "/users/create_appeal": {
+          post: Api::Internal::Helper::UsersController::CREATE_USER_APPEAL_OPENAPI,
+        },
         "/users/send_reset_password_instructions": {
           post: Api::Internal::Helper::UsersController::SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI,
         },

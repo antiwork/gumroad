@@ -311,6 +311,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       }
     }
   }.freeze
+
   def update_two_factor_authentication_enabled
     if params[:email].blank?
       return render json: { success: false, error_message: "Email is required." }, status: :unprocessable_entity
@@ -330,6 +331,139 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       end
     else
       render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+  end
+
+  CREATE_USER_APPEAL_OPENAPI = {
+    summary: "Create user appeal",
+    description: "Create an appeal for a suspended user who believes they have been suspended in error",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the user" },
+              reason: { type: "string", description: "Reason for the appeal" }
+            },
+            required: ["email", "reason"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully created appeal",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                id: { type: "string", description: "ID of the appeal" },
+                appeal_url: { type: "string", description: "URL for the user to view their appeal"  }
+              }
+            }
+          }
+        }
+      },
+      '400': {
+        description: "Invalid parameters",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '422': {
+        description: "User not found or appeal creation failed",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+
+  def create_appeal
+    if params[:email].blank?
+      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
+    end
+
+    if params[:reason].blank?
+      return render json: { success: false, error_message: "'reason' parameter is required" }, status: :bad_request
+    end
+
+    user = User.alive.by_email(params[:email]).first
+    if user.blank?
+      return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+
+    iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1" : "http://localhost:3000/api/v1"
+
+    begin
+      response = HTTParty.get(
+        "#{iffy_url}/users?email=#{CGI.escape(params[:email])}",
+        headers: {
+          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}"
+        }
+      )
+
+      if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
+        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") || "Failed to find user" : "Failed to find user"
+        return render json: { success: false, error_message: error_message }, status: :unprocessable_entity
+      end
+
+      user_data = response.parsed_response["data"].first
+      user_id = user_data["id"]
+
+      response = HTTParty.post(
+        "#{iffy_url}/users/#{user_id}/create_appeal",
+        headers: {
+          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}",
+          "Content-Type" => "application/json"
+        },
+        body: {
+          text: params[:reason]
+        }.to_json
+      )
+
+      if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
+        error_message = response.parsed_response.dig("error", "message") || "Failed to create appeal"
+        return render json: { success: false, error_message: }, status: :unprocessable_entity
+      end
+
+      appeal_data = response.parsed_response["data"]
+      appeal_id = appeal_data["id"]
+      appeal_url = appeal_data["appealUrl"]
+
+      render json: {
+        success: true,
+        id: appeal_id,
+        appeal_url: appeal_url
+      }
+    rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
+      Bugsnag.notify(e)
+
+      render json: {
+        success: false,
+        error_message: "Failed to create appeal"
+      }, status: :service_unavailable
     end
   end
 end
