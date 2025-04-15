@@ -10,11 +10,13 @@ import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { AudienceChart } from "$app/components/Audience/AudienceChart";
 import { AudienceQuickStats } from "$app/components/Audience/AudienceQuickStats";
-import { NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Icon } from "$app/components/Icons";
+import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/audience.png";
@@ -53,11 +55,18 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
       actions={
         hasContent ? (
           <>
-            <WithTooltip tip="Export">
-              <NavigationButton href={Routes.audience_export_path({ format: "csv" })}>
-                <Icon name="download" />
-              </NavigationButton>
-            </WithTooltip>
+            <Popover
+              aria-label="Export"
+              trigger={
+                <WithTooltip tip="Export" position="bottom">
+                  <Button aria-label="Export">
+                    <Icon aria-label="Download" name="download" />
+                  </Button>
+                </WithTooltip>
+              }
+            >
+              {(close) => <ExportSubscribersPopover closePopover={close} />}
+            </Popover>
             <DateRangePicker {...dateRange} />
           </>
         ) : null

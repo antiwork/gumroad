@@ -568,7 +568,7 @@ describe LinksController, :vcr do
           ],
           product_refund_policy_enabled: true,
           refund_policy: {
-            title: "New refund policy",
+            max_refund_period_in_days: 7,
             fine_print: "Sample fine print",
           },
         }
@@ -720,7 +720,7 @@ describe LinksController, :vcr do
           put :update, params: @params, as: :json
           @product.reload
           expect(@product.product_refund_policy_enabled).to be(true)
-          expect(@product.product_refund_policy.title).to eq("New refund policy")
+          expect(@product.product_refund_policy.title).to eq("7-day money back guarantee")
           expect(@product.product_refund_policy.fine_print).to eq("Sample fine print")
         end
       end
@@ -734,8 +734,22 @@ describe LinksController, :vcr do
           put :update, params: @params, as: :json
           @product.reload
           expect(@product.product_refund_policy_enabled).to be(true)
-          expect(@product.product_refund_policy.title).to eq "New refund policy"
+          expect(@product.product_refund_policy.title).to eq "7-day money back guarantee"
           expect(@product.product_refund_policy.fine_print).to eq "Sample fine print"
+        end
+
+        context "with product refund policy enabled" do
+          before do
+            @product.update!(product_refund_policy_enabled: true)
+          end
+
+          it "disables the product refund policy" do
+            @params[:product_refund_policy_enabled] = false
+            put :update, params: @params, as: :json
+            @product.reload
+            expect(@product.product_refund_policy_enabled).to be(false)
+            expect(@product.product_refund_policy).to be_nil
+          end
         end
       end
 

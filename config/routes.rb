@@ -231,6 +231,7 @@ Rails.application.routes.draw do
           resources :users, only: [] do
             collection do
               get :user_info
+              post :create_appeal
               post :user_suspension_info
               post :send_reset_password_instructions
               post :update_email
@@ -745,7 +746,7 @@ Rails.application.routes.draw do
     get "/audience" => redirect("/dashboard/audience")
     get "/dashboard/audience", to: "audience#index", as: :audience_dashboard
     get "/audience/data/by_date/:start_time/:end_time", to: "audience#data_by_date", as: "audience_data_by_date"
-    get "/audience/export", to: "audience#export", as: :audience_export
+    post "/audience/export", to: "audience#export", as: :audience_export
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices

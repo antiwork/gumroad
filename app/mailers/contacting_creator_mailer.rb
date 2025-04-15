@@ -449,6 +449,21 @@ class ContactingCreatorMailer < ApplicationMailer
     end
   end
 
+  def subscribers_data(recipient:, tempfile:, filename:)
+    @subject = "Here is your subscribers data!"
+    @recipient = recipient
+    file_or_url = MailerAttachmentOrLinkService.new(
+      file: tempfile,
+      filename:,
+    ).perform
+    if file_or_url[:file]
+      file_or_url[:file].rewind
+      attachments[filename] = { data: file_or_url[:file].read }
+    else
+      @subscribers_file_url = file_or_url[:url]
+    end
+  end
+
   def review_submitted(review_id)
     @review = ProductReview.includes(:purchase, link: :user).find(review_id)
     @product = @review.link
@@ -486,6 +501,11 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Important: Refund policy changes to your account"
     @postponed_date = User::LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY + 1.second if @seller.account_level_refund_policy_delayed?
     @subject += " (effective #{@postponed_date.to_fs(:formatted_date_full_month)})" if @postponed_date.present?
+  end
+
+  def product_level_refund_policies_reverted(seller_id)
+    @seller = User.find(seller_id)
+    @subject = "Important: Refund policy changes effective immediately"
   end
 
   def upcoming_refund_policy_change(user_id)

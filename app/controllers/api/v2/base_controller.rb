@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Api::V2::BaseController < ApplicationController
-  skip_before_action :save_us_from_ddos
   after_action :log_method_use
 
   private

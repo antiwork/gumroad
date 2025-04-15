@@ -63,11 +63,11 @@ export const Nav = () => {
 
   const navLinks = (
     <>
-      <NavLink text="Home" href={Routes.root_path()} />
-      <NavLink text="About" href={Routes.about_path()} />
-      <NavLink text="Features" href={Routes.features_path()} />
-      <NavLink text="Pricing" href={Routes.pricing_path()} />
-      <NavLink text="Taxes" href={Routes.taxes_path()} />
+      <NavLink text="Home" href={Routes.root_url()} />
+      <NavLink text="About" href={Routes.about_url()} />
+      <NavLink text="Features" href={Routes.features_url()} />
+      <NavLink text="Pricing" href={Routes.pricing_url()} />
+      <NavLink text="Taxes" href={Routes.taxes_url()} />
     </>
   );
 
@@ -83,7 +83,7 @@ export const Nav = () => {
   return (
     <section role="navigation">
       <div className="sticky left-0 right-0 top-0 z-50 flex h-20 justify-between border-b border-black bg-white pl-4 pr-4 lg:pl-8 lg:pr-0 dark:border-b-white/[.35] dark:bg-black">
-        <a href={Routes.root_path()} className="flex items-center">
+        <a href={Routes.root_url()} className="flex items-center">
           <img src={logo} alt="Gumroad" className="h-8 dark:invert" />
         </a>
         <div className="override hidden lg:flex lg:flex-1 lg:items-center lg:justify-center lg:gap-4">

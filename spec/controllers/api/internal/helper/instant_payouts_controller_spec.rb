@@ -25,7 +25,7 @@ describe Api::Internal::Helper::InstantPayoutsController do
 
     context "when user exists" do
       before do
-        allow_any_instance_of(User).to receive(:instantly_payable_balance_amount_cents).and_return(5000)
+        allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(5000)
       end
 
       it "returns instant payout balance information" do

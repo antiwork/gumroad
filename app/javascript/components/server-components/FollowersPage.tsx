@@ -5,7 +5,7 @@ import { createCast } from "ts-safe-cast";
 import { deleteFollower, fetchFollowers, Follower } from "$app/data/followers";
 import { register } from "$app/utils/serverComponentUtil";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
@@ -13,6 +13,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -140,11 +141,19 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               onChange={(evt) => setSearchQuery(evt.target.value)}
             />
           </Popover>
-          <WithTooltip tip="Export" position="bottom">
-            <NavigationButton href={Routes.audience_export_path({ format: "csv" })} aria-label="Export">
-              <Icon aria-label="Download" name="download" />
-            </NavigationButton>
-          </WithTooltip>
+          <Popover
+            aria-label="Export"
+            trigger={
+              <WithTooltip tip="Export" position="bottom">
+                <Button aria-label="Export">
+                  <Icon aria-label="Download" name="download" />
+                </Button>
+              </WithTooltip>
+            }
+          >
+            {(close) => <ExportSubscribersPopover closePopover={close} />}
+          </Popover>
+
           {currentSeller ? (
             <CopyToClipboard
               tooltipPosition="bottom"
