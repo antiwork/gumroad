@@ -23,7 +23,12 @@ module PayoutsHelper
   end
 
   def current_payout_end_date(user)
-    user.next_payout_date - User::PayoutSchedule::PAYOUT_DELAY_DAYS
+    next_payout_date = user.next_payout_date
+    if user.payout_frequency == User::DAILY
+      next_payout_date - 1
+    else
+      next_payout_date - User::PayoutSchedule::PAYOUT_DELAY_DAYS
+    end
   end
 
   def current_payout_period_data(user:)
@@ -47,6 +52,11 @@ module PayoutsHelper
       payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
       payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
+      payout_period_data[:type] = if user.payout_frequency == User::DAILY && Payouts.is_user_payable(user, payout_period_end_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+        Payouts::PAYOUT_TYPE_INSTANT
+      else
+        Payouts::PAYOUT_TYPE_STANDARD
+      end
 
       balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
       payout_period_data.merge!(payout_sales_data(user:, balance_ids:,
@@ -128,10 +138,13 @@ module PayoutsHelper
 
   def displayable_payout_period_range(previous_payment, payout_period_end_date)
     if previous_payment.present?
+      activity_start_date = [previous_payment.payout_period_end_date + 1, Date.current].min
       if payout_period_end_date > Date.current
-        "Activity since #{formatted_payout_date(previous_payment.payout_period_end_date + 1)}"
+        "Activity since #{formatted_payout_date(activity_start_date)}"
+      elsif payout_period_end_date == activity_start_date
+        "Activity on #{formatted_payout_date(payout_period_end_date)}"
       else
-        "Activity from #{formatted_payout_date(previous_payment.payout_period_end_date + 1)} to #{formatted_payout_date(payout_period_end_date)}"
+        "Activity from #{formatted_payout_date([previous_payment.payout_period_end_date + 1, Date.current].min)} to #{formatted_payout_date(payout_period_end_date)}"
       end
     else
       if payout_period_end_date > Date.current

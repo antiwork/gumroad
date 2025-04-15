@@ -538,6 +538,7 @@ describe SettingsPresenter do
         payout_threshold_cents: 1000,
         minimum_payout_threshold_cents: 1000,
         payout_frequency: User::PayoutSchedule::WEEKLY,
+        payout_frequency_daily_supported: false,
       }
     end
 

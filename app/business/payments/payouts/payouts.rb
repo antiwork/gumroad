@@ -7,7 +7,7 @@ class Payouts
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
 
-  def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false)
+  def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     if user.suspended? && !from_admin
@@ -21,20 +21,31 @@ class Payouts
       return false
     end
 
-    amount_payable = user.unpaid_balance_cents_up_to_date(date) + user.paid_payments_cents_for_date(date)
-    if amount_payable < user.minimum_payout_amount_cents
-      if add_comment && amount_payable > 0
-        current_balance = user.formatted_dollar_amount(amount_payable, with_currency: true)
+    amount_payable = user.unpaid_balance_cents_up_to_date(date)
+
+    account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+    if account_balance < user.minimum_payout_amount_cents
+      if add_comment && account_balance > 0
+        current_balance = user.formatted_dollar_amount(account_balance, with_currency: true)
         minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents, with_currency: true)
         user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account balance #{current_balance} was less than the minimum payout amount of #{minimum_balance}.") if add_comment
       end
-      is_payable_from_admin = from_admin && amount_payable > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == amount_payable
+      is_payable_from_admin = from_admin && account_balance > 0 && user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == account_balance
       return false unless is_payable_from_admin
+    end
+
+    if payout_type == Payouts::PAYOUT_TYPE_INSTANT
+      if !user.instant_payouts_supported?
+        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts.") if add_comment
+        return false
+      end
+
+      amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
     end
 
     processor_types = processor_type ? [processor_type] : ::PayoutProcessorType.all
     processor_types.any? do |payout_processor_type|
-      ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:)
+      ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:, payout_type:)
     end
   end
 
@@ -59,6 +70,11 @@ class Payouts
                   .where("bank_accounts.deleted_at is null")
       self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: true, bank_account_type:)
     end
+  end
+
+  def self.create_instant_payouts_for_balances_up_to_date(date)
+    users = User.holding_balance.where("json_data->'$.payout_frequency' = 'daily'")
+    self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: true, add_comment: true)
   end
 
   def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, retrying: false, bank_account_type: nil, from_admin: false)
@@ -96,6 +112,41 @@ class Payouts
       user_ids_to_pay.each do |user_id|
         payments << PayoutUsersService.new(date_string:,
                                            processor_type:,
+                                           user_ids: user_id).process
+      end
+      payments.compact
+    end
+  end
+
+  def self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: false, from_admin: false, add_comment: false)
+    raise ArgumentError.new("Cannot payout for today or future balances.") if date >= Date.current
+
+    user_ids_to_pay = []
+
+    users.each do |user|
+      if self.is_user_payable(
+        user, date,
+        processor_type: PayoutProcessorType::STRIPE,
+        add_comment:,
+        from_admin:,
+        payout_type: Payouts::PAYOUT_TYPE_INSTANT
+      )
+        user_ids_to_pay << user.id
+        Rails.logger.info("Instant Payouts: Payable user: #{user.id}")
+      else
+        Rails.logger.info("Instant Payouts: Not payable user: #{user.id}")
+      end
+    end
+
+    date_string = date.to_s
+    if perform_async
+      StripePayoutProcessor.enqueue_payments(user_ids_to_pay, date_string, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+    else
+      payments = []
+      user_ids_to_pay.each do |user_id|
+        payments << PayoutUsersService.new(date_string:,
+                                           processor_type: PayoutProcessorType::STRIPE,
+                                           payout_type: Payouts::PAYOUT_TYPE_INSTANT,
                                            user_ids: user_id).process
       end
       payments.compact

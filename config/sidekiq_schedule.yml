@@ -32,6 +32,10 @@ forcefully_finish_long_running_community_chat_recap_runs:
   description: Forcefully finishes long running community chat recap runs
 
 # Daily in format: [minute] [hour] * * *
+perform_daily_instant_payouts_worker:
+  cron: "0 8 * * *" # UTC 08:00, should be run before the weekly payouts job at 10:00
+  class: PerformDailyInstantPayoutsWorker
+  description: Creates daily instant payouts for balances up to yesterday
 large_sellers_update_user_balance_stats_cache_worker: # Duration: <1sec
   cron: "0 8 * * *" # UTC 08:00
   class: LargeSellersUpdateUserBalanceStatsCacheWorker
