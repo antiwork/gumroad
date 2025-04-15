@@ -1572,6 +1572,52 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe ".subscribers_data" do
+    let(:recipient) { create(:user) }
+    let(:filename) { "subscribers-export-#{SecureRandom.hex}.csv" }
+    let(:tempfile) { Tempfile.new }
+
+    before do
+      tempfile.puts "csv content"
+    end
+
+    it "contains the correct attachment and attributes" do
+      mail = ContactingCreatorMailer.subscribers_data(
+        recipient: recipient,
+        tempfile: tempfile,
+        filename: filename,
+      )
+
+      expect(mail.to).to eq([recipient.email])
+      expect(mail.subject).to include("Here is your subscribers data")
+      expect(mail.attachments.size).to eq(1)
+      expect(mail.attachments.first.body.raw_source).to eq("csv content\r\n")
+    end
+
+    context "when attachment size is above threshold" do
+      let(:download_url) { "https://example.com/download/subscribers_data.csv" }
+
+      before do
+        allow_any_instance_of(MailerAttachmentOrLinkService).to receive(:perform).and_return(
+          { file: nil, url: download_url }
+        )
+      end
+
+      it "contains a link instead of an attachment" do
+        mail = ContactingCreatorMailer.subscribers_data(
+          recipient: recipient,
+          tempfile: tempfile,
+          filename: filename,
+        )
+
+        expect(mail.to).to eq([recipient.email])
+        expect(mail.subject).to include("Here is your subscribers data")
+        expect(mail.attachments.size).to eq(0)
+        expect(mail.body).to have_link("link", href: download_url)
+      end
+    end
+  end
+
   describe "video_transcode_failed" do
     before do
       @user = create(:user, name: "Person")
