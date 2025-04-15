@@ -52,7 +52,9 @@ steps:
 
   - label: ":rocket: Deploy to Production"
     key: production-deployment
-    depends_on: compile-assets
+    depends_on:
+      - compile-assets
+      - require-approval
     branches: "main"
     command: ".buildkite/scripts/deploy_production.sh"
     timeout_in_minutes: 120
