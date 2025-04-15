@@ -3,7 +3,7 @@ import * as React from "react";
 type Props<OptionId extends string> = {
   value: OptionId;
   onChange: (newOptionId: OptionId) => void;
-  options: { id: OptionId; label: string; disabled?: boolean }[];
+  options: { id: OptionId; label: string }[];
   className?: string;
   disabled?: boolean;
 };
@@ -24,7 +24,7 @@ export const TypeSafeOptionSelect = <OptionId extends string>({
     disabled={disabled}
   >
     {options.map((opt) => (
-      <option key={opt.id} value={opt.id} disabled={!!opt.disabled}>
+      <option key={opt.id} value={opt.id}>
         {opt.label}
       </option>
     ))}

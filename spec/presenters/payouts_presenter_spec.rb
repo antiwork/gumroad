@@ -92,7 +92,6 @@ describe PayoutsPresenter do
               payout_method_type: "none",
               status: "payable",
               payout_note: nil,
-              type: "standard",
               has_stripe_connect: false
             },
             processing_payout_periods_data: [],
@@ -164,7 +163,6 @@ describe PayoutsPresenter do
               payout_method_type: "paypal",
               paypal_address: user.payment_address,
               payout_note: nil,
-              type: "standard",
               has_stripe_connect: false
             },
             processing_payout_periods_data: [],
