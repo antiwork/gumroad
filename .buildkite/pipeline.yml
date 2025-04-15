@@ -44,10 +44,10 @@ steps:
           username: "gumroadteam"
           password-env: DOCKERHUB_PASSWORD
 
-  - block: "Require tests to pass before deploying"
+  - block: "Approval required for production deployment"
     key: require-approval
-    branches: "unblock-buildkite-from-actions"
-    prompt: "This will unblock the deployment. Are you sure you want to continue?"
+    branches: "main"
+    prompt: "Are you sure you want to proceed with the deployment?"
     blocked_state: running
 
   - label: ":rocket: Deploy to Production"
