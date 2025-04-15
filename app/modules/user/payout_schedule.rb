@@ -15,6 +15,8 @@ module User::PayoutSchedule
   def next_payout_date
     return nil if unpaid_balance_cents < minimum_payout_amount_cents
 
+    return Date.current + 1 if payout_frequency == DAILY && Payouts.is_user_payable(self, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+
     upcoming_payout_date = get_initial_payout_date(Date.today)
 
     until upcoming_payout_date >= Date.today
@@ -33,7 +35,11 @@ module User::PayoutSchedule
   end
 
   def payout_amount_for_payout_date(payout_date)
-    unpaid_balance_cents_up_to_date(payout_date - PAYOUT_DELAY_DAYS)
+    if payout_frequency == DAILY && Payouts.is_user_payable(self, payout_date - 1, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      instantly_payable_unpaid_balance_cents_up_to_date(payout_date - 1)
+    else
+      unpaid_balance_cents_up_to_date(payout_date - PAYOUT_DELAY_DAYS)
+    end
   end
 
   def formatted_balance_for_next_payout_date

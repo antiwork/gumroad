@@ -31,14 +31,11 @@ forcefully_finish_long_running_community_chat_recap_runs:
   class: ForceFinishLongRunningCommunityChatRecapRunsJob
   description: Forcefully finishes long running community chat recap runs
 
-# Daily (Payouts)
-perform_daily_instant_payouts_up_to_today_worker:
-  cron: "0 8 * * *" # UTC 08:00, should be run before weekly payouts at 10:00
-  class: PerformDailyInstantPayoutsUpToTodayWorker
-  description: Creates daily instant payouts for balances up to today
-
-# Daily (Non-Payouts)
-# in format: [minute] [hour] * * *
+# Daily in format: [minute] [hour] * * *
+perform_daily_instant_payouts_worker:
+  cron: "0 8 * * *" # UTC 08:00, should be run before the weekly payouts job at 10:00
+  class: PerformDailyInstantPayoutsWorker
+  description: Creates daily instant payouts for balances up to yesterday
 large_sellers_update_user_balance_stats_cache_worker: # Duration: <1sec
   cron: "0 8 * * *" # UTC 08:00
   class: LargeSellersUpdateUserBalanceStatsCacheWorker
@@ -130,7 +127,8 @@ payouts_cross_border_stripe:
   class: PerformPayoutsUpToDelayDaysAgoWorker
   args:
     - "STRIPE"
-    - - "AlbaniaBankAccount"
+    -
+      - "AlbaniaBankAccount"
       - "AlgeriaBankAccount"
       - "AngolaBankAccount"
       - "AntiguaAndBarbudaBankAccount"
@@ -218,7 +216,8 @@ payouts_non_us_stripe:
   class: PerformPayoutsUpToDelayDaysAgoWorker
   args:
     - "STRIPE"
-    - - "AustralianBankAccount"
+    -
+      - "AustralianBankAccount"
       - "UkBankAccount"
       - "CanadianBankAccount"
       - "EuropeanBankAccount"
@@ -240,7 +239,8 @@ payouts_us_stripe:
   class: PerformPayoutsUpToDelayDaysAgoWorker
   args:
     - "STRIPE"
-    - - "AchAccount"
+    -
+      - "AchAccount"
       - "CardBankAccount"
 payouts_paypal:
   cron: "0 10 * * 5" # UTC 10:00 FRI

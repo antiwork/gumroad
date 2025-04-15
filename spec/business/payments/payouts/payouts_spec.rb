@@ -250,22 +250,22 @@ describe Payouts do
     end
   end
 
-  describe "create_daily_instant_payments_for_balances_up_to_date" do
+  describe "create_instant_payouts_for_balances_up_to_date" do
     let(:payout_date) { Date.yesterday }
 
-    it "calls create_daily_instant_payments_for_balances_up_to_date_for_users with all users holding balance with a payout frequency of daily" do
+    it "calls create_instant_payouts_for_balances_up_to_date_for_users with all users holding balance with a payout frequency of daily" do
       create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::WEEKLY)
       create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::WEEKLY)
       create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::DAILY)
       u4 = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::DAILY)
 
-      expect(described_class).to receive(:create_daily_instant_payments_for_balances_up_to_date_for_users).with(payout_date, [u4], perform_async: true)
+      expect(described_class).to receive(:create_instant_payouts_for_balances_up_to_date_for_users).with(payout_date, [u4], perform_async: true, add_comment: true)
 
-      described_class.create_daily_instant_payments_for_balances_up_to_date(payout_date)
+      described_class.create_instant_payouts_for_balances_up_to_date(payout_date)
     end
   end
 
-  describe "create_daily_instant_payments_for_balances_up_to_date_for_users" do
+  describe "create_instant_payouts_for_balances_up_to_date_for_users" do
     let(:payout_date) { Date.yesterday }
 
     context "when the seller does not support instant payouts" do
@@ -274,7 +274,7 @@ describe Payouts do
         allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
 
         expect do
-          described_class.create_payments_for_balances_up_to_date_for_users(payout_date, PayoutProcessorType::STRIPE, [creator])
+          described_class.create_instant_payouts_for_balances_up_to_date_for_users(payout_date, [creator])
         end.to_not change { Payment.count }
       end
     end

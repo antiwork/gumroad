@@ -72,9 +72,9 @@ class Payouts
     end
   end
 
-  def self.create_daily_instant_payments_for_balances_up_to_date(date)
+  def self.create_instant_payouts_for_balances_up_to_date(date)
     users = User.holding_balance.where("json_data->'$.payout_frequency' = 'daily'")
-    self.create_daily_instant_payments_for_balances_up_to_date_for_users(date, users, perform_async: true)
+    self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: true, add_comment: true)
   end
 
   def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, retrying: false, bank_account_type: nil, from_admin: false)
@@ -118,7 +118,7 @@ class Payouts
     end
   end
 
-  def self.create_daily_instant_payments_for_balances_up_to_date_for_users(date, users, perform_async: false, from_admin: false)
+  def self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: false, from_admin: false, add_comment: false)
     raise ArgumentError.new("Cannot payout for today or future balances.") if date >= Date.current
 
     user_ids_to_pay = []
@@ -127,14 +127,14 @@ class Payouts
       if self.is_user_payable(
         user, date,
         processor_type: PayoutProcessorType::STRIPE,
-        add_comment: true,
+        add_comment:,
         from_admin:,
         payout_type: Payouts::PAYOUT_TYPE_INSTANT
       )
         user_ids_to_pay << user.id
-        Rails.logger.info("Payouts: Payable user: #{user.id}")
+        Rails.logger.info("Instant Payouts: Payable user: #{user.id}")
       else
-        Rails.logger.info("Payouts: Not payable user: #{user.id}")
+        Rails.logger.info("Instant Payouts: Not payable user: #{user.id}")
       end
     end
 
