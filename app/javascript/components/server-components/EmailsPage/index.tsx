@@ -26,9 +26,10 @@ import { DraftsTab } from "$app/components/server-components/EmailsPage/DraftsTa
 import { EmailForm } from "$app/components/server-components/EmailsPage/EmailForm";
 import { PublishedTab } from "$app/components/server-components/EmailsPage/PublishedTab";
 import { ScheduledTab } from "$app/components/server-components/EmailsPage/ScheduledTab";
+import { SegmentsTab } from "$app/components/server-components/EmailsPage/SegmentsTab";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-const TABS = ["published", "scheduled", "drafts", "subscribers"] as const;
+const TABS = ["published", "scheduled", "drafts", "subscribers", "segments"] as const;
 
 export const emailTabPath = (tab: (typeof TABS)[number]) => `/emails/${tab}`;
 export const newEmailPath = "/emails/new";
@@ -89,7 +90,15 @@ export const Layout = ({
               </a>
             ) : (
               <Link to={emailTabPath(tab)} role="tab" aria-selected={selectedTab === tab} key={tab}>
-                {tab === "published" ? "Published" : tab === "scheduled" ? "Scheduled" : "Drafts"}
+                {tab === "published"
+                  ? "Published"
+                  : tab === "scheduled"
+                    ? "Scheduled"
+                    : tab === "drafts"
+                      ? "Drafts"
+                      : tab === "segments"
+                        ? "Segments"
+                        : tab}
               </Link>
             ),
           )}
@@ -194,6 +203,10 @@ const routes: RouteObject[] = [
     path: emailTabPath("drafts"),
     element: <DraftsTab />,
     loader: async () => json(await getDraftInstallments({ page: 1, query: "" }).response, { status: 200 }),
+  },
+  {
+    path: emailTabPath("segments"),
+    element: <SegmentsTab />,
   },
   {
     path: newEmailPath,

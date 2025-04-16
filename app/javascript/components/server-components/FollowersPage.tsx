@@ -51,6 +51,9 @@ const Layout = ({
           <a href={Routes.followers_path()} role="tab" aria-selected="true">
             Subscribers
           </a>
+          <a href={`${Routes.emails_path()}/segments`} role="tab">
+            Segments
+          </a>
         </div>
       </header>
       {children}
