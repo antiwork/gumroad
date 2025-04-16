@@ -8,6 +8,8 @@ class VideoFile < ApplicationRecord
   include SignedUrlHelper
   include FlagShihTzu
 
+  include VideoFile::HasThumbnail
+
   has_s3_fields :url
 
   belongs_to :record, polymorphic: true
