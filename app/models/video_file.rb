@@ -11,6 +11,7 @@ class VideoFile < ApplicationRecord
   has_s3_fields :url
 
   belongs_to :record, polymorphic: true
+  belongs_to :user
 
   has_flags 1 => :is_transcoded_for_hls,
             2 => :analyze_completed,
