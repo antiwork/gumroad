@@ -606,10 +606,14 @@ describe "Balance Pages Scenario", js: true, type: :feature do
           create(:user_compliance_info, user: seller)
           create_list(:payment_completed, 4, user: seller)
           create(:bank, routing_number: "110000000", name: "Bank of America")
-          create(:ach_account_stripe_succeed, user: seller, routing_number: "110000000")
-          merchant_account = StripeMerchantAccountManager.create_account(seller.reload, passphrase: "1234")
-          stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-          stripe_account.refresh until stripe_account.payouts_enabled?
+          create(:ach_account_stripe_succeed,
+                 user: seller,
+                 routing_number: "110000000",
+                 stripe_connect_account_id: "acct_1Qplf7S17V0i16U7",
+                 stripe_external_account_id: "ba_1Qplf7S17V0i16U7S5L4chWo",
+                 stripe_fingerprint: "dx7dqwoGHEQDKLLK",
+                 )
+          create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_1Qplf7S17V0i16U7")
 
           Credit.create_for_credit!(user: seller, amount_cents: 1000, crediting_user: seller)
           allow_any_instance_of(User).to receive(:compliant?).and_return(true)
@@ -622,7 +626,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
           click_on "Get paid!"
           within_modal "Instant payout" do
             expect(page).to have_text("You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your bank account within 30 minutes, though some payouts may take longer to be credited.")
-            expect(page).to have_select("Pay out balance up to", selected: Date.today.strftime("%-m/%-d/%Y"))
+            expect(page).to have_select("Pay out balance up to", selected: Date.current.strftime("%B %-d, %Y"))
             expect(page).to have_text("Sent to Bank of America", normalize_ws: true)
             expect(page).to have_text("Amount $10", normalize_ws: true)
             expect(page).to have_text("Instant payout fee (3%) -$0.30", normalize_ws: true)
@@ -683,12 +687,12 @@ describe "Balance Pages Scenario", js: true, type: :feature do
             expect(page).to have_text("You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your bank account within 30 minutes, though some payouts may take longer to be credited.")
             expect(page).to have_text("Sent to Test Bank", normalize_ws: true)
 
-            expect(page).to have_select("Pay out balance up to", selected: "1/3/2025")
+            expect(page).to have_select("Pay out balance up to", selected: "January 3, 2025")
             expect(page).to have_text("Amount $15,000", normalize_ws: true)
             expect(page).to have_text("Instant payout fee (3%) -$436.90", normalize_ws: true)
             expect(page).to have_text("You'll receive $14,563.10", normalize_ws: true)
             expect(page).to have_status(text: "Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split your balance into multiple payouts.")
-            select "1/2/2025", from: "Pay out balance up to"
+            select "January 2, 2025", from: "Pay out balance up to"
           end
           click_on "Get paid!"
           within_modal "Instant payout" do
@@ -696,7 +700,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
             expect(page).to have_text("Instant payout fee (3%) -$262.14", normalize_ws: true)
             expect(page).to have_text("You'll receive $8,737.86", normalize_ws: true)
             expect(page).to_not have_status(text: "Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split your balance into multiple payouts.")
-            select "1/1/2025", from: "Pay out balance up to"
+            select "January 1, 2025", from: "Pay out balance up to"
           end
           click_on "Get paid!"
           within_modal "Instant payout" do
