@@ -131,6 +131,12 @@ describe PaypalPayoutProcessor do
         end
       end
     end
+
+    describe "instant payouts" do
+      it "returns false" do
+        expect(described_class.is_user_payable(user, 10_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to be(false)
+      end
+    end
   end
 
   describe "has_valid_payout_info?" do

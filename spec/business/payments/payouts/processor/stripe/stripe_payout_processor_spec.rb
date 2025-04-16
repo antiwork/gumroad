@@ -18,6 +18,12 @@ describe StripePayoutProcessor, :vcr do
       @u2 = create(:compliant_user, unpaid_balance_cents: 10_01)
       @m2 = create(:merchant_account_stripe_korea, user: @u2)
       @b2 = create(:korea_bank_account, user: @u2, stripe_bank_account_id: "ba_korbankaccountid")
+
+      # balance too high for instant payout
+      @u3 = create(:compliant_user, unpaid_balance_cents: 10_000_01)
+      @m3 = create(:merchant_account, user: @u3)
+      @n3 = create(:ach_account, user: @u3, stripe_bank_account_id: "ba_bankaccountid")
+      create(:user_compliance_info, user: @u3)
     end
 
     describe "creator no longer has an ach account" do
@@ -93,6 +99,20 @@ describe StripePayoutProcessor, :vcr do
 
     it "returns true when the user is marked as compliant" do
       expect(described_class.is_user_payable(@u1, 10_01)).to eq(true)
+    end
+
+    describe "instant payouts" do
+      it "returns true when the user has an eligible balance" do
+        expect(described_class.is_user_payable(@u1, 10_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(true)
+      end
+
+      it "returns false when the user has a balance above the maximum instant payout amount" do
+        expect(described_class.is_user_payable(@u3, 10_000_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
+      end
+
+      it "returns false when the user has a balance below the minimum instant payout amount" do
+        expect(described_class.is_user_payable(@u1, 9_99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
+      end
     end
 
     describe "when the user has a previous payout in processing state" do
@@ -288,7 +308,7 @@ describe StripePayoutProcessor, :vcr do
 
       expect(PayoutUsersWorker.jobs.size).to eq(user_ids.size)
       sidekiq_job_args = user_ids.each_with_object([]) do |user_id, accumulator|
-        accumulator << [yesterday, PayoutProcessorType::STRIPE, user_id]
+        accumulator << [yesterday, PayoutProcessorType::STRIPE, user_id, Payouts::PAYOUT_TYPE_STANDARD]
       end
       expect(PayoutUsersWorker.jobs.map { _1["args"] }).to match_array(sidekiq_job_args)
     end

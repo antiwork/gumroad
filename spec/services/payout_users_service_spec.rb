@@ -153,6 +153,8 @@ describe PayoutUsersService, :vcr do
     end
 
     it "marks the balances as processing, alters the users' balances, and creates payments when payout method is instant" do
+      allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).with(anything).and_return(99_999_00)
+
       bal1 = user1.unpaid_balances.where("amount_cents > 1000000").last
       bal1.update!(amount_cents: 9_989_00, holding_amount_cents: 9_989_00)
       bal2 = user2.unpaid_balances.where("amount_cents > 1000000").last
@@ -193,6 +195,8 @@ describe PayoutUsersService, :vcr do
     end
 
     it "marks the payments as failed if the instant payout amount is more than the limit" do
+      allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).with(anything).and_return(99_999_00)
+
       bal1 = user1.unpaid_balances.where("amount_cents > 1000000").last
       bal1.update!(amount_cents: 12_000_00, holding_amount_cents: 12_000_00)
       bal2 = user2.unpaid_balances.where("amount_cents > 1000000").last
@@ -224,6 +228,32 @@ describe PayoutUsersService, :vcr do
       expect(user2.reload.unpaid_balance_cents).to eq(13_010_00)
 
       expect(user1.balances.reload.pluck(:state).uniq).to eq(["unpaid"])
+      expect(user2.balances.reload.pluck(:state).uniq).to eq(["unpaid"])
+    end
+
+    it "does not process the payments if the amount is less than the instantly payable unpaid balances amount" do
+      allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).with(user1).and_return(99_999_00)
+      allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).with(user2).and_return(800_00)
+
+      bal1 = user1.unpaid_balances.where("amount_cents > 1000000").last
+      bal1.update!(amount_cents: 900_00, holding_amount_cents: 900_00)
+      bal2 = user2.unpaid_balances.where("amount_cents > 1000000").last
+      bal2.update!(amount_cents: 900_00, holding_amount_cents: 900_00)
+
+      service_object = described_class.new(date_string: payout_date.to_s, processor_type: payout_processor_type,
+                                           user_ids: [user1.id, user2.id], payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+
+      expect do
+        expect(service_object).to receive(:create_payments).and_call_original
+        result = service_object.process
+        expect(result.length).to eq(1)
+        expect(result.map(&:id)).to match_array([Payment.last.id])
+        expect(result.map(&:processor).uniq).to eq([payout_processor_type])
+      end.to change { Payment.count }.by(1)
+
+      expect(user1.reload.unpaid_balance_cents).to eq(0)
+      expect(user2.reload.unpaid_balance_cents).to eq(910_00)
+      expect(user1.balances.reload.pluck(:state).uniq).to eq(["processing"])
       expect(user2.balances.reload.pluck(:state).uniq).to eq(["unpaid"])
     end
   end

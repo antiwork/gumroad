@@ -26,11 +26,14 @@ class PaypalPayoutProcessor
   # but will also opt to not payout users who have previous paypal payouts that were incomplete
   # or if they've provided a bank account because it's possibe for users to have both
   # a payment address and a bank account and we prefer bank payouts.
-  def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false)
+  def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     # Don't allow payout to PayPal if the user has given us a bank account.
     return false if user.active_bank_account
+
+    # PayPal does not support instant payouts.
+    return false if payout_type == Payouts::PAYOUT_TYPE_INSTANT
 
     # Don't allow payout to PayPal if the StripePayoutProcessor can handle it.
     return false if StripePayoutProcessor.is_user_payable(user, amount_payable_usd_cents)

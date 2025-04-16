@@ -14,7 +14,7 @@ class StripePayoutProcessor
   #
   # This payout processor can payout any user who has a Stripe managed account
   # and has a bank account setup.
-  def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false)
+  def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     # If a user's previous payment is still processing, don't allow for new payments.
@@ -38,6 +38,19 @@ class StripePayoutProcessor
       user.add_payout_note(content: "Payout on #{payout_date} was skipped because the payout bank account was not correctly set up.") if add_comment
       return false
     end
+
+    if payout_type == Payouts::PAYOUT_TYPE_INSTANT
+      if amount_payable_usd_cents < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the account balance was less than the minimum instant payout amount of $10.") if add_comment
+        return false
+      end
+
+      if amount_payable_usd_cents > StripePayoutProcessor::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the account balance was greater than the maximum instant payout amount of $9999.") if add_comment
+        return false
+      end
+    end
+
     true
   end
 
@@ -182,9 +195,9 @@ class StripePayoutProcessor
     payment.mark_failed! if failed
   end
 
-  def self.enqueue_payments(user_ids, date_string)
+  def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     user_ids.each do |user_id|
-      PayoutUsersWorker.perform_async(date_string, PayoutProcessorType::STRIPE, user_id)
+      PayoutUsersWorker.perform_async(date_string, PayoutProcessorType::STRIPE, user_id, payout_type)
     end
   end
 
