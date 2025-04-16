@@ -1,0 +1,8 @@
+<%= header_section("Your requested subscribers data") %>
+<div>
+  <% if @subscribers_file_url.present? %>
+    <p>Please click this <%= link_to "link", @subscribers_file_url %> to download</p>
+  <% else %>
+    <p>We've attached the subscribers data you requested</p>
+  <% end %>
+</div>

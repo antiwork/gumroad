@@ -1,6 +1,6 @@
 import { cast } from "ts-safe-cast";
 
-import { request } from "$app/utils/request";
+import { request, ResponseError } from "$app/utils/request";
 
 export type AudienceDataByDate = {
   dates: string[];
@@ -26,4 +26,20 @@ export const fetchAudienceDataByDate = ({ startTime, endTime }: { startTime: str
     .then((response) => response.json())
     .then((json) => cast<AudienceDataByDate>(json));
   return { response, abort };
+};
+
+export const sendSubscribersReport = async ({
+  options,
+}: {
+  options: { followers: boolean; customers: boolean; affiliates: boolean };
+}) => {
+  const response = await request({
+    url: Routes.audience_export_path(),
+    method: "POST",
+    data: {
+      options,
+    },
+    accept: "json",
+  });
+  if (!response.ok) throw new ResponseError();
 };

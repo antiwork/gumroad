@@ -15,6 +15,7 @@ import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportPayoutsPopover } from "$app/components/server-components/BalancePage/ExportPayoutsPopover";
+import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
@@ -630,6 +631,7 @@ const BalancePage = ({
   pagination: PaginationProps;
 }) => {
   const loggedInUser = useLoggedInUser();
+  const userAgentInfo = useUserAgentInfo();
 
   const [pastPayoutPeriodData, setPastPayoutPeriodData] = React.useState(past_payout_period_data);
   const [pagination, setPagination] = React.useState(initialPagination);
@@ -781,7 +783,11 @@ const BalancePage = ({
                   >
                     {instant_payout.payable_balances.map((balance) => (
                       <option key={balance.id} value={balance.id}>
-                        {new Date(balance.date).toLocaleDateString()}
+                        {new Date(balance.date).toLocaleDateString(userAgentInfo.locale, {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </option>
                     ))}
                   </select>

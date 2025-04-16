@@ -224,6 +224,7 @@ class SettingsPresenter
       payout_threshold_cents: seller.minimum_payout_amount_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
       payout_frequency: seller.payout_frequency,
+      payout_frequency_daily_supported: seller.instant_payouts_supported?,
     }
   end
 

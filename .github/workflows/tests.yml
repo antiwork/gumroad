@@ -422,3 +422,67 @@ jobs:
           WEB_REPO: quay.io/gumroad/web
         run: |
           docker rmi $WEB_REPO:test-${{ github.sha }} 2>/dev/null || true
+
+  unblock_deployment_from_buildkite:
+    name: Unblock deployment from Buildkite
+    runs-on: self-hosted
+    needs: [test_fast, test_slow]
+    if: success() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Unblock corresponding Buildkite build
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 20
+          retry_wait_seconds: 300
+          max_attempts: 3
+          command: |
+            echo "Looking for Buildkite build for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG..."
+            # Fetch builds for the specific commit, including jobs
+            BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+              "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds?commit=$COMMIT_SHA&include_retried_jobs=true")
+
+            # Extract the latest build number that is currently blocked for this commit
+            BUILD_NUMBER=$(echo "$BUILD_DATA" | jq -r --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit and .blocked == true)] | sort_by(.created_at) | last | .number // empty')
+
+            if [ -z "$BUILD_NUMBER" ]; then
+              echo "No blocked Buildkite build found for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG."
+              exit 1
+            fi
+
+            echo "Found blocked Buildkite build number: $BUILD_NUMBER. Fetching job details..."
+            # Fetch detailed data for the specific build to get job IDs
+            BUILD_DETAIL_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+               "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER")
+
+            # Extract the job ID for the block step with key "require-approval"
+            BLOCK_JOB_ID=$(echo "$BUILD_DETAIL_DATA" | jq -r '.jobs[] | select(.type == "manual" and .step_key == "require-approval") | .id // empty')
+
+            if [ -z "$BLOCK_JOB_ID" ]; then
+              echo "No block job with key 'require-approval' found in build $BUILD_NUMBER."
+              exit 1
+            fi
+
+            echo "Found block job ID: $BLOCK_JOB_ID for build $BUILD_NUMBER. Attempting to unblock job..."
+            # Send the unblock request using PUT to the job-specific endpoint
+            RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+              -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{}' \
+              "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID/unblock")
+
+            # Check the response code
+            if [ "$RESPONSE_CODE" -ge 200 ] && [ "$RESPONSE_CODE" -lt 300 ]; then
+              echo "Successfully sent unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
+            else
+              echo "Error sending unblock request for job $BLOCK_JOB_ID in build $BUILD_NUMBER. Response code: $RESPONSE_CODE"
+              # Attempt to fetch error details from Buildkite if available
+              ERROR_DETAILS=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+                "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER/jobs/$BLOCK_JOB_ID")
+              echo "API Response details for failed unblock: $ERROR_DETAILS"
+              exit 1 # Exit with error if the API call failed
+            fi
+        env:
+          BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          COMMIT_SHA: ${{ github.sha }}
+          ORG_SLUG: gumroad-inc
+          PIPELINE_SLUG: gumroad
