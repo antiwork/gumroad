@@ -76,7 +76,7 @@ export const Review = ({
           {review.is_new ? <span className="pill small primary">New</span> : null}
         </span>
         {review.message ? <p style={{ margin: 0 }}>{review.message}</p> : null}
-        {review.video ? <ReviewVideoPlayer id={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
+        {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
         <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center", flexWrap: "wrap" }}>
           <ReviewUserAttribution avatarUrl={review.rater.avatar_url} name={review.rater.name} isBuyer />
         </section>

@@ -39,10 +39,10 @@ function usePlayer(videoId: string, uid: string) {
   return { loading, showPlayer, onPlay, playerId: `${uid}-video` };
 }
 
-export const ReviewVideoPlayer = ({ id, thumbnail }: { id: string; thumbnail?: string | null }) => {
+export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thumbnail?: string | null }) => {
   const uid = React.useId();
 
-  const { loading, showPlayer, onPlay, playerId } = usePlayer(id, uid);
+  const { loading, showPlayer, onPlay, playerId } = usePlayer(videoId, uid);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded bg-black">
