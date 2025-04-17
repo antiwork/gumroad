@@ -40,14 +40,17 @@ describe ProductReviewVideoPolicy do
     ).user
   end
 
+  let(:purchaser) { create(:user) }
+  let(:another_user) { create(:user) }
+
   let(:product) { create(:product, user: seller) }
-  let(:purchase) { create(:purchase, link: product, seller: seller) }
-  let(:product_review) { create(:product_review, purchase: purchase) }
+  let(:purchase) { create(:purchase, link: product, seller:, purchaser:) }
+  let(:product_review) { create(:product_review, purchase:) }
   let(:product_review_video_for_seller) do
     create(
       :product_review_video,
-      product_review: product_review,
-      approval_status: :pending_review
+      :pending_review,
+      product_review: product_review
     )
   end
 
@@ -91,6 +94,53 @@ describe ProductReviewVideoPolicy do
         :support_for_seller,
         :accountant_for_seller,
         :marketing_for_seller,
+      ]
+    end
+  end
+
+  permissions :stream? do
+    context "when the video has been approved" do
+      let(:record) { product_review_video_for_another_seller }
+
+      before { record.approved! }
+
+      it_behaves_like "an access-granting policy for roles", [:seller]
+    end
+
+    context "when the video has not been approved" do
+      let(:record) { product_review_video_for_another_seller }
+
+      before { record.pending_review! }
+
+      it_behaves_like "an access-denying policy for roles", [:seller]
+    end
+
+    context "when the video is for the seller's product review" do
+      let(:record) { product_review_video_for_seller }
+
+      before { record.pending_review! }
+
+      it_behaves_like "an access-granting policy for roles", [
+        :seller,
+        :admin_for_seller,
+        :support_for_seller,
+        :accountant_for_seller,
+        :marketing_for_seller,
+      ]
+    end
+
+    context "when the video is for the purchaser's product review" do
+      let(:context_seller) { purchaser }
+      let(:record) { product_review_video_for_seller }
+
+      before { record.pending_review! }
+
+      it_behaves_like "an access-granting policy for roles", [
+        :purchaser,
+      ]
+
+      it_behaves_like "an access-denying policy for roles", [
+        :seller,
       ]
     end
   end

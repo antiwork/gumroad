@@ -12,6 +12,13 @@ class ProductReview < ApplicationRecord
   belongs_to :purchase, optional: true
   has_one :response, class_name: "ProductReviewResponse"
   has_many :videos, dependent: :destroy, class_name: "ProductReviewVideo"
+  has_one :approved_video, -> { alive.approved }, class_name: "ProductReviewVideo"
+
+  scope :visible_on_product_page,
+        -> {
+          left_joins(:approved_video)
+            .where("product_reviews.has_message = true OR product_review_videos.id IS NOT NULL")
+        }
 
   validates_presence_of :purchase
   validates_presence_of :link

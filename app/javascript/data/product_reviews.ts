@@ -31,7 +31,7 @@ export const setProductRating = async ({
 export type Review = {
   id: string;
   rating: number;
-  message: string;
+  message: string | null;
   rater: { name: string; avatar_url: string };
   purchase_id: string;
   is_new: boolean;
@@ -41,6 +41,10 @@ export type Review = {
       date: string;
       humanized: string;
     };
+  } | null;
+  video: {
+    id: string;
+    thumbnail_url: string | null;
   } | null;
 };
 
@@ -66,4 +70,16 @@ export const getReview = async (reviewId: string): Promise<{ review: Review }> =
   if (!response.ok) throw new ResponseError();
 
   return cast<{ review: Review }>(await response.json());
+};
+
+export const getStreamingUrls = async (id: string) => {
+  const response = await request({
+    method: "GET",
+    url: Routes.product_review_video_streaming_urls_path(id),
+    accept: "json",
+  });
+
+  if (!response.ok) throw new ResponseError();
+
+  return cast<{ streaming_urls: string[] }>(await response.json());
 };
