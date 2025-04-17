@@ -1624,9 +1624,11 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
       <div className="flex flex-col gap-4">
         <h5>Pending video</h5>
         <ReviewVideoPlayer videoId={pendingVideo.id} thumbnail={pendingVideo.thumbnail_url} />
-        <Button color="primary" className="flex-1" onClick={() => void approveVideo(pendingVideo)} disabled={loading}>
-          Show on product page
-        </Button>
+        {pendingVideo.can_approve ? (
+          <Button color="primary" className="flex-1" onClick={() => void approveVideo(pendingVideo)} disabled={loading}>
+            Show on product page
+          </Button>
+        ) : null}
       </div>
     </section>
   ) : null;
