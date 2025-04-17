@@ -1,11 +1,23 @@
 <%= header_section("New review") %>
 <div>
   <div><%= @buyer %> reviewed <%= link_to @product.name, @product.long_url %></div>
+
   <%= render("shared/mailers/review_rating", rating: @review.rating) %>
+
   <% if @review.message.present? %>
     <div>
       <i><%= "\"#{@review.message}\"" %></i>
     </div>
   <% end %>
+
+  <% if @review.pending_video.present? %>
+    <div>
+      <%= link_to customers_url(query: @review.purchase.email) do %>
+        <%= render("shared/mailers/video_file_thumbnail", video_file: @review.pending_video.video_file) %>
+      <% end %>
+    </div>
+    <%= link_to "Review & approve video", customers_url(query: @review.purchase.email), class: "button" %>
+  <% end %>
+
   <%= link_to "View all reviews", @product.long_url, class: "button primary" %>
 </div>

@@ -15,6 +15,7 @@ class ProductReview < ApplicationRecord
   has_many :videos, dependent: :destroy, class_name: "ProductReviewVideo"
   has_many :alive_videos, -> { alive }, class_name: "ProductReviewVideo"
   has_one :approved_video, -> { alive.approved }, class_name: "ProductReviewVideo"
+  has_one :pending_video, -> { alive.pending_review }, class_name: "ProductReviewVideo"
 
   scope :visible_on_product_page,
         -> {

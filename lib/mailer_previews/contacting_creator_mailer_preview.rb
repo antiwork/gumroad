@@ -185,7 +185,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def review_submitted
-    ContactingCreatorMailer.review_submitted(ProductReview.where.not(message: nil).last&.id)
+    ContactingCreatorMailer.review_submitted(ProductReview.last&.id)
   end
 
   def upcoming_call_reminder
