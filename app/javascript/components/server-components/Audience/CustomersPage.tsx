@@ -71,6 +71,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { Progress } from "$app/components/Progress";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
+import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
@@ -82,7 +83,6 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
-import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
