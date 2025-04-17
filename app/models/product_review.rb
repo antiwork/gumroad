@@ -11,7 +11,9 @@ class ProductReview < ApplicationRecord
   belongs_to :link, optional: true
   belongs_to :purchase, optional: true
   has_one :response, class_name: "ProductReviewResponse"
+
   has_many :videos, dependent: :destroy, class_name: "ProductReviewVideo"
+  has_many :alive_videos, -> { alive }, class_name: "ProductReviewVideo"
   has_one :approved_video, -> { alive.approved }, class_name: "ProductReviewVideo"
 
   scope :visible_on_product_page,

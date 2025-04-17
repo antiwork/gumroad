@@ -160,7 +160,13 @@ class CustomersController < Sellers::BaseController
     end
 
     def load_sales(sales)
-      sales.records.includes(:tip, product_review: [:response], utm_link: [target_resource: [:seller, :user]]).load
+      sales.records
+        .includes(
+          :tip,
+          product_review: [:response, { alive_videos: [:video_file] }],
+          utm_link: [target_resource: [:seller, :user]]
+        )
+        .load
     end
 
     def set_title
