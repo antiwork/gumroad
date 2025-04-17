@@ -4,6 +4,7 @@ class ReceiptPresenter::ChargeInfo
   include ActionView::Helpers::UrlHelper
   include CurrencyHelper
   include MailerHelper
+  include ERB::Util
 
   def initialize(chargeable, for_email:, order_items_count:)
     @for_email = for_email
@@ -27,9 +28,9 @@ class ReceiptPresenter::ChargeInfo
 
     action = \
       if for_email
-        "Contact #{seller.display_name} by replying to this email."
+        "Contact #{h(seller.display_name)} by replying to this email."
       else
-        "Contact #{seller.display_name} at #{mail_to(seller.support_or_form_email)}."
+        "Contact #{h(seller.display_name)} at #{mail_to(seller.support_or_form_email)}."
       end
     "#{question} #{action}".html_safe
   rescue NotImplementedError
