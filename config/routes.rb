@@ -1114,7 +1114,7 @@ Rails.application.routes.draw do
   resources :product_review_videos, only: [] do
     scope module: :product_review_videos do
       resource :stream, only: [:show]
-      resources :media_urls, only: [:index]
+      resources :streaming_urls, only: [:index]
     end
   end
 

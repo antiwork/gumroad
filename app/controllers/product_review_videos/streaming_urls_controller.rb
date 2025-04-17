@@ -8,7 +8,7 @@ class ProductReviewVideos::StreamingUrlsController < ApplicationController
     return head :unauthorized unless authorized?
 
     render json: {
-      media_urls: [
+      streaming_urls: [
         product_review_video_stream_path(
           @product_review_video.external_id,
           format: :smil

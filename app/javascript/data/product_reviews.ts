@@ -67,3 +67,15 @@ export const getReview = async (reviewId: string): Promise<{ review: Review }> =
 
   return cast<{ review: Review }>(await response.json());
 };
+
+export const getStreamingUrls = async (id: string) => {
+  const response = await request({
+    method: "GET",
+    url: Routes.product_review_video_streaming_urls_path(id),
+    accept: "json",
+  });
+
+  if (!response.ok) throw new ResponseError();
+
+  return cast<{ streaming_urls: string[] }>(await response.json());
+};
