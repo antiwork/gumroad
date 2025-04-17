@@ -9,7 +9,6 @@ import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 export const useReviewVideoUploader = () => {
   const loggedInUser = useLoggedInUser();
   const [uploadContext, setUploadContext] = useState<ReviewVideoUploadContext | null>(null);
-  const [readyToUpload, setReadyToUpload] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,7 +21,6 @@ export const useReviewVideoUploader = () => {
         if (!isMounted) return;
 
         setUploadContext(context);
-        setReadyToUpload(true);
       } catch (err) {
         assertResponseError(err);
         setError("Failed to get upload context");
@@ -41,6 +39,8 @@ export const useReviewVideoUploader = () => {
     s3_url: uploadContext?.s3_url ?? "",
     user_id: uploadContext?.user_id ?? "",
   });
+
+  const readyToUpload = uploadContext != null;
 
   return {
     error,

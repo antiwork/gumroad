@@ -12,28 +12,36 @@ export type UploadProgress = { percent: number; bitrate: number };
 type Props = { aws_access_key_id: string; s3_url: string; user_id: string };
 export const useConfigureEvaporate = (props: Props) => {
   const bucket = last(props.s3_url.split("/"));
-  const evaporateRef = React.useRef(
-    new Evaporate({
-      signerUrl: Routes.s3_utility_generate_multipart_signature_path(),
-      aws_key: props.aws_access_key_id,
-      bucket,
-      fetchCurrentServerTimeUrl: Routes.s3_utility_current_utc_time_string_path(),
-      maxFileSize: MAX_FILE_SIZE,
-    }),
+
+  const evaporate = React.useMemo(
+    () =>
+      new Evaporate({
+        signerUrl: Routes.s3_utility_generate_multipart_signature_path(),
+        aws_key: props.aws_access_key_id,
+        bucket,
+        fetchCurrentServerTimeUrl: Routes.s3_utility_current_utc_time_string_path(),
+        maxFileSize: MAX_FILE_SIZE,
+      }),
+    [props.aws_access_key_id, bucket],
   );
 
-  const s3UploadConfig = {
-    generateS3KeyForUpload: (guid: string, name: string) => {
-      const s3key = FileUtils.getS3Key(
-        guid,
-        // Firefox does not handle the encoding of ' characters correctly, we have to force it to work here
-        encodeURIComponent(name).replace("'", "%27"),
-        props.user_id,
-        ROOT_BUCKET_NAME,
-      );
-      return { s3key, fileUrl: `${props.s3_url}/${decodeURIComponent(s3key)}` };
-    },
-  };
+  const s3UploadConfig = React.useMemo(
+    () => ({
+      generateS3KeyForUpload: (guid: string, name: string) => {
+        const s3key = FileUtils.getS3Key(
+          guid,
+          encodeURIComponent(name).replace("'", "%27"),
+          props.user_id,
+          ROOT_BUCKET_NAME,
+        );
+        return {
+          s3key,
+          fileUrl: `${props.s3_url}/${decodeURIComponent(s3key)}`,
+        };
+      },
+    }),
+    [props.s3_url, props.user_id],
+  );
 
   const cancellationKeysToUploadIdsRef = React.useRef<Record<string, string>>({});
   const scheduleUpload = ({
@@ -53,7 +61,7 @@ export const useConfigureEvaporate = (props: Props) => {
   }) => {
     let previousProgress = 0;
 
-    const status = evaporateRef.current.add({
+    const status = evaporate.add({
       name,
       file,
       url: props.s3_url,
@@ -88,7 +96,7 @@ export const useConfigureEvaporate = (props: Props) => {
 
   const cancelUpload = (cancellationKey: string) => {
     const uploadId = cancellationKeysToUploadIdsRef.current[cancellationKey];
-    if (uploadId) evaporateRef.current.cancel(uploadId);
+    if (uploadId) evaporate.cancel(uploadId);
   };
 
   return { evaporateUploader: { scheduleUpload, cancelUpload }, s3UploadConfig };
