@@ -97,13 +97,33 @@ describe ProductReview do
   end
 
   describe ".visible_on_product_page" do
-    let!(:has_message) { create(:product_review, message: "has_message") }
-    let!(:has_video) { create(:product_review, videos: [build(:product_review_video, :approved)]) }
+    let!(:only_has_message) { create(:product_review, message: "has_message") }
+    let!(:only_has_approved_video) do
+      create(
+        :product_review,
+        message: nil,
+        videos: [build(:product_review_video, :approved)]
+      )
+    end
+    let!(:only_has_pending_video) do
+      create(
+        :product_review,
+        message: nil,
+        videos: [build(:product_review_video, :pending_review)]
+      )
+    end
+    let!(:only_has_deleted_approved_video) do
+      create(
+        :product_review,
+        message: nil,
+        videos: [build(:product_review_video, :approved, deleted_at: Time.current)]
+      )
+    end
     let!(:no_message_or_video) { create(:product_review, message: nil, videos: []) }
 
     it "includes reviews with has_message: true" do
       expect(ProductReview.visible_on_product_page.pluck(:id))
-        .to contain_exactly(has_message.id, has_video.id)
+        .to contain_exactly(only_has_message.id, only_has_approved_video.id)
     end
   end
 end
