@@ -1602,6 +1602,7 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
     try {
       await approveReviewVideo(video.id);
       onChange({ ...review, videos: [{ ...video, approval_status: "approved" }] });
+      showAlert("This video review is now live!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong", "error");
