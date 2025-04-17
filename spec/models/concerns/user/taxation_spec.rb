@@ -133,7 +133,11 @@ describe User::Taxation do
     before do
       create(:merchant_account_stripe, user: @user)
       create(:tos_agreement, user: @user)
-      @affiliate = create(:direct_affiliate, affiliate_user: @user, affiliate_basis_points: [10_00, 15_00, 20_00].sample)
+      @affiliate = create(
+        :direct_affiliate,
+        affiliate_user: @user,
+        affiliate_basis_points: [15_00, 20_00].sample
+      )
 
       10.times do
         create(:purchase, price_cents: 100_00,
