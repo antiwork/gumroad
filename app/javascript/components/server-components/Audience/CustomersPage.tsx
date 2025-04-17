@@ -42,6 +42,8 @@ import {
   completeCommission,
   getCharges,
   File,
+  ReviewVideo,
+  approveReviewVideo,
 } from "$app/data/customers";
 import {
   CurrencyCode,
@@ -80,6 +82,7 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
+import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -1587,6 +1590,55 @@ const EmailSection = ({
   );
 };
 
+const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChange: (review: Review) => void }) => {
+  const [loading, setLoading] = React.useState(false);
+
+  const approvedVideo = review.videos.find((video) => video.approval_status === "approved");
+  const pendingVideo = review.videos.find((video) => video.approval_status === "pending_review");
+
+  const approveVideo = async (video: ReviewVideo) => {
+    setLoading(true);
+
+    try {
+      await approveReviewVideo(video.id);
+      onChange({ ...review, videos: [{ ...video, approval_status: "approved" }] });
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Something went wrong", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approvedVideoSubsection = approvedVideo ? (
+    <section>
+      <div className="flex flex-col gap-4">
+        <h5>Approved video</h5>
+        <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
+      </div>
+    </section>
+  ) : null;
+
+  const pendingVideoSubsection = pendingVideo ? (
+    <section>
+      <div className="flex flex-col gap-4">
+        <h5>Pending video</h5>
+        <ReviewVideoPlayer videoId={pendingVideo.id} thumbnail={pendingVideo.thumbnail_url} />
+        <Button color="primary" className="flex-1" onClick={() => void approveVideo(pendingVideo)} disabled={loading}>
+          Show on product page
+        </Button>
+      </div>
+    </section>
+  ) : null;
+
+  return approvedVideoSubsection || pendingVideoSubsection ? (
+    <>
+      {approvedVideoSubsection}
+      {pendingVideoSubsection}
+    </>
+  ) : null;
+};
+
 const ReviewSection = ({
   review,
   purchaseId,
@@ -1610,6 +1662,7 @@ const ReviewSection = ({
         {review.message}
       </section>
     ) : null}
+    <ReviewVideosSubsections review={review} onChange={onChange} />
     {review.response ? (
       <section>
         <h5>Response</h5>
