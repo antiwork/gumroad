@@ -18,7 +18,8 @@ describe ProductReviewPresenter do
           rating: product_review.rating,
           purchase_id: product_review.purchase.external_id,
           is_new: true,
-          response: nil
+          response: nil,
+          video: nil
         }
       )
     end
@@ -89,6 +90,25 @@ describe ProductReviewPresenter do
             expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("Purchaser")
           end
         end
+      end
+    end
+
+    context "product review has videos" do
+      let(:video) { create(:product_review_video, product_review:) }
+
+      it "only includes the approved video" do
+        video.pending_review!
+        product_review.reload
+        expect(described_class.new(product_review).product_review_props[:video]).to be nil
+
+        video.approved!
+        product_review.reload
+        expect(described_class.new(product_review).product_review_props[:video]).to eq(
+          {
+            id: video.external_id,
+            thumbnail_url: video.video_file.thumbnail_url,
+          }
+        )
       end
     end
   end
