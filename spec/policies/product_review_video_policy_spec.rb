@@ -98,7 +98,7 @@ describe ProductReviewVideoPolicy do
     end
   end
 
-  permissions :streaming_urls? do
+  permissions :stream? do
     context "when the video has been approved" do
       let(:record) { product_review_video_for_another_seller }
 

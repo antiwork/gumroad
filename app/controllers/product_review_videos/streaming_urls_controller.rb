@@ -29,7 +29,7 @@ class ProductReviewVideos::StreamingUrlsController < ApplicationController
         skip_authorization
         true
       else
-        authorize @product_review_video, :streaming_urls?
+        authorize @product_review_video, :stream?
       end
     end
 

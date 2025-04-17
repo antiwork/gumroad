@@ -9,7 +9,7 @@ class ProductReviewVideoPolicy < ApplicationPolicy
     approve?
   end
 
-  def streaming_urls?
+  def stream?
     return true if record.approved?
     purchased_by_user?(record) || owned_by_seller?(record)
   end
