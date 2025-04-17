@@ -325,8 +325,8 @@ describe CustomerPresenter do
       it "includes the review videos" do
         props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
         expect(props[:review][:videos]).to contain_exactly(
-          ProductReviewVideoPresenter.new(alive_approved_video).props,
-          ProductReviewVideoPresenter.new(alive_pending_video).props,
+          ProductReviewVideoPresenter.new(alive_approved_video).props(pundit_user:),
+          ProductReviewVideoPresenter.new(alive_pending_video).props(pundit_user:),
         )
       end
     end

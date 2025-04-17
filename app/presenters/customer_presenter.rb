@@ -174,7 +174,7 @@ class CustomerPresenter
       }
     end
 
-    def review_videos_props(alive_videos, pundit_user:)
+    def review_videos_props(alive_videos:, pundit_user:)
       # alive_videos of different states are pre-loaded together to simplify
       # the query, and there is guaranteed to be at-most one pending and
       # at-most one approved video.
