@@ -31,7 +31,7 @@ export const setProductRating = async ({
 export type Review = {
   id: string;
   rating: number;
-  message: string;
+  message: string | null;
   rater: { name: string; avatar_url: string };
   purchase_id: string;
   is_new: boolean;
@@ -41,6 +41,10 @@ export type Review = {
       date: string;
       humanized: string;
     };
+  } | null;
+  video: {
+    id: string;
+    thumbnail_url: string | null;
   } | null;
 };
 
