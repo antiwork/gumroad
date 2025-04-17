@@ -42,6 +42,8 @@ import {
   completeCommission,
   getCharges,
   File,
+  ReviewVideo,
+  approveReviewVideo,
 } from "$app/data/customers";
 import {
   CurrencyCode,
@@ -69,6 +71,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { Progress } from "$app/components/Progress";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
+import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
@@ -1587,6 +1590,58 @@ const EmailSection = ({
   );
 };
 
+const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChange: (review: Review) => void }) => {
+  const [loading, setLoading] = React.useState(false);
+
+  const approvedVideo = review.videos.find((video) => video.approval_status === "approved");
+  const pendingVideo = review.videos.find((video) => video.approval_status === "pending_review");
+
+  const approveVideo = async (video: ReviewVideo) => {
+    setLoading(true);
+
+    try {
+      await approveReviewVideo(video.id);
+      onChange({ ...review, videos: [{ ...video, approval_status: "approved" }] });
+      showAlert("This video review is now live!", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Something went wrong", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approvedVideoSubsection = approvedVideo ? (
+    <section>
+      <div className="flex flex-col gap-4">
+        <h5>Approved video</h5>
+        <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
+      </div>
+    </section>
+  ) : null;
+
+  const pendingVideoSubsection = pendingVideo ? (
+    <section>
+      <div className="flex flex-col gap-4">
+        <h5>Pending video</h5>
+        <ReviewVideoPlayer videoId={pendingVideo.id} thumbnail={pendingVideo.thumbnail_url} />
+        {pendingVideo.can_approve ? (
+          <Button color="primary" className="flex-1" onClick={() => void approveVideo(pendingVideo)} disabled={loading}>
+            Show on product page
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  ) : null;
+
+  return approvedVideoSubsection || pendingVideoSubsection ? (
+    <>
+      {approvedVideoSubsection}
+      {pendingVideoSubsection}
+    </>
+  ) : null;
+};
+
 const ReviewSection = ({
   review,
   purchaseId,
@@ -1610,6 +1665,7 @@ const ReviewSection = ({
         {review.message}
       </section>
     ) : null}
+    <ReviewVideosSubsections review={review} onChange={onChange} />
     {review.response ? (
       <section>
         <h5>Response</h5>

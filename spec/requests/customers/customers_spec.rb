@@ -1565,6 +1565,51 @@ describe "Sales page", type: :feature, js: true do
       end
     end
 
+    describe "product review videos" do
+      let(:review) { create(:product_review, purchase: purchase1, message: "Amazing!") }
+      let!(:pending_video) do
+        create(
+          :product_review_video,
+          :pending_review,
+          product_review: review,
+          video_file: create(:video_file, :with_thumbnail)
+        )
+      end
+      let!(:approved_video) do
+        create(
+          :product_review_video,
+          :approved,
+          product_review: review,
+          video_file: create(:video_file, :with_thumbnail)
+        )
+      end
+      it "allows approving a video" do
+        visit customers_path
+        find(:table_row, { "Email" => purchase1.email }).click
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+          end
+          within_section "Pending video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+            expect(page).to have_text("Show on product page")
+          end
+        end
+
+        click_on "Show on product page"
+        expect(page).to have_alert(text: "This video review is now live!")
+        expect(pending_video.reload.approved?).to eq(true)
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+          end
+          expect(page).to_not have_section("Pending video")
+        end
+      end
+    end
+
     describe "call" do
       let(:call_product) { create(:call_product, :available_for_a_year, user: seller) }
       let!(:call_purchase) { create(:call_purchase, seller:, link: call_product, full_name: "Call Customer", created_at: Time.current) }
