@@ -8,7 +8,7 @@ module VideoFile::HasThumbnail
 
   included do
     has_one_attached :thumbnail do |attachable|
-      attachable.variant :poster, resize_to_limit: [1280, 720], preprocessed: true
+      attachable.variant :preview, resize_to_limit: [1280, 720], preprocessed: true
     end
 
     validate :validate_thumbnail
@@ -30,7 +30,7 @@ module VideoFile::HasThumbnail
   def thumbnail_url
     return nil unless thumbnail.attached?
 
-    url = thumbnail.variant(:poster).url || thumbnail.url
+    url = thumbnail.variant(:preview).url || thumbnail.url
     url.present? ? cdn_url_for(url) : nil
   end
 end

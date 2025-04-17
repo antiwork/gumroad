@@ -69,8 +69,8 @@ RSpec.describe VideoFile::HasThumbnail do
 
         expect(video_file.thumbnail_url).to eq("https://gumroad-specs.s3.amazonaws.com/#{video_file.thumbnail.key}")
 
-        video_file.thumbnail.variant(:poster).processed
-        expect(video_file.thumbnail_url).to eq("https://gumroad-specs.s3.amazonaws.com/#{video_file.thumbnail.variant(:poster).key}")
+        video_file.thumbnail.variant(:preview).processed
+        expect(video_file.thumbnail_url).to eq("https://gumroad-specs.s3.amazonaws.com/#{video_file.thumbnail.variant(:preview).key}")
       end
     end
 
