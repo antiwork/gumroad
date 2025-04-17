@@ -95,4 +95,15 @@ describe ProductReview do
     expect(product_review).to_not be_valid
     expect(product_review.errors.full_messages).to eq(["Adult keywords are not allowed"])
   end
+
+  describe ".visible_on_product_page" do
+    let!(:has_message) { create(:product_review, message: "has_message") }
+    let!(:has_video) { create(:product_review, videos: [build(:product_review_video, :approved)]) }
+    let!(:no_message_or_video) { create(:product_review, message: nil, videos: []) }
+
+    it "includes reviews with has_message: true" do
+      expect(ProductReview.visible_on_product_page.pluck(:id))
+        .to contain_exactly(has_message.id, has_video.id)
+    end
+  end
 end

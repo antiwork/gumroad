@@ -15,8 +15,8 @@ class ProductReviewsController < ApplicationController
     pagination, reviews = pagy(
       product.product_reviews
         .alive
+        .visible_on_product_page
         .includes(:response, approved_video: :video_file, purchase: :purchaser)
-        .where(has_message: true)
         .order(rating: :desc, created_at: :desc, id: :desc),
       page: [permitted_params[:page].to_i, 1].max,
       limit: PER_PAGE
