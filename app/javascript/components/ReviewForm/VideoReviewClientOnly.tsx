@@ -96,6 +96,9 @@ const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; dis
   </button>
 );
 
+const recordingType = MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "video/mp4";
+const recordingExtension = recordingType === "video/webm" ? "webm" : "mp4";
+
 export default function VideoReviewClientOnly({
   formState,
   videoUrl,
@@ -107,7 +110,7 @@ export default function VideoReviewClientOnly({
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(videoUrl);
 
   const setRecordedVideo = (_blobUrl: string, blob: Blob) => {
-    const videoFile = new File([blob], "video-review.webm", { type: "video/webm" });
+    const videoFile = new File([blob], `video-review.${recordingExtension}`, { type: recordingType });
     onVideoChange(videoFile);
   };
 
@@ -122,7 +125,7 @@ export default function VideoReviewClientOnly({
     askPermissionOnMount: true,
     stopStreamsOnStop: true,
     blobPropertyBag: {
-      type: "video/webm",
+      type: recordingType,
     },
     onStop: setRecordedVideo,
   });
