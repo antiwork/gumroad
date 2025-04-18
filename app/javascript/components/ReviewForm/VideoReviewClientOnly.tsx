@@ -121,7 +121,9 @@ export default function VideoReviewClientOnly({
 
   const { startRecording, stopRecording, clearBlobUrl, mediaBlobUrl, previewStream } = useReactMediaRecorder({
     audio: true,
-    video: true,
+    video: {
+      aspectRatio: { ideal: 16 / 9 },
+    },
     askPermissionOnMount: true,
     stopStreamsOnStop: true,
     blobPropertyBag: {
