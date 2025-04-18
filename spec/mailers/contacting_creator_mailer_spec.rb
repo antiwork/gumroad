@@ -1751,6 +1751,23 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to_not have_text('""')
       end
     end
+
+    context "when the review has a pending video" do
+      let!(:pending_video) do
+        create(
+          :product_review_video,
+          :pending_review,
+          product_review: review,
+          video_file: create(:video_file, :with_thumbnail)
+        )
+      end
+
+      it "includes the video thumbnail" do
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.body.encoded).to have_selector("img[src='#{pending_video.video_file.thumbnail_url}']")
+        expect(mail.body.encoded).to have_link("Review & approve video", href: customers_url(query: review.purchase.email))
+      end
+    end
   end
 
   describe "#upcoming_call_reminder" do

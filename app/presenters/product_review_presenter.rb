@@ -36,6 +36,17 @@ class ProductReviewPresenter
           },
         } :
         nil,
+      video: video_props,
     }
   end
+
+  private
+    def video_props
+      return nil unless product_review.approved_video.present?
+
+      {
+        id: product_review.approved_video.external_id,
+        thumbnail_url: product_review.approved_video.video_file.thumbnail_url,
+      }
+    end
 end

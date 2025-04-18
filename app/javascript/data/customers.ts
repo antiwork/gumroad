@@ -26,7 +26,18 @@ export type Address = {
 export type Tracking = { shipped: false } | { shipped: true; url: string | null };
 export type Option = { id: string; name: string };
 export type ReviewResponse = { message: string };
-export type Review = { rating: number; message: string | null; response: ReviewResponse | null };
+export type Review = {
+  rating: number;
+  message: string | null;
+  response: ReviewResponse | null;
+  videos: ReviewVideo[];
+};
+export type ReviewVideo = {
+  id: string;
+  approval_status: "pending_review" | "approved" | "rejected";
+  thumbnail_url: string | null;
+  can_approve: boolean;
+};
 export type Call = { id: string; call_url: string | null; start_time: string; end_time: string };
 export type File = {
   id: string;
@@ -411,5 +422,17 @@ export const completeCommission = async (commissionId: string) => {
 
   if (!response.ok) {
     throw new ResponseError(cast<{ errors: string[] }>(await response.json()).errors[0]);
+  }
+};
+
+export const approveReviewVideo = async (videoId: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_product_review_video_approvals_url(videoId),
+  });
+
+  if (!response.ok) {
+    throw new ResponseError();
   }
 };

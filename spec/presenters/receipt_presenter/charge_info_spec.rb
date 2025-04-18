@@ -53,6 +53,23 @@ describe ReceiptPresenter::ChargeInfo do
         end
       end
 
+      context "when the seller name contains HTML" do
+        let(:seller) { create(:named_seller, name: "<script>alert('xss')</script>") }
+
+        it "escapes the seller name for email" do
+          expect(presenter.product_questions_note).to include(
+            "Contact &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; by replying to this email."
+          )
+        end
+
+        it "escapes the seller name for non-email" do
+          presenter = described_class.new(chargeable, for_email: false, order_items_count: 1)
+          expect(presenter.product_questions_note).to include(
+            "Contact &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; at"
+          )
+        end
+      end
+
       context "when is a gift sender purchase" do
         include_context "when is a gift sender purchase"
 

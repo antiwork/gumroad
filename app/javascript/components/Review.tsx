@@ -5,6 +5,7 @@ import { Review as ReviewType } from "$app/data/product_reviews";
 import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
+import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -74,7 +75,8 @@ export const Review = ({
           <RatingStars rating={review.rating} />
           {review.is_new ? <span className="pill small primary">New</span> : null}
         </span>
-        <p style={{ margin: 0 }}>{review.message}</p>
+        {review.message ? <p style={{ margin: 0 }}>{review.message}</p> : null}
+        {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
         <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center", flexWrap: "wrap" }}>
           <ReviewUserAttribution avatarUrl={review.rater.avatar_url} name={review.rater.name} isBuyer />
         </section>

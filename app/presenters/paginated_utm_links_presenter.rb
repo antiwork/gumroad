@@ -23,7 +23,7 @@ class PaginatedUtmLinksPresenter
     @page = [page.to_i, 1].max
     sort = sort.presence || {}
     @sort_key = SORT_KEY_TO_COLUMN_MAP[sort[:key]] || SORT_KEY_TO_COLUMN_MAP["date"]
-    @sort_direction = sort[:direction] || "desc"
+    @sort_direction = sort[:direction].to_s.downcase == "asc" ? "asc" : "desc"
   end
 
   def props
