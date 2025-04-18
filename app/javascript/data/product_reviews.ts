@@ -18,8 +18,8 @@ export const setProductRating = async ({
   rating: number;
   message?: string | null;
   videoOptions?: {
-    create_by_url?: string;
-    destroy_by_external_id?: string;
+    create?: { url: string; thumbnail_signed_id: string | undefined };
+    destroy?: { id: string };
   };
 }) => {
   const response = await request({

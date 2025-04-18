@@ -13,4 +13,7 @@ class ProductReviewVideo < ApplicationRecord
   enum :approval_status,
        %w[pending_review approved rejected].index_by(&:itself),
        default: :pending_review
+
+  scope :editable, -> { where(approval_status: [:pending_review, :approved]) }
+  scope :latest, -> { order(created_at: :desc) }
 end

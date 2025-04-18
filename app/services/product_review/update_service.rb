@@ -1,19 +1,11 @@
 # frozen_string_literal: true
 
 class ProductReview::UpdateService
-  ALLOWED_VIDEO_OPTIONS = [
-    # Create a new video review with the given uploaded URL.
-    :create_by_url,
-
-    # Destroy the video review with the given external ID.
-    :destroy_by_external_id
-  ].freeze
-
   def initialize(product_review, rating:, message:, video_options: {})
     @product_review = product_review
     @rating = rating
     @message = message
-    @video_options = validate_video_options(video_options)
+    @video_options = video_options.to_h.with_indifferent_access
   end
 
   def update
@@ -35,26 +27,27 @@ class ProductReview::UpdateService
     end
 
     def update_video
-      if @video_options[:create_by_url]
-        @product_review.videos
-          .create!(video_file_attributes: { url: @video_options[:create_by_url] })
-      end
-
-      if @video_options[:destroy_by_external_id]
-        @product_review.videos
-          .find_by_external_id(@video_options[:destroy_by_external_id])
-          &.mark_deleted
-      end
+      create_video(@video_options[:create] || {})
+      destroy_video(@video_options[:destroy] || {})
     end
 
-    def validate_video_options(input)
-      input.symbolize_keys!
+    def create_video(options)
+      return unless options[:url]
 
-      unpermitted_options = input.keys - ALLOWED_VIDEO_OPTIONS
-      unless unpermitted_options.empty?
-        raise ArgumentError, "Unpermitted video options: #{unpermitted_options.join(", ")}"
-      end
+      @product_review.videos.alive.pending_review.each(&:mark_deleted!)
 
-      input
+      @product_review.videos.create!(
+        video_file_attributes: {
+          url: options[:url],
+          thumbnail: options[:thumbnail_signed_id],
+          user_id: @product_review.purchase.purchaser_id
+        }
+      )
+    end
+
+    def destroy_video(options)
+      return unless options[:id]
+
+      @product_review.videos.find_by_external_id(options[:id])&.mark_deleted
     end
 end

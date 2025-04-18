@@ -62,16 +62,33 @@ class ProductReviewsController < ApplicationController
         return
       end
 
-      purchase.post_review(rating: params[:rating].to_i, message: params[:message])
+      review = purchase.post_review(
+        rating: set_params[:rating].to_i,
+        message: set_params[:message],
+        video_options: set_params[:video_options] || {}
+      )
 
-      render json: { success: true }
+      render json: {
+        success: true,
+        review: ProductReviewPresenter.new(review.reload).review_form_props
+      }
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.message }
-    rescue StandardError
+    rescue StandardError => e
       render json: { success: false, message: "Sorry, something went wrong." }
     end
 
     def permitted_params
       params.permit(:product_id, :page, :id)
+    end
+
+    def set_params
+      params.permit(
+        :rating, :message,
+        video_options: [
+          { destroy: [:id] },
+          { create: [:url, :thumbnail_signed_id] }
+        ]
+      )
     end
 end

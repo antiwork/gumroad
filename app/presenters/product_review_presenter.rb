@@ -36,13 +36,22 @@ class ProductReviewPresenter
           },
         } :
         nil,
-      video: video_props,
+      video: video_props(product_review.approved_video),
+    }
+  end
+
+  def review_form_props
+    {
+      id: product_review.external_id,
+      rating: product_review.rating,
+      message: product_review.message,
+      video: video_props(product_review.editable_video),
     }
   end
 
   private
-    def video_props
-      return nil unless product_review.approved_video.present?
+    def video_props(video)
+      return nil unless video.present?
 
       {
         id: product_review.approved_video.external_id,

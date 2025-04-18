@@ -1,6 +1,8 @@
+import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
 import { setProductRating } from "$app/data/product_reviews";
+import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
 import { assertResponseError } from "$app/utils/request";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
@@ -17,8 +19,76 @@ export type Review = {
   rating: number;
   message: string | null;
   video?: {
-    external_id: string;
+    id: string;
+    thumbnail_url: string | null;
   };
+};
+
+const uploadThumbnail = (thumbnail: File): Promise<string> => {
+  if (thumbnail.size > 5 * 1024 * 1024) {
+    throw new Error("Could not process your thumbnail, please upload an image with size smaller than 5 MB.");
+  }
+
+  const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
+
+  return new Promise((resolve, reject) => {
+    upload.create((error, blob) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(blob.signed_id);
+      }
+    });
+  });
+};
+
+const generateThumbnail = (videoFile: File): Promise<File | undefined> =>
+  new Promise((resolve) => {
+    const video = document.createElement("video");
+    const videoSrc = URL.createObjectURL(videoFile);
+    video.src = videoSrc;
+    video.crossOrigin = "anonymous";
+
+    // Delay to work around a bug in Safari which otherwise captures a
+    // black/empty thumbnail.
+    video.addEventListener("loadedmetadata", () => setTimeout(() => (video.currentTime = 1), 100));
+
+    const canvas = document.createElement("canvas");
+    video.addEventListener("seeked", () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = assertDefined(canvas.getContext("2d"));
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const file = new File([blob], "thumbnail.jpg");
+            resolve(file);
+          } else {
+            resolve(undefined);
+          }
+
+          URL.revokeObjectURL(videoSrc);
+          video.remove();
+          canvas.remove();
+        },
+        "image/jpeg",
+        0.5,
+      );
+    });
+  });
+
+const gracefullyGenerateAndUploadThumbnail = async (videoFile: File): Promise<string | undefined> => {
+  try {
+    const thumbnail = await generateThumbnail(videoFile);
+    if (thumbnail) {
+      return await uploadThumbnail(thumbnail);
+    }
+  } catch (_) {}
+
+  return undefined;
 };
 
 export const ReviewForm = React.forwardRef<
@@ -111,14 +181,15 @@ export const ReviewForm = React.forwardRef<
     };
 
     const generateVideoOptions = async () => {
-      if (video.current === null && review?.video?.external_id) {
-        return { destroy_by_external_id: review.video.external_id };
+      if (video.current === null && review?.video?.id) {
+        return { destroy: { id: review.video.id } };
       }
 
       if (video.current instanceof File) {
         try {
           const fileUrl = await uploadVideo(video.current);
-          return { create_by_url: fileUrl };
+          const thumbnailSignedId = await gracefullyGenerateAndUploadThumbnail(video.current);
+          return { create: { url: fileUrl, thumbnail_signed_id: thumbnailSignedId } };
         } catch (error) {
           setIsLoading(false);
           throw error;
