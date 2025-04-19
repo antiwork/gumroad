@@ -4,7 +4,7 @@ module HelperWidget
   extend ActiveSupport::Concern
 
   included do
-    helper_method :show_helper_widget?, :helper_widget_host, :helper_widget_email_hmac, :helper_customer_metadata
+    helper_method :show_helper_widget?, :helper_widget_host, :helper_widget_email_hmac, :helper_customer_metadata, :enable_helper_guide?
   end
 
   def helper_widget_host
@@ -13,6 +13,10 @@ module HelperWidget
 
   def show_helper_widget?
     !Rails.env.test? && request.host == DOMAIN && current_seller && Feature.active?(:helper_widget, current_seller)
+  end
+
+  def enable_helper_guide?
+    !!current_user&.is_team_member?
   end
 
   def helper_customer_metadata
