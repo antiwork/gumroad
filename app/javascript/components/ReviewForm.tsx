@@ -123,7 +123,7 @@ export const ReviewForm = React.forwardRef<
     const [isLoading, setIsLoading] = React.useState(false);
     const [rating, setRating] = React.useState<number | null>(review?.rating ?? null);
     const [message, setMessage] = React.useState(review?.message ?? "");
-    const [reviewMode, setReviewMode] = React.useState<"text" | "video">("text");
+    const [reviewMode, setReviewMode] = React.useState<"text" | "video">(review?.video ? "video" : "text");
     const [formState, setFormState] = React.useState<"viewing" | "editing">(review ? "viewing" : "editing");
     const [videoState, setVideoState] = React.useState<VideoState>(
       review?.video
