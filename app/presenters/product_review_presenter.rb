@@ -53,8 +53,8 @@ class ProductReviewPresenter
       return nil unless video.present?
 
       {
-        id: product_review.approved_video.external_id,
-        thumbnail_url: product_review.approved_video.video_file.thumbnail_url,
+        id: video.external_id,
+        thumbnail_url: video.video_file.thumbnail_url,
       }
     end
 end
