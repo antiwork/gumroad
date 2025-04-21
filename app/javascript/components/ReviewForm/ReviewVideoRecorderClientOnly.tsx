@@ -8,6 +8,7 @@ import {
   ReviewVideoRecorderProps,
 } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 const CountdownOverlay = ({
   initialCountdown,
@@ -100,6 +101,18 @@ const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; dis
   </button>
 );
 
+const LoadingOverlay = () => (
+  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+    <LoadingSpinner width="3em" />
+  </div>
+);
+
+const ErrorOverlay = ({ message }: { message: string }) => (
+  <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+    <p className="text-center text-red">{message}</p>
+  </div>
+);
+
 const recordingType = MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "video/mp4";
 const recordingExtension = recordingType === "video/webm" ? "webm" : "mp4";
 
@@ -110,6 +123,8 @@ export default function ReviewVideoRecorderClientOnly({
   disabled = false,
 }: ReviewVideoRecorderProps) {
   const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
+  const [askPermission, setAskPermission] = useState(false);
+
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const lastTrackId = useRef<string | null>(null);
 
@@ -130,18 +145,23 @@ export default function ReviewVideoRecorderClientOnly({
     }
   };
 
-  const { startRecording, stopRecording, clearBlobUrl, mediaBlobUrl, previewStream } = useReactMediaRecorder({
-    audio: true,
-    video: {
-      aspectRatio: { ideal: 16 / 9 },
-    },
-    askPermissionOnMount: true,
-    stopStreamsOnStop: true,
-    blobPropertyBag: {
-      type: recordingType,
-    },
-    onStop: setRecordedVideo,
-  });
+  const { startRecording, stopRecording, clearBlobUrl, mediaBlobUrl, previewStream, error, status } =
+    useReactMediaRecorder({
+      audio: true,
+      video: {
+        aspectRatio: { ideal: 16 / 9 },
+      },
+      askPermissionOnMount: askPermission,
+      stopStreamsOnStop: true,
+      blobPropertyBag: {
+        type: recordingType,
+      },
+      onStop: setRecordedVideo,
+    });
+
+  const hasVideo = videoState.kind === "recorded" || videoState.kind === "existing";
+  const loadingStream = status === "acquiring_media";
+  const showLiveStream = !hasVideo && formState !== "viewing";
 
   useEffect(() => {
     const el = liveVideoRef.current;
@@ -156,14 +176,30 @@ export default function ReviewVideoRecorderClientOnly({
     }
   }, [previewStream]);
 
+  useEffect(() => {
+    if (showLiveStream && !askPermission) {
+      setAskPermission(true);
+    }
+  }, [showLiveStream, askPermission]);
+
   const renderUiState = () => {
-    if (formState === "viewing") {
+    if (formState === "viewing" || loadingStream) {
       return null;
     }
 
     switch (uiState) {
       case "idle":
-        return (
+      case "preview":
+        return hasVideo ? (
+          <DeleteRecordingButton
+            onClick={() => {
+              clearBlobUrl();
+              clearRecordedVideo();
+              setUiState("idle");
+            }}
+            disabled={disabled}
+          />
+        ) : (
           <StartRecordingButton
             onClick={() => {
               setUiState("countdown");
@@ -196,25 +232,14 @@ export default function ReviewVideoRecorderClientOnly({
             />
           </>
         );
-      case "preview":
-        return (
-          <DeleteRecordingButton
-            onClick={() => {
-              clearBlobUrl();
-              clearRecordedVideo();
-              setUiState("idle");
-            }}
-            disabled={disabled}
-          />
-        );
     }
   };
 
   const renderVideoPlayer = () => {
-    if (mediaBlobUrl) {
+    if (videoState.kind === "recorded") {
       return (
         <video
-          className={cx("h-full w-full object-cover", { hidden: uiState !== "preview" })}
+          className="h-full w-full object-cover"
           src={mediaBlobUrl || undefined}
           controls={!disabled}
           autoPlay
@@ -228,13 +253,19 @@ export default function ReviewVideoRecorderClientOnly({
     return null;
   };
 
+  const renderLiveVideo = () => {
+    if (error) {
+      return <ErrorOverlay message={`Camera error: ${error}`} />;
+    }
+    if (loadingStream) {
+      return <LoadingOverlay />;
+    }
+    return <video ref={liveVideoRef} autoPlay muted className="h-full w-full object-cover" />;
+  };
+
   return (
     <ReviewVideoRecorderContainer>
-      {uiState === "preview" ? (
-        <video ref={liveVideoRef} autoPlay muted className="h-full w-full object-cover" />
-      ) : (
-        renderVideoPlayer()
-      )}
+      {showLiveStream ? renderLiveVideo() : renderVideoPlayer()}
       {renderUiState()}
     </ReviewVideoRecorderContainer>
   );
