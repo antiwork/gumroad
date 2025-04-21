@@ -38,6 +38,10 @@ type Review = {
   purchase_id: string;
   purchase_email_digest: string;
   product: Product;
+  video: {
+    id: string;
+    thumbnail_url: string | null;
+  } | null;
 };
 
 let newReviewId = 0;
