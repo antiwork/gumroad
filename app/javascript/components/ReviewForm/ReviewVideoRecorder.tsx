@@ -1,6 +1,9 @@
 import React, { Suspense, lazy } from "react";
 
-import { ReviewVideoRecorderContainer, ReviewVideoRecorderProps } from "$app/components/ReviewForm/VideoReviewCommon";
+import {
+  ReviewVideoRecorderContainer,
+  ReviewVideoRecorderProps,
+} from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 
 const ReviewVideoRecorderClientOnly = lazy(() => import("$app/components/ReviewForm/ReviewVideoRecorderClientOnly"));
 

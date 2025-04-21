@@ -3,7 +3,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 
 import { Icon } from "$app/components/Icons";
-import { ReviewVideoRecorderContainer, ReviewVideoRecorderProps } from "$app/components/ReviewForm/VideoReviewCommon";
+import {
+  ReviewVideoRecorderContainer,
+  ReviewVideoRecorderProps,
+} from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 
 const CountdownOverlay = ({

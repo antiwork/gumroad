@@ -11,9 +11,9 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
-import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecorder";
-import { VideoState } from "$app/components/ReviewForm/VideoReviewCommon";
+import { VideoState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
+import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
 
 export type Review = {
