@@ -6,14 +6,14 @@ export type VideoState =
   | { kind: "recorded"; file: File; url: string }
   | { kind: "deleted"; id: string };
 
-export type VideoReviewProps = {
+export type ReviewVideoRecorderProps = {
   formState: "viewing" | "editing";
   videoState: VideoState;
   onVideoChange: (videoState: VideoState) => void;
   disabled?: boolean;
 };
 
-export const VideoReviewContainer = ({ children }: { children?: React.ReactNode }) => (
+export const ReviewVideoRecorderContainer = ({ children }: { children?: React.ReactNode }) => (
   <div className="relative aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-black bg-black">
     {children}
   </div>

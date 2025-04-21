@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 
 import { Icon } from "$app/components/Icons";
-import { VideoReviewContainer, VideoReviewProps } from "$app/components/ReviewForm/VideoReviewCommon";
+import { ReviewVideoRecorderContainer, ReviewVideoRecorderProps } from "$app/components/ReviewForm/VideoReviewCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 
 const CountdownOverlay = ({
@@ -100,12 +100,12 @@ const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; dis
 const recordingType = MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "video/mp4";
 const recordingExtension = recordingType === "video/webm" ? "webm" : "mp4";
 
-export default function VideoReviewClientOnly({
+export default function ReviewVideoRecorderClientOnly({
   formState,
   videoState,
   onVideoChange,
   disabled = false,
-}: VideoReviewProps) {
+}: ReviewVideoRecorderProps) {
   const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -218,13 +218,13 @@ export default function VideoReviewClientOnly({
   };
 
   return (
-    <VideoReviewContainer>
+    <ReviewVideoRecorderContainer>
       {uiState === "preview" ? (
         <video ref={liveVideoRef} autoPlay muted className="h-full w-full object-cover" />
       ) : (
         renderVideoPlayer()
       )}
       {renderUiState()}
-    </VideoReviewContainer>
+    </ReviewVideoRecorderContainer>
   );
 }

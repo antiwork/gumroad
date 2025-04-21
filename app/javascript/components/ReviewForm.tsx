@@ -12,7 +12,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
-import { VideoReview } from "$app/components/ReviewForm/VideoReview";
+import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecorder";
 import { VideoState } from "$app/components/ReviewForm/VideoReviewCommon";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -297,7 +297,7 @@ export const ReviewForm = React.forwardRef<
 
     const videoReview = loggedInUser ? (
       <>
-        <VideoReview
+        <ReviewVideoRecorder
           formState={formState}
           videoState={videoState}
           onVideoChange={(newVideoState) => {
