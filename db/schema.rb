@@ -2066,6 +2066,26 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_21_124634) do
     t.index ["variant_id"], name: "index_skus_variants_on_variant_id"
   end
 
+  create_table "social_proof_widget_conversions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "social_proof_widget_id", null: false
+    t.bigint "purchase_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["purchase_id"], name: "index_social_proof_widget_conversions_on_purchase_id"
+    t.index ["social_proof_widget_id", "purchase_id"], name: "unique_widget_purchase_conversion", unique: true
+    t.index ["social_proof_widget_id"], name: "index_social_proof_widget_conversions_on_social_proof_widget_id"
+  end
+
+  create_table "social_proof_widget_metrics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "social_proof_widget_id", null: false
+    t.integer "impressions_count", default: 0, null: false
+    t.integer "clicks_count", default: 0, null: false
+    t.integer "closes_count", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["social_proof_widget_id"], name: "index_social_proof_widget_metrics_on_social_proof_widget_id", unique: true
+  end
+
   create_table "social_proof_widgets", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.string "name", null: false
@@ -2733,4 +2753,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_21_124634) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "social_proof_widget_conversions", "purchases", name: "_fk_rails_37fec0bf3c"
+  add_foreign_key "social_proof_widget_conversions", "social_proof_widgets", name: "_fk_rails_2e39e376ef"
+  add_foreign_key "social_proof_widget_metrics", "social_proof_widgets"
 end

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SocialProofWidget < ApplicationRecord
+  include Deletable
+
   CTA_TYPES = %w[button link none].freeze
 
   ALLOWED_ICONS = %w[
@@ -28,15 +30,24 @@ class SocialProofWidget < ApplicationRecord
   has_one_attached :custom_image, dependent: :destroy
   has_many :social_proof_widgets_links, dependent: :destroy
   has_many :links, through: :social_proof_widgets_links
+  has_one :metric, class_name: "SocialProofWidgetMetric", dependent: :destroy
+  has_many :conversions, class_name: "SocialProofWidgetConversion", dependent: :destroy
 
   validates :name, :seller_id, :image_type, presence: true
   validates :cta_type, inclusion: { in: CTA_TYPES }
-  validate :custom_image_presence_if_required
+  validates :cta_text, presence: true, if: :cta_text_required?
   validates :image_type, inclusion: { in: IMAGE_TYPES }
+  validate :custom_image_presence_if_required
 
   def custom_image_presence_if_required
     if image_type == "custom_image" && custom_image.attached?
       errors.add(:image, "must be attached when image_type is custom_image")
     end
+  end
+
+  def cta_text_required?
+    return false if cta_type == "none"
+
+    true
   end
 end
