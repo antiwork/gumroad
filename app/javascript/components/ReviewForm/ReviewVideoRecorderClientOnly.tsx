@@ -121,7 +121,10 @@ export default function ReviewVideoRecorderClientOnly({
   videoState,
   onVideoChange,
   disabled = false,
-}: ReviewVideoRecorderProps) {
+  reacquireStream,
+}: ReviewVideoRecorderProps & {
+  reacquireStream: () => void;
+}) {
   const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
   const [askPermission, setAskPermission] = useState(false);
 
@@ -143,6 +146,7 @@ export default function ReviewVideoRecorderClientOnly({
     } else {
       onVideoChange({ kind: "none" });
     }
+    reacquireStream();
   };
 
   const { startRecording, stopRecording, clearBlobUrl, mediaBlobUrl, previewStream, error, status } =
@@ -160,7 +164,7 @@ export default function ReviewVideoRecorderClientOnly({
     });
 
   const hasVideo = videoState.kind === "recorded" || videoState.kind === "existing";
-  const loadingStream = status === "acquiring_media";
+  const loadingStream = !askPermission || status === "acquiring_media";
   const showLiveStream = !hasVideo && formState !== "viewing";
 
   useEffect(() => {
