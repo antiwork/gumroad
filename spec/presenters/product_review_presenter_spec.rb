@@ -117,7 +117,6 @@ describe ProductReviewPresenter do
     it "returns the correct props" do
       expect(described_class.new(product_review).review_form_props).to eq(
         {
-          id: product_review.external_id,
           message: product_review.message,
           rating: product_review.rating,
           video: nil

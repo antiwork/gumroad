@@ -36,8 +36,20 @@ export const setProductRating = async ({
     },
   });
 
-  const json = cast<{ success: true } | { success: false; message: string }>(await response.json());
+  const json = cast<
+    | {
+        success: true;
+        review: {
+          rating: number;
+          message: string | null;
+          video: { id: string; thumbnail_url: string | null } | null;
+        };
+      }
+    | { success: false; message: string }
+  >(await response.json());
   if (!json.success) throw new ResponseError(json.message);
+
+  return json.review;
 };
 
 export type Review = {

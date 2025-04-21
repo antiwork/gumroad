@@ -18,11 +18,17 @@ import { showAlert } from "$app/components/server-components/Alert";
 export type Review = {
   rating: number;
   message: string | null;
-  video?: {
+  video: {
     id: string;
     thumbnail_url: string | null;
-  };
+  } | null;
 };
+
+type VideoState =
+  | { kind: "none" }
+  | { kind: "existing"; id: string; thumbnailUrl: string | null }
+  | { kind: "recorded"; file: File; url: string }
+  | { kind: "deleted"; id: string };
 
 const uploadThumbnail = (thumbnail: File): Promise<string> => {
   if (thumbnail.size > 5 * 1024 * 1024) {
@@ -124,7 +130,7 @@ export const ReviewForm = React.forwardRef<
     const [message, setMessage] = React.useState(review?.message ?? "");
     const [reviewMode, setReviewMode] = React.useState<"text" | "video">("text");
     const [formState, setFormState] = React.useState<"viewing" | "editing">(review ? "viewing" : "editing");
-    const video = React.useRef<string | File | null>(null);
+    const video = React.useRef<{ id: string; thumbnail_url: string | null } | File | null>(null);
     const [uploadProgress, setUploadProgress] = React.useState<{ percent: number; bitrate: number } | null>(null);
     const [uploadCancellationKey, setUploadCancellationKey] = React.useState<string | null>(null);
 
@@ -217,7 +223,7 @@ export const ReviewForm = React.forwardRef<
       try {
         const content = await generateReviewContentPayload();
 
-        await setProductRating({
+        const review = await setProductRating({
           permalink,
           purchaseId,
           purchaseEmailDigest: purchaseEmailDigest ?? "",
@@ -225,7 +231,8 @@ export const ReviewForm = React.forwardRef<
           ...content,
         });
         setFormState("viewing");
-        onChange?.({ rating, message });
+        onChange?.(review);
+        video.current = review.video?.id ?? null;
         showAlert("Review submitted successfully!", "success");
       } catch (error) {
         assertResponseError(error);
