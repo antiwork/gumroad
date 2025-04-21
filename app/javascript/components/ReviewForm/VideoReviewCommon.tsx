@@ -1,8 +1,15 @@
 import * as React from "react";
+
+export type VideoState =
+  | { kind: "none" }
+  | { kind: "existing"; id: string; thumbnailUrl: string | null }
+  | { kind: "recorded"; file: File; url: string }
+  | { kind: "deleted"; id: string };
+
 export type VideoReviewProps = {
   formState: "viewing" | "editing";
-  videoUrl: string | null;
-  onVideoChange: (videoReview: File | null) => void;
+  videoState: VideoState;
+  onVideoChange: (videoState: VideoState) => void;
   disabled?: boolean;
 };
 

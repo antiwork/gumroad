@@ -13,6 +13,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { VideoReview } from "$app/components/ReviewForm/VideoReview";
+import { VideoState } from "$app/components/ReviewForm/VideoReviewCommon";
 import { showAlert } from "$app/components/server-components/Alert";
 
 export type Review = {
@@ -23,12 +24,6 @@ export type Review = {
     thumbnail_url: string | null;
   } | null;
 };
-
-type VideoState =
-  | { kind: "none" }
-  | { kind: "existing"; id: string; thumbnailUrl: string | null }
-  | { kind: "recorded"; file: File; url: string }
-  | { kind: "deleted"; id: string };
 
 const uploadThumbnail = (thumbnail: File): Promise<string> => {
   if (thumbnail.size > 5 * 1024 * 1024) {
@@ -130,7 +125,11 @@ export const ReviewForm = React.forwardRef<
     const [message, setMessage] = React.useState(review?.message ?? "");
     const [reviewMode, setReviewMode] = React.useState<"text" | "video">("text");
     const [formState, setFormState] = React.useState<"viewing" | "editing">(review ? "viewing" : "editing");
-    const video = React.useRef<{ id: string; thumbnail_url: string | null } | File | null>(null);
+    const [videoState, setVideoState] = React.useState<VideoState>(
+      review?.video
+        ? { kind: "existing", id: review.video.id, thumbnailUrl: review.video.thumbnail_url }
+        : { kind: "none" },
+    );
     const [uploadProgress, setUploadProgress] = React.useState<{ percent: number; bitrate: number } | null>(null);
     const [uploadCancellationKey, setUploadCancellationKey] = React.useState<string | null>(null);
 
@@ -187,14 +186,14 @@ export const ReviewForm = React.forwardRef<
     };
 
     const generateVideoOptions = async () => {
-      if (video.current === null && review?.video?.id) {
-        return { destroy: { id: review.video.id } };
+      if (videoState.kind === "deleted") {
+        return { destroy: { id: videoState.id } };
       }
 
-      if (video.current instanceof File) {
+      if (videoState.kind === "recorded") {
         try {
-          const fileUrl = await uploadVideo(video.current);
-          const thumbnailSignedId = await gracefullyGenerateAndUploadThumbnail(video.current);
+          const fileUrl = await uploadVideo(videoState.file);
+          const thumbnailSignedId = await gracefullyGenerateAndUploadThumbnail(videoState.file);
           return { create: { url: fileUrl, thumbnail_signed_id: thumbnailSignedId } };
         } catch (error) {
           setIsLoading(false);
@@ -232,7 +231,13 @@ export const ReviewForm = React.forwardRef<
         });
         setFormState("viewing");
         onChange?.(review);
-        video.current = review.video?.id ?? null;
+
+        setVideoState(
+          review.video
+            ? { kind: "existing", id: review.video.id, thumbnailUrl: review.video.thumbnail_url }
+            : { kind: "none" },
+        );
+
         showAlert("Review submitted successfully!", "success");
       } catch (error) {
         assertResponseError(error);
@@ -281,7 +286,7 @@ export const ReviewForm = React.forwardRef<
           {summarizeUploadProgress(
             uploadProgress.percent,
             uploadProgress.bitrate,
-            video.current instanceof File ? video.current.size : 0,
+            videoState.kind === "recorded" ? videoState.file.size : 0,
           )}
         </div>
         <Button onClick={cancelUpload} type="button" className="ml-2 !py-1">
@@ -294,13 +299,9 @@ export const ReviewForm = React.forwardRef<
       <>
         <VideoReview
           formState={formState}
-          videoUrl={null}
-          onVideoChange={(newVideo) => {
-            if (newVideo instanceof File) {
-              video.current = newVideo;
-            } else {
-              video.current = null;
-            }
+          videoState={videoState}
+          onVideoChange={(newVideoState) => {
+            setVideoState(newVideoState);
           }}
           disabled={disabled}
         />
