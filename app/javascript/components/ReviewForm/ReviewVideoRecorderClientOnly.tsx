@@ -3,12 +3,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
   ReviewVideoRecorderContainer,
   ReviewVideoRecorderProps,
 } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
-import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 const CountdownOverlay = ({
   initialCountdown,
