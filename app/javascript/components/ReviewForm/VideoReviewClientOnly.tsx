@@ -4,6 +4,7 @@ import { useReactMediaRecorder } from "react-media-recorder";
 
 import { Icon } from "$app/components/Icons";
 import { VideoReviewContainer, VideoReviewProps } from "$app/components/ReviewForm/VideoReviewCommon";
+import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 
 const CountdownOverlay = ({
   initialCountdown,
@@ -108,15 +109,6 @@ export default function VideoReviewClientOnly({
   const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  const getVideoUrl = (): string | null => {
-    if (videoState.kind === "existing") {
-      return videoState.thumbnailUrl;
-    } else if (videoState.kind === "recorded") {
-      return videoState.url;
-    }
-    return null;
-  };
-
   const setRecordedVideo = (blobUrl: string, blob: Blob) => {
     const videoFile = new File([blob], `video-review.${recordingExtension}`, { type: recordingType });
     onVideoChange({
@@ -153,19 +145,11 @@ export default function VideoReviewClientOnly({
     }
   }, [previewStream]);
 
-  if (formState === "viewing") {
-    const videoUrl = mediaBlobUrl || getVideoUrl();
-    if (videoUrl) {
-      return (
-        <div className="w-full">
-          <video className="w-full rounded-lg" src={videoUrl} controls={!disabled} />
-        </div>
-      );
-    }
-    return null;
-  }
-
   const renderUiState = () => {
+    if (formState === "viewing") {
+      return null;
+    }
+
     switch (uiState) {
       case "idle":
         return (
@@ -215,21 +199,31 @@ export default function VideoReviewClientOnly({
     }
   };
 
+  const renderVideoPlayer = () => {
+    if (mediaBlobUrl) {
+      return (
+        <video
+          className={cx("h-full w-full object-cover", { hidden: uiState !== "preview" })}
+          src={mediaBlobUrl || undefined}
+          controls={!disabled}
+          autoPlay
+          muted
+        />
+      );
+    }
+    if (videoState.kind === "existing") {
+      return <ReviewVideoPlayer videoId={videoState.id} thumbnail={videoState.thumbnailUrl} />;
+    }
+    return null;
+  };
+
   return (
     <VideoReviewContainer>
-      <video
-        ref={liveVideoRef}
-        autoPlay
-        muted
-        className={cx("h-full w-full object-cover", { hidden: uiState === "preview" })}
-      />
-      <video
-        className={cx("h-full w-full object-cover", { hidden: uiState !== "preview" })}
-        src={mediaBlobUrl || getVideoUrl() || undefined}
-        controls={!disabled}
-        autoPlay
-        muted
-      />
+      {uiState === "preview" ? (
+        <video ref={liveVideoRef} autoPlay muted className="h-full w-full object-cover" />
+      ) : (
+        renderVideoPlayer()
+      )}
       {renderUiState()}
     </VideoReviewContainer>
   );
