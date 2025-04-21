@@ -88,6 +88,8 @@ class Link < ApplicationRecord
 
   belongs_to :user, optional: true
   has_many :prices
+  has_many :social_proof_widgets_links, dependent: :destroy
+  has_many :social_proof_widgets, through: :social_proof_widgets_links
   has_many :alive_prices, -> { alive }, class_name: "Price"
   has_one :installment_plan, -> { alive }, class_name: "ProductInstallmentPlan"
   has_many :sales, class_name: "Purchase"

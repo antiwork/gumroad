@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_04_16_203854) do
+ActiveRecord::Schema[7.1].define(version: 2025_04_21_124634) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2064,6 +2064,31 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_16_203854) do
     t.integer "sku_id"
     t.index ["sku_id"], name: "index_skus_variants_on_sku_id"
     t.index ["variant_id"], name: "index_skus_variants_on_variant_id"
+  end
+
+  create_table "social_proof_widgets", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "seller_id", null: false
+    t.string "name", null: false
+    t.string "title"
+    t.text "description"
+    t.string "cta_text"
+    t.string "cta_type", null: false
+    t.boolean "universal", default: false
+    t.boolean "published", default: false
+    t.string "image_type", null: false
+    t.datetime "deleted_at", precision: nil
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["deleted_at"], name: "index_social_proof_widgets_on_deleted_at"
+    t.index ["seller_id"], name: "index_social_proof_widgets_on_seller_id"
+  end
+
+  create_table "social_proof_widgets_links", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "social_proof_widget_id", null: false
+    t.integer "link_id", null: false
+    t.index ["link_id"], name: "index_social_proof_widgets_links_on_link_id"
+    t.index ["social_proof_widget_id", "link_id"], name: "index_social_proof_widgets_links_on_widget_and_link", unique: true
+    t.index ["social_proof_widget_id"], name: "index_social_proof_widgets_links_on_widget_id"
   end
 
   create_table "staff_picked_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
