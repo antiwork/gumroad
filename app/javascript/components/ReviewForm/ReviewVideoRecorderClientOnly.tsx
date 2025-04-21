@@ -111,6 +111,7 @@ export default function ReviewVideoRecorderClientOnly({
 }: ReviewVideoRecorderProps) {
   const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+  const lastTrackId = useRef<string | null>(null);
 
   const setRecordedVideo = (blobUrl: string, blob: Blob) => {
     const videoFile = new File([blob], `video-review.${recordingExtension}`, { type: recordingType });
@@ -143,8 +144,15 @@ export default function ReviewVideoRecorderClientOnly({
   });
 
   useEffect(() => {
-    if (liveVideoRef.current && previewStream) {
-      liveVideoRef.current.srcObject = previewStream;
+    const el = liveVideoRef.current;
+    if (!el || !previewStream) return;
+
+    // Only re‑attach when the camera feed itself changes to avoid flickering.
+    const [track] = previewStream.getVideoTracks();
+    const id = track?.id;
+    if (id && id !== lastTrackId.current) {
+      el.srcObject = previewStream;
+      lastTrackId.current = id;
     }
   }, [previewStream]);
 
