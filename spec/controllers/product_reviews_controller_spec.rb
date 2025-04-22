@@ -204,22 +204,41 @@ describe ProductReviewsController do
 
     context "when review doesn't exist" do
       it "returns not found" do
-        get :show, params: { id: "nonexistent-id" }
-        expect(response).to have_http_status(:not_found)
+        expect { get :show, params: { id: "nonexistent-id" } }
+          .to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
     context "when review is deleted" do
       it "returns not found" do
-        get :show, params: { id: deleted_review.external_id }
-        expect(response).to have_http_status(:not_found)
+        expect { get :show, params: { id: deleted_review.external_id } }
+          .to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
-    context "when review has no message" do
+    context "when the review has no message nor approved videos" do
+      let!(:pending_video) do
+        create(:product_review_video, :pending_review, product_review: empty_message_review)
+      end
+
       it "returns not found" do
+        expect { get :show, params: { id: empty_message_review.external_id } }
+          .to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
+    context "when the review only has an approved video" do
+      let!(:approved_video) do
+        create(:product_review_video, :approved, product_review: empty_message_review)
+      end
+
+      it "returns the product review" do
         get :show, params: { id: empty_message_review.external_id }
-        expect(response).to have_http_status(:not_found)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["review"]).to match(
+          ProductReviewPresenter.new(empty_message_review).product_review_props
+        )
       end
     end
 

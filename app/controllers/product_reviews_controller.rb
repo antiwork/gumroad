@@ -31,10 +31,9 @@ class ProductReviewsController < ApplicationController
   def show
     review = ProductReview
       .alive
+      .visible_on_product_page
       .includes(:response, purchase: :purchaser, link: :user)
-      .find_by_external_id(permitted_params[:id])
-
-    return head :not_found unless review.present? && review.has_message?
+      .find_by_external_id!(permitted_params[:id])
 
     product = review.link
     return head :forbidden unless product.display_product_reviews || current_seller == product.user
