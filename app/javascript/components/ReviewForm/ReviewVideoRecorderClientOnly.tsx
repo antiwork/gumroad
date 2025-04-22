@@ -62,7 +62,7 @@ const RecordingTimer = () => {
 
 const disabledButtonClassNames = "cursor-not-allowed opacity-80";
 
-const StartRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
+const StartRecordingCountdownButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
     className={cx("absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full", {
       [disabledButtonClassNames]: disabled,
@@ -155,22 +155,29 @@ export default function ReviewVideoRecorderClientOnly({
     reacquireStream();
   };
 
-  const { startRecording, stopRecording, clearBlobUrl, mediaBlobUrl, previewStream, error, status } =
-    useReactMediaRecorder({
-      audio: true,
-      video: {
-        aspectRatio: { ideal: 16 / 9 },
-        width: { ideal: 1280, max: 1280 },
-        height: { ideal: 720, max: 720 },
-        frameRate: { ideal: 30, max: 30 },
-      },
-      askPermissionOnMount: askPermission,
-      stopStreamsOnStop: true,
-      blobPropertyBag: {
-        type: recordingType,
-      },
-      onStop: setRecordedVideo,
-    });
+  const {
+    startRecording: startMediaRecorder,
+    stopRecording: stopMediaRecorder,
+    clearBlobUrl,
+    mediaBlobUrl,
+    previewStream,
+    error,
+    status,
+  } = useReactMediaRecorder({
+    audio: true,
+    video: {
+      aspectRatio: { ideal: 16 / 9 },
+      width: { ideal: 1280, max: 1280 },
+      height: { ideal: 720, max: 720 },
+      frameRate: { ideal: 30, max: 30 },
+    },
+    askPermissionOnMount: askPermission,
+    stopStreamsOnStop: true,
+    blobPropertyBag: {
+      type: recordingType,
+    },
+    onStop: setRecordedVideo,
+  });
 
   const hasVideo = videoState.kind === "recorded" || videoState.kind === "existing";
   const loadingStream = status === "acquiring_media";
@@ -195,6 +202,18 @@ export default function ReviewVideoRecorderClientOnly({
     }
   }, [showLiveStream, askPermission]);
 
+  const startRecording = () => {
+    if (previewStream) {
+      startMediaRecorder();
+      setUiState("recording");
+    }
+  };
+
+  const stopRecording = () => {
+    stopMediaRecorder();
+    setUiState("idle");
+  };
+
   const renderUiState = () => {
     if (formState === "viewing" || loadingStream) {
       return null;
@@ -212,36 +231,15 @@ export default function ReviewVideoRecorderClientOnly({
             disabled={disabled}
           />
         ) : (
-          <StartRecordingButton
-            onClick={() => {
-              setUiState("countdown");
-            }}
-            disabled={disabled}
-          />
+          <StartRecordingCountdownButton onClick={() => setUiState("countdown")} disabled={disabled} />
         );
       case "countdown":
-        return (
-          <CountdownOverlay
-            initialCountdown={3}
-            onCountdownFinish={() => {
-              if (previewStream) {
-                startRecording();
-                setUiState("recording");
-              }
-            }}
-          />
-        );
+        return <CountdownOverlay initialCountdown={3} onCountdownFinish={startRecording} />;
       case "recording":
         return (
           <>
             <RecordingTimer />
-            <StopRecordingButton
-              onClick={() => {
-                stopRecording();
-                setUiState("idle");
-              }}
-              disabled={disabled}
-            />
+            <StopRecordingButton onClick={stopRecording} disabled={disabled} />
           </>
         );
     }
