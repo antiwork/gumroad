@@ -84,7 +84,7 @@ FILE_REGEX = {
   mobi_document: /mobi/i,
   psd_image: /psd/i,
   text_document: /txt|xml|json/i,
-  video: /mp4|m4v|mov|mpeg|mpeg4|wmv|movie|ogv|avi/i,
+  video: /mp4|m4v|mov|mpeg|mpeg4|wmv|movie|ogv|avi|webm/i,
   word_document: /doc/i
 }.stringify_keys
 
