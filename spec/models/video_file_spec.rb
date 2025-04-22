@@ -36,7 +36,21 @@ RSpec.describe VideoFile, type: :model do
       expected_xml = <<~XML.strip
         <smil><body><switch><video src="#{signed_url}"/></switch></body></smil>
       XML
+
       expect(video_file.smil_xml).to eq(expected_xml)
+    end
+  end
+
+  describe "#set_filetype" do
+    it "sets filetype based on the file extension" do
+      video_file = create(:video_file, url: "#{S3_BASE_URL}/video.mp4", filetype: nil)
+      expect(video_file.filetype).to eq("mp4")
+
+      video_file.update!(url: "#{S3_BASE_URL}/video.mov")
+      expect(video_file.filetype).to eq("mov")
+
+      video_file.update!(url: "#{S3_BASE_URL}/video.webm")
+      expect(video_file.filetype).to eq("webm")
     end
   end
 end

@@ -45,6 +45,45 @@ describe ProductReviewsController do
         expect(response.parsed_body["success"]).to eq(true)
         expect(purchase.reload.product_review.rating).to eq(4)
       end
+
+      context "video review" do
+        let(:video_url) { "#{S3_BASE_URL}/video.mp4" }
+        let(:blob) do
+          ActiveStorage::Blob.create_and_upload!(
+            io: fixture_file_upload("test-small.jpg"),
+            filename: "test-small.jpg",
+            content_type: "image/jpeg"
+          )
+        end
+
+        it "allows creating and destroying a video review" do
+          put :set, params: valid_params.merge(
+            video_options: {
+              create: {
+                url: video_url,
+                thumbnail_signed_id: blob.signed_id
+              }
+            }
+          )
+
+          expect(response.parsed_body["success"]).to eq(true)
+          review = purchase.reload.product_review
+          expect(review.videos.count).to eq(1)
+
+          video = review.videos.first
+          expect(video.video_file.url).to eq(video_url)
+          expect(video.video_file.thumbnail.signed_id).to eq(blob.signed_id)
+
+          put :set, params: valid_params.merge(
+            video_options: {
+              destroy: { id: video.external_id }
+            }
+          )
+
+          expect(response.parsed_body["success"]).to eq(true)
+          expect(video.reload.deleted?).to eq(true)
+        end
+      end
     end
 
     context "with invalid params" do
@@ -84,7 +123,7 @@ describe ProductReviewsController do
         put :set, params: valid_params
 
         expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("Sorry, you cannot review this product.")
+        expect(response.parsed_body["message"]).to eq("Sorry, something went wrong.")
         expect(purchase.reload.product_review).to be_nil
       end
     end

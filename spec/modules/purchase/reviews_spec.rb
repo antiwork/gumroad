@@ -4,115 +4,107 @@ require "spec_helper"
 
 describe Purchase::Reviews do
   describe "#post_review" do
-    before do
-      @purchase = create(:purchase)
-      @rating = 3
-      @message = "This is a review message"
-    end
+    context "non-recurring purchase" do
+      let!(:purchase) { create(:purchase) }
 
-    context "when there is an existing product_review" do
-      it "updates the existing product_review with the provided rating" do
-        product_review = create(:product_review, purchase: @purchase, rating: 1)
-        result = @purchase.post_review(@rating, @message)
-        expect(result).to eq(true)
-        product_review.reload
-        expect(product_review.rating).to eq(@rating)
-        expect(product_review.message).to eq(@message)
+      context "when there is an existing product_review" do
+        let!(:existing_product_review) { create(:product_review, purchase:, rating: 1, message: "Original message") }
+
+        it "updates the existing product_review with the provided rating" do
+          result = purchase.post_review(rating: 1, message: "Updated message")
+
+          expect(result).to eq(existing_product_review)
+          expect(result.rating).to eq(1)
+          expect(result.message).to eq("Updated message")
+        end
+
+        it "does not update the rating if the purchase does not allow reviews to be counted" do
+          purchase.update!(stripe_refunded: true)
+
+          expect { purchase.post_review(rating: 5, message: "Updated message") }.to raise_error(ProductReview::RestrictedOperationError)
+
+          expect(existing_product_review.reload.rating).to eq(1)
+          expect(existing_product_review.message).to eq("Original message")
+        end
       end
 
-      it "updates the product review of the original purchase in case of recurring purchase of a subscription" do
-        subscription_product = create(:subscription_product)
-        subscription = create(:subscription, link: subscription_product)
-        original_purchase = create(:purchase, link: subscription_product, is_original_subscription_purchase: true, subscription:)
-        create(:product_review, rating: 1, purchase: original_purchase)
-        recurring_purchase = create(:purchase, link: subscription_product, subscription:)
-        subscription.purchases << original_purchase << recurring_purchase
+      context "when there is no existing product_review" do
+        it "creates a new product review for a purchase that allows reviews to be counted" do
+          expect(purchase.product_review).to be(nil)
 
-        recurring_purchase.reload
-        result = recurring_purchase.post_review(@rating)
-        expect(result).to eq(true)
-        original_purchase.reload
-        expect(original_purchase.product_review.rating).to eq(@rating)
-        expect(original_purchase.product_review.message).to be_nil
-      end
+          result = purchase.post_review(rating: 1, message: "Updated message")
 
-      it "does not update the rating if the purchase does not allow reviews to be counted" do
-        product_review = create(:product_review, purchase: @purchase, rating: 1, message: nil)
-        @purchase.update!(stripe_refunded: true)
-        expect { @purchase.post_review(5, @message) }.to raise_error(ProductReview::RestrictedOperationError)
-        product_review.reload
-        expect(product_review.rating).to eq(1)
-        expect(product_review.message).to be_nil
-      end
-    end
+          expect(result).to be_a(ProductReview)
+          expect(result.rating).to eq(1)
+          expect(result.message).to eq("Updated message")
+          expect(result.purchase).to eq(purchase)
+        end
 
-    context "when there is no existing product_review" do
-      it "adds a review for a purchase that allows reviews to be counted" do
-        expect(@purchase).to receive(:add_review!).with(@rating, nil)
-        result = @purchase.post_review(@rating)
-        expect(result).to eq(true)
-      end
+        it "creates a product review and enqueues an email notification" do
+          expect(purchase.product_review).to be(nil)
 
-      it "does not add review when the purchase does not allow reviews to be counted" do
-        allow(@purchase).to receive(:allows_review_to_be_counted?).and_return(false)
-        expect(@purchase).not_to receive(:add_review!)
-        result = @purchase.post_review(@rating)
-        expect(result).to eq(false)
-        expect(@purchase.product_review).to be_blank
-      end
-    end
-  end
+          expect do
+            purchase.post_review(rating: 1, message: "Updated message")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with { purchase.reload.product_review.id }
 
-  describe "#add_review!" do
-    let(:purchase) { create(:purchase) }
+          expect(purchase.reload.product_review).not_to be(nil)
+          expect(purchase.product_review.rating).to eq(1)
+          expect(purchase.product_review.message).to eq("Updated message")
+        end
 
-    it "creates a ProductReview" do
-      expect(purchase.product_review).to be(nil)
+        it "does not enqueue an email when review notifications are disabled" do
+          purchase.seller.update(disable_reviews_email: true)
 
-      expect do
-        purchase.add_review!(3, @message)
-      end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with { purchase.product_review.id }
+          expect do
+            purchase.post_review(rating: 1, message: "Updated message")
+          end.to_not have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+        end
 
-      expect(purchase.product_review).not_to be(nil)
-      expect(purchase.product_review.rating).to eq(3)
-      expect(purchase.product_review.message).to eq(@message)
-    end
+        it "does not add review when the purchase does not allow reviews to be counted" do
+          allow(purchase).to receive(:allows_review_to_be_counted?).and_return(false)
 
-    context "review notifications are disabled" do
-      before { purchase.seller.update(disable_reviews_email: true) }
+          expect { purchase.post_review(rating: 1, message: "Updated message") }.to raise_error(ProductReview::RestrictedOperationError)
 
-      it "doesn't enqueue an email" do
-        expect do
-          purchase.add_review!(3, @message)
-        end.to_not have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with { purchase.product_review.id }
+          expect(purchase.reload.product_review).to be_blank
+        end
+
+        it "saves the link_id associated with the purchase on the product review" do
+          review = purchase.post_review(rating: 1, message: "Updated message")
+
+          expect(review.link_id).to eq(purchase.link_id)
+        end
       end
     end
 
-    context "review already exists for the purchase" do
-      let(:review) { create(:product_review) }
+    context "recurring purchase" do
+      let!(:subscription_product) { create(:subscription_product) }
+      let!(:subscription) { create(:subscription, link: subscription_product) }
+      let!(:original_purchase) { create(:purchase, link: subscription_product, is_original_subscription_purchase: true, subscription:) }
+      let!(:recurring_purchase) { create(:purchase, link: subscription_product, subscription:) }
 
-      it "raises an exception" do
-        expect { review.purchase.add_review!(1) }.to raise_error(ActiveRecord::RecordInvalid, /Purchase has already been taken/)
+      before { recurring_purchase.reload }
+
+      context "when there is an existing product_review" do
+        let!(:product_review) { create(:product_review, rating: 1, purchase: original_purchase) }
+
+        it "updates the product review of the original purchase in case of recurring purchase of a subscription" do
+          result = recurring_purchase.post_review(rating: 1)
+
+          expect(result).to eq(product_review)
+          original_purchase.reload
+          expect(original_purchase.product_review.rating).to eq(1)
+          expect(original_purchase.product_review.message).to be_nil
+        end
       end
-    end
 
-    it "saves the link_id associated with the purchase on the product review" do
-      purchase = create(:purchase)
-      purchase.add_review!(3)
+      context "when there is no existing product_review" do
+        it "adds product review to the original purchase in case of recurring purchase of a subscription" do
+          review = recurring_purchase.post_review(rating: 1)
 
-      expect(purchase.product_review.link_id).to eq(purchase.link_id)
-    end
-
-    it "adds product review to the original purchase in case of recurring purchase of a subscription" do
-      subscription_product = create(:subscription_product)
-      subscription = create(:subscription, link: subscription_product)
-      original_purchase = create(:purchase, link: subscription_product, is_original_subscription_purchase: true, subscription:)
-      recurring_purchase = create(:purchase, link: subscription_product, subscription:)
-      subscription.purchases << original_purchase << recurring_purchase
-      subscription.save!
-
-      recurring_purchase.add_review!(3)
-      expect(original_purchase.reload.product_review.rating).to eq(3)
+          expect(review.purchase).to eq(original_purchase)
+          expect(original_purchase.reload.product_review.rating).to eq(1)
+        end
+      end
     end
   end
 
@@ -135,7 +127,7 @@ describe Purchase::Reviews do
 
     it "updates the product_review_stat after update" do
       purchase = create(:purchase)
-      purchase.add_review!(3)
+      purchase.post_review(rating: 3)
 
       expect(purchase.link).to receive(:update_review_stat_via_purchase_changes).with(
         hash_including("stripe_refunded" => [nil, true]),
@@ -152,7 +144,7 @@ describe Purchase::Reviews do
       product = purchase.link
 
       expect(product.average_rating).to eq(0)
-      purchase.add_review!(3)
+      purchase.post_review(rating: 3)
       expect(product.average_rating).to eq(3)
 
       purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents), purchase.seller.id)
@@ -167,7 +159,7 @@ describe Purchase::Reviews do
       product = purchase.link
 
       expect(product.average_rating).to eq(0)
-      purchase.add_review!(3)
+      purchase.post_review(rating: 3)
       expect(product.average_rating).to eq(3)
 
       purchase.update!(is_access_revoked: true)

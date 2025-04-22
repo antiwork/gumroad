@@ -22,6 +22,7 @@ class VideoFile < ApplicationRecord
   validates :url, presence: true
   validate :url_is_s3
 
+  before_save :set_filetype
   after_create_commit :schedule_file_analysis
 
   def smil_xml
@@ -40,7 +41,19 @@ class VideoFile < ApplicationRecord
     signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video: true)
   end
 
+  # Compatibility with WithFileProperties.
+  attr_accessor :pagelength
+  attr_writer :filegroup
+
+  def filegroup
+    "video"
+  end
+
   private
+    def set_filetype
+      self.filetype = s3_extension.delete_prefix(".")
+    end
+
     def schedule_file_analysis
       AnalyzeFileWorker.perform_async(id, self.class.name)
     end

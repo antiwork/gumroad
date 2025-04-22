@@ -30,10 +30,8 @@ describe ReviewsPresenter do
       expect(presenter.reviews_props).to eq(
         {
           reviews: [
-            {
+            ProductReviewPresenter.new(reviews.first).review_form_props.merge(
               id: reviews.first.external_id,
-              rating: 1,
-              message: nil,
               purchase_id: reviews.first.purchase.external_id,
               purchase_email_digest: reviews.first.purchase.email_digest,
               product: {
@@ -48,11 +46,9 @@ describe ReviewsPresenter do
                   video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
-            },
-            {
+            ),
+            ProductReviewPresenter.new(reviews.second).review_form_props.merge(
               id: reviews.second.external_id,
-              rating: 2,
-              message: "Message 1",
               purchase_id: reviews.second.purchase.external_id,
               purchase_email_digest: reviews.second.purchase.email_digest,
               product: {
@@ -67,11 +63,9 @@ describe ReviewsPresenter do
                   video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
-            },
-            {
+            ),
+            ProductReviewPresenter.new(reviews.third).review_form_props.merge(
               id: reviews.third.external_id,
-              rating: 3,
-              message: "Message 2",
               purchase_id: reviews.third.purchase.external_id,
               purchase_email_digest: reviews.third.purchase.email_digest,
               product: {
@@ -86,7 +80,7 @@ describe ReviewsPresenter do
                   video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
-            }
+            )
           ],
           purchases: [
             {

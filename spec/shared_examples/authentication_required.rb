@@ -4,7 +4,7 @@ require "spec_helper"
 
 RSpec.shared_examples_for "authentication required for action" do |verb, action|
   before do
-    sign_out(User.last)
+    sign_out :user
   end
 
   it "redirects to the login page" do
