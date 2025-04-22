@@ -8,7 +8,6 @@ import { assertResponseError } from "$app/utils/request";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
 import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecorder";
@@ -282,20 +281,18 @@ export const ReviewForm = React.forwardRef<
       />
     );
 
-    const uploadProgressDisplay = uploadProgress && (
-      <div className="bg-gray-100 mt-2 flex w-full items-center justify-between rounded px-3 py-2">
-        <div>
-          {summarizeUploadProgress(
-            uploadProgress.percent,
-            uploadProgress.bitrate,
-            videoState.kind === "recorded" ? videoState.file.size : 0,
-          )}
-        </div>
-        <Button onClick={cancelUpload} type="button" className="ml-2 !py-1">
-          <Icon name="x" className="text-sm" /> Cancel
-        </Button>
+    const uploadProgressDisplay = uploadProgress ? (
+      <div>
+        {summarizeUploadProgress(
+          uploadProgress.percent,
+          uploadProgress.bitrate,
+          videoState.kind === "recorded" ? videoState.file.size : 0,
+        )}
+        <button onClick={cancelUpload} type="button" className="link">
+          (Cancel)
+        </button>
       </div>
-    );
+    ) : null;
 
     const videoReview = loggedInUser ? (
       <>
@@ -335,11 +332,7 @@ export const ReviewForm = React.forwardRef<
 
     return (
       <form onSubmit={(event) => void handleSubmit(event)} style={style} className="flex flex-col !items-start">
-        {error ? (
-          <div role="status" className="error mb-2">
-            {error}
-          </div>
-        ) : null}
+        {error ? <p className="text-red"> {error} </p> : null}
         <div className="flex flex-wrap justify-between gap-2">
           <label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</label>
           <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
