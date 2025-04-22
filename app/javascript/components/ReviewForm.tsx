@@ -139,7 +139,7 @@ export const ReviewForm = React.forwardRef<
     const uid = React.useId();
     const viewing = formState === "viewing";
     const disabled = isLoading || preview || !!disabledStatus;
-    const reviewVideoRecorderBusy = videoRecorderUiState !== "idle";
+    const reviewVideoRecorderBusy = videoRecorderUiState !== null && videoRecorderUiState !== "idle";
     const readyToSubmit = rating && (reviewMode === "text" || (readyToUpload && !reviewVideoRecorderBusy));
 
     const cancelUpload = () => {
