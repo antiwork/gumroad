@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authentication_required"
 
-describe Api::Internal::ProductReviewVideos::UploadContextsController do
+describe ProductReviewVideos::UploadContextsController do
   describe "GET show" do
     let(:user) { create(:user) }
 

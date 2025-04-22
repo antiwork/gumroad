@@ -628,6 +628,9 @@ Rails.application.routes.draw do
         resources :streaming_urls, only: [:index]
       end
     end
+    namespace :product_review_videos do
+      resource :upload_context, only: [:show]
+    end
 
     resources :calls, only: [:update]
 
@@ -923,9 +926,6 @@ Rails.application.routes.draw do
             resources :rejections, only: [:create]
           end
         end
-        namespace :product_review_videos do
-          resource :upload_context, only: [:show]
-        end
       end
     end
 
@@ -1119,6 +1119,9 @@ Rails.application.routes.draw do
       resource :stream, only: [:show]
       resources :streaming_urls, only: [:index]
     end
+  end
+  namespace :product_review_videos do
+    resource :upload_context, only: [:show]
   end
 
   namespace :checkout do

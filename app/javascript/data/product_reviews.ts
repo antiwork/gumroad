@@ -117,7 +117,7 @@ export type ReviewVideoUploadContext = {
 export const getReviewVideoUploadContext = async (): Promise<ReviewVideoUploadContext> => {
   const response = await request({
     method: "GET",
-    url: Routes.internal_product_review_videos_upload_context_path(),
+    url: Routes.product_review_videos_upload_context_path(),
     accept: "json",
   });
 

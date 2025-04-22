@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Api::Internal::ProductReviewVideos::UploadContextsController < Api::Internal::BaseController
+class ProductReviewVideos::UploadContextsController < ApplicationController
   before_action :authenticate_user!
 
   def show
