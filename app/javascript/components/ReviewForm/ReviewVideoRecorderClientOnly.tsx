@@ -249,7 +249,8 @@ export default function ReviewVideoRecorderClientOnly({
       return (
         <video
           className="h-full w-full object-cover"
-          src={mediaBlobUrl || undefined}
+          key={mediaBlobUrl}
+          src={mediaBlobUrl}
           controls={!disabled}
           autoPlay
           muted
