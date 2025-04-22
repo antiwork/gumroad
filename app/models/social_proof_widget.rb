@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class SocialProofWidget < ApplicationRecord
-  include Deletable, ExternalId
+  include Deletable, ExternalId, SocialProofWidget::Sorting
 
   CTA_TYPES = %w[button link none].freeze
 

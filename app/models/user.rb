@@ -37,6 +37,7 @@ class User < ApplicationRecord
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
+  has_many :social_proof_widgets, foreign_key: :seller_id
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
   has_many :affiliate_requests, foreign_key: :seller_id
   has_many :self_service_affiliate_products, foreign_key: :seller_id
