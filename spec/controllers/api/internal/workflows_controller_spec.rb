@@ -266,7 +266,7 @@ describe Api::Internal::WorkflowsController do
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(false)
-      expect(response.parsed_body["message"]).to eq("You cannot publish a workflow until you have made at least $100 in sales and received a payout")
+      expect(response.parsed_body["message"]).to eq("You cannot publish a workflow until you have made at least $100 in total earnings and received a payout")
       expect(workflow.reload.published_at).to be_nil
     end
 

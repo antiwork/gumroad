@@ -63,7 +63,7 @@ class Workflow < ApplicationRecord
     return true if published_at.present?
 
     if !abandoned_cart_type? && !seller.eligible_to_send_emails?
-      errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in sales and received a payout")
+      errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
       raise ActiveRecord::RecordInvalid.new(self)
     end
 

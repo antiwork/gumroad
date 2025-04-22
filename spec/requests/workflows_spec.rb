@@ -1303,7 +1303,7 @@ describe("Workflows", js: true, type: :feature) do
       select_disclosure "Publish" do
         click_on "Publish now"
       end
-      expect(page).to have_alert(text: "You cannot publish a workflow until you have made at least $100 in sales and received a payout")
+      expect(page).to have_alert(text: "You cannot publish a workflow until you have made at least $100 in total earnings and received a payout")
       expect(workflow.reload.published_at).to be_nil
       expect(workflow.name).to eq("Product workflow")
     end

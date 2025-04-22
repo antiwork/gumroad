@@ -286,7 +286,7 @@ describe Workflow do
       installment1 = create(:installment, workflow: @workflow)
       installment2 = create(:installment, workflow: @workflow)
 
-      expect { @workflow.publish! }.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: You cannot publish a workflow until you have made at least $100 in sales and received a payout")
+      expect { @workflow.publish! }.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: You cannot publish a workflow until you have made at least $100 in total earnings and received a payout")
       expect(@workflow.reload.published_at).to be_nil
       expect(installment1.reload.published_at).to be_nil
       expect(installment2.reload.published_at).to be_nil
