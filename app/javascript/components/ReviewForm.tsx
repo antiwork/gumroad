@@ -287,9 +287,10 @@ export const ReviewForm = React.forwardRef<
           uploadProgress.percent,
           uploadProgress.bitrate,
           videoState.kind === "recorded" ? videoState.file.size : 0,
-        )}
+        )}{" "}
+        -{" "}
         <button onClick={cancelUpload} type="button" className="link">
-          (Cancel)
+          Cancel
         </button>
       </div>
     ) : null;
