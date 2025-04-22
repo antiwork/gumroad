@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 
 import {
   ReviewVideoRecorderContainer,
@@ -13,6 +13,7 @@ const ReviewVideoRecorderFallback = () => <ReviewVideoRecorderContainer />;
 
 export const ReviewVideoRecorder = (props: ReviewVideoRecorderProps) => {
   const [key, setKey] = useState(0);
+  const [clientRenderingStarted, setClientRenderingStarted] = useState(false);
 
   // Force remount to reacquire the stream, instead of trying to manage the
   // stream state manually.
@@ -20,9 +21,17 @@ export const ReviewVideoRecorder = (props: ReviewVideoRecorderProps) => {
     setKey((key) => key + 1);
   };
 
-  return (
+  useEffect(() => {
+    setClientRenderingStarted(true);
+  }, []);
+
+  // Defer loading and rendering of ReviewVideoRecorderClientOnly to avoid SSR
+  // errors of "Blob is not defined".
+  return clientRenderingStarted ? (
     <Suspense fallback={<ReviewVideoRecorderFallback />}>
       <ReviewVideoRecorderClientOnly {...props} key={key} reacquireStream={reacquireStream} />
     </Suspense>
+  ) : (
+    <ReviewVideoRecorderFallback />
   );
 };
