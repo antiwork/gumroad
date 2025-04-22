@@ -160,6 +160,9 @@ export default function ReviewVideoRecorderClientOnly({
       audio: true,
       video: {
         aspectRatio: { ideal: 16 / 9 },
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 30, max: 30 },
       },
       askPermissionOnMount: askPermission,
       stopStreamsOnStop: true,
