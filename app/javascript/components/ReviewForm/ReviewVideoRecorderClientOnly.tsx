@@ -7,6 +7,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
   ReviewVideoRecorderContainer,
   ReviewVideoRecorderProps,
+  ReviewVideoRecorderUiState,
 } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 
@@ -120,16 +121,21 @@ export default function ReviewVideoRecorderClientOnly({
   formState,
   videoState,
   onVideoChange,
+  onUiStateChange,
   disabled = false,
   reacquireStream,
 }: ReviewVideoRecorderProps & {
   reacquireStream: () => void;
 }) {
-  const [uiState, setUiState] = useState<"idle" | "countdown" | "recording">("idle");
+  const [uiState, setUiState] = useState<ReviewVideoRecorderUiState>("idle");
   const [askPermission, setAskPermission] = useState(false);
 
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const lastTrackId = useRef<string | null>(null);
+
+  useEffect(() => {
+    onUiStateChange?.(uiState);
+  }, [uiState, onUiStateChange]);
 
   const setRecordedVideo = (blobUrl: string, blob: Blob) => {
     const videoFile = new File([blob], `video-review.${recordingExtension}`, { type: recordingType });

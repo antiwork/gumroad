@@ -6,10 +6,13 @@ export type VideoState =
   | { kind: "recorded"; file: File; url: string }
   | { kind: "deleted"; id: string };
 
+export type ReviewVideoRecorderUiState = "idle" | "countdown" | "recording";
+
 export type ReviewVideoRecorderProps = {
   formState: "viewing" | "editing";
   videoState: VideoState;
-  onVideoChange: (videoState: VideoState) => void;
+  onVideoChange: (newVideoState: VideoState) => void;
+  onUiStateChange?: (state: ReviewVideoRecorderUiState) => void;
   disabled?: boolean;
 };
 

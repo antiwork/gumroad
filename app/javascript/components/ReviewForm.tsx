@@ -12,7 +12,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
 import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecorder";
-import { VideoState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
+import { VideoState, ReviewVideoRecorderUiState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -132,6 +132,7 @@ export const ReviewForm = React.forwardRef<
     );
     const [uploadProgress, setUploadProgress] = React.useState<{ percent: number; bitrate: number } | null>(null);
     const [uploadCancellationKey, setUploadCancellationKey] = React.useState<string | null>(null);
+    const [videoRecorderUiState, setVideoRecorderUiState] = React.useState<ReviewVideoRecorderUiState | null>(null);
 
     const loggedInUser = useLoggedInUser();
     const { error, readyToUpload, evaporateUploader, s3UploadConfig } = useReviewVideoUploader();
@@ -139,7 +140,8 @@ export const ReviewForm = React.forwardRef<
     const uid = React.useId();
     const viewing = formState === "viewing";
     const disabled = isLoading || preview || !!disabledStatus;
-    const readyToSubmit = reviewMode === "text" || readyToUpload;
+    const reviewVideoRecorderBusy = videoRecorderUiState !== "idle";
+    const readyToSubmit = rating && (reviewMode === "text" || (readyToUpload && !reviewVideoRecorderBusy));
 
     const cancelUpload = () => {
       if (uploadCancellationKey && evaporateUploader) {
@@ -252,7 +254,7 @@ export const ReviewForm = React.forwardRef<
           role="radio"
           aria-checked={reviewMode === "text"}
           onClick={() => setReviewMode("text")}
-          disabled={disabled}
+          disabled={disabled || reviewVideoRecorderBusy}
         >
           <div className="w-full text-center">Text review</div>
         </Button>
@@ -260,7 +262,7 @@ export const ReviewForm = React.forwardRef<
           role="radio"
           aria-checked={reviewMode === "video"}
           onClick={() => setReviewMode("video")}
-          disabled={disabled}
+          disabled={disabled || reviewVideoRecorderBusy}
         >
           <div className="w-full text-center">Video review</div>
         </Button>
@@ -303,6 +305,7 @@ export const ReviewForm = React.forwardRef<
           onVideoChange={(newVideoState) => {
             setVideoState(newVideoState);
           }}
+          onUiStateChange={setVideoRecorderUiState}
           disabled={disabled}
         />
         {uploadProgressDisplay}
@@ -319,7 +322,7 @@ export const ReviewForm = React.forwardRef<
         Edit
       </Button>
     ) : (
-      <Button color="primary" disabled={disabled || rating === null || !readyToSubmit} key="submit" type="submit">
+      <Button color="primary" disabled={disabled || !readyToSubmit} key="submit" type="submit">
         {review ? "Update review" : "Post review"}
       </Button>
     );
