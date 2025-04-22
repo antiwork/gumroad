@@ -74,7 +74,7 @@ class ProductReviewsController < ApplicationController
       }
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.message }
-    rescue StandardError => e
+    rescue StandardError
       render json: { success: false, message: "Sorry, something went wrong." }
     end
 
