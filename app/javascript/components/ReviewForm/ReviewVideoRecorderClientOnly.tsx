@@ -10,6 +10,9 @@ import {
   ReviewVideoRecorderUiState,
 } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
+import { showAlert } from "$app/components/server-components/Alert";
+
+const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000;
 
 const CountdownOverlay = ({
   initialCountdown,
@@ -183,6 +186,18 @@ export default function ReviewVideoRecorderClientOnly({
   const loadingStream = status === "acquiring_media";
   const showLiveStream = !hasVideo && formState !== "viewing";
 
+  const startRecording = () => {
+    if (previewStream) {
+      startMediaRecorder();
+      setUiState("recording");
+    }
+  };
+
+  const stopRecording = () => {
+    stopMediaRecorder();
+    setUiState("idle");
+  };
+
   useEffect(() => {
     const el = liveVideoRef.current;
     if (!el || !previewStream) return;
@@ -202,17 +217,15 @@ export default function ReviewVideoRecorderClientOnly({
     }
   }, [showLiveStream, askPermission]);
 
-  const startRecording = () => {
-    if (previewStream) {
-      startMediaRecorder();
-      setUiState("recording");
+  useEffect(() => {
+    if (uiState === "recording") {
+      const timer = setTimeout(() => {
+        stopRecording();
+        showAlert("Your recording has reached its maximum length and has been stopped.", "info");
+      }, MAX_RECORDING_DURATION_MS);
+      return () => clearTimeout(timer);
     }
-  };
-
-  const stopRecording = () => {
-    stopMediaRecorder();
-    setUiState("idle");
-  };
+  }, [uiState, stopRecording]);
 
   const renderUiState = () => {
     if (formState === "viewing" || loadingStream) {
