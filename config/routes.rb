@@ -267,6 +267,8 @@ Rails.application.routes.draw do
   end
 
   get "/s3_utility/cdn_url_for_blob", to: "s3_utility#cdn_url_for_blob"
+  get "/s3_utility/current_utc_time_string", to: "s3_utility#current_utc_time_string"
+  get "/s3_utility/generate_multipart_signature", to: "s3_utility#generate_multipart_signature"
 
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
@@ -735,10 +737,6 @@ Rails.application.routes.draw do
 
     # events
     post "/events/track_user_action", to: "events#create"
-
-    # s3 utility
-    get "/s3_utility/generate_multipart_signature", to: "s3_utility#generate_multipart_signature"
-    get "/s3_utility/current_utc_time_string", to: "s3_utility#current_utc_time_string"
 
     # product files utility
     get "/product_files_utility/external_link_title", to: "product_files_utility#external_link_title", as: :external_link_title
