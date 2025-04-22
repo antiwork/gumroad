@@ -57,8 +57,10 @@ RSpec.describe ProductReview::UpdateService do
           end.to change { product_review.videos.count }.by(1)
             .and change { existing_pending_video.reload.deleted? }.from(false).to(true)
 
-          expect(product_review.videos.last.video_file.url).to eq(video_url)
-          expect(product_review.videos.last.video_file.thumbnail.signed_id).to eq(blob.signed_id)
+          new_video = product_review.videos.last
+          expect(new_video.approval_status).to eq("pending_review")
+          expect(new_video.video_file.url).to eq(video_url)
+          expect(new_video.video_file.thumbnail.signed_id).to eq(blob.signed_id)
         end
       end
 

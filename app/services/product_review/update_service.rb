@@ -37,6 +37,7 @@ class ProductReview::UpdateService
       @product_review.videos.alive.pending_review.each(&:mark_deleted!)
 
       @product_review.videos.create!(
+        approval_status: :pending_review,
         video_file_attributes: {
           url: options[:url],
           thumbnail: options[:thumbnail_signed_id],
