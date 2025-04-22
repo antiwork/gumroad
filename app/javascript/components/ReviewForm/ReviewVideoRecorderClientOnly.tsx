@@ -125,7 +125,7 @@ export default function ReviewVideoRecorderClientOnly({
 }: ReviewVideoRecorderProps & {
   reacquireStream: () => void;
 }) {
-  const [uiState, setUiState] = useState<"idle" | "countdown" | "recording" | "preview">("idle");
+  const [uiState, setUiState] = useState<"idle" | "countdown" | "recording">("idle");
   const [askPermission, setAskPermission] = useState(false);
 
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -164,7 +164,7 @@ export default function ReviewVideoRecorderClientOnly({
     });
 
   const hasVideo = videoState.kind === "recorded" || videoState.kind === "existing";
-  const loadingStream = !askPermission || status === "acquiring_media";
+  const loadingStream = status === "acquiring_media";
   const showLiveStream = !hasVideo && formState !== "viewing";
 
   useEffect(() => {
@@ -193,7 +193,6 @@ export default function ReviewVideoRecorderClientOnly({
 
     switch (uiState) {
       case "idle":
-      case "preview":
         return hasVideo ? (
           <DeleteRecordingButton
             onClick={() => {
@@ -230,7 +229,7 @@ export default function ReviewVideoRecorderClientOnly({
             <StopRecordingButton
               onClick={() => {
                 stopRecording();
-                setUiState("preview");
+                setUiState("idle");
               }}
               disabled={disabled}
             />
