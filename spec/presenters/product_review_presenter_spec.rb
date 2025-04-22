@@ -124,8 +124,29 @@ describe ProductReviewPresenter do
       )
     end
 
+    context "product review has a rejected video" do
+      let!(:video) { create(:product_review_video, :rejected, product_review:) }
+
+      it "does not include the video props" do
+        expect(described_class.new(product_review).review_form_props[:video]).to be nil
+      end
+    end
+
+    context "product review has a pending video" do
+      let!(:video) { create(:product_review_video, :pending_review, product_review:) }
+
+      it "includes the video props" do
+        expect(described_class.new(product_review).review_form_props[:video]).to eq(
+          {
+            id: video.external_id,
+            thumbnail_url: video.video_file.thumbnail_url,
+          }
+        )
+      end
+    end
+
     context "product review has an approved video" do
-      let(:video) { create(:product_review_video, product_review:) }
+      let!(:video) { create(:product_review_video, :approved, product_review:) }
 
       it "includes the video props" do
         expect(described_class.new(product_review).review_form_props[:video]).to eq(
