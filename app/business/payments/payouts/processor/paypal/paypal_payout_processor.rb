@@ -422,7 +422,7 @@ class PaypalPayoutProcessor
 
   def self.note_for_paypal_payment(payment)
     user              = payment.user
-    legal_entity_name = user.alive_user_compliance_info.legal_entity_name
+    legal_entity_name = user.alive_user_compliance_info&.legal_entity_name.presence || user.name_or_username
 
     "#{legal_entity_name}, selling digital products / memberships"
   end

@@ -315,6 +315,37 @@ describe PaypalPayoutProcessor do
     end
   end
 
+  describe ".note_for_paypal_payment" do
+    let(:user) { create(:user, name: "Test User", username: "testuser") }
+    let(:payment) { create(:payment, user:) }
+
+    context "when user has compliance info with a legal entity name" do
+      let!(:compliance_info) { create(:user_compliance_info, user:, is_business: true, business_name: "Test Legal Entity") }
+
+      it "returns the note with the legal entity name" do
+        expected_note = "Test Legal Entity, selling digital products / memberships"
+        expect(described_class.note_for_paypal_payment(payment)).to eq(expected_note)
+      end
+    end
+
+    context "when user has compliance info but legal entity name is blank" do
+      let!(:compliance_info) { create(:user_compliance_info, user:, first_name: "", last_name: "") }
+
+      it "returns the note with the user's name" do
+        expected_note = "Test User, selling digital products / memberships"
+        expect(described_class.note_for_paypal_payment(payment)).to eq(expected_note)
+      end
+    end
+
+    context "when user does not have compliance info" do
+      it "returns the note with the user's name" do
+        user.update!(name: nil) # Use username in this case
+        expected_note = "testuser, selling digital products / memberships"
+        expect(described_class.note_for_paypal_payment(payment)).to eq(expected_note)
+      end
+    end
+  end
+
   describe "pay via paypal and handle IPNs", :vcr do
     before do
       @u1 = create(:singaporean_user_with_compliance_info, payment_address: "amir_1351103838_biz@gumroad.com")
@@ -495,7 +526,6 @@ describe PaypalPayoutProcessor do
                                           "status_11" => "Failed",
                                           "unique_id_11" => p2.id,
                                           "mc_fee_11" => "3.99")
-
       @u1.reload
       expect(@u1.unpaid_balance_cents).to eq 99
 
