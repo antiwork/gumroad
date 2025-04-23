@@ -50,4 +50,39 @@ class SocialProofWidget < ApplicationRecord
 
     true
   end
+
+  def as_json(options = {})
+    {
+      id: external_id,
+      name:,
+      title:,
+      description:,
+      universal:,
+      icon_color:,
+      cta_text:,
+      cta_type:,
+      image_type:,
+      published:,
+      metric: {
+        impressions_count: metric&.impressions_count.to_i,
+        closes_count: metric&.closes_count.to_i,
+        clicks_count: metric&.clicks_count.to_i,
+      },
+      revenue: conversions.joins(:purchase).sum("purchases.amount"),
+      conversion_rate:,
+      selected_products: links.map do |link|
+        {
+          id: link.external_id,
+          name: link.name,
+        }
+      end,
+    }
+  end
+
+  def conversion_rate
+    impressions_count = social_proof_widget.metric&.impressions_count.to_i
+    conversion_rate = impressions_count.zero? ? 0.0 : social_proof_widget.conversions.count / impressions_count.to_f
+
+    conversion_rate
+  end
 end

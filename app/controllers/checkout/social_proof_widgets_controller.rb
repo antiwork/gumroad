@@ -65,11 +65,16 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
 
   private
     def social_proof_widget_params
-      params.permit(:name, :text, :description, :cross_sell, :product_id, :variant_id, :universal, :replace_selected_products, offer_code: [:amount_cents, :amount_percentage], product_ids: [], upsell_variants: [:selected_variant_id, :offered_variant_id])
+      params.permit(:name, :title, :description, :published, :universal, :icon_color, :cta_text, :cta_type, :image_type, :custom_image_signed_id, product_ids: [],)
     end
 
     def assign_social_proof_widget_attributes
-      @social_proof_widget.assign_attributes(product: current_seller.products.find_by_external_id!(social_proof_widget_params[:product_id]), selected_products: current_seller.products.by_external_ids(social_proof_widget_params[:product_ids]), **social_proof_widget_params.except(:product_id, :variant_id, :product_ids, :offer_code, :upsell_variants))
+      @social_proof_widget.assign_attributes(links: current_seller.products.by_external_ids(social_proof_widget_params[:product_ids]), **social_proof_widget_params.except(:product_ids, :signed_blob_id))
+
+      if social_proof_widget_params[:signed_blob_id].present?
+        @social_proof_widget.custom_image.attach(social_proof_widget_params[:signed_blob_id])
+        @social_proof_widget.custom_image.analyze
+      end
     end
 
     def paged_params
