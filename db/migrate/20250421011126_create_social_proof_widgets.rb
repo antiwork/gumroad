@@ -7,6 +7,7 @@ class CreateSocialProofWidgets < ActiveRecord::Migration[7.1]
       t.string :name, null: false
       t.string :title
       t.text :description
+      t.string :icon_color
       t.string :cta_text
       t.string :cta_type, null: false
       t.boolean :universal, default: false

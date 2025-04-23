@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_04_21_124634) do
+ActiveRecord::Schema[7.1].define(version: 2025_04_21_998888) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2091,6 +2091,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_21_124634) do
     t.string "name", null: false
     t.string "title"
     t.text "description"
+    t.string "icon_color"
     t.string "cta_text"
     t.string "cta_type", null: false
     t.boolean "universal", default: false
