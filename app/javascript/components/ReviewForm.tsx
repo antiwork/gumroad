@@ -238,6 +238,8 @@ export const ReviewForm = React.forwardRef<
             ? { kind: "existing", id: review.video.id, thumbnailUrl: review.video.thumbnail_url }
             : { kind: "none" },
         );
+        setMessage(review.message ?? "");
+        setReviewMode(review.video ? "video" : "text");
 
         showAlert("Review submitted successfully!", "success");
       } catch (error) {
