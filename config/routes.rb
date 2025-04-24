@@ -271,7 +271,7 @@ Rails.application.routes.draw do
   get "/s3_utility/generate_multipart_signature", to: "s3_utility#generate_multipart_signature"
 
   constraints GumroadDomainConstraint do
-    get "/about", to: "home#about"
+    get "/", to: "home#about"
     get "/features", to: "home#features"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
@@ -943,10 +943,11 @@ Rails.application.routes.draw do
     get "/CHARGE" => redirect("/charge")
 
     # discover
+    get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
     get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
 
-    root to: "public#home"
+    root to: "home#about"
 
     resources :consumption_analytics, only: [:create], format: :json
     resources :media_locations, only: [:create], format: :json
