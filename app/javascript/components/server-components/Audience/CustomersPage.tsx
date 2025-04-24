@@ -1593,6 +1593,7 @@ const EmailSection = ({
 
 const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChange: (review: Review) => void }) => {
   const [loading, setLoading] = React.useState(false);
+  const [approvedVideoRemovalModalOpen, setApprovedVideoRemovalModalOpen] = React.useState(false);
 
   const approvedVideo = review.videos.find((video) => video.approval_status === "approved");
   const pendingVideo = review.videos.find((video) => video.approval_status === "pending_review");
@@ -1603,7 +1604,7 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
     try {
       await approveReviewVideo(video.id);
       onChange({ ...review, videos: [{ ...video, approval_status: "approved" }] });
-      showAlert("This video review is now live!", "success");
+      showAlert("This video is now live!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong", "error");
@@ -1618,7 +1619,8 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
       await rejectReviewVideo(video.id);
       const otherVideos = review.videos.filter((v) => v.id !== video.id);
       onChange({ ...review, videos: [{ ...video, approval_status: "rejected" }, ...otherVideos] });
-      showAlert("This review video has been rejected.", "success");
+      showAlert("This video has been removed.", "success");
+      setApprovedVideoRemovalModalOpen(false);
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong", "error");
@@ -1632,9 +1634,26 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
       <div className="flex flex-col gap-4">
         <h5>Approved video</h5>
         <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
-        <Button color="danger" onClick={() => void rejectVideo(approvedVideo)} disabled={loading}>
-          Reject
+        <Button onClick={() => setApprovedVideoRemovalModalOpen(true)} disabled={loading}>
+          Remove
         </Button>
+        <Modal
+          open={approvedVideoRemovalModalOpen}
+          onClose={() => setApprovedVideoRemovalModalOpen(false)}
+          title="Remove approved video?"
+          footer={
+            <>
+              <Button onClick={() => setApprovedVideoRemovalModalOpen(false)} disabled={loading}>
+                Cancel
+              </Button>
+              <Button color="danger" onClick={() => void rejectVideo(approvedVideo)} disabled={loading}>
+                Remove video
+              </Button>
+            </>
+          }
+        >
+          <p>This action cannot be undone. This video will be permanently removed from this review.</p>
+        </Modal>
       </div>
     </section>
   ) : null;

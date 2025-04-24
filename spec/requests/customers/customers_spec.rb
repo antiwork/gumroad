@@ -1591,7 +1591,7 @@ describe "Sales page", type: :feature, js: true do
         within_section "Review" do
           within_section "Approved video" do
             expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
-            expect(page).to have_text("Reject")
+            expect(page).to have_text("Remove")
           end
 
           within_section "Pending video" do
@@ -1602,7 +1602,7 @@ describe "Sales page", type: :feature, js: true do
         end
 
         click_on "Approve"
-        expect(page).to have_alert(text: "This video review is now live!")
+        expect(page).to have_alert(text: "This video is now live!")
         expect(pending_video.reload.approved?).to eq(true)
 
         within_section "Review" do
@@ -1620,7 +1620,7 @@ describe "Sales page", type: :feature, js: true do
         within_section "Review" do
           within_section "Approved video" do
             expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
-            expect(page).to have_text("Reject")
+            expect(page).to have_text("Remove")
           end
 
           within_section "Pending video" do
@@ -1630,10 +1630,11 @@ describe "Sales page", type: :feature, js: true do
           end
         end
 
+        # Rejecting the pending video should not affect the approved video.
         within_section "Review" do
           within_section "Approved video" do
             expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
-            expect(page).to have_text("Reject")
+            expect(page).to have_text("Remove")
           end
 
           within_section "Pending video" do
@@ -1645,15 +1646,29 @@ describe "Sales page", type: :feature, js: true do
           end
         end
 
-        expect(page).to have_alert(text: "This review video has been rejected.")
+        expect(page).to have_alert(text: "This video has been removed.")
         expect(pending_video.reload.rejected?).to eq(true)
 
         within_section "Review" do
-          within_section "Approved video" do
-            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
-          end
           expect(page).to_not have_section("Pending video")
         end
+
+        # Removing the approved video requires confirmation.
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Remove")
+
+            click_on "Remove"
+
+            within_modal "Remove approved video?" do
+              click_on "Remove video"
+            end
+          end
+        end
+
+        expect(page).to_not have_section("Approved video")
+        expect(approved_video.reload.rejected?).to eq(true)
       end
     end
 
