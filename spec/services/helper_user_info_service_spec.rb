@@ -29,22 +29,23 @@ describe HelperUserInfoService do
                                       })
     end
 
-    it "includes purchases in value calculation" do
-      create(:purchase, purchaser: user, price_cents: 1000)
-      create(:purchase, purchaser: user, price_cents: 1500)
-      index_model_records(Purchase)
-      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(2500)
-      result = service.user_info
-      expect(result[:metadata][:value]).to eq(2500)
-    end
+    context "value calculation" do
+      let(:product) { create(:product, user:, price_cents: 100_00) }
 
-    it "returns max of lifetime sales and 28-day purchases" do
-      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(2000) # lifetime
-      allow(service).to receive(:purchases_cents_total).and_return(3000) # 28-day
+      it "returns the higher value between lifetime sales and last-28-day purchases" do
+        # Bought $10.00 of products in the last 28 days.
+        create(:purchase, purchaser: user, price_cents: 10_00, created_at: 30.days.ago)
+        create(:purchase, purchaser: user, price_cents: 10_00, created_at: 1.day.ago)
+        index_model_records(Purchase)
 
-      result = service.user_info
+        expect(service.user_info[:metadata][:value]).to eq(10_00)
 
-      expect(result[:metadata][:value]).to eq(3000) # max of 2000 and 3000
+        # Sold $100.00 of products, before fees.
+        sale = create(:purchase, link: product, price_cents: 100_00, created_at: 30.days.ago)
+        index_model_records(Purchase)
+
+        expect(service.user_info[:metadata][:value]).to eq(sale.payment_cents)
+      end
     end
 
     context "when user is not found" do

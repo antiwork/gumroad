@@ -34,8 +34,9 @@ class HelperUserInfoService
       name: user.name,
       email: user.email,
       value: [
-  user.sales_cents_total,
-  user.sales_cents_total(after: 28.days.ago) + purchases_cents_total(after: 28.days.ago)].max,
+        user.sales_cents_total,
+        purchases_cents_total(after: 28.days.ago)
+      ].max,
       links: {
         "Impersonate": admin_impersonate_helper_action_url(user_id: user.external_id, host: UrlService.domain_with_protocol)
       }

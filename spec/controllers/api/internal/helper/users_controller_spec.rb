@@ -49,10 +49,10 @@ describe Api::Internal::Helper::UsersController do
         expect(parsed_response["user_info"]["prompt"]).to include("User Name: #{user.name}")
         expect(parsed_response["user_info"]["prompt"]).to include("User Email: #{user.email}")
         expect(parsed_response["user_info"]["prompt"]).to include("Account Status: Active")
-        expect(parsed_response["user_info"]["metadata"]).to include({
+        expect(parsed_response["user_info"]["metadata"]).to eq({
                                                                  "name" => user.name,
                                                                  "email" => user.email,
-                                                                 "value" => user.sales_cents_total,
+                                                                 "value" => 0,
                                                                  "links" => {
                                                                    "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}",
                                                                  }
