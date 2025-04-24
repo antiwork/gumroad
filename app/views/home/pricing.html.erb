@@ -67,6 +67,12 @@
   </div>
   <div class="accordion-container">
     <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What can't I sell on Gumroad?",
+      content: "Outside of physical goods, things like illegal or illicit goods or services, securities & financial instruments, credit repair, gambling & lotteries, harassment & extremist content, copyright infringement & piracy, or obscene or adult content are not permitted on Gumroad. A full list can be found #{link_to 'here', prohibited_path}."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
       title: "How do I get paid?",
       content: "Gumroad's goal is to help creators make a living doing what they love, so we make it as simple as possible to get paid. How we pay creators, whether through direct deposit or PayPal, varies by country."
     } %>
