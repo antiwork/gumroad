@@ -271,7 +271,7 @@ Rails.application.routes.draw do
   get "/s3_utility/generate_multipart_signature", to: "s3_utility#generate_multipart_signature"
 
   constraints GumroadDomainConstraint do
-    get "/", to: "home#about"
+    get "/", to: "home#about", as: :about
     get "/features", to: "home#features"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
