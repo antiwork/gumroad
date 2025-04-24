@@ -13,6 +13,7 @@ class ProductReviewVideoPresenter
       approval_status: video.approval_status,
       thumbnail_url: video.video_file.thumbnail_url,
       can_approve: Pundit.policy!(pundit_user, video).approve?,
+      can_reject: Pundit.policy!(pundit_user, video).reject?,
     }
   end
 end
