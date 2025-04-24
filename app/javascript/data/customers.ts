@@ -437,3 +437,15 @@ export const approveReviewVideo = async (videoId: string) => {
     throw new ResponseError();
   }
 };
+
+export const rejectReviewVideo = async (videoId: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_product_review_video_rejections_url(videoId),
+  });
+
+  if (!response.ok) {
+    throw new ResponseError();
+  }
+};

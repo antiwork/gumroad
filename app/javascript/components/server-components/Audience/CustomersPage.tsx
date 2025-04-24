@@ -44,6 +44,7 @@ import {
   File,
   ReviewVideo,
   approveReviewVideo,
+  rejectReviewVideo,
 } from "$app/data/customers";
 import {
   CurrencyCode,
@@ -1611,11 +1612,29 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
     }
   };
 
+  const rejectVideo = async (video: ReviewVideo) => {
+    setLoading(true);
+    try {
+      await rejectReviewVideo(video.id);
+      const otherVideos = review.videos.filter((v) => v.id !== video.id);
+      onChange({ ...review, videos: [{ ...video, approval_status: "rejected" }, ...otherVideos] });
+      showAlert("This review video has been rejected.", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Something went wrong", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const approvedVideoSubsection = approvedVideo ? (
     <section>
       <div className="flex flex-col gap-4">
         <h5>Approved video</h5>
         <ReviewVideoPlayer videoId={approvedVideo.id} thumbnail={approvedVideo.thumbnail_url} />
+        <Button color="danger" onClick={() => void rejectVideo(approvedVideo)} disabled={loading}>
+          Reject
+        </Button>
       </div>
     </section>
   ) : null;
@@ -1625,11 +1644,23 @@ const ReviewVideosSubsections = ({ review, onChange }: { review: Review; onChang
       <div className="flex flex-col gap-4">
         <h5>Pending video</h5>
         <ReviewVideoPlayer videoId={pendingVideo.id} thumbnail={pendingVideo.thumbnail_url} />
-        {pendingVideo.can_approve ? (
-          <Button color="primary" className="flex-1" onClick={() => void approveVideo(pendingVideo)} disabled={loading}>
-            Show on product page
-          </Button>
-        ) : null}
+        <div className="flex flex-row gap-2">
+          {pendingVideo.can_approve ? (
+            <Button
+              color="primary"
+              className="flex-1"
+              onClick={() => void approveVideo(pendingVideo)}
+              disabled={loading}
+            >
+              Approve
+            </Button>
+          ) : null}
+          {pendingVideo.can_reject ? (
+            <Button color="danger" className="flex-1" onClick={() => void rejectVideo(pendingVideo)} disabled={loading}>
+              Reject
+            </Button>
+          ) : null}
+        </div>
       </div>
     </section>
   ) : null;

@@ -1583,6 +1583,7 @@ describe "Sales page", type: :feature, js: true do
           video_file: create(:video_file, :with_thumbnail)
         )
       end
+
       it "allows approving a video" do
         visit customers_path
         find(:table_row, { "Email" => purchase1.email }).click
@@ -1590,20 +1591,66 @@ describe "Sales page", type: :feature, js: true do
         within_section "Review" do
           within_section "Approved video" do
             expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
           end
+
           within_section "Pending video" do
             expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
-            expect(page).to have_text("Show on product page")
+            expect(page).to have_text("Approve")
+            expect(page).to have_text("Reject")
           end
         end
 
-        click_on "Show on product page"
+        click_on "Approve"
         expect(page).to have_alert(text: "This video review is now live!")
         expect(pending_video.reload.approved?).to eq(true)
 
         within_section "Review" do
           within_section "Approved video" do
             expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+          end
+          expect(page).to_not have_section("Pending video")
+        end
+      end
+
+      it "allows rejecting a video" do
+        visit customers_path
+        find(:table_row, { "Email" => purchase1.email }).click
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
+          end
+
+          within_section "Pending video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
+            expect(page).to have_text("Approve")
+          end
+        end
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
+          end
+
+          within_section "Pending video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
+            expect(page).to have_text("Approve")
+
+            click_on "Reject"
+          end
+        end
+
+        expect(page).to have_alert(text: "This review video has been rejected.")
+        expect(pending_video.reload.rejected?).to eq(true)
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
           end
           expect(page).to_not have_section("Pending video")
         end
