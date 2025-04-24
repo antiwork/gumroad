@@ -37,6 +37,7 @@ export type ReviewVideo = {
   approval_status: "pending_review" | "approved" | "rejected";
   thumbnail_url: string | null;
   can_approve: boolean;
+  can_reject: boolean;
 };
 export type Call = { id: string; call_url: string | null; start_time: string; end_time: string };
 export type File = {
