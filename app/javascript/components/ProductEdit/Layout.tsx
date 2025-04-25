@@ -47,22 +47,41 @@ const NotifyAboutProductChangesAlert = () => {
   const { uniquePermalink, notifyAboutChangesOptions, setNotifyAboutChangesOptions } = useProductEditContext();
   const timerRef = React.useRef<number | null>(null);
   const isVisible = !!notifyAboutChangesOptions;
-  const close = () => setNotifyAboutChangesOptions(null);
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startTimer = () => {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => {
+      close();
+    }, 10_000);
+  };
+
+  const close = () => {
+    clearTimer();
+    setNotifyAboutChangesOptions(null);
+  };
 
   React.useEffect(() => {
     if (isVisible) {
-      timerRef.current = window.setTimeout(() => {
-        close();
-      }, 10_000);
+      startTimer();
     }
 
-    return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [isVisible, close]);
+    return clearTimer;
+  }, [isVisible]);
+
+  const handleMouseEnter = () => {
+    clearTimer();
+  };
+
+  const handleMouseLeave = () => {
+    startTimer();
+  };
 
   return (
     <div
@@ -73,6 +92,8 @@ const NotifyAboutProductChangesAlert = () => {
         transition: "all 0.3s ease-out 0.5s",
         zIndex: "var(--z-index-tooltip)",
       }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <div className="paragraphs">
         Changes saved! Would you like to notify your customers about those changes?
