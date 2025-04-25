@@ -12,7 +12,7 @@ class UrlRedirectsController < ApplicationController
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
-                                             hls_playlist download_subtitle_file read
+                                             hls_playlist download_subtitle_file read stamp
                                              download_archive latest_media_locations download_product_files audio_durations]
   before_action :hide_layouts, only: %i[
     confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
@@ -265,6 +265,15 @@ class UrlRedirectsController < ApplicationController
     end
 
     render json:
+  end
+
+  def stamp
+    @product_file = @url_redirect.product_file(params[:product_file_id])
+    @purchase = @url_redirect.purchase
+
+    SendChargeReceiptJob.perform_async(@purchase.id, @product_file.id, logged_in_user.id)
+
+    head :ok
   end
 
   private

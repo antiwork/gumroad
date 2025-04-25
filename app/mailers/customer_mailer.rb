@@ -105,6 +105,20 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
+  def stamped_file_ready(recipient:, product_file:, url_redirect:)
+    @recipient = recipient
+    @product = product_file.link
+    @stamped_pdf_url = url_redirect.stamped_pdfs.find_by(product_file_id: product_file.id).url
+
+    mail(
+      to: recipient.email,
+      from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
+      reply_to: @product.user.support_or_form_email,
+      subject: "Your stamped file is ready!",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+    )
+  end
+
   def send_to_kindle(kindle_email, product_file_id)
     product_file = ProductFile.find(product_file_id)
 

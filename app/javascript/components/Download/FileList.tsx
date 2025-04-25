@@ -5,6 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { stampProductFile } from "$app/data/product_files";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
@@ -82,6 +83,7 @@ export const FileList = ({ content_items }: Props) => {
         .flatMap((item) => (item.type === "folder" ? item.children : item))
         .some(({ processing }) => processing)
     )
+      // fixme: show better alert
       showAlert(
         "This product includes a file that's being processed. You'll be able to download it shortly.",
         "warning",
@@ -129,6 +131,42 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
 export const shouldShowSubtitlesForFile = (file: FileItem) =>
   file.stream_url != null && file.download_url != null && file.subtitle_files != null && file.subtitle_files.length > 0;
 
+const DownloadFileButton = ({ file, token }: { file: FileItem; token: string }) => {
+  const [loading, setLoading] = React.useState(false);
+
+  const handleProcessingFileDownload = async () => {
+    try {
+      setLoading(true);
+      await stampProductFile({
+        purchaseInfoToken: token,
+        productFileId: file.id,
+      });
+
+      showAlert("The PDF will be emailed to you shortly!", "info");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+  };
+
+  const downloadUrl = file.download_url;
+  if (!downloadUrl) return null;
+
+  if (file.processing) {
+    return (
+      <Button disabled={loading} onClick={() => void handleProcessingFileDownload()}>
+        Download
+      </Button>
+    );
+  }
+
+  return (
+    <TrackClick eventName="download_click" resourceId={file.id}>
+      <NavigationButton href={downloadUrl}>Download</NavigationButton>
+    </TrackClick>
+  );
+};
+
 export const FileRow = ({
   file,
   playingAudioForId,
@@ -160,14 +198,7 @@ export const FileRow = ({
   );
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
-  const downloadUrl = file.download_url;
-  const downloadButton = downloadUrl ? (
-    <TrackClick eventName="download_click" resourceId={file.id}>
-      <NavigationButton disabled={file.processing} href={downloadUrl}>
-        Download
-      </NavigationButton>
-    </TrackClick>
-  ) : null;
+
   const streamUrl = file.stream_url;
   const externalLinkUrl = file.external_link_url;
   const mediaUrls = allMediaUrls[file.id] ?? [];
@@ -257,15 +288,7 @@ export const FileRow = ({
           </div>
         ) : null}
 
-        {downloadButton ? (
-          file.processing ? (
-            <WithTooltip tip="This file will be ready to download shortly." position="bottom">
-              {downloadButton}
-            </WithTooltip>
-          ) : (
-            downloadButton
-          )
-        ) : null}
+        <DownloadFileButton file={file} token={purchaseInfo.token} />
 
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" resourceId={file.id}>
