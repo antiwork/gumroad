@@ -11,10 +11,10 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
-import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Preview } from "$app/components/Preview";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -33,19 +33,26 @@ export const useProductUrl = (params = {}) => {
       });
 };
 
+const paramsToQueryString = (params: Record<string, string | string[] | undefined>) =>
+  Object.keys(params)
+    .map((key) => {
+      const value = params[key];
+      return Array.isArray(value)
+        ? value.map((v) => `${key}[]=${encodeURIComponent(v)}`).join("&")
+        : `${key}=${encodeURIComponent(value ?? "")}`;
+    })
+    .join("&");
+
 const NotifyAboutProductChangesAlert = () => {
-  const {
-    uniquePermalink,
-    showNotifyAboutProductChanges: isVisible,
-    setShowNotifyAboutProductChanges: setIsVisible,
-  } = useProductEditContext();
-  const [loading, setLoading] = React.useState(false);
+  const { uniquePermalink, notifyAboutChangesOptions, setNotifyAboutChangesOptions } = useProductEditContext();
   const timerRef = React.useRef<number | null>(null);
+  const isVisible = !!notifyAboutChangesOptions;
+  const close = () => setNotifyAboutChangesOptions(null);
 
   React.useEffect(() => {
     if (isVisible) {
       timerRef.current = window.setTimeout(() => {
-        setIsVisible(false);
+        close();
       }, 10_000);
     }
 
@@ -55,27 +62,11 @@ const NotifyAboutProductChangesAlert = () => {
         timerRef.current = null;
       }
     };
-  }, [isVisible, setIsVisible]);
-
-  const handleNotify = () => {
-    setLoading(true);
-    try {
-      // TODO: Redirect to /email/new
-      showAlert("Notification emails will be sent to customers!", "success");
-      setIsVisible(false);
-    } catch (error) {
-      assertResponseError(error);
-      showAlert("Something went wrong.", "error");
-    }
-  };
-
-  const handleSkip = () => {
-    setIsVisible(false);
-  };
+  }, [isVisible, close]);
 
   return (
     <div
-      role="status"
+      role="alert"
       className={cx("fixed right-1/2 top-4", "info", isVisible ? "visible" : "invisible")}
       style={{
         transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
@@ -86,12 +77,20 @@ const NotifyAboutProductChangesAlert = () => {
       <div className="paragraphs">
         Changes saved! Would you like to notify your customers about those changes?
         <div className="flex gap-2">
-          <Button color="primary" outline onClick={handleSkip}>
+          <Button color="primary" outline onClick={() => close()}>
             Skip for now
           </Button>
-          <Button color="primary" onClick={() => void handleNotify()} disabled={loading}>
-            {loading ? <LoadingSpinner color="grey" /> : "Send notification"}
-          </Button>
+          <NavigationButton
+            color="primary"
+            href={`${newEmailPath}?${paramsToQueryString({
+              new_content_added: "true",
+              product: uniquePermalink,
+              product_ids: notifyAboutChangesOptions?.changedProductIds ?? [],
+            })}`}
+            target="_blank"
+          >
+            Send notification
+          </NavigationButton>
         </div>
       </div>
     </div>

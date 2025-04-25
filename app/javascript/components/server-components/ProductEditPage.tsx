@@ -27,6 +27,7 @@ import {
   ProfileSection,
   ExistingFileEntry,
   ShippingCountry,
+  ContentChangesOptions,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -114,21 +115,25 @@ const createContextValue = (props: Props) => ({
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean =>
   pages1.length === pages2.length && pages1.every((page, i) => isEqual(page.description, pages2[i]?.description));
 
-const checkIfContentDirty = (product: Product, lastSavedProduct: Product) => {
-  const variantsChanged = product.variants.some((variant) => {
+const findDirtyContent = (product: Product, lastSavedProduct: Product) => {
+  const changedVariants = product.variants.filter((variant) => {
     const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
     return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
   });
 
-  if (variantsChanged) return true;
+  const productHasChanged = !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
 
-  return !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
+  return {
+    productHasChanged,
+    changedVariants,
+  };
 };
 
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
-  const [showNotifyAboutProductChanges, setShowNotifyAboutProductChanges] = React.useState(false);
-  const [lastSavedProduct, setLastSavedProduct] = React.useState<Product>(props.product);
+  const [notifyAboutChangesOptions, setNotifyAboutChangesOptions] = React.useState<ContentChangesOptions>(null);
+
+  const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
@@ -148,14 +153,21 @@ const ProductEditPage = (props: Props) => {
       const response = await saveProduct(props.unique_permalink, props.id, product);
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
-        const isDirty = checkIfContentDirty(product, lastSavedProduct);
+        const { changedVariants, productHasChanged } = findDirtyContent(product, lastSavedProductRef.current);
+        const isDirty = productHasChanged || changedVariants.length > 0;
 
         if (product.is_published && isDirty) {
-          setShowNotifyAboutProductChanges(true);
+          const changedProductIds = product.has_same_rich_content_for_all_variants
+            ? [props.unique_permalink]
+            : changedVariants.map((v) => v.id);
+
+          setNotifyAboutChangesOptions({
+            changedProductIds,
+          });
         } else {
           showAlert("Changes saved!", "success");
         }
-        setLastSavedProduct(product);
+        lastSavedProductRef.current = structuredClone(product);
       }
     } catch (e) {
       assertResponseError(e);
@@ -173,8 +185,8 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
-      showNotifyAboutProductChanges,
-      setShowNotifyAboutProductChanges,
+      notifyAboutChangesOptions,
+      setNotifyAboutChangesOptions,
     }),
     [product, updateProduct, existingFiles, setExistingFiles],
   );
@@ -229,8 +241,8 @@ const ProductEditRouter = async (global: GlobalProps) => {
     <ProductEditContext.Provider
       value={{
         ...createContextValue(props),
-        showNotifyAboutProductChanges: false,
-        setShowNotifyAboutProductChanges: () => {},
+        notifyAboutChangesOptions: null,
+        setNotifyAboutChangesOptions: () => {},
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
