@@ -271,7 +271,7 @@ class UrlRedirectsController < ApplicationController
     @product_file = @url_redirect.product_file(params[:product_file_id])
     @purchase = @url_redirect.purchase
 
-    SendChargeReceiptJob.perform_async(@purchase.id, @product_file.id, logged_in_user.id)
+    StampProductFileWorker.perform_async(@purchase.id, @product_file.id, logged_in_user.id)
 
     head :ok
   end

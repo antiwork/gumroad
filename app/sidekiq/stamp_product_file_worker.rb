@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 
-class SendChargeReceiptJob
+class StampProductFileWorker
   include Sidekiq::Job
   sidekiq_options queue: :critical, retry: 5, lock: :until_executed
 
