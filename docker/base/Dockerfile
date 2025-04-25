@@ -47,6 +47,7 @@ RUN cd /tmp \
        libgcrypt20 \
        libvips-dev \
        libxml2-dev \
+       libyaml-dev \
        percona-toolkit \
        pdftk \
        ruby-dev \
