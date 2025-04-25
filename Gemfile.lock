@@ -709,7 +709,8 @@ GEM
       pry (>= 0.13, < 0.15)
     pry-rails (0.3.11)
       pry (>= 0.13.0)
-    psych (5.1.2)
+    psych (5.2.3)
+      date
       stringio
     public_suffix (5.1.1)
     puffing-billy (4.0.0)
@@ -1185,6 +1186,7 @@ DEPENDENCIES
   private_address_check (~> 0.5)
   pry-byebug (~> 3.10)
   pry-rails (~> 0.3)
+  psych (~> 5.2.3)
   public_suffix (~> 5.0)
   puffing-billy (~> 4.0.0)
   puma (= 6.4.2)
