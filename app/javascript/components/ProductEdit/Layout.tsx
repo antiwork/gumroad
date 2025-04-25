@@ -1,3 +1,4 @@
+import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
 
@@ -10,6 +11,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Preview } from "$app/components/Preview";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -29,6 +31,71 @@ export const useProductUrl = (params = {}) => {
         host: currentSeller?.subdomain ?? appDomain,
         ...params,
       });
+};
+
+const NotifyAboutProductChangesAlert = () => {
+  const {
+    uniquePermalink,
+    showNotifyAboutProductChanges: isVisible,
+    setShowNotifyAboutProductChanges: setIsVisible,
+  } = useProductEditContext();
+  const [loading, setLoading] = React.useState(false);
+  const timerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    if (isVisible) {
+      timerRef.current = window.setTimeout(() => {
+        setIsVisible(false);
+      }, 10_000);
+    }
+
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isVisible, setIsVisible]);
+
+  const handleNotify = () => {
+    setLoading(true);
+    try {
+      // TODO: Redirect to /email/new
+      showAlert("Notification emails will be sent to customers!", "success");
+      setIsVisible(false);
+    } catch (error) {
+      assertResponseError(error);
+      showAlert("Something went wrong.", "error");
+    }
+  };
+
+  const handleSkip = () => {
+    setIsVisible(false);
+  };
+
+  return (
+    <div
+      role="status"
+      className={cx("fixed right-1/2 top-4", "info", isVisible ? "visible" : "invisible")}
+      style={{
+        transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
+        transition: "all 0.3s ease-out 0.5s",
+        zIndex: "var(--z-index-tooltip)",
+      }}
+    >
+      <div className="paragraphs">
+        Changes saved! Would you like to notify your customers about those changes?
+        <div className="flex gap-2">
+          <Button color="primary" outline onClick={handleSkip}>
+            Skip for now
+          </Button>
+          <Button color="primary" onClick={() => void handleNotify()} disabled={loading}>
+            {loading ? <LoadingSpinner color="grey" /> : "Send notification"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export const Layout = ({
@@ -126,6 +193,7 @@ export const Layout = ({
 
   return (
     <>
+      <NotifyAboutProductChangesAlert />
       {/* TODO: remove this legacy uploader stuff */}
       <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
       <header className="sticky-top">

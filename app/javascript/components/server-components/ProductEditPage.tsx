@@ -1,4 +1,5 @@
 import { DirectUpload } from "@rails/activestorage";
+import { isEqual } from "lodash";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import { StaticRouterProvider } from "react-router-dom/server";
@@ -16,6 +17,7 @@ import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverCompo
 
 import { Seller } from "$app/components/Product";
 import { ContentTab } from "$app/components/ProductEdit/ContentTab";
+import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
@@ -109,8 +111,25 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
 });
 
+const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean =>
+  pages1.length === pages2.length && pages1.every((page, i) => isEqual(page.description, pages2[i]?.description));
+
+const checkIfContentDirty = (product: Product, lastSavedProduct: Product) => {
+  const variantsChanged = product.variants.some((variant) => {
+    const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
+    return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
+  });
+
+  if (variantsChanged) return true;
+
+  return !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
+};
+
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
+  const [showNotifyAboutProductChanges, setShowNotifyAboutProductChanges] = React.useState(false);
+  const [lastSavedProduct, setLastSavedProduct] = React.useState<Product>(props.product);
+
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
       const updated = { ...prevProduct };
@@ -128,7 +147,16 @@ const ProductEditPage = (props: Props) => {
       setSaving(true);
       const response = await saveProduct(props.unique_permalink, props.id, product);
       if (response.warning_message) showAlert(response.warning_message, "warning");
-      else showAlert("Changes saved!", "success");
+      else {
+        const isDirty = checkIfContentDirty(product, lastSavedProduct);
+
+        if (product.is_published && isDirty) {
+          setShowNotifyAboutProductChanges(true);
+        } else {
+          showAlert("Changes saved!", "success");
+        }
+        setLastSavedProduct(product);
+      }
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -145,6 +173,8 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      showNotifyAboutProductChanges,
+      setShowNotifyAboutProductChanges,
     }),
     [product, updateProduct, existingFiles, setExistingFiles],
   );
@@ -196,7 +226,13 @@ const ProductEditPage = (props: Props) => {
 const ProductEditRouter = async (global: GlobalProps) => {
   const { router, context } = await buildStaticRouter(global, routes);
   const component = (props: Props) => (
-    <ProductEditContext.Provider value={createContextValue(props)}>
+    <ProductEditContext.Provider
+      value={{
+        ...createContextValue(props),
+        showNotifyAboutProductChanges: false,
+        setShowNotifyAboutProductChanges: () => {},
+      }}
+    >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
     </ProductEditContext.Provider>
   );

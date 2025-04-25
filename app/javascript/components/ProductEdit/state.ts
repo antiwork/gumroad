@@ -181,6 +181,8 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: RefundPolicy;
   cancellationDiscountsEnabled: boolean;
+  showNotifyAboutProductChanges: boolean;
+  setShowNotifyAboutProductChanges: React.Dispatch<React.SetStateAction<boolean>>;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 
