@@ -913,28 +913,5 @@ describe ProductFile do
         end
       end
     end
-
-    describe "#stamp_existing_pdfs_if_needed" do
-      let(:file) { create(:pdf_product_file) }
-      let(:purchase) { create(:purchase, seller: file.user, link: file.link) }
-
-      before { purchase.create_artifacts_and_send_receipt! }
-
-      context "when PDF stamping is newly enabled" do
-        it "enqueues a job to stamp existing PDFs if needed" do
-          file.update!(pdf_stamp_enabled: true)
-          expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id)
-        end
-      end
-
-      context "when PDF stamping is newly disabled" do
-        let(:file) { create(:pdf_product_file, pdf_stamp_enabled: true) }
-
-        it "does not enqueue a job to stamp existing PDFs" do
-          file.update!(pdf_stamp_enabled: false)
-          expect(StampPdfForPurchaseJob).not_to have_enqueued_sidekiq_job(purchase.id)
-        end
-      end
-    end
   end
 end

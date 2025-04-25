@@ -14,7 +14,6 @@ describe SendChargeReceiptJob do
   before do
     charge.order.purchases << purchase_one
     charge.order.purchases << purchase_two
-    allow(PdfStampingService).to receive(:stamp_for_purchase!)
     allow(CustomerMailer).to receive_message_chain(:receipt, :deliver_now)
   end
 
@@ -22,7 +21,6 @@ describe SendChargeReceiptJob do
     it "delivers the email and updates the charge without stamping" do
       described_class.new.perform(charge.id)
 
-      expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
       expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
       expect(charge.reload.receipt_sent?).to be(true)
     end
@@ -35,7 +33,6 @@ describe SendChargeReceiptJob do
 
     it "does nothing" do
       described_class.new.perform(charge.id)
-      expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
       expect(CustomerMailer).not_to have_received(:receipt)
     end
   end
@@ -45,25 +42,11 @@ describe SendChargeReceiptJob do
       allow_any_instance_of(Charge).to receive(:purchases_requiring_stamping).and_return([purchase_one])
     end
 
-    it "stamps the PDFs and delivers the email" do
+    it "doesn't stamp but delivers the email" do
       described_class.new.perform(charge.id)
 
-      expect(PdfStampingService).to have_received(:stamp_for_purchase!).exactly(:once)
-      expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase_one)
       expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
       expect(charge.reload.receipt_sent?).to be(true)
-    end
-
-    context "when stamping fails" do
-      before do
-        allow(PdfStampingService).to receive(:stamp_for_purchase!).and_raise(PdfStampingService::Error)
-      end
-
-      it "doesn't deliver the email and raises an error" do
-        expect(CustomerMailer).not_to receive(:receipt)
-        expect { described_class.new.perform(charge.id) }.to raise_error(PdfStampingService::Error)
-        expect(charge.reload.receipt_sent?).to be(false)
-      end
     end
   end
 end

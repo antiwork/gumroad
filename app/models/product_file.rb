@@ -27,7 +27,6 @@ class ProductFile < ApplicationRecord
   before_save :set_filegroup
   before_save :downcase_filetype
   after_commit :schedule_file_analyze, on: :create
-  after_commit :stamp_existing_pdfs_if_needed, on: :update
   after_create :reset_moderated_by_iffy_flag
 
   has_flags 1 => :is_transcoded_for_hls,
@@ -360,16 +359,6 @@ class ProductFile < ApplicationRecord
     def reset_moderated_by_iffy_flag
       return unless filegroup == "image"
       link&.update_attribute(:moderated_by_iffy, false)
-    end
-
-    def stamp_existing_pdfs_if_needed
-      return if link.nil?
-      return unless saved_change_to_pdf_stamp_enabled? && pdf_stamp_enabled?
-
-      link.sales.successful_gift_or_nongift.not_is_gift_sender_purchase.not_recurring_charge.includes(:url_redirect).find_each(order: :desc) do |purchase|
-        next if purchase.url_redirect.blank?
-        StampPdfForPurchaseJob.perform_async(purchase.id)
-      end
     end
 
     def video_file_analysis_completed

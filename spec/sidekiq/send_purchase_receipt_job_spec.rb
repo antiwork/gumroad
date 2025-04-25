@@ -14,33 +14,19 @@ describe SendPurchaseReceiptJob do
 
   context "when the purchase is for a product with stampable PDFs" do
     before do
-      allow(PdfStampingService).to receive(:stamp_for_purchase!)
       allow_any_instance_of(Link).to receive(:has_stampable_pdfs?).and_return(true)
     end
 
-    it "stamps the PDFs and delivers the email" do
+    it "doesn't stamp the PDFs but delivers the email" do
       expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
       described_class.new.perform(purchase.id)
 
-      expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase)
       expect(mail_double).to have_received(:deliver_now)
-    end
-
-    context "when stamping the PDF fails" do
-      before do
-        allow(PdfStampingService).to receive(:stamp_for_purchase!).and_raise(PdfStampingService::Error)
-      end
-
-      it "doesn't deliver the email and raises an error" do
-        expect(CustomerMailer).not_to receive(:receipt).with(purchase.id)
-        expect { described_class.new.perform(purchase.id) }.to raise_error(PdfStampingService::Error)
-      end
     end
   end
 
   context "when the purchase is for a product without stampable PDFs" do
     before do
-      allow(PdfStampingService).to receive(:stamp_for_purchase!)
       allow_any_instance_of(Link).to receive(:has_stampable_pdfs?).and_return(false)
     end
 
@@ -48,7 +34,6 @@ describe SendPurchaseReceiptJob do
       expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
       described_class.new.perform(purchase.id)
 
-      expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
       expect(mail_double).to have_received(:deliver_now)
     end
   end

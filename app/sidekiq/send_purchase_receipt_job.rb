@@ -12,7 +12,6 @@ class SendPurchaseReceiptJob
   def perform(purchase_id)
     purchase = Purchase.find(purchase_id)
 
-    PdfStampingService.stamp_for_purchase!(purchase) if purchase.link.has_stampable_pdfs?
     return if purchase.is_bundle_product_purchase?
 
     CustomerMailer.receipt(purchase_id).deliver_now
