@@ -207,7 +207,7 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
         it "notifies Bugsnag" do
           expect(Bugsnag).to receive(:notify) do |error|
             expect(error).to be_a(EmailDeliveryObserver::HandleCustomerEmailInfo::InvalidHeaderError)
-            expect(error.message.to_s).to eq("Failed to parse resend header: undefined method `value' for nil")
+            expect(error.message.to_s).to eq("Failed to parse resend header: undefined method 'value' for nil")
             expect(JSON.parse(error.bugsnag_meta_data[:debug]).keys).to include(MailerInfo.header_name(:mailer_class))
           end
 

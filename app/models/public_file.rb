@@ -21,7 +21,9 @@ class PublicFile < ApplicationRecord
 
   scope :attached, -> { with_attached_file.where(active_storage_attachments: { record_type: "PublicFile" }) }
 
-  delegate :blob, to: :file, allow_nil: true
+  def blob
+    file&.blob
+  end
 
   def analyzed?
     blob&.analyzed? || false
