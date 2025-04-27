@@ -16,7 +16,7 @@ module HelperWidget
   end
 
   def enable_helper_guide?
-    !!current_user&.is_team_member?
+    Feature.active?(:helper_guide)
   end
 
   def helper_customer_metadata
