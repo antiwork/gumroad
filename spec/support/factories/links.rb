@@ -136,11 +136,16 @@ My email is test@gmail.com <i>Reach out and say hi!</i>
       description { "This is a bundle of products" }
       is_bundle { true }
 
-      after(:create) do |product|
-        product.bundle_products = build_list(:bundle_product, 2, bundle: product) do |bundle_product, i|
-          bundle_product.product.update(name: "Bundle Product #{i + 1}")
+      bundle_products do
+        build_list(:bundle_product, 2, bundle: instance) do |bundle_product, i|
+          bundle_product.product.update!(name: "Bundle Product #{i + 1}")
         end
       end
+    end
+
+    trait :unpublished do
+      draft { true }
+      purchase_disabled_at { Time.current }
     end
 
     factory :product_with_files do

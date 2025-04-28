@@ -58,6 +58,14 @@ module Product::Validations
       errors.add(:base, "This product cannot be converted to a bundle because it is already part of a bundle.")
     end
 
+    def published_bundle_must_have_at_least_one_product
+      return unless published?
+      return if not_is_bundle?
+      return if bundle_products.alive.exists?
+
+      errors.add(:base, "Bundles must have at least one product.")
+    end
+
     def user_is_eligible_for_service_products
       return if user.eligible_for_service_products?
 

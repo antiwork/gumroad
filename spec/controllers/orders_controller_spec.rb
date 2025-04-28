@@ -1287,17 +1287,40 @@ describe OrdersController, :vcr do
           let(:bundle_text_field) { create(:custom_field, name: "Text field") }
           let(:bundle_checkbox_field) { create(:custom_field, name: "Checkbox field", type: CustomField::TYPE_CHECKBOX) }
           let(:bundle_terms_field) { create(:custom_field, name: "https://example.com", type: CustomField::TYPE_TERMS) }
-          let(:bundle_product) { create(:bundle_product, bundle: product_2, product: create(:product, user: product_2.user, custom_fields: [bundle_text_field, bundle_checkbox_field, bundle_terms_field])) }
 
-          before { product_2.update!(is_bundle: true) }
+          let(:product_in_bundle) do
+            create(
+              :product,
+              user: seller_1,
+              custom_fields: [bundle_text_field, bundle_checkbox_field, bundle_terms_field]
+            )
+          end
+
+          let(:product_2) do
+            create(
+             :product,
+             :bundle,
+             user: seller_1,
+             bundle_products: [
+               build(:bundle_product, product: product_in_bundle)
+             ]
+           )
+          end
+          let(:bundle_product) { product_2.bundle_products.first }
 
           it "sets the bundle custom fields" do
-            multiple_purchase_params[:line_items][1][:custom_fields] = [{ id: country_field.external_id, value: "UK" }]
+            multiple_purchase_params[:line_items][1][:custom_fields] = [
+              { id: country_field.external_id, value: "UK" }
+            ]
             multiple_purchase_params[:line_items][1][:bundle_products] = [
               {
                 product_id: bundle_product.product.external_id,
                 quantity: 1,
-                custom_fields: [{ id: bundle_text_field.external_id, value: "Hi" }, { id: bundle_checkbox_field.external_id, value: true }, { id: bundle_terms_field.external_id, value: true }]
+                custom_fields: [
+                  { id: bundle_text_field.external_id, value: "Hi" },
+                  { id: bundle_checkbox_field.external_id, value: true },
+                  { id: bundle_terms_field.external_id, value: true }
+                ]
               }
             ]
             post :create, params: multiple_purchase_params

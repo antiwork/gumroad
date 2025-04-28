@@ -449,7 +449,7 @@ class LinksController < ApplicationController
 
     begin
       @product.publish!
-    rescue Link::LinkInvalid
+    rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
       return render json: { success: false, error_message: @product.errors.full_messages[0] }
     rescue => e
       Bugsnag.notify(e)
