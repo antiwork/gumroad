@@ -501,7 +501,7 @@ describe("Bundle edit page", type: :feature, js: true) do
       within(:fieldset, "Has not yet bought") do
         expect(page).to_not have_button("Bundle Product 1")
         expect(page).to_not have_button("Bundle Product 2")
-        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle", "Bundle Product 1", "Bundle Product 2"]
+        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle Product 1", "Bundle Product 2", "Bundle"]
       end
     end
 
@@ -516,7 +516,7 @@ describe("Bundle edit page", type: :feature, js: true) do
       within(:fieldset, "Bought") do
         expect(page).to_not have_button("Bundle Product 1")
         expect(page).to_not have_button("Bundle Product 2")
-        expect(page).to have_combo_box "Bought", options: ["Bundle", "Bundle Product 1", "Bundle Product 2"]
+        expect(page).to have_combo_box "Bought", options: ["Bundle Product 1", "Bundle Product 2", "Bundle"]
       end
       send_keys :escape
       find(:combo_box, "Has not yet bought").click
@@ -524,7 +524,7 @@ describe("Bundle edit page", type: :feature, js: true) do
       within(:fieldset, "Has not yet bought") do
         expect(page).to_not have_button("Bundle Product 1")
         expect(page).to_not have_button("Bundle Product 2")
-        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle", "Bundle Product 1", "Bundle Product 2"]
+        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle Product 1", "Bundle Product 2", "Bundle"]
       end
     end
   end

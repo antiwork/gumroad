@@ -1770,7 +1770,7 @@ describe Link, :vcr do
   end
 
   describe "#bundle_is_not_in_bundle" do
-    let!(:product) { create(:product) }
+    let!(:product) { create(:product, :unpublished) }
 
     context "product is not in bundle" do
       it "does not add an error to the product" do
