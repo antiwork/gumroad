@@ -152,7 +152,7 @@ export type ProfileSection = { id: string; header: string | null; product_names:
 export type ShippingCountry = { code: string; name: string };
 
 export type ContentUpdates = {
-  changedProductIds: string[];
+  uniquePermalinkOrVariantIds: string[];
 } | null;
 
 export const ProductEditContext = React.createContext<{

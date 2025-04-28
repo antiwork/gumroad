@@ -99,7 +99,7 @@ const NotifyAboutProductChangesAlert = () => {
             href={`${newEmailPath}?${paramsToQueryString({
               template: "content_updates",
               product: uniquePermalink,
-              product_ids: contentUpdates?.changedProductIds ?? [],
+              bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
             })}`}
             target="_blank"
           >

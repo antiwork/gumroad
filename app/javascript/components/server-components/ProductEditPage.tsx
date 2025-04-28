@@ -110,6 +110,8 @@ const createContextValue = (props: Props) => ({
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
+  contentUpdates: null,
+  setContentUpdates: () => {},
 });
 
 const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
@@ -161,12 +163,12 @@ const ProductEditPage = (props: Props) => {
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
         if (props.successful_sales_count > 0 && contentUpdated) {
-          const changedProductIds = product.has_same_rich_content_for_all_variants
+          const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
             ? [props.unique_permalink]
             : contentUpdatedVariantIds;
 
           setContentUpdates({
-            changedProductIds,
+            uniquePermalinkOrVariantIds,
           });
         } else {
           showAlert("Changes saved!", "success");
@@ -245,8 +247,6 @@ const ProductEditRouter = async (global: GlobalProps) => {
     <ProductEditContext.Provider
       value={{
         ...createContextValue(props),
-        contentUpdates: null,
-        setContentUpdates: () => {},
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />

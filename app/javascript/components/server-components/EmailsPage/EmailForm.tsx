@@ -320,9 +320,9 @@ export const EmailForm = () => {
     const isBundleMarketing = template === "bundle_marketing";
 
     if (template === "content_updates") {
-      const changedProductIds = searchParams.getAll("product_ids[]");
+      const bought = searchParams.getAll("bought[]");
       setTitle(`New content added to ${productName}`);
-      setBought(changedProductIds);
+      setBought(bought);
       setAudienceType("customers");
       setChannel({ profile: false, email: true });
       setInitialMessage({
