@@ -137,7 +137,7 @@ My email is test@gmail.com <i>Reach out and say hi!</i>
       is_bundle { true }
 
       bundle_products do
-        bundle_products = build_list(:bundle_product, 2, bundle: instance) do |bundle_product, i|
+        build_list(:bundle_product, 2, bundle: instance) do |bundle_product, i|
           bundle_product.product.update!(name: "Bundle Product #{i + 1}")
         end
       end
