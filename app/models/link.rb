@@ -146,7 +146,7 @@ class Link < ApplicationRecord
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"
   has_one :custom_domain, -> { alive }, foreign_key: "product_id"
-  has_many :bundle_products, foreign_key: "bundle_id"
+  has_many :bundle_products, foreign_key: "bundle_id", inverse_of: :bundle
   has_many :wishlist_products, foreign_key: "product_id"
   has_many :call_availabilities, foreign_key: "call_id"
   has_one :call_limitation_info, foreign_key: "call_id"

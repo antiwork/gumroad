@@ -456,7 +456,16 @@ describe BundlesController do
 
       it "converts it to a bundle" do
         expect do
-          put :update, params: { id: product.external_id }
+          put :update, params: {
+            id: product.external_id,
+            products: [
+              {
+                product_id: versioned_product.external_id,
+                variant_id: versioned_product.alive_variants.first.external_id,
+                quantity: 1,
+              },
+            ]
+          }
           product.reload
         end.to change { product.is_bundle }.from(false).to(true)
            .and change { product.native_type }.from(Link::NATIVE_TYPE_DIGITAL).to(Link::NATIVE_TYPE_BUNDLE)
