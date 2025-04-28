@@ -33,14 +33,11 @@ class InvoicePresenter::SupplierInfo
     def gumroad_address_attribute
       {
         label: "Office address",
-        value: safe_join(
-          [
-            GumroadAddress::STREET,
-            "#{GumroadAddress::CITY}, #{GumroadAddress::STATE} #{GumroadAddress::ZIP_PLUS_FOUR}",
-            GumroadAddress::COUNTRY.common_name
-          ],
-          tag.br
-        )
+        value: [
+          GumroadAddress::STREET,
+          "#{GumroadAddress::CITY}, #{GumroadAddress::STATE} #{GumroadAddress::ZIP_PLUS_FOUR}",
+          GumroadAddress::COUNTRY.common_name
+        ].join("\n")
       }
     end
 

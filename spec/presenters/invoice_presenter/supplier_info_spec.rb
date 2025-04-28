@@ -52,7 +52,7 @@ describe InvoicePresenter::SupplierInfo do
               },
               {
                 label: "Office address",
-                value: "548 Market St<br>San Francisco, CA 94104-5401<br>United States",
+                value: "548 Market St\nSan Francisco, CA 94104-5401\nUnited States",
               },
               {
                 label: "Email",
