@@ -469,6 +469,11 @@ describe BundlesController do
           product.reload
         end.to change { product.is_bundle }.from(false).to(true)
            .and change { product.native_type }.from(Link::NATIVE_TYPE_DIGITAL).to(Link::NATIVE_TYPE_BUNDLE)
+
+        expect(product.bundle_products.count).to eq(1)
+        expect(product.bundle_products.first.product).to eq(versioned_product)
+        expect(product.bundle_products.first.variant).to eq(versioned_product.alive_variants.first)
+        expect(product.bundle_products.first.quantity).to eq(1)
       end
     end
 
