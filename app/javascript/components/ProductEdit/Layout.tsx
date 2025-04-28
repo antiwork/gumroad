@@ -34,7 +34,7 @@ export const useProductUrl = (params = {}) => {
       });
 };
 
-const NotifyAboutProductChangesAlert = () => {
+const NotifyAboutProductUpdatesAlert = () => {
   const { uniquePermalink, contentUpdates, setContentUpdates } = useProductEditContext();
   const timerRef = React.useRef<number | null>(null);
   const isVisible = !!contentUpdates;
@@ -205,7 +205,7 @@ export const Layout = ({
 
   return (
     <>
-      <NotifyAboutProductChangesAlert />
+      <NotifyAboutProductUpdatesAlert />
       {/* TODO: remove this legacy uploader stuff */}
       <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
       <header className="sticky-top">
