@@ -290,10 +290,13 @@ describe("Bundle edit page", type: :feature, js: true) do
       end
       uncheck "All products", checked: true
       expect(page).to_not have_selector("[aria-label='Bundle products']")
+
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Bundles must have at least one product.")
     end
 
     context "when the bundle has no products" do
-      let(:empty_bundle) { create(:product, user: seller, is_bundle: true) }
+      let(:empty_bundle) { create(:product, :unpublished, user: seller, is_bundle: true) }
 
       it "displays a placeholder" do
         visit "#{bundle_path(empty_bundle.external_id)}/content"
@@ -305,6 +308,9 @@ describe("Bundle edit page", type: :feature, js: true) do
 
         expect(page).to_not have_section("Select products")
         expect(page).to have_selector("[aria-label='Product selector']")
+
+        click_on "Publish and continue"
+        expect(page).to have_alert(text: "Bundles must have at least one product.")
       end
     end
   end

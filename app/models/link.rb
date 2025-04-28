@@ -189,6 +189,7 @@ class Link < ApplicationRecord
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
+  validate :published_bundle_must_have_at_least_one_product, on: :update
   validate :user_is_eligible_for_service_products, on: :create, if: :is_service?
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
@@ -388,7 +389,6 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
-    enforce_bundle_must_have_at_least_one_product!
 
     if auto_transcode_videos?
       transcode_videos!
@@ -1326,14 +1326,6 @@ class Link < ApplicationRecord
 
       errors.add(:base, "You must connect connect at least one payment method before you can publish this product for sale.")
       raise LinkInvalid, "You must connect connect at least one payment method before you can publish this product for sale."
-    end
-
-    def enforce_bundle_must_have_at_least_one_product!
-      return if not_is_bundle?
-      return if bundle_products.alive.exists?
-
-      errors.add(:base, "Bundles must have at least one product.")
-      raise LinkInvalid, "Bundles must have at least one product."
     end
 
     def free_trial_only_enabled_if_recurring_billing
