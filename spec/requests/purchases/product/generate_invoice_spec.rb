@@ -83,11 +83,11 @@ describe("Generate invoice for purchase", type: :feature, js: true) do
         expect(page).not_to have_content("Additional notes")
       end
 
-      fill_in("Additional notes", with: "Very important custom information.")
+      fill_in("Additional notes", with: "Custom information.")
 
       within find("h5", text: "Invoice").first(:xpath, ".//..") do
         expect(page).to have_content "Additional notes"
-        expect(page).to have_content "Very important custom information."
+        expect(page).to have_content "Custom information."
       end
 
       click_on "Download"
@@ -108,7 +108,7 @@ describe("Generate invoice for purchase", type: :feature, js: true) do
       expect(pdf_text).to include(purchase.link.name)
       expect(pdf_text).to include(purchase.formatted_non_refunded_total_transaction_amount)
       expect(pdf_text).to include("Additional notes")
-      expect(pdf_text).to include("Very important custom information.")
+      expect(pdf_text).to include("Custom information.")
       expect(pdf_text).to_not include("VAT Registration Number")
       expect(pdf_text).to_not include(GUMROAD_VAT_REGISTRATION_NUMBER)
       expect(pdf_text).to have_content("Products supplied by Gumroad.")
