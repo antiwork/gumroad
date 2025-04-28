@@ -4,6 +4,13 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe "Calls Edit", type: :feature, js: true do
+  def upload_image(filenames)
+    click_on "Upload images or videos"
+    page.attach_file(filenames.map { |filename| file_fixture(filename) }) do
+      select_tab "Computer files"
+    end
+  end
+
   let(:seller) { create(:user, :eligible_for_service_products) }
   let(:call) { create(:call_product, user: seller) }
 
@@ -11,9 +18,25 @@ describe "Calls Edit", type: :feature, js: true do
 
   before { Feature.activate_user(:product_edit_react, seller) }
 
+  it "supports attaching covers on calls without durations" do
+    call = create(:call_product, user: seller, durations: [])
+    visit edit_link_path(call.unique_permalink)
+    upload_image(["test.png"])
+    wait_for_ajax
+    sleep 1
+
+    select_disclosure "Add cover" do
+      upload_image(["test-small.jpg"])
+    end
+    wait_for_ajax
+
+    within_section "Cover", section_element: :section do
+      expect(page).to have_selector("button[role='tab']", count: 2)
+    end
+  end
+
   it "allows editing durations" do
     call = create(:call_product, user: seller, durations: [])
-
     visit edit_link_path(call.unique_permalink)
 
     click_on "Add duration"

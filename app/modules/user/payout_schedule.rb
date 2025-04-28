@@ -8,11 +8,14 @@ module User::PayoutSchedule
   WEEKLY = "weekly"
   MONTHLY = "monthly"
   QUARTERLY = "quarterly"
+  DAILY = "daily"
 
   include CurrencyHelper
 
   def next_payout_date
     return nil if unpaid_balance_cents < minimum_payout_amount_cents
+
+    return Date.current + 1 if payout_frequency == DAILY && Payouts.is_user_payable(self, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
 
     upcoming_payout_date = get_initial_payout_date(Date.today)
 
@@ -32,7 +35,11 @@ module User::PayoutSchedule
   end
 
   def payout_amount_for_payout_date(payout_date)
-    unpaid_balance_cents_up_to_date(payout_date - PAYOUT_DELAY_DAYS)
+    if payout_frequency == DAILY && Payouts.is_user_payable(self, payout_date - 1, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      instantly_payable_unpaid_balance_cents_up_to_date(payout_date - 1)
+    else
+      unpaid_balance_cents_up_to_date(payout_date - PAYOUT_DELAY_DAYS)
+    end
   end
 
   def formatted_balance_for_next_payout_date
@@ -81,6 +88,8 @@ module User::PayoutSchedule
 
     def get_initial_payout_date(date)
       case payout_frequency
+      # Daily payouts are handled separately, so this date is a fallback, for any amount not able to be paid instantly
+      when DAILY then last_friday_of_week(date)
       when WEEKLY then last_friday_of_week(date)
       when MONTHLY then last_friday_of_month(date)
       when QUARTERLY then last_friday_of_quarter(date)
@@ -89,6 +98,8 @@ module User::PayoutSchedule
 
     def advance_payout_date(date)
       case payout_frequency
+      # Daily payouts are handled separately, so this date is a fallback, for any amount not able to be paid instantly
+      when DAILY then last_friday_of_week(date.next_day(7))
       when WEEKLY then last_friday_of_week(date.next_day(7))
       when MONTHLY then last_friday_of_month(date.next_month)
       when QUARTERLY then last_friday_of_quarter(date.next_month(3))

@@ -200,7 +200,7 @@ const GenerateInvoicePage = ({
           {supplier_info.attributes.map((attribute, index) => (
             <div key={index}>
               {attribute.label ? <h6>{attribute.label}</h6> : null}
-              {attribute.value}
+              <p className="whitespace-pre">{attribute.value}</p>
             </div>
           ))}
           <h5>{seller_info.heading}</h5>

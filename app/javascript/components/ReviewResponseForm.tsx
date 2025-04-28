@@ -12,11 +12,13 @@ export const ReviewResponseForm = ({
   purchaseId,
   onChange,
   onEditingChange,
+  buttonProps = { small: false },
 }: {
   message: string | undefined;
   purchaseId: string;
   onChange: (message: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
+  buttonProps?: React.ComponentProps<typeof Button>;
 }) => {
   const loggedInUser = useLoggedInUser();
 
@@ -54,7 +56,7 @@ export const ReviewResponseForm = ({
             required
             autoFocus
           />
-          <Button outline small disabled={isLoading} type="submit">
+          <Button {...buttonProps} disabled={isLoading} type="submit">
             {originalMessage
               ? isLoading
                 ? "Updating..."
@@ -65,7 +67,7 @@ export const ReviewResponseForm = ({
           </Button>
         </form>
       ) : (
-        <Button outline small onClick={() => setIsEditing(true)}>
+        <Button {...buttonProps} onClick={() => setIsEditing(true)}>
           {originalMessage ? "Edit response" : "Add response"}
         </Button>
       )}

@@ -4,7 +4,7 @@ FactoryBot.define do
   factory :product_refund_policy do
     product
     seller { product.user }
-    title { "Refund policy" }
+    max_refund_period_in_days { RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS }
     fine_print { "This is a product-level refund policy" }
   end
 end

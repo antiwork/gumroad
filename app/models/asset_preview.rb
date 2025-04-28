@@ -264,7 +264,7 @@ class AssetPreview < ApplicationRecord
     end
 
     def reset_moderated_by_iffy_flag
-      link&.update!(moderated_by_iffy: false)
+      link&.update_attribute(:moderated_by_iffy, false)
     end
 
     def safe_url?(url)

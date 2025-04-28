@@ -606,6 +606,7 @@ const types: Record<string, string> = {
   "mxu,m4u": "video/vnd.mpegurl",
   pyv: "video/vnd.ms-playready.media.pyv",
   viv: "video/vnd.vivo",
+  webm: "video/webm",
   "dv,dif": "video/x-dv",
   f4v: "video/x-f4v",
   fli: "video/x-fli",

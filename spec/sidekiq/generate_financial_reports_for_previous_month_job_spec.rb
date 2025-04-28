@@ -20,7 +20,7 @@ describe GenerateFinancialReportsForPreviousMonthJob do
 
       expect(CreateCanadaMonthlySalesReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
       expect(GenerateFeesByCreatorLocationReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
-      expect(CreateUsStatesSalesSummaryReportJob).to have_enqueued_sidekiq_job(%w[AR CO CT DC GA HI IA IN KS KY LA MD MI MN NC ND NE NJ OH OK PA SD TN UT VT WA WI WV WY], an_instance_of(Integer), an_instance_of(Integer))
+      expect(CreateUsStatesSalesSummaryReportJob).to have_enqueued_sidekiq_job(Compliance::Countries::TAXABLE_US_STATE_CODES, an_instance_of(Integer), an_instance_of(Integer))
       expect(GenerateCanadaSalesReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
     end
   end

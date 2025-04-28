@@ -131,10 +131,9 @@ describe("Bundle edit page", type: :feature, js: true) do
         select_combo_box_option "Other product"
         click_on "Copy"
       end
-      find_field("Refund policy", with: "Refund policy").fill_in with: "Hi I refund policy"
+      select "7-day money back guarantee", from: "Refund period"
       find_field("Fine print (optional)", with: "This is a product-level refund policy").fill_in with: "I hate being small"
-      in_preview { expect(page).to have_modal("Hi I refund policy", text: "I hate being small") }
-      find_field("Refund policy").click
+      in_preview { expect(page).to have_modal("7-day money back guarantee", text: "I hate being small") }
 
       product_page = window_opened_by { click_on "Preview" }
       expect(page).to have_alert(text: "Changes saved!")
@@ -142,7 +141,8 @@ describe("Bundle edit page", type: :feature, js: true) do
       within_window(product_page) { expect(page.current_url).to eq(bundle.long_url) }
 
       expect(bundle.product_refund_policy_enabled?).to eq(true)
-      expect(bundle.product_refund_policy.title).to eq("Hi I refund policy")
+      expect(bundle.product_refund_policy.max_refund_period_in_days).to eq(7)
+      expect(bundle.product_refund_policy.title).to eq("7-day money back guarantee")
       expect(bundle.product_refund_policy.fine_print).to eq("I hate being small")
     end
   end
@@ -290,10 +290,13 @@ describe("Bundle edit page", type: :feature, js: true) do
       end
       uncheck "All products", checked: true
       expect(page).to_not have_selector("[aria-label='Bundle products']")
+
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Bundles must have at least one product.")
     end
 
     context "when the bundle has no products" do
-      let(:empty_bundle) { create(:product, user: seller, is_bundle: true) }
+      let(:empty_bundle) { create(:product, :unpublished, user: seller, is_bundle: true) }
 
       it "displays a placeholder" do
         visit "#{bundle_path(empty_bundle.external_id)}/content"
@@ -305,6 +308,9 @@ describe("Bundle edit page", type: :feature, js: true) do
 
         expect(page).to_not have_section("Select products")
         expect(page).to have_selector("[aria-label='Product selector']")
+
+        click_on "Publish and continue"
+        expect(page).to have_alert(text: "Bundles must have at least one product.")
       end
     end
   end
@@ -495,7 +501,7 @@ describe("Bundle edit page", type: :feature, js: true) do
       within(:fieldset, "Has not yet bought") do
         expect(page).to_not have_button("Bundle Product 1")
         expect(page).to_not have_button("Bundle Product 2")
-        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle", "Bundle Product 1", "Bundle Product 2"]
+        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle Product 1", "Bundle Product 2", "Bundle"]
       end
     end
 
@@ -510,7 +516,7 @@ describe("Bundle edit page", type: :feature, js: true) do
       within(:fieldset, "Bought") do
         expect(page).to_not have_button("Bundle Product 1")
         expect(page).to_not have_button("Bundle Product 2")
-        expect(page).to have_combo_box "Bought", options: ["Bundle", "Bundle Product 1", "Bundle Product 2"]
+        expect(page).to have_combo_box "Bought", options: ["Bundle Product 1", "Bundle Product 2", "Bundle"]
       end
       send_keys :escape
       find(:combo_box, "Has not yet bought").click
@@ -518,7 +524,7 @@ describe("Bundle edit page", type: :feature, js: true) do
       within(:fieldset, "Has not yet bought") do
         expect(page).to_not have_button("Bundle Product 1")
         expect(page).to_not have_button("Bundle Product 2")
-        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle", "Bundle Product 1", "Bundle Product 2"]
+        expect(page).to have_combo_box "Has not yet bought", options: ["Bundle Product 1", "Bundle Product 2", "Bundle"]
       end
     end
   end

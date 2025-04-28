@@ -11,7 +11,18 @@ class ProductReview < ApplicationRecord
   belongs_to :link, optional: true
   belongs_to :purchase, optional: true
   has_one :response, class_name: "ProductReviewResponse"
+
   has_many :videos, dependent: :destroy, class_name: "ProductReviewVideo"
+  has_many :alive_videos, -> { alive }, class_name: "ProductReviewVideo"
+  has_one :approved_video, -> { alive.approved.latest }, class_name: "ProductReviewVideo"
+  has_one :pending_video, -> { alive.pending_review.latest }, class_name: "ProductReviewVideo"
+  has_one :editable_video, -> { alive.editable.latest }, class_name: "ProductReviewVideo"
+
+  scope :visible_on_product_page,
+        -> {
+          left_joins(:approved_video)
+            .where("product_reviews.has_message = true OR product_review_videos.id IS NOT NULL")
+        }
 
   validates_presence_of :purchase
   validates_presence_of :link
@@ -33,6 +44,8 @@ class ProductReview < ApplicationRecord
   end
   after_save :update_product_review_stat
 
+  after_create_commit :notify_seller
+
   private
     def update_product_review_stat
       return if rating_previous_change.nil?
@@ -41,5 +54,10 @@ class ProductReview < ApplicationRecord
 
     def message_cannot_contain_adult_keywords
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(message)
+    end
+
+    def notify_seller
+      return if link.user.disable_reviews_email?
+      ContactingCreatorMailer.review_submitted(id).deliver_later
     end
 end

@@ -60,7 +60,7 @@ describe PostToIndividualPingEndpointWorker do
 
   it "does not raise when it encounters an internet error" do
     allow(HTTParty).to receive(:post).and_raise(SocketError.new("socket error message"))
-    expect(Rails.logger).to receive(:info).with("[SocketError] PostToIndividualPingEndpointWorker error=\"socket error message\" url=http://example.com content_type=#{Mime[:url_encoded_form]} params={\"q\"=>47}")
+    expect(Rails.logger).to receive(:info).with("[SocketError] PostToIndividualPingEndpointWorker error=\"socket error message\" url=http://example.com content_type=#{Mime[:url_encoded_form]} params={\"q\" => 47}")
     expect(HTTParty).to receive(:post).exactly(1).times
 
     PostToIndividualPingEndpointWorker.new.perform("http://example.com", { "q" => 47 })
@@ -93,7 +93,7 @@ describe PostToIndividualPingEndpointWorker do
   describe "logging" do
     it "logs url, response code and params" do
       expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
-      expect(Rails.logger).to receive(:info).with("PostToIndividualPingEndpointWorker response=200 url=https://notification.com content_type=#{Mime[:url_encoded_form]} params={\"a\"=>1}")
+      expect(Rails.logger).to receive(:info).with("PostToIndividualPingEndpointWorker response=200 url=https://notification.com content_type=#{Mime[:url_encoded_form]} params={\"a\" => 1}")
 
       PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 })
     end

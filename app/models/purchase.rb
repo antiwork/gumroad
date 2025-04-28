@@ -970,7 +970,7 @@ class Purchase < ApplicationRecord
       json[:display_product_reviews] = purchase.link.display_product_reviews?
       review = purchase.original_product_review
       json[:product_rating] = review.rating if review.present?
-      json[:review] = { rating: review.rating, message: review.message } if review.present?
+      json[:review] = ProductReviewPresenter.new(review).review_form_props if review.present?
       json[:has_shipping_to_show] = purchase.shipping_cents > 0
       json[:shipping_amount] = purchase.formatted_shipping_amount
       json[:has_sales_tax_to_show] = purchase.was_purchase_taxable && purchase.price_cents > 0

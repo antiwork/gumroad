@@ -103,6 +103,7 @@ class CustomerPresenter
           response: review.response ? {
             message: review.response.message,
           } : nil,
+          videos: review_videos_props(alive_videos: review.alive_videos, pundit_user:),
         } : nil,
       call: call.present? ?
         {
@@ -171,5 +172,17 @@ class CustomerPresenter
         extension: File.extname(file.filename.to_s).delete(".").upcase,
         key: file.key
       }
+    end
+
+    def review_videos_props(alive_videos:, pundit_user:)
+      # alive_videos of different states are pre-loaded together to simplify
+      # the query, and there is guaranteed to be at-most one pending and
+      # at-most one approved video.
+      pending = alive_videos.find(&:pending_review?)
+      approved = alive_videos.find(&:approved?)
+
+      [pending, approved]
+        .compact
+        .map { |video| ProductReviewVideoPresenter.new(video).props(pundit_user:) }
     end
 end

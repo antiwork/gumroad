@@ -108,9 +108,6 @@ class CustomerMailer < ApplicationMailer
   def send_to_kindle(kindle_email, product_file_id)
     product_file = ProductFile.find(product_file_id)
 
-    # Set creator to nil if the product is deleted
-    creator = product_file.link.try(:user)
-
     temp_file = Tempfile.new
     product_file.s3_object.download_file(temp_file.path)
     temp_file.rewind

@@ -199,3 +199,4 @@ gem "ruby-openai", "~> 7.0"
 gem "anycable-rails", "~> 1.5"
 
 gem "react_on_rails", "~> 14.0"
+gem "psych", "~> 5.2.3"

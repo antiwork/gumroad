@@ -1572,6 +1572,52 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe ".subscribers_data" do
+    let(:recipient) { create(:user) }
+    let(:filename) { "subscribers-export-#{SecureRandom.hex}.csv" }
+    let(:tempfile) { Tempfile.new }
+
+    before do
+      tempfile.puts "csv content"
+    end
+
+    it "contains the correct attachment and attributes" do
+      mail = ContactingCreatorMailer.subscribers_data(
+        recipient: recipient,
+        tempfile: tempfile,
+        filename: filename,
+      )
+
+      expect(mail.to).to eq([recipient.email])
+      expect(mail.subject).to include("Here is your subscribers data")
+      expect(mail.attachments.size).to eq(1)
+      expect(mail.attachments.first.body.raw_source).to eq("csv content\r\n")
+    end
+
+    context "when attachment size is above threshold" do
+      let(:download_url) { "https://example.com/download/subscribers_data.csv" }
+
+      before do
+        allow_any_instance_of(MailerAttachmentOrLinkService).to receive(:perform).and_return(
+          { file: nil, url: download_url }
+        )
+      end
+
+      it "contains a link instead of an attachment" do
+        mail = ContactingCreatorMailer.subscribers_data(
+          recipient: recipient,
+          tempfile: tempfile,
+          filename: filename,
+        )
+
+        expect(mail.to).to eq([recipient.email])
+        expect(mail.subject).to include("Here is your subscribers data")
+        expect(mail.attachments.size).to eq(0)
+        expect(mail.body).to have_link("link", href: download_url)
+      end
+    end
+  end
+
   describe "video_transcode_failed" do
     before do
       @user = create(:user, name: "Person")
@@ -1705,6 +1751,23 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to_not have_text('""')
       end
     end
+
+    context "when the review has a pending video" do
+      let!(:pending_video) do
+        create(
+          :product_review_video,
+          :pending_review,
+          product_review: review,
+          video_file: create(:video_file, :with_thumbnail)
+        )
+      end
+
+      it "includes the video thumbnail" do
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.body.encoded).to have_selector("img[src='#{pending_video.video_file.thumbnail_url}']")
+        expect(mail.body.encoded).to have_link("Review & approve video", href: customers_url(query: review.purchase.email))
+      end
+    end
   end
 
   describe "#upcoming_call_reminder" do
@@ -1828,6 +1891,18 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include("We're super sorry about the inconvenience!")
         expect(mail.body.encoded).to include("Sahil and the Gumroad team")
       end
+    end
+  end
+
+  describe "product_level_refund_policies_reverted" do
+    let(:seller) { create(:user) }
+
+    it "sends the email correctly" do
+      mail = ContactingCreatorMailer.product_level_refund_policies_reverted(seller.id)
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "Important: Refund policy changes effective immediately"
+      expect(mail.body.encoded).to include "Hey #{seller.name_or_username},"
     end
   end
 end

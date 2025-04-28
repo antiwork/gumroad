@@ -108,6 +108,6 @@ class RichContent < ApplicationRecord
 
     def reset_moderated_by_iffy_flag
       return unless entity.is_a?(Link)
-      entity.update!(moderated_by_iffy: false)
+      entity.update_attribute(:moderated_by_iffy, false)
     end
 end

@@ -321,7 +321,7 @@ describe("ProductMoreOptionScenario", type: :feature, js: true) do
 
       expect(page).not_to have_text("Copy from other products")
 
-      fill_in "Refund policy", with: "Refund policy"
+      select "7-day money back guarantee", from: "Refund period"
       fill_in "Fine print (optional)", with: "This is the fine print"
 
       expect do
@@ -329,7 +329,7 @@ describe("ProductMoreOptionScenario", type: :feature, js: true) do
       end.to change { product.reload.product_refund_policy_enabled }.from(false).to(true)
       refund_policy = product.product_refund_policy
 
-      expect(refund_policy.title).to eq("Refund policy")
+      expect(refund_policy.title).to eq("7-day money back guarantee")
       expect(refund_policy.fine_print).to eq("This is the fine print")
     end
 
@@ -351,6 +351,7 @@ describe("ProductMoreOptionScenario", type: :feature, js: true) do
         end.to change { product.reload.product_refund_policy_enabled }.from(false).to(true)
         refund_policy = product.product_refund_policy
 
+        expect(refund_policy.max_refund_period_in_days).to eq(other_refund_policy.max_refund_period_in_days)
         expect(refund_policy.title).to eq(other_refund_policy.title)
         expect(refund_policy.fine_print).to eq(other_refund_policy.fine_print)
       end

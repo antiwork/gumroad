@@ -39,7 +39,7 @@ def create_purchase(seller, buyer, product)
   purchase.save!
   purchase.update(purchase_state: "successful", succeeded_at: Time.current)
 
-  purchase.post_review(3)
+  purchase.post_review(rating: 3)
 end
 
 def create_recommendable_product_if_not_exists(user, taxonomy_slug)

@@ -1565,6 +1565,113 @@ describe "Sales page", type: :feature, js: true do
       end
     end
 
+    describe "product review videos" do
+      let(:review) { create(:product_review, purchase: purchase1, message: "Amazing!") }
+      let!(:pending_video) do
+        create(
+          :product_review_video,
+          :pending_review,
+          product_review: review,
+          video_file: create(:video_file, :with_thumbnail)
+        )
+      end
+      let!(:approved_video) do
+        create(
+          :product_review_video,
+          :approved,
+          product_review: review,
+          video_file: create(:video_file, :with_thumbnail)
+        )
+      end
+
+      it "allows approving a video" do
+        visit customers_path
+        find(:table_row, { "Email" => purchase1.email }).click
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Remove")
+          end
+
+          within_section "Pending video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+            expect(page).to have_text("Approve")
+            expect(page).to have_text("Reject")
+          end
+        end
+
+        click_on "Approve"
+        expect(page).to have_alert(text: "This video is now live!")
+        expect(pending_video.reload.approved?).to eq(true)
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+          end
+          expect(page).to_not have_section("Pending video")
+        end
+      end
+
+      it "allows rejecting a video" do
+        visit customers_path
+        find(:table_row, { "Email" => purchase1.email }).click
+
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Remove")
+          end
+
+          within_section "Pending video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
+            expect(page).to have_text("Approve")
+          end
+        end
+
+        # Rejecting the pending video should not affect the approved video.
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Remove")
+          end
+
+          within_section "Pending video" do
+            expect(page).to have_image(src: pending_video.video_file.thumbnail_url)
+            expect(page).to have_text("Reject")
+            expect(page).to have_text("Approve")
+
+            click_on "Reject"
+          end
+        end
+
+        expect(page).to have_alert(text: "This video has been removed.")
+        expect(pending_video.reload.rejected?).to eq(true)
+
+        within_section "Review" do
+          expect(page).to_not have_section("Pending video")
+        end
+
+        # Removing the approved video requires confirmation.
+        within_section "Review" do
+          within_section "Approved video" do
+            expect(page).to have_image(src: approved_video.video_file.thumbnail_url)
+            expect(page).to have_text("Remove")
+
+            click_on "Remove"
+
+            within_modal "Remove approved video?" do
+              click_on "Remove video"
+            end
+          end
+        end
+
+        expect(page).to_not have_section("Approved video")
+        expect(approved_video.reload.rejected?).to eq(true)
+      end
+    end
+
     describe "call" do
       let(:call_product) { create(:call_product, :available_for_a_year, user: seller) }
       let!(:call_purchase) { create(:call_purchase, seller:, link: call_product, full_name: "Call Customer", created_at: Time.current) }

@@ -110,6 +110,7 @@ describe CustomerPresenter do
             response: {
               message: "Thank you!",
             },
+            videos: [],
           },
           call: nil,
           commission: nil,
@@ -309,6 +310,23 @@ describe CustomerPresenter do
             term: utm_link.utm_term,
             content: utm_link.utm_content,
           }
+        )
+      end
+    end
+
+    context "purchase has review videos" do
+      let(:purchase) { create(:purchase) }
+      let(:product_review) { create(:product_review, purchase:) }
+
+      let!(:alive_approved_video) { create(:product_review_video, :approved, product_review:) }
+      let!(:alive_pending_video) { create(:product_review_video, :pending_review, product_review:) }
+      let!(:soft_deleted_video) { create(:product_review_video, :approved, product_review:, deleted_at: Time.current) }
+
+      it "includes the review videos" do
+        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
+        expect(props[:review][:videos]).to contain_exactly(
+          ProductReviewVideoPresenter.new(alive_approved_video).props(pundit_user:),
+          ProductReviewVideoPresenter.new(alive_pending_video).props(pundit_user:),
         )
       end
     end

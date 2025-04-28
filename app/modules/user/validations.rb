@@ -69,9 +69,9 @@ module User::Validations
     end
 
     def payout_frequency_is_valid
-      return if [User::PayoutSchedule::WEEKLY, User::PayoutSchedule::MONTHLY, User::PayoutSchedule::QUARTERLY].include?(payout_frequency)
+      return if [User::PayoutSchedule::DAILY, User::PayoutSchedule::WEEKLY, User::PayoutSchedule::MONTHLY, User::PayoutSchedule::QUARTERLY].include?(payout_frequency)
 
-      errors.add(:payout_frequency, "must be weekly, monthly, or quarterly")
+      errors.add(:payout_frequency, "must be daily, weekly, monthly, or quarterly")
     end
 
   protected

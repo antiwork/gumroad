@@ -56,7 +56,7 @@ export type User = {
   joined_at: string;
 };
 
-const PAYOUT_FREQUENCIES = ["weekly", "monthly", "quarterly"] as const;
+const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
 
 export type ComplianceInfo = {
@@ -148,6 +148,7 @@ type Props = {
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
+  payout_frequency_daily_supported: boolean;
 };
 
 export type PayoutMethod = "bank" | "card" | "paypal" | "stripe";
@@ -888,9 +889,27 @@ const PaymentsPage = (props: Props) => {
                 options={PAYOUT_FREQUENCIES.map((frequency) => ({
                   id: frequency,
                   label: frequency.charAt(0).toUpperCase() + frequency.slice(1),
+                  disabled: frequency === "daily" && !props.payout_frequency_daily_supported,
                 }))}
               />
+              <small>
+                Daily payouts are only available for US users with eligible bank accounts and more than 4 previous
+                payouts.
+              </small>
             </fieldset>
+            {payoutFrequency === "daily" && props.payout_frequency_daily_supported ? (
+              <div role="status" className="info">
+                <div>
+                  Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
+                  <b>3% fee</b>.
+                </div>
+              </div>
+            ) : null}
+            {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
+              <div role="status" className="danger">
+                <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
+              </div>
+            )}
             <fieldset className={cx({ danger: payoutThresholdCents.error })}>
               <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>
               <PriceInput

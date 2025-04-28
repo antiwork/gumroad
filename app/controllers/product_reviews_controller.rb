@@ -15,8 +15,8 @@ class ProductReviewsController < ApplicationController
     pagination, reviews = pagy(
       product.product_reviews
         .alive
-        .includes(:response, purchase: :purchaser)
-        .where(has_message: true)
+        .visible_on_product_page
+        .includes(:response, approved_video: :video_file, purchase: :purchaser)
         .order(rating: :desc, created_at: :desc, id: :desc),
       page: [permitted_params[:page].to_i, 1].max,
       limit: PER_PAGE
@@ -31,10 +31,9 @@ class ProductReviewsController < ApplicationController
   def show
     review = ProductReview
       .alive
+      .visible_on_product_page
       .includes(:response, purchase: :purchaser, link: :user)
-      .find_by_external_id(permitted_params[:id])
-
-    return head :not_found unless review.present? && review.has_message?
+      .find_by_external_id!(permitted_params[:id])
 
     product = review.link
     return head :forbidden unless product.display_product_reviews || current_seller == product.user
@@ -62,12 +61,16 @@ class ProductReviewsController < ApplicationController
         return
       end
 
-      succeeded = purchase.post_review(params[:rating].to_i, params[:message])
-      if succeeded
-        render json: { success: true }
-      else
-        render json: { success: false, message: "Sorry, you cannot review this product." }
-      end
+      review = purchase.post_review(
+        rating: set_params[:rating].to_i,
+        message: set_params[:message],
+        video_options: set_params[:video_options] || {}
+      )
+
+      render json: {
+        success: true,
+        review: ProductReviewPresenter.new(review.reload).review_form_props
+      }
     rescue ActiveRecord::RecordInvalid => e
       render json: { success: false, message: e.message }
     rescue StandardError
@@ -76,5 +79,15 @@ class ProductReviewsController < ApplicationController
 
     def permitted_params
       params.permit(:product_id, :page, :id)
+    end
+
+    def set_params
+      params.permit(
+        :rating, :message,
+        video_options: [
+          { destroy: [:id] },
+          { create: [:url, :thumbnail_signed_id] }
+        ]
+      )
     end
 end

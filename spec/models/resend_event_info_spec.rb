@@ -194,7 +194,7 @@ RSpec.describe ResendEventInfo do
         )
         expect(event_info.workflow_ids).to eq([seller_workflow.id.to_s])
         expect(event_info.mailer_class_and_method).to eq("CustomerMailer.abandoned_cart")
-        expect(event_info.mailer_args).to eq("[#{cart.id}, {\"#{seller_workflow.id}\"=>[#{seller.products.first.id}]}]")
+        expect(event_info.mailer_args).to eq("[#{cart.id}, {\"#{seller_workflow.id}\" => [#{seller.products.first.id}]}]")
         expect(event_info).to be_for_abandoned_cart_email
         expect(event_info).not_to be_for_receipt_email
         expect(event_info).not_to be_for_installment_email

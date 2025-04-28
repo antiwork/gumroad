@@ -183,7 +183,7 @@ export const ProductEditContext = React.createContext<{
   googleClientId: string;
   googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: RefundPolicy;
+  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
   cancellationDiscountsEnabled: boolean;
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;

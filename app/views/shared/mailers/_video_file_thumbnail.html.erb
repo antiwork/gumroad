@@ -1,0 +1,14 @@
+<figure style="width: 100%; position: relative;">
+  <% if video_file.thumbnail_url.present? %>
+    <%= image_tag(
+      video_file.thumbnail_url,
+      width: 1280,
+      height: 720,
+      style: "width: 100%; height: auto;"
+    ) %>
+  <% else %>
+    <!-- 16:9 aspect ratio via padding -->
+    <div style="background-color: black; display:block; width:100%; height:0; padding-top:56.25%;">
+    </div>
+  <% end %>
+</figure>

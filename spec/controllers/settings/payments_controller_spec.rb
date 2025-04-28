@@ -154,7 +154,7 @@ describe Settings::PaymentsController, :vcr do
         put :update, params: { payout_frequency: "invalid" }, as: :json
 
         expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error_message"]).to eq("Payout frequency must be weekly, monthly, or quarterly")
+        expect(response.parsed_body["error_message"]).to eq("Payout frequency must be daily, weekly, monthly, or quarterly")
         expect(user.reload.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
       end
     end

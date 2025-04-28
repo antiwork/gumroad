@@ -9,16 +9,14 @@ class ReviewsPresenter
 
   def reviews_props
     {
-      reviews: user.product_reviews.map do |review|
+      reviews: user.product_reviews.includes(:editable_video).map do |review|
         product = review.link
-        {
+        ProductReviewPresenter.new(review).review_form_props.merge(
           id: review.external_id,
-          rating: review.rating,
-          message: review.message,
           purchase_id: ObfuscateIds.encrypt(review.purchase_id),
           purchase_email_digest: review.purchase.email_digest,
           product: product_props(product),
-        }
+        )
       end,
       purchases: user.purchases.allowing_reviews_to_be_counted.where.missing(:product_review).order(created_at: :desc).filter_map do |purchase|
         if !purchase.seller.disable_reviews_after_year? || purchase.created_at > 1.year.ago

@@ -359,7 +359,7 @@ class ProductFile < ApplicationRecord
 
     def reset_moderated_by_iffy_flag
       return unless filegroup == "image"
-      link&.update!(moderated_by_iffy: false)
+      link&.update_attribute(:moderated_by_iffy, false)
     end
 
     def stamp_existing_pdfs_if_needed

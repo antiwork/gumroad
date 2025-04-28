@@ -150,7 +150,7 @@ describe ProductPresenter::ProductProps do
                 tier_name: "hello",
                 tier_description: nil
               },
-              review: { rating: 5, message: purchase.product_review.message },
+              review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
               video_reviews_enabled: seller.video_reviews_enabled?,
               should_show_receipt: true,
               is_gift_receiver_purchase: false,
@@ -366,7 +366,7 @@ describe ProductPresenter::ProductProps do
               email_digest: purchase.email_digest,
               created_at: purchase.created_at,
               membership: nil,
-              review: { rating: 5, message: "This is my review!" },
+              review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
               video_reviews_enabled: seller.video_reviews_enabled?,
               should_show_receipt: true,
               is_gift_receiver_purchase: false,
