@@ -888,33 +888,42 @@ describe("Product Edit Scenario", type: :feature, js: true) do
     expect(product.description).to eq("<p>Hi there!</p><review-card reviewid=\"#{review2.external_id}\"></review-card><review-card reviewid=\"#{review1.external_id}\"></review-card>")
   end
 
-  it "allows notifying users about product changes" do
-    product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
+  shared_examples "notifying users about content updates" do |factory_name|
+    it "allows notifying users" do
+      product = create(factory_name, user: seller, name: "Sample product", price_cents: 1000)
 
-    allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
+      allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
 
-    visit edit_link_path(product.unique_permalink)
-    select_tab "Content"
+      visit edit_link_path(product.unique_permalink)
+      select_tab "Content"
 
-    editor = find("[aria-label='Content editor']")
-    set_rich_text_editor_input(editor, to_text: "Hi there!")
+      editor = find("[aria-label='Content editor']")
+      set_rich_text_editor_input(editor, to_text: "Hi there!")
 
-    click_on "Save changes"
-    expect(page).to have_alert(text: "Changes saved!")
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
 
-    set_rich_text_editor_input(editor, to_text: "New content")
-    click_on "Save changes"
-    expect(page).to have_alert(text: "Changes saved!")
-    new_window = window_opened_by { click_on "Send notification" }
+      set_rich_text_editor_input(editor, to_text: "New content")
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
 
-    within_window new_window do
-      wait_for_ajax
+      new_window = window_opened_by { click_on "Send notification" }
+      within_window new_window do
+        wait_for_ajax
 
-      expect(page).to have_radio_button("Customers only", checked: true)
-      expect(page).to have_field("Title", with: "New content added to #{product.name}")
+        expect(page).to have_field("Title", with: "New content added to #{product.name}")
+      end
     end
   end
 
+  describe "Content updates" do
+    context "when shared content" do
+      include_examples "notifying users about content updates", :product
+    end
+    context "when variants change" do
+      include_examples "notifying users about content updates", :product_with_digital_versions
+    end
+  end
 
   it "allows toggling the community chat integration on and off" do
     Feature.activate_user(:communities, seller)
