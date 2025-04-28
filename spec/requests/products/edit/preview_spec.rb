@@ -211,10 +211,7 @@ describe("Product Edit Previews", type: :feature, js: true) do
     it_behaves_like "displaying collaborator"
 
     context "that is a bundle" do
-      before do
-        product.update!(is_bundle: true)
-        create_list(:bundle_product, 2, bundle: product)
-      end
+      let(:product) { create(:product, :bundle, user: seller) }
 
       it_behaves_like "displaying collaborator"
     end
