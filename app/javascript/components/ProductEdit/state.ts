@@ -151,7 +151,7 @@ export type ProfileSection = { id: string; header: string | null; product_names:
 
 export type ShippingCountry = { code: string; name: string };
 
-export type ContentChangesOptions = {
+export type ContentUpdates = {
   changedProductIds: string[];
 } | null;
 
@@ -185,8 +185,8 @@ export const ProductEditContext = React.createContext<{
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: RefundPolicy;
   cancellationDiscountsEnabled: boolean;
-  notifyAboutChangesOptions: ContentChangesOptions;
-  setNotifyAboutChangesOptions: React.Dispatch<React.SetStateAction<ContentChangesOptions>>;
+  contentUpdates: ContentUpdates;
+  setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 

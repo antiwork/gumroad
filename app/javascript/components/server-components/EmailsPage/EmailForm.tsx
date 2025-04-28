@@ -315,11 +315,11 @@ export const EmailForm = () => {
     const tier = searchParams.get("tier");
     const permalink = searchParams.get("product");
     const productName = productOptions.find((option) => option.id === permalink)?.label;
-    const isBundleMarketing = searchParams.get("bundle_marketing") === "true";
     const canSendToCustomers = context.audience_types.includes("customers");
-    const newContentAdded = searchParams.get("new_content_added") === "true";
+    const template = searchParams.get("template");
+    const isBundleMarketing = template === "bundle_marketing";
 
-    if (newContentAdded) {
+    if (template === "content_updates") {
       const changedProductIds = searchParams.getAll("product_ids[]");
       setTitle(`New content added to ${productName}`);
       setBought(changedProductIds);

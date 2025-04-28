@@ -27,7 +27,7 @@ import {
   ProfileSection,
   ExistingFileEntry,
   ShippingCountry,
-  ContentChangesOptions,
+  ContentUpdates,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -112,26 +112,27 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
 });
 
-const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean =>
-  pages1.length === pages2.length && pages1.every((page, i) => isEqual(page.description, pages2[i]?.description));
+const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
 
-const findDirtyContent = (product: Product, lastSavedProduct: Product) => {
-  const changedVariants = product.variants.filter((variant) => {
-    const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
-    return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
-  });
+const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
+  const contentUpdatedVariantIds = product.variants
+    .filter((variant) => {
+      const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
+      return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
+    })
+    .map((variant) => variant.id);
 
-  const productHasChanged = !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
+  const sharedContentUpdated = !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
 
   return {
-    productHasChanged,
-    changedVariants,
+    sharedContentUpdated,
+    contentUpdatedVariantIds,
   };
 };
 
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
-  const [notifyAboutChangesOptions, setNotifyAboutChangesOptions] = React.useState<ContentChangesOptions>(null);
+  const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
 
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
@@ -153,15 +154,18 @@ const ProductEditPage = (props: Props) => {
       const response = await saveProduct(props.unique_permalink, props.id, product);
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
-        const { changedVariants, productHasChanged } = findDirtyContent(product, lastSavedProductRef.current);
-        const isDirty = productHasChanged || changedVariants.length > 0;
+        const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
+          product,
+          lastSavedProductRef.current,
+        );
+        const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
-        if (product.is_published && isDirty) {
+        if (props.successful_sales_count > 0 && contentUpdated) {
           const changedProductIds = product.has_same_rich_content_for_all_variants
             ? [props.unique_permalink]
-            : changedVariants.map((v) => v.id);
+            : contentUpdatedVariantIds;
 
-          setNotifyAboutChangesOptions({
+          setContentUpdates({
             changedProductIds,
           });
         } else {
@@ -185,8 +189,8 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
-      notifyAboutChangesOptions,
-      setNotifyAboutChangesOptions,
+      contentUpdates,
+      setContentUpdates,
     }),
     [product, updateProduct, existingFiles, setExistingFiles],
   );
@@ -241,8 +245,8 @@ const ProductEditRouter = async (global: GlobalProps) => {
     <ProductEditContext.Provider
       value={{
         ...createContextValue(props),
-        notifyAboutChangesOptions: null,
-        setNotifyAboutChangesOptions: () => {},
+        contentUpdates: null,
+        setContentUpdates: () => {},
       }}
     >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />

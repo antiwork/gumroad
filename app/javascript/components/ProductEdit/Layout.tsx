@@ -5,6 +5,7 @@ import { Link, useMatches, useNavigate } from "react-router-dom";
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { assertResponseError } from "$app/utils/request";
+import { paramsToQueryString } from "$app/utils/url";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -33,20 +34,10 @@ export const useProductUrl = (params = {}) => {
       });
 };
 
-const paramsToQueryString = (params: Record<string, string | string[] | undefined>) =>
-  Object.keys(params)
-    .map((key) => {
-      const value = params[key];
-      return Array.isArray(value)
-        ? value.map((v) => `${key}[]=${encodeURIComponent(v)}`).join("&")
-        : `${key}=${encodeURIComponent(value ?? "")}`;
-    })
-    .join("&");
-
 const NotifyAboutProductChangesAlert = () => {
-  const { uniquePermalink, notifyAboutChangesOptions, setNotifyAboutChangesOptions } = useProductEditContext();
+  const { uniquePermalink, contentUpdates, setContentUpdates } = useProductEditContext();
   const timerRef = React.useRef<number | null>(null);
-  const isVisible = !!notifyAboutChangesOptions;
+  const isVisible = !!contentUpdates;
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -64,7 +55,7 @@ const NotifyAboutProductChangesAlert = () => {
 
   const close = () => {
     clearTimer();
-    setNotifyAboutChangesOptions(null);
+    setContentUpdates(null);
   };
 
   React.useEffect(() => {
@@ -91,6 +82,7 @@ const NotifyAboutProductChangesAlert = () => {
         transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
         transition: "all 0.3s ease-out 0.5s",
         zIndex: "var(--z-index-tooltip)",
+        backgroundColor: "var(--body-bg)",
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -103,10 +95,11 @@ const NotifyAboutProductChangesAlert = () => {
           </Button>
           <NavigationButton
             color="primary"
+            onClick={() => close()}
             href={`${newEmailPath}?${paramsToQueryString({
-              new_content_added: "true",
+              template: "content_updates",
               product: uniquePermalink,
-              product_ids: notifyAboutChangesOptions?.changedProductIds ?? [],
+              product_ids: contentUpdates?.changedProductIds ?? [],
             })}`}
             target="_blank"
           >
