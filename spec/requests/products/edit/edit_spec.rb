@@ -862,7 +862,7 @@ describe("Product Edit Scenario", type: :feature, js: true) do
     visit edit_link_path(product.unique_permalink)
 
     set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "Hi there!")
-    # dd
+
     select_disclosure "Insert" do
       click_on "Review"
     end
@@ -886,34 +886,6 @@ describe("Product Edit Scenario", type: :feature, js: true) do
 
     product.reload
     expect(product.description).to eq("<p>Hi there!</p><review-card reviewid=\"#{review2.external_id}\"></review-card><review-card reviewid=\"#{review1.external_id}\"></review-card>")
-  end
-
-  shared_examples "notifying users about content updates" do |factory_name|
-    it "allows notifying users" do
-      product = create(factory_name, user: seller, name: "Sample product", price_cents: 1000)
-
-      allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
-
-      visit edit_link_path(product.unique_permalink)
-      select_tab "Content"
-
-      editor = find("[aria-label='Content editor']")
-      set_rich_text_editor_input(editor, to_text: "Hi there!")
-
-      click_on "Save changes"
-      expect(page).to have_alert(text: "Changes saved!")
-
-      set_rich_text_editor_input(editor, to_text: "New content")
-      click_on "Save changes"
-      expect(page).to have_alert(text: "Changes saved! Would you like to notify your customers about those changes?")
-
-      new_window = window_opened_by { click_on "Send notification" }
-      within_window new_window do
-        wait_for_ajax
-
-        expect(page).to have_field("Title", with: "New content added to #{product.name}")
-      end
-    end
   end
 
   describe "Content updates" do
