@@ -862,7 +862,7 @@ describe("Product Edit Scenario", type: :feature, js: true) do
     visit edit_link_path(product.unique_permalink)
 
     set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "Hi there!")
-
+    # dd
     select_disclosure "Insert" do
       click_on "Review"
     end
@@ -917,11 +917,86 @@ describe("Product Edit Scenario", type: :feature, js: true) do
   end
 
   describe "Content updates" do
-    context "when shared content" do
-      include_examples "notifying users about content updates", :product
+    before do
+      allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
     end
+
+    context "when non-content update" do
+      let(:product) { create(:product, user: seller, name: "Sample product", price_cents: 1000) }
+
+      it "doesn't allow notifying users" do
+        visit edit_link_path(product.unique_permalink)
+
+        description_input = find("[aria-label='Description']")
+        set_rich_text_editor_input(description_input, to_text: "Hi there!")
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Changes saved!")
+
+        set_rich_text_editor_input(description_input, to_text: "New description")
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(page).not_to have_alert(text: "Changes saved! Would you like to notify your customers about those changes?")
+      end
+    end
+
+    context "when shared content" do
+      let(:product) { create(:product, user: seller, name: "Sample product", price_cents: 1000) }
+
+      it "allows notifying users" do
+        visit edit_link_path(product.unique_permalink)
+        select_tab "Content"
+
+        editor = find("[aria-label='Content editor']")
+        set_rich_text_editor_input(editor, to_text: "Hi there!")
+
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Changes saved!")
+
+        set_rich_text_editor_input(editor, to_text: "New content")
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Changes saved! Would you like to notify your customers about those changes?")
+
+        new_window = window_opened_by { click_on "Send notification" }
+        within_window new_window do
+          wait_for_ajax
+
+          expect(page).to have_field("Title", with: "New content added to #{product.name}")
+          find(:combo_box, "Bought").click
+          within(:fieldset, "Bought") do
+            expect(page).to have_button(product.name)
+          end
+        end
+      end
+    end
+
     context "when variants change" do
-      include_examples "notifying users about content updates", :product_with_digital_versions
+      let(:product) { create(:product_with_digital_versions, user: seller, name: "Sample product", price_cents: 1000) }
+
+      it "allows notifying users" do
+        visit edit_link_path(product.unique_permalink)
+        select_tab "Content"
+
+        editor = find("[aria-label='Content editor']")
+        set_rich_text_editor_input(editor, to_text: "Hi there!")
+
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Changes saved!")
+
+        set_rich_text_editor_input(editor, to_text: "New content")
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Changes saved! Would you like to notify your customers about those changes?")
+
+        new_window = window_opened_by { click_on "Send notification" }
+        within_window new_window do
+          wait_for_ajax
+
+          expect(page).to have_field("Title", with: "New content added to #{product.name}")
+          find(:combo_box, "Bought").click
+          within(:fieldset, "Bought") do
+            expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
+          end
+        end
+      end
     end
   end
 
