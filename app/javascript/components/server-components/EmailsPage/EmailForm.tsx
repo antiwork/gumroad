@@ -319,7 +319,7 @@ export const EmailForm = () => {
     const template = searchParams.get("template");
     const isBundleMarketing = template === "bundle_marketing";
 
-    if (template === "content_updates") {
+    if (template === "content_updates" && permalink) {
       const bought = searchParams.getAll("bought[]");
       setTitle(`New content added to ${productName}`);
       setBought(bought);
@@ -341,7 +341,7 @@ export const EmailForm = () => {
                   {
                     type: "link",
                     attrs: {
-                      href: Routes.short_link_url(assertDefined(permalink), {
+                      href: Routes.short_link_url(permalink, {
                         host: currentSeller.subdomain ?? appDomain,
                       }),
                     },

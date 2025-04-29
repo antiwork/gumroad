@@ -905,7 +905,7 @@ describe("Product Edit Scenario", type: :feature, js: true) do
 
       set_rich_text_editor_input(editor, to_text: "New content")
       click_on "Save changes"
-      expect(page).to have_alert(text: "Changes saved!")
+      expect(page).to have_alert(text: "Changes saved! Would you like to notify your customers about those changes?")
 
       new_window = window_opened_by { click_on "Send notification" }
       within_window new_window do

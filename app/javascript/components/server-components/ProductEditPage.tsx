@@ -244,11 +244,7 @@ const ProductEditPage = (props: Props) => {
 const ProductEditRouter = async (global: GlobalProps) => {
   const { router, context } = await buildStaticRouter(global, routes);
   const component = (props: Props) => (
-    <ProductEditContext.Provider
-      value={{
-        ...createContextValue(props),
-      }}
-    >
+    <ProductEditContext.Provider value={createContextValue(props)}>
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
     </ProductEditContext.Provider>
   );

@@ -100,6 +100,11 @@ const NotifyAboutProductUpdatesAlert = () => {
               product: uniquePermalink,
               bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
             })}`}
+            onClick={() => {
+              // NOTE: this is a workaround to make sure the alert closes after the tab is opened
+              // with correct URL params. Otherwise `bought` won't be set correctly.
+              setTimeout(() => close(), 100);
+            }}
             target="_blank"
           >
             Send notification
