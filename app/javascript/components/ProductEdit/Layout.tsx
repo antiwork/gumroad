@@ -76,8 +76,7 @@ const NotifyAboutProductUpdatesAlert = () => {
 
   return (
     <div
-      role="alert"
-      className={cx("fixed right-1/2 top-4", "info", isVisible ? "visible" : "invisible")}
+      className={cx("fixed right-1/2 top-4", isVisible ? "visible" : "invisible")}
       style={{
         transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
         transition: "all 0.3s ease-out 0.5s",
@@ -87,28 +86,30 @@ const NotifyAboutProductUpdatesAlert = () => {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div className="paragraphs">
-        Changes saved! Would you like to notify your customers about those changes?
-        <div className="flex gap-2">
-          <Button color="primary" outline onClick={() => close()}>
-            Skip for now
-          </Button>
-          <NavigationButton
-            color="primary"
-            href={`${newEmailPath}?${paramsToQueryString({
-              template: "content_updates",
-              product: uniquePermalink,
-              bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
-            })}`}
-            onClick={() => {
-              // NOTE: this is a workaround to make sure the alert closes after the tab is opened
-              // with correct URL params. Otherwise `bought` won't be set correctly.
-              setTimeout(() => close(), 100);
-            }}
-            target="_blank"
-          >
-            Send notification
-          </NavigationButton>
+      <div role="alert" className="info">
+        <div className="paragraphs">
+          Changes saved! Would you like to notify your customers about those changes?
+          <div className="flex gap-2">
+            <Button color="primary" outline onClick={() => close()}>
+              Skip for now
+            </Button>
+            <NavigationButton
+              color="primary"
+              href={`${newEmailPath}?${paramsToQueryString({
+                template: "content_updates",
+                product: uniquePermalink,
+                bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
+              })}`}
+              onClick={() => {
+                // NOTE: this is a workaround to make sure the alert closes after the tab is opened
+                // with correct URL params. Otherwise `bought` won't be set correctly.
+                setTimeout(() => close(), 100);
+              }}
+              target="_blank"
+            >
+              Send notification
+            </NavigationButton>
+          </div>
         </div>
       </div>
     </div>
