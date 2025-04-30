@@ -287,28 +287,4 @@ describe User::FeatureStatus do
       end
     end
   end
-
-  describe "#video_reviews_enabled?" do
-    it "returns true if video_reviews feature is enabled for the user" do
-      user = create(:user)
-      expect(user.video_reviews_enabled?).to eq false
-
-      Feature.activate_user(:video_reviews, user)
-      expect(user.video_reviews_enabled?).to eq true
-
-      Feature.deactivate_user(:video_reviews, user)
-      expect(user.video_reviews_enabled?).to eq false
-    end
-
-    it "returns true if video_reviews feature is globally enabled" do
-      user = create(:user)
-      expect(user.video_reviews_enabled?).to eq false
-
-      Feature.activate(:video_reviews)
-      expect(user.video_reviews_enabled?).to eq true
-
-      Feature.deactivate(:video_reviews)
-      expect(user.video_reviews_enabled?).to eq false
-    end
-  end
 end

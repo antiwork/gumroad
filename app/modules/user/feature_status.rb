@@ -73,10 +73,6 @@ class User
       false
     end
 
-    def video_reviews_enabled?
-      Feature.active?(:video_reviews, self)
-    end
-
     def waive_gumroad_fee_on_new_sales?
       timezone_for_gumroad_day = gumroad_day_timezone.presence || timezone
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date

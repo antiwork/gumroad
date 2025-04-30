@@ -1,5 +1,14 @@
 # frozen_string_literal: true
 
+# `sidekiq-pro` is now only autoloaded in staging/production due to the Gemfile
+# group. This ensures `sidekiq-pro` is correctly loaded in all environments
+# when available.
+begin
+  require "sidekiq-pro"
+rescue LoadError
+  warn "sidekiq-pro is not installed"
+end
+
 require Rails.root.join("lib", "extras", "sidekiq_makara_reset_context_middleware")
 
 Sidekiq.configure_server do |config|

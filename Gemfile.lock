@@ -35,7 +35,7 @@ GIT
 GEM
   remote: https://gems.contribsys.com/
   specs:
-    sidekiq-pro (7.3.0)
+    sidekiq-pro (7.3.3)
       sidekiq (>= 7.3.0, < 8)
 
 GEM
@@ -1231,6 +1231,7 @@ DEPENDENCIES
   sendgrid-ruby (~> 6.6)
   shakapacker (~> 8.0)
   shoulda-matchers (~> 6.0)
+  sidekiq (~> 7.2)
   sidekiq-cron (~> 1.9)
   sidekiq-pro (~> 7.2)!
   sidekiq-unique-jobs (~> 8.0)
