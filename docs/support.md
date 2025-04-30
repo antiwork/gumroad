@@ -142,10 +142,13 @@ u.update!(refunds_disabled: false)
 ### Remove old email from checkout
 
 Get the current email:
+
 ```ruby
 User.find_by(email: "customer@example.com").alive_cart.email
 ```
+
 Remove the email:
+
 ```ruby
 User.find_by(email: "customer@example.com").alive_cart.update!(email: nil)
 ```
