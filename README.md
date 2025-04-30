@@ -42,6 +42,7 @@ Before you begin, ensure you have the following installed:
 #### Node.js
 
 - https://nodejs.org/en/download
+- Install the version listed in [the .node-version file](./.node-version)
 
 #### Docker
 
