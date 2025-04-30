@@ -148,6 +148,7 @@ Rails.application.routes.draw do
   constraints DiscoverDomainConstraint do
     get "/", to: "discover#index", as: :discover
 
+    get "/discover", to: "discover#index"
     get "/discover/recommended_products", to: "discover#recommended_products", as: :discover_recommended_products
     namespace :discover do
       resources :recommended_wishlists, only: [:index]
@@ -943,6 +944,7 @@ Rails.application.routes.draw do
     get "/CHARGE" => redirect("/charge")
 
     # discover
+    get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
     get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
 
