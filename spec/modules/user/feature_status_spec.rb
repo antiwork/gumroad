@@ -288,10 +288,4 @@ describe User::FeatureStatus do
     end
   end
 
-  describe "#video_reviews_enabled?" do
-    it "always returns true" do
-      user = create(:user)
-      expect(user.video_reviews_enabled?).to eq true
-    end
-  end
 end
