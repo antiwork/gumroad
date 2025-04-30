@@ -972,6 +972,8 @@ describe("Product Edit Scenario", type: :feature, js: true) do
           expect(page).to have_unchecked_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
+            expect(page).not_to have_selector(:button, exact_text: product.name)
+            expect(page).not_to have_button("#{product.name} - #{product.alive_variants.last.name}")
           end
           within find("[aria-label='Email message']") do
             expect(page).to have_text("New content has been added to")
