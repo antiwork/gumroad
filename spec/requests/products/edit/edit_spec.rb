@@ -978,7 +978,6 @@ describe("Product Edit Scenario", type: :feature, js: true) do
           within find("[aria-label='Email message']") do
             expect(page).to have_text("New content has been added to")
             expect(page).to have_link("#{product.name}", href: product.long_url)
- 
             expect(page).to have_text("You can access it by visiting your Gumroad Library or through the link in your email receipt.")
           end
         end
