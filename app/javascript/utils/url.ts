@@ -14,3 +14,13 @@ export const writeQueryParams = (url: URL, values: Record<string, string | null>
   url.searchParams.sort();
   return url;
 };
+
+export const paramsToQueryString = (params: Record<string, string | string[] | undefined>) =>
+  Object.keys(params)
+    .map((key) => {
+      const value = params[key];
+      return Array.isArray(value)
+        ? value.map((v) => `${key}[]=${encodeURIComponent(v)}`).join("&")
+        : `${key}=${encodeURIComponent(value ?? "")}`;
+    })
+    .join("&");
