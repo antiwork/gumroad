@@ -146,7 +146,7 @@ Rails.application.routes.draw do
   end
 
   constraints DiscoverDomainConstraint do
-    get "/", to: "discover#index", as: :discover
+    get "/", to: "discover#index"
 
     get "/discover", to: "discover#index"
     get "/discover/recommended_products", to: "discover#recommended_products", as: :discover_recommended_products
