@@ -27,7 +27,6 @@ type Product = {
   seller: {
     name: string;
     url: string;
-    video_reviews_enabled: boolean;
   };
 };
 
@@ -100,7 +99,6 @@ const ReviewsPage = ({
                       purchaseId={purchase.id}
                       purchaseEmailDigest={purchase.email_digest}
                       review={null}
-                      videoReviewsEnabled={purchase.product.seller.video_reviews_enabled}
                       onChange={(newReview) => {
                         setReviews((prevReviews) => [
                           ...prevReviews,
@@ -220,7 +218,6 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                 purchaseId={review.purchase_id}
                 purchaseEmailDigest={review.purchase_email_digest}
                 review={review}
-                videoReviewsEnabled={review.product.seller.video_reviews_enabled}
                 onChange={(newReview) => onChange({ ...review, ...newReview })}
               />
             </div>

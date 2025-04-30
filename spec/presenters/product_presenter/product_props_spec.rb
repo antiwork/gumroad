@@ -151,7 +151,6 @@ describe ProductPresenter::ProductProps do
                 tier_description: nil
               },
               review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
-              video_reviews_enabled: seller.video_reviews_enabled?,
               should_show_receipt: true,
               is_gift_receiver_purchase: false,
               show_view_content_button_on_product_page: false,
@@ -367,7 +366,6 @@ describe ProductPresenter::ProductProps do
               created_at: purchase.created_at,
               membership: nil,
               review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
-              video_reviews_enabled: seller.video_reviews_enabled?,
               should_show_receipt: true,
               is_gift_receiver_purchase: false,
               show_view_content_button_on_product_page: false,

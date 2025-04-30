@@ -43,7 +43,6 @@ describe ReviewsPresenter do
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
-                  video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
             ),
@@ -60,7 +59,6 @@ describe ReviewsPresenter do
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
-                  video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
             ),
@@ -77,7 +75,6 @@ describe ReviewsPresenter do
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
-                  video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
             )
@@ -95,7 +92,6 @@ describe ReviewsPresenter do
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
-                  video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
             },
@@ -111,7 +107,6 @@ describe ReviewsPresenter do
                 seller: {
                   name: "Seller",
                   url: seller.profile_url,
-                  video_reviews_enabled: seller.video_reviews_enabled?,
                 }
               }
             }

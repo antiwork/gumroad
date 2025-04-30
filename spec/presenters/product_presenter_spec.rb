@@ -154,7 +154,6 @@ describe ProductPresenter do
             created_at: purchase.created_at,
             membership: nil,
             review: nil,
-            video_reviews_enabled: false,
             should_show_receipt: true,
             is_gift_receiver_purchase: false,
             show_view_content_button_on_product_page: false,

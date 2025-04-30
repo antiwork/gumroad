@@ -1,4 +1,5 @@
 import { DirectUpload } from "@rails/activestorage";
+import { isEqual } from "lodash";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
 import { StaticRouterProvider } from "react-router-dom/server";
@@ -16,6 +17,7 @@ import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverCompo
 
 import { Seller } from "$app/components/Product";
 import { ContentTab } from "$app/components/ProductEdit/ContentTab";
+import { Page } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
@@ -25,6 +27,7 @@ import {
   ProfileSection,
   ExistingFileEntry,
   ShippingCountry,
+  ContentUpdates,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -107,10 +110,34 @@ const createContextValue = (props: Props) => ({
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
+  contentUpdates: null,
+  setContentUpdates: () => {},
 });
+
+const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
+
+const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
+  const contentUpdatedVariantIds = product.variants
+    .filter((variant) => {
+      const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
+      return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
+    })
+    .map((variant) => variant.id);
+
+  const sharedContentUpdated = !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
+
+  return {
+    sharedContentUpdated,
+    contentUpdatedVariantIds,
+  };
+};
 
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
+  const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
+
+  const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
       const updated = { ...prevProduct };
@@ -128,7 +155,26 @@ const ProductEditPage = (props: Props) => {
       setSaving(true);
       const response = await saveProduct(props.unique_permalink, props.id, product);
       if (response.warning_message) showAlert(response.warning_message, "warning");
-      else showAlert("Changes saved!", "success");
+      else {
+        const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
+          product,
+          lastSavedProductRef.current,
+        );
+        const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
+
+        if (props.successful_sales_count > 0 && contentUpdated) {
+          const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
+            ? [props.unique_permalink]
+            : contentUpdatedVariantIds;
+
+          setContentUpdates({
+            uniquePermalinkOrVariantIds,
+          });
+        } else {
+          showAlert("Changes saved!", "success");
+        }
+        lastSavedProductRef.current = structuredClone(product);
+      }
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -145,6 +191,8 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      contentUpdates,
+      setContentUpdates,
     }),
     [product, updateProduct, existingFiles, setExistingFiles],
   );

@@ -1,9 +1,11 @@
+import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { assertResponseError } from "$app/utils/request";
+import { paramsToQueryString } from "$app/utils/url";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -13,6 +15,7 @@ import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -29,6 +32,88 @@ export const useProductUrl = (params = {}) => {
         host: currentSeller?.subdomain ?? appDomain,
         ...params,
       });
+};
+
+const NotifyAboutProductUpdatesAlert = () => {
+  const { uniquePermalink, contentUpdates, setContentUpdates } = useProductEditContext();
+  const timerRef = React.useRef<number | null>(null);
+  const isVisible = !!contentUpdates;
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startTimer = () => {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => {
+      close();
+    }, 10_000);
+  };
+
+  const close = () => {
+    clearTimer();
+    setContentUpdates(null);
+  };
+
+  React.useEffect(() => {
+    if (isVisible) {
+      startTimer();
+    }
+
+    return clearTimer;
+  }, [isVisible]);
+
+  const handleMouseEnter = () => {
+    clearTimer();
+  };
+
+  const handleMouseLeave = () => {
+    startTimer();
+  };
+
+  return (
+    <div
+      className={cx("fixed right-1/2 top-4", isVisible ? "visible" : "invisible")}
+      style={{
+        transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
+        transition: "all 0.3s ease-out 0.5s",
+        zIndex: "var(--z-index-tooltip)",
+        backgroundColor: "var(--body-bg)",
+      }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div role="alert" className="info">
+        <div className="paragraphs">
+          Changes saved! Would you like to notify your customers about those changes?
+          <div className="flex gap-2">
+            <Button color="primary" outline onClick={() => close()}>
+              Skip for now
+            </Button>
+            <NavigationButton
+              color="primary"
+              href={`${newEmailPath}?${paramsToQueryString({
+                template: "content_updates",
+                product: uniquePermalink,
+                bought: contentUpdates?.uniquePermalinkOrVariantIds ?? [],
+              })}`}
+              onClick={() => {
+                // NOTE: this is a workaround to make sure the alert closes after the tab is opened
+                // with correct URL params. Otherwise `bought` won't be set correctly.
+                setTimeout(() => close(), 100);
+              }}
+              target="_blank"
+            >
+              Send notification
+            </NavigationButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export const Layout = ({
@@ -126,6 +211,7 @@ export const Layout = ({
 
   return (
     <>
+      <NotifyAboutProductUpdatesAlert />
       {/* TODO: remove this legacy uploader stuff */}
       <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
       <header className="sticky-top">
