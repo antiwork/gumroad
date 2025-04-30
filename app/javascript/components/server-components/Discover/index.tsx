@@ -98,7 +98,7 @@ const Discover = (props: Props) => {
   const parseUrlParams = (href: string) => {
     const url = new URL(href);
     const parsedParams: SearchRequest = {
-      taxonomy: url.pathname === "/" ? undefined : url.pathname.replace("/", ""),
+      taxonomy: url.pathname === "/" || url.pathname === "/discover" ? undefined : url.pathname.replace("/", ""),
       curated_product_ids: props.curated_product_ids.slice(url.pathname === "/" ? recommendedProductsCount : 0),
     };
 
