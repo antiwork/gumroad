@@ -10,7 +10,6 @@ jobs:
     runs-on: ubicloud-standard-2
     env:
       RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
-      GUMROAD_SIDEKIQ_PRO_DISABLED: true
     steps:
       - uses: actions/checkout@v4
 
