@@ -288,4 +288,3 @@ describe User::FeatureStatus do
     end
   end
 end
-
