@@ -43,7 +43,6 @@ class ReviewsPresenter
         seller: {
           name: seller.display_name,
           url: seller.profile_url,
-          video_reviews_enabled: seller.video_reviews_enabled?,
         },
       }
     end

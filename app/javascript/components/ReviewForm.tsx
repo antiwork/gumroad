@@ -98,7 +98,6 @@ export const ReviewForm = React.forwardRef<
     purchaseId: string;
     purchaseEmailDigest?: string;
     review: Review | null;
-    videoReviewsEnabled: boolean;
     onChange?: (review: Review) => void;
     preview?: boolean;
     disabledStatus?: string | null;
@@ -111,7 +110,6 @@ export const ReviewForm = React.forwardRef<
       purchaseId,
       purchaseEmailDigest,
       review,
-      videoReviewsEnabled,
       onChange,
       preview,
       disabledStatus,
@@ -341,8 +339,8 @@ export const ReviewForm = React.forwardRef<
           <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
         </div>
 
-        {!viewing && videoReviewsEnabled ? reviewModeRadioButtons : null}
-        {reviewMode === "video" && videoReviewsEnabled ? videoReview : textReview}
+        {!viewing ? reviewModeRadioButtons : null}
+        {reviewMode === "video" ? videoReview : textReview}
         {disabledStatusWarning}
         {reviewButton}
       </form>

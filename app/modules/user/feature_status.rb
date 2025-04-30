@@ -74,7 +74,7 @@ class User
     end
 
     def video_reviews_enabled?
-      Feature.active?(:video_reviews, self)
+      true
     end
 
     def waive_gumroad_fee_on_new_sales?

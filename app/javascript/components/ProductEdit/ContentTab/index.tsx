@@ -828,7 +828,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
               {isDesktop ? (
                 <>
                   <div className="stack">
-                    <ReviewForm permalink="" purchaseId="" review={null} videoReviewsEnabled={false} preview />
+                    <ReviewForm permalink="" purchaseId="" review={null} preview />
                   </div>
                   <div className="stack">
                     {product.native_type === "membership" ? (
