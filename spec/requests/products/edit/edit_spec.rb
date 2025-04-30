@@ -890,7 +890,8 @@ describe("Product Edit Scenario", type: :feature, js: true) do
 
   describe "Content updates" do
     before do
-      allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
+      create(:purchase, link: product)
+      index_model_records(Purchase)
     end
 
     context "when non-content update" do
@@ -911,7 +912,7 @@ describe("Product Edit Scenario", type: :feature, js: true) do
       end
     end
 
-    context "when shared content" do
+    context "product with no variants" do
       let(:product) { create(:product, user: seller, name: "Sample product", price_cents: 1000) }
 
       it "allows notifying users" do
@@ -930,18 +931,23 @@ describe("Product Edit Scenario", type: :feature, js: true) do
 
         new_window = window_opened_by { click_on "Send notification" }
         within_window new_window do
-          wait_for_ajax
-
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
-          find(:combo_box, "Bought").click
+          expect(page).to have_radio_button "Customers only", checked: true
+          expect(page).to have_checked_field("Send email")
+          expect(page).to have_unchecked_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button(product.name)
+          end
+          within find("[aria-label='Email message']") do
+            expect(page).to have_text("New content has been added to")
+            expect(page).to have_link("#{product.name}", href: /#{Regexp.escape(product.user.subdomain)}.*#{Regexp.escape(product.unique_permalink)}/)
+            expect(page).to have_text("You can access it by visiting your Gumroad Library or through the link in your email receipt.")
           end
         end
       end
     end
 
-    context "when variants change" do
+    context "product with variants" do
       let(:product) { create(:product_with_digital_versions, user: seller, name: "Sample product", price_cents: 1000) }
 
       it "allows notifying users" do
@@ -960,12 +966,17 @@ describe("Product Edit Scenario", type: :feature, js: true) do
 
         new_window = window_opened_by { click_on "Send notification" }
         within_window new_window do
-          wait_for_ajax
-
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
-          find(:combo_box, "Bought").click
+          expect(page).to have_radio_button "Customers only", checked: true
+          expect(page).to have_checked_field("Send email")
+          expect(page).to have_unchecked_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
+          end
+          within find("[aria-label='Email message']") do
+            expect(page).to have_text("New content has been added to")
+            expect(page).to have_link("#{product.name}", href: /#{Regexp.escape(product.user.subdomain)}.*#{Regexp.escape(product.unique_permalink)}/)
+            expect(page).to have_text("You can access it by visiting your Gumroad Library or through the link in your email receipt.")
           end
         end
       end
