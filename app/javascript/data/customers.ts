@@ -37,6 +37,7 @@ export type ReviewVideo = {
   approval_status: "pending_review" | "approved" | "rejected";
   thumbnail_url: string | null;
   can_approve: boolean;
+  can_reject: boolean;
 };
 export type Call = { id: string; call_url: string | null; start_time: string; end_time: string };
 export type File = {
@@ -430,6 +431,18 @@ export const approveReviewVideo = async (videoId: string) => {
     method: "POST",
     accept: "json",
     url: Routes.internal_product_review_video_approvals_url(videoId),
+  });
+
+  if (!response.ok) {
+    throw new ResponseError();
+  }
+};
+
+export const rejectReviewVideo = async (videoId: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_product_review_video_rejections_url(videoId),
   });
 
   if (!response.ok) {

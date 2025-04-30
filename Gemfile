@@ -12,6 +12,12 @@ group :development do
   gem "stackprof", "~> 0.2"
 end
 
+group :staging, :production do
+  source "https://gems.contribsys.com/" do
+    gem "sidekiq-pro", "~> 7.2"
+  end
+end
+
 group :development, :test do
   gem "bundler"
   gem "dotenv-rails", "~> 2.8"
@@ -168,15 +174,7 @@ gem "sendgrid-ruby", "~> 6.6"
 gem "shakapacker", "~> 8.0"
 gem "sidekiq-cron", "~> 1.9"
 gem "suo", "~> 0.4"
-
-if ENV["GUMROAD_SIDEKIQ_PRO_DISABLED"] == "true"
-  gem "sidekiq", "~> 7.2"
-else
-  source "https://gems.contribsys.com/" do
-    gem "sidekiq-pro", "~> 7.2"
-  end
-end
-
+gem "sidekiq", "~> 7.2"
 gem "sidekiq-unique-jobs", "~> 8.0"
 gem "sitemap_generator", "~> 6.3"
 gem "slack-notifier", "~> 2.4"
@@ -197,5 +195,5 @@ gem "zip-zip", "~> 0.3"
 gem "rouge", "~> 4.0"
 gem "ruby-openai", "~> 7.0"
 gem "anycable-rails", "~> 1.5"
-
 gem "react_on_rails", "~> 14.0"
+gem "psych", "~> 5.2.3"

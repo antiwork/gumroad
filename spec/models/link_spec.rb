@@ -767,7 +767,7 @@ describe Link, :vcr do
         it "raises a Link::LinkInvalid error" do
           expect do
             @product.publish!
-          end.to raise_error(Link::LinkInvalid)
+          end.to raise_error(ActiveRecord::RecordInvalid)
           expect(@product.reload.purchase_disabled_at).to_not be(nil)
           expect(@product.errors.full_messages.to_sentence).to eq("Bundles must have at least one product.")
         end
@@ -1770,7 +1770,7 @@ describe Link, :vcr do
   end
 
   describe "#bundle_is_not_in_bundle" do
-    let!(:product) { create(:product) }
+    let!(:product) { create(:product, :unpublished) }
 
     context "product is not in bundle" do
       it "does not add an error to the product" do

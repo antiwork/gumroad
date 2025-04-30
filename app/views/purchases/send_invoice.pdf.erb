@@ -53,7 +53,7 @@
               <% if attribute[:label].present? %>
                 <strong><%= attribute[:label] %></strong>
               <% end %>
-              <%= attribute[:value] %>
+              <p class="with-line-breaks"><%= attribute[:value] %></p>
             </p>
           <% end %>
           <h2>Creator</h2>

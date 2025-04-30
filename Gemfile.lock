@@ -35,7 +35,7 @@ GIT
 GEM
   remote: https://gems.contribsys.com/
   specs:
-    sidekiq-pro (7.3.0)
+    sidekiq-pro (7.3.3)
       sidekiq (>= 7.3.0, < 8)
 
 GEM
@@ -101,7 +101,7 @@ GEM
     active_model_otp (2.3.4)
       activemodel
       rotp (~> 6.3.0)
-    active_record_query_trace (1.8.2)
+    active_record_query_trace (1.8.3)
       activerecord (>= 6.0.0)
     activejob (7.1.3.4)
       activesupport (= 7.1.3.4)
@@ -371,10 +371,6 @@ GEM
     faraday_middleware (1.2.0)
       faraday (~> 1.0)
     ffi (1.17.0)
-    ffi (1.17.0-arm64-darwin)
-    ffi (1.17.0-x86_64-darwin)
-    ffi (1.17.0-x86_64-linux-gnu)
-    ffi (1.17.0-x86_64-linux-musl)
     ffi-compiler (1.3.2)
       ffi (>= 1.15.5)
       rake
@@ -610,12 +606,6 @@ GEM
     nokogiri (1.16.7)
       mini_portile2 (~> 2.8.2)
       racc (~> 1.4)
-    nokogiri (1.16.7-arm64-darwin)
-      racc (~> 1.4)
-    nokogiri (1.16.7-x86_64-darwin)
-      racc (~> 1.4)
-    nokogiri (1.16.7-x86_64-linux)
-      racc (~> 1.4)
     oauth (1.1.0)
       oauth-tty (~> 1.0, >= 1.0.1)
       snaky_hash (~> 2.0)
@@ -719,7 +709,8 @@ GEM
       pry (>= 0.13, < 0.15)
     pry-rails (0.3.11)
       pry (>= 0.13.0)
-    psych (5.1.2)
+    psych (5.2.3)
+      date
       stringio
     public_suffix (5.1.1)
     puffing-billy (4.0.0)
@@ -1195,6 +1186,7 @@ DEPENDENCIES
   private_address_check (~> 0.5)
   pry-byebug (~> 3.10)
   pry-rails (~> 0.3)
+  psych (~> 5.2.3)
   public_suffix (~> 5.0)
   puffing-billy (~> 4.0.0)
   puma (= 6.4.2)
@@ -1239,6 +1231,7 @@ DEPENDENCIES
   sendgrid-ruby (~> 6.6)
   shakapacker (~> 8.0)
   shoulda-matchers (~> 6.0)
+  sidekiq (~> 7.2)
   sidekiq-cron (~> 1.9)
   sidekiq-pro (~> 7.2)!
   sidekiq-unique-jobs (~> 8.0)
@@ -1267,7 +1260,7 @@ DEPENDENCIES
   zip-zip (~> 0.3)
 
 RUBY VERSION
-   ruby 3.3.4p94
+   ruby 3.4.3p32
 
 BUNDLED WITH
    2.5.10

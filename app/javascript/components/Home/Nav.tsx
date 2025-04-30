@@ -19,7 +19,7 @@ const NavLink = ({
   context?: "primary";
 }) => {
   const currentLocation = useOriginalLocation();
-  const isCurrent = href === new URL(currentLocation).pathname;
+  const isCurrent = new URL(href, currentLocation).pathname === new URL(currentLocation).pathname;
 
   if (category === "button") {
     return (

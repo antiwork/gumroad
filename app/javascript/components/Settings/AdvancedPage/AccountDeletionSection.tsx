@@ -37,18 +37,15 @@ const AccountDeletionSection = (props: Props) => {
         <h2>Danger Zone</h2>
       </header>
       <p>
-        Deleting your account will permanently delete all of your products and product files, as well as any credit card
-        and payout information. You will not be able to restore your account once it's deleted and you will be
-        unsubscribed from any memberships. You will also not be able to create a new account with this account's email.
-      </p>
-      <p>
         <a
           href="#"
           data-helper-prompt="What happens when I delete my Gumroad account and will I be able to reactivate it? Can I delete my Gumroad account if I have a balance? Can I reuse my delted email address to create a new account?"
         >
-          Read first before deleting your account.
-        </a>
-        .
+          Deleting your account
+        </a>{" "}
+        will permanently delete all of your products and product files, as well as any credit card and payout
+        information. You will not be able to restore your account once it's deleted and you will be unsubscribed from
+        any memberships. You will also not be able to create a new account with this account's email.
       </p>
       <div>
         <Button color="danger" onClick={() => setShowConfirmationModal(true)}>
