@@ -142,7 +142,6 @@ export type Purchase = {
   email_digest: string;
   created_at: string;
   review: FormReview | null;
-  video_reviews_enabled: boolean;
   should_show_receipt: boolean;
   is_gift_receiver_purchase: boolean;
   content_url: string | null;
@@ -685,7 +684,6 @@ const ExistingPurchaseStack = ({
             purchaseId={purchase.id}
             review={purchase.review}
             purchaseEmailDigest={purchase.email_digest}
-            videoReviewsEnabled={purchase.video_reviews_enabled}
           />
         ) : null}
       </div>
