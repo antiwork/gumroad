@@ -11,9 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="./LICENSE.md">License</a> •
-  <a href="./CODE_OF_CONDUCT.md">Code of Conduct</a> •
-  <a href="./CONTRIBUTING.md">Contributing</a>
+  [Gumroad](https://gumroad.com) is an e-commerce platform that enables creators to sell products directly to consumers. This repository contains the source code for the Gumroad web application.
 </p>
 
 ## Table of Contents
@@ -45,11 +43,11 @@ Before you begin, ensure you have the following installed:
 
 - https://nodejs.org/en/download
 
-#### Docker & Docker Compose
+#### Docker
 
-We use `docker` and `docker compose` to setup the services for development environment.
+We use Docker to setup the services for development environment.
 
-- For MacOS: Grab the docker mac installation from the [Docker website](https://www.docker.com/products/docker-desktop)
+- For MacOS: Download the Docker app from the [Docker website](https://www.docker.com/products/docker-desktop)
 - For Linux:
 
 ```bash
@@ -123,20 +121,17 @@ We use Bundler to install Ruby gems.
 gem install bundler
 ```
 
-If you have a license for Sidekiq Pro, configure its credentials:
+Configure Bundler to install gems without production or staging dependencies by default:
 
 ```shell
-bundle config gems.contribsys.com <key>
+bundle config --local without production staging
 ```
 
-If you don't have a license for Sidekiq Pro, set the environment variable `GUMROAD_SIDEKIQ_PRO_DISABLED` in your shell:
+Install gems:
 
 ```shell
-export GUMROAD_SIDEKIQ_PRO_DISABLED=true
-echo "export GUMROAD_SIDEKIQ_PRO_DISABLED=true" >> ~/.bashrc
+bundle install
 ```
-
-Run `bundle install` to install the necessary dependencies.
 
 Also make sure to install `dotenv` as it is required for some console commands:
 
@@ -211,9 +206,7 @@ For Linux (Debian / Ubuntu) you might need the following:
 bin/dev
 ```
 
-This starts the rails server, the javascript build system, and a Sidekiq worker.
-
-If you know what foreman does and you don't want to use it you can inspect the contents of the `Procfile.dev` file and run the required components individually.
+This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
 
 You can now access the application at `https://gumroad.dev`.
 
