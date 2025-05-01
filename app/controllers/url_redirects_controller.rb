@@ -91,10 +91,10 @@ class UrlRedirectsController < ApplicationController
     if processing
       @purchase = @url_redirect.purchase
 
-      StampProductFileWorker.perform_async(@purchase.id, @product_file.id, logged_in_user.id)
+      StampProductFileWorker.perform_async(@purchase.id, @product_file.id)
 
       flash[:alert] = "Your file is being processed. You will receive an email when it is ready to download."
-      redirect_to url_redirect_download_page_path(@url_redirect.token, **forwardable_query_params)
+      redirect_to url_redirect_download_page_path(@url_redirect.token)
       return
     end
 

@@ -641,7 +641,7 @@ describe("Download Page", type: :feature, js: true) do
       visit url_redirect.download_page_url
       click_on "Download"
 
-      expect(StampProductFileWorker).to have_enqueued_sidekiq_job(purchase.id, product_file.id, logged_in_user.id)
+      expect(StampProductFileWorker).to have_enqueued_sidekiq_job(purchase.id, product_file.id)
       expect(page).to have_alert(text: "Your file is being processed. You will receive an email when it is ready to download.")
     end
   end

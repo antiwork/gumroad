@@ -105,13 +105,13 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  def stamped_file_ready(recipient:, product_file:, url_redirect:)
-    @recipient = recipient
+  def stamped_file_ready(email:, product_file:, url_redirect:)
+    @email = email
     @product = product_file.link
     @stamped_pdf_url = url_redirect.stamped_pdfs.find_by(product_file_id: product_file.id).url
 
     mail(
-      to: recipient.email,
+      to: @email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: @product.user.support_or_form_email,
       subject: "Your stamped file is ready!",
