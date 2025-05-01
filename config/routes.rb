@@ -948,7 +948,7 @@ Rails.application.routes.draw do
     get "/discover/categories",          to: "discover#categories"
     get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
 
-    root to: "home#about"
+    root to: "public#home"
 
     resources :consumption_analytics, only: [:create], format: :json
     resources :media_locations, only: [:create], format: :json
