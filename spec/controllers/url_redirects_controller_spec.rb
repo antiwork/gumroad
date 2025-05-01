@@ -759,6 +759,149 @@ describe UrlRedirectsController do
 
       expect(response).to redirect_to("https://example.com/file.srt")
     end
+
+    context "with PDF stamping enabled files" do
+      before do
+        @purchase = create(:purchase, link: @product)
+        @url_redirect = create(:url_redirect, purchase: @purchase, link: @product)
+        @token = @url_redirect.token
+
+        # Create two PDF files with stamping enabled
+        @pdf_file1 = create(:readable_document, link: @product, display_name: "stamped_pdf1", pdf_stamp_enabled: true)
+        @pdf_file2 = create(:readable_document, link: @product, display_name: "stamped_pdf2", pdf_stamp_enabled: true)
+
+        # Create a regular PDF file without stamping
+        @normal_pdf = create(:readable_document, link: @product, display_name: "normal_pdf", pdf_stamp_enabled: false)
+      end
+
+      context "when all requested files are still processing" do
+        it "enqueues stamping jobs and returns processing status for JSON format" do
+          expect(StampProductFileWorker).to receive(:perform_async).with(@purchase.id, @pdf_file1.id).once
+          expect(StampProductFileWorker).to receive(:perform_async).with(@purchase.id, @pdf_file2.id).once
+
+          get :download_product_files, format: :json, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id, @pdf_file2.external_id]
+          }
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body).to include(
+            "processing" => true,
+            "message" => "Your files are being processed. You will receive an email when they are ready to download."
+          )
+          expect(response.parsed_body).not_to include("files")
+        end
+
+        it "enqueues stamping job and redirects with message for HTML format" do
+          expect(StampProductFileWorker).to receive(:perform_async).with(@purchase.id, @pdf_file1.id).once
+
+          get :download_product_files, format: :html, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id]
+          }
+
+          expect(response).to redirect_to(url_redirect_download_page_path(@url_redirect.token))
+          expect(flash[:alert]).to eq("Your file is being processed. You will receive an email when it is ready to download.")
+        end
+
+        it "uses singular/plural wording correctly in message based on files count" do
+          expect(StampProductFileWorker).to receive(:perform_async).with(@purchase.id, @pdf_file1.id).once
+
+          get :download_product_files, format: :json, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id]
+          }
+
+          expect(response.parsed_body["message"]).to eq("Your file is being processed. You will receive an email when it is ready to download.")
+        end
+      end
+
+      context "when some files are already processed" do
+        before do
+          # Create a stamped PDF for one of the files
+          @url_redirect.stamped_pdfs.create!(product_file: @pdf_file1, url: "https://example.com/stamped_file1.pdf")
+        end
+
+        it "enqueues job only for unprocessed files and returns processing status for JSON format" do
+          expect(StampProductFileWorker).to receive(:perform_async).with(@purchase.id, @pdf_file2.id).once
+          expect(StampProductFileWorker).not_to receive(:perform_async).with(@purchase.id, @pdf_file1.id)
+
+          get :download_product_files, format: :json, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id, @pdf_file2.external_id]
+          }
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body).to include(
+            "processing" => true,
+            "message" => "Your file is being processed. You will receive an email when it is ready to download."
+          )
+        end
+      end
+
+      context "when mixing stamped and unstamped files" do
+        it "processes only stampable files that aren't already processed and returns processing status" do
+          expect(StampProductFileWorker).to receive(:perform_async).with(@purchase.id, @pdf_file1.id).once
+
+          get :download_product_files, format: :json, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id, @normal_pdf.external_id]
+          }
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body).to include("processing" => true)
+        end
+      end
+
+      context "when all requested files are already processed" do
+        before do
+          @url_redirect.stamped_pdfs.create!(product_file: @pdf_file1, url: "https://example.com/stamped_file1.pdf")
+          @url_redirect.stamped_pdfs.create!(product_file: @pdf_file2, url: "https://example.com/stamped_file2.pdf")
+
+          allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(@pdf_file1).and_return("https://example.com/stamped_file1.pdf")
+          allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(@pdf_file2).and_return("https://example.com/stamped_file2.pdf")
+        end
+
+        it "returns download URLs for all files for JSON format" do
+          get :download_product_files, format: :json, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id, @pdf_file2.external_id]
+          }
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body).to include("files")
+          expect(response.parsed_body["files"].size).to eq(2)
+          expect(response.parsed_body["files"].map { |f| f["url"] }).to include(
+            "https://example.com/stamped_file1.pdf",
+            "https://example.com/stamped_file2.pdf"
+          )
+          expect(response.parsed_body).not_to include("processing")
+        end
+
+        it "redirects to the stamped file URL for HTML format" do
+          get :download_product_files, format: :html, params: {
+            id: @token,
+            product_file_ids: [@pdf_file1.external_id]
+          }
+
+          expect(response).to redirect_to("https://example.com/stamped_file1.pdf")
+        end
+      end
+    end
+
+    context "with consumption events" do
+      it "creates consumption event for HTML format downloads" do
+        file = create(:product_file, link: @product)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_return("https://example.com/file.pdf")
+
+        expect do
+          get :download_product_files, format: :html, params: { id: @token, product_file_ids: [file.external_id] }
+        end.to change(ConsumptionEvent, :count).by(1)
+
+        event = ConsumptionEvent.last
+        expect(event.event_type).to eq(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+      end
+    end
   end
 
   describe "GET download_subtitle_file" do
