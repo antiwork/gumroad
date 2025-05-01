@@ -28,7 +28,7 @@ export const useDomains = (): DomainSettings => {
 export const useDiscoverUrl = (): string => {
   const value = React.useContext(Context);
   assert(value != null, "Cannot read domain settings, make sure DomainSettingsProvider is used");
-  return `${value.scheme}://${value.discoverDomain}`;
+  return Routes.discover_url({ protocol: value.scheme, host: value.discoverDomain });
 };
 
 export const DomainSettingsProvider = Context.Provider;

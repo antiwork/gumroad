@@ -2,7 +2,7 @@ import * as React from "react";
 import { useState } from "react";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { useAppDomain } from "$app/components/DomainSettings";
+import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import logo from "$assets/images/logo.svg";
@@ -60,10 +60,11 @@ export const Nav = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const currentSeller = useCurrentSeller();
   const appDomain = useAppDomain();
+  const discoverUrl = useDiscoverUrl();
 
   const navLinks = (
     <>
-      <NavLink text="Home" href={Routes.root_url()} />
+      <NavLink text="Discover" href={discoverUrl} />
       <NavLink text="About" href={Routes.about_url()} />
       <NavLink text="Features" href={Routes.features_url()} />
       <NavLink text="Pricing" href={Routes.pricing_url()} />

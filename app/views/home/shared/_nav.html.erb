@@ -54,11 +54,11 @@
 
   def nav_links
     content_tag :div, class: "flex flex-col justify-center items-center lg:flex-row lg:gap-4 lg:px-8" do
-      nav_link("Home", "/") +
-      nav_link("About", "/about") +
-      nav_link("Features", "/features") +
-      nav_link("Pricing", "/pricing") +
-      nav_link("Taxes", "/taxes")
+      nav_link("Discover", discover_path) +
+      nav_link("About", about_path) +
+      nav_link("Features", features_path) +
+      nav_link("Pricing", pricing_path) +
+      nav_link("Taxes", taxes_path)
     end
   end
 

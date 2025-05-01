@@ -146,7 +146,7 @@ Rails.application.routes.draw do
   end
 
   constraints DiscoverDomainConstraint do
-    get "/", to: "discover#index", as: :discover
+    get "/", to: "home#about"
 
     get "/discover", to: "discover#index"
     get "/discover/recommended_products", to: "discover#recommended_products", as: :discover_recommended_products
@@ -157,7 +157,7 @@ Rails.application.routes.draw do
     product_info_and_purchase_routes
 
     constraints DiscoverTaxonomyConstraint do
-      get "/*taxonomy", to: "discover#index"
+      get "/*taxonomy", to: "discover#index", as: :discover_taxonomy
     end
 
     get "/animation(*path)", to: redirect { |_, req| req.fullpath.sub("animation", "3d") }
@@ -272,7 +272,7 @@ Rails.application.routes.draw do
   get "/s3_utility/generate_multipart_signature", to: "s3_utility#generate_multipart_signature"
 
   constraints GumroadDomainConstraint do
-    get "/", to: "home#about", as: :about
+    get "/about", to: "home#about"
     get "/features", to: "home#features"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
