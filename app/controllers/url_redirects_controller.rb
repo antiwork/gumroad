@@ -82,25 +82,39 @@ class UrlRedirectsController < ApplicationController
     product_files = @url_redirect.alive_product_files.by_external_ids(params[:product_file_ids])
     e404 unless product_files.present? && product_files.all? { @url_redirect.is_file_downloadable?(_1) }
 
-    return render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } }) if request.format.json?
+    processing_files = product_files.select { |file| file.pdf_stamp_enabled? && @url_redirect.alive_stamped_pdfs.find_by(product_file_id: file.id).blank? }
 
-    # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
-    @product_file = product_files.first
-    processing = @product_file.pdf_stamp_enabled? && @url_redirect.alive_stamped_pdfs.find_by(product_file_id: @product_file.id).blank?
-
-    if processing
+    if processing_files.present?
       @purchase = @url_redirect.purchase
 
-      StampProductFileWorker.perform_async(@purchase.id, @product_file.id)
+      # Enqueue jobs for all processing files
+      processing_files.each do |file|
+        StampProductFileWorker.perform_async(@purchase.id, file.id)
+      end
 
-      flash[:alert] = "Your file is being processed. You will receive an email when it is ready to download."
-      redirect_to url_redirect_download_page_path(@url_redirect.token)
-      return
+      if request.format.json?
+        # Return JSON response with banner information
+        return render json: {
+          processing: true,
+          message: "Your file#{processing_files.size > 1 ? 's are' : ' is'} being processed. You will receive an email when #{processing_files.size > 1 ? 'they are' : 'it is'} ready to download."
+        }
+      else
+        # HTML response - redirect with flash message
+        flash[:alert] = "Your file is being processed. You will receive an email when it is ready to download."
+        redirect_to url_redirect_download_page_path(@url_redirect.token)
+        return
+      end
     end
 
-
-    redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
-    create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+    # All files are ready
+    if request.format.json?
+      render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } })
+    else
+      @product_file = product_files.first
+      # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
+      redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
+      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+    end
   end
 
   def download_archive
