@@ -5,7 +5,6 @@ import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
-import { stampProductFile } from "$app/data/product_files";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
@@ -27,7 +26,6 @@ import {
 } from "$app/components/server-components/DownloadPage/WithContent";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { NativeAppLink, TrackClick } from "./Interactions";
@@ -118,34 +116,9 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
 export const shouldShowSubtitlesForFile = (file: FileItem) =>
   file.stream_url != null && file.download_url != null && file.subtitle_files != null && file.subtitle_files.length > 0;
 
-const DownloadFileButton = ({ file, token }: { file: FileItem; token: string }) => {
-  const [loading, setLoading] = React.useState(false);
-
-  const handleProcessingFileDownload = async () => {
-    try {
-      setLoading(true);
-      await stampProductFile({
-        purchaseInfoToken: token,
-        productFileId: file.id,
-      });
-
-      showAlert("The PDF will be emailed to you shortly!", "info");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
-  };
-
+const DownloadFileButton = ({ file }: { file: FileItem }) => {
   const downloadUrl = file.download_url;
   if (!downloadUrl) return null;
-
-  if (file.processing) {
-    return (
-      <Button disabled={loading} onClick={() => void handleProcessingFileDownload()}>
-        Download
-      </Button>
-    );
-  }
 
   return (
     <TrackClick eventName="download_click" resourceId={file.id}>
@@ -275,7 +248,7 @@ export const FileRow = ({
           </div>
         ) : null}
 
-        <DownloadFileButton file={file} token={purchaseInfo.token} />
+        <DownloadFileButton file={file} />
 
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" resourceId={file.id}>

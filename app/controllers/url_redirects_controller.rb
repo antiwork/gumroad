@@ -12,7 +12,7 @@ class UrlRedirectsController < ApplicationController
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
-                                             hls_playlist download_subtitle_file read stamp
+                                             hls_playlist download_subtitle_file read
                                              download_archive latest_media_locations download_product_files audio_durations]
   before_action :hide_layouts, only: %i[
     confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
@@ -82,14 +82,25 @@ class UrlRedirectsController < ApplicationController
     product_files = @url_redirect.alive_product_files.by_external_ids(params[:product_file_ids])
     e404 unless product_files.present? && product_files.all? { @url_redirect.is_file_downloadable?(_1) }
 
-    if request.format.json?
-      render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } })
-    else
-      # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
-      @product_file = product_files.first
-      redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
-      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+    return render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } }) if request.format.json?
+
+    # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
+    @product_file = product_files.first
+    processing = @product_file.pdf_stamp_enabled? && @url_redirect.alive_stamped_pdfs.find_by(product_file_id: @product_file.id).blank?
+
+    if processing
+      @purchase = @url_redirect.purchase
+
+      StampProductFileWorker.perform_async(@purchase.id, @product_file.id, logged_in_user.id)
+
+      flash[:alert] = "Your file is being processed. You will receive an email when it is ready to download."
+      redirect_to url_redirect_download_page_path(@url_redirect.token, **forwardable_query_params)
+      return
     end
+
+
+    redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
+    create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
   end
 
   def download_archive
@@ -265,15 +276,6 @@ class UrlRedirectsController < ApplicationController
     end
 
     render json:
-  end
-
-  def stamp
-    @product_file = @url_redirect.product_file(params[:product_file_id])
-    @purchase = @url_redirect.purchase
-
-    StampProductFileWorker.perform_async(@purchase.id, @product_file.id, logged_in_user.id)
-
-    head :ok
   end
 
   private
