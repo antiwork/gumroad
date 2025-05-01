@@ -125,8 +125,11 @@ const Discover = (props: Props) => {
     if (!fromUrl.current) {
       // don't pushState if we're already loading from history state
       const url = new URL(window.location.href);
-      if (state.params.taxonomy) url.pathname = state.params.taxonomy;
-      else url.pathname = "/";
+      if (state.params.taxonomy) {
+        url.pathname = state.params.taxonomy;
+      } else if (url.pathname !== "/discover" && url.pathname !== "/") {
+        url.pathname = "/discover";
+      }
       const serializeParams = <T extends keyof SearchRequest>(
         keys: T[],
         transform: (value: NonNullable<SearchRequest[T]>) => string,
