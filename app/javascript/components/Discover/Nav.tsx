@@ -6,6 +6,14 @@ import { useDomains } from "$app/components/DomainSettings";
 import { MenuItem, NestedMenu } from "$app/components/NestedMenu";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
+const getPathname = (url: string) => {
+  try {
+    return new URL(url).pathname;
+  } catch (_) {
+    return url;
+  }
+};
+
 export const Nav = ({
   wholeTaxonomy,
   currentTaxonomyPath,
@@ -23,13 +31,17 @@ export const Nav = ({
   const discoverUrl = Routes.discover_url({ host: discoverDomain });
 
   const menuItems = React.useMemo(
-    () => generateTaxonomyItemsForMenu(wholeTaxonomy, forceDomain ? discoverUrl : ""),
+    () => generateTaxonomyItemsForMenu(wholeTaxonomy, forceDomain, discoverDomain),
     [wholeTaxonomy, discoverUrl],
   );
 
-  const selectedCategory = menuItems.find(
-    (menuItem) => menuItem.href?.replace(discoverUrl, "/") === (currentTaxonomyPath ? `/${currentTaxonomyPath}` : "/"),
-  )?.key;
+  const selectedCategory = menuItems.find((menuItem) => {
+    if (!menuItem.href) return false;
+    const pathname = getPathname(menuItem.href);
+    return currentTaxonomyPath
+      ? pathname === Routes.discover_taxonomy_path(currentTaxonomyPath)
+      : pathname === Routes.discover_path();
+  })?.key;
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
@@ -51,8 +63,9 @@ export const Nav = ({
   );
 };
 
-const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], discoverUrl: string) => {
+const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], forceDomain: boolean, discoverDomain: string) => {
   const taxonomyMap = new Map(wholeTaxonomy.map((tc) => [tc.key, tc]));
+
   const generateHref = (taxonomyCategory: Taxonomy): string => {
     const slugs = [];
     let curr: Taxonomy | undefined = taxonomyCategory;
@@ -60,11 +73,18 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], discoverUrl: st
       slugs.unshift(curr.slug);
       curr = curr.parent_key ? taxonomyMap.get(curr.parent_key) : undefined;
     }
-    return `${discoverUrl.replace(/\/$/u, "")}/${slugs.join("/")}`;
+
+    return forceDomain
+      ? Routes.discover_taxonomy_url(slugs.join("/"), { host: discoverDomain })
+      : Routes.discover_taxonomy_path(slugs.join("/"));
   };
 
   return [
-    { key: "all#key", label: "All", href: discoverUrl || "/" },
+    {
+      key: "all#key",
+      label: "All",
+      href: forceDomain ? Routes.discover_url({ host: discoverDomain }) : Routes.discover_path(),
+    },
     ...wholeTaxonomy.map((taxonomy): MenuItem => {
       const root = getRootTaxonomy(taxonomy.slug);
       return {

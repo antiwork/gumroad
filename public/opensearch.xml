@@ -4,8 +4,7 @@
   <Description>Gumroad makes it easy for you to sell digital products, memberships and more. Join the creator economy and escape your 9-5 desk job.</Description>
   <InputEncoding>[UTF-8]</InputEncoding>
   <Image width="16" height="16" type="image/x-icon">/favicon.ico</Image>
-  <Url type="text/html" template="https://discover.gumroad.com">
-    <Param name="query" value="{searchTerms}"/>
-  </Url>
-  <moz:SearchForm>https://discover.gumroad.com</moz:SearchForm>
+
+  <Url type="text/html" template="https://gumroad.com/discover?query={searchTerms}"/>
+  <moz:SearchForm>https://gumroad.com/discover</moz:SearchForm>
 </OpenSearchDescription>

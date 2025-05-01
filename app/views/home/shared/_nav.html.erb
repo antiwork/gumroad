@@ -54,18 +54,18 @@
 
   def nav_links
     content_tag :div, class: "flex flex-col justify-center items-center lg:flex-row lg:gap-4 lg:px-8" do
-      nav_link("Home", "/") +
-      nav_link("About", "/about") +
-      nav_link("Features", "/features") +
-      nav_link("Pricing", "/pricing") +
-      nav_link("Taxes", "/taxes")
+      nav_link("Discover", discover_path) +
+      nav_link("About", about_path) +
+      nav_link("Features", features_path) +
+      nav_link("Pricing", pricing_path) +
+      nav_link("Taxes", taxes_path)
     end
   end
 
   def auth_links
     content_tag :div, class: "flex flex-col lg:flex-row" do
       if signed_in?
-        nav_link("Dashboard", "https://gumroad.com", category: "button", context: "primary")
+        nav_link("Dashboard", dashboard_url(host: DOMAIN), category: "button", context: "primary")
       else
         nav_link("Log in", new_user_session_path, category: "button") +
         nav_link("Start selling", new_user_registration_path, category: "button", context: "primary")

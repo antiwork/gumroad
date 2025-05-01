@@ -43,7 +43,7 @@ export const Layout: React.FC<{
 
   onTaxonomyChange ??= (newTaxonomyPath) => {
     window.location.href = forceDomain
-      ? newTaxonomyPath || "/"
+      ? newTaxonomyPath || Routes.discover_path()
       : Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath });
   };
 

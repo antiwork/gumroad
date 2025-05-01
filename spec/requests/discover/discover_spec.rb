@@ -287,7 +287,7 @@ describe("Discover", js: true, type: :feature) do
       end
 
       # Should also work with client-side navigation
-      visit discover_host
+      visit "#{discover_host}/discover"
       within "[role=menubar]" do
         find("[role=menuitem]", text: "3D").hover
         click_on "All 3D"

@@ -282,7 +282,7 @@ describe "Affiliated Products", type: :feature, js: true do
       visit products_affiliated_index_path(affiliates: true)
 
       expect(page).to have_content "Gumroad Affiliates"
-      expect(page).to have_content "#{UrlService.discover_domain_with_protocol}?a=#{affiliate.external_id_numeric}"
+      expect(page).to have_content "#{UrlService.discover_domain_with_protocol}/discover?a=#{affiliate.external_id_numeric}"
     end
 
     it "displays the amount earned as an affiliate" do
