@@ -2489,11 +2489,7 @@ class Purchase < ApplicationRecord
   end
 
   def linked_license
-    if license_key.present?
-      license
-    elsif is_gift_sender_purchase && gift.giftee_purchase.present? && gift.giftee_purchase.license_key.present?
-      gift.giftee_purchase.license
-    end
+    license
   end
 
   def load_and_prepare_chargeable(credit_card)

@@ -5360,8 +5360,8 @@ describe Purchase, :vcr do
       let(:giftee_purchase) { create(:purchase, is_gift_receiver_purchase: true, license: create(:license), link: create(:product, is_licensed: true)) }
       let!(:gift) { create(:gift, gifter_purchase:, giftee_purchase:) }
 
-      it "returns the giftee's license" do
-        expect(gifter_purchase.reload.linked_license).to eq(giftee_purchase.license)
+      it "doesn't return the giftee's license" do
+        expect(gifter_purchase.reload.linked_license).to be_nil
       end
     end
 
