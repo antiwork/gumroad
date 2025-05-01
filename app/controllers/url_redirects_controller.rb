@@ -87,7 +87,6 @@ class UrlRedirectsController < ApplicationController
     if processing_files.present?
       @purchase = @url_redirect.purchase
 
-      # Enqueue jobs for all processing files
       processing_files.each do |file|
         StampProductFileWorker.perform_async(@purchase.id, file.id)
       end
@@ -110,8 +109,8 @@ class UrlRedirectsController < ApplicationController
     if request.format.json?
       render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } })
     else
-      @product_file = product_files.first
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
+      @product_file = product_files.first
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
     end
