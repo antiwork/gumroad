@@ -178,7 +178,7 @@ describe("Discover - Search scenarios", js: true, type: :feature) do
         fill_in "Search products", with: "product"
         find_field("Search products").native.send_keys(:return)
 
-        expect(page).to have_current_path("/?query=product")
+        expect(page).to have_current_path("/discover?query=product")
         expect(page).to have_product_card(count: 5)
       end
 
