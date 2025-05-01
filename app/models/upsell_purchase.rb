@@ -17,7 +17,7 @@ class UpsellPurchase < ApplicationRecord
     {
       name: upsell.name,
       discount: purchase.original_offer_code&.displayed_amount_off(purchase.link.price_currency_type, with_symbol: true),
-      selected_product: selected_product.name,
+      selected_product: selected_product&.name,
       selected_version: upsell_variant&.selected_variant&.name,
     }
   end
