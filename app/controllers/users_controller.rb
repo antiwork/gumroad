@@ -174,9 +174,9 @@ class UsersController < ApplicationController
       @body_id = "user_page"
     end
 
-private
-  def set_user_for_action
-    @user = User.find_by_external_id!(params[:id])
-    e404 if @user.nil? || @user != current_user
-  end
+  private
+    def set_user_for_action
+      @user = User.find_by_external_id!(params[:id])
+      e404 if @user.nil? || @user != current_user
+    end
 end
