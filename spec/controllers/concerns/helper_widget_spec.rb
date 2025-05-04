@@ -32,6 +32,25 @@ describe HelperWidget, type: :controller do
   end
 
   describe "#show_helper_widget?" do
+    context "when on a home controller page that should always show the widget" do
+      let(:home_pages) { %w[about features pricing terms prohibited privacy taxes] }
+
+      before do
+        allow(Rails.env).to receive(:test?).and_return(false)
+        allow(Feature).to receive(:active?).with(:helper_widget, nil).and_return(false)
+        stub_const("DOMAIN", "gumroad.com")
+        allow(controller).to receive(:controller_name).and_return("home")
+        request.host = "gumroad.com"
+      end
+
+      it "returns true" do
+        home_pages.each do |page|
+          allow(controller).to receive(:action_name).and_return(page)
+          expect(controller.show_helper_widget?).to be true
+        end
+      end
+    end
+
     context "when conditions are met" do
       before do
         allow(Rails.env).to receive(:test?).and_return(false)

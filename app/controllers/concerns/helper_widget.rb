@@ -12,7 +12,12 @@ module HelperWidget
   end
 
   def show_helper_widget?
-    !Rails.env.test? && request.host == DOMAIN && current_seller && Feature.active?(:helper_widget, current_seller)
+    return false if Rails.env.test?
+    return false unless request.host == DOMAIN
+    # Always show helper widget on marketing pages
+    return true if controller_name == "home" && %w[about features pricing terms prohibited privacy taxes].include?(action_name)
+
+    current_seller && Feature.active?(:helper_widget, current_seller)
   end
 
   def enable_helper_guide?

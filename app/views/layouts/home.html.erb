@@ -1,8 +1,5 @@
 <% content_for :script do %>
   <%= render "home/shared/scripts" %>
-  <% if ENV["HELPER_AI_MAILBOX_SLUG"].present? %>
-    <script src="https://helper.ai/widget/sdk.js" data-mailbox="<%= ENV["HELPER_AI_MAILBOX_SLUG"] %>" async></script>
-  <% end %>
 <% end %>
 
 <% content_for :meta do %>
