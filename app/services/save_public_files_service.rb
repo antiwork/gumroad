@@ -13,6 +13,9 @@ class SavePublicFilesService
     ActiveRecord::Base.transaction do
       persisted_files = resource.alive_public_files
       doc = Nokogiri::HTML.fragment(content)
+      sanitizer = Rails::Html::SafeListSanitizer.new
+      sanitized_content = sanitizer.sanitize(doc.to_html)
+      doc = Nokogiri::HTML.fragment(sanitized_content)
       file_ids_in_content = extract_file_ids_from_content(doc)
 
       update_existing_files(persisted_files, file_ids_in_content)
