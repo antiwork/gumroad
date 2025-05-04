@@ -32,7 +32,7 @@ class ReceiptPresenter::ChargeInfo
       else
         "Contact #{h(seller.display_name)} at #{mail_to(seller.support_or_form_email)}."
       end
-    "#{question} #{action}".html_safe
+    "#{question} #{action}"
   rescue NotImplementedError
     nil
   end
