@@ -37,6 +37,7 @@
     "core-js": "^3.27.1",
     "date-fns": "^3.0.0",
     "date-fns-tz": "^3.0.0",
+    "dompurify": "^3.2.5",
     "fast-average-color": "^9.4.0",
     "immer": "^10.0.0",
     "jquery": "^3.6.3",

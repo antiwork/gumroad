@@ -243,7 +243,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
     return ReactNodeViewRenderer(({ editor, node, deleteNode }: NodeViewProps) => (
       <NodeViewWrapper>
         <div className="embed">
-          <div className="preview" dangerouslySetInnerHTML={{ __html: cast(node.attrs.html) }}></div>
+          <div className="preview" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cast(node.attrs.html)) }}></div>
           <div className="content">
             <Icon name="file-earmark-play-fill" className="type-icon" />
             <div>
@@ -273,4 +273,5 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
       insertMediaEmbed: createInsertCommand("mediaEmbed"),
     };
   },
+import DOMPurify from 'dompurify';
 });
