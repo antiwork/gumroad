@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { Editor, Node as TiptapNode, Extension } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -273,5 +274,4 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
       insertMediaEmbed: createInsertCommand("mediaEmbed"),
     };
   },
-import DOMPurify from 'dompurify';
 });
