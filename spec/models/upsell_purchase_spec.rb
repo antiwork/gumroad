@@ -82,6 +82,38 @@ describe UpsellPurchase do
           }
         )
       end
+
+      context "when the upsell is a content upsell" do
+        let(:seller) { create(:named_seller) }
+        let(:purchase) { create(:purchase, link: product1) }
+        let(:content_upsell) do
+          create(
+            :upsell,
+            name: "Content Upsell",
+            product: product1,
+            seller: seller,
+            is_content_upsell: true,
+            cross_sell: true
+          )
+        end
+        let(:upsell_purchase) do
+          create(
+            :upsell_purchase,
+            upsell: content_upsell,
+            purchase: purchase,
+            selected_product: nil
+          )
+        end
+
+        it "returns nil for selected_product" do
+          expect(upsell_purchase.as_json).to match(
+            name: "Content Upsell",
+            discount: "$1",
+            selected_product: nil,
+            selected_version: nil,
+          )
+        end
+      end
     end
   end
 end
