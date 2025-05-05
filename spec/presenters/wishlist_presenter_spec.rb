@@ -341,6 +341,40 @@ describe WishlistPresenter do
       end
     end
 
+    context "thumbnails" do
+      let!(:product_with_only_thumbnail) { create(:product) }
+      let!(:product_with_only_cover) { create(:product) }
+      let!(:product_with_neither_1) { create(:product) }
+      let!(:product_with_neither_2) { create(:product) }
+
+      let!(:thumbnail) { create(:thumbnail, product: product_with_only_thumbnail) }
+      let!(:cover_image) { create(:asset_preview_jpg, link: product_with_only_cover) }
+
+      let!(:wishlist_for_thumbnails) do
+        create(
+          :wishlist,
+          wishlist_products: [
+            build(:wishlist_product, product: product_with_only_thumbnail),
+            build(:wishlist_product, product: product_with_only_cover),
+            build(:wishlist_product, product: product_with_neither_1),
+            build(:wishlist_product, product: product_with_neither_2),
+          ],
+        )
+      end
+
+      it "falls back to cover image url" do
+        result = described_class.new(wishlist: wishlist_for_thumbnails)
+          .card_props(pundit_user:, following: false)
+
+        expect(result[:thumbnails]).to contain_exactly(
+          { url: thumbnail.url, native_type: "digital" },
+          { url: cover_image.url, native_type: "digital" },
+          { url: nil, native_type: "digital" },
+          { url: nil, native_type: "digital" },
+        )
+      end
+    end
+
     context "for the user's own wishlist" do
       let(:pundit_user) { SellerContext.new(user: wishlist.user, seller: wishlist.user) }
 
