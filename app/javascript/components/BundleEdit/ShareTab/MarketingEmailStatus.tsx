@@ -1,27 +1,18 @@
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { paramsToQueryString } from "$app/utils/url";
 
 import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { NavigationButton } from "$app/components/Button";
 import { newEmailPath } from "$app/components/server-components/EmailsPage";
-
-const paramsToQueryString = (params: Record<string, string | string[] | undefined>) =>
-  Object.keys(params)
-    .map((key) => {
-      const value = params[key];
-      return Array.isArray(value)
-        ? value.map((v) => `${key}[]=${encodeURIComponent(v)}`).join("&")
-        : `${key}=${encodeURIComponent(value ?? "")}`;
-    })
-    .join("&");
 
 export const MarketingEmailStatus = () => {
   const { bundle, uniquePermalink, currencyType } = useBundleEditContext();
 
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
   const queryParams = {
-    bundle_marketing: "true",
+    template: "bundle_marketing",
     bundle_product_permalinks: sendToAllCustomers ? undefined : bundle.products.map(({ permalink }) => permalink),
     bundle_product_names: bundle.products.map(({ name }) => name),
     bundle_permalink: uniquePermalink,

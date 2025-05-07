@@ -23,6 +23,7 @@ import { AbortError, assertResponseError, request } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
+import { useDomains } from "$app/components/DomainSettings";
 import {
   EmailAttachments,
   FilesDispatchProvider,
@@ -242,6 +243,7 @@ export const EmailForm = () => {
   const publishDateRef = React.useRef<HTMLInputElement>(null);
   const [invalidFields, setInvalidFields] = React.useState(new Set<InvalidFieldName>());
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
+  const { appDomain } = useDomains();
   const imageSettings = React.useMemo(
     () => ({
       onUpload: (file: File) => {
@@ -313,8 +315,61 @@ export const EmailForm = () => {
     const tier = searchParams.get("tier");
     const permalink = searchParams.get("product");
     const productName = productOptions.find((option) => option.id === permalink)?.label;
-    const isBundleMarketing = searchParams.get("bundle_marketing") === "true";
     const canSendToCustomers = context.audience_types.includes("customers");
+    const template = searchParams.get("template");
+    const isBundleMarketing = template === "bundle_marketing";
+
+    if (template === "content_updates" && permalink) {
+      const bought = searchParams.getAll("bought[]");
+      setTitle(`New content added to ${productName}`);
+      setBought(bought);
+      setAudienceType("customers");
+      setChannel({ profile: false, email: true });
+      setInitialMessage({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "New content has been added to ",
+              },
+              {
+                type: "text",
+                marks: [
+                  {
+                    type: "link",
+                    attrs: {
+                      href: Routes.short_link_url(permalink, {
+                        host: currentSeller.subdomain ?? appDomain,
+                      }),
+                    },
+                  },
+                ],
+                text: productName ?? "your product",
+              },
+              {
+                type: "text",
+                text: ".",
+              },
+            ],
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "You can access it by visiting your Gumroad Library or through the link in your email receipt.",
+              },
+            ],
+          },
+        ],
+      });
+
+      return;
+    }
+
     if (tier !== null && productOptions.findIndex((option) => option.id === tier) !== -1 && canSendToCustomers) {
       setAudienceType("customers");
       setBought([tier]);

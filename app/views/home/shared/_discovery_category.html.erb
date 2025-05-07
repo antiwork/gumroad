@@ -1,5 +1,5 @@
 <div class="flex flex-col gap-4 rounded-lg border border-black <%= bg %> p-4 lg:p-8" role="listitem">
-  <a href="https://discover.gumroad.com/<%= path %>" class="flex flex-col gap-4 no-underline">
+  <%= link_to discover_taxonomy_url(path, host: DISCOVER_DOMAIN), class: "flex flex-col gap-4 no-underline" do %>
     <div class="flex flex-col gap-3">
       <%= image_tag icon,
           alt: title,
@@ -12,18 +12,17 @@
         <%= description %>
       </div>
     </div>
-  </a>
+  <% end %>
 
   <div class="flex flex-col gap-3">
     <div class="text-base">Popular tags</div>
     <div class="flex flex-wrap gap-2">
       <% tags.each do |tag| %>
-        <a
-          href="https://discover.gumroad.com/<%= path %>?tags=<%= tag.gsub(' ', '+') %>"
-          class="px-3 py-1 text-sm bg-white rounded-full border border-black no-underline hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all"
-        >
-          <%= tag %>
-        </a>
+        <%= link_to(
+          tag,
+          discover_taxonomy_url(path, tags: tag, host: DISCOVER_DOMAIN),
+          class: "px-3 py-1 text-sm bg-white rounded-full border border-black no-underline hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all"
+        ) %>
       <% end %>
     </div>
   </div>

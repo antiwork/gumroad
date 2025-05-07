@@ -65,7 +65,15 @@ class WishlistPresenter
     }
   end
 
-  ASSOCIATIONS_FOR_CARD = [:user, alive_wishlist_products: :product].freeze
+  ASSOCIATIONS_FOR_CARD = [
+    :user,
+    {
+      alive_wishlist_products: {
+        product: [:thumbnail_alive, :display_asset_previews]
+      }
+    }
+  ].freeze
+
   def card_props(pundit_user:, following:, layout: nil, recommended_by: nil)
     thumbnails = wishlist.alive_wishlist_products.last(4).map { product_thumbnail(_1.product) }
     thumbnails = [thumbnails.last].compact if thumbnails.size < 4
@@ -85,7 +93,7 @@ class WishlistPresenter
 
   private
     def product_thumbnail(product)
-      { url: product.thumbnail_alive&.url, native_type: product.native_type }
+      { url: product.thumbnail_or_cover_url, native_type: product.native_type }
     end
 
     def selections_in_wishlist_props(product:)

@@ -184,14 +184,7 @@ describe("Download Page product reviews", type: :feature, js: true) do
   end
 
   context "video reviews" do
-    it "only allows text reviews if the seller has video reviews disabled" do
-      visit purchase.url_redirect.download_page_url
-      expect(page).not_to have_radio_button("Video review")
-    end
-
-    it "allows both text and video reviews if the purchaser has video reviews enabled" do
-      Feature.activate_user(:video_reviews, purchase.seller)
-
+    it "allows both text and video reviews" do
       visit purchase.url_redirect.download_page_url
 
       expect(page).to have_radio_button("Text review")

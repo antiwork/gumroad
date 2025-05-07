@@ -98,8 +98,10 @@ const Discover = (props: Props) => {
   const parseUrlParams = (href: string) => {
     const url = new URL(href);
     const parsedParams: SearchRequest = {
-      taxonomy: url.pathname === "/" || url.pathname === "/discover" ? undefined : url.pathname.replace("/", ""),
-      curated_product_ids: props.curated_product_ids.slice(url.pathname === "/" ? recommendedProductsCount : 0),
+      taxonomy: url.pathname === Routes.discover_path() ? undefined : url.pathname.replace("/", ""),
+      curated_product_ids: props.curated_product_ids.slice(
+        url.pathname === Routes.discover_path() ? recommendedProductsCount : 0,
+      ),
     };
 
     function parseParams<T extends keyof SearchRequest>(keys: T[], transform: (value: string) => SearchRequest[T]) {
@@ -125,8 +127,11 @@ const Discover = (props: Props) => {
     if (!fromUrl.current) {
       // don't pushState if we're already loading from history state
       const url = new URL(window.location.href);
-      if (state.params.taxonomy) url.pathname = state.params.taxonomy;
-      else url.pathname = "/";
+      if (state.params.taxonomy) {
+        url.pathname = state.params.taxonomy;
+      } else if (url.pathname !== Routes.discover_path()) {
+        url.pathname = Routes.discover_path();
+      }
       const serializeParams = <T extends keyof SearchRequest>(
         keys: T[],
         transform: (value: NonNullable<SearchRequest[T]>) => string,

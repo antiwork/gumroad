@@ -114,7 +114,6 @@ class ProductPresenter::ProductProps
         content_url: purchase_info[:content_url],
         subscription_has_lapsed: purchase_info[:subscription_has_lapsed],
         membership: purchase_info[:membership],
-        video_reviews_enabled: seller.video_reviews_enabled?,
       }
     end
 

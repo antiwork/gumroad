@@ -98,7 +98,7 @@ describe GlobalAffiliate do
 
     context "when product is not provided" do
       it "returns the discover URL with the affiliate ID param" do
-        expect(affiliate.final_destination_url).to eq "#{UrlService.discover_domain_with_protocol}/?a=#{affiliate.external_id_numeric}"
+        expect(affiliate.final_destination_url).to eq "#{UrlService.discover_domain_with_protocol}/discover?a=#{affiliate.external_id_numeric}"
       end
     end
   end

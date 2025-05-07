@@ -48,7 +48,6 @@ export type LayoutProps = {
     product_long_url: string | null;
     created_at: string;
     allows_review: boolean;
-    video_reviews_enabled: boolean;
     disable_reviews_after_year: boolean;
     review: Review | null;
     membership: {
@@ -127,7 +126,6 @@ export const Layout = ({
                 purchaseId={purchase.id}
                 purchaseEmailDigest={purchase.email_digest}
                 review={purchase.review}
-                videoReviewsEnabled={purchase.video_reviews_enabled}
                 disabledStatus={disabledStatus}
               />
             </div>
