@@ -3,14 +3,37 @@ import * as React from "react";
 
 import { getRootTaxonomy, getRootTaxonomyCss, Taxonomy } from "$app/utils/discover";
 
+import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
-import { Nav as HomeNav } from "$app/components/Home/Nav";
 import { Icon } from "$app/components/Icons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+
+import logo from "$assets/images/logo.svg";
+interface UserActionsButtonsProps {
+  currentSeller: ReturnType<typeof useCurrentSeller>;
+}
+
+const UserActionsButtons: React.FC<UserActionsButtonsProps> = ({ currentSeller }) => (
+  <>
+    {currentSeller ? (
+      <NavigationButton href={Routes.library_url()}>
+        <Icon name="bookmark-heart-fill" /> Library
+      </NavigationButton>
+    ) : (
+      <NavigationButton href={Routes.login_url()}>Log in</NavigationButton>
+    )}
+    <CartNavigationButton className="link-button" />
+    {!currentSeller?.has_published_products && (
+      <NavigationButton href={Routes.root_url()} color="primary">
+        Start Selling
+      </NavigationButton>
+    )}
+  </>
+);
 
 export const Layout: React.FC<{
   taxonomiesForNav: Taxonomy[];
@@ -33,7 +56,7 @@ export const Layout: React.FC<{
   children,
   forceDomain = false,
 }) => {
-  const { discoverDomain } = useDomains();
+  const { discoverDomain, appDomain } = useDomains();
   const isDesktop = useIsAboveBreakpoint("lg");
   const currentSeller = useCurrentSeller();
 
@@ -47,14 +70,10 @@ export const Layout: React.FC<{
       : Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath });
   };
 
-  const headerCta = currentSeller && (
-    <a href={Routes.library_url()} className="button">
-      <Icon name="bookmark-heart-fill" /> Library
-    </a>
-  );
+  const headerLinks = <UserActionsButtons currentSeller={currentSeller} />;
 
   const avatar = currentSeller ? (
-    <a href={Routes.settings_main_url()} aria-label="Settings">
+    <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard">
       <img className="user-avatar" src={currentSeller.avatarUrl} />
     </a>
   ) : null;
@@ -65,35 +84,38 @@ export const Layout: React.FC<{
       currentTaxonomyPath={taxonomyPath}
       onClickTaxonomy={onTaxonomyChange}
       forceDomain={forceDomain}
-      footer={<footer>{headerCta}</footer>}
+      footer={
+        <footer>
+          <UserActionsButtons currentSeller={currentSeller} />
+        </footer>
+      }
     />
   );
 
   return (
     <main className={cx("discover", className)}>
-      <section className="content sticky top-0 z-50 p-0">
-        <HomeNav />
-      </section>
       <header
         className="hero border-t-0 lg:pe-16 lg:ps-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
       >
         <div className="hero-actions">
-          <CartNavigationButton className="link-button" />
-          {isDesktop ? null : avatar}
-          <div className="separator" />
+          <a href={Routes.discover_path()} className="flex items-center">
+            <img src={logo} alt="Gumroad" className="h-8 dark:invert" />
+          </a>
           <Search query={query} setQuery={setQuery} />
-          {isDesktop ? headerCta : nav}
-          {isDesktop ? (
-            <div className="order-1 flex flex-grow items-center justify-between">
-              {nav}
-              {avatar}
-            </div>
-          ) : null}
+
+          {isDesktop ? headerLinks : null}
+
+          <div className="separator" />
+
+          <div className="flex w-full items-center justify-between lg:order-2">
+            <div className="flex-auto">{nav}</div>
+            {avatar}
+          </div>
         </div>
         {showTaxonomy && taxonomyPath ? (
-          <div className="col-start-1 grid">
-            <div className="col-start-1">
+          <div className="col-start-1 flex items-center">
+            <div>
               <TaxonomyCategoryBreadcrumbs
                 taxonomyPath={taxonomyPath}
                 taxonomies={taxonomiesForNav}

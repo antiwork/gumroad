@@ -369,7 +369,7 @@ class User < ApplicationRecord
     return unless annual_reports.attached?
 
     blob_url = annual_reports.joins("LEFT JOIN active_storage_blobs ON active_storage_blobs.id = active_storage_attachments.blob_id")
-                             .find_by("JSON_CONTAINS(active_storage_blobs.metadata, :year, '$.year')", year:)&.blob&.url
+                             .find_by("JSON_CONTAINS(active_storage_blobs.metadata, :year, \'$.year\')", year:)&.blob&.url
 
     cdn_url_for(blob_url) if blob_url
   end
@@ -975,6 +975,13 @@ class User < ApplicationRecord
     return nil unless has_paypal_account_connected?
 
     paypal_connect_account.paypal_account_details&.dig("primary_email")
+  end
+
+  def has_published_products?
+    # 'products' is an alias for 'links'.
+    # Assumes that the 'alive' scope on the Link (Product) model
+    # correctly identifies products that are published/live.
+    products.alive.exists?
   end
 
   protected

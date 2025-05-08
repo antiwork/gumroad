@@ -21,8 +21,8 @@
     left: spacer(3);
   }
 
-  > [role="menu"],
-  > .stack {
+  >[role="menu"],
+  >.stack {
     &:only-child {
       box-shadow: none;
       margin: -(spacer(4));
@@ -56,6 +56,7 @@
     z-index: z-index(tooltip);
     // We want the popover to contrast against the site as a whole, not its parent.
     --color: var(--contrast-filled);
+
     &::before {
       display: none;
     }
@@ -77,12 +78,13 @@
   }
 
   &:has(> summary button) {
-    > .dropdown {
+    >.dropdown {
       margin-left: -$button-hover-transform-length;
     }
 
     &.top {
-      > .dropdown,
+
+      >.dropdown,
       &::after {
         margin-bottom: $button-hover-transform-length;
       }
