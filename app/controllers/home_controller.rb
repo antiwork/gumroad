@@ -27,7 +27,7 @@ class HomeController < ApplicationController
         "hackathon" => {
           url: :hackathon_url,
           title: "Gumroad $100K Niche Marketplace Hackathon",
-          description: "Build a niche marketplace that features products from Gumroad creators. $100K in prizes for the best marketplace ideas and implementations."
+          description: "Build a niche marketplace using Gumroad OSS. $100K in prizes for the best marketplace ideas and implementations."
         },
         "pricing" => {
           url: :pricing_url,
