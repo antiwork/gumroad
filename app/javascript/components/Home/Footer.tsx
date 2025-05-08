@@ -27,9 +27,6 @@ export const Footer = () => (
     <div className="flex w-full max-w-3xl flex-col gap-16">
       <div className="flex flex-1 gap-16">
         <div className="flex flex-1 flex-col gap-3">
-          <a href="/taxes" className="no-underline hover:text-pink">
-            Taxes
-          </a>
           <a href="/terms" className="no-underline hover:text-pink">
             Terms of Service
           </a>

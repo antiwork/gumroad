@@ -44,11 +44,6 @@ class HomeController < ApplicationController
           title: "Prohibited products on Gumroad",
           description: "Understand what products and activities are not allowed on Gumroad to comply with our policies."
         },
-        "taxes" => {
-          url: :taxes_url,
-          title: "Gumroad's merchant of record transition",
-          description: "Gumroad is transitioning to a merchant of record, simplifying tax handling for creators and customers."
-        },
         "terms" => {
           url: :terms_url,
           title: "Gumroad terms of service",

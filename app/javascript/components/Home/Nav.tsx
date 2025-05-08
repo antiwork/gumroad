@@ -68,7 +68,6 @@ export const Nav = () => {
       <NavLink text="About" href={Routes.about_url()} />
       <NavLink text="Features" href={Routes.features_url()} />
       <NavLink text="Pricing" href={Routes.pricing_url()} />
-      <NavLink text="Taxes" href={Routes.taxes_url()} />
     </>
   );
 
