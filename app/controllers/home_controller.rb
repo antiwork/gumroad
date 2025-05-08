@@ -24,6 +24,11 @@ class HomeController < ApplicationController
           title: "Gumroad features: Simple and powerful e-commerce tools",
           description: "Sell books, memberships, courses, and more with Gumroad's simple e-commerce tools. Everything you need to grow your audience."
         },
+        "hackathon" => {
+          url: :hackathon_url,
+          title: "Gumroad $100K Niche Marketplace Hackathon",
+          description: "Build a niche marketplace using Gumroad OSS. $100K in prizes for the best marketplace ideas and implementations."
+        },
         "pricing" => {
           url: :pricing_url,
           title: "Gumroad pricing: 10% flat fee",
