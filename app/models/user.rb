@@ -36,6 +36,10 @@ class User < ApplicationRecord
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
+  # Constants for "Small Bets" product
+  SMALL_BETS_SELLER_USERNAME = "dvassallo"
+  SMALL_BETS_PRODUCT_PERMALINK = "small-bets" # Assumed permalink from https://dvassallo.gumroad.com/l/small-bets
+
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
   has_many :affiliate_requests, foreign_key: :seller_id
@@ -975,6 +979,25 @@ class User < ApplicationRecord
     return nil unless has_paypal_account_connected?
 
     paypal_connect_account.paypal_account_details&.dig("primary_email")
+  end
+
+  def purchased_small_bets?
+    # Cache this per request or for a short duration if it's called frequently
+    # You might want to adjust the cache key or expiration based on your needs.
+    cache_key = "user_#{self.id}_purchased_small_bets?"
+    Rails.cache.fetch(cache_key, expires_in: 5.minutes) do
+      small_bets_product = Link.joins(:user)
+                                .where(users: { username: SMALL_BETS_SELLER_USERNAME },
+                                       links: { unique_permalink: SMALL_BETS_PRODUCT_PERMALINK })
+                                .first
+      return false unless small_bets_product
+
+      # Assuming Purchase::NON_GIFT_SUCCESS_STATES contains the list of successful purchase states.
+      # This is based on its usage elsewhere in your User model.
+      purchases.where(link_id: small_bets_product.id)
+               .where(purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
+               .exists?
+    end
   end
 
   protected

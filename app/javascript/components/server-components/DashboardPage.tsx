@@ -1,11 +1,11 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { createCast, cast } from "ts-safe-cast";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
-import { NavigationButton } from "$app/components/Button";
+import { NavigationButton, Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -13,7 +13,12 @@ import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
+import DesignIcon from "$assets/images/features/design-and-tech.svg";
+import PaintingIcon from "$assets/images/features/drawing-and-painting.svg";
+import PinkIcon from "$assets/images/logo-g.svg";
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
+
+const nativeTypeIcons = require.context("$assets/images/native_types/", false, /\.png$/u);
 
 type ProductRow = {
   id: string;
@@ -25,6 +30,8 @@ type ProductRow = {
   today: number;
   last_7: number;
   last_30: number;
+  imageName: string;
+  show_1099_download_notice: boolean;
 };
 
 type Props = {
@@ -37,6 +44,7 @@ type Props = {
     first_sale: boolean;
     first_payout: boolean;
     first_email: boolean;
+    first_small_bets: boolean;
   };
   sales: ProductRow[];
   balances: {
@@ -50,6 +58,15 @@ type Props = {
   show_1099_download_notice: boolean;
 };
 type TableProps = { sales: ProductRow[] };
+
+type RadioItemProps = {
+  name: string;
+  checked: boolean;
+  link: string;
+  imageName?: string;
+  imagePath?: string;
+  description?: string;
+};
 
 const Greeter = () => (
   <div className="placeholder">
@@ -65,24 +82,59 @@ const Greeter = () => (
     </a>
   </div>
 );
+const RadioItem = ({ name, checked, link, imageName, imagePath, description }: RadioItemProps) => {
+  const handleClick = () => {
+    if (!checked && link) {
+      window.location.href = link;
+    }
+  };
 
-const RadioItem = ({ name, checked, link }: { name: string; checked: boolean; link: string }) => (
-  <div>
-    <div style={{ display: "flex", gap: "var(--spacer-3)" }}>
+  const imgSrc = imagePath ? imagePath : cast<string>(nativeTypeIcons(`./${imageName}.png`));
+
+  return (
+    <Button
+      role="radio"
+      aria-checked={checked}
+      onClick={handleClick}
+      color="filled"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        gap: "var(--spacer-0)",
+        padding: "var(--spacer-6) var(--spacer-3)",
+        position: "relative",
+      }}
+    >
       {checked ? (
-        <>
-          <Icon name="solid-check-circle" style={{ backgroundColor: "rgb(var(--success))" }} />
-          <s>{name}</s>
-        </>
-      ) : (
-        <>
-          <Icon name="circle" />
-          <a href={link}>{name}</a>
-        </>
-      )}
-    </div>
-  </div>
-);
+        <Icon
+          name="solid-check-circle"
+          style={{
+            position: "absolute",
+            top: "var(--spacer-2)",
+            right: "var(--spacer-2)",
+            color: "rgb(var(--success))",
+          }}
+        />
+      ) : null}
+      <img
+        src={imgSrc}
+        alt=""
+        width="62"
+        height="62"
+        style={{
+          marginBottom: "var(--spacer-3)",
+          filter: checked ? "none" : "grayscale(100%) opacity(30%)",
+        }}
+      />
+      <div className="text-lg font-semibold">{name}</div>
+      {description ? (
+        <p style={{ fontSize: "var(--font-size-small)", color: "var(--text-muted)" }}>{description}</p>
+      ) : null}
+    </Button>
+  );
+};
 
 const formatPrice = (cents: number) =>
   formatPriceCentsWithCurrencySymbol("usd", cents, { symbolFormat: "short", noCentsIfWhole: true });
@@ -197,73 +249,109 @@ export const DashboardPage = ({
             </div>
           </div>
         ) : null}
-        {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? <Greeter /> : null}
-        <div className="stats-grid">
-          <Stats
-            title="Balance"
-            description="Your current balance available for payout"
-            value={balances.balance}
-            url={Routes.balance_path()}
-          />
-          <Stats
-            title="Last 7 days"
-            description="Your total sales in the last 7 days"
-            value={balances.last_seven_days_sales_total}
-            url={Routes.sales_dashboard_path()}
-          />
-          <Stats
-            title="Last 28 days"
-            description="Your total sales in the last 28 days"
-            value={balances.last_28_days_sales_total}
-            url={Routes.sales_dashboard_path()}
-          />
-          <Stats
-            title="Total earnings"
-            description="Your all-time net earnings from all products, excluding refunds and chargebacks"
-            value={balances.total}
-            url={Routes.dashboard_total_revenue_path()}
-          />
-        </div>
 
         {loggedInUser?.policies.settings_payments_user.show
           ? Object.values(getting_started_stats).some((v) => !v) && (
               <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
                 <h2>Getting started</h2>
-                <div className="stack two-columns">
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))",
+                    gap: "var(--spacer-3)",
+                  }}
+                >
+                  <RadioItem
+                    name="Make a Gumroad account"
+                    checked
+                    link=""
+                    imagePath={PinkIcon}
+                    description="Start selling with Gumroad."
+                  />
                   <RadioItem
                     name="Customize your profile"
                     checked={getting_started_stats.customized_profile}
                     link={Routes.settings_profile_path()}
+                    imagePath={PaintingIcon}
+                    description="Personalize your public page."
                   />
                   <RadioItem
                     name="Create your first product"
                     checked={getting_started_stats.first_product}
                     link={Routes.new_product_path()}
+                    imagePath={DesignIcon}
+                    description="Add something to sell or share."
                   />
                   <RadioItem
                     name="Get your first follower"
                     checked={getting_started_stats.first_follower}
                     link={Routes.followers_path()}
+                    imageName="membership"
+                    description="Build your audience."
                   />
                   <RadioItem
                     name="Make your first sale"
                     checked={getting_started_stats.first_sale}
                     link={Routes.sales_dashboard_path()}
+                    imageName="coffee"
+                    description="Start earning from your work."
                   />
                   <RadioItem
                     name="Get your first pay out"
                     checked={getting_started_stats.first_payout}
                     link={Routes.settings_payments_path()}
+                    imageName="commission"
+                    description="Receive your earnings."
                   />
                   <RadioItem
                     name="Send out your first email blast"
                     checked={getting_started_stats.first_email}
                     link={Routes.posts_path()}
+                    imageName="newsletter"
+                    description="Engage with your audience."
+                  />
+                  <RadioItem
+                    name="Sign up for Small Bets"
+                    checked={false}
+                    link="https://dvassallo.gumroad.com/l/small-bets?layout=profile"
+                    imageName="newsletter"
+                    description="Join the community."
                   />
                 </div>
               </div>
             )
           : null}
+
+        {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? (
+          <Greeter />
+        ) : (
+          <div className="stats-grid">
+            <Stats
+              title="Balance"
+              description="Your current balance available for payout"
+              value={balances.balance}
+              url={Routes.balance_path()}
+            />
+            <Stats
+              title="Last 7 days"
+              description="Your total sales in the last 7 days"
+              value={balances.last_seven_days_sales_total}
+              url={Routes.sales_dashboard_path()}
+            />
+            <Stats
+              title="Last 28 days"
+              description="Your total sales in the last 28 days"
+              value={balances.last_28_days_sales_total}
+              url={Routes.sales_dashboard_path()}
+            />
+            <Stats
+              title="Total earnings"
+              description="Your all-time net earnings from all products, excluding refunds and chargebacks"
+              value={balances.total}
+              url={Routes.dashboard_total_revenue_path()}
+            />
+          </div>
+        )}
 
         <ProductsTable sales={sales} />
 
