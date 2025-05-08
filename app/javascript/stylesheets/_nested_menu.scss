@@ -1,5 +1,5 @@
 .nested-menu {
-  >[role="menubar"] {
+  > [role="menubar"] {
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: max-content;
@@ -67,7 +67,7 @@
     }
   }
 
-  >button {
+  > button {
     @include bg-color(filled);
   }
 
@@ -87,7 +87,7 @@
       right: spacer(4);
     }
 
-    >[role="menu"] {
+    > [role="menu"] {
       position: fixed;
       height: 100%;
       overflow-y: auto;
