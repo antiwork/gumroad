@@ -3,6 +3,8 @@
 class HomeController < ApplicationController
   layout "home"
 
+  allow_anonymous_access_to_helper_widget
+
   before_action :set_meta_data
   before_action :set_layout_and_title
 
