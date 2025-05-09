@@ -35,7 +35,6 @@ describe HelperWidget, type: :controller do
     context "when conditions are met" do
       before do
         allow(Rails.env).to receive(:test?).and_return(false)
-        allow(Feature).to receive(:active?).with(:helper_widget, user).and_return(true)
         stub_const("DOMAIN", "gumroad.com")
         sign_in(user)
         request.host = "gumroad.com"
@@ -61,23 +60,8 @@ describe HelperWidget, type: :controller do
     context "when domain is not gumroad.com" do
       before do
         allow(Rails.env).to receive(:test?).and_return(false)
-        allow(Feature).to receive(:active?).with(:helper_widget, user).and_return(true)
         sign_in(user)
         request.host = "seller.gumroad.com"
-      end
-
-      it "returns false" do
-        get :action
-        expect(controller.show_helper_widget?).to be false
-      end
-    end
-
-    context "when feature is not active" do
-      before do
-        allow(Rails.env).to receive(:test?).and_return(false)
-        allow(Feature).to receive(:active?).with(:helper_widget, user).and_return(false)
-        sign_in(user)
-        request.host = "gumroad.com"
       end
 
       it "returns false" do

@@ -12,7 +12,7 @@ module HelperWidget
   end
 
   def show_helper_widget?
-    !Rails.env.test? && request.host == DOMAIN && current_seller && Feature.active?(:helper_widget, current_seller)
+    !Rails.env.test? && request.host == DOMAIN && current_seller
   end
 
   def enable_helper_guide?
