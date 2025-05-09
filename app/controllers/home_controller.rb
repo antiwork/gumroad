@@ -24,6 +24,11 @@ class HomeController < ApplicationController
           title: "Gumroad features: Simple and powerful e-commerce tools",
           description: "Sell books, memberships, courses, and more with Gumroad's simple e-commerce tools. Everything you need to grow your audience."
         },
+        "hackathon" => {
+          url: :hackathon_url,
+          title: "Gumroad $100K Niche Marketplace Hackathon",
+          description: "Build a niche marketplace using Gumroad OSS. $100K in prizes for the best marketplace ideas and implementations."
+        },
         "pricing" => {
           url: :pricing_url,
           title: "Gumroad pricing: 10% flat fee",
@@ -38,11 +43,6 @@ class HomeController < ApplicationController
           url: :prohibited_url,
           title: "Prohibited products on Gumroad",
           description: "Understand what products and activities are not allowed on Gumroad to comply with our policies."
-        },
-        "taxes" => {
-          url: :taxes_url,
-          title: "Gumroad's merchant of record transition",
-          description: "Gumroad is transitioning to a merchant of record, simplifying tax handling for creators and customers."
         },
         "terms" => {
           url: :terms_url,
