@@ -14,7 +14,7 @@ class SendMembershipsPriceUpdateEmailsJob
 
         subscription_plan_change.update!(notified_subscriber_at: Time.current)
         CustomerLowPriorityMailer.subscription_price_change_notification(
-          subscription_id: subscription_plan_change.subscription_id,
+          subscription_id: subscription.id,
           new_price: subscription_plan_change.perceived_price_cents,
         ).deliver_later(queue: "low")
       end
