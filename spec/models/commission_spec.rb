@@ -225,6 +225,51 @@ describe Commission, :vcr do
         end
       end
     end
+
+    context "when the deposit purchase has PPP discount applied" do
+      before do
+        PurchasingPowerParityService.new.set_factor("LV", 0.5)
+      end
+
+      let(:seller) do
+        create(
+          :user,
+          :eligible_for_service_products,
+          purchasing_power_parity_enabled: true,
+          purchasing_power_parity_payment_verification_disabled: true
+        )
+      end
+      let!(:product) { create(:commission_product, price_cents: 2000, user: seller) }
+
+      let!(:deposit_purchase) do
+        create(
+          :commission_deposit_purchase,
+          link: product,
+          is_purchasing_power_parity_discounted: true,
+          ip_country: "Latvia",
+          card_country: "LV"
+        ).tap do |purchase|
+          purchase.create_purchasing_power_parity_info(factor: 0.5)
+        end
+      end
+
+      let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase:) }
+
+      it "creates a completion purchase with PPP discount applied" do
+        expect(deposit_purchase.is_purchasing_power_parity_discounted).to eq(true)
+        expect(deposit_purchase.purchasing_power_parity_info).to be_present
+        expect(deposit_purchase.purchasing_power_parity_info.factor).to eq(0.5)
+
+        expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
+
+        completion_purchase = commission.reload.completion_purchase
+        expect(completion_purchase.is_purchasing_power_parity_discounted).to eq(true)
+        expect(completion_purchase.purchasing_power_parity_info).to be_present
+        expect(completion_purchase.purchasing_power_parity_info.factor).to eq(0.5)
+
+        expect(completion_purchase.price_cents).to eq(500)
+      end
+    end
   end
 
   describe "#completion_price_cents" do
