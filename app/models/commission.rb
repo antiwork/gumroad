@@ -47,8 +47,11 @@ class Commission < ApplicationRecord
       completion_purchase.build_tip(value_cents: completion_tip_value_cents)
     end
 
-    if deposit_purchase.purchasing_power_parity_info.present? && deposit_purchase.is_purchasing_power_parity_discounted
-      completion_purchase.build_purchasing_power_parity_info(factor: deposit_purchase.purchasing_power_parity_info.factor)
+    if deposit_purchase.is_purchasing_power_parity_discounted &&
+        deposit_purchase.purchasing_power_parity_info.present?
+      completion_purchase.build_purchasing_power_parity_info(
+        factor: deposit_purchase.purchasing_power_parity_info.factor
+      )
     end
 
     completion_purchase.ensure_completion do
