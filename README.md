@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  [Gumroad](https://gumroad.com) is an e-commerce platform that enables creators to sell products directly to consumers. This repository contains the source code for the Gumroad web application.
+  <a href="https://gumroad.com">Gumroad</a> is an e-commerce platform that enables creators to sell products directly to consumers. This repository contains the source code for the Gumroad web application.
 </p>
 
 ## Table of Contents
