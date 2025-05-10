@@ -91,6 +91,16 @@ const RadioItem = ({ name, checked, link, imageName, imagePath, description }: R
 
   const imgSrc = imagePath ? imagePath : cast<string>(nativeTypeIcons(`./${imageName}.png`));
 
+  let imgFilterStyle = "none";
+  if (!checked) {
+    const isProvidedSvg = imagePath?.toLowerCase().endsWith(".svg");
+    if (isProvidedSvg) {
+      imgFilterStyle = "grayscale(100%) opacity(10%)"; // SVGs are more transparent when unchecked
+    } else {
+      imgFilterStyle = "grayscale(100%) opacity(30%)"; // Default for other images
+    }
+  }
+
   return (
     <Button
       role="radio"
@@ -125,7 +135,7 @@ const RadioItem = ({ name, checked, link, imageName, imagePath, description }: R
         height="62"
         style={{
           marginBottom: "var(--spacer-3)",
-          filter: checked ? "none" : "grayscale(100%) opacity(30%)",
+          filter: imgFilterStyle,
         }}
       />
       <div className="text-lg font-semibold">{name}</div>
