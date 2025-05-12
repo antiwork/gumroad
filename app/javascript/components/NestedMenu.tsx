@@ -353,6 +353,8 @@ const ItemsList = ({
 
   return (
     <div id={menuId} style={displayedItem.css} role="menu" aria-label={displayedItem.label} className="overflow-hidden">
+      {footer}
+
       {displayedItem.key !== initialMenuItem.key ? (
         <a
           key={`back${displayedItem.key}`}
@@ -392,7 +394,6 @@ const ItemsList = ({
         </a>
       ))}
       {displayedItem.image ? <img src={displayedItem.image} className="w-full translate-x-6 translate-y-6" /> : null}
-      {footer}
     </div>
   );
 };

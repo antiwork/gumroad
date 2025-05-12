@@ -83,8 +83,8 @@ const MobileHeaderRows: React.FC<HeaderRowElementsProps> = ({
     <div className="flex w-full items-center justify-between">
       {logoLink}
       <div className="flex items-center gap-4">
-        {cartButton}
         {avatarElement}
+        {cartButton}
       </div>
     </div>
     <div className="flex w-full items-center gap-4">
@@ -134,7 +134,7 @@ export const Layout: React.FC<{
 
   const logoLink = (
     <a href={Routes.discover_path()} className="flex flex-shrink-0 items-center">
-      <img src={logo} alt="Gumroad" className="h-7 sm:h-8 dark:invert" />
+      <img src={logo} alt="Gumroad" className="h-7 md:h-8 dark:invert" />
     </a>
   );
   const searchBar = (
@@ -155,7 +155,7 @@ export const Layout: React.FC<{
       currentTaxonomyPath={taxonomyPath}
       onClickTaxonomy={onTaxonomyChange}
       forceDomain={forceDomain}
-      footer={<div className="flex gap-4 border-t p-4">{mobileFooterUserActionButtons}</div>}
+      footer={<div className="flex gap-4 border-b p-4 pb-4">{mobileFooterUserActionButtons}</div>}
     />
   );
 
