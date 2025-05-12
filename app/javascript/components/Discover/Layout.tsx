@@ -31,7 +31,11 @@ const UserActionsButtons: React.FC<UserActionsButtonsProps> = ({ currentSeller, 
       </NavigationButton>
     )}
     {!currentSeller?.has_published_products && (
-      <NavigationButton href={Routes.root_url()} color="primary" className={buttonClassName}>
+      <NavigationButton
+        href={currentSeller ? Routes.products_path() : Routes.root_url()}
+        color="primary"
+        className={buttonClassName}
+      >
         Start Selling
       </NavigationButton>
     )}
