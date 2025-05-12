@@ -13,25 +13,84 @@ import { Icon } from "$app/components/Icons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 import logo from "$assets/images/logo.svg";
+
 interface UserActionsButtonsProps {
   currentSeller: ReturnType<typeof useCurrentSeller>;
+  buttonClassName?: string;
 }
 
-const UserActionsButtons: React.FC<UserActionsButtonsProps> = ({ currentSeller }) => (
+const UserActionsButtons: React.FC<UserActionsButtonsProps> = ({ currentSeller, buttonClassName }) => (
   <>
     {currentSeller ? (
-      <NavigationButton href={Routes.library_url()}>
+      <NavigationButton href={Routes.library_url()} className={buttonClassName}>
         <Icon name="bookmark-heart-fill" /> Library
       </NavigationButton>
     ) : (
-      <NavigationButton href={Routes.login_url()}>Log in</NavigationButton>
+      <NavigationButton href={Routes.login_url()} className={buttonClassName}>
+        Log in
+      </NavigationButton>
     )}
-    <CartNavigationButton className="link-button" />
     {!currentSeller?.has_published_products && (
-      <NavigationButton href={Routes.root_url()} color="primary">
+      <NavigationButton href={Routes.root_url()} color="primary" className={buttonClassName}>
         Start Selling
       </NavigationButton>
     )}
+  </>
+);
+
+interface HeaderRowElementsProps {
+  logoLink: React.ReactNode;
+  searchBar: React.ReactNode;
+  userActionButtons: React.ReactNode;
+  cartButton: React.ReactNode;
+  avatarElement: React.ReactNode;
+  navElementNoFooter: React.ReactNode;
+  navElementWithFooter: React.ReactNode;
+}
+
+const DesktopHeaderRows: React.FC<HeaderRowElementsProps> = ({
+  logoLink,
+  searchBar,
+  userActionButtons,
+  cartButton,
+  avatarElement,
+  navElementNoFooter,
+}) => (
+  <>
+    <div className="flex w-full items-center gap-4">
+      {logoLink}
+      {searchBar}
+      <div className="flex flex-shrink-0 items-center space-x-4">
+        {userActionButtons}
+        {cartButton}
+      </div>
+    </div>
+    <div className="flex w-full items-center justify-between gap-4">
+      <div className="flex-grow">{navElementNoFooter}</div>
+      {avatarElement}
+    </div>
+  </>
+);
+
+const MobileHeaderRows: React.FC<HeaderRowElementsProps> = ({
+  logoLink,
+  searchBar,
+  cartButton,
+  avatarElement,
+  navElementWithFooter,
+}) => (
+  <>
+    <div className="flex w-full items-center justify-between">
+      {logoLink}
+      <div className="flex items-center gap-4">
+        {cartButton}
+        {avatarElement}
+      </div>
+    </div>
+    <div className="flex w-full items-center gap-4">
+      {searchBar}
+      {navElementWithFooter}
+    </div>
   </>
 );
 
@@ -70,27 +129,55 @@ export const Layout: React.FC<{
       : Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath });
   };
 
-  const headerLinks = <UserActionsButtons currentSeller={currentSeller} />;
+  const defaultUserActionButtons = <UserActionsButtons currentSeller={currentSeller} />;
+  const mobileFooterUserActionButtons = <UserActionsButtons currentSeller={currentSeller} buttonClassName="flex-1" />;
 
-  const avatar = currentSeller ? (
-    <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard">
+  const logoLink = (
+    <a href={Routes.discover_path()} className="flex flex-shrink-0 items-center">
+      <img src={logo} alt="Gumroad" className="h-7 sm:h-8 dark:invert" />
+    </a>
+  );
+  const searchBar = (
+    <div className="min-w-0 flex-grow">
+      <Search query={query} setQuery={setQuery} />
+    </div>
+  );
+  const cartButton = <CartNavigationButton className="link-button flex-shrink-0" />;
+  const avatarElement = currentSeller ? (
+    <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard" className="flex-shrink-0">
       <img className="user-avatar" src={currentSeller.avatarUrl} />
     </a>
   ) : null;
 
-  const nav = (
+  const navElementWithFooter = (
     <Nav
       wholeTaxonomy={taxonomiesForNav}
       currentTaxonomyPath={taxonomyPath}
       onClickTaxonomy={onTaxonomyChange}
       forceDomain={forceDomain}
-      footer={
-        <footer>
-          <UserActionsButtons currentSeller={currentSeller} />
-        </footer>
-      }
+      footer={<div className="flex gap-4 border-t p-4">{mobileFooterUserActionButtons}</div>}
     />
   );
+
+  const navElementNoFooter = (
+    <Nav
+      wholeTaxonomy={taxonomiesForNav}
+      currentTaxonomyPath={taxonomyPath}
+      onClickTaxonomy={onTaxonomyChange}
+      forceDomain={forceDomain}
+      footer={undefined}
+    />
+  );
+
+  const headerRowElementsProps: HeaderRowElementsProps = {
+    logoLink,
+    searchBar,
+    userActionButtons: defaultUserActionButtons,
+    cartButton,
+    avatarElement,
+    navElementNoFooter,
+    navElementWithFooter,
+  };
 
   return (
     <main className={cx("discover", className)}>
@@ -98,31 +185,20 @@ export const Layout: React.FC<{
         className="hero border-t-0 lg:pe-16 lg:ps-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
       >
-        <div className="hero-actions">
-          <a href={Routes.discover_path()} className="flex items-center">
-            <img src={logo} alt="Gumroad" className="h-8 dark:invert" />
-          </a>
-          <Search query={query} setQuery={setQuery} />
-
-          {isDesktop ? headerLinks : null}
-
-          <div className="separator" />
-
-          <div className="flex w-full items-center justify-between lg:order-2">
-            <div className="flex-auto">{nav}</div>
-            {avatar}
-          </div>
+        <div className="flex w-full flex-col gap-4">
+          {isDesktop ? (
+            <DesktopHeaderRows {...headerRowElementsProps} />
+          ) : (
+            <MobileHeaderRows {...headerRowElementsProps} />
+          )}
         </div>
+
         {showTaxonomy && taxonomyPath ? (
-          <div className="col-start-1 flex items-center">
-            <div>
-              <TaxonomyCategoryBreadcrumbs
-                taxonomyPath={taxonomyPath}
-                taxonomies={taxonomiesForNav}
-                onClickTaxonomy={onTaxonomyChange}
-              />
-            </div>
-          </div>
+          <TaxonomyCategoryBreadcrumbs
+            taxonomyPath={taxonomyPath}
+            taxonomies={taxonomiesForNav}
+            onClickTaxonomy={onTaxonomyChange}
+          />
         ) : null}
       </header>
       {children}

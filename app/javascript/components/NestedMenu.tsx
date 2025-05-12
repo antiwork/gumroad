@@ -311,7 +311,7 @@ const OverlayMenu = ({
       </Button>
       <div className="backdrop" hidden={!menuOpen} style={menuTop ? { top: menuTop } : undefined}>
         <button className="close" onClick={() => setMenuOpen(false)} aria-label="Close Menu">
-          <Icon name="x" />
+          <Icon name="x" className="text-white" />
         </button>
         <ItemsList
           menuId={overlayMenuUID}

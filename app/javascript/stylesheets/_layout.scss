@@ -8,14 +8,14 @@ body {
     overflow: hidden;
   }
 
-  & > header,
+  &>header,
   header.sticky-top {
     border-bottom: $border;
     grid-column: 1 / span 2;
     grid-row: -3;
   }
 
-  & > footer {
+  &>footer {
     padding: spacer(4);
     text-align: center;
   }
@@ -29,7 +29,7 @@ header.hero {
   .hero-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 spacer(4);
+    gap: spacer(1) spacer(4);
     align-items: center;
 
     .separator {
@@ -66,12 +66,14 @@ header.hero {
   }
 }
 
-body > header,
+body>header,
 header.sticky-top,
-main > * {
+main>* {
   padding: $body-padding-mobile;
+
   @include breakpoint-up(lg) {
     padding: $body-padding-desktop $body-padding-desktop-center;
+
     &:where(.sidebar-nav *) {
       padding-left: $body-padding-desktop;
       padding-right: max(100% - #{$body-max-width} - #{$body-padding-desktop}, #{$body-padding-desktop});
@@ -79,9 +81,9 @@ main > * {
   }
 }
 
-body > header,
+body>header,
 header.sticky-top,
-main > header {
+main>header {
   $gap-x: spacer(3);
   display: grid;
   grid-template-columns: 1fr auto;
@@ -90,14 +92,16 @@ main > header {
   padding-top: $header-padding-y;
   padding-bottom: $header-padding-y;
 
-  & > * {
+  &>* {
     grid-column: 1/-1;
   }
 
   h1 {
     grid-column-end: unset;
+
     &:where(.sidebar-nav *) {
       display: none;
+
       @include breakpoint-up(lg) {
         margin: spacer(4) 0;
         @include text-singleline;
@@ -108,10 +112,8 @@ main > header {
 
   .actions {
     display: grid;
-    grid-template-columns: repeat(
-      auto-fit,
-      minmax(min(50% - #{$gap-x}, (#{$grid-wrap-breakpoint} - 100%) * 1000), 1fr)
-    );
+    grid-template-columns: repeat(auto-fit,
+      minmax(min(50% - #{$gap-x}, (#{$grid-wrap-breakpoint} - 100%) * 1000), 1fr));
     gap: $gap-x;
   }
 
@@ -140,7 +142,7 @@ main {
   grid-column: 1;
   grid-row: 1;
 
-  & > footer {
+  &>footer {
     text-align: center;
   }
 
@@ -148,7 +150,7 @@ main {
     border-top: $border;
   }
 
-  & > a {
+  &>a {
     @extend %big-link;
     padding-top: spacer(7);
     padding-bottom: spacer(7);
