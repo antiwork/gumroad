@@ -217,7 +217,7 @@ describe CustomerMailer do
           :purchase,
           link: product,
           seller:,
-          price_cents: 1_499,
+          price_cents: 14_99,
           created_at: DateTime.parse("January 1, 2023")
         )
       end
@@ -230,7 +230,9 @@ describe CustomerMailer do
       end
 
       context "when there are recommended products" do
-        let(:recommendable_product) { create(:product, :recommendable, name: "Recommended product") }
+        let(:recommendable_product) do
+          create(:product, :recommendable, name: "Recommended product", price_cents: 9_99)
+        end
         let!(:affiliate) do
           create(
             :direct_affiliate,
@@ -254,8 +256,11 @@ describe CustomerMailer do
               user_ids: nil,
             }
           ).and_return(Link.where(id: [recommendable_product.id]))
+
           mail = CustomerMailer.receipt(purchase.id)
+
           expect(mail.body.sanitized).to have_text("Customers who bought this item also bought")
+          expect(mail.body.sanitized).to have_text("$9.99")
         end
       end
     end

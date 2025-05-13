@@ -1,21 +1,15 @@
 <% if show_helper_widget? %>
-  <% timestamp = (Time.now.to_f * 1000).to_i %>
-
-  <%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
+  <%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request),
+    data: {
+      cfasync: "false",
+      helper_widget_init_data: helper_widget_init_data,
+    } do %>
     (function(d) {
+      var initData=JSON.parse(d.currentScript.dataset.helperWidgetInitData);
       var g=d.createElement("script");
       g.src="<%= helper_widget_host %>"+"/widget/sdk.js";
       g.onload=function(){
-        window.HelperWidget.init({
-          title: "Support",
-          email: "<%= current_seller.email %>",
-          email_hash: "<%= helper_widget_email_hmac(timestamp) %>",
-          mailbox_slug: "gumroad",
-          timestamp: <%= timestamp %>,
-          icon_color: "#FF90E8",
-          customer_metadata: <%= helper_customer_metadata.to_json.html_safe %>,
-          enable_guide: <%= enable_helper_guide? %>
-        });
+        window.HelperWidget.init(initData);
       }
       d.body.appendChild(g);
     })(document);

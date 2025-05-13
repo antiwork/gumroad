@@ -32,7 +32,7 @@ class Commission < ApplicationRecord
       :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
       :country, :state, :zip_code, :city, :ip_address, :ip_state, :ip_country,
       :browser_guid, :referrer, :quantity, :was_product_recommended, :seller,
-      :credit_card_zipcode, :offer_code, :variant_attributes
+      :credit_card_zipcode, :offer_code, :variant_attributes, :is_purchasing_power_parity_discounted
     ).merge(
       perceived_price_cents: completion_display_price_cents,
       affiliate: deposit_purchase.affiliate.try(:alive?) ? deposit_purchase.affiliate : nil,
@@ -40,10 +40,18 @@ class Commission < ApplicationRecord
     )
 
     completion_purchase = build_completion_purchase(completion_purchase_attributes)
+
     deposit_tip = deposit_purchase.tip
     if deposit_tip.present?
       completion_tip_value_cents = (deposit_tip.value_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_tip.value_cents
       completion_purchase.build_tip(value_cents: completion_tip_value_cents)
+    end
+
+    if deposit_purchase.is_purchasing_power_parity_discounted &&
+        deposit_purchase.purchasing_power_parity_info.present?
+      completion_purchase.build_purchasing_power_parity_info(
+        factor: deposit_purchase.purchasing_power_parity_info.factor
+      )
     end
 
     completion_purchase.ensure_completion do

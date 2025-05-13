@@ -1,0 +1,240 @@
+<%= render "home/shared/header",
+  bg_color: "yellow",
+  subtitle: "Gumroad hackathon",
+  title: "$100K Niche Marketplace Hackathon",
+  description: "Build a specialized marketplace using Gumroad's MIT-licensed code that serves creators in a specific niche. Help creators find their perfect audience and customers discover their ideal creators." do %>
+<div class="override hidden relative mx-auto h-96 w-full max-w-6xl overflow-hidden border-y border-black bg-pink p-8 rounded-full border lg:block">
+  <div class="relative z-10 flex h-full flex-col justify-between border border-black bg-pink rounded-full px-8">
+    <div class="-mt-3 justify-between px-32 flex">
+      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
+        <div class="text-xl xl:text-2xl">Sign up</div>
+      </div>
+      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
+        <div class="text-xl xl:text-2xl">Build marketplace</div>
+      </div>
+      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
+        <div class="text-xl xl:text-2xl">Submit project</div>
+      </div>
+    </div>
+    <div class="flex justify-around space-x-4">
+      <%= image_tag "features/design-and-tech.svg" %>
+      <%= image_tag "features/drawing-and-painting.svg" %>
+      <%= image_tag "features/books-and-writing.svg" %>
+      <%= image_tag "features/games.svg" %>
+    </div>
+    <div class="-mb-3 justify-between px-32 flex">
+      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+        <div class="text-xl xl:text-2xl">Win prizes</div>
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3 translate-y-px rotate-180", alt: "" %>
+      </div>
+      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+        <div class="text-xl xl:text-2xl">Launch</div>
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3 translate-y-px rotate-180", alt: "" %>
+      </div>
+    </div>
+  </div>
+</div>
+<% end %>
+
+<%= render "home/shared/section_header",
+  subtitle: "Official terms & details",
+  title: "Why we're doing this",
+  description: "We're opening up our codebase to help creators reach more customers <br class=\"hidden override md:inline\">and build innovative niche marketplaces."
+%>
+
+<div class="flex flex-col overflow-hidden border-y border-black lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black bg-orange p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+    <div class="relative">
+      <%= image_tag "features/home-feature-4.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing customizable store options" %>
+    </div>
+  </div>
+  <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="max-w-2xl space-y-12 md:space-y-16">
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-orange lg:text-4xl xl:text-5xl">
+          Open source
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Why not? If there's not a good reason to keep the source code a secret, we want to give it to the world.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-orange lg:text-4xl xl:text-5xl">
+          Small team
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          We're a small team, and if the code is open-source, it means more people can help us ship things for creators.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-orange lg:text-4xl xl:text-5xl">
+          MIT licensed
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Now that we're MIT licensed, we want to give everyone a proper chance to build with our code.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render "home/shared/section_header",
+  subtitle: "Ideas and inspiration",
+  title: "Get creative",
+  description: "The sky's the limit when it comes to potential marketplaces <br class=\"hidden override md:inline\">you could build. Here are some ideas to get you started."
+%>
+
+<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black bg-purple p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+    <div class="relative max-w-xl">
+      <%= image_tag "features/features-3.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing marketplace ideas" %>
+    </div>
+  </div>
+  <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="max-w-2xl space-y-12 md:space-y-16">
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Audio marketplace
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          A marketplace exclusively for audio professionals selling ambient soundscapes, field recordings, and sound effects for film, gaming, and meditation apps.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Digital patterns
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          For digital pattern creators across knitting, sewing, crochet, embroidery, and quilting.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Mentorship platform
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          A marketplace where experienced creators offer mentorship sessions, portfolio reviews, and career guidance to emerging talent.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black bg-purple lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-l">
+    <div class="relative">
+      <%= image_tag "features/features-4.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing more marketplace ideas" %>
+    </div>
+  </div>
+  <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="max-w-2xl space-y-12 md:space-y-16">
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Publishing services
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Services marketplace connecting indie authors with book cover designers, editors, formatters, and marketing specialists.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Culinary platform
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Platform for chefs and food specialists to sell cooking courses, recipe collections, and technique-focused tutorials.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render "home/shared/section_header",
+  subtitle: "Timeline",
+  title: "Important dates",
+  description: "Mark your calendar for these key milestones in the <br class=\"hidden override md:inline\">Gumroad $100K Niche Marketplace Hackathon."
+%>
+
+<div class="flex flex-col overflow-hidden border-y border-black lg:flex-row-reverse">
+  <div class="flex items-center justify-center border-b border-black bg-purple p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+    <div class="relative max-w-xl">
+      <%= image_tag "features/features-5.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing timeline" %>
+    </div>
+  </div>
+  <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="max-w-2xl space-y-12 md:space-y-16">
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Submissions open
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Now through Sept 15, 2025
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Submission deadline
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Sept 15, 2025 at 11:59 PM ET
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Finalists announced
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Oct 2025
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Finalist celebration
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          In New York: Winter 2025
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render "home/shared/section_header",
+  subtitle: "Prize structure",
+  title: "$100,000 in prizes",
+  description: "We're offering substantial rewards for the best <br class=\"hidden override md:inline\">niche marketplaces built during this hackathon."
+%>
+
+<div class="flex flex-col overflow-hidden border-t border-black lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black bg-orange p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+    <div class="relative">
+      <%= image_tag "features/features-6.svg", alt: "Illustration showing prizes", class: "h-auto w-full", data: { parallax: true } %>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="max-w-2xl space-y-12 md:space-y-16">
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-orange lg:text-4xl xl:text-5xl">
+          Grand prize
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          $100,000 for the most impactful niche marketplace
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-orange lg:text-4xl xl:text-5xl">
+          Additional prizes
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Category prizes for best design, most innovative, best technical implementation, and more.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render "home/shared/section_cta" %>
+<%= render "home/shared/footer" %>
