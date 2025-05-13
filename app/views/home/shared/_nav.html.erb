@@ -82,11 +82,6 @@
         request = Net::HTTP::Get.new(uri)
         request["Accept"] = "application/vnd.github+json"
         request["X-GitHub-Api-Version"] = "2022-11-28"
-        # Optional: Add a GitHub token for higher rate limits
-        # if ENV['GITHUB_TOKEN']
-        #   request["Authorization"] = "Bearer #{ENV['GITHUB_TOKEN']}"
-        # end
-
         response = http.request(request)
 
         if response.is_a?(Net::HTTPSuccess)
