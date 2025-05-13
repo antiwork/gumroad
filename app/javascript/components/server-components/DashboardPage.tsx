@@ -1,5 +1,5 @@
 import * as React from "react";
-import { createCast, cast } from "ts-safe-cast";
+import { createCast } from "ts-safe-cast";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { register } from "$app/utils/serverComponentUtil";
@@ -8,22 +8,20 @@ import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { NavigationButton, Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
+import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
+import { FirstProductIcon } from "$app/components/icons/getting-started/FirstProductIcon";
+import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-import CustomizeProfileIcon from "$assets/images/getting-started/customize-profile.svg";
-import EmailBlastIcon from "$assets/images/getting-started/email-blast.svg";
-import FirstFollowerIcon from "$assets/images/getting-started/first-follower.svg";
-import FirstPayoutIcon from "$assets/images/getting-started/first-payout.svg";
-import FirstProductIcon from "$assets/images/getting-started/first-product.svg";
-import FirstSaleIcon from "$assets/images/getting-started/first-sale.svg";
-import MakeAccountIcon from "$assets/images/getting-started/make-account.svg";
-import SmallBetsIcon from "$assets/images/getting-started/small-bets.svg";
+import EmailBlastIconAssetPath from "$assets/images/getting-started/email-blast.svg";
+import FirstPayoutIconAssetPath from "$assets/images/getting-started/first-payout.svg";
+import FirstSaleIconAssetPath from "$assets/images/getting-started/first-sale.svg";
+import SmallBetsIconAssetPath from "$assets/images/getting-started/small-bets.svg";
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
-
-const nativeTypeIcons = require.context("$assets/images/native_types/", false, /\.png$/u);
 
 type ProductRow = {
   id: string;
@@ -35,9 +33,12 @@ type ProductRow = {
   today: number;
   last_7: number;
   last_30: number;
-  imageName?: string;
   show_1099_download_notice?: boolean;
 };
+
+interface GettingStartedIconProps extends React.SVGProps<SVGSVGElement> {
+  isChecked: boolean;
+}
 
 type Props = {
   name: string;
@@ -68,7 +69,7 @@ type RadioItemProps = {
   name: string;
   checked: boolean;
   link: string;
-  imageName?: string;
+  IconComponent?: React.ComponentType<GettingStartedIconProps>;
   imagePath?: string;
   description?: string;
 };
@@ -87,21 +88,25 @@ const Greeter = () => (
     </a>
   </div>
 );
-const RadioItem = ({ name, checked, link, imageName, imagePath, description }: RadioItemProps) => {
+
+const RadioItem = ({ name, checked, link, IconComponent, imagePath, description }: RadioItemProps) => {
   const handleClick = () => {
     if (!checked && link) {
       window.location.href = link;
     }
   };
 
-  const imgSrc = imagePath ? imagePath : cast<string>(nativeTypeIcons(`./${imageName}.png`));
-
-  let imgFilterStyle = "none";
-  if (!checked) {
-    imgFilterStyle = "grayscale(100%) opacity(40%)"; // SVGs are more transparent when unchecked
-  }
-
   const textStyle = !checked ? { opacity: 0.6 } : {};
+
+  let iconElement: React.ReactNode;
+
+  if (IconComponent) {
+    iconElement = <IconComponent isChecked={checked} width="80" height="80" />;
+  } else if (imagePath) {
+    iconElement = <img src={imagePath} alt="" width="80" height="80" />;
+  } else {
+    iconElement = <div style={{ width: 80, height: 80, border: "1px dashed gray" }} />;
+  }
 
   return (
     <Button
@@ -130,16 +135,7 @@ const RadioItem = ({ name, checked, link, imageName, imagePath, description }: R
           }}
         />
       ) : null}
-      <img
-        src={imgSrc}
-        alt=""
-        width="80"
-        height="80"
-        style={{
-          marginBottom: "var(--spacer-2)",
-          filter: imgFilterStyle,
-        }}
-      />
+      <div style={{ width: 80, height: 80, marginBottom: "var(--spacer-2)" }}>{iconElement}</div>
       <div className="text-lg font-semibold leading-tight" style={textStyle}>
         {name}
       </div>
@@ -279,56 +275,56 @@ export const DashboardPage = ({
                     name="Welcome aboard!"
                     checked
                     link=""
-                    imagePath={MakeAccountIcon}
+                    IconComponent={MakeAccountIcon}
                     description="Make a Gumroad account."
                   />
                   <RadioItem
                     name="Make an impression!"
                     checked={getting_started_stats.customized_profile}
                     link={Routes.settings_profile_path()}
-                    imagePath={CustomizeProfileIcon}
+                    IconComponent={CustomizeProfileIcon}
                     description="Customize your profile."
                   />
                   <RadioItem
                     name="Showtime!"
                     checked={getting_started_stats.first_product}
                     link={Routes.new_product_path()}
-                    imagePath={FirstProductIcon}
+                    IconComponent={FirstProductIcon}
                     description="Create your first product."
                   />
                   <RadioItem
                     name="Build your tribe!"
                     checked={getting_started_stats.first_follower}
                     link={Routes.followers_path()}
-                    imagePath={FirstFollowerIcon}
+                    IconComponent={FirstFollowerIcon}
                     description="Get your first follower."
                   />
                   <RadioItem
                     name="Cha-ching!"
                     checked={getting_started_stats.first_sale}
                     link={Routes.sales_dashboard_path()}
-                    imagePath={FirstSaleIcon}
+                    imagePath={FirstSaleIconAssetPath}
                     description="Make your first sale."
                   />
                   <RadioItem
                     name="Money inbound!"
                     checked={getting_started_stats.first_payout}
                     link={Routes.settings_payments_path()}
-                    imagePath={FirstPayoutIcon}
+                    imagePath={FirstPayoutIconAssetPath}
                     description="Get your first pay out."
                   />
                   <RadioItem
                     name="Making waves!"
                     checked={getting_started_stats.first_email}
                     link={Routes.posts_path()}
-                    imagePath={EmailBlastIcon}
+                    imagePath={EmailBlastIconAssetPath}
                     description="Send out your first email blast."
                   />
                   <RadioItem
                     name="Smart move!"
                     checked={getting_started_stats.first_small_bets}
                     link="https://dvassallo.gumroad.com/l/small-bets?layout=profile"
-                    imagePath={SmallBetsIcon}
+                    imagePath={SmallBetsIconAssetPath}
                     description="Sign up for Small Bets."
                   />
                 </div>
@@ -338,7 +334,9 @@ export const DashboardPage = ({
 
         {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? <Greeter /> : null}
 
-        <ProductsTable sales={sales} />
+        {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? null : (
+          <ProductsTable sales={sales} />
+        )}
 
         <div className="grid gap-4">
           <h2>Activity</h2>
