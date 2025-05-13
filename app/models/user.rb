@@ -986,17 +986,15 @@ class User < ApplicationRecord
     # You might want to adjust the cache key or expiration based on your needs.
     cache_key = "user_#{self.id}_purchased_small_bets?"
     Rails.cache.fetch(cache_key, expires_in: 5.minutes) do
-      small_bets_product = Link.joins(:user)
-                                .where(users: { username: SMALL_BETS_SELLER_USERNAME },
-                                       links: { unique_permalink: SMALL_BETS_PRODUCT_PERMALINK })
-                                .first
+      small_bets_product = Link.visible
+                                .joins(:user)
+                                .merge(User.where(username: SMALL_BETS_SELLER_USERNAME))
+                                .find_by(unique_permalink: SMALL_BETS_PRODUCT_PERMALINK)
       return false unless small_bets_product
 
       # Assuming Purchase::NON_GIFT_SUCCESS_STATES contains the list of successful purchase states.
       # This is based on its usage elsewhere in your User model.
-      purchases.where(link_id: small_bets_product.id)
-               .where(purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
-               .exists?
+      purchases.successful.where(link: small_bets_product).exists?
     end
   end
 
