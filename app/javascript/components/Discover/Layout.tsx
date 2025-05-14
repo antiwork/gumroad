@@ -37,7 +37,7 @@ const UserActionButtons: React.FC = () => {
       <NavigationButton href={Routes.login_url()} className="flex-1 lg:flex-none">
         Log in
       </NavigationButton>
-      <NavigationButton href={Routes.root_url()} color="primary" className="flex-1 lg:flex-none">
+      <NavigationButton href={Routes.signup_url()} color="primary" className="flex-1 lg:flex-none">
         Start Selling
       </NavigationButton>
     </>
