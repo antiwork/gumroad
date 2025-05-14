@@ -126,14 +126,6 @@ export const ProductTab = () => {
                 />
               </>
             )}
-            <CustomDomain
-              verificationStatus={customDomainVerificationStatus}
-              customDomain={product.custom_domain}
-              setCustomDomain={(custom_domain) => updateProduct({ custom_domain })}
-              label="Custom domain"
-              productId={id}
-              includeLearnMoreLink
-            />
           </section>
           {isCoffee ? (
             <>
@@ -424,6 +416,14 @@ export const ProductTab = () => {
                     />
                   </fieldset>
                 ) : null}
+                <CustomDomain
+                  verificationStatus={customDomainVerificationStatus}
+                  customDomain={product.custom_domain}
+                  setCustomDomain={(custom_domain) => updateProduct({ custom_domain })}
+                  label="Custom domain"
+                  productId={id}
+                  includeLearnMoreLink
+                />
               </section>
             </>
           )}

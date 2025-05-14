@@ -34,7 +34,13 @@
   <div class="footer">
     <div>
       <div class="price">
-        <%= product_card_formatted_price(price: product[:price], currency_code: product[:currency_code], is_pay_what_you_want: product[:is_pay_what_you_want], recurrence: product[:recurrence], duration_in_months: product[:duration_in_months]) %>
+        <%= product_card_formatted_price(
+          price: product[:price_cents],
+          currency_code: product[:currency_code],
+          is_pay_what_you_want: product[:is_pay_what_you_want],
+          recurrence: product[:recurrence],
+          duration_in_months: product[:duration_in_months]
+        ) %>
       </div>
     </div>
   </div>

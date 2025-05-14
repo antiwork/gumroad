@@ -652,6 +652,7 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ first_name: evt.target.value })}
             />
+            <small>Include your middle name if it appears on your ID.</small>
           </fieldset>
           <fieldset className={cx({ danger: errorFieldNames.has("last_name") })}>
             <legend>

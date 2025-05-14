@@ -35,6 +35,36 @@ describe SendMembershipsPriceUpdateEmailsJob do
 
         expect(CustomerLowPriorityMailer).not_to have_received(:subscription_price_change_notification)
       end
+
+      it "does not send notification emails for subscriptions that are fully cancelled" do
+        subscription.update!(cancelled_at: 1.day.ago, deactivated_at: 1.day.ago)
+
+        expect do
+          subject.perform
+        end.not_to change { applicable_plan_change.reload.notified_subscriber_at }
+
+        expect(CustomerLowPriorityMailer).not_to have_received(:subscription_price_change_notification)
+      end
+
+      it "does not send notification emails for subscriptions that have ended" do
+        subscription.update!(ended_at: 1.day.ago, deactivated_at: 1.day.ago)
+
+        expect do
+          subject.perform
+        end.not_to change { applicable_plan_change.reload.notified_subscriber_at }
+
+        expect(CustomerLowPriorityMailer).not_to have_received(:subscription_price_change_notification)
+      end
+
+      it "does not send notification emails for subscriptions that have failed" do
+        subscription.update!(failed_at: 1.day.ago, deactivated_at: 1.day.ago)
+
+        expect do
+          subject.perform
+        end.not_to change { applicable_plan_change.reload.notified_subscriber_at }
+
+        expect(CustomerLowPriorityMailer).not_to have_received(:subscription_price_change_notification)
+      end
     end
 
     context "when there are non-applicable subscription plan changes" do

@@ -52,6 +52,47 @@
   </div>
 </div>
 
+<%= render "home/shared/section_header",
+  subtitle: "Tax management",
+  title: "We're a Merchant <br> of Record",
+  description: "Since January 1, 2025, Gumroad handles ALL your tax obligations. Yes, you read that right – we manage sales tax collection and remittance worldwide." %>
+
+<div class="border-b border-black"></div>
+
+<div class="flex flex-col border-b border-black overflow-hidden lg:flex-row">
+  <div class="bg-pink h-auto lg:w-1/2 lg:border-r border-b lg:border-b-0">
+    <div class="relative">
+    <%= image_tag "features/features-4.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing payment integrations" %>
+    </div>
+  </div>
+  <div class="bg-black text-white py-16 px-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-24">
+    <div class="max-w-2xl space-y-12 md:space-y-8">
+      <div class="space-y-4">
+        <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl text-purple">
+          What this means for you
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+        Build your creative business with confidence. We're taking care of all tax complexity worldwide, so you can focus on what you do best: creating.
+        </p>
+      </div>
+      <ul class="grid grid-cols-1 gap-3 pl-0 text-lg md:grid-cols-2">
+        <li class="flex items-center">
+          <span class="mr-2">→</span>
+          No more tax headaches - we handle everything
+        </li>
+        <li class="flex items-center">
+          <span class="mr-2">→</span>
+          Simplified global selling - we manage international tax compliance
+        </li>
+        <li class="flex items-center">
+          <span class="mr-2">→</span>
+          More time for creating - less time dealing with paperwork
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 <div class="mx-auto my-16 max-w-6xl px-8 md:my-24 md:px-28 md:text-center lg:my-32">
   <h2 class="text-5xl font-medium md:text-6xl lg:text-7xl">
     Frequently asked questions
@@ -87,6 +128,43 @@
     <%= render partial: "home/shared/accordion_item", locals: {
       title: "Can I use Gumroad for memberships?",
       content: "Yes!<br><br>Whether it's for a podcast, online course, or SaaS subscriptions, Gumroad makes it easy to manage memberships."
+    } %>
+  </div>
+  <%# Copied from taxes.html.erb %>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What's changing with taxes?",
+      content: "We're becoming your merchant of record, which means Gumroad will automatically handle all sales tax collection and remittance worldwide. You won't need to manage any tax settings or applications - we'll take care of everything."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What do I need to do to prepare for this change?",
+      content: "Nothing! The transition will happen automatically on January 1, 2025. Our updated Terms of Service will reflect these changes. You can continue selling as usual."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What about international sales?",
+      content: "We'll handle all tax obligations for your global sales automatically. You don't need to worry about VAT, GST, or any other international tax requirements."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What happens to my tax collection settings?",
+      content: "All tax settings will be automatically disabled in your dashboard. This includes both the state tax settings in your creator profile and any product-specific tax settings. You won't need to manage these anymore since we'll handle all tax collection automatically."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Will Gumroad collect taxes everywhere?",
+      content: "We'll collect taxes in regions where we have tax obligations as a merchant of record. This varies by location, and we'll automatically handle the appropriate tax collection for each sale."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Need a Reseller Certificate from Gumroad?",
+      content: "Some creators may have an obligation to file sales tax (or other indirect tax) returns already, and will need to report their sales on Gumroad as \"sales to other retailers for purposes of resale\", which are not taxable. To justify this treatment to your tax authority, you will need to download and save <a href='/Gumroad-CA-Resale Certificate-01JAN25.pdf'>this Reseller Certificate</a>."
     } %>
   </div>
 </div>

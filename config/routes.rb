@@ -278,7 +278,8 @@ Rails.application.routes.draw do
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
     get "/privacy", to: "home#privacy"
-    get "/taxes", to: "home#taxes"
+    get "/taxes", to: redirect("/pricing", status: 301)
+    get "/hackathon", to: "home#hackathon"
 
     get "/ifttt/v1/status" => "api/v2/users#ifttt_status"
     get "/ifttt/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
