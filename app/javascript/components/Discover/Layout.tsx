@@ -14,17 +14,17 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 import logo from "$assets/images/logo.svg";
 
-const UserActionsButtons: React.FC<{ buttonClassName?: string }> = ({ buttonClassName }) => {
+const UserActionsButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();
 
   if (currentSeller) {
     return (
       <>
-        <NavigationButton href={Routes.library_url()} className={buttonClassName}>
+        <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
           <Icon name="bookmark-heart-fill" /> Library
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
-          <NavigationButton href={Routes.products_path()} color="primary" className={buttonClassName}>
+          <NavigationButton href={Routes.products_path()} color="primary" className="flex-1 lg:flex-none">
             Start Selling
           </NavigationButton>
         )}
@@ -34,10 +34,10 @@ const UserActionsButtons: React.FC<{ buttonClassName?: string }> = ({ buttonClas
 
   return (
     <>
-      <NavigationButton href={Routes.login_url()} className={buttonClassName}>
+      <NavigationButton href={Routes.login_url()} className="flex-1 lg:flex-none">
         Log in
       </NavigationButton>
-      <NavigationButton href={Routes.root_url()} color="primary" className={buttonClassName}>
+      <NavigationButton href={Routes.root_url()} color="primary" className="flex-1 lg:flex-none">
         Start Selling
       </NavigationButton>
     </>
@@ -135,8 +135,7 @@ export const Layout: React.FC<{
       : Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath });
   };
 
-  const defaultUserActionButtons = <UserActionsButtons />;
-  const mobileFooterUserActionButtons = <UserActionsButtons buttonClassName="flex-1" />;
+  const userActionButtons = <UserActionsButtons />;
 
   const logoLink = (
     <a href={Routes.discover_path()} className="flex flex-shrink-0 items-center">
@@ -161,7 +160,7 @@ export const Layout: React.FC<{
       currentTaxonomyPath={taxonomyPath}
       onClickTaxonomy={onTaxonomyChange}
       forceDomain={forceDomain}
-      footer={<div className="flex gap-4 border-b p-4 pb-4">{mobileFooterUserActionButtons}</div>}
+      footer={<div className="flex gap-4 border-b p-4 pb-4">{userActionButtons}</div>}
     />
   );
 
@@ -178,7 +177,7 @@ export const Layout: React.FC<{
   const headerRowElementsProps: HeaderRowElementsProps = {
     logoLink,
     searchBar,
-    userActionButtons: defaultUserActionButtons,
+    userActionButtons,
     cartButton,
     avatarElement,
     navElementNoFooter,
