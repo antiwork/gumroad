@@ -132,9 +132,11 @@ const RadioItem = ({ name, checked, link, IconComponent, description }: RadioIte
         }}
       />
       {IconComponent ? (
-        <IconComponent isChecked={checked} width="80" height="80" />
+        <div style={{ marginBottom: "var(--spacer-2)" }}>
+          <IconComponent isChecked={checked} width="80" height="80" />
+        </div>
       ) : (
-        <div style={{ width: 80, height: 80, border: "1px dashed gray" }} />
+        <div style={{ width: 80, height: 80, border: "1px dashed gray", marginBottom: "var(--spacer-2)" }} />
       )}
       <div className="text-lg font-semibold leading-tight">{name}</div>
       {description ? <p style={{ fontSize: "var(--font-size-small)", opacity: 0.8 }}>{description}</p> : null}
