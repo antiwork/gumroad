@@ -14,7 +14,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 import logo from "$assets/images/logo.svg";
 
-const UserActionsButtons: React.FC = () => {
+const UserActionButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();
 
   if (currentSeller) {
@@ -135,7 +135,7 @@ export const Layout: React.FC<{
       : Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath });
   };
 
-  const userActionButtons = <UserActionsButtons />;
+  const userActionButtons = <UserActionButtons />;
 
   const logoLink = (
     <a href={Routes.discover_path()} className="flex flex-shrink-0 items-center">
