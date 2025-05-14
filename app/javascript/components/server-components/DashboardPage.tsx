@@ -111,17 +111,6 @@ const RadioItem = ({ name, checked, link, IconComponent, description }: RadioIte
         position: "relative",
       }}
     >
-      {checked ? (
-        <Icon
-          name="solid-check-circle"
-          style={{
-            position: "absolute",
-            top: "var(--spacer-2)",
-            right: "var(--spacer-2)",
-            color: "rgb(var(--success))",
-          }}
-        />
-      ) : null}
       <Icon
         name={checked ? "solid-check-circle" : "circle"}
         style={{
