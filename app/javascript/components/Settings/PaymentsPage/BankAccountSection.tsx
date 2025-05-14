@@ -934,7 +934,7 @@ const BankAccountSection = ({
             aria-invalid={errorFieldNames.has("account_holder_full_name")}
             onChange={(evt) => updateBankAccount({ account_holder_full_name: evt.target.value })}
           />
-          <small className="text-sm">Must exactly match the name on your bank account</small>
+          <small>Must exactly match the name on your bank account</small>
         </fieldset>
         <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
           {showNewBankAccount ? (
@@ -2432,9 +2432,9 @@ const BankAccountSection = ({
               </div>
             </>
           )}
-          <small className="text-sm">
+          <div className="text-muted text-sm">
             Payouts will be made in {user.payout_currency?.toUpperCase() || "your local currency"}.
-          </small>
+          </div>
         </div>
       </section>
 
