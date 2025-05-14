@@ -14,33 +14,35 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 import logo from "$assets/images/logo.svg";
 
-interface UserActionsButtonsProps {
-  currentSeller: ReturnType<typeof useCurrentSeller>;
-  buttonClassName?: string;
-}
+const UserActionsButtons: React.FC<{ buttonClassName?: string }> = ({ buttonClassName }) => {
+  const currentSeller = useCurrentSeller();
 
-const UserActionsButtons: React.FC<UserActionsButtonsProps> = ({ currentSeller, buttonClassName }) => (
-  <>
-    {currentSeller ? (
-      <NavigationButton href={Routes.library_url()} className={buttonClassName}>
-        <Icon name="bookmark-heart-fill" /> Library
-      </NavigationButton>
-    ) : (
+  if (currentSeller) {
+    return (
+      <>
+        <NavigationButton href={Routes.library_url()} className={buttonClassName}>
+          <Icon name="bookmark-heart-fill" /> Library
+        </NavigationButton>
+        {currentSeller.has_published_products ? null : (
+          <NavigationButton href={Routes.products_path()} color="primary" className={buttonClassName}>
+            Start Selling
+          </NavigationButton>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
       <NavigationButton href={Routes.login_url()} className={buttonClassName}>
         Log in
       </NavigationButton>
-    )}
-    {!currentSeller?.has_published_products && (
-      <NavigationButton
-        href={currentSeller ? Routes.products_path() : Routes.root_url()}
-        color="primary"
-        className={buttonClassName}
-      >
+      <NavigationButton href={Routes.root_url()} color="primary" className={buttonClassName}>
         Start Selling
       </NavigationButton>
-    )}
-  </>
-);
+    </>
+  );
+};
 
 interface HeaderRowElementsProps {
   logoLink: React.ReactNode;
@@ -133,8 +135,8 @@ export const Layout: React.FC<{
       : Routes.discover_url({ host: discoverDomain, taxonomy: newTaxonomyPath });
   };
 
-  const defaultUserActionButtons = <UserActionsButtons currentSeller={currentSeller} />;
-  const mobileFooterUserActionButtons = <UserActionsButtons currentSeller={currentSeller} buttonClassName="flex-1" />;
+  const defaultUserActionButtons = <UserActionsButtons />;
+  const mobileFooterUserActionButtons = <UserActionsButtons buttonClassName="flex-1" />;
 
   const logoLink = (
     <a href={Routes.discover_path()} className="flex flex-shrink-0 items-center">
