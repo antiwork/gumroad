@@ -8,8 +8,7 @@ export const FirstProductIcon = ({ isChecked, ...props }: FirstProductIconProps)
   const mainFillColor = isChecked ? "#FF7051" : "rgb(var(--filled))";
   const circleFillColor = isChecked ? "black" : "rgb(var(--black))"; // The small circle
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";
-  const mainStrokeWidth = "5.74154"; // Original stroke width for most paths
-  // The white stroke inside the circle should be hidden when circle is white (or main icon is white)
+  const mainStrokeWidth = "6";
   const innerCircleStroke = isChecked ? "white" : "none";
 
   const { width = "80", height = "80", ...restProps } = props;

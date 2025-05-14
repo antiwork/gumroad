@@ -9,18 +9,18 @@ import { NavigationButton, Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
+import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
 import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
+import { FirstPayoutIcon } from "$app/components/icons/getting-started/FirstPayoutIcon";
 import { FirstProductIcon } from "$app/components/icons/getting-started/FirstProductIcon";
+import { FirstSaleIcon } from "$app/components/icons/getting-started/FirstSaleIcon";
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
+import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-import EmailBlastIconAssetPath from "$assets/images/getting-started/email-blast.svg";
-import FirstPayoutIconAssetPath from "$assets/images/getting-started/first-payout.svg";
-import FirstSaleIconAssetPath from "$assets/images/getting-started/first-sale.svg";
-import SmallBetsIconAssetPath from "$assets/images/getting-started/small-bets.svg";
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
 
 type ProductRow = {
@@ -70,7 +70,6 @@ type RadioItemProps = {
   checked: boolean;
   link: string;
   IconComponent?: React.ComponentType<GettingStartedIconProps>;
-  imagePath?: string;
   description?: string;
 };
 
@@ -89,24 +88,12 @@ const Greeter = () => (
   </div>
 );
 
-const RadioItem = ({ name, checked, link, IconComponent, imagePath, description }: RadioItemProps) => {
+const RadioItem = ({ name, checked, link, IconComponent, description }: RadioItemProps) => {
   const handleClick = () => {
     if (!checked && link) {
       window.location.href = link;
     }
   };
-
-  const textStyle = !checked ? { opacity: 0.6 } : {};
-
-  let iconElement: React.ReactNode;
-
-  if (IconComponent) {
-    iconElement = <IconComponent isChecked={checked} width="80" height="80" />;
-  } else if (imagePath) {
-    iconElement = <img src={imagePath} alt="" width="80" height="80" />;
-  } else {
-    iconElement = <div style={{ width: 80, height: 80, border: "1px dashed gray" }} />;
-  }
 
   return (
     <Button
@@ -135,13 +122,22 @@ const RadioItem = ({ name, checked, link, IconComponent, imagePath, description 
           }}
         />
       ) : null}
-      <div style={{ width: 80, height: 80, marginBottom: "var(--spacer-2)" }}>{iconElement}</div>
-      <div className="text-lg font-semibold leading-tight" style={textStyle}>
-        {name}
-      </div>
-      {description ? (
-        <p style={{ fontSize: "var(--font-size-small)", color: "var(--text-muted)", ...textStyle }}>{description}</p>
-      ) : null}
+      <Icon
+        name={checked ? "solid-check-circle" : "circle"}
+        style={{
+          position: "absolute",
+          top: "var(--spacer-2)",
+          right: "var(--spacer-2)",
+          color: checked ? "rgb(var(--success))" : "rgb(var(--gray-400))",
+        }}
+      />
+      {IconComponent ? (
+        <IconComponent isChecked={checked} width="80" height="80" />
+      ) : (
+        <div style={{ width: 80, height: 80, border: "1px dashed gray" }} />
+      )}
+      <div className="text-lg font-semibold leading-tight">{name}</div>
+      {description ? <p style={{ fontSize: "var(--font-size-small)", opacity: 0.8 }}>{description}</p> : null}
     </Button>
   );
 };
@@ -303,28 +299,28 @@ export const DashboardPage = ({
                     name="Cha-ching!"
                     checked={getting_started_stats.first_sale}
                     link={Routes.sales_dashboard_path()}
-                    imagePath={FirstSaleIconAssetPath}
+                    IconComponent={FirstSaleIcon}
                     description="Make your first sale."
                   />
                   <RadioItem
                     name="Money inbound!"
                     checked={getting_started_stats.first_payout}
                     link={Routes.settings_payments_path()}
-                    imagePath={FirstPayoutIconAssetPath}
+                    IconComponent={FirstPayoutIcon}
                     description="Get your first pay out."
                   />
                   <RadioItem
                     name="Making waves!"
                     checked={getting_started_stats.first_email}
                     link={Routes.posts_path()}
-                    imagePath={EmailBlastIconAssetPath}
+                    IconComponent={EmailBlastIcon}
                     description="Send out your first email blast."
                   />
                   <RadioItem
                     name="Smart move!"
                     checked={getting_started_stats.first_small_bets}
                     link="https://dvassallo.gumroad.com/l/small-bets?layout=profile"
-                    imagePath={SmallBetsIconAssetPath}
+                    IconComponent={SmallBetsIcon}
                     description="Sign up for Small Bets."
                   />
                 </div>

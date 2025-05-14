@@ -10,7 +10,7 @@ export const FirstFollowerIcon = ({ isChecked, ...props }: FirstFollowerIconProp
   const mainFillColor = isChecked ? "#FFC900" : "rgb(var(--filled))"; // Yellow or white
   const secondaryFillColor = isChecked ? "black" : "rgb(var(--black))"; // Black arrow area
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";
-  const strokeWidthValue = "5.78049"; // Original stroke width
+  const strokeWidthValue = "6";
 
   const { width = "80", height = "80", ...restProps } = props;
 
