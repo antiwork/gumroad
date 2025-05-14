@@ -273,7 +273,7 @@ class CheckoutPresenter
 
     def checkout_common
       {
-        discover_url: UrlService.discover_domain_with_protocol,
+        discover_url: discover_url(protocol: PROTOCOL, host: DISCOVER_DOMAIN),
         countries: Compliance::Countries.for_select.to_h,
         us_states: STATES,
         ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),

@@ -201,13 +201,32 @@ export const Checkout = ({
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
+  const getContinueShoppingHref = () => {
+    if (cart.returnUrl) {
+      try {
+        const parsedReturnUrl = new URL(cart.returnUrl, window.location.origin);
+        const currentOrigin = new URL(window.location.href).origin;
+
+        if (parsedReturnUrl.origin === currentOrigin && parsedReturnUrl.pathname === "/") {
+          return discoverUrl;
+        }
+        return cart.returnUrl;
+      } catch (_e) {
+        return discoverUrl;
+      }
+    }
+    return discoverUrl;
+  };
+
+  const continueShoppingHref = getContinueShoppingHref();
+
   return (
     <main>
       <header>
         <h1>Checkout</h1>
         {isDesktop ? (
           <div className="actions">
-            <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton>
+            <NavigationButton href={continueShoppingHref}>Continue shopping</NavigationButton>
           </div>
         ) : null}
       </header>
@@ -356,7 +375,7 @@ export const Checkout = ({
               ) : null}
             </div>
             <PaymentForm />
-            {!isDesktop && <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton>}
+            {!isDesktop && <NavigationButton href={continueShoppingHref}>Continue shopping</NavigationButton>}
           </div>
         </div>
       ) : (
