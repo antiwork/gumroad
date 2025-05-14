@@ -259,56 +259,56 @@ export const DashboardPage = ({
                   }}
                 >
                   <RadioItem
-                    name="Welcome aboard!"
+                    name="Welcome aboard"
                     checked
                     link=""
                     IconComponent={MakeAccountIcon}
                     description="Make a Gumroad account."
                   />
                   <RadioItem
-                    name="Make an impression!"
+                    name="Make an impression"
                     checked={getting_started_stats.customized_profile}
                     link={Routes.settings_profile_path()}
                     IconComponent={CustomizeProfileIcon}
                     description="Customize your profile."
                   />
                   <RadioItem
-                    name="Showtime!"
+                    name="Showtime"
                     checked={getting_started_stats.first_product}
                     link={Routes.new_product_path()}
                     IconComponent={FirstProductIcon}
                     description="Create your first product."
                   />
                   <RadioItem
-                    name="Build your tribe!"
+                    name="Build your tribe"
                     checked={getting_started_stats.first_follower}
                     link={Routes.followers_path()}
                     IconComponent={FirstFollowerIcon}
                     description="Get your first follower."
                   />
                   <RadioItem
-                    name="Cha-ching!"
+                    name="Cha-ching"
                     checked={getting_started_stats.first_sale}
                     link={Routes.sales_dashboard_path()}
                     IconComponent={FirstSaleIcon}
                     description="Make your first sale."
                   />
                   <RadioItem
-                    name="Money inbound!"
+                    name="Money inbound"
                     checked={getting_started_stats.first_payout}
                     link={Routes.settings_payments_path()}
                     IconComponent={FirstPayoutIcon}
                     description="Get your first pay out."
                   />
                   <RadioItem
-                    name="Making waves!"
+                    name="Making waves"
                     checked={getting_started_stats.first_email}
                     link={Routes.posts_path()}
                     IconComponent={EmailBlastIcon}
                     description="Send out your first email blast."
                   />
                   <RadioItem
-                    name="Smart move!"
+                    name="Smart move"
                     checked={getting_started_stats.first_small_bets}
                     link="https://dvassallo.gumroad.com/l/small-bets?layout=profile"
                     IconComponent={SmallBetsIcon}
