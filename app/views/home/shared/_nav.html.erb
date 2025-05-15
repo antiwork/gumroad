@@ -87,7 +87,7 @@
         if response.is_a?(Net::HTTPSuccess)
           data = JSON.parse(response.body)
           count = data['stargazers_count']
-          count.nil? ? 'N/A' : number_with_delimiter(count)
+          count.nil? ? 'N/A' : number_to_human(count, units: { unit: "", thousand: "k", million: "m" }, precision: 1, significant: false, strip_insignificant_zeros: true, format: '%n%u')
         else
           Rails.logger.error "GitHub API error for #{owner}/#{repo_name}: #{response.code} #{response.message}"
           'N/A'
