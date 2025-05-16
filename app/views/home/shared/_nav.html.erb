@@ -82,6 +82,7 @@
         request = Net::HTTP::Get.new(uri)
         request["Accept"] = "application/vnd.github+json"
         request["X-GitHub-Api-Version"] = "2022-11-28"
+        request["User-Agent"] = "Gumroad-App"
         response = http.request(request)
 
         if response.is_a?(Net::HTTPSuccess)
