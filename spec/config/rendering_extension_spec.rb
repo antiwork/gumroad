@@ -50,7 +50,6 @@ describe "RenderingExtension" do
         end
 
         it "generates correct context" do
-          time_zone = ActiveSupport::TimeZone[seller.timezone]
           expect(custom_context).to eq(
             {
               design_settings: {
