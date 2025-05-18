@@ -1,0 +1,31 @@
+<%= form_for :email_domains, url: url, method: :put do |f| %>
+  <section>
+    <header>
+      <%= header %>
+    </header>
+    <p>
+      For emails like
+      <code>john@example.com</code>,
+      <code>john@example.net</code>,
+      <code>john@list.example.org</code>,
+      enter what is to the right of
+      <code>@</code> character.
+    </p>
+    <figure class="code">
+      <figcaption>
+        Example with comma-separated items
+      </figcaption>
+      <pre>example.com, example.net, list.example.org</pre>
+    </figure>
+    <figure class="code">
+      <figcaption>
+        Example with items separated by newline
+      </figcaption>
+      <pre>example.com
+example.net
+list.example.org</pre>
+    </figure>
+    <%= f.text_area :identifiers, placeholder: "Enter email domains here", rows: 10 %>
+    <%= f.button button_label, class: "button primary" %>
+  </section>
+<% end %>

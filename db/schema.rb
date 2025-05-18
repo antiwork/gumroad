@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_04_16_203854) do
+ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -37,6 +37,15 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_16_203854) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "admin_action_call_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "controller_name", null: false
+    t.string "action_name", null: false
+    t.integer "call_count", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["controller_name", "action_name"], name: "index_admin_action_call_infos_on_controller_name_and_action_name", unique: true
   end
 
   create_table "affiliate_credits", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -876,7 +885,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_16_203854) do
     t.datetime "deleted_at", precision: nil
     t.index ["email", "followed_id"], name: "index_followers_on_email_and_followed_id", unique: true
     t.index ["followed_id", "confirmed_at"], name: "index_followers_on_followed_id_and_confirmed_at"
-    t.index ["followed_id", "email"], name: "index_followers_on_followed_id_and_email"
+    t.index ["followed_id", "email"], name: "index_follows_on_followed_id_and_email"
   end
 
   create_table "friendly_id_slugs", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2706,6 +2715,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_16_203854) do
     t.index ["zip_code"], name: "index_zip_tax_rates_on_zip_code"
   end
 
-  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
 end

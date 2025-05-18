@@ -29,7 +29,7 @@ header.hero {
   .hero-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 spacer(4);
+    gap: spacer(1) spacer(4);
     align-items: center;
 
     .separator {
@@ -70,8 +70,10 @@ body > header,
 header.sticky-top,
 main > * {
   padding: $body-padding-mobile;
+
   @include breakpoint-up(lg) {
     padding: $body-padding-desktop $body-padding-desktop-center;
+
     &:where(.sidebar-nav *) {
       padding-left: $body-padding-desktop;
       padding-right: max(100% - #{$body-max-width} - #{$body-padding-desktop}, #{$body-padding-desktop});
@@ -96,8 +98,10 @@ main > header {
 
   h1 {
     grid-column-end: unset;
+
     &:where(.sidebar-nav *) {
       display: none;
+
       @include breakpoint-up(lg) {
         margin: spacer(4) 0;
         @include text-singleline;

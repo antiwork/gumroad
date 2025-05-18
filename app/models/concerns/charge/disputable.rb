@@ -138,9 +138,13 @@ module Charge::Disputable
     dispute_evidence&.update_as_seller_contacted!
 
     ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later
+    AdminMailer.chargeback_notify(dispute.id).deliver_later
     CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
 
     disputed_purchases.each do |purchase|
+      # Check for low balance and put the creator on probation
+      LowBalanceFraudCheckWorker.perform_in(5.seconds, purchase.id)
+
       PostToPingEndpointsWorker.perform_in(5.seconds, purchase.id, purchase.url_parameters, ResourceSubscription::DISPUTE_RESOURCE_NAME)
     end
 

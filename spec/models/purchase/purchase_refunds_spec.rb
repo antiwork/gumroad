@@ -1051,6 +1051,33 @@ describe "PurchaseRefunds", :vcr do
       end
     end
 
+    describe "Low balance related sidekiq jobs" do
+      before do
+        @flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)
+      end
+
+      context "when refunding user is not admin" do
+        before do
+          @purchase.refund_purchase!(@flow_of_funds, @refunding_user.id)
+        end
+
+        it "enqueues LowBalanceFraudCheckWorker" do
+          expect(LowBalanceFraudCheckWorker).to have_enqueued_sidekiq_job(@purchase.id)
+        end
+      end
+
+      context "when refunding user is admin" do
+        before do
+          admin_user = create(:admin_user)
+          @purchase.refund_purchase!(@flow_of_funds, admin_user.id)
+        end
+
+        it "doesn't enqueue LowBalanceFraudCheckWorker" do
+          expect(LowBalanceFraudCheckWorker).not_to have_enqueued_sidekiq_job(@purchase.id)
+        end
+      end
+    end
+
     describe "gift purchases" do
       let(:link) { create(:product, price_cents: 200) }
       let(:gift) { create(:gift) }

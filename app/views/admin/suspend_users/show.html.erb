@@ -1,0 +1,35 @@
+<%= load_pack("admin") %>
+
+<%= form_for :suspend_users, url: admin_suspend_users_path, method: :put do |f| %>
+  <section>
+    <header>
+      To suspend users for terms of service violations, please enter IDs of those users separated by comma or newline.
+    </header>
+
+    <figure class="code">
+      <figcaption>
+        Example with comma-separated items
+      </figcaption>
+      <pre>3322133, 3738461, 4724778</pre>
+    </figure>
+
+    <figure class="code">
+      <figcaption>
+        Example with items separated by newline
+      </figcaption>
+      <pre>3322133
+3738461
+4724778</pre>
+    </figure>
+
+    <%= f.text_area :identifiers, placeholder: "Enter user IDs here", rows: 10 %>
+
+    <%= f.label "Reason" %>
+    <%= f.select :reason, options_for_select(@suspend_reasons.map { |reason| [reason, reason] }) %>
+
+    <%= f.label "Notes" %>
+    <%= f.text_area :additional_notes, placeholder: "Additional info for support team", rows: 3 %>
+
+    <%= button_tag "Suspend users", type: :submit, class: "button primary" %>
+  </section>
+<% end %>

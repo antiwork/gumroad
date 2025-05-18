@@ -1,0 +1,18 @@
+<% comments = commentable.comments.includes(:author).references(:author).order(created_at: :desc) %>
+<% if comments.any? %>
+  <details>
+    <summary>
+      <h4>
+        <%= pluralize(comments.count, "comment") %>
+      </h4>
+    </summary>
+
+    <div class="rows" role="list">
+      <% comments.each do |comment| %>
+        <%= render partial: "admin/comments/comment", locals: { comment: comment } %>
+      <% end %>
+    </div>
+  </details>
+<% else %>
+  <div class="info" role="status">No comments created.</div>
+<% end %>

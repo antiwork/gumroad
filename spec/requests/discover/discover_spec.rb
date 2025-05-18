@@ -621,32 +621,26 @@ describe("Discover", js: true, type: :feature) do
 
   it "shows the correct header CTAs when the user is logged out vs in" do
     visit discover_url(host: discover_host)
-    nav = find("main [role='navigation']")
-    expect(nav).to_not have_link "Dashboard"
-    expect(nav).to have_link "Start selling", href: signup_url(host: UrlService.domain_with_protocol)
-    expect(nav).to have_link "Log in", href: login_url(host: UrlService.domain_with_protocol)
     header = find("main > header")
+    expect(header).to_not have_link "Dashboard"
+    expect(header).to have_link "Start selling", href: signup_url(host: UrlService.domain_with_protocol)
+    expect(header).to have_link "Log in", href: login_url(host: UrlService.domain_with_protocol)
     expect(header).to_not have_link "Library"
-    expect(header).to_not have_link "Settings"
 
     login_as create(:buyer_user)
     visit discover_url(host: discover_host)
-    nav = find("main [role='navigation']")
-    expect(nav).to have_link "Dashboard", href: dashboard_url(host: UrlService.domain_with_protocol)
-    expect(nav).to_not have_link "Start selling"
-    expect(nav).to_not have_link "Log in"
     header = find("main > header")
+    expect(header).to have_link "Dashboard", href: dashboard_url(host: UrlService.domain_with_protocol)
+    expect(header).to_not have_link "Log in"
+    expect(header).to have_link "Start selling", href: products_url(host: UrlService.domain_with_protocol)
     expect(header).to have_link "Library", href: library_url(host: UrlService.domain_with_protocol)
-    expect(header).to have_link "Settings", href: settings_main_url(host: UrlService.domain_with_protocol)
 
     login_as create(:compliant_user)
     visit discover_url(host: discover_host)
-    nav = find("main [role='navigation']")
-    expect(nav).to_not have_link "Start selling"
-    expect(nav).to_not have_link "Log in"
     header = find("main > header")
-    expect(header).to have_link "Library"
-    expect(header).to have_link "Settings"
+    expect(header).to_not have_link "Log in"
+    expect(header).to have_link "Start selling", href: products_url(host: UrlService.domain_with_protocol)
+    expect(header).to have_link "Library", href: library_url(host: UrlService.domain_with_protocol)
   end
 
   it "shows the footer" do

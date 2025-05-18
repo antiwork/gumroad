@@ -260,7 +260,7 @@ $light-body-bg: #f4f4f0 !default;
 
 $border-width: math.div(size(1), 16);
 $border-color: rgb(var(--parent-color) / var(--border-alpha));
-$backdrop-bg: rgba(0, 0, 0, 0.5);
+$backdrop-bg: rgba(0, 0, 0, 0.8);
 $border: solid $border-width $border-color;
 $outline: size(0.125) solid full-color(accent);
 $font-family: "ABC Favorit", Avenir, Montserrat, Corbel, "URW Gothic", source-sans-pro, sans-serif;

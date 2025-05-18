@@ -1,0 +1,147 @@
+<article class="card" data-product-id="<%= product.unique_permalink %>">
+  <div class="paragraphs">
+    <div style="display: flex; gap: var(--spacer-4); align-items: center">
+      <%= link_to_if(product.preview_url, image_tag(cdn_url_for(product.preview_url) || asset_path("cover_placeholder.png"), style: "width: var(--form-element-height)", alt: "Preview image"), product.preview_url, target: "_blank") %>
+      <div style="display: grid; gap: var(--spacer-2)">
+        <h2>
+          <%= product.price_formatted %>, <%= link_to_unless_current(h(product.name), admin_link_url(product), title: product.id) %>
+          <%= link_to(tag.span(nil, class: "icon icon-arrow-up-right-square"), product.long_url, target: "_blank") %>
+        </h2>
+        <div>
+          <ul class="inline">
+            <li><%= format_relative_time(product.created_at) %></li>
+            <li><%= link_to(user_name(product.user), admin_user_url(product.user)) %></li>
+          </ul>
+          <%= react_component "AdminProductStats", props: { product_id: product.id }, prerender: true %>
+        </div>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <% if policy([:admin, :products, :staff_picked, product]).create? %>
+        <%= admin_action label: "Mark as staff-picked", url: admin_product_staff_picked_path(product.id), loading: "Marking as staff-picked...", done: "Marked as staff-picked!", success_message: "Marked as staff-picked!" %>
+      <% end %>
+    </div>
+  </div>
+
+  <hr>
+  <details>
+    <summary>
+      <h3>Description</h3>
+    </summary>
+    <div class="js-product-description with-rich-text">
+      <% product_description = product.html_safe_description %>
+      <% if strip_tags(product_description).blank? %>
+        <div class="info" role="status">No description provided.</div>
+      <% else %>
+        <%= product_description %>
+      <% end %>
+    </div>
+  </details>
+
+  <hr>
+  <details>
+    <summary>
+      <h3>Details</h3>
+    </summary>
+    <% if product.filegroup %>
+      <%= react_component "AdminProductAttributesAndInfo", props: { productData: ProductPresenter.new(product: product).admin_info }, prerender: true %>
+    <% else %>
+      <div class="info" role="status">No additional details.</div>
+    <% end %>
+  </details>
+
+  <hr>
+  <h3>Info</h3>
+  <dl>
+    <dt>Type</dt>
+    <dd><%= product_type_label(product) %></dd>
+
+    <dt>External ID</dt>
+    <dd><%= product.external_id %></dd>
+
+    <dt>Published</dt>
+    <dd><%= product.alive? ? icon_yes : icon_no %></dd>
+
+    <dt>Listed on Discover</dt>
+    <dd><%= product.recommendable? ? icon_yes : icon_no %></dd>
+
+    <dt>Staff-picked</dt>
+    <dd><%= product.staff_picked_product&.not_deleted? ? icon_yes : icon_no %></dd>
+
+    <dt>Preorder</dt>
+    <dd><%= product.is_in_preorder_state? ? icon_yes : icon_no %></dd>
+
+    <% if !product.buy_only? %>
+      <dt>Purchase type</dt>
+      <dd><%= product.purchase_type %></dd>
+
+      <dt>Rental price</dt>
+      <dd><%= MoneyFormatter.format(product.rental_price_cents, product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true) %></dd>
+    <% end %>
+
+    <dt>Has stamped PDFs</dt>
+    <dd><%= product.has_stampable_pdfs? ? icon_yes : icon_no %></dd>
+
+    <dt>Streaming</dt>
+    <dd><%= product.streamable? ? icon_yes : icon_no %></dd>
+
+    <dt>Physical</dt>
+    <dd><%= product.is_physical ? icon_yes : icon_no %></dd>
+
+    <dt>Licensed</dt>
+    <dd><%= product.is_licensed ? icon_yes : icon_no %></dd>
+
+    <dt>Is Adult (on product)</dt>
+    <dd><%= product.is_adult? ? icon_yes : icon_no %></dd>
+
+    <dt>Is Adult (on user profile)</dt>
+    <dd><%= product.user.all_adult_products? ? icon_yes : icon_no %></dd>
+
+    <dt>Is Adult (keywords)</dt>
+    <dd><%= product.has_adult_keywords? ? icon_yes : icon_no %></dd>
+
+    <dt>Category</dt>
+    <dd>
+      <% if product.taxonomy.present? %>
+        <%= product.taxonomy.ancestry_path.map { |taxonomy| Discover::TaxonomyPresenter::TAXONOMY_LABELS[taxonomy] }.join(" > ") %>
+      <% end %>
+    </dd>
+
+    <dt>Tags</dt>
+    <dd><%= product.tags.map(&:humanized_name).join(", ") %></dd>
+
+    <dt>Circle Community</dt>
+    <dd>
+      <% if product.has_integration?(CircleIntegration.name) %>
+        <%= icon_yes %>
+      <% else %>
+        <%= icon_no %>
+      <% end %>
+    </dd>
+
+    <dt>Discord Channel</dt>
+    <dd>
+      <% if product.has_integration?(DiscordIntegration.name) %>
+        <%= icon_yes %>
+      <% else %>
+        <%= icon_no %>
+      <% end %>
+    </dd>
+  </dl>
+
+  <hr>
+  <%= react_component "AdminProductPurchases", props: { product_id: product.id, is_affiliate_user: is_affiliate_user, user_id: defined?(user_id) && user_id }, prerender: true %>
+
+  <hr>
+  <%= render("admin/comments/form", commentable: product) %>
+  <%= render("admin/comments/index", commentable: product) %>
+
+  <hr>
+  <dl>
+    <dt>Updated</dt>
+    <dd><%= format_relative_time(product.updated_at) %></dd>
+    <dt>Deleted</dt>
+    <dd><%= format_relative_time(product.deleted_at, placeholder: icon_no) %></dd>
+  </dl>
+</article>

@@ -1,0 +1,18 @@
+<%= header_section("Low balance for #{@user.name}") %>
+<div>
+  <p>
+    Last refunded purchase:
+    <%= link_to @purchase.email, admin_purchase_url(@purchase) %>
+    <% if @purchase.card_type == CardType::PAYPAL %>
+      <%= PaypalChargeProcessor::DISPLAY_NAME %>
+    <% end %>
+  </p>
+
+  <p>
+    Last refunded product:
+    <%= link_to @product.name, admin_product_url(@product.unique_permalink) %>
+  </p>
+
+  <p>Creator:</p>
+  <%= render("admin_mailer/internal_user_info", user: @user) %>
+</div>

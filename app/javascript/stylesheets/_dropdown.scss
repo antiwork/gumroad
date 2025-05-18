@@ -56,6 +56,7 @@
     z-index: z-index(tooltip);
     // We want the popover to contrast against the site as a whole, not its parent.
     --color: var(--contrast-filled);
+
     &::before {
       display: none;
     }

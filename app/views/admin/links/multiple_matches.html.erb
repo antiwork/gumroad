@@ -1,0 +1,25 @@
+<table>
+  <thead>
+    <tr>
+      <th>Product</th>
+      <th>By</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @product_matches.each do |product| %>
+      <tr>
+        <td data-label="Product">
+          <%= product.price_formatted %>, <%= link_to_unless_current(h(product.name), admin_link_url(product), title: product.id) %>
+          <%= link_to(tag.span(nil, class: "icon icon-arrow-up-right-square"), product.long_url, target: "_blank") %>
+        </td>
+
+        <td data-label="By">
+          <%= link_to h(product.user.name.presence || "User #{product.user.id}"), admin_user_path(product.user) %>
+          <small>
+            <%= format_relative_time(product.created_at) %>
+          </small>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

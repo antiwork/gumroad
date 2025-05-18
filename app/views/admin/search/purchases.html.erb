@@ -1,0 +1,7 @@
+<%= load_pack("admin_review") %>
+
+<% if @purchases&.exists? %>
+  <%= render("purchases", purchases: @purchases) %>
+<% else %>
+  <%= render("admin/empty_state", message: "No purchases found.") %>
+<% end %>
