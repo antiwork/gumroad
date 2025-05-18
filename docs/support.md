@@ -3,7 +3,7 @@
 This document contains various administrative operations for Gumroad.
 To use, run these commands in the production console.
 
-## PAYOUT OPERATIONS
+## Payout operations
 
 ### Process a PayPal payout for a specific user
 
@@ -76,7 +76,7 @@ User.find_by(email: 'creator@example.com').payments.select(:id, :created_at, :pr
 User.find_by(email: 'creator@example.com').payments.failed.last(2)
 ```
 
-## PAYMENT OPERATIONS
+## Payment operations
 
 ### Find purchase ID by creator and customer email
 
@@ -108,7 +108,7 @@ Purchase.find_by_external_id(purchase_external_id).refund!(refunding_user_id: GU
 Charge.find_by_external_id("abcdefghijklmno==").purchases
 ```
 
-## PRODUCT MANAGEMENT
+## Product management
 
 ### Undelete a product
 
@@ -130,7 +130,7 @@ product = Link.find_by(email: 'creator@example.com', custom_permalink: 'customna
 product.update!(custom_receipt: nil)
 ```
 
-## USER MANAGEMENT
+## User management
 
 ### Restore refunding capability
 
@@ -159,7 +159,7 @@ User.find_by(email: "customer@example.com").alive_cart.update!(email: nil)
 User.find_by(email: "creator@example.com").financial_annual_report_url_for(year: 2024)
 ```
 
-## SUBSCRIPTION MANAGEMENT
+## Subscription management
 
 ### Check subscription cancellation date
 
@@ -176,3 +176,5 @@ User.find_by_email("creator@example.com").links.each do |product|
     end
 end
 ```
+
+## Risk
