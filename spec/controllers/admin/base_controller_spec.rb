@@ -3,6 +3,7 @@
 require "spec_helper"
 
 describe Admin::BaseController do
+  render_views
   class DummyPolicy < ApplicationPolicy
     def index_with_policy?
       false
@@ -10,10 +11,6 @@ describe Admin::BaseController do
   end
 
   controller(Admin::BaseController) do
-    def index
-      render json: { success: true }
-    end
-
     def index_with_policy
       authorize :dummy
 
@@ -187,7 +184,7 @@ describe Admin::BaseController do
       it "redirects" do
         get :index_with_policy
 
-        expect(response).to redirect_to root_url
+        expect(response).to redirect_to "/"
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
     end
