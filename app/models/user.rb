@@ -369,7 +369,7 @@ class User < ApplicationRecord
     return unless annual_reports.attached?
 
     blob_url = annual_reports.joins("LEFT JOIN active_storage_blobs ON active_storage_blobs.id = active_storage_attachments.blob_id")
-                             .find_by("JSON_CONTAINS(active_storage_blobs.metadata, :year, \'$.year\')", year:)&.blob&.url
+                             .find_by("JSON_CONTAINS(active_storage_blobs.metadata, :year, '$.year')", year:)&.blob&.url
 
     cdn_url_for(blob_url) if blob_url
   end
