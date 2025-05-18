@@ -23,6 +23,7 @@ describe Admin::BaseController do
       namespace :admin do
         get :index, to: "base#index"
         get :index_with_policy, to: "base#index_with_policy"
+        get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard"
       end
     end
   end
