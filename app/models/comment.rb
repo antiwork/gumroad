@@ -38,6 +38,7 @@ class Comment < ApplicationRecord
   after_commit :notify_seller_of_new_comment, on: :create
 
   scope :with_type_payout_note, -> { where(comment_type: COMMENT_TYPE_PAYOUT_NOTE) }
+  scope :with_type_on_probation, -> { where(comment_type: COMMENT_TYPE_ON_PROBATION) }
 
   def mark_subtree_deleted!
     transaction do
