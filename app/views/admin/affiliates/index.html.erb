@@ -1,0 +1,11 @@
+<%= load_pack("admin_review") %>
+
+<div class="paragraphs">
+  <% if @users.any? %>
+    <% @users.each do |user| %>
+      <%= render("admin/users/user", user: user, is_affiliate_user: true) %>
+    <% end %>
+  <% else %>
+    <%= render("admin/empty_state", message: "No affiliates found.") %>
+  <% end %>
+</div>

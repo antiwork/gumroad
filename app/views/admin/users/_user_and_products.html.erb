@@ -1,0 +1,22 @@
+<%= load_pack("admin_review") %>
+
+<div class="paragraphs">
+  <%= render("admin/users/user", user: user, is_affiliate_user: is_affiliate_user) %>
+  <% if products.none? %>
+    <div class="info" role="status"><%= is_affiliate_user ? "No affiliated products." : "No products created." %></div>
+  <% end %>
+  <% products.each do |product| %>
+    <%= render("admin/links/product", product: product, show_purchases: true, is_affiliate_user: is_affiliate_user, user_id: user.id) %>
+  <% end %>
+  <% if pagy.pages > 1 %>
+    <div class="pagination" role="navigation" aria-label="Pagination">
+      <%= link_to("‹ Previous", pagy_url_for(pagy, pagy.prev), class: "button", inert: !pagy.prev) %>
+      <menu>
+        <% (1..pagy.pages).map do |page| %>
+          <li><%= link_to(page, pagy_url_for(pagy, page), class: "button", inert: page == pagy.page) %></li>
+        <% end %>
+      </menu>
+      <%= link_to("Next ›", pagy_url_for(pagy, pagy.next), class: "button", inert: !pagy.next) %>
+    </div>
+  <% end %>
+</div>

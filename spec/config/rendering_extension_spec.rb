@@ -50,7 +50,6 @@ describe "RenderingExtension" do
         end
 
         it "generates correct context" do
-          time_zone = ActiveSupport::TimeZone[seller.timezone]
           expect(custom_context).to eq(
             {
               design_settings: {
@@ -133,15 +132,7 @@ describe "RenderingExtension" do
                 is_gumroad_admin: false,
                 is_impersonating: true,
               },
-              current_seller: {
-                id: seller.external_id,
-                email: seller.email,
-                name: seller.display_name(prefer_email_over_default_username: true),
-                subdomain: seller.subdomain,
-                avatar_url: seller.avatar_url,
-                is_buyer: seller.is_buyer?,
-                time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
-              },
+              current_seller: UserPresenter.new(user: seller).as_current_seller,
               csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
               locale: "en-US"
             }

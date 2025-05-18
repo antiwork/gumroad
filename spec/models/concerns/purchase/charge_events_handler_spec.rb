@@ -177,11 +177,15 @@ describe Purchase::ChargeEventsHandler, :vcr do
       expect(purchase.stripe_status).to eq "charge.succeeded"
     end
 
-    it "sets the purchase chargeback_date flag" do
+    it "sets the purchase chargeback_date flag and email us" do
       charge_event = build(:charge_event_dispute_formalized, charge_id: transaction_id)
+      mail = double("mail")
+      expect(mail).to receive(:deliver_later)
+      allow(AdminMailer).to receive(:chargeback_notify).and_return(mail)
 
       Purchase.handle_charge_event(charge_event)
       expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+      expect(AdminMailer).to have_received(:chargeback_notify).with(purchase.dispute.id)
 
       purchase.reload
       seller.reload
@@ -190,6 +194,14 @@ describe Purchase::ChargeEventsHandler, :vcr do
       expect(purchase.chargeback_date.to_i).to eq charge_event.created_at.to_i
       expect(Event.last.event_name).to eq "chargeback"
       expect(Event.last.purchase_id).to eq purchase.id
+    end
+
+    it "enqueues LowBalanceFraudCheckWorker" do
+      charge_event = build(:charge_event_dispute_formalized, charge_id: transaction_id)
+      Purchase.handle_charge_event(charge_event)
+
+      expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+      expect(LowBalanceFraudCheckWorker).to have_enqueued_sidekiq_job(purchase.id)
     end
 
     it "enqueues UpdateSalesRelatedProductsInfosJob" do
@@ -238,6 +250,9 @@ describe Purchase::ChargeEventsHandler, :vcr do
       expect(amount_refundable_cents).to eq(purchase.price_cents - partially_refunded_cents)
 
       charge_event = build(:charge_event_dispute_formalized, charge_id: transaction_id)
+      mail = double("mail")
+      expect(mail).to receive(:deliver_later)
+      expect(AdminMailer).to receive(:chargeback_notify).and_return(mail)
       Purchase.handle_charge_event(charge_event) # This will decrement 31c from seller balance
       purchase.reload
       seller.reload

@@ -2673,6 +2673,13 @@ describe User, :vcr do
     end
   end
 
+  describe "#admin_page_url" do
+    it "returns the admin users page url" do
+      user = create(:user)
+      expect(user.admin_page_url).to eq("#{PROTOCOL}://#{DOMAIN}/admin/users/#{user.id}")
+    end
+  end
+
   describe "#compliance_info_resettable?" do
     it "returns true if the user doesn't have an active Stripe account" do
       user = create(:user_with_compliance_info)

@@ -9,7 +9,7 @@ class User < ApplicationRecord
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, Mongoable, JsonData, Deletable, MoneyBalance,
           DeviseInternal, PayoutSchedule, SocialFacebook, SocialTwitter, SocialGoogle, SocialApple, SocialGoogleMobile,
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
-          Email, AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, MailerLevel,
+          Email, AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper
 
@@ -515,6 +515,10 @@ class User < ApplicationRecord
     # so as to use the cache
     single_key = key.is_a?(Array) ? key.first : key
     find_by(id: single_key)
+  end
+
+  def admin_page_url
+    Rails.application.routes.url_helpers.admin_user_url(self, protocol: PROTOCOL, host: DOMAIN)
   end
 
   def profile_url(custom_domain_url: nil, recommended_by: nil)

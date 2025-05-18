@@ -1,0 +1,23 @@
+<p>
+  Name:
+  <a href="<%= admin_user_url(user.id) %>">
+    <%= user.name.presence || "<none set>" %>
+  </a>
+  <br>
+  <br>
+  Public email: <%= user.email %>
+  <br>
+  <% if user.username %>
+    Username:
+    <a href="<%= user.profile_url %>">
+      <%= user.username %>
+    </a>
+    <br>
+  <% end %>
+  Signed up: <%= user.created_at.to_fs(:formatted_date_full_month) %>
+  <br>
+  Balance: <%= user.balance_formatted(via: :elasticsearch) %>
+  <br>
+  <% lost_chargebacks = user.lost_chargebacks %>
+  Lost Chargebacks: <%= lost_chargebacks[:volume] %> (<%= lost_chargebacks[:count] %>)
+</p>

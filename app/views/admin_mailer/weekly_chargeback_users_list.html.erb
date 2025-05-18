@@ -1,0 +1,16 @@
+<%= header_section("Weekly Chargeback Users List") %>
+<div>
+  <% if @sellers_cb_hash.any? %>
+    <p>The following users have crossed our chargeback threshold:</p>
+    <% @sellers_cb_hash.each do |user_id, cb| %>
+      <% user = User.find(user_id) %>
+      <p>
+        <%= link_to(h(user.name.present? ? User.find(user_id).name : "User #{ user_id }"), admin_user_url(user_id)) %>
+        · Chargeback Rate:
+        <strong><%= "#{ cb * 100 }%" %></strong>
+      </p>
+    <% end %>
+  <% else %>
+    <p>System has no chargeback sellers! :)</p>
+  <% end %>
+</div>

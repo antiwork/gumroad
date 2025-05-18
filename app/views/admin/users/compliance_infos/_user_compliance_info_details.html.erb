@@ -1,0 +1,76 @@
+<% user = user_compliance_info.user %>
+<div class="paragraphs">
+  <h3>Personal Info</h3>
+  <dl>
+    <dt>Is Business</dt>
+    <dd><%= user_compliance_info.is_business ? icon_yes : icon_no %></dd>
+
+    <dt>First Name</dt>
+    <dd><%= user_compliance_info.first_name %></dd>
+
+    <dt>Last Name</dt>
+    <dd><%= user_compliance_info.last_name %></dd>
+
+    <dt>Join Date</dt>
+    <dd><%= user.created_at.to_fs(:formatted_date_full_month) %></dd>
+
+    <dt>Address Street</dt>
+    <dd><%= user_compliance_info.street_address %></dd>
+
+    <dt>Address City</dt>
+    <dd><%= user_compliance_info.city %></dd>
+
+    <dt>Address State</dt>
+    <dd>
+      <%= user_compliance_info.state %>
+      <% if user_compliance_info.state_code %>
+        (<%= user_compliance_info.state_code %>)
+      <% end %>
+    </dd>
+
+    <dt>Address Zip</dt>
+    <dd><%= user_compliance_info.zip_code %></dd>
+
+    <dt>Address Country</dt>
+    <dd>
+      <% if user_compliance_info.country %>
+        <%= user_compliance_info.country %>
+        (<%= user_compliance_info.country_code %>)
+      <% end %>
+    </dd>
+
+    <dt>Individual Tax ID Provided</dt>
+    <dd><%= user_compliance_info.individual_tax_id.present? ? icon_yes : icon_no %></dd>
+  </dl>
+</div>
+
+<% if user_compliance_info.is_business %>
+  <div class="paragraphs">
+    <h3>Business Info</h3>
+    <dl>
+      <dt>Name</dt>
+      <dd><%= user_compliance_info.business_name %></dd>
+
+      <dt>Street Address</dt>
+      <dd><%= user_compliance_info.business_street_address %></dd>
+
+      <dt>City</dt>
+      <dd><%= user_compliance_info.business_city %></dd>
+
+      <dt>State</dt>
+      <dd><%= user_compliance_info.business_state %></dd>
+
+      <dt>Zip</dt>
+      <dd><%= user_compliance_info.business_zip_code %></dd>
+
+      <dt>Country</dt>
+      <dd><%= user_compliance_info.business_country %></dd>
+
+      <dt>Type</dt>
+      <dd><%= user_compliance_info.business_type %></dd>
+
+      <dt>Tax ID Provided</dt>
+      <dd><%= user_compliance_info.business_tax_id.present? ? icon_yes : icon_no %></dd>
+    </dl>
+  </div>
+<% end %>

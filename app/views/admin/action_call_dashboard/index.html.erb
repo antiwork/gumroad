@@ -1,0 +1,20 @@
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Controller</th>
+      <th>Action</th>
+      <th>Call Count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @admin_action_call_infos.each_with_index do |info, index| %>
+      <tr>
+        <td><%= index + 1 %></td>
+        <td><%= info.controller_name %></td>
+        <td><%= info.action_name %></td>
+        <td><%= info.call_count %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

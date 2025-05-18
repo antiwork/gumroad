@@ -392,19 +392,7 @@ Rails.application.routes.draw do
 
     resources :tags, only: [:index]
 
-    namespace :admin do
-      get "/", to: "base#index"
-      get :impersonate, to: "base#impersonate"
-      delete :unimpersonate, to: "base#unimpersonate"
-      get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard"
-      get "helper_actions/impersonate/:user_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
-      get "helper_actions/stripe_dashboard/:user_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
-
-      constraints(lambda { |request| request.env["warden"].authenticate? && request.env["warden"].user.is_team_member? }) do
-        mount SidekiqWebCSP.new(Sidekiq::Web) => :sidekiq, as: :sidekiq_web
-        mount FlipperCSP.new(Flipper::UI.app(Flipper)) => :features, as: :flipper_ui
-      end
-    end
+    draw(:admin)
 
     post "/settings/store_facebook_token", to: "users/oauth#async_facebook_store_token", as: :ajax_facebook_access_token
 

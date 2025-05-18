@@ -41,6 +41,7 @@ class UserPresenter
       avatar_url: user.avatar_url,
       is_buyer: user.is_buyer?,
       time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
+      has_published_products: user.products.alive.exists?,
     }
   end
 

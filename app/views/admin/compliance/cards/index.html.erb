@@ -1,0 +1,15 @@
+<%= load_pack("admin_review") %>
+
+<div class="paragraphs">
+  <% if @service_charges.present? %>
+    <% @service_charges.each do |service_charge| %>
+      <%= render("admin/service_charges/service_charge", service_charge: service_charge) %>
+    <% end %>
+  <% elsif @purchases.present? %>
+    <% @purchases.each do |purchase| %>
+      <%= render("admin/purchases/purchase", purchase: purchase) %>
+    <% end %>
+  <% else %>
+    <%= render("admin/empty_state", message: "No purchases or service charges found.") %>
+  <% end %>
+</div>

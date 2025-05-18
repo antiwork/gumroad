@@ -1,0 +1,97 @@
+<div class="card">
+  <div>
+    <div>
+      <h2>
+        <%= "Merchant Account #{merchant_account.id}" %>
+      </h2>
+      <%= format_relative_time(merchant_account.created_at) %>
+    </div>
+  </div>
+
+  <hr>
+  <div>
+    <dl>
+      <dt>ID</dt>
+      <dd><%= merchant_account.id %></dd>
+
+      <dt>External ID</dt>
+      <dd><%= merchant_account.external_id %></dd>
+
+      <dt>User</dt>
+      <dd>
+        <% if merchant_account.user %>
+          <%= link_to(merchant_account.user.id, admin_user_path(merchant_account.user)) %>
+        <% else %>
+          none
+        <% end %>
+      </dd>
+
+      <dt>Country</dt>
+      <dd><%= "#{ISO3166::Country[merchant_account.country]&.common_name} (#{merchant_account.country})" %></dd>
+
+      <dt>Currency</dt>
+      <dd><%= merchant_account.currency.upcase %></dd>
+
+      <dt>Active</dt>
+      <dd><%= merchant_account.deleted_at.blank? ? icon_yes : icon_no %></dd>
+
+      <dt>Funds are held by</dt>
+      <dd><%= merchant_account.holder_of_funds.capitalize %></dd>
+
+      <dt>Charge Processor</dt>
+      <dd>
+        <%= merchant_account.charge_processor_id.capitalize %>
+        <% if merchant_account.charge_processor_merchant_id %>
+          |
+          <a href="<%= StripeUrl.connected_account_url(merchant_account.charge_processor_merchant_id) if merchant_account.charge_processor_id == StripeChargeProcessor.charge_processor_id %>"><%= merchant_account.charge_processor_merchant_id %></a>
+        <% end %>
+      </dd>
+
+      <dt><%= merchant_account.charge_processor_id.capitalize %> Alive</dt>
+      <dd>
+        <%= merchant_account.charge_processor_alive_at.present? ? icon_yes : icon_no %>
+        <%= merchant_account.charge_processor_alive_at %>
+      </dd>
+
+      <dt><%= merchant_account.charge_processor_id.capitalize %> Verified</dt>
+      <dd>
+        <%= merchant_account.charge_processor_verified_at.present? ? icon_yes : icon_no %>
+        <%= merchant_account.charge_processor_verified_at %>
+      </dd>
+
+      <dt><%= merchant_account.charge_processor_id.capitalize %> Deleted</dt>
+      <dd>
+        <%= merchant_account.charge_processor_deleted_at.present? ? icon_yes : icon_no %>
+        <%= merchant_account.charge_processor_deleted_at %>
+      </dd>
+    </dl>
+  </div>
+
+  <hr>
+  <div class="paragraphs">
+    <h3>
+      Charge Processor live attributes
+    </h3>
+    <% if @live_attributes.present? %>
+      <dl>
+        <% @live_attributes.each do |key, value| %>
+          <dt><%= key %></dt>
+          <dd>
+            <code><%= value.to_json %></code>
+          </dd>
+        <% end %>
+      </dl>
+    <% else %>
+      <div role="alert" class="info">Charge Processor Merchant information is missing.</div>
+    <% end %>
+  </div>
+
+  <hr>
+  <dl>
+    <dt>Updated</dt>
+    <dd><%= format_relative_time(merchant_account.updated_at) %></dd>
+
+    <dt>Deleted</dt>
+    <dd><%= format_relative_time(merchant_account.deleted_at, placeholder: icon_no) %></dd>
+  </dl>
+</div>

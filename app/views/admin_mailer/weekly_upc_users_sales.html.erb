@@ -1,0 +1,23 @@
+<%= header_section("Weekly UPC Users Sales") %>
+
+<div>
+  <% if @product_upc_hash.any? %>
+    <p>The following products have made US based sale(s) in the last week:</p>
+    <% @product_upc_hash.each do |product_id, us_sales_count| %>
+      <p>
+        <%= link_to(h(Link.find_by_id(product_id).name || user_id.to_s), admin_product_url(product_id)) %>
+        · US Sales:
+        <strong><%= us_sales_count %></strong>
+        · Missing Zips:
+        <%= @product_zip_mismatch_hash[product_id] %>
+        <% if Link.find_by_id(product_id).is_physical %>
+          · Physical
+        <% else %>
+          · Digital
+        <% end %>
+      </p>
+    <% end %>
+  <% else %>
+    <p>There are no UPC users sales this week :(</p>
+  <% end %>
+</div>

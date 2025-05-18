@@ -1,0 +1,28 @@
+<%= header_section("Gumroad Merchant Registration – Update") %>
+<div>
+  <p><%= "A #{@charge_processor_id.capitalize} account has been updated. It may have fields that need to be completed, or identity verification requiring action. If this is the case action is usually required within 3 days." %></p>
+
+  <% if @user %>
+    <%= render("admin_mailer/internal_user_info", user: @user) %>
+  <% end %>
+
+  <% if @charge_processor_merchant_id %>
+    <p>
+      <%= "#{@charge_processor_id.capitalize} Merchant ID:" %>
+      <a href="<%= @charge_processor_merchant_url %>">
+        <%= @charge_processor_merchant_id %>
+      </a>
+    </p>
+  <% else %>
+    <p>This update is for Gumroad's account.</p>
+  <% end %>
+
+  <p>
+    <%= "#{@charge_processor_id.capitalize} Event ID:" %>
+    <a href="<%= @event_url %>">
+      <%= @event_id %>
+    </a>
+  </p>
+
+  <pre><code><%= JSON.pretty_generate(@info) %></code></pre>
+</div>
