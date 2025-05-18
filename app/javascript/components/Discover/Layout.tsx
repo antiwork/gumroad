@@ -25,7 +25,7 @@ const UserActionButtons: React.FC = () => {
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
           <NavigationButton href={Routes.products_path()} color="primary" className="flex-1 lg:flex-none">
-            Start Selling
+            Start selling
           </NavigationButton>
         )}
       </>
@@ -38,7 +38,7 @@ const UserActionButtons: React.FC = () => {
         Log in
       </NavigationButton>
       <NavigationButton href={Routes.signup_url()} color="primary" className="flex-1 lg:flex-none">
-        Start Selling
+        Start selling
       </NavigationButton>
     </>
   );
