@@ -178,7 +178,7 @@
           Submission deadline
         </h3>
         <p class="text-lg lg:text-xl xl:text-2xl">
-          Sept 15, 2025 at 11:59 PM ET
+          Sept 15, 2025 at 11:59 PM ET. Submit your project <a href="https://forms.gle/BJzSM9JtFYYCmGJg9" class="underline">here</a>.
         </p>
       </div>
       <div class="space-y-4">
@@ -229,10 +229,82 @@
           Additional prizes
         </h3>
         <p class="text-lg lg:text-xl xl:text-2xl">
-          Category prizes for best design, most innovative, best technical implementation, and more.
+          We'll also be giving prizes to:
         </p>
+        <ul class="list-disc text-lg lg:text-xl xl:text-2xl">
+          <li>Highest GMV - $5,000</li>
+          <li>Most creative/unique - $2,500</li>
+          <li>$1,000 each to ten novel projects</li>
+        </ul>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="mx-auto my-16 max-w-6xl px-8 md:my-24 md:px-28 md:text-center lg:my-32">
+  <h2 class="text-5xl font-medium md:text-6xl lg:text-7xl">
+    Questions?
+  </h2>
+</div>
+
+<div class="mx-auto mb-16 px-8 md:px-28">
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "How winners are determined",
+      content: "We're using a multi-factor scoring approach focusing on real marketplace health:
+      <br><br>1. <strong>50% Quality</strong>
+      <br>&nbsp;&nbsp;&nbsp;a. Well-defined creator niche
+      <br>&nbsp;&nbsp;&nbsp;b. Niche needs a solution (aka minimal alternatives)
+      <br>&nbsp;&nbsp;&nbsp;c. How well your solution addresses their needs
+      <br><br>2. <strong>50% Quantity</strong>
+      <br>&nbsp;&nbsp;&nbsp;a. Average earnings per creator
+      <br>&nbsp;&nbsp;&nbsp;b. Creator retention rate after 30 days
+      <br>&nbsp;&nbsp;&nbsp;c. Buyer-to-creator ratio (healthy marketplace balance)
+      <br>&nbsp;&nbsp;&nbsp;d. Month-over-month growth in both creators and buyers
+      <br>&nbsp;&nbsp;&nbsp;e. Sustainable customer acquisition strategy"
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Eligibility",
+      content: "Open to anyone, anywhere in the world
+      <br>Individual and team submissions welcome
+      <br>No coding experience? Team up with developers
+      <br>Gumroad employees and immediate family not eligible"
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Submission requirements",
+      content: "Working niche marketplace built on Gumroad's MIT-licensed code
+      <br><br>Documentation of your niche strategy and target creator community, including:
+      <br>• One-paragraph description of your specific marketplace focus
+      <br>• Target creator types and the products/services they'll sell
+      <br>• How your marketplace differs from existing platforms
+      <br><br>Verifiable creator and buyer metrics
+      <br>3-minute video showcasing your marketplace in action
+      <br><a href='https://forms.gle/BJzSM9JtFYYCmGJg9' class='underline'>Submission form</a> completed by Sept 15, 2025, at 11:59 PM ET"
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Presentations",
+      content: "10-15 projects will be selected as finalists and notified via email.
+      <br>Finalists and presentations will be announced in the early fall (specific dates to come)."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Resources",
+      content: "GitHub repository: <a href='https://github.com/antiwork/gumroad' class='underline'>https://github.com/antiwork/gumroad</a>
+      <br>Technical questions can be sent to: <a href='mailto:hackathon@gumroad.com' class='underline'>hackathon@gumroad.com</a>"
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Terms & conditions",
+      content: "Gumroad's official terms & conditions for this event <a href='https://drive.google.com/file/d/1Yl6yiG8s20PU3TEpqJ4J0MVCLSBJ5SQQ/view?usp=drive_link' class='underline'>can be found here</a>."
+    } %>
   </div>
 </div>
 
