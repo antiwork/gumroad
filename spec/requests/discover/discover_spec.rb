@@ -621,7 +621,7 @@ describe("Discover", js: true, type: :feature) do
 
   it "shows the correct header CTAs when the user is logged out vs in" do
     visit discover_url(host: discover_host)
-    nav = find("main [role='navigation']")
+    nav = find("main > header")
     expect(nav).to_not have_link "Dashboard"
     expect(nav).to have_link "Start selling", href: signup_url(host: UrlService.domain_with_protocol)
     expect(nav).to have_link "Log in", href: login_url(host: UrlService.domain_with_protocol)
