@@ -1,0 +1,14 @@
+<div role="listitem">
+  <div class="content">
+    <div>
+      <ul class="inline" style="margin-bottom: var(--spacer-2)">
+        <li>
+          <strong><%= comment.comment_type %></strong>
+        </li>
+        <li><%= comment.author ? link_to(comment.author.name || comment.author.email, admin_user_url(comment.author)) : comment.author_name %></li>
+        <li><%= comment.updated_at.strftime("%d %b %H:%M %Y") %></li>
+      </ul>
+      <%= markdown(comment.content) %>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,27 @@
+<%= header_section("Custom Date UPC Sales") %>
+
+<div>
+  <% if @product_upc_hash.any? %>
+    <p>The following products have made US based sale(s):</p>
+    <% @product_upc_hash.each do |product_id, us_sales_count| %>
+      <p>
+        <%= link_to(h(Link.find_by_id(product_id).name || user_id.to_s), admin_product_url(product_id)) %>
+        · Date Range:
+        <%= @products_hash[product_id.to_s][0].to_date.strftime('%Y-%m-%d') %>
+        to
+        <%= @products_hash[product_id.to_s][1].to_date.strftime('%Y-%m-%d') %>
+        · US Sales:
+        <strong><%= us_sales_count %></strong>
+        · Missing Zips:
+        <%= @product_zip_mismatch_hash[product_id.to_i] %>
+        <% if Link.find_by_id(product_id).require_shipping %>
+          · Physical
+        <% else %>
+          · Digital
+        <% end %>
+      </p>
+    <% end %>
+  <% else %>
+    <p>There are no UPC users sales this week :(</p>
+  <% end %>
+</div>

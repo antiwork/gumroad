@@ -1,0 +1,34 @@
+<% user_memberships = user.user_memberships_not_deleted_and_ordered.reject { |team_membership| team_membership.role_owner? } %>
+<% if user_memberships.any? %>
+  <hr>
+  <details>
+    <summary>
+      <h3>User memberships</h3>
+    </summary>
+    <div class="stack">
+      <% user_memberships.each do |user_membership| %>
+        <div>
+          <div style="display: flex; gap: var(--spacer-4); align-items: center">
+            <%= image_tag(user_membership.seller.avatar_url, class: "user-avatar", alt: user_membership.seller.display_name(prefer_email_over_default_username: true)) %>
+            <div style="display: grid;">
+              <h5><%= link_to(user_membership.seller.display_name(prefer_email_over_default_username: true), admin_user_url(user_membership.seller.id)) %></h5>
+              <div class="small">
+                <%= user_membership.role %>
+              </div>
+            </div>
+          </div>
+          <div style="text-align: right">
+            <% if user_membership.last_accessed_at %>
+              last accessed
+              <%= format_relative_time(user_membership.last_accessed_at) %>
+            <% end %>
+            <div class="small">
+              invited
+              <%= format_relative_time(user_membership.created_at) %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </details>
+<% end %>

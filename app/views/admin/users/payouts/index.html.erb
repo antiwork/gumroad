@@ -1,0 +1,6 @@
+<%= load_pack("admin_review") %>
+
+<div class="paragraphs">
+  <%= render partial: "admin/users/payouts/payment", collection: @payouts %>
+  <%= paginate @payouts, views_prefix: "admin" %>
+</div>

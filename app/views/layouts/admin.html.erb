@@ -15,6 +15,9 @@
     <main>
       <header>
         <h1><%= @title %></h1>
+        <div class="actions">
+          <%= react_component "AdminSearchPopover", props: { card_types: card_types_for_react }, prerender: true %>
+        </div>
       </header>
       <%= yield %>
     </main>

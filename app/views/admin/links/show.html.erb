@@ -1,0 +1,6 @@
+<%= load_pack("admin_review") %>
+
+<div class="paragraphs">
+  <%= render("admin/links/product", product: @product, show_purchases: true, is_affiliate_user: false) %>
+  <%= render("admin/users/user", user: @product.user, is_affiliate_user: false) %>
+</div>

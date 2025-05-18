@@ -1,0 +1,29 @@
+<% if @product.is_in_preorder_state %>
+  <li>
+    <%= number_with_delimiter(@product.sales.preorder_authorization_successful.count) %>
+    pre-orders
+    <% if @product.sales.stripe_failed.any? %>
+      <%= with_tooltip(tip: (@product.sales.preorder_authorization_failed.stripe_failed.count * 100.0) / (@product.sales.preorder_authorization_failed.stripe_failed.count + @product.sales.preorder_authorization_successful.count)) do %>
+        (<%= @product.sales.preorder_authorization_failed.stripe_failed.count %> failed)
+      <% end %>
+    <% end %>
+  </li>
+  <li>
+    <%= @product.balance_formatted %>
+    total (pre-order auths)
+  </li>
+<% else %>
+  <li>
+    <%= number_with_delimiter(@product.sales.successful.count) %>
+    sales
+    <% if @product.sales.stripe_failed.any? %>
+      <%= with_tooltip(tip: (@product.sales.stripe_failed.count * 100.0) / (@product.sales.stripe_failed.count + @product.sales.successful.count)) do %>
+        (<%= @product.sales.stripe_failed.count %>  failed)
+      <% end %>
+    <% end %>
+  </li>
+  <li>
+    <%= @product.balance_formatted %>
+    total
+  </li>
+<% end %>

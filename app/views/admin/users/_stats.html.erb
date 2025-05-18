@@ -1,0 +1,18 @@
+<% user = local_assigns[:user] %>
+<% lost_chargebacks = user.lost_chargebacks %>
+<li>
+  <%= formatted_dollar_amount(user.sales_cents_total) %>
+  total
+</li>
+<li>
+  <%= user.balance_formatted %>
+  balance
+</li>
+<li>
+  <%= lost_chargebacks[:volume] %>
+  vol CB
+</li>
+<li>
+  <%= lost_chargebacks[:count] %>
+  count CB
+</li>

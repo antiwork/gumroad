@@ -1,0 +1,66 @@
+<div class="card js-admin-user" data-user-id="<%= user.id %>">
+  <div class="paragraphs">
+    <div style="display: flex; gap: var(--spacer-4); align-items: center">
+      <%= image_tag(user.avatar_url, class: "user-avatar", style: "width: var(--form-element-height)", alt: user.name) %>
+      <div style="display: grid; gap: var(--spacer-2)">
+        <h2>
+          <% if is_affiliate_user %>
+            <%= link_to_unless_current(h(user_name(user)), admin_affiliate_url(user)) %>
+          <% else %>
+            <%= link_to_unless_current(h(user_name(user)), admin_user_url(user)) %>
+          <% end %>
+        </h2>
+        <ul class="inline">
+          <li><%= format_relative_time(user.created_at) %></li>
+          <% if user.username.present? %>
+            <li><%= link_to user.username, user.subdomain_with_protocol, target: "_blank" %></li>
+          <% end %>
+          <% if user.form_email.present? %>
+            <li>
+              Email:
+              <%= mail_to(user.form_email) %>
+              <%= blocked_email_tooltip(user.form_email) %>
+            </li>
+          <% end %>
+          <% if user.support_email.present? %>
+            <li>
+              Support email:
+              <%= mail_to(user.support_email) %>
+            </li>
+          <% end %>
+          <% if user.payments.any? %>
+            <li><%= link_to("Payouts", admin_user_payouts_path(user)) %></li>
+          <% end %>
+        </ul>
+        <%= react_component "AdminUserStats", props: { user_id: user.id }, prerender: true %>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+  <div class="button-group">
+    <% become_tooltip = policy([:admin, :impersonators, user]).create? ? nil : "User is either deleted, or a team member." %>
+    <%= with_tooltip(tip: become_tooltip) do %>
+      <%= button_to "Become", admin_user_impersonator_path(user), disabled: become_tooltip.present?, data: { confirm: "Are you sure you want to become user #{user.id}?" }, class: "button small" %>
+    <% end %>
+    <%= admin_action label: (user.verified? ? "Unverify" : "Verify"), url: verify_admin_user_path(user), confirm_message: "Are you sure you want to (un)verify user #{user.id}?", done: user.verified? ? "Verify" : "Unverify", success_message: user.verified? ? "Unverified." : "Verified." %>
+  </div>
+
+  <%= render("admin/users/user_memberships", user: user) %>
+
+  <%= render("admin/users/user_permission_risk", user: user) %>
+
+  <%= render("admin/users/user_permission_payouts", user: user) %>
+
+  <hr>
+  <%= render("admin/comments/form", commentable: user) %>
+  <%= render("admin/comments/index", commentable: user) %>
+
+  <hr>
+  <dl>
+    <dt>Updated</dt>
+    <dd><%= format_relative_time(user.updated_at) %></dd>
+    <dt>Deleted</dt>
+    <dd><%= format_relative_time(user.deleted_at, placeholder: icon_no) %></dd>
+  </dl>
+</div>

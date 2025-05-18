@@ -3,7 +3,15 @@ import "abortcontroller-polyfill/dist/abortcontroller-polyfill-only";
 import "whatwg-fetch";
 import ReactOnRails from "react-on-rails";
 
+import AdminActionButton from "$app/components/server-components/Admin/ActionButton";
+import AdminAddCommentForm from "$app/components/server-components/Admin/AddCommentForm";
 import AdminNav from "$app/components/server-components/Admin/Nav";
+import AdminProductAttributesAndInfo from "$app/components/server-components/Admin/ProductAttributesAndInfo";
+import AdminProductPurchases from "$app/components/server-components/Admin/ProductPurchases";
+import AdminProductStats from "$app/components/server-components/Admin/ProductStats";
+import AdminSearchPopover from "$app/components/server-components/Admin/SearchPopover";
+import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
+import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliatedPage from "$app/components/server-components/AffiliatedPage";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
@@ -81,7 +89,15 @@ import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
 
 ReactOnRails.register({
+  AdminActionButton,
+  AdminAddCommentForm,
   AdminNav,
+  AdminProductAttributesAndInfo,
+  AdminProductPurchases,
+  AdminProductStats,
+  AdminSearchPopover,
+  AdminUserGuids,
+  AdminUserStats,
   AdvancedSettingsPage,
   AffiliatedPage,
   AffiliateRequestPage,

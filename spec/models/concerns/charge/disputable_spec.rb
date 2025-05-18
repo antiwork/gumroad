@@ -303,9 +303,10 @@ describe Charge::Disputable, :vcr do
         end
       end
 
-      it "sends emails to creator and customer" do
+      it "sends emails to admin, creator, and customer" do
         mail = double("mail")
-        expect(mail).to receive(:deliver_later).exactly(2).times
+        expect(mail).to receive(:deliver_later).exactly(3).times
+        expect(AdminMailer).to receive(:chargeback_notify).and_return(mail)
         expect(ContactingCreatorMailer).to receive(:chargeback_notice).and_return(mail)
         expect(CustomerLowPriorityMailer).to receive(:chargeback_notice_to_customer).and_return(mail)
         Purchase.handle_charge_event(event)

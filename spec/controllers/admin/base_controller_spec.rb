@@ -4,20 +4,31 @@ require "spec_helper"
 
 describe Admin::BaseController do
   render_views
-
-  let(:admin_user) { create(:admin_user) }
-
-  describe "GET index" do
-    before(:each) do
-      sign_in admin_user
-    end
-
-    it "renders the page" do
-      get :index
-
-      expect(response).to be_successful
+  class DummyPolicy < ApplicationPolicy
+    def index_with_policy?
+      false
     end
   end
+
+  controller(Admin::BaseController) do
+    def index_with_policy
+      authorize :dummy
+
+      render json: { success: true }
+    end
+  end
+
+  before do
+    routes.draw do
+      namespace :admin do
+        get :index, to: "base#index"
+        get :index_with_policy, to: "base#index_with_policy"
+        get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard"
+      end
+    end
+  end
+
+  let(:admin_user) { create(:admin_user) }
 
   describe "require_admin!" do
     shared_examples_for "404 for xhr request" do
@@ -174,7 +185,7 @@ describe Admin::BaseController do
       it "redirects" do
         get :index_with_policy
 
-        expect(response).to redirect_to root_url
+        expect(response).to redirect_to "/"
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
     end

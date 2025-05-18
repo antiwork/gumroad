@@ -1,0 +1,90 @@
+<% if current_user.has_payout_privilege %>
+  <% if user.alive_user_compliance_info %>
+    <hr>
+    <div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
+      <%= render("admin/users/compliance_infos/user_compliance_info_details", user_compliance_info: user.alive_user_compliance_info) %>
+    </div>
+  <% end %>
+
+  <hr>
+  <div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
+    <div class="paragraphs">
+      <h3>Payout info</h3>
+      <div>
+        <% case %>
+        <% when user.active_bank_account %>
+          <% account = user.active_bank_account %>
+          <span><%= "#{account.type} / #{account.account_holder_full_name} / #{account.formatted_account}" %></span>
+        <% when user.payment_address.present? %>
+          <span><%= "PayPal / #{user.payment_address}" %></span>
+        <% else %>
+          <%= icon_no %>
+          This user has no payout method.
+        <% end %>
+      </div>
+    </div>
+
+    <div class="paragraphs">
+      <h3>Merchant Accounts</h3>
+      <% if user.merchant_accounts.empty? %>
+        No merchant accounts.
+      <% else %>
+        <ul class="inline">
+          <% user.merchant_accounts.each do |merchant_account| %>
+            <li>
+              <%= link_to "#{merchant_account.id} – #{merchant_account.charge_processor_id}", admin_merchant_account_path(merchant_account) %>
+              <%= merchant_account.alive? && merchant_account.charge_processor_alive? ? icon_yes : icon_no %>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+    </div>
+  </div>
+
+  <hr>
+  <details>
+    <summary>
+      <h3>Email changes</h3>
+    </summary>
+    <div>
+      <% fields = %w(email payment_address) %>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Old</th>
+            <th>New</th>
+            <th>Changed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% user.versions_for(*fields).each do |version| %>
+            <% version.changes.sort.each do |field, values| %>
+              <tr>
+                <td data-label="Field"><%= field %></td>
+                <td data-label="Old"><%= values.first %></td>
+                <td data-label="New"><%= values.last %></td>
+                <td data-label="Changed"><%= format_relative_time(version.created_at) %></td>
+              </tr>
+            <% end %>
+          <% end %>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">
+              <p>
+                Tracked fields:
+                <%= fields.join(", ") %>
+              </p>
+              <small>
+                Results from last <%= Versionable::LIMIT %> version records.
+                <br>
+                Version records are deleted regularly. The information may not reflect the complete history of the account.
+              </small>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </details>
+<% end %>

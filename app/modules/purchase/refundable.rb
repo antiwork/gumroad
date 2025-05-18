@@ -225,6 +225,11 @@ class Purchase
 
       enqueue_update_sales_related_products_infos_job(false)
 
+      unless refund.user&.is_team_member?
+        # Check for low balance and put the creator on probation
+        LowBalanceFraudCheckWorker.perform_in(5.seconds, id)
+      end
+
       true
     end
   end
