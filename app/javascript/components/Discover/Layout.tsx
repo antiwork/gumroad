@@ -24,7 +24,7 @@ const UserActionButtons: React.FC = () => {
           <Icon name="bookmark-heart-fill" /> Library
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
-          <NavigationButton href={Routes.products_path()} color="primary" className="flex-1 lg:flex-none">
+          <NavigationButton href={Routes.products_url()} color="primary" className="flex-1 lg:flex-none">
             Start selling
           </NavigationButton>
         )}
