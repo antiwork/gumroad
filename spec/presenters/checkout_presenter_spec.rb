@@ -21,7 +21,7 @@ describe CheckoutPresenter do
 
     it "returns basic props for the checkout page" do
       expect(@instance.checkout_props(params: {}, browser_guid:)).to eq(
-        discover_url: UrlService.discover_domain_with_protocol,
+        discover_url: discover_url(protocol: PROTOCOL, host: DISCOVER_DOMAIN),
         countries: Compliance::Countries.for_select.to_h,
         us_states: STATES,
         ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
@@ -59,7 +59,7 @@ describe CheckoutPresenter do
       options = product.options
       params = { product: product.unique_permalink, recommended_by: "discover", option: options[1][:id] }
       expect(@instance.checkout_props(params:, browser_guid:)).to eq(
-        discover_url: UrlService.discover_domain_with_protocol,
+        discover_url: discover_url(protocol: PROTOCOL, host: DISCOVER_DOMAIN),
         countries: Compliance::Countries.for_select.to_h,
         us_states: STATES,
         ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
@@ -584,7 +584,7 @@ describe CheckoutPresenter do
                                  is_installment_plan: false,
                                },
                                contact_info: { city: "San Francisco", country: "US", email: @subscription.email, full_name: "Jane Gumroad", state: "CA", street: "100 Main St", zip: "00000" },
-                               discover_url: UrlService.discover_domain_with_protocol,
+                               discover_url: discover_url(protocol: PROTOCOL, host: DISCOVER_DOMAIN),
                                countries: Compliance::Countries.for_select.to_h,
                                us_states: STATES,
                                ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),

@@ -218,7 +218,7 @@ export const CardGrid = ({
   return (
     <div className="with-sidebar">
       {hideFilters ? null : (
-        <div className="stack top-28 lg:sticky" aria-label="Filters">
+        <div className="stack top-12 lg:sticky" aria-label="Filters">
           <header>
             {title ?? "Filters"}
             {anyFilters ? (
