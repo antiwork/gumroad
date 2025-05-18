@@ -977,13 +977,6 @@ class User < ApplicationRecord
     paypal_connect_account.paypal_account_details&.dig("primary_email")
   end
 
-  def has_published_products?
-    # 'products' is an alias for 'links'.
-    # Assumes that the 'alive' scope on the Link (Product) model
-    # correctly identifies products that are published/live.
-    products.alive.exists?
-  end
-
   protected
     def after_confirmation
       # The password reset link sent to the old email should be invalidated
