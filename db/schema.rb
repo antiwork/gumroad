@@ -885,7 +885,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
     t.datetime "deleted_at", precision: nil
     t.index ["email", "followed_id"], name: "index_followers_on_email_and_followed_id", unique: true
     t.index ["followed_id", "confirmed_at"], name: "index_followers_on_followed_id_and_confirmed_at"
-    t.index ["followed_id", "email"], name: "index_followers_on_followed_id_and_email"
+    t.index ["followed_id", "email"], name: "index_follows_on_followed_id_and_email"
   end
 
   create_table "friendly_id_slugs", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2715,6 +2715,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
     t.index ["zip_code"], name: "index_zip_tax_rates_on_zip_code"
   end
 
-  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
 end
