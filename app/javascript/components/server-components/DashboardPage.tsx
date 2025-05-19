@@ -50,7 +50,7 @@ type Props = {
     first_sale: boolean;
     first_payout: boolean;
     first_email: boolean;
-    first_small_bets: boolean;
+    purchased_small_bets: boolean;
   };
   sales: ProductRow[];
   balances: {
@@ -348,7 +348,7 @@ export const DashboardPage = ({
     {
       key: "small_bets",
       name: "Smart move",
-      getChecked: (stats) => stats.first_small_bets,
+      getChecked: (stats) => stats.purchased_small_bets,
       link: "https://dvassallo.gumroad.com/l/small-bets?layout=profile",
       IconComponent: SmallBetsIcon,
       description: "Sign up for Small Bets.",
