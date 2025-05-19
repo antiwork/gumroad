@@ -65,10 +65,20 @@ type Props = {
 };
 type TableProps = { sales: ProductRow[] };
 
+type GettingStartedItemType = {
+  key: string;
+  name: string;
+  getChecked: (stats: Props["getting_started_stats"]) => boolean;
+  link: string;
+  IconComponent: React.ComponentType<GettingStartedIconProps>;
+  description: string;
+};
+
 type RadioItemProps = {
   name: string;
   checked: boolean;
-  link: string;
+  isMinimized?: boolean;
+  link?: string;
   IconComponent?: React.ComponentType<GettingStartedIconProps>;
   description?: string;
 };
@@ -88,7 +98,36 @@ const Greeter = () => (
   </div>
 );
 
-const RadioItem = ({ name, checked, link, IconComponent, description }: RadioItemProps) => {
+const RadioItem = ({ name, checked, link, IconComponent, description, isMinimized }: RadioItemProps) => {
+  if (isMinimized) {
+    return (
+      <Button
+        color="filled"
+        role="radio"
+        aria-checked={checked}
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: "var(--spacer-2)",
+          padding: "var(--spacer-2) var(--spacer-3)",
+          flexGrow: 1,
+          flexBasis: "0",
+        }}
+      >
+        {IconComponent ? <IconComponent isChecked={checked} width="36" height="36" /> : null}
+        <span style={{ flexGrow: 1, textAlign: "left" }}>{name}</span>
+        <Icon
+          name={checked ? "solid-check-circle" : "circle"}
+          style={{
+            color: checked ? "rgb(var(--success))" : "rgb(var(--gray-400))",
+            marginLeft: "auto",
+          }}
+        />
+      </Button>
+    );
+  }
+
   const handleClick = () => {
     if (!checked && link) {
       window.location.href = link;
@@ -106,8 +145,8 @@ const RadioItem = ({ name, checked, link, IconComponent, description }: RadioIte
         flexDirection: "column",
         alignItems: "center",
         textAlign: "center",
-        gap: "var(--spacer-1)",
-        padding: "var(--spacer-6) var(--spacer-4)",
+        gap: "var(--spacer-0)",
+        padding: "var(--spacer-5) var(--spacer-4)",
         position: "relative",
       }}
     >
@@ -122,13 +161,13 @@ const RadioItem = ({ name, checked, link, IconComponent, description }: RadioIte
       />
       {IconComponent ? (
         <div style={{ marginBottom: "var(--spacer-2)" }}>
-          <IconComponent isChecked={checked} width="80" height="80" />
+          <IconComponent isChecked={checked} width="60" height="60" />
         </div>
       ) : (
         <div style={{ width: 80, height: 80, border: "1px dashed gray", marginBottom: "var(--spacer-2)" }} />
       )}
-      <div className="text-lg font-semibold leading-tight">{name}</div>
-      {description ? <p style={{ fontSize: "var(--font-size-small)", opacity: 0.8 }}>{description}</p> : null}
+      <div className="mb-1 text-base font-semibold leading-tight">{name}</div>
+      {description ? <p className="text-sm opacity-80">{description}</p> : null}
     </Button>
   );
 };
@@ -221,6 +260,74 @@ export const DashboardPage = ({
   show_1099_download_notice,
 }: Props) => {
   const loggedInUser = useLoggedInUser();
+  const [isGettingStartedMinimized, setIsGettingStartedMinimized] = React.useState(false);
+
+  const gettingStartedItems: GettingStartedItemType[] = [
+    {
+      key: "welcome",
+      name: "Welcome aboard",
+      getChecked: () => true,
+      link: "",
+      IconComponent: MakeAccountIcon,
+      description: "Make a Gumroad account.",
+    },
+    {
+      key: "profile",
+      name: "Make an impression",
+      getChecked: (stats) => stats.customized_profile,
+      link: Routes.settings_profile_path(),
+      IconComponent: CustomizeProfileIcon,
+      description: "Customize your profile.",
+    },
+    {
+      key: "product",
+      name: "Showtime",
+      getChecked: (stats) => stats.first_product,
+      link: Routes.new_product_path(),
+      IconComponent: FirstProductIcon,
+      description: "Create your first product.",
+    },
+    {
+      key: "follower",
+      name: "Build your tribe",
+      getChecked: (stats) => stats.first_follower,
+      link: Routes.followers_path(),
+      IconComponent: FirstFollowerIcon,
+      description: "Get your first follower.",
+    },
+    {
+      key: "sale",
+      name: "Cha-ching",
+      getChecked: (stats) => stats.first_sale,
+      link: Routes.sales_dashboard_path(),
+      IconComponent: FirstSaleIcon,
+      description: "Make your first sale.",
+    },
+    {
+      key: "payout",
+      name: "Money inbound",
+      getChecked: (stats) => stats.first_payout,
+      link: Routes.settings_payments_path(),
+      IconComponent: FirstPayoutIcon,
+      description: "Get your first pay out.",
+    },
+    {
+      key: "email",
+      name: "Making waves",
+      getChecked: (stats) => stats.first_email,
+      link: Routes.posts_path(),
+      IconComponent: EmailBlastIcon,
+      description: "Send out your first email blast.",
+    },
+    {
+      key: "small_bets",
+      name: "Smart move",
+      getChecked: (stats) => stats.first_small_bets,
+      link: "https://dvassallo.gumroad.com/l/small-bets?layout=profile",
+      IconComponent: SmallBetsIcon,
+      description: "Sign up for Small Bets.",
+    },
+  ];
 
   return (
     <main>
@@ -250,71 +357,63 @@ export const DashboardPage = ({
         {loggedInUser?.policies.settings_payments_user.show
           ? Object.values(getting_started_stats).some((v) => !v) && (
               <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
-                <h2>Getting started</h2>
                 <div
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))",
-                    gap: "var(--spacer-4)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                   }}
                 >
-                  <RadioItem
-                    name="Welcome aboard"
-                    checked
-                    link=""
-                    IconComponent={MakeAccountIcon}
-                    description="Make a Gumroad account."
-                  />
-                  <RadioItem
-                    name="Make an impression"
-                    checked={getting_started_stats.customized_profile}
-                    link={Routes.settings_profile_path()}
-                    IconComponent={CustomizeProfileIcon}
-                    description="Customize your profile."
-                  />
-                  <RadioItem
-                    name="Showtime"
-                    checked={getting_started_stats.first_product}
-                    link={Routes.new_product_path()}
-                    IconComponent={FirstProductIcon}
-                    description="Create your first product."
-                  />
-                  <RadioItem
-                    name="Build your tribe"
-                    checked={getting_started_stats.first_follower}
-                    link={Routes.followers_path()}
-                    IconComponent={FirstFollowerIcon}
-                    description="Get your first follower."
-                  />
-                  <RadioItem
-                    name="Cha-ching"
-                    checked={getting_started_stats.first_sale}
-                    link={Routes.sales_dashboard_path()}
-                    IconComponent={FirstSaleIcon}
-                    description="Make your first sale."
-                  />
-                  <RadioItem
-                    name="Money inbound"
-                    checked={getting_started_stats.first_payout}
-                    link={Routes.settings_payments_path()}
-                    IconComponent={FirstPayoutIcon}
-                    description="Get your first pay out."
-                  />
-                  <RadioItem
-                    name="Making waves"
-                    checked={getting_started_stats.first_email}
-                    link={Routes.posts_path()}
-                    IconComponent={EmailBlastIcon}
-                    description="Send out your first email blast."
-                  />
-                  <RadioItem
-                    name="Smart move"
-                    checked={getting_started_stats.first_small_bets}
-                    link="https://dvassallo.gumroad.com/l/small-bets?layout=profile"
-                    IconComponent={SmallBetsIcon}
-                    description="Sign up for Small Bets."
-                  />
+                  <h2>Getting started</h2>
+                  <Button
+                    onClick={() => setIsGettingStartedMinimized(!isGettingStartedMinimized)}
+                    aria-label={isGettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                  >
+                    <span>{isGettingStartedMinimized ? "▼" : "▲"}</span>
+                  </Button>
                 </div>
+                {!isGettingStartedMinimized && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))",
+                      gap: "var(--spacer-4)",
+                    }}
+                  >
+                    {gettingStartedItems.map((item) => (
+                      <RadioItem
+                        key={item.key}
+                        name={item.name}
+                        checked={item.getChecked(getting_started_stats)}
+                        link={item.link}
+                        IconComponent={item.IconComponent}
+                        description={item.description}
+                      />
+                    ))}
+                  </div>
+                )}
+                {isGettingStartedMinimized ? (
+                  <div
+                    style={{
+                      border: "1px solid rgb(var(--gray-300))",
+                      borderRadius: "var(--border-radius-lg)",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                      gap: "var(--spacer-3)",
+                      width: "100%",
+                    }}
+                  >
+                    {gettingStartedItems.map((item) => (
+                      <RadioItem
+                        key={item.key}
+                        isMinimized
+                        name={item.name}
+                        checked={item.getChecked(getting_started_stats)}
+                        IconComponent={item.IconComponent}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )
           : null}
