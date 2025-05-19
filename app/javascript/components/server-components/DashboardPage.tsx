@@ -116,7 +116,7 @@ const RadioItem = ({ name, checked, link, IconComponent, description, isMinimize
         }}
       >
         {IconComponent ? <IconComponent isChecked={checked} width="36" height="36" /> : null}
-        <span style={{ flexGrow: 1, textAlign: "left" }}>{name}</span>
+        <span className="mb-1 text-base font-semibold leading-tight">{name}</span>
         <Icon
           name={checked ? "solid-check-circle" : "circle"}
           style={{
@@ -249,6 +249,8 @@ const ProductsTable = ({ sales }: TableProps) => {
   );
 };
 
+const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
+
 export const DashboardPage = ({
   name,
   has_sale,
@@ -260,7 +262,31 @@ export const DashboardPage = ({
   show_1099_download_notice,
 }: Props) => {
   const loggedInUser = useLoggedInUser();
-  const [isGettingStartedMinimized, setIsGettingStartedMinimized] = React.useState(false);
+  const [isGettingStartedMinimized, setIsGettingStartedMinimized] = React.useState<boolean>(false);
+  const isInitialWrite = React.useRef(true);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedValue = window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY);
+      if (storedValue !== null) {
+        const parsedValue: unknown = JSON.parse(storedValue);
+        if (typeof parsedValue === "boolean") {
+          setIsGettingStartedMinimized(parsedValue);
+        }
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (isInitialWrite.current) {
+      isInitialWrite.current = false;
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(isGettingStartedMinimized));
+    }
+  }, [isGettingStartedMinimized]);
 
   const gettingStartedItems: GettingStartedItemType[] = [
     {
@@ -356,64 +382,38 @@ export const DashboardPage = ({
 
         {loggedInUser?.policies.settings_payments_user.show
           ? Object.values(getting_started_stats).some((v) => !v) && (
-              <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
+              <div className="override grid gap-4">
+                <div className="flex items-center justify-between">
                   <h2>Getting started</h2>
-                  <Button
-                    onClick={() => setIsGettingStartedMinimized(!isGettingStartedMinimized)}
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsGettingStartedMinimized(!isGettingStartedMinimized);
+                    }}
                     aria-label={isGettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                    style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
                   >
-                    <span>{isGettingStartedMinimized ? "▼" : "▲"}</span>
-                  </Button>
+                    <span>{isGettingStartedMinimized ? "Show more" : "Show less"}</span>
+                    <Icon
+                      name={isGettingStartedMinimized ? "arrows-expand" : "arrows-collapse"}
+                      style={{ width: "20px", height: "20px" }}
+                    />
+                  </a>
                 </div>
-                {!isGettingStartedMinimized && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))",
-                      gap: "var(--spacer-4)",
-                    }}
-                  >
-                    {gettingStartedItems.map((item) => (
-                      <RadioItem
-                        key={item.key}
-                        name={item.name}
-                        checked={item.getChecked(getting_started_stats)}
-                        link={item.link}
-                        IconComponent={item.IconComponent}
-                        description={item.description}
-                      />
-                    ))}
-                  </div>
-                )}
-                {isGettingStartedMinimized ? (
-                  <div
-                    style={{
-                      border: "1px solid rgb(var(--gray-300))",
-                      borderRadius: "var(--border-radius-lg)",
-                      display: "grid",
-                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                      gap: "var(--spacer-3)",
-                      width: "100%",
-                    }}
-                  >
-                    {gettingStartedItems.map((item) => (
-                      <RadioItem
-                        key={item.key}
-                        isMinimized
-                        name={item.name}
-                        checked={item.getChecked(getting_started_stats)}
-                        IconComponent={item.IconComponent}
-                      />
-                    ))}
-                  </div>
-                ) : null}
+                <div className="override grid w-full grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
+                  {gettingStartedItems.map((item) => (
+                    <RadioItem
+                      key={item.key}
+                      name={item.name}
+                      checked={item.getChecked(getting_started_stats)}
+                      link={item.link}
+                      IconComponent={item.IconComponent}
+                      description={item.description}
+                      isMinimized={isGettingStartedMinimized}
+                    />
+                  ))}
+                </div>
               </div>
             )
           : null}
