@@ -39,14 +39,14 @@ export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose
               Due to limitations with our payments provider, switching your country to <b>{country}</b> means that you
               will have to forfeit your remaining balance of <b>{balance}</b>.<br />
               <br />
-              Please confirm that you're okay forfeiting your balance by typing <i>"I understand"</i> below and clicking{" "}
-              <i>Confirm</i>.
+              Please confirm that you're okay forfeiting your balance by typing <b>"I understand"</b> below and clicking{" "}
+              <b>Confirm</b>.
               <div className="mt-4">
                 <input
                   type="text"
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
-                  placeholder="Type 'I understand'"
+                  placeholder="I understand"
                   className="border-gray-300 w-full rounded border p-2"
                 />
               </div>
