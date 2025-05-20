@@ -23,6 +23,12 @@ class GithubStarsController < ApplicationController
         "https://api.github.com/repos/antiwork/gumroad",
         headers: { "X-GitHub-Api-Version" => "2022-11-28" }
       )
-      response.parsed_response["stargazers_count"] if response.success?
+
+      if response.success?
+        response.parsed_response["stargazers_count"]
+      else
+        Rails.logger.error("GitHub API request failed: status=#{response.code}, message=#{response.message}, body=#{response.body}")
+        nil
+      end
     end
 end
