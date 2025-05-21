@@ -255,6 +255,16 @@
       <dd aria-label="Can email">
         <%= purchase.can_contact? ? icon_yes : icon_no %>
       </dd>
+
+      <% if purchase.is_gift_sender_purchase %>
+        <dt>Receiver purchase id</dt>
+        <dd><%= link_to(purchase.gift.giftee_purchase_id, admin_purchase_path(purchase.gift.giftee_purchase_id)) %></dd>
+      <% end %>
+
+      <% if purchase.is_gift_receiver_purchase %>
+        <dt>Sender purchase id</dt>
+        <dd><%= link_to(purchase.gift.gifter_purchase_id, admin_purchase_path(purchase.gift.gifter_purchase_id)) %></dd>
+      <% end %>
     </dl>
   </div>
 
@@ -274,6 +284,17 @@
         <dt>Receiver purchase id</dt>
         <dd><%= link_to(purchase.gift.giftee_purchase_id, admin_purchase_path(purchase.gift.giftee_purchase_id)) %></dd>
       </dl>
+    </details>
+
+    <hr>
+    <details>
+      <summary>
+        <h3>Edit giftee email</h3>
+      </summary>
+      <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
+        <%= f.text_field :giftee_email, placeholder: "Enter new giftee email" %>
+        <%= f.button "Update", class: "button" %>
+      <% end %>
     </details>
   <% end %>
 
@@ -296,18 +317,32 @@
     </details>
   <% end %>
 
+  <% if purchase.successful? || purchase.preorder_authorization_successful? || purchase.is_free_trial_purchase? %>
+    <hr>
+    <details>
+      <summary>
+        <h3>Resend receipt</h3>
+      </summary>
+      <%= react_component "AdminResendReceiptForm", props: { purchase_id: purchase.id, email: purchase.email }, prerender: true %>
+    </details>
+  <% end %>
+
   <hr>
   <div class="button-group">
     <% if purchase.can_force_update? || purchase.failed? %>
       <%= admin_action label: "Sync with Stripe/PayPal", url: sync_status_with_charge_processor_admin_purchase_path(purchase), loading: "syncing...", done: "synced!", confirm_message: "Are you sure you want to sync this purchase's state with Stripe/PayPal?", success_message: "synced!" %>
-    <% end %>
-    <% if purchase.successful? && !purchase.stripe_refunded %>
       <%= admin_action label: "Refund", url: refund_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase?", success_message: "Refunded!" %>
       <%= admin_action label: "Refund for Fraud", url: refund_for_fraud_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase for fraud?", success_message: "Refunded!" %>
     <% end %>
     <%= admin_action label: "Refund Card for Fraud", url: refund_admin_cards_path(stripe_fingerprint: purchase.stripe_fingerprint), loading: "Refunding...", done: "Refunding purchases!", confirm_message: "Are you sure you want to Mass-refund for fraud all purchases associated with this purchase's card?", success_message: "Refunding purchases!" %>
+    <% if purchase.subscription.present? && !purchase.subscription.cancelled_or_failed? && !purchase.subscription.ended? %>
+      <%= admin_action label: "Cancel subscription for buyer", url: cancel_subscription_admin_purchase_path(purchase, by_seller: false), loading: "Canceling...", done: "Canceled!", confirm_message: "Are you sure you want to cancel this subscription on behalf of the buyer?", success_message: "Canceled!" %>
+      <%= admin_action label: "Cancel subscription for seller", url: cancel_subscription_admin_purchase_path(purchase, by_seller: true), loading: "Canceling...", done: "Canceled!", confirm_message: "Are you sure you want to cancel this subscription on behalf of the seller?", success_message: "Canceled!" %>
+    <% end %>
     <% if purchase.buyer_blocked? %>
       <%= admin_action label: "Unblock buyer", url: unblock_buyer_admin_purchase_path(purchase), loading: "Unblocking buyer...", done: "Buyer unblocked!", success_message: "Buyer unblocked!" %>
+    <% else %>
+      <%= admin_action label: "Block buyer", url: block_buyer_admin_purchase_path(purchase), loading: "Blocking buyer...", done: "Buyer blocked!", confirm_message: "This will fully block this buyer's emails, GUID, and IP addresses. Proceed?", success_message: "Buyer blocked!" %>
     <% end %>
     <% if purchase.successful? %>
       <%= link_to "Go to Receipt", receipt_purchase_path(purchase.external_id), target: "_blank", class: "button small" %>

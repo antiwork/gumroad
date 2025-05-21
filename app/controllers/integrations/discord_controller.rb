@@ -76,6 +76,14 @@ class Integrations::DiscordController < ApplicationController
     if params[:state].present?
       state = JSON.parse(params[:state])
 
+      is_admin = state.dig("is_admin") == true
+      encrypted_product_id = state.dig("product_id")
+      if is_admin && !encrypted_product_id.nil?
+        decrypted_product_id = ObfuscateIds.decrypt(CGI.unescape(encrypted_product_id))
+        redirect_to join_discord_admin_link_path(decrypted_product_id, code: params[:code])
+        return
+      end
+
       seller = User.find(ObfuscateIds.decrypt(CGI.unescape(state.dig("seller_id"))))
       if seller.present?
         host = state.dig("is_custom_domain") ? seller.custom_domain.domain : seller.subdomain

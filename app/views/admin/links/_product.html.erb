@@ -18,8 +18,12 @@
     </div>
 
     <div class="button-group">
-      <% if policy([:admin, :products, :staff_picked, product]).create? %>
-        <%= admin_action label: "Mark as staff-picked", url: admin_product_staff_picked_path(product.id), loading: "Marking as staff-picked...", done: "Marked as staff-picked!", success_message: "Marked as staff-picked!" %>
+      <%= link_to "Edit", edit_link_path(product), target: "_blank", class: "button small" %>
+      <% if product.admins_can_generate_url_redirects? %>
+        <%= link_to "View download page", generate_url_redirect_admin_link_path(product.unique_permalink), target: "_blank", class: "button small" %>
+      <% end %>
+      <% product.alive_product_files.each do |file| %>
+        <%= link_to file.s3_filename, admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id), target: "_blank", class: "button small" %>
       <% end %>
     </div>
   </div>
@@ -104,7 +108,7 @@
     <dt>Category</dt>
     <dd>
       <% if product.taxonomy.present? %>
-        <%= product.taxonomy.ancestry_path.map { |taxonomy| Discover::TaxonomyPresenter::TAXONOMY_LABELS[taxonomy] }.join(" > ") %>
+        <%= product.taxonomy.ancestry_path.join(" > ") %>
       <% end %>
     </dd>
 
@@ -129,6 +133,47 @@
       <% end %>
     </dd>
   </dl>
+
+  <hr>
+  <div class="button-group">
+    <% if product.alive? %>
+      <%= admin_action label: "Unpublish", url: unpublish_admin_link_path(product.unique_permalink), loading: "Unpublishing product...", done: "Unpublished!", success_message: "Unpublished!" %>
+    <% else %>
+      <%= admin_action label: "Publish", url: publish_admin_link_path(product.unique_permalink), loading: "Publishing product...", done: "Published!", success_message: "Published!" %>
+    <% end %>
+    <% if product.deleted_at %>
+      <%= admin_action label: "Undelete", url: restore_admin_product_path(product.unique_permalink), loading: "Undeleting product...", done: "Undeleted!", success_message: "Undeleted!" %>
+    <% else %>
+      <%= admin_action label: "Delete", url: admin_product_path(product.unique_permalink), method: "DELETE", loading: "Deleting product...", done: "Deleted!", success_message: "Deleted!" %>
+    <% end %>
+    <% if product.is_adult %>
+      <%= admin_action label: "Make non-adult", url: is_adult_admin_link_path(product.unique_permalink, is_adult: "0"), loading: "Making non-adult...", done: "It's not adult!", success_message: "It's not adult!" %>
+    <% else %>
+      <%= admin_action label: "Make adult", url: is_adult_admin_link_path(product.unique_permalink, is_adult: "1"), loading: "Making adult...", done: "It's adult!", success_message: "It's adult!" %>
+    <% end %>
+    <% if policy([:admin, :products, :staff_picked, product]).create? %>
+      <%= admin_action label: "Mark as staff-picked", url: admin_product_staff_picked_path(product.id), loading: "Marking as staff-picked...", done: "Marked as staff-picked!", success_message: "Marked as staff-picked!" %>
+    <% end %>
+    <% if policy([:admin, :products, :staff_picked, product]).destroy? %>
+      <%= admin_action label: "Unmark as staff-picked", url: admin_product_staff_picked_path(product.id), method: "DELETE", loading: "Unmarking as staff-picked...", done: "Unmarked as staff-picked!", success_message: "Unmarked as staff-picked!" %>
+    <% end %>
+    <% if product.has_integration?(DiscordIntegration.name) %>
+      <%= link_to "Join Discord", join_discord_redirect_admin_link_path(product.id), target: "_blank", class: "button small" %>
+    <% end %>
+  </div>
+
+  <% unless product.user.flagged_for_tos_violation? || product.user.suspended? || !product.alive? %>
+    <hr>
+    <details>
+      <summary>
+        <h3>Flag for TOS violation</h3>
+      </summary>
+
+      <% suspend_tos_success_message = "User was flagged for TOS violation and product #{product.is_tiered_membership? ? "unpublished" : "deleted"}." %>
+      <% suspend_tos_confirm_message = "Are you sure you want to flag the user and #{product.is_tiered_membership? ? "unpublish" : "delete"} the product?" %>
+      <%= react_component "AdminSuspendForTosForm", props: { product_id: product.id, success_message: suspend_tos_success_message, confirm_message: suspend_tos_confirm_message, reasons: Compliance::TOS_VIOLATION_REASONS, default_reason: Compliance::DEFAULT_TOS_VIOLATION_REASON }, prerender: true %>
+    </details>
+  <% end %>
 
   <hr>
   <%= react_component "AdminProductPurchases", props: { product_id: product.id, is_affiliate_user: is_affiliate_user, user_id: defined?(user_id) && user_id }, prerender: true %>
