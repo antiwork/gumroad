@@ -44,6 +44,14 @@
       <%= button_to "Become", admin_user_impersonator_path(user), disabled: become_tooltip.present?, data: { confirm: "Are you sure you want to become user #{user.id}?" }, class: "button small" %>
     <% end %>
     <%= admin_action label: (user.verified? ? "Unverify" : "Verify"), url: verify_admin_user_path(user), confirm_message: "Are you sure you want to (un)verify user #{user.id}?", done: user.verified? ? "Verify" : "Unverify", success_message: user.verified? ? "Unverified." : "Verified." %>
+
+    <% if user.deleted? %>
+      <%= admin_action label: "Undelete", url: enable_admin_user_path(user), confirm_message: "Are you sure you want to undelete the account of user #{user.id}?", done: "Undeleted.", success_message: "Undeleted" %>
+    <% end %>
+
+    <%= admin_action label: "Reset password", url: reset_password_admin_user_path(user), confirm_message: "Are you sure you want to reset the password of user #{user.id}?", loading: "Resetting...", done: "Password reset.", show_message_in_alert: true %>
+    <%= admin_action label: "Confirm email", url: confirm_email_admin_user_path(user), confirm_message: "Are you sure you want to confirm the email address for #{user.id}?", success_message: "Confirmed email.", done: "Confirmed email." %>
+    <%= admin_action label: "Sign out from all active sessions", url: invalidate_active_sessions_admin_user_path(user), confirm_message: "Are you sure you want to sign out user #{user.id} from all active sessions?", loading: "Signing out from all active sessions...", success_message: "Signed out from all active sessions", done: "Signed out from all active sessions" %>
   </div>
 
   <%= render("admin/users/user_memberships", user: user) %>
@@ -51,6 +59,22 @@
   <%= render("admin/users/user_permission_risk", user: user) %>
 
   <%= render("admin/users/user_permission_payouts", user: user) %>
+
+  <hr>
+  <details>
+    <summary>
+      <h3>Change email</h3>
+    </summary>
+    <%= react_component "AdminChangeEmailForm", props: { user_id: user.id, current_email: user.email } %>
+  </details>
+
+  <hr>
+  <details>
+    <summary>
+      <h3>Mass-transfer purchases</h3>
+    </summary>
+    <%= react_component "AdminMassTransferPurchasesForm", props: { user_id: user.id }, prerender: true %>
+  </details>
 
   <hr>
   <%= render("admin/comments/form", commentable: user) %>

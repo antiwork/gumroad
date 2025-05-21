@@ -5,8 +5,36 @@
       <% if user.suspended? && user.unpaid_balance_cents.positive? %>
         <%= admin_action label: "Refund balance", url: refund_balance_admin_user_path(user), confirm_message: "Are you sure you want to refund user #{user.id}'s not paid out purchases!?", done: "Refunded.", success_message: "Refunded" %>
       <% end %>
+      <% unless user.disable_paypal_sales? %>
+        <%= admin_action label: "Disable PayPal sales", url: disable_paypal_sales_admin_user_path(user), loading: "Disabling PayPal sales...", done: "PayPal sales disabled!", success_message: "PayPal sales disabled!", outline: true, color: "warning" %>
+      <% end %>
+    </div>
+    <div>
+      <%= with_tooltip(tip: "Risk State", position: "left") do %>
+        <div class="pill small <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
+      <% end %>
     </div>
   </div>
+
+  <% unless (user.flagged_for_fraud? || user.suspended? || user.on_probation?) %>
+    <hr>
+    <details>
+      <summary>
+        <h3>Flag for fraud</h3>
+      </summary>
+      <%= react_component "AdminFlagForFraudForm", props: { user_id: user.id }, prerender: true %>
+    </details>
+  <% end %>
+
+  <% if user.flagged_for_fraud? || user.on_probation? %>
+    <hr>
+    <details>
+      <summary>
+        <h3>Suspend for fraud</h3>
+      </summary>
+      <%= react_component "AdminSuspendForFraudForm", props: { user_id: user.id }, prerender: true %>
+    </details>
+  <% end %>
 
   <hr>
   <%= react_component "AdminUserGuids", props: { user_id: user.id }, prerender: true %>
