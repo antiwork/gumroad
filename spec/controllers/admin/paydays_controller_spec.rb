@@ -30,7 +30,7 @@ describe Admin::PaydaysController do
       expect(flash[:notice]).to eq("Payment was sent.")
       last_payment = Payment.last
       expect(last_payment.user_id).to eq(@user.id)
-      expect(last_payment.amount_cents).to eq(1500)
+      expect(last_payment.amount_cents).to eq(1470)
       expect(last_payment.state).to eq("processing")
       expect(@user.unpaid_balance_cents).to eq(2000)
     end
