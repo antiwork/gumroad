@@ -1,3 +1,4 @@
+import cx from "classnames";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -5,7 +6,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
-import { NavigationButton, Button } from "$app/components/Button";
+import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
@@ -20,10 +21,10 @@ import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIc
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 type ProductRow = {
   id: string;
@@ -72,10 +73,10 @@ type GettingStartedItemType = {
   description: string;
 };
 
-type RadioItemProps = {
+type GettingStartedItemProps = {
   name: string;
   checked: boolean;
-  isMinimized: boolean;
+  minimized: boolean;
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
@@ -96,71 +97,42 @@ const Greeter = () => (
   </div>
 );
 
-const RadioItem = ({ name, checked, link, IconComponent, description, isMinimized }: RadioItemProps) => {
-  if (isMinimized) {
-    return (
-      <Button
-        color="filled"
-        role="radio"
-        aria-checked={checked}
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: "var(--spacer-2)",
-          padding: "var(--spacer-2) var(--spacer-3)",
-          flexGrow: 1,
-          flexBasis: "0",
-        }}
-      >
-        <IconComponent isChecked={checked} width="36" height="36" />
-        <span className="mb-1 text-base font-semibold leading-tight">{name}</span>
-        <Icon
-          name={checked ? "solid-check-circle" : "circle"}
-          style={{
-            color: checked ? "rgb(var(--success))" : "rgb(var(--gray-400))",
-            marginLeft: "auto",
-          }}
-        />
-      </Button>
-    );
+const GettingStartedItem = ({
+  name,
+  checked,
+  link,
+  IconComponent,
+  description,
+  minimized,
+}: GettingStartedItemProps) => {
+  const commonClasses = "relative";
+
+  const iconName = checked ? "solid-check-circle" : "circle";
+  const iconClasses = checked ? "text-green" : "text-dark-gray";
+
+  const content = minimized ? (
+    <div className="flex w-full items-center gap-2">
+      <IconComponent isChecked={checked} width={36} height={36} className="flex-none" />
+      <span className="mb-1 flex-1 font-semibold leading-tight">{name}</span>
+      <Icon name={iconName} className={cx("flex-none", iconClasses)} />
+    </div>
+  ) : (
+    <div className="my-3 flex flex-col items-center gap-1">
+      <IconComponent isChecked={checked} width={60} height={60} />
+      <span className="font-semibold leading-tight">{name}</span>
+      <Icon name={iconName} className={cx("absolute right-2 top-2", iconClasses)} />
+      <p className="text-sm opacity-80">{description}</p>
+    </div>
+  );
+
+  if (checked) {
+    return <div className={cx(commonClasses, "button filled !cursor-default")}>{content}</div>;
   }
 
-  const handleClick = () => {
-    if (!checked && link) {
-      window.location.href = link;
-    }
-  };
-
   return (
-    <Button
-      role="radio"
-      aria-checked={checked}
-      onClick={handleClick}
-      color="filled"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        textAlign: "center",
-        gap: "var(--spacer-0)",
-        padding: "var(--spacer-5) var(--spacer-4)",
-        position: "relative",
-      }}
-    >
-      <Icon
-        name={checked ? "solid-check-circle" : "circle"}
-        style={{
-          position: "absolute",
-          top: "var(--spacer-2)",
-          right: "var(--spacer-2)",
-          color: checked ? "rgb(var(--success))" : "rgb(var(--gray-400))",
-        }}
-      />
-      <IconComponent isChecked={checked} width="60" height="60" />
-      <div className="mb-1 text-base font-semibold leading-tight">{name}</div>
-      {description ? <p className="text-sm opacity-80">{description}</p> : null}
-    </Button>
+    <NavigationButton color="filled" href={link} className={commonClasses}>
+      {content}
+    </NavigationButton>
   );
 };
 
@@ -381,14 +353,14 @@ export const DashboardPage = ({
                 </div>
                 <div className="override grid w-full grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
                   {gettingStartedItems.map((item) => (
-                    <RadioItem
+                    <GettingStartedItem
                       key={item.key}
                       name={item.name}
                       checked={item.getChecked(getting_started_stats)}
                       link={item.link}
                       IconComponent={item.IconComponent}
                       description={item.description}
-                      isMinimized={gettingStartedMinimized}
+                      minimized={gettingStartedMinimized}
                     />
                   ))}
                 </div>
