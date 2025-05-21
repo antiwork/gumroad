@@ -111,7 +111,7 @@
     <dt>Category</dt>
     <dd>
       <% if product.taxonomy.present? %>
-        <%= product.taxonomy.ancestry_path.map { |taxonomy| t("taxonomy.#{taxonomy}") }.join(" > ") %>
+        <%= product.taxonomy.ancestry_path.join(" > ") %>
       <% end %>
     </dd>
 
