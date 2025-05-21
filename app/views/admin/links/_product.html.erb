@@ -25,9 +25,6 @@
       <% product.alive_product_files.each do |file| %>
         <%= link_to file.s3_filename, admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id), target: "_blank", class: "button small" %>
       <% end %>
-      <% if policy([:admin, :products, :staff_picked, product]).create? %>
-        <%= admin_action label: "Mark as staff-picked", url: admin_product_staff_picked_path(product.id), loading: "Marking as staff-picked...", done: "Marked as staff-picked!", success_message: "Marked as staff-picked!" %>
-      <% end %>
     </div>
   </div>
 
