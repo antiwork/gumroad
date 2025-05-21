@@ -15,7 +15,7 @@ describe Admin::PaydaysController do
 
   describe "POST 'pay_user'" do
     before do
-      @user = create(:singaporean_compliant_user, user_risk_state: "compliant", payment_address: "bob@example.com")
+      @user = create(:singaporean_user_with_compliance_info, user_risk_state: "compliant", payment_address: "bob@example.com")
       create(:balance, user: @user, amount_cents: 1000, date: next_scheduled_payout_end_date - 3)
       create(:balance, user: @user, amount_cents: 500, date: next_scheduled_payout_end_date)
       create(:balance, user: @user, amount_cents: 2000, date: next_scheduled_payout_end_date + 1)
