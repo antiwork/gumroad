@@ -280,6 +280,7 @@ Rails.application.routes.draw do
     get "/privacy", to: "home#privacy"
     get "/taxes", to: redirect("/pricing", status: 301)
     get "/hackathon", to: "home#hackathon"
+    resource :github_stars, only: [:show]
 
     get "/ifttt/v1/status" => "api/v2/users#ifttt_status"
     get "/ifttt/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
