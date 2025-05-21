@@ -4,6 +4,8 @@ class Admin::UsersController < Admin::BaseController
   include Pagy::Backend
   include MassTransferPurchases
 
+  skip_before_action :require_admin!, if: :request_from_iffy?, only: %i[suspend_for_fraud_from_iffy mark_compliant_from_iffy flag_for_explicit_nsfw_tos_violation_from_iffy]
+
   before_action :fetch_user, except: %i[refund_queue block_ip_address]
   before_action :require_user_has_payout_privileges!, only: %i[
     create_stripe_managed_account
@@ -118,6 +120,64 @@ class Admin::UsersController < Admin::BaseController
   def mass_transfer_purchases
     transfer = transfer_purchases(user: @user, new_email: mass_transfer_purchases_params[:new_email])
     render json: { success: transfer[:success], message: transfer[:message] }, status: transfer[:status]
+  end
+
+  def mark_compliant_from_iffy
+    @user.mark_compliant!(author_name: "iffy")
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
+  def suspend_for_fraud
+    unless @user.suspended?
+      @user.suspend_for_fraud!(author_id: current_user.id)
+      suspension_note = params.dig(:suspend_for_fraud, :suspension_note).presence
+      if suspension_note
+        @user.comments.create!(
+          author_id: current_user.id,
+          author_name: current_user.name,
+          comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+          content: suspension_note
+        )
+      end
+    end
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
+  def suspend_for_fraud_from_iffy
+    @user.flag_for_fraud!(author_name: "iffy") unless @user.flagged_for_fraud? || @user.on_probation? || @user.suspended?
+    @user.suspend_for_fraud!(author_name: "iffy") unless @user.suspended?
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
+  def flag_for_explicit_nsfw_tos_violation_from_iffy
+    @user.flag_for_explicit_nsfw_tos_violation!(author_name: "iffy") unless @user.flagged_for_explicit_nsfw?
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
+  def flag_for_fraud
+    if !@user.flagged_for_fraud? && !@user.suspended_for_fraud?
+      @user.flag_for_fraud!(author_id: current_user.id)
+      flag_note = params.dig(:flag_for_fraud, :flag_note).presence
+      if flag_note
+        @user.comments.create!(
+          author_id: current_user.id,
+          author_name: current_user.name,
+          comment_type: Comment::COMMENT_TYPE_FLAG_NOTE,
+          content: flag_note
+        )
+      end
+    end
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
   end
 
   private
