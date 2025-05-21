@@ -23,6 +23,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
+import { useRunOnce } from "$app/components/useRunOnce";
 
 type ProductRow = {
   id: string;
@@ -259,31 +260,17 @@ export const DashboardPage = ({
   show_1099_download_notice,
 }: Props) => {
   const loggedInUser = useLoggedInUser();
-  const [isGettingStartedMinimized, setIsGettingStartedMinimized] = React.useState<boolean>(false);
-  const isInitialWrite = React.useRef(true);
+  const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
 
-  React.useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedValue = window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY);
-      if (storedValue !== null) {
-        const parsedValue: unknown = JSON.parse(storedValue);
-        if (typeof parsedValue === "boolean") {
-          setIsGettingStartedMinimized(parsedValue);
-        }
-      }
-    }
-  }, []);
+  useRunOnce(() => {
+    setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
+  });
 
-  React.useEffect(() => {
-    if (isInitialWrite.current) {
-      isInitialWrite.current = false;
-      return;
-    }
-
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(isGettingStartedMinimized));
-    }
-  }, [isGettingStartedMinimized]);
+  const toggleGettingStarted = () => {
+    const newState = !gettingStartedMinimized;
+    window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(newState));
+    setGettingStartedMinimized(newState);
+  };
 
   const gettingStartedItems: GettingStartedItemType[] = [
     {
@@ -386,14 +373,14 @@ export const DashboardPage = ({
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      setIsGettingStartedMinimized(!isGettingStartedMinimized);
+                      toggleGettingStarted();
                     }}
-                    aria-label={isGettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                    aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
                     style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
                   >
-                    <span>{isGettingStartedMinimized ? "Show more" : "Show less"}</span>
+                    <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
                     <Icon
-                      name={isGettingStartedMinimized ? "arrows-expand" : "arrows-collapse"}
+                      name={gettingStartedMinimized ? "arrows-expand" : "arrows-collapse"}
                       style={{ width: "20px", height: "20px" }}
                     />
                   </a>
@@ -407,7 +394,7 @@ export const DashboardPage = ({
                       link={item.link}
                       IconComponent={item.IconComponent}
                       description={item.description}
-                      isMinimized={isGettingStartedMinimized}
+                      isMinimized={gettingStartedMinimized}
                     />
                   ))}
                 </div>
