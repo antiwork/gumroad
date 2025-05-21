@@ -75,10 +75,10 @@ type GettingStartedItemType = {
 type RadioItemProps = {
   name: string;
   checked: boolean;
-  isMinimized?: boolean;
-  link?: string;
-  IconComponent?: React.ComponentType<GettingStartedIconProps>;
-  description?: string;
+  isMinimized: boolean;
+  link: string;
+  IconComponent: React.ComponentType<GettingStartedIconProps>;
+  description: string;
 };
 
 const Greeter = () => (
@@ -113,7 +113,7 @@ const RadioItem = ({ name, checked, link, IconComponent, description, isMinimize
           flexBasis: "0",
         }}
       >
-        {IconComponent ? <IconComponent isChecked={checked} width="36" height="36" /> : null}
+        <IconComponent isChecked={checked} width="36" height="36" />
         <span className="mb-1 text-base font-semibold leading-tight">{name}</span>
         <Icon
           name={checked ? "solid-check-circle" : "circle"}
@@ -157,13 +157,7 @@ const RadioItem = ({ name, checked, link, IconComponent, description, isMinimize
           color: checked ? "rgb(var(--success))" : "rgb(var(--gray-400))",
         }}
       />
-      {IconComponent ? (
-        <div style={{ marginBottom: "var(--spacer-2)" }}>
-          <IconComponent isChecked={checked} width="60" height="60" />
-        </div>
-      ) : (
-        <div style={{ width: 80, height: 80, border: "1px dashed gray", marginBottom: "var(--spacer-2)" }} />
-      )}
+      <IconComponent isChecked={checked} width="60" height="60" />
       <div className="mb-1 text-base font-semibold leading-tight">{name}</div>
       {description ? <p className="text-sm opacity-80">{description}</p> : null}
     </Button>
@@ -277,7 +271,7 @@ export const DashboardPage = ({
       key: "welcome",
       name: "Welcome aboard",
       getChecked: () => true,
-      link: "",
+      link: Routes.dashboard_path(),
       IconComponent: MakeAccountIcon,
       description: "Make a Gumroad account.",
     },
