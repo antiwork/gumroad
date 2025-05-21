@@ -1,10 +1,8 @@
 import * as React from "react";
 
-interface CustomizeProfileIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
+import { GettingStartedIconProps } from "./GettingStartedIconProps";
 
-export const CustomizeProfileIcon = ({ isChecked, ...props }: CustomizeProfileIconProps) => {
+export const CustomizeProfileIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
   const mainFillColor = isChecked ? "#90A8ED" : "rgb(var(--filled))";
   const blackFill = isChecked ? "black" : "rgb(var(--black))";
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";

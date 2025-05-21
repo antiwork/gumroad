@@ -1,10 +1,8 @@
 import * as React from "react";
 
-interface EmailBlastIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
+import { GettingStartedIconProps } from "./GettingStartedIconProps";
 
-export const EmailBlastIcon = ({ isChecked, ...props }: EmailBlastIconProps) => {
+export const EmailBlastIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
   const mainFillColor = isChecked ? "#90A8ED" : "rgb(var(--filled))";
   const detailFillColor = isChecked ? "black" : "rgb(var(--black))";
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";

@@ -1,10 +1,8 @@
 import * as React from "react";
 
-interface FirstSaleIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
+import { GettingStartedIconProps } from "./GettingStartedIconProps";
 
-export const FirstSaleIcon = ({ isChecked, ...props }: FirstSaleIconProps) => {
+export const FirstSaleIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
   const mainFillColor = isChecked ? "#FF90E8" : "rgb(var(--filled))";
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";
   const blackFill = isChecked ? "black" : "rgb(var(--primary))";

@@ -14,6 +14,7 @@ import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFo
 import { FirstPayoutIcon } from "$app/components/icons/getting-started/FirstPayoutIcon";
 import { FirstProductIcon } from "$app/components/icons/getting-started/FirstProductIcon";
 import { FirstSaleIcon } from "$app/components/icons/getting-started/FirstSaleIcon";
+import { GettingStartedIconProps } from "$app/components/icons/getting-started/GettingStartedIconProps";
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -35,10 +36,6 @@ type ProductRow = {
   last_30: number;
   show_1099_download_notice?: boolean;
 };
-
-interface GettingStartedIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
 
 type Props = {
   name: string;

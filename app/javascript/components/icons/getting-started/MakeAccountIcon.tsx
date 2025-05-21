@@ -1,10 +1,8 @@
 import * as React from "react";
 
-interface MakeAccountIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
+import { GettingStartedIconProps } from "./GettingStartedIconProps";
 
-export const MakeAccountIcon = ({ isChecked, ...props }: MakeAccountIconProps) => {
+export const MakeAccountIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
   const mainFill = isChecked ? "#FF90E8" : "rgb(var(--filled))";
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";
   const strokeWidthValue = "6";

@@ -2,11 +2,9 @@
 
 import * as React from "react";
 
-interface FirstFollowerIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
+import { GettingStartedIconProps } from "./GettingStartedIconProps";
 
-export const FirstFollowerIcon = ({ isChecked, ...props }: FirstFollowerIconProps) => {
+export const FirstFollowerIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
   const mainFillColor = isChecked ? "#FFC900" : "rgb(var(--filled))"; // Yellow or white
   const secondaryFillColor = isChecked ? "black" : "rgb(var(--black))"; // Black arrow area
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";

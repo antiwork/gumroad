@@ -1,10 +1,8 @@
 import * as React from "react";
 
-interface SmallBetsIconProps extends React.SVGProps<SVGSVGElement> {
-  isChecked: boolean;
-}
+import { GettingStartedIconProps } from "./GettingStartedIconProps";
 
-export const SmallBetsIcon = ({ isChecked, ...props }: SmallBetsIconProps) => {
+export const SmallBetsIcon = ({ isChecked, ...props }: GettingStartedIconProps) => {
   const mainFillColor = isChecked ? "#FF90E8" : "rgb(var(--filled))"; // Original fill is #FF90E8
   const strokeColor = isChecked ? "black" : "rgb(var(--primary))";
   const strokeWidthValue = "6";
