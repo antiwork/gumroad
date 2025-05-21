@@ -44,6 +44,7 @@ describe CreatorHomePresenter do
           "first_payout" => true,
           "first_product" => false,
           "first_sale" => false,
+          "purchased_small_bets" => false,
         }
       )
     end
@@ -68,6 +69,7 @@ describe CreatorHomePresenter do
           "first_payout" => true,
           "first_product" => true,
           "first_sale" => true,
+          "purchased_small_bets" => false,
         }
       )
     end

@@ -981,6 +981,14 @@ class User < ApplicationRecord
     paypal_connect_account.paypal_account_details&.dig("primary_email")
   end
 
+  def purchased_small_bets?
+    small_bets_product_id = GlobalConfig.get("SMALL_BETS_PRODUCT_ID",  2866567)
+
+    purchases.all_success_states_including_test
+      .where(link_id: small_bets_product_id)
+      .exists?
+  end
+
   protected
     def after_confirmation
       # The password reset link sent to the old email should be invalidated
