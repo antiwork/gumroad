@@ -36,7 +36,6 @@ type ProductRow = {
   today: number;
   last_7: number;
   last_30: number;
-  show_1099_download_notice?: boolean;
 };
 
 type Props = {
@@ -60,7 +59,7 @@ type Props = {
   };
   activity_items: ActivityItem[];
   stripe_verification_message?: string | null;
-  show_1099_download_notice?: boolean;
+  show_1099_download_notice: boolean;
 };
 type TableProps = { sales: ProductRow[] };
 
