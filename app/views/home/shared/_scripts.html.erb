@@ -64,6 +64,27 @@
       });
     }
 
+    const githubStars = document.querySelector('[data-github-stars]');
+    if (githubStars) {
+      fetch('/github_stars')
+        .then(response => response.json())
+        .then(data => {
+          const countContainerElement = githubStars.querySelector('[data-github-stars-count]');
+          const countElement = countContainerElement.querySelector('[data-github-stars-count-value]');
+          const arrowElement = githubStars.querySelector('[data-github-stars-arrow]');
+
+          countElement.textContent = new Intl.NumberFormat("en-US", {
+            notation: 'compact',
+          }).format(data.stars);
+          countContainerElement.classList.remove('hidden');
+          arrowElement.classList.add('hidden');
+        })
+        .catch(error => {
+          console.error('Error fetching GitHub stars:', error);
+        })
+    }
+
+
     window._gumroadHomepageInteractivityAdded = true;
   }
 
