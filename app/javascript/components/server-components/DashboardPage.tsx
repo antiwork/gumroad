@@ -64,17 +64,75 @@ type Props = {
 type TableProps = { sales: ProductRow[] };
 
 type GettingStartedItemType = {
-  key: string;
   name: string;
-  getChecked: (stats: Props["getting_started_stats"]) => boolean;
+  getCompleted: (stats: Props["getting_started_stats"]) => boolean;
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
 };
 
+const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
+  {
+    name: "Welcome aboard",
+    getCompleted: () => true,
+    link: Routes.dashboard_path(),
+    IconComponent: MakeAccountIcon,
+    description: "Make a Gumroad account.",
+  },
+  {
+    name: "Make an impression",
+    getCompleted: (stats) => stats.customized_profile,
+    link: Routes.settings_profile_path(),
+    IconComponent: CustomizeProfileIcon,
+    description: "Customize your profile.",
+  },
+  {
+    name: "Showtime",
+    getCompleted: (stats) => stats.first_product,
+    link: Routes.new_product_path(),
+    IconComponent: FirstProductIcon,
+    description: "Create your first product.",
+  },
+  {
+    name: "Build your tribe",
+    getCompleted: (stats) => stats.first_follower,
+    link: Routes.followers_path(),
+    IconComponent: FirstFollowerIcon,
+    description: "Get your first follower.",
+  },
+  {
+    name: "Cha-ching",
+    getCompleted: (stats) => stats.first_sale,
+    link: Routes.sales_dashboard_path(),
+    IconComponent: FirstSaleIcon,
+    description: "Make your first sale.",
+  },
+  {
+    name: "Money inbound",
+    getCompleted: (stats) => stats.first_payout,
+    link: Routes.settings_payments_path(),
+    IconComponent: FirstPayoutIcon,
+    description: "Get your first pay out.",
+  },
+  {
+    name: "Making waves",
+    getCompleted: (stats) => stats.first_email,
+    link: Routes.posts_path(),
+    IconComponent: EmailBlastIcon,
+    description: "Send out your first email blast.",
+  },
+  {
+    name: "Smart move",
+    getCompleted: (stats) => stats.purchased_small_bets,
+    link: "https://dvassallo.gumroad.com/l/small-bets?layout=profile",
+    IconComponent: SmallBetsIcon,
+    description: "Sign up for Small Bets.",
+  },
+];
+
 type GettingStartedItemProps = {
   name: string;
-  checked: boolean;
+  completed: boolean;
   minimized: boolean;
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
@@ -98,7 +156,7 @@ const Greeter = () => (
 
 const GettingStartedItem = ({
   name,
-  checked,
+  completed,
   link,
   IconComponent,
   description,
@@ -106,30 +164,34 @@ const GettingStartedItem = ({
 }: GettingStartedItemProps) => {
   const commonClasses = "relative";
 
-  const iconName = checked ? "solid-check-circle" : "circle";
-  const iconClasses = checked ? "text-green" : "text-dark-gray";
+  const iconName = completed ? "solid-check-circle" : "circle";
+  const iconClasses = completed ? "text-green" : "text-dark-gray";
 
   const content = minimized ? (
     <div className="flex w-full items-center gap-2">
-      <IconComponent isChecked={checked} width={36} height={36} className="flex-none" />
+      <IconComponent isChecked={completed} width={36} height={36} className="flex-none" />
       <span className="mb-1 flex-1 font-semibold leading-tight">{name}</span>
       <Icon name={iconName} className={cx("flex-none", iconClasses)} />
     </div>
   ) : (
     <div className="my-3 flex flex-col items-center gap-1">
-      <IconComponent isChecked={checked} width={60} height={60} />
+      <IconComponent isChecked={completed} width={60} height={60} />
       <span className="font-semibold leading-tight">{name}</span>
       <Icon name={iconName} className={cx("absolute right-2 top-2", iconClasses)} />
       <p className="text-sm opacity-80">{description}</p>
     </div>
   );
 
-  if (checked) {
-    return <div className={cx(commonClasses, "button filled !cursor-default")}>{content}</div>;
+  if (completed) {
+    return (
+      <div className={cx(commonClasses, "button filled !cursor-default")} data-status="completed">
+        {content}
+      </div>
+    );
   }
 
   return (
-    <NavigationButton color="filled" href={link} className={commonClasses}>
+    <NavigationButton color="filled" href={link} className={commonClasses} data-status="pending">
       {content}
     </NavigationButton>
   );
@@ -237,73 +299,6 @@ export const DashboardPage = ({
     setGettingStartedMinimized(newState);
   };
 
-  const gettingStartedItems: GettingStartedItemType[] = [
-    {
-      key: "welcome",
-      name: "Welcome aboard",
-      getChecked: () => true,
-      link: Routes.dashboard_path(),
-      IconComponent: MakeAccountIcon,
-      description: "Make a Gumroad account.",
-    },
-    {
-      key: "profile",
-      name: "Make an impression",
-      getChecked: (stats) => stats.customized_profile,
-      link: Routes.settings_profile_path(),
-      IconComponent: CustomizeProfileIcon,
-      description: "Customize your profile.",
-    },
-    {
-      key: "product",
-      name: "Showtime",
-      getChecked: (stats) => stats.first_product,
-      link: Routes.new_product_path(),
-      IconComponent: FirstProductIcon,
-      description: "Create your first product.",
-    },
-    {
-      key: "follower",
-      name: "Build your tribe",
-      getChecked: (stats) => stats.first_follower,
-      link: Routes.followers_path(),
-      IconComponent: FirstFollowerIcon,
-      description: "Get your first follower.",
-    },
-    {
-      key: "sale",
-      name: "Cha-ching",
-      getChecked: (stats) => stats.first_sale,
-      link: Routes.sales_dashboard_path(),
-      IconComponent: FirstSaleIcon,
-      description: "Make your first sale.",
-    },
-    {
-      key: "payout",
-      name: "Money inbound",
-      getChecked: (stats) => stats.first_payout,
-      link: Routes.settings_payments_path(),
-      IconComponent: FirstPayoutIcon,
-      description: "Get your first pay out.",
-    },
-    {
-      key: "email",
-      name: "Making waves",
-      getChecked: (stats) => stats.first_email,
-      link: Routes.posts_path(),
-      IconComponent: EmailBlastIcon,
-      description: "Send out your first email blast.",
-    },
-    {
-      key: "small_bets",
-      name: "Smart move",
-      getChecked: (stats) => stats.purchased_small_bets,
-      link: "https://dvassallo.gumroad.com/l/small-bets?layout=profile",
-      IconComponent: SmallBetsIcon,
-      description: "Sign up for Small Bets.",
-    },
-  ];
-
   return (
     <main>
       <header>
@@ -351,11 +346,11 @@ export const DashboardPage = ({
                   </a>
                 </div>
                 <div className="override grid w-full grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
-                  {gettingStartedItems.map((item) => (
+                  {GETTING_STARTED_ITEMS.map((item) => (
                     <GettingStartedItem
-                      key={item.key}
+                      key={item.name}
                       name={item.name}
-                      checked={item.getChecked(getting_started_stats)}
+                      completed={item.getCompleted(getting_started_stats)}
                       link={item.link}
                       IconComponent={item.IconComponent}
                       description={item.description}
