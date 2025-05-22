@@ -23,6 +23,7 @@ class CreatorHomePresenter
       "first_sale" => has_sale,
       "first_payout" => seller.has_payout_information?,
       "first_email" => seller.installments.send_emails.exists?,
+      "purchased_small_bets" => seller.purchased_small_bets?,
     }
 
     today = Time.now.in_time_zone(seller.timezone).to_date

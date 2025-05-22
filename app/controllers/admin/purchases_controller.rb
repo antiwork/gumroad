@@ -3,7 +3,17 @@
 class Admin::PurchasesController < Admin::BaseController
   include RiskState
 
-  before_action :fetch_purchase, only: %i[refund refund_for_fraud show unblock_buyer]
+  before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud resend_receipt
+                                          show sync_status_with_charge_processor block_buyer unblock_buyer]
+
+  def cancel_subscription
+    if @purchase.subscription
+      @purchase.subscription.cancel!(by_seller: params[:by_seller] == "true", by_admin: true)
+      render json: { success: true }
+    else
+      render json: { success: false }
+    end
+  end
 
   def refund
     if @purchase.refund_and_save!(current_user.id)
@@ -21,10 +31,38 @@ class Admin::PurchasesController < Admin::BaseController
     end
   end
 
+  def resend_receipt
+    if @purchase
+      if params[:resend_receipt][:email_address].present?
+        @purchase.email = params[:resend_receipt][:email_address]
+        @purchase.save!
+
+        user = User.alive.find_by(email: @purchase.email)
+        @purchase.attach_to_user_and_card(user, nil, nil) if user
+      end
+
+      @purchase.resend_receipt
+      render json: { success: true }
+    else
+      render json: { success: false }
+    end
+  end
+
   def show
     e404 if @purchase.nil?
     @product = @purchase.link
     @title = "Purchase #{@purchase.id}"
+  end
+
+  def sync_status_with_charge_processor
+    @purchase.sync_status_with_charge_processor(mark_as_failed: true)
+  end
+
+  def block_buyer
+    @purchase.block_buyer!(blocking_user_id: current_user.id)
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
   end
 
   def unblock_buyer
@@ -45,6 +83,27 @@ class Admin::PurchasesController < Admin::BaseController
     render json: { success: true }
   rescue => e
     render json: { success: false, message: e.message }
+  end
+
+  def update_giftee_email
+    new_giftee_email = params[:update_giftee_email][:giftee_email]
+    gift = Gift.find_by(gifter_purchase_id: params[:id])
+
+    if gift.present? && new_giftee_email != gift.giftee_email
+      giftee_purchase = Purchase.find_by(id: gift.giftee_purchase_id)
+      if giftee_purchase.present?
+        gift.update!(giftee_email: new_giftee_email)
+        giftee_purchase.update!(email: new_giftee_email)
+
+        giftee_purchase.resend_receipt
+        redirect_to [:admin, Purchase.find_by(id: params[:id])]
+      else
+        render json: {
+          success: false,
+          message: "This gift is missing a giftee purchase. Please ask an engineer to generate one with script here: https://github.com/gumroad/web/issues/17248#issuecomment-784478299",
+        }
+      end
+    end
   end
 
   private
