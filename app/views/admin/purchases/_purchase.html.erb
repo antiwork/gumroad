@@ -331,6 +331,8 @@
   <div class="button-group">
     <% if purchase.can_force_update? || purchase.failed? %>
       <%= admin_action label: "Sync with Stripe/PayPal", url: sync_status_with_charge_processor_admin_purchase_path(purchase), loading: "syncing...", done: "synced!", confirm_message: "Are you sure you want to sync this purchase's state with Stripe/PayPal?", success_message: "synced!" %>
+    <% end %>
+    <% if purchase.successful? && !purchase.stripe_refunded %>
       <%= admin_action label: "Refund", url: refund_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase?", success_message: "Refunded!" %>
       <%= admin_action label: "Refund for Fraud", url: refund_for_fraud_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase for fraud?", success_message: "Refunded!" %>
     <% end %>
