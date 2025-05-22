@@ -219,8 +219,14 @@ user.confirm
 ### Refresh purchases in user's library
 
 ```ruby
+
 user = User.find_by(email: "customer@example.com")
-user.id && Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
+if user.present?
+  Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
+else
+  # Handle case when user doesn't exist
+  puts "No user found with email: customer@example.com"
+end
 ```
 
 ## Subscription management
