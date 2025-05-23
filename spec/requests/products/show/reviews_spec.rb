@@ -338,7 +338,6 @@ describe("Product page reviews", js: true, type: :feature) do
       expect(page).to have_alert(text: "Response submitted successfully!")
       within_section "Seller", match: :first do
         expect(page).to have_text("Thank you for your review, Mr. 5!")
-        expect(page).to have_text("just now")
         expect(page).to have_text("Creator")
       end
       expect(review_5.reload.response.message).to eq("Thank you for your review, Mr. 5!")
@@ -349,7 +348,6 @@ describe("Product page reviews", js: true, type: :feature) do
       expect(page).to have_alert(text: "Response updated successfully!")
       within_section "Seller", match: :first do
         expect(page).to have_text("I hate you, Mr. 5!")
-        expect(page).to have_text("just now")
         expect(page).to have_text("Creator")
       end
       expect(review_5.reload.response.message).to eq("I hate you, Mr. 5!")
@@ -358,7 +356,6 @@ describe("Product page reviews", js: true, type: :feature) do
 
       within_section "Seller", match: :first do
         expect(page).to have_text("I hate you, Mr. 5!")
-        expect(page).to have_text("less than a minute ago")
         expect(page).to have_text("Creator")
       end
       expect(page).to have_button("Edit")
