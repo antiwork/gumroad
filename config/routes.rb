@@ -614,7 +614,7 @@ Rails.application.routes.draw do
     resources :product_duplicates, only: [:create, :show], format: :json
     put "/product_reviews/set", to: "product_reviews#set", format: :json
     resources :product_reviews, only: [:index, :show]
-    resource :product_review_response, only: [:update], format: :json
+    resources :product_review_responses, only: [:update, :destroy], format: :json
     resources :product_review_videos, only: [] do
       scope module: :product_review_videos do
         resource :stream, only: [:show]
@@ -1103,7 +1103,7 @@ Rails.application.routes.draw do
   put "/product_reviews/set", to: "product_reviews#set", format: :json
 
   resources :product_reviews, only: [:index, :show]
-  resource :product_review_response, only: [:update], format: :json
+  resources :product_review_responses, only: [:update, :destroy], format: :json
   resources :product_review_videos, only: [] do
     scope module: :product_review_videos do
       resource :stream, only: [:show]

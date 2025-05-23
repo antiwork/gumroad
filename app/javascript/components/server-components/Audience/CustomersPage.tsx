@@ -1725,7 +1725,7 @@ const ReviewSection = ({
     <ReviewResponseForm
       message={review.response?.message}
       purchaseId={purchaseId}
-      onChange={(newMessage) => onChange({ ...review, response: { message: newMessage } })}
+      onChange={(response) => onChange({ ...review, response })}
     />
   </section>
 );

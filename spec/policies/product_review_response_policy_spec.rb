@@ -79,4 +79,33 @@ describe ProductReviewResponsePolicy do
       ]
     end
   end
+
+  permissions :destroy? do
+    context "when the response is for the seller's product review" do
+      let(:record) { product_review_response_for_seller }
+
+      it_behaves_like "an access-granting policy for roles", [
+        :seller,
+        :admin_for_seller,
+        :support_for_seller,
+      ]
+
+      it_behaves_like "an access-denying policy for roles", [
+        :accountant_for_seller,
+        :marketing_for_seller,
+      ]
+    end
+
+    context "when the response is for another seller's product review" do
+      let(:record) { product_review_response_for_another_seller }
+
+      it_behaves_like "an access-denying policy for roles", [
+        :seller,
+        :admin_for_seller,
+        :support_for_seller,
+        :accountant_for_seller,
+        :marketing_for_seller,
+      ]
+    end
+  end
 end

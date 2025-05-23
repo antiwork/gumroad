@@ -19,6 +19,17 @@ class ProductReviewResponsesController < ApplicationController
     end
   end
 
+  def destroy
+    authorize @review_response
+
+    if @review_response.destroy
+      head :no_content
+    else
+      render json: { error: @review_response.errors.full_messages.to_sentence },
+             status: :unprocessable_entity
+    end
+  end
+
   private
     def set_product_review!
       @product_review = @purchase.original_product_review

@@ -5,6 +5,10 @@ class ProductReviewResponsePolicy < ApplicationPolicy
     role_permitted? && owned_by_seller?
   end
 
+  def destroy?
+    role_permitted? && owned_by_seller?
+  end
+
   private
     def role_permitted?
       user.role_owner_for?(seller) ||
