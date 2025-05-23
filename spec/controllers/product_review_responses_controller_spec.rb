@@ -11,6 +11,8 @@ describe ProductReviewResponsesController do
     let!(:purchase) { create(:purchase, link: product, purchaser: purchaser) }
     let!(:product_review) { create(:product_review, purchase: purchase) }
 
+    let(:product_review_for_another_seller) { create(:product_review) }
+
     before do
       sign_in seller
     end
@@ -77,6 +79,15 @@ describe ProductReviewResponsesController do
       put :update, params: { purchase_id: purchase.external_id, message: "Updated" }, as: :json
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    it "401s when the product review is for another seller" do
+      put :update, params: {
+        purchase_id: product_review_for_another_seller.purchase.external_id,
+        message: "Updated",
+      }, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 end
