@@ -2,7 +2,7 @@
 
 class ProductReviewResponsePolicy < ApplicationPolicy
   def update?
-    role_permitted? && owned_by_seller?(record)
+    role_permitted? && owned_by_seller?
   end
 
   private
@@ -12,7 +12,7 @@ class ProductReviewResponsePolicy < ApplicationPolicy
         user.role_support_for?(seller)
     end
 
-    def owned_by_seller?(record)
-      record.product_review.link.user_id == seller.id
+    def owned_by_seller?
+      when_record_available { record.product_review.link.user_id == seller.id }
     end
 end

@@ -25,12 +25,4 @@ class CollaboratorPolicy < ApplicationPolicy
     return false unless user.role_admin_for?(seller)
     when_record_available { record.seller == seller || record.affiliate_user == seller }
   end
-
-  private
-    # Not ideal, but this allows running the role-based policy checks only when
-    # an actual Collaborator record is not available.
-    def when_record_available(&block)
-      return true unless record.is_a?(Collaborator)
-      block.call
-    end
 end
