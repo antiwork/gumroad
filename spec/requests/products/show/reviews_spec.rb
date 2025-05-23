@@ -334,7 +334,7 @@ describe("Product page reviews", js: true, type: :feature) do
 
       click_on "Add response", match: :first
       fill_in "Add a response to the review", with: "Thank you for your review, Mr. 5!"
-      click_on "Submit response"
+      click_on "Submit"
       expect(page).to have_alert(text: "Response submitted successfully!")
       within_section "Seller", match: :first do
         expect(page).to have_text("Thank you for your review, Mr. 5!")
@@ -343,9 +343,9 @@ describe("Product page reviews", js: true, type: :feature) do
       end
       expect(review_5.reload.response.message).to eq("Thank you for your review, Mr. 5!")
 
-      click_on "Edit response"
+      click_on "Edit"
       fill_in "Add a response to the review", with: "I hate you, Mr. 5!"
-      click_on "Update response"
+      click_on "Update"
       expect(page).to have_alert(text: "Response updated successfully!")
       within_section "Seller", match: :first do
         expect(page).to have_text("I hate you, Mr. 5!")
@@ -361,7 +361,7 @@ describe("Product page reviews", js: true, type: :feature) do
         expect(page).to have_text("less than a minute ago")
         expect(page).to have_text("Creator")
       end
-      expect(page).to have_button("Edit response")
+      expect(page).to have_button("Edit")
     end
   end
 end

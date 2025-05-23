@@ -1545,7 +1545,7 @@ describe "Sales page", type: :feature, js: true do
     end
 
     describe "product review response" do
-      it "allows creating and updating a response" do
+      it "allows creating, updating, and deleting a response" do
         review = create(:product_review, purchase: purchase1, message: "Amazing!")
 
         visit customers_path
@@ -1553,15 +1553,23 @@ describe "Sales page", type: :feature, js: true do
 
         click_on "Add response"
         fill_in "Add a response to the review", with: "Thank you!"
-        click_on "Submit response"
+        click_on "Submit"
         expect(page).to have_alert(text: "Response submitted successfully!")
         expect(review.response.reload.message).to eq("Thank you!")
 
-        click_on "Edit response"
+        click_on "Edit"
         fill_in "Add a response to the review", with: "Thank you, again!"
-        click_on "Update response"
+        click_on "Update"
         expect(page).to have_alert(text: "Response updated successfully!")
         expect(review.response.reload.message).to eq("Thank you, again!")
+
+        click_on "Delete"
+        within_modal "Delete response" do
+          click_on "Delete"
+        end
+        expect(page).to have_alert(text: "Response deleted successfully!")
+        expect(page).to have_button("Add response")
+        expect(review.reload.response).to be_nil
       end
     end
 

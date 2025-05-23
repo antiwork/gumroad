@@ -76,12 +76,10 @@ export const Review = ({
           <ReviewResponseForm
             message={review.response?.message}
             purchaseId={review.purchase_id}
-            onChange={(message: string) =>
+            onChange={(response) =>
               setReview((prev) => ({
                 ...prev,
-                response: {
-                  message,
-                },
+                response,
               }))
             }
             onEditingChange={setIsEditing}

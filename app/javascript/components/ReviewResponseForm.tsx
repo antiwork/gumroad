@@ -17,7 +17,7 @@ export const ReviewResponseForm = ({
 }: {
   message: string | undefined;
   purchaseId: string;
-  onChange: (message: string) => void;
+  onChange: (response: { message: string } | null) => void;
   onEditingChange?: (isEditing: boolean) => void;
   buttonProps?: React.ComponentProps<typeof Button>;
 }) => {
@@ -35,7 +35,7 @@ export const ReviewResponseForm = ({
     try {
       await updateReviewResponse(purchaseId, message);
       showAlert(originalMessage ? "Response updated successfully!" : "Response submitted successfully!", "success");
-      onChange(message);
+      onChange({ message });
       setIsEditing(false);
     } catch (e) {
       assertResponseError(e);
@@ -43,12 +43,13 @@ export const ReviewResponseForm = ({
     }
     setIsLoading(false);
   };
+
   const deleteResponse = async () => {
     setIsLoading(true);
     try {
       await deleteReviewResponse(purchaseId);
       showAlert("Response deleted successfully!", "success");
-      onChange("");
+      onChange(null);
       setDeleteConfirmation(false);
     } catch (e) {
       assertResponseError(e);
@@ -73,13 +74,7 @@ export const ReviewResponseForm = ({
           />
           <div className="flex w-full gap-3">
             <Button {...buttonProps} disabled={isLoading} type="submit" className="flex-1">
-              {originalMessage
-                ? isLoading
-                  ? "Updating..."
-                  : "Update response"
-                : isLoading
-                  ? "Submitting..."
-                  : "Submit response"}
+              {originalMessage ? (isLoading ? "Updating..." : "Update") : isLoading ? "Submitting..." : "Submit"}
             </Button>
             <Button {...buttonProps} onClick={() => setIsEditing(false)} className="flex-1">
               Cancel
