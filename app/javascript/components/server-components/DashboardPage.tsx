@@ -257,16 +257,28 @@ const ProductsTable = ({ sales }: TableProps) => {
               </a>
             </td>
             <td data-label="Products">
-              <a href={Routes.edit_link_url({ id }, { host: appDomain })} style={{ wordWrap: "break-word" }}>
+              <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
               </a>
             </td>
-            <td data-label="Sales">{sales.toLocaleString(locale)}</td>
-            <td data-label="Revenue">{formatPrice(revenue)}</td>
-            <td data-label="Visits">{visits.toLocaleString(locale)}</td>
-            <td data-label="Today">{formatPrice(today)}</td>
-            <td data-label="Last 7 days">{formatPrice(last_7)}</td>
-            <td data-label="Last 30 days">{formatPrice(last_30)}</td>
+            <td data-label="Sales" title={sales.toLocaleString(locale)} className="text-nowrap">
+              {sales.toLocaleString(locale, { notation: "compact" })}
+            </td>
+            <td data-label="Revenue" title={formatPrice(revenue)} className="text-nowrap">
+              {formatPrice(revenue)}
+            </td>
+            <td data-label="Visits" title={visits.toLocaleString(locale)} className="text-nowrap">
+              {visits.toLocaleString(locale, { notation: "compact" })}
+            </td>
+            <td data-label="Today" className="text-nowrap">
+              {formatPrice(today)}
+            </td>
+            <td data-label="Last 7 days" className="text-nowrap">
+              {formatPrice(last_7)}
+            </td>
+            <td data-label="Last 30 days" className="text-nowrap">
+              {formatPrice(last_30)}
+            </td>
           </tr>
         ))}
       </tbody>
