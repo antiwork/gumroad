@@ -79,7 +79,7 @@ describe ProductReviewResponsePolicy do
       ]
     end
   end
-  
+
   permissions :destroy? do
     context "when the response is for the seller's product review" do
       let(:record) { product_review_response_for_seller }

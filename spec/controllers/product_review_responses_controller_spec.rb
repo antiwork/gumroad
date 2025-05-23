@@ -90,7 +90,7 @@ describe ProductReviewResponsesController do
       expect(response).to have_http_status(:unauthorized)
     end
   end
-  
+
   describe "DELETE destroy" do
     let!(:seller) { create(:named_seller) }
     let!(:product) { create(:product, user: seller) }

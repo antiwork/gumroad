@@ -4,7 +4,7 @@ class ProductReviewResponsePolicy < ApplicationPolicy
   def update?
     role_permitted? && owned_by_seller?
   end
-  
+
   def destroy?
     role_permitted? && owned_by_seller?
   end

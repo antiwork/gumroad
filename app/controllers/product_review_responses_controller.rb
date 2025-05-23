@@ -18,10 +18,10 @@ class ProductReviewResponsesController < ApplicationController
              status: :unprocessable_entity
     end
   end
-  
+
   def destroy
     authorize @review_response
-    
+
     if @review_response.destroy
       head :no_content
     else
