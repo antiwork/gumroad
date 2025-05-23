@@ -66,17 +66,24 @@ describe RichContents do
           ] },
           { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Ignore me" }] }]
 
-        page3_description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 2", "uid" => folder2_id }, "content" => [
-          { "type" => "fileEmbed", "attrs" => { "id" => file3.external_id, "uid" => SecureRandom.uuid } },
-          { "type" => "fileEmbed", "attrs" => { "id" => file4.external_id, "uid" => SecureRandom.uuid } },
-          { "type" => "fileEmbed", "attrs" => { "id" => file5.external_id, "uid" => SecureRandom.uuid } },
-        ] }]
+        page3_description = [
+          {
+            "type" => "fileEmbedGroup",
+            # Ensure folders with numeric names are handled as strings
+            "attrs" => { "name" => 100, "uid" => folder2_id },
+            "content" => [
+              { "type" => "fileEmbed", "attrs" => { "id" => file3.external_id, "uid" => SecureRandom.uuid } },
+              { "type" => "fileEmbed", "attrs" => { "id" => file4.external_id, "uid" => SecureRandom.uuid } },
+              { "type" => "fileEmbed", "attrs" => { "id" => file5.external_id, "uid" => SecureRandom.uuid } },
+            ]
+          }
+        ]
 
         create(:rich_content, entity: product, title: "Page 2", description: page2_description, position: 1)
         create(:rich_content, entity: product, title: "Page 3", description: page3_description, position: 2)
 
         expect(product.reload.rich_content_folder_name(folder1_id)).to eq ("folder 1")
-        expect(product.reload.rich_content_folder_name(folder2_id)).to eq ("folder 2")
+        expect(product.reload.rich_content_folder_name(folder2_id)).to eq ("100")
       end
     end
   end

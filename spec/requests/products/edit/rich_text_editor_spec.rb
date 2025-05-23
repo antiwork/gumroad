@@ -1176,9 +1176,10 @@ describe("Product Edit Rich Text Editor", type: :feature, js: true) do
         end
       end
 
-      fill_in "Folder name", with: "My folder"
+      # Ensure folders with numeric names are saved as strings.
+      fill_in "Folder name", with: "100"
       send_keys(:enter)
-      within_file_group("My folder") do
+      within_file_group("100") do
         expect(page).to have_embed(name: "Second file")
       end
 
@@ -1190,7 +1191,7 @@ describe("Product Edit Rich Text Editor", type: :feature, js: true) do
       sleep 0.5 # Wait for the editor to update
       save_change
 
-      new_folder_uid = @product.reload.rich_contents.first.description.find { |node| node["type"] == RichContent::FILE_EMBED_GROUP_NODE_TYPE && node["attrs"]["name"] == "My folder" }["attrs"]["uid"]
+      new_folder_uid = @product.reload.rich_contents.first.description.find { |node| node["type"] == RichContent::FILE_EMBED_GROUP_NODE_TYPE && node["attrs"]["name"] == "100" }["attrs"]["uid"]
       expect(@product.reload.rich_contents.first.description).to eq(
         [
           {
@@ -1214,7 +1215,7 @@ describe("Product Edit Rich Text Editor", type: :feature, js: true) do
           {
             "type" => RichContent::FILE_EMBED_GROUP_NODE_TYPE,
             "attrs" => {
-              "name" => "My folder",
+              "name" => "100",
               "uid" => new_folder_uid
             },
             "content" => [
