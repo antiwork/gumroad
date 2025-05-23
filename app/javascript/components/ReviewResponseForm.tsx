@@ -62,7 +62,7 @@ export const ReviewResponseForm = ({
   return (
     <section>
       {isEditing ? (
-        <form onSubmit={(event) => void respondToReview(event)} style={{ display: "grid", gap: "var(--spacer-3)" }}>
+        <form onSubmit={(event) => void respondToReview(event)} className="grid gap-3">
           <textarea
             value={message}
             placeholder="Add a response to the review"
@@ -71,24 +71,29 @@ export const ReviewResponseForm = ({
             required
             autoFocus
           />
-          <Button {...buttonProps} disabled={isLoading} type="submit">
-            {originalMessage
-              ? isLoading
-                ? "Updating..."
-                : "Update response"
-              : isLoading
-                ? "Submitting..."
-                : "Submit response"}
-          </Button>
+          <div className="flex w-full gap-3">
+            <Button {...buttonProps} disabled={isLoading} type="submit" className="flex-1">
+              {originalMessage
+                ? isLoading
+                  ? "Updating..."
+                  : "Update response"
+                : isLoading
+                  ? "Submitting..."
+                  : "Submit response"}
+            </Button>
+            <Button {...buttonProps} onClick={() => setIsEditing(false)} className="flex-1">
+              Cancel
+            </Button>
+          </div>
         </form>
       ) : (
-        <div style={{ display: "flex", gap: "var(--spacer-3)" }}>
-          <Button {...buttonProps} onClick={() => setIsEditing(true)}>
-            {originalMessage ? "Edit response" : "Add response"}
+        <div className="flex w-full gap-3">
+          <Button {...buttonProps} onClick={() => setIsEditing(true)} className="flex-1">
+            {originalMessage ? "Edit" : "Add response"}
           </Button>
           {originalMessage ? (
-            <Button {...buttonProps} color="danger" onClick={() => setDeleteConfirmation(true)}>
-              Delete response
+            <Button {...buttonProps} color="danger" onClick={() => setDeleteConfirmation(true)} className="flex-1">
+              Delete
             </Button>
           ) : null}
         </div>
