@@ -388,8 +388,8 @@ export const updateReviewResponse = (purchaseId: string, message: string) =>
   request({
     method: "PUT",
     accept: "json",
-    url: Routes.product_review_response_path(),
-    data: { purchase_id: purchaseId, message },
+    url: Routes.product_review_response_path(purchaseId),
+    data: { message },
   }).then((response) => {
     if (!response.ok) throw new ResponseError();
   });
@@ -398,8 +398,7 @@ export const deleteReviewResponse = (purchaseId: string) =>
   request({
     method: "DELETE",
     accept: "json",
-    url: Routes.product_review_response_path(),
-    data: { purchase_id: purchaseId },
+    url: Routes.product_review_response_path(purchaseId),
   }).then((response) => {
     if (!response.ok) throw new ResponseError();
   });
