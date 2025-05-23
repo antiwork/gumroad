@@ -1,10 +1,11 @@
 import React from "react";
 
-import { updateReviewResponse } from "$app/data/customers";
+import { updateReviewResponse, deleteReviewResponse } from "$app/data/customers";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 
 export const ReviewResponseForm = ({
@@ -25,6 +26,7 @@ export const ReviewResponseForm = ({
   const [isLoading, setIsLoading] = React.useState(false);
   const [message, setMessage] = React.useState(originalMessage ?? "");
   const [isEditing, setIsEditing] = React.useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState(false);
   React.useEffect(() => onEditingChange?.(isEditing), [isEditing]);
 
   const respondToReview = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -35,6 +37,19 @@ export const ReviewResponseForm = ({
       showAlert(originalMessage ? "Response updated successfully!" : "Response submitted successfully!", "success");
       onChange(message);
       setIsEditing(false);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsLoading(false);
+  };
+  const deleteResponse = async () => {
+    setIsLoading(true);
+    try {
+      await deleteReviewResponse(purchaseId);
+      showAlert("Response deleted successfully!", "success");
+      onChange("");
+      setDeleteConfirmation(false);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -67,10 +82,36 @@ export const ReviewResponseForm = ({
           </Button>
         </form>
       ) : (
-        <Button {...buttonProps} onClick={() => setIsEditing(true)}>
-          {originalMessage ? "Edit response" : "Add response"}
-        </Button>
+        <div style={{ display: "flex", gap: "var(--spacer-3)" }}>
+          <Button {...buttonProps} onClick={() => setIsEditing(true)}>
+            {originalMessage ? "Edit response" : "Add response"}
+          </Button>
+          {originalMessage ? (
+            <Button {...buttonProps} color="danger" onClick={() => setDeleteConfirmation(true)}>
+              Delete response
+            </Button>
+          ) : null}
+        </div>
       )}
+      {deleteConfirmation ? (
+        <Modal
+          open={deleteConfirmation}
+          onClose={() => setDeleteConfirmation(false)}
+          title="Delete response"
+          footer={
+            <>
+              <Button disabled={isLoading} onClick={() => setDeleteConfirmation(false)}>
+                Cancel
+              </Button>
+              <Button color="danger" disabled={isLoading} onClick={() => void deleteResponse()}>
+                {isLoading ? "Deleting..." : "Delete"}
+              </Button>
+            </>
+          }
+        >
+          <h4>Delete this response? Deleted responses cannot be recovered.</h4>
+        </Modal>
+      ) : null}
     </section>
   );
 };

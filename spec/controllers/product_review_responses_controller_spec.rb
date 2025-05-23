@@ -90,4 +90,56 @@ describe ProductReviewResponsesController do
       expect(response).to have_http_status(:unauthorized)
     end
   end
+  
+  describe "DELETE destroy" do
+    let!(:seller) { create(:named_seller) }
+    let!(:product) { create(:product, user: seller) }
+    let!(:purchaser) { create(:user) }
+    let!(:purchase) { create(:purchase, link: product, purchaser: purchaser) }
+    let!(:product_review) { create(:product_review, purchase: purchase) }
+    let!(:product_review_response) { create(:product_review_response, product_review: product_review) }
+
+    let(:product_review_for_another_seller) { create(:product_review) }
+
+    before do
+      sign_in seller
+    end
+
+    it_behaves_like "authorize called for action", :delete, :destroy do
+      let(:record) { ProductReviewResponse }
+      let(:policy_klass) { ProductReviewResponsePolicy }
+      let(:request_params) { { purchase_id: purchase.external_id } }
+      let(:request_format) { :json }
+    end
+
+    it "destroys the response" do
+      delete :destroy, params: { purchase_id: purchase.external_id }, as: :json
+
+      expect(response).to have_http_status(:no_content)
+      product_review.reload
+      expect(product_review.response).to be_nil
+    end
+
+    it "404s for non-existent purchase" do
+      expect do
+        delete :destroy, params: { purchase_id: "non_existent_id" }, as: :json
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+
+    it "404s when there is no product review" do
+      product_review.delete
+
+      delete :destroy, params: { purchase_id: purchase.external_id }, as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "401s when the product review is for another seller" do
+      delete :destroy, params: {
+        purchase_id: product_review_for_another_seller.purchase.external_id,
+      }, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+    end
+  end
 end
