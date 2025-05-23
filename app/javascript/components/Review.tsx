@@ -6,7 +6,6 @@ import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
-import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Seller = {
@@ -14,24 +13,6 @@ export type Seller = {
   name: string;
   avatar_url: string;
   profile_url: string;
-};
-
-const DateWithTooltip = ({ date, humanized }: { date: string; humanized: string }) => {
-  const userAgentInfo = useUserAgentInfo();
-
-  return (
-    <WithTooltip
-      tip={new Date(date).toLocaleDateString(userAgentInfo.locale, {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      })}
-    >
-      <time className="text-muted" style={{ cursor: "default" }}>
-        {humanized}
-      </time>
-    </WithTooltip>
-  );
 };
 
 const ReviewUserAttribution = ({
@@ -86,7 +67,6 @@ export const Review = ({
           <p style={{ margin: 0 }}>{review.response.message}</p>
           <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center", flexWrap: "wrap" }}>
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}
-            <DateWithTooltip date={review.response.created_at.date} humanized={review.response.created_at.humanized} />
             <span className="pill small">Creator</span>
           </section>
         </section>
@@ -101,10 +81,6 @@ export const Review = ({
                 ...prev,
                 response: {
                   message,
-                  created_at: {
-                    date: new Date().toISOString(),
-                    humanized: "just now",
-                  },
                 },
               }))
             }
