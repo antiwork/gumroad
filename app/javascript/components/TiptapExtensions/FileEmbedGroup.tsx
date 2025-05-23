@@ -236,7 +236,16 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
   selectable: true,
   draggable: true,
   atom: true,
-  addAttributes: () => ({ uid: { isRequired: true }, name: { default: null } }),
+  addAttributes: () => ({
+    uid: { isRequired: true },
+    name: {
+      default: null,
+      // Explicitly parse to keep the value as String. Tiptap by default tries
+      // to coerce the value automatically and converts `1.0` or `1` to a
+      // number.
+      parseHTML: (element) => element.getAttribute("name"),
+    },
+  }),
   parseHTML: () => [{ tag: "file-embed-group" }],
   renderHTML: ({ HTMLAttributes }) => ["file-embed-group", HTMLAttributes, 0],
   addStorage: () => ({ lastCreatedUid: null }),

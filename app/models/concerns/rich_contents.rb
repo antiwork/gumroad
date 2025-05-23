@@ -11,12 +11,15 @@ module RichContents
   def rich_content_folder_name(folder_id)
     return if folder_id.blank?
 
-    alive_rich_contents.each do |page|
-      folder = page.description.find { |node| node["type"] == RichContent::FILE_EMBED_GROUP_NODE_TYPE && node.dig("attrs", "uid") == folder_id }
-      return folder.dig("attrs", "name") if folder.present?
-    end
+    folder = alive_rich_contents
+      .lazy
+      .flat_map(&:description)
+      .find do |node|
+        node["type"] == RichContent::FILE_EMBED_GROUP_NODE_TYPE &&
+          node.dig("attrs", "uid") == folder_id
+      end
 
-    nil
+    folder ? folder.dig("attrs", "name").to_s : nil
   end
 
   def rich_content_json
