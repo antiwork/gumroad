@@ -97,7 +97,7 @@ export const ReviewResponseForm = ({
         <Modal
           open={deleteConfirmation}
           onClose={() => setDeleteConfirmation(false)}
-          title="Delete response"
+          title="Delete this response?"
           footer={
             <>
               <Button disabled={isLoading} onClick={() => setDeleteConfirmation(false)}>
@@ -109,7 +109,7 @@ export const ReviewResponseForm = ({
             </>
           }
         >
-          <h4>Delete this response? Deleted responses cannot be recovered.</h4>
+          <h4>Deleted responses cannot be recovered.</h4>
         </Modal>
       ) : null}
     </section>

@@ -1564,7 +1564,7 @@ describe "Sales page", type: :feature, js: true do
         expect(review.response.reload.message).to eq("Thank you, again!")
 
         click_on "Delete"
-        within_modal "Delete response" do
+        within_modal "Delete this response?" do
           click_on "Delete"
         end
         expect(page).to have_alert(text: "Response deleted successfully!")
