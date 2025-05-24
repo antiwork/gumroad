@@ -28,8 +28,8 @@ describe DashboardController do
 
         expect(response.body).to have_text("Hey, Gumbot! Welcome to Gumroad.")
         expect(response.body).to have_text("We're here to help you get paid for your work.")
-        expect(response.body).to have_selector("a", text: "Create your first product")
-        expect(response.body).to have_selector("a", text: "Make your first sale")
+        expect(response.body).to have_selector("a[data-status='pending']", text: "Create your first product")
+        expect(response.body).to have_selector("a[data-status='pending']", text: "Make your first sale")
         expect(response.body).to_not have_text("Best selling")
       end
     end
@@ -68,8 +68,8 @@ describe DashboardController do
         expect(response.body).to have_selector("h1", text: "Hey, Gumbot! Welcome back to Gumroad.")
 
         expect(response.body).to_not have_text("We're here to help you get paid for your work.")
-        expect(response.body).to have_selector("s", text: "Create your first product")
-        expect(response.body).to have_selector("s", text: "Make your first sale")
+        expect(response.body).to have_selector("[data-status='completed']", text: "Create your first product")
+        expect(response.body).to have_selector("[data-status='completed']", text: "Make your first sale")
 
         expect(response.body).to have_table_row({ "Sales" => "1", "Revenue" => "$1.50", "Today" => "$1.50" })
 
@@ -104,6 +104,10 @@ describe DashboardController do
         create(:purchase, :from_seller, seller:)
         create(:payment_completed, user: seller)
         create(:installment, seller:, send_emails: true)
+
+        small_bets_product = create(:product)
+        create(:purchase, purchaser: seller, link: small_bets_product)
+        stub_const("ENV", ENV.to_hash.merge("SMALL_BETS_PRODUCT_ID" => small_bets_product.id))
       end
 
       it "doesn't render `Getting started` text"  do

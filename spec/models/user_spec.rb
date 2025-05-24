@@ -3278,4 +3278,23 @@ describe User, :vcr do
       end
     end
   end
+
+  describe "#purchased_small_bets?" do
+    let(:user) { create(:user) }
+    let(:small_bets_product) { create(:product) }
+
+    before do
+      allow(GlobalConfig).to receive(:get)
+        .with("SMALL_BETS_PRODUCT_ID", 2866567)
+        .and_return(small_bets_product.id)
+    end
+
+    it "returns true if the user has purchased the small bets product" do
+      expect(user.purchased_small_bets?).to eq(false)
+
+      create(:purchase, purchaser: user, link: small_bets_product)
+
+      expect(user.purchased_small_bets?).to eq(true)
+    end
+  end
 end

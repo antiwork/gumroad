@@ -17,14 +17,38 @@ namespace :admin do
         collection do
           post :pause
           post :resume
+          post :sync_all
+        end
+        member do
+          post :retry
+          post :cancel
+          post :fail
+          post :sync
         end
       end
     end
     resources :service_charges, only: :index
     member do
+      post :mass_transfer_purchases
+      post :probation_with_reminder
       post :refund_balance
       get :stats
       post :verify
+      post :enable
+      post :create_stripe_managed_account
+      post :update_email
+      post :reset_password
+      post :confirm_email
+      post :invalidate_active_sessions
+      post :disable_paypal_sales
+      post :mark_compliant
+      post :mark_compliant_from_iffy
+      post :suspend_for_fraud
+      post :suspend_for_fraud_from_iffy
+      post :flag_for_explicit_nsfw_tos_violation_from_iffy
+      post :suspend_for_tos_violation
+      post :put_on_probation
+      post :flag_for_fraud
     end
   end
 
@@ -36,13 +60,26 @@ namespace :admin do
 
   resources :affiliates, only: [:index, :show], defaults: { format: "html" }
 
-  resources :links, only: [:show], defaults: { format: "html" }
+  resources :links, only: [:show], defaults: { format: "html" } do
+    member do
+      get :access_product_file
+      post :flag_seller_for_tos_violation
+      get :generate_url_redirect
+      post :is_adult
+      post :publish
+      post :unpublish
+      get :join_discord
+      get :join_discord_redirect
+    end
+  end
 
   resources :products, controller: "links", only: [:show, :destroy] do
     member do
+      get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
       get :purchases
       get :views_count
       get :sales_stats
+      post :restore
     end
     resource :staff_picked, only: [:create], controller: "products/staff_picked"
   end
@@ -54,6 +91,13 @@ namespace :admin do
     member do
       post :refund
       post :refund_for_fraud
+      post :cancel_subscription
+      post "change_risk_state/:state", to: "purchases#change_risk_state", as: :change_risk_state
+      post :resend_receipt
+      post :sync_status_with_charge_processor
+      post :update_giftee_email
+      post :block_buyer
+      post :unblock_buyer
     end
   end
 
@@ -65,6 +109,8 @@ namespace :admin do
 
   # Payouts
   resources :payments, controller: "users/payouts", only: [:show]
+
+  post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
 
   # Search
   get "/search_users", to: "search#users", as: :search_users
@@ -83,5 +129,10 @@ namespace :admin do
   constraints(lambda { |request| request.env["warden"].authenticate? && request.env["warden"].user.is_team_member? }) do
     mount SidekiqWebCSP.new(Sidekiq::Web) => :sidekiq, as: :sidekiq_web
     mount FlipperCSP.new(Flipper::UI.app(Flipper)) => :features, as: :flipper_ui
+  end
+
+  scope module: "users" do
+    post :block_ip_address
+    get :refund_queue
   end
 end

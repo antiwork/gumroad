@@ -14,4 +14,12 @@ class ApplicationPolicy
     #
     raise Pundit::NotAuthorizedError, "must be logged in" unless @user
   end
+
+  private
+    # Still a bit torn on this -- this allows running the role-based policy
+    # checks and skipping record-specific logic when an actual record is not
+    # available.
+    def when_record_available(&block)
+      record.is_a?(Class) || block.call
+    end
 end

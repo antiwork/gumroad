@@ -1,3 +1,4 @@
+import cx from "classnames";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -8,9 +9,19 @@ import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
+import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
+import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
+import { FirstPayoutIcon } from "$app/components/icons/getting-started/FirstPayoutIcon";
+import { FirstProductIcon } from "$app/components/icons/getting-started/FirstProductIcon";
+import { FirstSaleIcon } from "$app/components/icons/getting-started/FirstSaleIcon";
+import { GettingStartedIconProps } from "$app/components/icons/getting-started/GettingStartedIconProps";
+import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
+import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
@@ -37,6 +48,7 @@ type Props = {
     first_sale: boolean;
     first_payout: boolean;
     first_email: boolean;
+    purchased_small_bets: boolean;
   };
   sales: ProductRow[];
   balances: {
@@ -50,6 +62,82 @@ type Props = {
   show_1099_download_notice: boolean;
 };
 type TableProps = { sales: ProductRow[] };
+
+type GettingStartedItemType = {
+  name: string;
+  getCompleted: (stats: Props["getting_started_stats"]) => boolean;
+  link: string;
+  IconComponent: React.ComponentType<GettingStartedIconProps>;
+  description: string;
+};
+
+const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
+  {
+    name: "Welcome aboard",
+    getCompleted: () => true,
+    link: Routes.dashboard_path(),
+    IconComponent: MakeAccountIcon,
+    description: "Make a Gumroad account.",
+  },
+  {
+    name: "Make an impression",
+    getCompleted: (stats) => stats.customized_profile,
+    link: Routes.settings_profile_path(),
+    IconComponent: CustomizeProfileIcon,
+    description: "Customize your profile.",
+  },
+  {
+    name: "Showtime",
+    getCompleted: (stats) => stats.first_product,
+    link: Routes.new_product_path(),
+    IconComponent: FirstProductIcon,
+    description: "Create your first product.",
+  },
+  {
+    name: "Build your tribe",
+    getCompleted: (stats) => stats.first_follower,
+    link: Routes.followers_path(),
+    IconComponent: FirstFollowerIcon,
+    description: "Get your first follower.",
+  },
+  {
+    name: "Cha-ching",
+    getCompleted: (stats) => stats.first_sale,
+    link: Routes.sales_dashboard_path(),
+    IconComponent: FirstSaleIcon,
+    description: "Make your first sale.",
+  },
+  {
+    name: "Money inbound",
+    getCompleted: (stats) => stats.first_payout,
+    link: Routes.settings_payments_path(),
+    IconComponent: FirstPayoutIcon,
+    description: "Get your first pay out.",
+  },
+  {
+    name: "Making waves",
+    getCompleted: (stats) => stats.first_email,
+    link: Routes.posts_path(),
+    IconComponent: EmailBlastIcon,
+    description: "Send out your first email blast.",
+  },
+  {
+    name: "Smart move",
+    getCompleted: (stats) => stats.purchased_small_bets,
+    link: "https://dvassallo.gumroad.com/l/small-bets?layout=profile",
+    IconComponent: SmallBetsIcon,
+    description: "Sign up for Small Bets.",
+  },
+];
+
+type GettingStartedItemProps = {
+  name: string;
+  completed: boolean;
+  minimized: boolean;
+  link: string;
+  IconComponent: React.ComponentType<GettingStartedIconProps>;
+  description: string;
+};
 
 const Greeter = () => (
   <div className="placeholder">
@@ -66,23 +154,48 @@ const Greeter = () => (
   </div>
 );
 
-const RadioItem = ({ name, checked, link }: { name: string; checked: boolean; link: string }) => (
-  <div>
-    <div style={{ display: "flex", gap: "var(--spacer-3)" }}>
-      {checked ? (
-        <>
-          <Icon name="solid-check-circle" style={{ backgroundColor: "rgb(var(--success))" }} />
-          <s>{name}</s>
-        </>
-      ) : (
-        <>
-          <Icon name="circle" />
-          <a href={link}>{name}</a>
-        </>
-      )}
+const GettingStartedItem = ({
+  name,
+  completed,
+  link,
+  IconComponent,
+  description,
+  minimized,
+}: GettingStartedItemProps) => {
+  const commonClasses = "relative";
+
+  const iconName = completed ? "solid-check-circle" : "circle";
+  const iconClasses = completed ? "text-green" : "text-dark-gray";
+
+  const content = minimized ? (
+    <div className="flex w-full items-center gap-2">
+      <IconComponent isChecked={completed} width={36} height={36} className="flex-none" />
+      <span className="mb-1 flex-1 font-semibold leading-tight">{name}</span>
+      <Icon name={iconName} className={cx("flex-none", iconClasses)} />
     </div>
-  </div>
-);
+  ) : (
+    <div className="my-3 flex flex-col items-center gap-1">
+      <IconComponent isChecked={completed} width={60} height={60} />
+      <span className="font-semibold leading-tight">{name}</span>
+      <Icon name={iconName} className={cx("absolute right-2 top-2", iconClasses)} />
+      <p className="text-sm opacity-80">{description}</p>
+    </div>
+  );
+
+  if (completed) {
+    return (
+      <div className={cx(commonClasses, "button filled !cursor-default")} data-status="completed">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <NavigationButton color="filled" href={link} className={commonClasses} data-status="pending">
+      {content}
+    </NavigationButton>
+  );
+};
 
 const formatPrice = (cents: number) =>
   formatPriceCentsWithCurrencySymbol("usd", cents, { symbolFormat: "short", noCentsIfWhole: true });
@@ -144,22 +257,36 @@ const ProductsTable = ({ sales }: TableProps) => {
               </a>
             </td>
             <td data-label="Products">
-              <a href={Routes.edit_link_url({ id }, { host: appDomain })} style={{ wordWrap: "break-word" }}>
+              <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
               </a>
             </td>
-            <td data-label="Sales">{sales.toLocaleString(locale)}</td>
-            <td data-label="Revenue">{formatPrice(revenue)}</td>
-            <td data-label="Visits">{visits.toLocaleString(locale)}</td>
-            <td data-label="Today">{formatPrice(today)}</td>
-            <td data-label="Last 7 days">{formatPrice(last_7)}</td>
-            <td data-label="Last 30 days">{formatPrice(last_30)}</td>
+            <td data-label="Sales" title={sales.toLocaleString(locale)} className="text-nowrap">
+              {sales.toLocaleString(locale, { notation: "compact" })}
+            </td>
+            <td data-label="Revenue" title={formatPrice(revenue)} className="text-nowrap">
+              {formatPrice(revenue)}
+            </td>
+            <td data-label="Visits" title={visits.toLocaleString(locale)} className="text-nowrap">
+              {visits.toLocaleString(locale, { notation: "compact" })}
+            </td>
+            <td data-label="Today" className="text-nowrap">
+              {formatPrice(today)}
+            </td>
+            <td data-label="Last 7 days" className="text-nowrap">
+              {formatPrice(last_7)}
+            </td>
+            <td data-label="Last 30 days" className="text-nowrap">
+              {formatPrice(last_30)}
+            </td>
           </tr>
         ))}
       </tbody>
     </table>
   );
 };
+
+const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 
 export const DashboardPage = ({
   name,
@@ -172,6 +299,17 @@ export const DashboardPage = ({
   show_1099_download_notice,
 }: Props) => {
   const loggedInUser = useLoggedInUser();
+  const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
+
+  useRunOnce(() => {
+    setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
+  });
+
+  const toggleGettingStarted = () => {
+    const newState = !gettingStartedMinimized;
+    window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(newState));
+    setGettingStartedMinimized(newState);
+  };
 
   return (
     <main>
@@ -197,78 +335,79 @@ export const DashboardPage = ({
             </div>
           </div>
         ) : null}
-        {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? <Greeter /> : null}
-        <div className="stats-grid">
-          <Stats
-            title="Balance"
-            description="Your current balance available for payout"
-            value={balances.balance}
-            url={Routes.balance_path()}
-          />
-          <Stats
-            title="Last 7 days"
-            description="Your total sales in the last 7 days"
-            value={balances.last_seven_days_sales_total}
-            url={Routes.sales_dashboard_path()}
-          />
-          <Stats
-            title="Last 28 days"
-            description="Your total sales in the last 28 days"
-            value={balances.last_28_days_sales_total}
-            url={Routes.sales_dashboard_path()}
-          />
-          <Stats
-            title="Total earnings"
-            description="Your all-time net earnings from all products, excluding refunds and chargebacks"
-            value={balances.total}
-            url={Routes.dashboard_total_revenue_path()}
-          />
-        </div>
 
         {loggedInUser?.policies.settings_payments_user.show
           ? Object.values(getting_started_stats).some((v) => !v) && (
-              <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
-                <h2>Getting started</h2>
-                <div className="stack two-columns">
-                  <RadioItem
-                    name="Customize your profile"
-                    checked={getting_started_stats.customized_profile}
-                    link={Routes.settings_profile_path()}
-                  />
-                  <RadioItem
-                    name="Create your first product"
-                    checked={getting_started_stats.first_product}
-                    link={Routes.new_product_path()}
-                  />
-                  <RadioItem
-                    name="Get your first follower"
-                    checked={getting_started_stats.first_follower}
-                    link={Routes.followers_path()}
-                  />
-                  <RadioItem
-                    name="Make your first sale"
-                    checked={getting_started_stats.first_sale}
-                    link={Routes.sales_dashboard_path()}
-                  />
-                  <RadioItem
-                    name="Get your first pay out"
-                    checked={getting_started_stats.first_payout}
-                    link={Routes.settings_payments_path()}
-                  />
-                  <RadioItem
-                    name="Send out your first email blast"
-                    checked={getting_started_stats.first_email}
-                    link={Routes.posts_path()}
-                  />
+              <div className="override grid gap-4">
+                <div className="flex items-center justify-between">
+                  <h2>Getting started</h2>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      toggleGettingStarted();
+                    }}
+                    aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                    style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
+                  >
+                    <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
+                    <Icon
+                      name={gettingStartedMinimized ? "arrows-expand" : "arrows-collapse"}
+                      style={{ width: "20px", height: "20px" }}
+                    />
+                  </a>
+                </div>
+                <div className="override grid w-full grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
+                  {GETTING_STARTED_ITEMS.map((item) => (
+                    <GettingStartedItem
+                      key={item.name}
+                      name={item.name}
+                      completed={item.getCompleted(getting_started_stats)}
+                      link={item.link}
+                      IconComponent={item.IconComponent}
+                      description={item.description}
+                      minimized={gettingStartedMinimized}
+                    />
+                  ))}
                 </div>
               </div>
             )
           : null}
 
+        {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? <Greeter /> : null}
+
         <ProductsTable sales={sales} />
 
-        <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
+        <div className="grid gap-4">
           <h2>Activity</h2>
+
+          <div className="stats-grid">
+            <Stats
+              title="Balance"
+              description="Your current balance available for payout"
+              value={balances.balance}
+              url={Routes.balance_path()}
+            />
+            <Stats
+              title="Last 7 days"
+              description="Your total sales in the last 7 days"
+              value={balances.last_seven_days_sales_total}
+              url={Routes.sales_dashboard_path()}
+            />
+            <Stats
+              title="Last 28 days"
+              description="Your total sales in the last 28 days"
+              value={balances.last_28_days_sales_total}
+              url={Routes.sales_dashboard_path()}
+            />
+            <Stats
+              title="Total earnings"
+              description="Your all-time net earnings from all products, excluding refunds and chargebacks"
+              value={balances.total}
+              url={Routes.dashboard_total_revenue_path()}
+            />
+          </div>
+
           <ActivityFeed items={activity_items} />
         </div>
       </div>

@@ -30,10 +30,6 @@ class ProductReviewPresenter
       response: product_review.response.present? ?
         {
           message: product_review.response.message,
-          created_at: {
-            date: product_review.response.created_at.iso8601,
-            humanized: "#{time_ago_in_words(product_review.response.created_at)} ago",
-          },
         } :
         nil,
       video: video_props(product_review.approved_video),

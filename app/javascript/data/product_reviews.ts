@@ -61,10 +61,6 @@ export type Review = {
   is_new: boolean;
   response: {
     message: string;
-    created_at: {
-      date: string;
-      humanized: string;
-    };
   } | null;
   video: {
     id: string;
