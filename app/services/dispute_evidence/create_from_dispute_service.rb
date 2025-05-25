@@ -66,7 +66,7 @@ class DisputeEvidence::CreateFromDisputeService
       rows << "Product type: #{product.is_physical? ? "physical product" : type}"
       rows << "Product variant: #{variant_names_displayable(purchase.variant_names)}" if purchase.variant_names.present?
       rows << "Quantity purchased: #{purchase.quantity}" if purchase.quantity > 1
-      rows << "Receipt: #{Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: DOMAIN, protocol: PROTOCOL)}"
+      rows << "Receipt: #{purchase.receipt_url}"
       rows << "Live product: #{purchase.link.long_url}"
       rows.join("\n")
     end

@@ -325,7 +325,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
       # Check VAT ID is present on the invoice as well
 
-      visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+      visit purchase.receipt_url
       click_on("Generate")
       expect(page).to(have_text("NL860999063B01"))
     end
@@ -364,7 +364,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check VAT ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("NL860999063B01"))
       end
@@ -473,7 +473,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
       # Check ABN ID is present on the invoice as well
 
-      visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+      visit purchase.receipt_url
       click_on("Generate")
       expect(page).to(have_text("51824753556"))
     end
@@ -592,7 +592,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check GST ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("T9100001B"))
       end
@@ -728,7 +728,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
       # Check MVA ID is present on the invoice as well
 
-      visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+      visit purchase.receipt_url
       click_on("Generate")
       expect(page).to(have_text("Norway VAT Registration"))
       expect(page).to(have_text("977074010MVA"))
@@ -831,7 +831,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("528491"))
       end
@@ -913,7 +913,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("5-8356-7825-6246"))
       end
@@ -995,7 +995,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("NZ62-332-956"))
       end
@@ -1077,7 +1077,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("4734567892"))
       end
@@ -1180,7 +1180,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("CHE-123.456.788"))
       end
@@ -1262,7 +1262,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("923456789012345"))
       end
@@ -1344,7 +1344,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("27AAPFU0939F1ZV"))
       end
@@ -1443,7 +1443,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
         expect(purchase.gumroad_tax_cents).to eq(0)
         expect(purchase.was_purchase_taxable).to be(false)
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("123456789012345"))
       end
@@ -1543,7 +1543,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("623456785"))
       end
@@ -1643,7 +1643,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("72345678-9"))
       end
@@ -1743,7 +1743,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("623.456.789-1"))
       end
@@ -1843,7 +1843,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("123456789"))
       end
@@ -1943,7 +1943,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("1790027740001"))
       end
@@ -2043,7 +2043,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("623-456-782"))
       end
@@ -2143,7 +2143,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("123456789"))
       end
@@ -2243,7 +2243,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("830302300054"))
       end
@@ -2341,7 +2341,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
         expect(purchase.gumroad_tax_cents).to eq(0)
         expect(purchase.was_purchase_taxable).to be(false)
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("A123456789P"))
       end
@@ -2441,7 +2441,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("X89-2104-12345678"))
       end
@@ -2561,7 +2561,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("RTL-630713-7M9"))
       end
@@ -2661,7 +2661,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("MD9234564"))
       end
@@ -2761,7 +2761,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("1234567"))
       end
@@ -2859,7 +2859,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
         expect(purchase.gumroad_tax_cents).to eq(0)
         expect(purchase.was_purchase_taxable).to be(false)
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("12345678-1234"))
       end
@@ -3056,7 +3056,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("1234567894"))
       end
@@ -3156,7 +3156,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("300710482300003"))
       end
@@ -3256,7 +3256,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("101134702"))
       end
@@ -3356,7 +3356,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("116-82-00276"))
       end
@@ -3454,7 +3454,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
         expect(purchase.gumroad_tax_cents).to eq(0)
         expect(purchase.was_purchase_taxable).to be(false)
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("12-345678-A"))
       end
@@ -3554,7 +3554,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("0105536112014"))
       end
@@ -3654,7 +3654,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("1729171602"))
       end
@@ -3754,7 +3754,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("4928621938"))
       end
@@ -3854,7 +3854,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("123456789"))
       end
@@ -3954,7 +3954,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check Tax ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("0193456780-001"))
       end
@@ -4152,7 +4152,7 @@ describe("Product Page - Tax Scenarios", type: :feature, js: true) do
 
         # Check QST ID is present on the invoice as well
 
-        visit Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+        visit purchase.receipt_url
         click_on("Generate")
         expect(page).to(have_text("1002092821TQ0001"))
       end

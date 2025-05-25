@@ -739,7 +739,7 @@ class Purchase < ApplicationRecord
       json[:discover_fee_percentage] = discover_fee_per_thousand / 10
     end
 
-    json[:receipt_url] = Rails.application.routes.url_helpers.receipt_purchase_url(external_id, email: email, host: "#{PROTOCOL}://#{DOMAIN}") if options[:include_receipt_url]
+    json[:receipt_url] = receipt_url if options[:include_receipt_url]
 
     if options[:include_ping]
       cached_value = options[:include_ping][:value] if options[:include_ping].is_a? Hash
@@ -754,6 +754,10 @@ class Purchase < ApplicationRecord
     json[:quantity] = quantity
     json[:message] = messages.unread.last if options[:unread_message]
     json
+  end
+
+  def receipt_url
+    Rails.application.routes.url_helpers.receipt_purchase_url(external_id, email: email, host: "#{PROTOCOL}://#{DOMAIN}")
   end
 
   def as_json_for_license

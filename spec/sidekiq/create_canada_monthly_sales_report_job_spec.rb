@@ -82,6 +82,7 @@ describe CreateCanadaMonthlySalesReportJob do
                                         "Gumroad Fee",
                                         "Shipping",
                                         "Total",
+                                        "Receipt URL",
                                       ])
 
       expect(@purchase1.purchase_taxjar_info).to be_present
@@ -101,6 +102,7 @@ describe CreateCanadaMonthlySalesReportJob do
                                         "30.00",
                                         "0.00",
                                         "113.00",
+                                        @purchase1.receipt_url,
                                       ])
 
       expect(@purchase2.purchase_taxjar_info).to be_present
@@ -120,6 +122,7 @@ describe CreateCanadaMonthlySalesReportJob do
                                         "30.00",
                                         "0.00",
                                         "114.98",
+                                        @purchase2.receipt_url,
                                       ])
     end
   end
