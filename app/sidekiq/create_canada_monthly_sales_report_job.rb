@@ -49,6 +49,7 @@ class CreateCanadaMonthlySalesReportJob
             Money.new(fee_cents).format(no_cents_if_whole: false, symbol: false),
             Money.new(purchase.shipping_cents).format(no_cents_if_whole: false, symbol: false),
             Money.new(total_cents).format(no_cents_if_whole: false, symbol: false),
+            purchase.receipt_url
           ]
 
           temp_file.write(row.to_csv)
@@ -88,6 +89,7 @@ class CreateCanadaMonthlySalesReportJob
         "Gumroad Fee",
         "Shipping",
         "Total",
+        "Receipt URL",
       ]
     end
 end

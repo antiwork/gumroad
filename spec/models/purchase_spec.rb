@@ -3737,6 +3737,15 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#receipt_url" do
+    let(:purchase) { create(:purchase) }
+
+    it "returns the correct receipt URL" do
+      expected_url = "http://#{PROTOCOL}:#{DOMAIN}/purchases/#{purchase.external_id}/receipt?email=#{CGI.escape(purchase.email)}"
+      expect(purchase.receipt_url).to eq(expected_url)
+    end
+  end
+
   describe "email" do
     describe "on create" do
       describe "valid email" do

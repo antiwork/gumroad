@@ -756,6 +756,10 @@ class Purchase < ApplicationRecord
     json
   end
 
+  def receipt_url
+    Rails.application.routes.url_helpers.receipt_purchase_url(external_id, email: email, host: "#{PROTOCOL}://#{DOMAIN}")
+  end
+
   def as_json_for_license
     json = as_json
     json[:product_name] = json.delete :link_name
