@@ -39,9 +39,13 @@
 
   <hr>
   <div class="button-group">
-    <% become_tooltip = policy([:admin, :impersonators, user]).create? ? nil : "User is either deleted, or a team member." %>
-    <%= with_tooltip(tip: become_tooltip) do %>
-      <%= button_to "Become", admin_user_impersonator_path(user), disabled: become_tooltip.present?, data: { confirm: "Are you sure you want to become user #{user.id}?" }, class: "button small" %>
+    <% can_impersonate = policy([:admin, :impersonators, user]).create? %>
+    <% if can_impersonate %>
+      <%= link_to "Become", admin_impersonate_path(user_identifier: user.external_id), class: "button small" %>
+    <% else %>
+      <%= with_tooltip(tip: "User is either deleted, or a team member.") do %>
+        <%= link_to "Become", "#", class: "button small", disabled: true %>
+      <% end %>
     <% end %>
     <%= admin_action label: (user.verified? ? "Unverify" : "Verify"), url: verify_admin_user_path(user), confirm_message: "Are you sure you want to (un)verify user #{user.id}?", done: user.verified? ? "Verify" : "Unverify", success_message: user.verified? ? "Unverified." : "Verified." %>
 
