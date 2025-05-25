@@ -76,6 +76,32 @@ User.find_by(email: 'creator@example.com').payments.select(:id, :created_at, :pr
 User.find_by(email: 'creator@example.com').payments.failed.last(2)
 ```
 
+### Cancel a payout
+
+If it has not been triggered on Stripe/PayPal, can just mark it as failed:
+
+```ruby
+Payment.find(PAYMENT_ID).mark_failed!
+```
+
+### Mark unclaimed/canceled payout as returned
+
+```ruby
+Payment.find(PAYMENT_ID).mark_returned!
+```
+
+### Find PayPal Connect email for a user
+
+```ruby
+User.find_by(email: "creator@example.com").paypal_connect_account.paypal_account_details["primary_email"]
+```
+
+### Look up PayPal merchant account by ID
+
+```ruby
+PaypalIntegrationRestApi.new(nil, authorization_header: PaypalPartnerRestCredentials.new.auth_token).get_merchant_account_by_merchant_id("MERCHANT_ID")["primary_email"]
+```
+
 ## Payment operations
 
 ### Find purchase ID by creator and customer email
@@ -130,6 +156,22 @@ product = Link.find_by(email: 'creator@example.com', custom_permalink: 'customna
 product.update!(custom_receipt: nil)
 ```
 
+Alternative method:
+
+```ruby
+user = User.find_by(email: 'creator@example.com')
+product = user.links.find_by(unique_permalink: 'PERMALINK')
+product.update!(custom_receipt: nil)
+```
+
+### Remove rental option
+
+```ruby
+user = User.find_by(email: 'creator@example.com')
+product = user.links.find_by(unique_permalink: 'PERMALINK')
+product.update(purchase_type: :buy_only)
+```
+
 ## User management
 
 ### Restore refunding capability
@@ -159,12 +201,40 @@ User.find_by(email: "customer@example.com").alive_cart.update!(email: nil)
 User.find_by(email: "creator@example.com").financial_annual_report_url_for(year: 2024)
 ```
 
+### Find user ID
+
+```ruby
+User.find_by(email: 'creator@example.com').id
+```
+
+### Confirm user email
+
+```ruby
+user = User.find_by(email: 'creator@example.com')
+# or
+user = User.find_by(id: USER_ID)
+user.confirm
+```
+
+### Refresh purchases in user's library
+
+```ruby
+
+user = User.find_by(email: "customer@example.com")
+if user.present?
+  Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
+else
+  # Handle case when user doesn't exist
+  puts "No user found with email: customer@example.com"
+end
+```
+
 ## Subscription management
 
 ### Check subscription cancellation date
 
 ```ruby
-Subscription.find(123456).user_requested_cancellation_at
+Subscription.find(SUBSCRIPTION_ID).user_requested_cancellation_at
 ```
 
 ### Cancel all active subscriptions for a user

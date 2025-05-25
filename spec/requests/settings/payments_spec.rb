@@ -4330,8 +4330,8 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
 
         fill_in("Pay to the order of", with: "Guatemala Creator")
         fill_in("SWIFT / BIC Code", with: "AAAAGTGCXYZ")
-        fill_in("IBAN", with: "GT20AGRO00000000001234567890")
-        fill_in("Confirm IBAN", with: "GT20AGRO00000000001234567890")
+        fill_in("IBAN", with: "GT82TRAJ01020000001210029690")
+        fill_in("Confirm IBAN", with: "GT82TRAJ01020000001210029690")
 
         fill_in("Número de Identificación Tributaria (NIT)", with: "1234567-8")
 
@@ -4350,7 +4350,7 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
         expect(compliance_info.zip_code).to eq("1100")
         expect(compliance_info.phone).to eq("+50231234567")
         expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
-        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("GT20AGRO00000000001234567890")
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("GT82TRAJ01020000001210029690")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAAGTGCXYZ")
       end
     end

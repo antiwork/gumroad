@@ -39,10 +39,6 @@ describe ProductReviewPresenter do
         expect(described_class.new(product_review).product_review_props[:response]).to eq(
           {
             message: product_review_response.message,
-            created_at: {
-              date: product_review_response.created_at.iso8601,
-              humanized: "#{time_ago_in_words(product_review_response.created_at)} ago",
-            }
           }
         )
       end

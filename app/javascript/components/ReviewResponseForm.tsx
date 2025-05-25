@@ -1,10 +1,11 @@
 import React from "react";
 
-import { updateReviewResponse } from "$app/data/customers";
+import { updateReviewResponse, deleteReviewResponse } from "$app/data/customers";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 
 export const ReviewResponseForm = ({
@@ -16,7 +17,7 @@ export const ReviewResponseForm = ({
 }: {
   message: string | undefined;
   purchaseId: string;
-  onChange: (message: string) => void;
+  onChange: (response: { message: string } | null) => void;
   onEditingChange?: (isEditing: boolean) => void;
   buttonProps?: React.ComponentProps<typeof Button>;
 }) => {
@@ -25,6 +26,7 @@ export const ReviewResponseForm = ({
   const [isLoading, setIsLoading] = React.useState(false);
   const [message, setMessage] = React.useState(originalMessage ?? "");
   const [isEditing, setIsEditing] = React.useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState(false);
   React.useEffect(() => onEditingChange?.(isEditing), [isEditing]);
 
   const respondToReview = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -33,8 +35,22 @@ export const ReviewResponseForm = ({
     try {
       await updateReviewResponse(purchaseId, message);
       showAlert(originalMessage ? "Response updated successfully!" : "Response submitted successfully!", "success");
-      onChange(message);
+      onChange({ message });
       setIsEditing(false);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsLoading(false);
+  };
+
+  const deleteResponse = async () => {
+    setIsLoading(true);
+    try {
+      await deleteReviewResponse(purchaseId);
+      showAlert("Response deleted successfully!", "success");
+      onChange(null);
+      setDeleteConfirmation(false);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -47,7 +63,7 @@ export const ReviewResponseForm = ({
   return (
     <section>
       {isEditing ? (
-        <form onSubmit={(event) => void respondToReview(event)} style={{ display: "grid", gap: "var(--spacer-3)" }}>
+        <form onSubmit={(event) => void respondToReview(event)} className="grid gap-3">
           <textarea
             value={message}
             placeholder="Add a response to the review"
@@ -56,21 +72,46 @@ export const ReviewResponseForm = ({
             required
             autoFocus
           />
-          <Button {...buttonProps} disabled={isLoading} type="submit">
-            {originalMessage
-              ? isLoading
-                ? "Updating..."
-                : "Update response"
-              : isLoading
-                ? "Submitting..."
-                : "Submit response"}
-          </Button>
+          <div className="flex w-full gap-3">
+            <Button {...buttonProps} disabled={isLoading} type="submit" className="flex-1">
+              {originalMessage ? (isLoading ? "Updating..." : "Update") : isLoading ? "Submitting..." : "Submit"}
+            </Button>
+            <Button {...buttonProps} onClick={() => setIsEditing(false)} className="flex-1">
+              Cancel
+            </Button>
+          </div>
         </form>
       ) : (
-        <Button {...buttonProps} onClick={() => setIsEditing(true)}>
-          {originalMessage ? "Edit response" : "Add response"}
-        </Button>
+        <div className="flex w-full gap-3">
+          <Button {...buttonProps} onClick={() => setIsEditing(true)} className="flex-1">
+            {originalMessage ? "Edit" : "Add response"}
+          </Button>
+          {originalMessage ? (
+            <Button {...buttonProps} color="danger" onClick={() => setDeleteConfirmation(true)} className="flex-1">
+              Delete
+            </Button>
+          ) : null}
+        </div>
       )}
+      {deleteConfirmation ? (
+        <Modal
+          open={deleteConfirmation}
+          onClose={() => setDeleteConfirmation(false)}
+          title="Delete this response?"
+          footer={
+            <>
+              <Button disabled={isLoading} onClick={() => setDeleteConfirmation(false)}>
+                Cancel
+              </Button>
+              <Button color="danger" disabled={isLoading} onClick={() => void deleteResponse()}>
+                {isLoading ? "Deleting..." : "Delete"}
+              </Button>
+            </>
+          }
+        >
+          <h4>Deleted responses cannot be recovered.</h4>
+        </Modal>
+      ) : null}
     </section>
   );
 };
