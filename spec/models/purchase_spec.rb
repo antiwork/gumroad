@@ -777,7 +777,7 @@ describe Purchase, :vcr do
     end
 
     it "contains receipt_url only when include_receipt_url is set" do
-      receipt_url = Rails.application.routes.url_helpers.receipt_purchase_url(@purchase.external_id, email: @purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+      receipt_url = @purchase.receipt_url
       expect(@purchase.as_json[:receipt_url]).to be nil
       expect(@purchase.as_json(include_receipt_url: true)[:receipt_url]).to eq receipt_url
     end
