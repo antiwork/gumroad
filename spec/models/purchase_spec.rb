@@ -777,7 +777,7 @@ describe Purchase, :vcr do
     end
 
     it "contains receipt_url only when include_receipt_url is set" do
-      receipt_url = Rails.application.routes.url_helpers.receipt_purchase_url(@purchase.external_id, email: @purchase.email, host: "#{PROTOCOL}://#{DOMAIN}")
+      receipt_url = @purchase.receipt_url
       expect(@purchase.as_json[:receipt_url]).to be nil
       expect(@purchase.as_json(include_receipt_url: true)[:receipt_url]).to eq receipt_url
     end
@@ -3734,6 +3734,15 @@ describe Purchase, :vcr do
     it "returns nil when email is blank" do
       purchase = build(:purchase, email: nil)
       expect(purchase.email_digest).to be_nil
+    end
+  end
+
+  describe "#receipt_url" do
+    let(:purchase) { create(:purchase) }
+
+    it "returns the correct receipt URL" do
+      expected_url = "#{PROTOCOL}://#{DOMAIN}/purchases/#{purchase.external_id}/receipt?email=#{CGI.escape(purchase.email)}"
+      expect(purchase.receipt_url).to eq(expected_url)
     end
   end
 

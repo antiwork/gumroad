@@ -331,10 +331,12 @@
   <div class="button-group">
     <% if purchase.can_force_update? || purchase.failed? %>
       <%= admin_action label: "Sync with Stripe/PayPal", url: sync_status_with_charge_processor_admin_purchase_path(purchase), loading: "syncing...", done: "synced!", confirm_message: "Are you sure you want to sync this purchase's state with Stripe/PayPal?", success_message: "synced!" %>
+    <% end %>
+    <% if purchase.successful? && !purchase.stripe_refunded %>
       <%= admin_action label: "Refund", url: refund_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase?", success_message: "Refunded!" %>
       <%= admin_action label: "Refund for Fraud", url: refund_for_fraud_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase for fraud?", success_message: "Refunded!" %>
+      <%= admin_action label: "Refund Card for Fraud", url: refund_admin_cards_path(stripe_fingerprint: purchase.stripe_fingerprint), loading: "Refunding...", done: "Refunding purchases!", confirm_message: "Are you sure you want to Mass-refund for fraud all purchases associated with this purchase's card?", success_message: "Refunding purchases!" %>
     <% end %>
-    <%= admin_action label: "Refund Card for Fraud", url: refund_admin_cards_path(stripe_fingerprint: purchase.stripe_fingerprint), loading: "Refunding...", done: "Refunding purchases!", confirm_message: "Are you sure you want to Mass-refund for fraud all purchases associated with this purchase's card?", success_message: "Refunding purchases!" %>
     <% if purchase.subscription.present? && !purchase.subscription.cancelled_or_failed? && !purchase.subscription.ended? %>
       <%= admin_action label: "Cancel subscription for buyer", url: cancel_subscription_admin_purchase_path(purchase, by_seller: false), loading: "Canceling...", done: "Canceled!", confirm_message: "Are you sure you want to cancel this subscription on behalf of the buyer?", success_message: "Canceled!" %>
       <%= admin_action label: "Cancel subscription for seller", url: cancel_subscription_admin_purchase_path(purchase, by_seller: true), loading: "Canceling...", done: "Canceled!", confirm_message: "Are you sure you want to cancel this subscription on behalf of the seller?", success_message: "Canceled!" %>
