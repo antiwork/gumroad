@@ -16,7 +16,7 @@ type Props = {
 
 export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose, onConfirm }: Props) => {
   const [confirmText, setConfirmText] = React.useState("");
-  const isConfirmEnabled = !balance || confirmText === "I understand";
+  const isConfirmEnabled = !balance || confirmText.trim().toLowerCase() === "i understand";
 
   return (
     <div>
