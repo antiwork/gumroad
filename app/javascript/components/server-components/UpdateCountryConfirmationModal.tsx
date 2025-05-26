@@ -42,7 +42,11 @@ export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose
               Please confirm that you're okay forfeiting your balance by typing <b>"I understand"</b> below and clicking{" "}
               <b>Confirm</b>.
               <div className="mt-4">
+                <label htmlFor="confirmation-input" className="sr-only">
+                  Type "I understand" to confirm
+                </label>
                 <input
+                  id="confirmation-input"
                   type="text"
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
