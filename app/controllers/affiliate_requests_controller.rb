@@ -3,7 +3,7 @@
 class AffiliateRequestsController < ApplicationController
   include CustomDomainConfig
 
-  PUBLIC_ACTIONS = %i[new create approve ignore]
+  PUBLIC_ACTIONS = %i[new create]
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
 
   before_action :set_user_and_custom_domain_config, only: %i[new create]
@@ -109,7 +109,7 @@ class AffiliateRequestsController < ApplicationController
     end
 
     def set_affiliate_request
-      @affiliate_request = AffiliateRequest.find_by_external_id!(params[:id])
+      @affiliate_request = current_seller.affiliate_requests.find_by_external_id!(params[:id])
     end
 
     def permitted_create_params

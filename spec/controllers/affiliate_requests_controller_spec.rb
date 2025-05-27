@@ -305,6 +305,10 @@ describe AffiliateRequestsController do
   describe "GET approve" do
     let(:affiliate_request) { create(:affiliate_request) }
 
+    before do
+      sign_in affiliate_request.seller
+    end
+
     context "when the affiliate request is not attended yet" do
       it "approves the affiliate request" do
         expect do
@@ -336,6 +340,10 @@ describe AffiliateRequestsController do
 
   describe "GET ignore" do
     let(:affiliate_request) { create(:affiliate_request) }
+
+    before do
+      sign_in affiliate_request.seller
+    end
 
     context "when the affiliate request is not attended yet" do
       it "ignores the affiliate request" do
