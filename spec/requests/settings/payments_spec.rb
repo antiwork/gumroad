@@ -886,7 +886,8 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
           within "dialog" do
             expect(page).to have_content "Confirm country change"
             expect(page).to have_content "Due to limitations with our payments provider, switching your country to #{@update_country} means that you will have to forfeit your remaining balance of #{@user.formatted_balance_to_forfeit}"
-            expect(page).to have_content "Please confirm that you are okay forfeiting your balance."
+            expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
+            fill_in "I understand", with: "I understand"
             click_on "Confirm"
           end
           wait_for_ajax
