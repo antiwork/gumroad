@@ -12,7 +12,7 @@
             type="text"
             name="query"
             placeholder="Search marketplace ..."
-            class="px-4 py-[18px] pr-12 border !border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black w-full sm:w-64 !text-xl !leading-[1.8rem]"
+            class="px-4 pr-12 border !border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black w-full sm:w-64 !text-xl !h-14 lg:!h-16"
           />
           <button
             type="submit"
@@ -555,67 +555,4 @@
 
 <%= render "home/shared/footer" %>
 
-<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
-  function initHeroCoinParallax() {
-    const container = document.querySelector('[data-hero-parallax-container]');
-    if (!container) return;
-
-    const coins = Array.from(container.querySelectorAll('.hero-coin'));
-    if (coins.length === 0) return;
-
-    coins.forEach(coin => {
-      coin.mouseOffsetX = 0;
-      coin.mouseOffsetY = 0;
-      coin.scrollOffsetY = 0;
-    });
-
-    function applyCombinedTransform(coin) {
-      const combinedY = coin.mouseOffsetY + coin.scrollOffsetY;
-      coin.style.transform = `translate3d(${coin.mouseOffsetX}px, ${combinedY}px, 0)`;
-    }
-
-    const handleMouseMove = (event) => {
-      const rect = container.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-
-      const mouseX = event.clientX;
-      const mouseY = event.clientY;
-
-      const deltaX = mouseX - centerX;
-      const deltaY = mouseY - centerY;
-
-      coins.forEach(coin => {
-        const intensity = parseFloat(coin.dataset.parallaxIntensity) || 0.05;
-        coin.mouseOffsetX = deltaX * intensity;
-        coin.mouseOffsetY = deltaY * intensity;
-        applyCombinedTransform(coin);
-      });
-    };
-
-    const handleScroll = () => {
-      const scrollY = window.scrollY;
-      coins.forEach(coin => {
-        const scrollIntensity = parseFloat(coin.dataset.scrollIntensity) || -0.05;
-        coin.scrollOffsetY = scrollY * scrollIntensity;
-        applyCombinedTransform(coin);
-      });
-    };
-
-    const isTouchDeviceOrSmallScreen = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 1024;
-
-    if (!isTouchDeviceOrSmallScreen) {
-      container.addEventListener('mousemove', handleMouseMove);
-    }
-
-    window.addEventListener('scroll', handleScroll);
-
-    handleScroll();
-  }
-
-  if (document.readyState === 'loading') {
-    window.addEventListener('DOMContentLoaded', initHeroCoinParallax);
-  } else {
-    initHeroCoinParallax();
-  }
-<% end %>
+<%= javascript_include_tag 'hero_parallax', nonce: SecureHeaders.content_security_policy_script_nonce(request), defer: true %>
