@@ -10,54 +10,11 @@ function initHeroCoinParallax() {
   const coins = Array.from(container.querySelectorAll(".hero-coin"));
   if (coins.length === 0) return;
 
-  let mouseMoveTimeout;
-
   coins.forEach((coin) => {
     coin.mouseOffsetX = 0;
     coin.mouseOffsetY = 0;
     coin.scrollOffsetY = 0;
   });
-
-  function applyCombinedTransform(coin) {
-    const combinedY = coin.mouseOffsetY + coin.scrollOffsetY;
-    coin.style.transform = `translate3d(${coin.mouseOffsetX}px, ${combinedY}px, 0)`;
-  }
-
-  // Replace manual timeout‐based throttle with a reusable throttle helper
-  const handleMouseMove = (event) => {
-    const rect = container.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    const mouseX = event.clientX;
-    const mouseY = event.clientY;
-
-    const deltaX = mouseX - centerX;
-    const deltaY = mouseY - centerY;
-
-    coins.forEach((coin) => {
-      const intensity = parseFloat(coin.dataset.parallaxIntensity) || 0.05;
-      coin.mouseOffsetX = deltaX * intensity;
-      coin.mouseOffsetY = deltaY * intensity;
-      applyCombinedTransform(coin);
-    });
-  };
-
-  // Use the same throttle utility as the scroll handler
-  const throttledMouseMove = throttle(handleMouseMove, 16);
-
-  if (!isTouchDeviceOrSmallScreen) {
-    container.addEventListener("mousemove", throttledMouseMove);
-  }
-
-  const handleScroll = () => {
-    const scrollY = window.scrollY;
-    coins.forEach((coin) => {
-      const scrollIntensity = parseFloat(coin.dataset.scrollIntensity) || -0.05;
-      coin.scrollOffsetY = scrollY * scrollIntensity;
-      applyCombinedTransform(coin);
-    });
-  };
 
   function throttle(func, limit) {
     let lastFunc;
@@ -82,13 +39,48 @@ function initHeroCoinParallax() {
     };
   }
 
-  const throttledScroll = throttle(handleScroll, 16);
+  function applyCombinedTransform(coin) {
+    const combinedY = coin.mouseOffsetY + coin.scrollOffsetY;
+    coin.style.transform = `translate3d(${coin.mouseOffsetX}px, ${combinedY}px, 0)`;
+  }
+
+  const handleMouseMove = (event) => {
+    const rect = container.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const mouseX = event.clientX;
+    const mouseY = event.clientY;
+
+    const deltaX = mouseX - centerX;
+    const deltaY = mouseY - centerY;
+
+    coins.forEach((coin) => {
+      const intensity = parseFloat(coin.dataset.parallaxIntensity) || 0.05;
+      coin.mouseOffsetX = deltaX * intensity;
+      coin.mouseOffsetY = deltaY * intensity;
+      applyCombinedTransform(coin);
+    });
+  };
+
+  const throttledMouseMove = throttle(handleMouseMove, 16);
+
+  const handleScroll = () => {
+    const scrollY = window.scrollY;
+    coins.forEach((coin) => {
+      const scrollIntensity = parseFloat(coin.dataset.scrollIntensity) || -0.05;
+      coin.scrollOffsetY = scrollY * scrollIntensity;
+      applyCombinedTransform(coin);
+    });
+  };
 
   const isTouchDeviceOrSmallScreen = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 1024;
 
   if (!isTouchDeviceOrSmallScreen) {
-    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mousemove", throttledMouseMove);
   }
+
+  const throttledScroll = throttle(handleScroll, 16);
 
   window.addEventListener("scroll", throttledScroll);
 
