@@ -122,6 +122,101 @@ describe RichContent do
     end
   end
 
+  describe "#custom_field_nodes" do
+    let(:product) { create(:product) }
+
+    let(:paragraph_node) do
+      {
+        "type" => "paragraph",
+        "content" => [{ "type" => "text", "text" => "Item 1" }]
+      }
+    end
+    let(:short_answer_node_1) do
+      {
+        "type" => "shortAnswer",
+        "attrs" => {
+          "id" => "short-answer-id",
+          "label" => "Short answer field",
+        }
+      }
+    end
+    let(:short_answer_node_2) do
+      {
+        "type" => "shortAnswer",
+        "attrs" => {
+          "id" => "short-answer-id-2",
+          "label" => "Short answer field 2",
+        }
+      }
+    end
+    let(:long_answer_node_1) do
+      {
+        "type" => "longAnswer",
+        "attrs" => {
+          "id" => "long-answer-id",
+          "label" => "Long answer field",
+        }
+      }
+    end
+    let(:file_upload_node) do
+      {
+        "type" => "fileUpload",
+        "attrs" => {
+          "id" => "file-upload-id",
+        }
+      }
+    end
+
+    it "parses out deeply nested custom field nodes in order" do
+      description = [
+        {
+          "type" => "orderedList",
+          "attrs" => { "start" => 1 },
+          "content" => [
+            {
+              "type" => "listItem",
+              "content" => [
+                paragraph_node,
+                short_answer_node_1,
+              ]
+            },
+          ]
+        },
+        {
+          "type" => "bulletList",
+          "content" => [
+            {
+              "type" => "listItem",
+              "content" => [
+                paragraph_node,
+                long_answer_node_1,
+              ]
+            },
+          ]
+        },
+        {
+          "type" => "blockquote",
+          "content" => [
+            paragraph_node,
+            short_answer_node_2,
+          ]
+        },
+        paragraph_node,
+        file_upload_node,
+      ]
+      rich_content = create(:rich_content, entity: product, description:)
+
+      expect(rich_content.custom_field_nodes).to eq(
+        [
+          short_answer_node_1,
+          long_answer_node_1,
+          short_answer_node_2,
+          file_upload_node,
+        ]
+      )
+    end
+  end
+
   describe "callbacks" do
     describe "#reset_moderated_by_iffy_flag" do
       let(:product) { create(:product, moderated_by_iffy: true) }
