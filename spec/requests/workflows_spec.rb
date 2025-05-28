@@ -1325,12 +1325,12 @@ describe("Workflows", js: true, type: :feature) do
 
       find(:label, "Has bought").click
       expect(page).to have_combo_box "Has bought", options: ["My product", "product name"]
-      click_on "product name"
+      find("button", text: "product name", exact: true).click
       expect(page).to have_combo_box "Has bought", options: ["My product"]
       send_keys(:escape)
 
       find(:label, "Has not yet bought").click
-      click_on @product2.unique_permalink
+      find("button", text: @product2.unique_permalink, exact: true).click
       find(:label, "Has not yet bought").click
       expect(page).to have_combo_box "Has not yet bought", options: ["My product"]
       send_keys(:escape)
@@ -1339,7 +1339,7 @@ describe("Workflows", js: true, type: :feature) do
       expect(page).to have_unchecked_field "All products"
       find(:label, "Affiliated products").click
       expect(page).to have_combo_box "Affiliated products", options: ["My product", "product name"]
-      click_on "product name"
+      find("button", text: "product name", exact: true).click
       expect(page).to have_combo_box "Affiliated products", options: ["My product"]
     end
 

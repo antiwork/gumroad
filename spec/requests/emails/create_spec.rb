@@ -10,14 +10,14 @@ describe("Email Creation Flow", :js, type: :feature) do
 
   before do
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-    stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
-    create(:purchase, seller:, link: product, merchant_account: stripe_connect_account)
+    @stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
   end
 
   include_context "with switching account to user as admin for seller"
 
   it "creates a product-type email with images and attachments" do
     product = create(:product, name: "Sample product", user: seller)
+    create(:purchase, seller:, link: product, merchant_account: @stripe_connect_account)
     another_product = create(:product, name: "Another product", user: seller)
 
     create(:purchase, link: product)
@@ -452,6 +452,9 @@ describe("Email Creation Flow", :js, type: :feature) do
   end
 
   it "does not upload unsupported file as a subtitle" do
+    product = create(:product, name: "Sample product", user: seller)
+    create(:purchase, seller:, link: product, merchant_account: @stripe_connect_account)
+    
     visit "#{emails_path}/new"
 
     fill_in "Title", with: "Hello"
@@ -484,6 +487,7 @@ describe("Email Creation Flow", :js, type: :feature) do
   it "auto populates the new email form when URL contains 'product' query parameter" do
     product = create(:product, user: seller, name: "Sample product")
     create(:purchase, link: product)
+    create(:purchase, seller:, link: product, merchant_account: @stripe_connect_account)
 
     visit "#{emails_path}/new?product=#{product.unique_permalink}"
     wait_for_ajax
@@ -516,6 +520,7 @@ describe("Email Creation Flow", :js, type: :feature) do
   it "auto populates the new email form when URL contains bundle product related query parameter" do
     product = create(:product, :bundle, user: seller)
     create(:purchase, link: product)
+    create(:purchase, seller:, link: product, merchant_account: @stripe_connect_account)
 
     visit edit_link_path(product.unique_permalink)
 
@@ -569,6 +574,7 @@ describe("Email Creation Flow", :js, type: :feature) do
   it "creates and schedules an email"  do
     product = create(:product, name: "Sample product", user: seller)
     create(:purchase, link: product)
+    create(:purchase, seller:, link: product, merchant_account: @stripe_connect_account)
 
     visit emails_path
     click_on "New email", match: :first
