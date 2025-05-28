@@ -63,7 +63,7 @@ class RichContent < ApplicationRecord
   end
 
   def custom_field_nodes
-    description.flat_map { select_custom_field_nodes(_1) }.compact.uniq
+    select_custom_field_nodes(description).uniq
   end
 
   def has_license_key?
@@ -96,13 +96,17 @@ class RichContent < ApplicationRecord
       end
     end
 
-    def select_custom_field_nodes(node)
-      if CUSTOM_FIELD_NODE_TYPES.include?(node["type"])
-        return node
-      end
+    def select_custom_field_nodes(nodes)
+      nodes.flat_map do |node|
+        if CUSTOM_FIELD_NODE_TYPES.include?(node["type"])
+          next [node]
+        end
 
-      if node["type"].in?(COMMON_CONTAINER_NODE_TYPES) && CUSTOM_FIELD_NODE_TYPES.any? { |type| node["content"].include?(type) }
-        node["content"].flat_map { select_custom_field_nodes(_1) }
+        if COMMON_CONTAINER_NODE_TYPES.include?(node["type"])
+          next select_custom_field_nodes(node["content"])
+        end
+
+        []
       end
     end
 
