@@ -454,7 +454,7 @@ describe("Email Creation Flow", :js, type: :feature) do
   it "does not upload unsupported file as a subtitle" do
     product = create(:product, name: "Sample product", user: seller)
     create(:purchase, seller:, link: product, merchant_account: @stripe_connect_account)
-    
+
     visit "#{emails_path}/new"
 
     fill_in "Title", with: "Hello"
