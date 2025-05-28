@@ -23,31 +23,32 @@ function initHeroCoinParallax() {
     coin.style.transform = `translate3d(${coin.mouseOffsetX}px, ${combinedY}px, 0)`;
   }
 
+  // Replace manual timeout‐based throttle with a reusable throttle helper
   const handleMouseMove = (event) => {
-    if (mouseMoveTimeout) {
-      return;
-    }
-    mouseMoveTimeout = setTimeout(() => {
-      mouseMoveTimeout = null;
+    const rect = container.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
 
-      const rect = container.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
+    const mouseX = event.clientX;
+    const mouseY = event.clientY;
 
-      const mouseX = event.clientX;
-      const mouseY = event.clientY;
+    const deltaX = mouseX - centerX;
+    const deltaY = mouseY - centerY;
 
-      const deltaX = mouseX - centerX;
-      const deltaY = mouseY - centerY;
-
-      coins.forEach((coin) => {
-        const intensity = parseFloat(coin.dataset.parallaxIntensity) || 0.05;
-        coin.mouseOffsetX = deltaX * intensity;
-        coin.mouseOffsetY = deltaY * intensity;
-        applyCombinedTransform(coin);
-      });
-    }, 16);
+    coins.forEach((coin) => {
+      const intensity = parseFloat(coin.dataset.parallaxIntensity) || 0.05;
+      coin.mouseOffsetX = deltaX * intensity;
+      coin.mouseOffsetY = deltaY * intensity;
+      applyCombinedTransform(coin);
+    });
   };
+
+  // Use the same throttle utility as the scroll handler
+  const throttledMouseMove = throttle(handleMouseMove, 16);
+
+  if (!isTouchDeviceOrSmallScreen) {
+    container.addEventListener("mousemove", throttledMouseMove);
+  }
 
   const handleScroll = () => {
     const scrollY = window.scrollY;
