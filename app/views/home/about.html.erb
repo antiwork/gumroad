@@ -8,7 +8,9 @@
           <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
         </div>
         <form action="<%= discover_path %>" method="get" class="relative w-full sm:w-auto">
+          <label for="marketplace-search" class="sr-only">Search marketplace</label>
           <input
+            id="marketplace-search"
             type="text"
             name="query"
             placeholder="Search marketplace ..."
