@@ -1,8 +1,8 @@
 <header class="grid border-b border-black override grid-cols-1 bg-[#f0f0f0]">
   <div data-hero-parallax-container class="relative flex items-center justify-center border-b border-black bg-gray-100 px-8 py-40 lg:px-[8vw] md:py-[12rem]">
     <div class="flex flex-col max-w-screen-lg items-center gap-6 text-center z-10">
-      <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from <span class="whitespace-nowrap">0 to $1</span></h1>
-      <div class="text-xl max-w-xl lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
+      <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from<br class="sm:hidden"> <span class="whitespace-nowrap">0 to $1</span></h1>
+      <div class="text-xl max-w-md lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
       <div class="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-[384px] sm:max-w-none sm:w-auto mx-auto">
         <div class="w-full sm:w-auto [&>div]:!block">
           <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
@@ -33,26 +33,26 @@
       </div>
     </div>
     <div class="absolute inset-0 pointer-events-none overflow-visible parallax-up">
-      <div class="hero-coin absolute z-[1] w-[8rem] invisible sm:w-[4rem] sm:visible sm:top-[15rem] sm:right-[-1rem] md:w-[12rem] md:top-[55rem] md:right-[15rem]" data-parallax-intensity="0.03" data-scroll-intensity="-0.10">
+      <div class="hero-coin absolute z-[1] w-[8rem] invisible md:visible sm:w-[8rem] sm:top-[20rem] sm:right-[-3rem] md:w-[10rem] md:top-[58rem] md:right-[15rem] lg:w-[12rem] lg:top-[55rem]" data-parallax-intensity="0.03" data-scroll-intensity="-0.10">
         <%= image_tag "about/coin-1.svg", loading: "lazy", alt: "Decorative coin 1", class: "w-full h-auto" %>
       </div>
-      <div class="hero-coin absolute z-[1] w-[11rem] invisible sm:visible sm:w-[3rem] sm:top-[-5rem] sm:left-[-2vw] md:w-[11rem] md:top-[30rem] md:left-[8vw]" data-parallax-intensity="-0.02" data-scroll-intensity="-0.03">
+      <div class="hero-coin absolute z-[1] w-[10rem] top-[28rem] left-[-12vw] sm:left-[-7vw] md:w-[10rem] md:left-[3vw] md:w-[11rem] md:top-[30rem] md:left-[8vw]" data-parallax-intensity="-0.02" data-scroll-intensity="-0.03">
         <%= image_tag "about/coin-2.svg", loading: "lazy", alt: "Decorative coin 2", class: "w-full h-auto" %>
       </div>
-      <div class="hero-coin absolute z-[1] w-[9rem] right-[-3vw] top-[-7rem] invisible sm:visible sm:w-[3rem] sm:top-[-9rem] sm:right-[0vw] md:w-[9rem] md:top-[26rem] md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.07">
+      <div class="hero-coin absolute z-[1] w-[9rem] right-[-3vw] top-[-7rem] invisible sm:visible md:w-[8rem] md:top-[26rem] md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.07">
         <%= image_tag "about/coin-3.svg", loading: "lazy", alt: "Decorative coin 3", class: "w-full h-auto" %>
       </div>
-      <div class="hero-coin absolute z-[1] w-[10rem] top-[20rem] right-[-9vw] sm:w-[4rem] sm:top-[9rem] sm:right-[-3rem] md:w-[12rem] md:top-[46rem] md:right-[-4rem]" data-parallax-intensity="-0.035" data-scroll-intensity="-0.04">
+      <div class="hero-coin absolute z-[1] w-[9rem] top-[53rem] right-[-14vw] sm:top-[42rem] sm:right-[-5rem] md:w-[11rem] md:top-[44rem] md:right-[-5rem] lg:w-[12rem] lg:top-[46rem] lg:right-[-4rem]" data-parallax-intensity="-0.035" data-scroll-intensity="-0.04">
         <%= image_tag "about/coin-4.svg", loading: "lazy", alt: "Decorative Coin 4", class: "w-full h-auto" %>
       </div>
-      <div class="hero-coin absolute z-[1] w-[8rem] left-[-4rem] top-[-6rem] invisible sm:visible sm:w-[5rem] sm:top-[5rem] sm:left-[-3rem] md:w-[16rem] md:top-[45rem] md:left-[-3rem]" data-parallax-intensity="0.04" data-scroll-intensity="-0.06">
+      <div class="hero-coin absolute z-[1] w-[10rem] left-[-2rem] top-[63rem] sm:w-[10rem] sm:top-[50rem] sm:left-[3rem] md:w-[14rem] md:top-[45rem] md:left-[-6rem] lg:w-[16rem] lg:left-[-3rem]" data-parallax-intensity="0.04" data-scroll-intensity="-0.06">
         <%= image_tag "about/coin-5.svg", loading: "lazy", alt: "Decorative Coin 5", class: "w-full h-auto" %>
       </div>
     </div>
   </div>
 </header>
 
-<div class="relative py-16 lg:border-b lg:border-black lg:py-32">
+<div class="relative py-24 lg:border-b lg:border-black lg:py-32">
   <div class="px-8 lg:px-[4vw]">
     <div class="max-w-4xl mx-auto text-center text-4xl mb-20 lg:mb-24 lg:leading-tight lg:text-5xl">
       You know all those great ideas you have?
@@ -113,7 +113,7 @@
     <p class="text-xl max-w-2xl mx-auto">
       You don't have to be a tech expert or even understand how to start a business. You just gotta take what you know and sell it.
     </p>
-    <div class="w-full mt-2">
+    <div class="w-full mt-4">
       <%= render "home/shared/button", text: "Find out how", url: features_path %>
     </div>
   </div>
@@ -563,7 +563,6 @@
     const coins = Array.from(container.querySelectorAll('.hero-coin'));
     if (coins.length === 0) return;
 
-    // Initialize offset properties on each coin element
     coins.forEach(coin => {
       coin.mouseOffsetX = 0;
       coin.mouseOffsetY = 0;
@@ -598,19 +597,19 @@
       const scrollY = window.scrollY;
       coins.forEach(coin => {
         const scrollIntensity = parseFloat(coin.dataset.scrollIntensity) || -0.05;
-        // Calculate scroll offset relative to its initial position
-        // A simple multiplication might make them move too far if intensities are large
-        // For a subtle effect, ensure this value doesn't become excessively large.
-        // Limit the effect or tie it to when the hero is in view for more complex scenarios.
         coin.scrollOffsetY = scrollY * scrollIntensity;
         applyCombinedTransform(coin);
       });
     };
 
-    container.addEventListener('mousemove', handleMouseMove);
+    const isTouchDeviceOrSmallScreen = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 1024;
+
+    if (!isTouchDeviceOrSmallScreen) {
+      container.addEventListener('mousemove', handleMouseMove);
+    }
+
     window.addEventListener('scroll', handleScroll);
 
-    // Initial call to set scroll position if page is already scrolled
     handleScroll();
   }
 
