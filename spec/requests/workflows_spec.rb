@@ -25,10 +25,12 @@ describe("Workflows", js: true, type: :feature) do
     @product = create(:product, name: "product name", user: seller, created_at: 2.hours.ago)
     @product2 = create(:product, name: "product 2 name", user: seller, created_at: 1.hour.ago)
     create(:purchase, link: @product)
-    index_model_records(Purchase)
 
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-    create(:merchant_account_stripe_connect, user: seller)
+    stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+    create(:purchase, seller:, link: @product2, merchant_account: stripe_connect_account)
+
+    index_model_records(Purchase)
   end
 
   include_context "with switching account to user as admin for seller"

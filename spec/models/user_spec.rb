@@ -3089,51 +3089,6 @@ describe User, :vcr do
     end
   end
 
-  describe "#made_a_successful_sale_with_a_paypal_connect_account?" do
-    let(:user) { create(:user) }
-    let!(:paypal_connect_account) { create(:merchant_account_paypal, user:) }
-
-    context "when the user has made a successful sale with a PayPal Connect account" do
-      before do
-        create(:purchase, seller: user, link: create(:product, user:), merchant_account: paypal_connect_account)
-      end
-
-      context "when the PayPal Connect account is alive" do
-        it "returns true" do
-          expect(user.made_a_successful_sale_with_a_paypal_connect_account?).to eq(true)
-        end
-      end
-
-      context "when the PayPal Connect account has been deleted" do
-        before do
-          paypal_connect_account.mark_deleted!
-        end
-
-        it "returns true" do
-          expect(user.made_a_successful_sale_with_a_paypal_connect_account?).to eq(true)
-        end
-      end
-    end
-
-    context "when the user has not made a successful sale with a PayPal Connect account" do
-      before do
-        create(:failed_purchase, seller: user, link: create(:product, user:), merchant_account: paypal_connect_account)
-      end
-
-      it "returns false" do
-        expect(user.made_a_successful_sale_with_a_paypal_connect_account?).to eq(false)
-      end
-    end
-
-    context "when the user has no PayPal Connect account" do
-      it "returns false" do
-        paypal_connect_account.destroy!
-
-        expect(user.made_a_successful_sale_with_a_paypal_connect_account?).to eq(false)
-      end
-    end
-  end
-
   describe "#eligible_for_abandoned_cart_workflows?" do
     let(:user) { create(:user) }
 

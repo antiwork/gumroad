@@ -240,7 +240,8 @@ describe Workflow do
   describe "#publish!" do
     before do
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-      create(:merchant_account_stripe_connect, user: @workflow.seller)
+      stripe_connect_account = create(:merchant_account_stripe_connect, user: @workflow.seller)
+      create(:purchase, seller: @workflow.seller, link: @workflow.link, merchant_account: stripe_connect_account)
     end
 
     it "does nothing if the workflow is already published" do
