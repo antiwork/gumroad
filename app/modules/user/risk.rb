@@ -200,7 +200,7 @@ module User::Risk
   class_methods do
     def refund_queue(from_date = 7.days.ago)
       user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]
-        .find(suspended_at: { "$gte": from_date.to_s })
+        .find(suspended_at: { "$gte": from_date.utc })
         .map { |record| record["user_id"] }
 
       User.where(id: user_ids, user_risk_state: "suspended_for_fraud")
