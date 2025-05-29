@@ -12,9 +12,20 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
   def index
     authorize [:gumroad_blog, :posts]
 
-    @posts = @blog_owner.installments
+    posts = @blog_owner.installments
       .visible_on_profile
       .order(published_at: :desc)
+
+    @props = {
+      posts: posts.map do |post|
+        {
+          url: gumroad_blog_post_path(post.slug),
+          subject: post.subject,
+          published_at: post.published_at,
+          featured_image_url: post.featured_image_url,
+        }
+      end,
+    }
   end
 
   def show
