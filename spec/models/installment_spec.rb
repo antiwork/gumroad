@@ -1009,4 +1009,37 @@ const b = 2;</code></pre>
       end.to change { Iffy::Post::IngestJob.jobs.size }.by(1)
     end
   end
+
+  describe "#featured_image_url" do
+    let(:installment) { create(:installment) }
+
+    it "returns nil when message is blank" do
+      installment.message = ""
+      expect(installment.featured_image_url).to be_nil
+
+      installment.message = nil
+      expect(installment.featured_image_url).to be_nil
+    end
+
+    it "only returns the first element's image src if it's a figure" do
+      installment.message = <<~HTML
+        <figure>
+          <img src='https://example.com/first.jpg' alt='First'>
+          <img src='https://example.com/second.jpg' alt='Second'>
+        </figure>
+      HTML
+      expect(installment.featured_image_url).to eq("https://example.com/first.jpg")
+
+      installment.message = <<~HTML
+        <p>First paragraph</p>
+        <figure>
+          <img src='https://example.com/image.jpg' alt='Test'>
+        </figure>
+      HTML
+      expect(installment.featured_image_url).to be_nil
+
+      installment.message = "text only"
+      expect(installment.featured_image_url).to be_nil
+    end
+  end
 end

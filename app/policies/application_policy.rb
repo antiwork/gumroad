@@ -3,6 +3,14 @@
 class ApplicationPolicy
   attr_reader :user, :seller, :record
 
+  class_attribute :allow_anonymous_user_access, default: false
+
+  class << self
+    def allow_anonymous_user_access!
+      self.allow_anonymous_user_access = true
+    end
+  end
+
   def initialize(context, record)
     @context = context
     @user = context.user
@@ -12,7 +20,9 @@ class ApplicationPolicy
     # It would happen if authenticate_user! is not called before authorize is called, in which case is a bug
     # that needs fixing.
     #
-    raise Pundit::NotAuthorizedError, "must be logged in" unless @user
+    if !@user && !allow_anonymous_user_access
+      raise Pundit::NotAuthorizedError, "must be logged in"
+    end
   end
 
   private

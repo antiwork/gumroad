@@ -792,6 +792,16 @@ class Installment < ApplicationRecord
   def has_been_blasted? = blasts.exists?
   def can_be_blasted? = send_emails? && !has_been_blasted?
 
+  def featured_image_url
+    return nil if message.blank?
+
+    fragment = Nokogiri::HTML.fragment(message)
+    first_element = fragment.element_children.first
+    return nil unless first_element&.name == "figure"
+
+    first_element.at_css("img")&.attr("src")
+  end
+
   class InstallmentInvalid < StandardError
   end
 

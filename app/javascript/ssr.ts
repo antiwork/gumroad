@@ -50,6 +50,8 @@ import EmailsPage from "$app/components/server-components/EmailsPage";
 import FollowersPage from "$app/components/server-components/FollowersPage";
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
+import GumroadBlogIndexPage from "$app/components/server-components/GumroadBlog/IndexPage";
+import GumroadBlogPostPage from "$app/components/server-components/GumroadBlog/PostPage";
 import LibraryPage from "$app/components/server-components/LibraryPage";
 import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
@@ -146,6 +148,8 @@ ReactOnRails.register({
   FormPage,
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
+  GumroadBlogIndexPage,
+  GumroadBlogPostPage,
   LibraryPage,
   LoginPage,
   MainSettingsPage,
