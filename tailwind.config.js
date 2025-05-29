@@ -1,3 +1,54 @@
+import fs from "node:fs";
+import module from "node:module";
+import postcss from "postcss";
+import tailwindPlugin from "tailwindcss/plugin";
+
+const require = module.createRequire(import.meta.url);
+
+const scopedPreflightPlugin = (preflightScopeSelector) => {
+  if (!preflightScopeSelector) {
+    throw new Error("Selector to manually enable the Tailwind CSS preflight is not provided");
+  }
+
+  let preflightCssPath;
+  let preflightStyles;
+
+  try {
+    preflightCssPath = require.resolve("tailwindcss/lib/css/preflight.css");
+    preflightStyles = postcss.parse(fs.readFileSync(preflightCssPath, "utf8"));
+  } catch {
+    const minimalPreflightStyles = `
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+    `;
+    preflightStyles = postcss.parse(minimalPreflightStyles);
+  }
+
+  return tailwindPlugin(({ addBase }) => {
+    preflightStyles.walkRules((rule) => {
+      rule.selectors = rule.selectors.map((s) => {
+        const trimmedSelector = s.trim();
+        if (trimmedSelector.toLowerCase() === ":root") {
+          return `${preflightScopeSelector}`;
+        }
+        if (trimmedSelector.includes(",")) {
+          return trimmedSelector
+            .split(",")
+            .map((part) => `${preflightScopeSelector} :where(${part.trim()})`)
+            .join(", ");
+        }
+        return `${preflightScopeSelector} :where(${trimmedSelector})`;
+      });
+      rule.selector = rule.selectors.join(", ");
+    });
+
+    addBase(preflightStyles.nodes);
+  });
+};
+
 export default {
   content: ["./app/javascript/**/*.{ts,tsx}", "./app/views/**/*.erb", "./public/help/**/*.html"],
   corePlugins: {
@@ -24,4 +75,5 @@ export default {
       },
     },
   },
+  plugins: [scopedPreflightPlugin(".scoped-tailwind-preflight")],
 };
