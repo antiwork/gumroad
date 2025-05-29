@@ -4,12 +4,12 @@
 
 <% content_for :meta do %>
   <% if @page_data %>
-    <%= tag.link rel: "canonical", href: send(@page_data[:url]) %>
+    <%= tag.link rel: "canonical", href: @page_data[:url] %>
     <%= tag.meta name: "description", content: @page_data[:description] %>
     <%= tag.meta property: "og:title", content: @page_data[:title] %>
     <%= tag.meta property: "og:description", content: @page_data[:description] %>
     <%= tag.meta property: "og:type", content: "website" %>
-    <%= tag.meta property: "og:url", content: send(@page_data[:url]) %>
+    <%= tag.meta property: "og:url", content: @page_data[:url] %>
   <% end %>
 <% end %>
 
