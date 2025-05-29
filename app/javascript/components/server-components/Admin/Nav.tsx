@@ -64,6 +64,7 @@ export const Nav = ({ title, current_user }: Props) => {
         />
         <NavLink text="Sidekiq" icon="lighting-fill" href={Routes.admin_sidekiq_web_url(routeParams)} />
         <NavLink text="Features" icon="solid-flag" href={Routes.admin_flipper_ui_url(routeParams)} />
+        <NavLink text="Refund queue" icon="solid-currency-dollar" href={Routes.admin_refund_queue_url(routeParams)} />
       </section>
     </NavFramework>
   );
