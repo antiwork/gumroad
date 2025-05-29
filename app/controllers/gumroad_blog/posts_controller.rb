@@ -19,6 +19,8 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
 
   def show
     authorize @post, policy_class: GumroadBlog::PostsPolicy
+
+    @props = PostPresenter.new(pundit_user: pundit_user, post: @post, purchase_id_param: nil).post_component_props
   end
 
   private
