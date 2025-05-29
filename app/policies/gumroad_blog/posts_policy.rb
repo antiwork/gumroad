@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class GumroadBlog::PostsPolicy < ApplicationPolicy
+  allow_anonymous_user_access!
+
   def index?
     true
   end
