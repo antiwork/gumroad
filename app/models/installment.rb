@@ -802,6 +802,17 @@ class Installment < ApplicationRecord
     first_element.at_css("img")&.attr("src")
   end
 
+  def message_snippet
+    return nil if message.blank?
+
+    html_content = message.gsub(%r{</p>|<br\s*/?>}i, "\n")
+    plain_text = strip_tags(html_content)
+
+    plain_text = plain_text.strip.gsub(/\n+/, " ").gsub(/\s+/, " ")
+
+    truncate(plain_text, length: 200, separator: " ", omission: "...")
+  end
+
   class InstallmentInvalid < StandardError
   end
 

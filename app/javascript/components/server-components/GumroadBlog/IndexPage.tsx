@@ -6,44 +6,62 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
 
+import postPlaceholder from "../../../../assets/images/blog/post-placeholder.jpg";
+
 interface Post {
   url: string;
   subject: string;
   published_at: string;
   featured_image_url: string | null;
+  message_snippet: string | null;
 }
 
 interface IndexPageProps {
   posts: Post[];
 }
 
-const PostCard = ({ post, title_size_class = "text-2xl" }: { post: Post; title_size_class?: string }) => (
-  <article>
+const PostCard = ({
+  post,
+  title_size_class = "text-2xl",
+  usePlaceholder = false,
+}: {
+  post: Post;
+  title_size_class?: string;
+  usePlaceholder?: boolean;
+}) => (
+  <article className="h-full">
     <a
       href={post.url}
-      className="override block grid grid-rows-[auto_1fr] overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]"
+      className={cx(
+        "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]",
+        (post.featured_image_url || usePlaceholder) && "grid-rows-[auto_1fr]",
+      )}
     >
       {post.featured_image_url ? (
-        <figure className="overflow-hidden border-b border-black">
-          <img src={post.featured_image_url} alt={post.subject} className="h-auto w-full" loading="lazy" />
+        <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
+          <img src={post.featured_image_url} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
+        </figure>
+      ) : usePlaceholder ? (
+        <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
+          <img src={postPlaceholder} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
         </figure>
       ) : null}
-      <header className="flex flex-grow flex-col p-6">
+      <header className="flex h-full flex-grow flex-col justify-between p-6">
         <div>
           <h3 className={cx("mb-1 leading-tight", title_size_class)}>{post.subject}</h3>
-          <p className="text-md text-gray-600 mb-2">{formatPostDate(post.published_at, "en-US")}</p>
+          {!!(!post.featured_image_url && !usePlaceholder && post.message_snippet) && (
+            <p className="text-md text-gray-600 mt-2 whitespace-pre-line opacity-80">{post.message_snippet}</p>
+          )}
         </div>
+        <p className="text-md text-gray-600 mt-2 md:mt-4">{formatPostDate(post.published_at, "en-US")}</p>
       </header>
     </a>
   </article>
 );
 
 const CompactPostItem = ({ post }: { post: Post }) => (
-  <li className="border-gray-300 py-4">
-    <a
-      href={post.url}
-      className="hover:text-pink-600 group block flex items-end justify-between text-black no-underline"
-    >
+  <li className="border-gray-300 py-4 first:pt-0">
+    <a href={post.url} className="hover:text-pink-600 group flex items-end justify-between text-black no-underline">
       <div className="override grid grid-cols-1 gap-1">
         <h4 className="mb-0.5 text-2xl font-normal">{post.subject}</h4>
         <p className="text-gray-500 pb-0.5 text-base">{formatPostDate(post.published_at, "en-US")}</p>
@@ -102,7 +120,7 @@ const IndexPage = ({ posts = [] }: IndexPageProps) => {
         <div className="mb-8 flex flex-row items-start lg:gap-[1.875rem]">
           <section className="mb-0 w-full lg:mb-0 lg:w-[calc(67%-0.9375rem)]">
             {featured_post ? (
-              <PostCard post={featured_post} title_size_class="text-3xl lg:text-4xl" />
+              <PostCard post={featured_post} title_size_class="text-2xl md:text-4xl" usePlaceholder />
             ) : (
               <p className="text-gray-600 border-gray-300 flex min-h-[300px] items-center justify-center rounded border-2 border-dashed p-8 text-center">
                 No featured post available.

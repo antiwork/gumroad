@@ -21,7 +21,9 @@ Installment.create!(seller: gumroad_user, shown_on_profile: true, send_emails: t
                     name: "Reorder Tiers and Versions",
                     published_at: Time.current, installment_type: "audience")
 Installment.create!(seller: gumroad_user, shown_on_profile: true, send_emails: true,
-                    message: "Sam has earned well over $100,000 on Gumroad",
+                    message: "Sam has been creating and selling digital products on Gumroad for over 3 years now. What started as a side project selling programming tutorials has grown into a thriving business generating well over $100,000 in revenue. His success story showcases how creators can build sustainable income streams by focusing on delivering high-quality educational content.
+
+Through consistent effort and engaging with his audience, Sam has built a loyal following of over 20,000 students who appreciate his clear teaching style and practical approach. He attributes much of his success to Gumroad's creator-friendly platform that lets him focus on creating great content while handling all the technical details of running an online business.",
                     name: "Creator Spotlight: Sam's Success on Gumroad ",
                     published_at: Time.current, installment_type: "audience")
 
