@@ -5,7 +5,8 @@ require "spec_helper"
 describe Workflow::SaveInstallmentsService do
   before do
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-    create(:merchant_account_stripe_connect, user: seller)
+    stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+    create(:purchase, seller:, link: product, merchant_account: stripe_connect_account)
   end
 
   describe "#process" do

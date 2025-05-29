@@ -29,6 +29,7 @@ describe("Workflows", js: true, type: :feature) do
 
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
     create(:merchant_account_stripe_connect, user: seller)
+    create(:payment_completed, user: seller)
   end
 
   include_context "with switching account to user as admin for seller"

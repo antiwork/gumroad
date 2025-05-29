@@ -391,7 +391,8 @@ describe "Sales page", type: :feature, js: true do
 
       it "displays the missed posts and allows re-sending them" do
         allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        create(:merchant_account_stripe_connect, user: seller)
+        stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:purchase, seller:, link: product1, merchant_account: stripe_connect_account)
 
         post = posts.last
         visit customers_path
