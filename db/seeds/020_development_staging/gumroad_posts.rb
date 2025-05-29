@@ -24,3 +24,25 @@ Installment.create!(seller: gumroad_user, shown_on_profile: true, send_emails: t
                     message: "Sam has earned well over $100,000 on Gumroad",
                     name: "Creator Spotlight: Sam's Success on Gumroad ",
                     published_at: Time.current, installment_type: "audience")
+
+posts_directory = Rails.root.join("db", "seeds", "040_posts")
+
+if Dir.exist?(posts_directory)
+  Dir.glob("*.html", base: posts_directory).sort.each do |filename|
+    file_path = posts_directory.join(filename)
+    base_name = File.basename(filename, ".html")
+
+    name = base_name.gsub(/^\d+_/, "").tr("-", " ").titleize
+    message = File.read(file_path).strip
+
+    Installment.create!(
+      seller: gumroad_user,
+      shown_on_profile: true,
+      send_emails: true,
+      message: message,
+      name: name,
+      published_at: Time.current,
+      installment_type: "audience",
+    )
+  end
+end
