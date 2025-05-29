@@ -808,9 +808,9 @@ class Installment < ApplicationRecord
     html_content = message.gsub(%r{</p>|<br\s*/?>}i, "\n")
     plain_text = strip_tags(html_content)
 
-    plain_text = plain_text.strip.gsub(/\n+/, ' ').gsub(/\s+/, ' ')
+    plain_text = plain_text.strip.gsub(/\n+/, " ").gsub(/\s+/, " ")
 
-    truncate(plain_text, length: 200, separator: ' ', omission: '...')
+    truncate(plain_text, length: 200, separator: " ", omission: "...")
   end
 
   class InstallmentInvalid < StandardError
