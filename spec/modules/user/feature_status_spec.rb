@@ -287,24 +287,4 @@ describe User::FeatureStatus do
       end
     end
   end
-
-  describe "#can_see_gumroad_blog?" do
-    let(:user) { create(:user) }
-
-    it "returns true when gumroad_blog feature is enabled for the user" do
-      Feature.activate_user(:gumroad_blog, user)
-      expect(user.can_see_gumroad_blog?).to be true
-
-      Feature.deactivate_user(:gumroad_blog, user)
-      expect(user.can_see_gumroad_blog?).to be false
-    end
-
-    it "returns true when gumroad_blog feature is globally enabled" do
-      Feature.activate(:gumroad_blog)
-      expect(user.can_see_gumroad_blog?).to be true
-
-      Feature.deactivate(:gumroad_blog)
-      expect(user.can_see_gumroad_blog?).to be false
-    end
-  end
 end
