@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 class GumroadBlog::BaseController < ApplicationController
+  include GumroadBlogHelper
+
   before_action :ensure_feature_enabled!
 
   private
     def ensure_feature_enabled!
-      return if Feature.active?(:gumroad_blog, logged_in_user)
+      return if can_see_gumroad_blog?(logged_in_user)
       raise ActionController::RoutingError, "Not Found"
     end
 
