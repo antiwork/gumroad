@@ -23,22 +23,22 @@ interface IndexPageProps {
 
 const useDynamicClamp = (containerRef: React.RefObject<HTMLElement>, textRef: React.RefObject<HTMLElement>) => {
   const [clamp, setClamp] = useState<number | undefined>(undefined);
-  const lineHeight = useRef<number | undefined>(undefined);
+  const lineHeightRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    if (!lineHeight.current && textRef.current) {
-      lineHeight.current = parseFloat(getComputedStyle(textRef.current).lineHeight);
+    if (!lineHeightRef.current && textRef.current) {
+      lineHeightRef.current = parseFloat(getComputedStyle(textRef.current).lineHeight);
     }
-  }, [textRef.current]);
+  }, []);
 
   useEffect(() => {
-    if (clamp !== undefined || !containerRef.current || !lineHeight.current) return;
+    const container = containerRef.current;
+    const lineHeight = lineHeightRef.current;
+    if (clamp !== undefined || !container || !lineHeight) return;
 
     const id = requestAnimationFrame(() => {
-      if (!containerRef.current || !lineHeight.current) return;
-
-      const availableHeight = containerRef.current.getBoundingClientRect().height;
-      setClamp(Math.floor(availableHeight / lineHeight.current));
+      const availableHeight = container.getBoundingClientRect().height;
+      setClamp(Math.floor(availableHeight / lineHeight));
     });
 
     return () => cancelAnimationFrame(id);
