@@ -1,24 +1,51 @@
 import cx from "classnames";
 import * as React from "react";
+import { useEffect, useRef, useState } from "react";
 import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
 import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
 
-import postPlaceholder from "../../../../assets/images/blog/post-placeholder.jpg";
+import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";
 
 interface Post {
   url: string;
   subject: string;
   published_at: string;
   featured_image_url: string | null;
-  message_snippet: string | null;
+  message_snippet: string;
 }
 
 interface IndexPageProps {
   posts: Post[];
 }
+
+const useDynamicClamp = (containerRef: React.RefObject<HTMLElement>, textRef: React.RefObject<HTMLElement>) => {
+  const [clamp, setClamp] = useState<number | undefined>(undefined);
+  const lineHeightRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!lineHeightRef.current && textRef.current) {
+      lineHeightRef.current = parseFloat(getComputedStyle(textRef.current).lineHeight);
+    }
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const lineHeight = lineHeightRef.current;
+    if (clamp !== undefined || !container || !lineHeight) return;
+
+    const id = requestAnimationFrame(() => {
+      const availableHeight = container.getBoundingClientRect().height;
+      setClamp(Math.floor(availableHeight / lineHeight));
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [clamp]);
+
+  return clamp;
+};
 
 const PostCard = ({
   post,
@@ -28,36 +55,53 @@ const PostCard = ({
   post: Post;
   title_size_class?: string;
   usePlaceholder?: boolean;
-}) => (
-  <article className="h-full">
-    <a
-      href={post.url}
-      className={cx(
-        "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]",
-        (post.featured_image_url || usePlaceholder) && "grid-rows-[auto_1fr]",
-      )}
-    >
-      {post.featured_image_url ? (
-        <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
-          <img src={post.featured_image_url} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
-        </figure>
-      ) : usePlaceholder ? (
-        <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
-          <img src={postPlaceholder} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
-        </figure>
-      ) : null}
-      <header className="flex h-full flex-grow flex-col justify-between p-6">
-        <div>
-          <h3 className={cx("mb-1 leading-tight", title_size_class)}>{post.subject}</h3>
-          {!!(!post.featured_image_url && !usePlaceholder && post.message_snippet) && (
-            <p className="text-md text-gray-600 mt-2 whitespace-pre-line opacity-80">{post.message_snippet}</p>
-          )}
+}) => {
+  const snippetContainerRef = useRef<HTMLDivElement>(null);
+  const snippetRef = useRef<HTMLParagraphElement>(null);
+  const clamp = useDynamicClamp(snippetContainerRef, snippetRef);
+
+  const featureImageUrl = post.featured_image_url || (usePlaceholder ? placeholderFeatureImage : null);
+  const showSnippet = !featureImageUrl && post.message_snippet && (clamp === undefined || clamp > 0);
+
+  return (
+    <article className="h-full">
+      <a
+        href={post.url}
+        className={cx(
+          "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]",
+          { "grid-rows-[auto_1fr]": !!featureImageUrl },
+        )}
+      >
+        {featureImageUrl ? (
+          <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
+            <img src={featureImageUrl} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
+          </figure>
+        ) : null}
+
+        <div className="flex h-full flex-grow flex-col justify-between p-6">
+          <h3 className={cx("mb-1 flex-none leading-tight", title_size_class)}>{post.subject}</h3>
+          {showSnippet ? (
+            <div className="relative flex-1" ref={snippetContainerRef}>
+              <p
+                className="text-md inset-0 mt-2 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
+                style={{
+                  position: clamp === undefined ? "absolute" : "relative",
+                  display: "-webkit-box",
+                  WebkitBoxOrient: "vertical",
+                  WebkitLineClamp: clamp,
+                }}
+                ref={snippetRef}
+              >
+                {post.message_snippet}
+              </p>
+            </div>
+          ) : null}
+          <p className="text-md mt-2 flex-none text-dark-gray md:mt-4">{formatPostDate(post.published_at, "en-US")}</p>
         </div>
-        <p className="text-md text-gray-600 mt-2 md:mt-4">{formatPostDate(post.published_at, "en-US")}</p>
-      </header>
-    </a>
-  </article>
-);
+      </a>
+    </article>
+  );
+};
 
 const CompactPostItem = ({ post }: { post: Post }) => (
   <li className="border-gray-300 py-4 first:pt-0">
