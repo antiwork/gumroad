@@ -55,6 +55,7 @@
   def nav_links
     content_tag :div, class: "flex flex-col justify-center items-center lg:flex-row lg:gap-1 lg:px-6" do
       nav_link("Discover", discover_path) +
+      (logged_in_user&.can_see_gumroad_blog? ? nav_link("Blog", gumroad_blog_root_path) : "") +
       nav_link("Pricing", pricing_path) +
       nav_link("Features", features_path) +
       nav_link("About", about_path, {}, [root_path])
