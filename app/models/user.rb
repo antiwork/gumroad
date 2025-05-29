@@ -873,10 +873,10 @@ class User < ApplicationRecord
     payouts_paused_internally? || payouts_paused_by_user?
   end
 
-  def made_a_successful_sale_with_a_stripe_connect_account?
+  def made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
     ids = merchant_accounts
-      .stripe
-      .where("json_data->>'$.meta.stripe_connect' = ?", "true")
+      .stripe_connect
+      .or(merchant_accounts.paypal)
       .pluck(:id)
     return false if ids.empty?
 
@@ -887,15 +887,17 @@ class User < ApplicationRecord
 
   def eligible_for_abandoned_cart_workflows?
     return true if is_team_member?
+    return false if suspended?
 
-    stripe_connect_account.present? || made_a_successful_sale_with_a_stripe_connect_account? || payments.completed.exists?
+    has_completed_payouts?
   end
 
   def eligible_to_send_emails?
     return true if is_team_member?
     return false if suspended?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
-    stripe_connect_account.present? || made_a_successful_sale_with_a_stripe_connect_account? || payments.completed.exists?
+
+    has_completed_payouts?
   end
 
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day
@@ -1163,5 +1165,10 @@ class User < ApplicationRecord
                     saved_change_to_bio?
 
       Iffy::Profile::IngestJob.perform_async(id)
+    end
+
+    def has_completed_payouts?
+      payments.completed.exists? ||
+        made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
     end
 end

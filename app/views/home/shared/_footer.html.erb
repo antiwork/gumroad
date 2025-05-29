@@ -18,10 +18,13 @@
   <div class="max-w-3xl flex flex-col w-full gap-16">
     <div class="flex-1 flex gap-16">
       <div class="flex-1 flex flex-col gap-3">
-        <a href="/about" class="no-underline hover:text-pink">About</a>
-        <a href="/features" class="no-underline hover:text-pink">Features</a>
-        <a href="/pricing" class="no-underline hover:text-pink">Pricing</a>
         <a href="/discover" class="no-underline hover:text-pink">Discover</a>
+        <% if can_see_gumroad_blog?(logged_in_user) %>
+          <a href="/blog" class="no-underline hover:text-pink">Blog</a>
+        <% end %>
+        <a href="/pricing" class="no-underline hover:text-pink">Pricing</a>
+        <a href="/features" class="no-underline hover:text-pink">Features</a>
+        <a href="/about" class="no-underline hover:text-pink">About</a>
         <a href="https://dvassallo.gumroad.com/l/small-bets" class="no-underline hover:text-pink">Small Bets</a>
       </div>
       <div class="flex-1 flex flex-col gap-3">

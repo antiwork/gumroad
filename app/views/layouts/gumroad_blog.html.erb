@@ -1,0 +1,26 @@
+<% content_for :script do %>
+  <%= render "home/shared/scripts" %>
+<% end %>
+
+<% content_for :meta do %>
+  <% if @page_data %>
+    <%= tag.link rel: "canonical", href: @page_data[:url] %>
+    <%= tag.meta name: "description", content: @page_data[:description] %>
+    <%= tag.meta property: "og:title", content: @page_data[:title] %>
+    <%= tag.meta property: "og:description", content: @page_data[:description] %>
+    <%= tag.meta property: "og:type", content: "website" %>
+    <%= tag.meta property: "og:url", content: @page_data[:url] %>
+  <% end %>
+<% end %>
+
+<% content_for :content do %>
+  <div class="block bg-white text-black font-['ABC_Favorit'] text-base font-normal leading-relaxed tracking-tight">
+    <%= render "home/shared/nav" %>
+    <div class="overflow-hidden">
+      <%= yield %>
+    </div>
+  </div>
+  <%= render "home/shared/footer" %>
+<% end %>
+
+<%= render template: "layouts/application" %>

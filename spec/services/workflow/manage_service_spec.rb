@@ -389,7 +389,8 @@ describe Workflow::ManageService do
       end
 
       it "updates the workflow and unpublishes it if the save action is 'save_and_unpublish'" do
-        create(:merchant_account_stripe_connect, user: seller)
+        stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:purchase, seller:, link: product, merchant_account: stripe_connect_account)
         workflow.publish!
 
         params[:save_action_name] = Workflow::SAVE_AND_UNPUBLISH_ACTION
@@ -417,9 +418,12 @@ describe Workflow::ManageService do
       end
 
       it "does not save changes while publishing the workflow if the seller's email is not confirmed" do
-        create(:merchant_account_stripe_connect, user: seller)
+        stripe_connect_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:purchase, seller:, link: product, merchant_account: stripe_connect_account)
         seller.update!(confirmed_at: nil)
+
         params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
+
         expect do
           service = described_class.new(seller:, params:, product:, workflow:)
           expect(service.process).to eq([false, "You have to confirm your email address before you can do that."])

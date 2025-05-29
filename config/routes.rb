@@ -282,6 +282,11 @@ Rails.application.routes.draw do
     get "/hackathon", to: "home#hackathon"
     resource :github_stars, only: [:show]
 
+    namespace :gumroad_blog, path: "blog" do
+      root to: "posts#index"
+      resources :posts, only: [:index, :show], param: :slug, path: "p"
+    end
+
     get "/ifttt/v1/status" => "api/v2/users#ifttt_status"
     get "/ifttt/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
     get "/ifttt/v1/oauth2/authorize(.:format)" => "oauth/authorizations#new"

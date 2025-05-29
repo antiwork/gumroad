@@ -792,6 +792,27 @@ class Installment < ApplicationRecord
   def has_been_blasted? = blasts.exists?
   def can_be_blasted? = send_emails? && !has_been_blasted?
 
+  def featured_image_url
+    return nil if message.blank?
+
+    fragment = Nokogiri::HTML.fragment(message)
+    first_element = fragment.element_children.first
+    return nil unless first_element&.name == "figure"
+
+    first_element.at_css("img")&.attr("src")
+  end
+
+  def message_snippet
+    return nil if message.blank?
+
+    html_content = message.gsub(%r{</p>|<br\s*/?>}i, "\n")
+    plain_text = strip_tags(html_content)
+
+    plain_text = plain_text.strip.gsub(/\n+/, " ").gsub(/\s+/, " ")
+
+    truncate(plain_text, length: 200, separator: " ", omission: "...")
+  end
+
   class InstallmentInvalid < StandardError
   end
 
