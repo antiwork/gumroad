@@ -5,7 +5,7 @@ class GumroadBlog::BaseController < ApplicationController
 
   private
     def ensure_feature_enabled!
-      return if logged_in_user&.can_see_gumroad_blog?
+      return if Feature.active?(:gumroad_blog, logged_in_user)
       raise ActionController::RoutingError, "Not Found"
     end
 
