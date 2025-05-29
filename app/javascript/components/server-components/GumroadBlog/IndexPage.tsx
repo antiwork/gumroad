@@ -25,7 +25,7 @@ const PostCard = ({ post, title_size_class = "text-2xl" }: { post: Post; title_s
     >
       {post.featured_image_url ? (
         <figure className="overflow-hidden border-b border-black">
-          <img src={post.featured_image_url} alt={post.subject} className="h-auto w-full" />
+          <img src={post.featured_image_url} alt={post.subject} className="h-auto w-full" loading="lazy" />
         </figure>
       ) : null}
       <header className="flex flex-grow flex-col p-6">
