@@ -21,6 +21,32 @@ interface IndexPageProps {
   posts: Post[];
 }
 
+const useDynamicClamp = (containerRef: React.RefObject<HTMLElement>, textRef: React.RefObject<HTMLElement>) => {
+  const [clamp, setClamp] = useState<number | undefined>(undefined);
+  const lineHeight = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!lineHeight.current && textRef.current) {
+      lineHeight.current = parseFloat(getComputedStyle(textRef.current).lineHeight);
+    }
+  }, [textRef.current]);
+
+  useEffect(() => {
+    if (clamp !== undefined || !containerRef.current || !lineHeight.current) return;
+
+    const id = requestAnimationFrame(() => {
+      if (!containerRef.current || !lineHeight.current) return;
+
+      const availableHeight = containerRef.current.getBoundingClientRect().height;
+      setClamp(Math.floor(availableHeight / lineHeight.current));
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [clamp]);
+
+  return clamp;
+};
+
 const PostCard = ({
   post,
   title_size_class = "text-2xl",
@@ -30,26 +56,12 @@ const PostCard = ({
   title_size_class?: string;
   usePlaceholder?: boolean;
 }) => {
-  const [clamp, setClamp] = useState<number | undefined>(undefined);
   const snippetContainerRef = useRef<HTMLDivElement>(null);
   const snippetRef = useRef<HTMLParagraphElement>(null);
+  const clamp = useDynamicClamp(snippetContainerRef, snippetRef);
 
   const featureImageUrl = post.featured_image_url || (usePlaceholder ? placeholderFeatureImage : null);
-  const showSnippet = !featureImageUrl && (clamp === undefined || clamp > 0);
-
-  useEffect(() => {
-    if (!showSnippet) return;
-
-    const snippetContainer = snippetContainerRef.current;
-    const snippet = snippetRef.current;
-    if (!snippetContainer || !snippet) return;
-
-    const availableHeight = snippetContainer.getBoundingClientRect().height;
-    const lh = parseFloat(getComputedStyle(snippet).lineHeight);
-    const lines = Math.floor(availableHeight / lh);
-
-    setClamp(lines);
-  }, [post.message_snippet]);
+  const showSnippet = !featureImageUrl && post.message_snippet && (clamp === undefined || clamp > 0);
 
   return (
     <article className="h-full">
