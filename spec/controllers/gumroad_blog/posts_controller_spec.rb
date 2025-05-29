@@ -59,19 +59,19 @@ describe GumroadBlog::PostsController do
 
       expect(response).to have_http_status(:ok)
       expect(assigns[:props][:posts]).to eq([
-        {
-          url: gumroad_blog_post_path(published_post_2.slug),
-          subject: published_post_2.subject,
-          published_at: published_post_2.published_at,
-          featured_image_url: published_post_2.featured_image_url,
-        },
-        {
-          url: gumroad_blog_post_path(published_post_1.slug),
-          subject: published_post_1.subject,
-          published_at: published_post_1.published_at,
-          featured_image_url: published_post_1.featured_image_url,
-        }
-      ])
+                                              {
+                                                url: gumroad_blog_post_path(published_post_2.slug),
+                                                subject: published_post_2.subject,
+                                                published_at: published_post_2.published_at,
+                                                featured_image_url: published_post_2.featured_image_url,
+                                              },
+                                              {
+                                                url: gumroad_blog_post_path(published_post_1.slug),
+                                                subject: published_post_1.subject,
+                                                published_at: published_post_1.published_at,
+                                                featured_image_url: published_post_1.featured_image_url,
+                                              }
+                                            ])
     end
 
     context "when then feature is disabled" do
