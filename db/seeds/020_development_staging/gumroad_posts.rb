@@ -32,7 +32,7 @@ if Dir.exist?(posts_directory)
     file_path = posts_directory.join(filename)
     base_name = File.basename(filename, ".html")
 
-    name = base_name.gsub(/^\d+_/, "").gsub(/-/, " ").titleize
+    name = base_name.gsub(/^\d+_/, "").tr("-", " ").titleize
     message = File.read(file_path).strip
 
     Installment.create!(
