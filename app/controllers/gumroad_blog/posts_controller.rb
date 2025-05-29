@@ -23,6 +23,7 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
           subject: post.subject,
           published_at: post.published_at,
           featured_image_url: post.featured_image_url,
+          message_snippet: post.message_snippet,
         }
       end,
     }
