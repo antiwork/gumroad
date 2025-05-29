@@ -803,14 +803,15 @@ class Installment < ApplicationRecord
   end
 
   def message_snippet
-    return nil if message.blank?
+    return "" if message.blank?
 
-    html_content = message.gsub(%r{</p>|<br\s*/?>}i, "\n")
-    plain_text = strip_tags(html_content)
+    # Add spaces between paragraphs and line breaks, so that `Hello<br/>World`
+    # becomes `Hello World`.
+    spaced_message = message.split(%r{</p>|<br\s*/?>}i).join(" ")
 
-    plain_text = plain_text.strip.gsub(/\n+/, " ").gsub(/\s+/, " ")
-
-    truncate(plain_text, length: 200, separator: " ", omission: "...")
+    strip_tags(spaced_message)
+      .squish
+      .truncate(200, separator: " ", omission: "...")
   end
 
   class InstallmentInvalid < StandardError
