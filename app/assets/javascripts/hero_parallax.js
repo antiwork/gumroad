@@ -91,8 +91,9 @@ function initHeroCoinParallax() {
 
   if (!isTouchDeviceOrSmallScreen) {
     container.addEventListener("mousemove", handleMouseMove);
-    animationFrameId = requestAnimationFrame(animate);
   }
+
+  animationFrameId = requestAnimationFrame(animate);
 
   const throttledScroll = throttle(handleScroll, 16);
 
