@@ -9,7 +9,6 @@ gem "rake", "13.2.1"
 
 group :development do
   gem "derailed_benchmarks", "~> 2.1"
-  gem "stackprof", "~> 0.2"
 end
 
 group :staging, :production do
@@ -180,6 +179,7 @@ gem "sitemap_generator", "~> 6.3"
 gem "slack-notifier", "~> 2.4"
 gem "sprockets-rails", "~> 3.4", require: "sprockets/railtie"
 gem "ssrf_filter", "~> 1.2.0"
+gem "stackprof", "~> 0.2"
 gem "state_machines-activerecord", "~> 0.8"
 gem "streamio-ffmpeg", "~> 3.0"
 gem "stripe", "~> 12.0"

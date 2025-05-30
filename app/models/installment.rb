@@ -802,6 +802,18 @@ class Installment < ApplicationRecord
     first_element.at_css("img")&.attr("src")
   end
 
+  def message_snippet
+    return "" if message.blank?
+
+    # Add spaces between paragraphs and line breaks, so that `Hello<br/>World`
+    # becomes `Hello World`.
+    spaced_message = message.split(%r{</p>|<br\s*/?>}i).join(" ")
+
+    strip_tags(spaced_message)
+      .squish
+      .truncate(200, separator: " ", omission: "...")
+  end
+
   class InstallmentInvalid < StandardError
   end
 

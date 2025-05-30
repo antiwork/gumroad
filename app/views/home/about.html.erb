@@ -1,32 +1,66 @@
-<header class="grid border-b border-black override grid-cols-1 lg:grid-cols-2">
-  <div class="flex items-center justify-center border-b border-black bg-pink px-8 py-12 lg:border-b-0 lg:border-r lg:p-[4vw]">
-    <div class="flex flex-col max-w-screen-sm gap-8 lg:items-start lg:gap-12">
-      <h1 class="leading-none text-center text-6xl lg:text-left lg:text-8xl">Go from <span class="whitespace-nowrap">zero to $1</span></h1>
-      <div class="text-center text-xl lg:text-left lg:text-3xl">With Gumroad, anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
-      <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+<header class="grid border-b border-black override grid-cols-1 bg-[#f0f0f0]">
+  <div data-hero-parallax-container class="relative flex items-center justify-center border-b border-black bg-gray-100 px-8 py-40 lg:px-[8vw] md:py-[12rem]">
+    <div class="flex flex-col max-w-screen-lg items-center gap-6 text-center z-10">
+      <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from<br class="sm:hidden"> <span class="whitespace-nowrap">0 to $1</span></h1>
+      <div class="text-xl max-w-md lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
+      <div class="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-[384px] sm:max-w-none sm:w-auto mx-auto">
+        <div class="w-full sm:w-auto [&>div]:!block">
+          <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+        </div>
+        <form action="<%= discover_path %>" method="get" class="relative w-full sm:w-auto">
+          <label for="marketplace-search" class="sr-only">Search marketplace</label>
+          <input
+            id="marketplace-search"
+            type="text"
+            name="query"
+            placeholder="Search marketplace ..."
+            class="px-4 pr-12 border !border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black w-full sm:w-64 !text-xl !h-14 lg:!h-16"
+          />
+          <button
+            type="submit"
+            aria-label="Search"
+            class="absolute mr-3 right-0 top-1/2 -translate-y-[55%]"
+          >
+            <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </button>
+        </form>
+      </div>
+      <div class="text-base text-gray-600 text-muted">
+        Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black inline-flex items-center gap-1 ml-1">
+          <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          Github
+        </a>
+      </div>
     </div>
-  </div>
-  <div class="relative flex items-center justify-center bg-orange p-16">
-    <div class="relative">
-      <%= image_tag "creators/vegalia.png", alt: "Vegalia's profile photo", class: "w-full max-w-lg mx-auto transform -translate-y-4 transition-transform duration-500" %>
-      <%= image_tag "about/paint-brush.svg", alt: "Paint brush illustration", class: "absolute w-24 sm:w-32 top-4 -right-12 sm:top-8 sm:-right-8" %>
-      <%= image_tag "about/gum-coins.svg", alt: "Gumroad coins illustration", class: "absolute w-32 sm:w-48 bottom-8 -left-8" %>
-      <a href="https://byvegalia.gumroad.com/?recommended_by=search" class="absolute flex items-center gap-2 rounded-full border border-black bg-white px-4 py-2 text-black no-underline bottom-4 right-4 transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]">
-        <%= image_tag "logo-g.svg", alt: "Gumroad icon", class: "w-6 h-6" %>
-        <div class="text-lg">Vegalia</div>
-      </a>
+    <div class="absolute inset-0 pointer-events-none overflow-visible parallax-up">
+      <div class="hero-coin absolute z-[1] w-[8rem] invisible md:visible sm:w-[8rem] sm:top-[20rem] sm:right-[-3rem] md:w-[10rem] md:top-[58rem] md:right-[15rem] lg:w-[12rem] lg:top-[55rem]" data-parallax-intensity="0.03" data-scroll-intensity="-0.10">
+        <%= image_tag "about/coin-1.svg", loading: "lazy", alt: "Decorative coin 1", class: "w-full h-auto" %>
+      </div>
+      <div class="hero-coin absolute z-[1] w-[10rem] top-[28rem] left-[-12vw] sm:left-[-7vw] md:left-[3vw] md:w-[11rem] md:top-[30rem] md:left-[8vw]" data-parallax-intensity="-0.02" data-scroll-intensity="-0.03">
+        <%= image_tag "about/coin-2.svg", loading: "lazy", alt: "Decorative coin 2", class: "w-full h-auto" %>
+      </div>
+      <div class="hero-coin absolute z-[1] w-[9rem] right-[-3vw] top-[-7rem] invisible sm:visible md:w-[8rem] md:top-[26rem] md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.07">
+        <%= image_tag "about/coin-3.svg", loading: "lazy", alt: "Decorative coin 3", class: "w-full h-auto" %>
+      </div>
+      <div class="hero-coin absolute z-[1] w-[9rem] top-[53rem] right-[-14vw] sm:top-[42rem] sm:right-[-5rem] md:w-[11rem] md:top-[44rem] md:right-[-5rem] lg:w-[12rem] lg:top-[46rem] lg:right-[-4rem]" data-parallax-intensity="-0.035" data-scroll-intensity="-0.04">
+        <%= image_tag "about/coin-4.svg", loading: "lazy", alt: "Decorative Coin 4", class: "w-full h-auto" %>
+      </div>
+      <div class="hero-coin absolute z-[1] w-[10rem] left-[-2rem] top-[63rem] sm:w-[10rem] sm:top-[50rem] sm:left-[3rem] md:w-[14rem] md:top-[45rem] md:left-[-6rem] lg:w-[16rem] lg:left-[-3rem]" data-parallax-intensity="0.04" data-scroll-intensity="-0.06">
+        <%= image_tag "about/coin-5.svg", loading: "lazy", alt: "Decorative Coin 5", class: "w-full h-auto" %>
+      </div>
     </div>
-    <div class="absolute text-xl bottom-8 left-8">Vegalia sells Procreate brushes</div>
   </div>
 </header>
 
-<div class="relative pt-16 lg:border-b lg:border-black lg:py-32">
+<div class="relative py-24 lg:border-b lg:border-black lg:py-32">
   <div class="px-8 lg:px-[4vw]">
-    <div class="max-w-4xl mx-auto text-center text-3xl mb-16 lg:mb-24 lg:leading-tight lg:text-5xl">
-      You know all those great ideas you have? We want you to try them, lots of them, and find out what works.
+    <div class="max-w-4xl mx-auto text-center text-4xl mb-20 lg:mb-24 lg:leading-tight lg:text-5xl">
+      You know all those great ideas you have?
     </div>
   </div>
-  <div class="relative max-w-6xl mx-auto h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
+  <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
     <div id="lottie-animation" class="absolute w-56 h-56 z-20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:top-20 lg:w-80 lg:h-80">
       <lottie-player
         src="<%= asset_path("about/gumhead.json") %>"
@@ -72,6 +106,17 @@
         <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
         <div class="whitespace-nowrap lg:text-2xl">Learn Quickly</div>
       </div>
+    </div>
+  </div>
+  <div class="max-w-4xl mx-auto text-center flex flex-col gap-4 px-8">
+    <h2 class="text-4xl lg:text-5xl lg:leading-tight">
+      We want you to try them, lots of them, and find out what works.
+    </h2>
+    <p class="text-xl max-w-2xl mx-auto">
+      You don't have to be a tech expert or even understand how to start a business. You just gotta take what you know and sell it.
+    </p>
+    <div class="w-full mt-4">
+      <%= render "home/shared/button", text: "Find out how", url: features_path %>
     </div>
   </div>
 </div>
@@ -492,23 +537,6 @@
 
 <div class="relative w-full border-t border-black bg-white">
   <div class="flex flex-col justify-center gap-8 px-8 text-center my-20 md:items-center md:gap-16 md:my-40">
-    <div class="absolute inset-0 pointer-events-none overflow-visible parallax-up">
-      <div class="absolute z-[1] w-[10rem] top-[12rem] left-[-3rem] invisible sm:w-[8rem] md:w-[10rem] md:visible">
-        <%= image_tag "about/coin-1.svg", loading: "lazy", alt: "Decorative coin 1", class: "w-full h-auto" %>
-      </div>
-      <div class="absolute z-[1] w-[12rem] top-[4rem] left-[16vw] invisible sm:w-[6rem] sm:top-[0rem] sm:left-[-1vw] sm:visible md:w-[12rem] md:top-[0rem] md:left-[16vw]">
-        <%= image_tag "about/coin-2.svg", loading: "lazy", alt: "Decorative coin 2", class: "w-full h-auto" %>
-      </div>
-      <div class="absolute z-[1] w-[9rem] right-[-8vw] sm:w-[12rem] sm:top-[18rem] sm:right-[-1vw] md:w-[9rem] md:top-[10rem] md:right-[5vw]">
-        <%= image_tag "about/coin-3.svg", loading: "lazy", alt: "Decorative coin 3", class: "w-full h-auto" %>
-      </div>
-      <div class="absolute z-[1] w-[10rem] sm:w-[12rem] md:w-[12rem] top-[20rem] sm:top-[0rem] md:top-[26rem] right-[75vw] sm:right-[-2rem]">
-        <%= image_tag "about/coin-4.svg", loading: "lazy", alt: "Decorative Coin 4", class: "w-full h-auto" %>
-      </div>
-      <div class="absolute z-[1] w-[12rem] sm:w-[12rem] md:w-[14rem] sm:top-[36rem] md:top-[28rem] left-[-4rem] md:left-[2rem] invisible md:visible">
-        <%= image_tag "about/coin-5.svg", loading: "lazy", alt: "Decorative Coin 5", class: "w-full h-auto" %>
-      </div>
-    </div>
     <h1 class="text-left md:text-center text-5xl sm:text-7xl md:text-9xl lg:text-[12rem] md:leading-[0.9] font-medium">
       $3,129,297
     </h1>
@@ -528,3 +556,5 @@
 </div>
 
 <%= render "home/shared/footer" %>
+
+<%= javascript_include_tag 'hero_parallax', nonce: SecureHeaders.content_security_policy_script_nonce(request), defer: true %>

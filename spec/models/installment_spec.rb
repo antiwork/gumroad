@@ -1042,4 +1042,34 @@ const b = 2;</code></pre>
       expect(installment.featured_image_url).to be_nil
     end
   end
+
+  describe "#message_snippet" do
+    let(:installment) { create(:installment) }
+
+    it "returns empty string when message is blank" do
+      installment.message = ""
+      expect(installment.message_snippet).to eq("")
+
+      installment.message = nil
+      expect(installment.message_snippet).to eq("")
+
+      installment.message = "   "
+      expect(installment.message_snippet).to eq("")
+    end
+
+    it "strips HTML tags from message" do
+      installment.message = "<p>Hello <strong>world</strong>!</p><br><div>Another paragraph</div>"
+      expect(installment.message_snippet).to eq("Hello world! Another paragraph")
+    end
+
+    it "squishes extra whitespace" do
+      installment.message = "  Hello    world  \n\n  with   extra    spaces  "
+      expect(installment.message_snippet).to eq("Hello world with extra spaces")
+    end
+
+    it "truncates to 200 characters with word boundaries" do
+      installment.message = "a " * 105
+      expect(installment.message_snippet).to eq("a " * 98 + "a...")
+    end
+  end
 end
