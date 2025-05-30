@@ -1062,7 +1062,7 @@ const b = 2;</code></pre>
         <p>First paragraph</p>
         <p>#tag1 #tag2 #tag3</p>
       HTML
-      expect(installment.tags).to eq(["tag1", "tag2", "tag3"])
+      expect(installment.tags).to eq(["Tag1", "Tag2", "Tag3"])
 
       installment.message = <<~HTML
         <p>#tag1 #tag2</p>
@@ -1076,15 +1076,15 @@ const b = 2;</code></pre>
 
     it "returns tags when all words in the last paragraph start with #" do
       installment.message = <<~HTML
-        <p>#ruby #rails #programming</p>
+        <p>#RubyOnRails #Tips&Tricks</p>
       HTML
-      expect(installment.tags).to eq(["ruby", "rails", "programming"])
+      expect(installment.tags).to eq(["Ruby On Rails", "Tips & Tricks"])
 
       installment.message = <<~HTML
         <p>Some content here</p>
-        <p>#onlytag</p>
+        <p>#Dedupe #Dedupe</p>
       HTML
-      expect(installment.tags).to eq(["onlytag"])
+      expect(installment.tags).to eq(["Dedupe"])
 
       installment.message = <<~HTML
         <p>Content</p>
@@ -1121,6 +1121,25 @@ const b = 2;</code></pre>
     it "truncates to 200 characters with word boundaries" do
       installment.message = "a " * 105
       expect(installment.message_snippet).to eq("a " * 98 + "a...")
+    end
+  end
+
+  describe "#fragment" do
+    let(:installment) { create(:installment) }
+
+    it "caches the Nokogiri fragment based on message content" do
+      installment.message = "<p>Hello world!</p>"
+
+      first_fragment = installment.fragment
+      expect(first_fragment.to_html).to include("Hello world!")
+
+      second_fragment = installment.fragment
+      expect(second_fragment.object_id).to eq(first_fragment.object_id)
+
+      installment.message = "<p>Updated message</p>"
+
+      updated_fragment = installment.fragment
+      expect(updated_fragment.to_html).to include("Updated message")
     end
   end
 end

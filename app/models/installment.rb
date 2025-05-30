@@ -321,7 +321,7 @@ class Installment < ApplicationRecord
   def message_with_inline_syntax_highlighting_and_upsells
     return message if message.blank?
 
-    doc = Nokogiri::HTML.fragment(message)
+    doc = fragment
 
     doc.search("pre > code").each do |node|
       language = node.attr("class")&.sub("language-", "")
@@ -370,7 +370,7 @@ class Installment < ApplicationRecord
     default_checkout_url = Rails.application.routes.url_helpers.checkout_index_url(host: UrlService.domain_with_protocol)
     checkout_url ||= default_checkout_url
 
-    doc = Nokogiri::HTML.fragment(message_with_inline_syntax_highlighting_and_upsells)
+    doc = fragment
     doc.search("#{PRODUCT_LIST_PLACEHOLDER_TAG_NAME}").each do |node|
       node.replace(
         ApplicationController.renderer.render(
@@ -795,7 +795,6 @@ class Installment < ApplicationRecord
   def featured_image_url
     return nil if message.blank?
 
-    fragment = Nokogiri::HTML.fragment(message)
     first_element = fragment.element_children.first
     return nil unless first_element&.name == "figure"
 
@@ -817,14 +816,24 @@ class Installment < ApplicationRecord
   def tags
     return [] if message.blank?
 
-    fragment = Nokogiri::HTML.fragment(message)
     last_element = fragment.element_children.last
     return [] unless last_element&.name == "p"
 
     tags = last_element.content.split
     return [] unless tags.all? { |tag| tag.start_with?("#") }
 
-    tags.each { |tag| tag.gsub!("#", "") }
+    tags.map { normalize_tag(it) }.uniq
+  end
+
+  def fragment
+    if message == @_fragment_message && @_fragment
+      @_fragment
+    else
+      @_fragment_message = message
+      @_fragment = Nokogiri::HTML.fragment(message)
+    end
+
+    @_fragment
   end
 
   class InstallmentInvalid < StandardError
@@ -916,5 +925,12 @@ class Installment < ApplicationRecord
     def trigger_iffy_ingest
       return unless saved_change_to_name? || saved_change_to_message?
       Iffy::Post::IngestJob.perform_async(id)
+    end
+
+    def normalize_tag(raw)
+      raw.delete_prefix("#")
+        .gsub(/([^[:alnum:]\s])/, ' \1 ')
+        .squish
+        .titleize
     end
 end
