@@ -814,6 +814,19 @@ class Installment < ApplicationRecord
       .truncate(200, separator: " ", omission: "...")
   end
 
+  def tags
+    return [] if message.blank?
+
+    fragment = Nokogiri::HTML.fragment(message)
+    last_element = fragment.element_children.last
+    return [] unless last_element&.name == "p"
+
+    tags = last_element.content.split
+    return [] unless tags.all? { |tag| tag.start_with?("#") }
+
+    tags.each { |tag| tag.gsub!("#", "") }
+  end
+
   class InstallmentInvalid < StandardError
   end
 
