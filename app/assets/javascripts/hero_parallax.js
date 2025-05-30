@@ -79,6 +79,8 @@ function initHeroCoinParallax() {
     });
   };
 
+  const throttledMouseMove = throttle(handleMouseMove, 16);
+
   const handleScroll = () => {
     const scrollY = window.scrollY;
     coins.forEach((coin) => {
@@ -90,7 +92,7 @@ function initHeroCoinParallax() {
   const isTouchDeviceOrSmallScreen = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 1024;
 
   if (!isTouchDeviceOrSmallScreen) {
-    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mousemove", throttledMouseMove);
   }
 
   animationFrameId = requestAnimationFrame(animate);
