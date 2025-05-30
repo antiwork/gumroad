@@ -24,6 +24,7 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
           published_at: post.published_at,
           featured_image_url: post.featured_image_url,
           message_snippet: post.message_snippet,
+          tags: post.tags,
         }
       end,
     }

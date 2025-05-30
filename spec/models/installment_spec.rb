@@ -1043,6 +1043,57 @@ const b = 2;</code></pre>
     end
   end
 
+  describe "#tags" do
+    let(:installment) { create(:installment) }
+
+    it "returns empty array when message is blank" do
+      installment.message = ""
+      expect(installment.tags).to eq([])
+
+      installment.message = nil
+      expect(installment.tags).to eq([])
+
+      installment.message = "   "
+      expect(installment.tags).to eq([])
+    end
+
+    it "only returns tags from the last element if it's a paragraph" do
+      installment.message = <<~HTML
+        <p>First paragraph</p>
+        <p>#tag1 #tag2 #tag3</p>
+      HTML
+      expect(installment.tags).to eq(["Tag1", "Tag2", "Tag3"])
+
+      installment.message = <<~HTML
+        <p>#tag1 #tag2</p>
+        <div>#not #tags</div>
+      HTML
+      expect(installment.tags).to eq([])
+
+      installment.message = "#not #tags"
+      expect(installment.tags).to eq([])
+    end
+
+    it "returns tags when all words in the last paragraph start with #" do
+      installment.message = <<~HTML
+        <p>#RubyOnRails #Tips&Tricks</p>
+      HTML
+      expect(installment.tags).to eq(["Ruby On Rails", "Tips & Tricks"])
+
+      installment.message = <<~HTML
+        <p>Some content here</p>
+        <p>#Dedupe #Dedupe</p>
+      HTML
+      expect(installment.tags).to eq(["Dedupe"])
+
+      installment.message = <<~HTML
+        <p>Content</p>
+        <p>Not all #tags</p>
+      HTML
+      expect(installment.tags).to eq([])
+    end
+  end
+
   describe "#message_snippet" do
     let(:installment) { create(:installment) }
 

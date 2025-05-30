@@ -66,6 +66,7 @@ describe GumroadBlog::PostsController do
             published_at: published_post_2.published_at,
             featured_image_url: published_post_2.featured_image_url,
             message_snippet: published_post_2.message_snippet,
+            tags: published_post_2.tags,
           },
           {
             url: gumroad_blog_post_path(published_post_1.slug),
@@ -73,6 +74,7 @@ describe GumroadBlog::PostsController do
             published_at: published_post_1.published_at,
             featured_image_url: published_post_1.featured_image_url,
             message_snippet: published_post_1.message_snippet,
+            tags: published_post_1.tags,
           },
         ]
       )

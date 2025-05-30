@@ -1,6 +1,6 @@
 import cx from "classnames";
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
@@ -9,12 +9,37 @@ import { formatPostDate } from "$app/components/server-components/Profile/PostPa
 
 import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";
 
+interface TagProps {
+  name: string;
+  count?: number;
+  showCount?: boolean;
+  active?: boolean;
+  size?: "sm" | "base";
+}
+
+const Tag = ({ name, count, showCount = false, active = false, size = "sm" }: TagProps) => {
+  const sizeClasses = {
+    sm: "text-sm",
+    base: "text-base",
+  };
+
+  const commonClasses = `inline-block rounded px-2 py-2 leading-none mr-2 mb-2`;
+  const activeStateClass = active ? "bg-black text-white" : "bg-white text-black border border-black";
+
+  return (
+    <span className={cx(commonClasses, sizeClasses[size], activeStateClass)}>
+      {showCount && count ? `${name} (${count})` : name}
+    </span>
+  );
+};
+
 interface Post {
   url: string;
   subject: string;
   published_at: string;
   featured_image_url: string | null;
   message_snippet: string;
+  tags: string[];
 }
 
 interface IndexPageProps {
@@ -78,12 +103,12 @@ const PostCard = ({
           </figure>
         ) : null}
 
-        <div className="flex h-full flex-grow flex-col justify-between p-6">
-          <h3 className={cx("mb-1 flex-none leading-tight", title_size_class)}>{post.subject}</h3>
+        <div className="flex h-full flex-grow flex-col space-y-2 p-6">
+          <h3 className={cx("flex-none leading-tight", title_size_class)}>{post.subject}</h3>
           {showSnippet ? (
             <div className="relative flex-1" ref={snippetContainerRef}>
               <p
-                className="text-md inset-0 mt-2 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
+                className="text-md inset-0 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
                 style={{
                   position: clamp === undefined ? "absolute" : "relative",
                   display: "-webkit-box",
@@ -95,8 +120,17 @@ const PostCard = ({
                 {post.message_snippet}
               </p>
             </div>
-          ) : null}
-          <p className="text-md mt-2 flex-none text-dark-gray md:mt-4">{formatPostDate(post.published_at, "en-US")}</p>
+          ) : (
+            <div className="flex-1" />
+          )}
+          <p className="text-md flex-none text-dark-gray">{formatPostDate(post.published_at, "en-US")}</p>
+          {post.tags.length > 0 && (
+            <div className="flex flex-none flex-row flex-wrap">
+              {post.tags.map((tag) => (
+                <Tag key={tag} name={tag} />
+              ))}
+            </div>
+          )}
         </div>
       </a>
     </article>
@@ -149,10 +183,100 @@ const PostsGrid = ({ posts }: { posts: Post[] }) => (
   </section>
 );
 
+interface TabButtonProps {
+  children: React.ReactNode;
+  isActive: boolean;
+  onClick: () => void;
+  count?: number;
+  showCount?: boolean;
+}
+
+const TabButton = ({ children, isActive, onClick, count, showCount = false }: TabButtonProps) => {
+  const baseClasses =
+    "block no-underline px-4 py-2 rounded-full border border-black transition-all duration-200 ease-in-out flex items-center justify-center cursor-pointer";
+  const activeClasses = isActive
+    ? "bg-black text-white"
+    : "bg-white text-black hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]";
+
+  return (
+    <button role="tab" aria-selected={isActive} className={cx(baseClasses, activeClasses)} onClick={onClick}>
+      {children}
+      {showCount ? <span className="ml-1.5 text-base opacity-85">({count})</span> : null}
+    </button>
+  );
+};
+
+const TagSelector = ({
+  postsByTags,
+  allPostsCount,
+  activeTab,
+  setActiveTab,
+}: {
+  postsByTags: Record<string, Post[]>;
+  allPostsCount: number;
+  activeTab: string | null;
+  setActiveTab: (tag: string | null) => void;
+}) => {
+  const tags = Object.keys(postsByTags);
+
+  if (tags.length === 0) {
+    return null;
+  }
+
+  const isAllPostsActive = activeTab === null;
+
+  const selectTag = useCallback((tag: string) => {
+    setActiveTab(tag);
+  }, []);
+  const selectAll = useCallback(() => {
+    setActiveTab(null);
+  }, []);
+
+  return (
+    <div className="mb-12" role="tablist">
+      <ul className="flex flex-wrap gap-x-3 gap-y-3 text-lg">
+        <li>
+          <TabButton isActive={isAllPostsActive} onClick={selectAll} count={allPostsCount} showCount={isAllPostsActive}>
+            All Posts
+          </TabButton>
+        </li>
+        {tags.map((tag) => {
+          const isActive = activeTab === tag;
+          const count = postsByTags[tag]?.length || 0;
+
+          return (
+            <li key={tag}>
+              <TabButton isActive={isActive} onClick={() => selectTag(tag)} count={count} showCount={isActive}>
+                {tag}
+              </TabButton>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
 const IndexPage = ({ posts = [] }: IndexPageProps) => {
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+
   const featured_post = posts[0];
   const product_updates = posts.slice(1, 4);
-  const postsForGrid = posts.slice(1);
+
+  const postsByTags = useMemo(() => {
+    const map: Record<string, Post[]> = {};
+    posts.forEach((post) => {
+      post.tags.forEach((tag) => {
+        if (!map[tag]) {
+          map[tag] = [];
+        }
+        map[tag].push(post);
+      });
+    });
+    return map;
+  }, [posts]);
+
+  const postsForGrid = useMemo(() => (activeTab ? postsByTags[activeTab] : posts.slice(1)), [activeTab, postsByTags]);
 
   return (
     <div className="scoped-tailwind-preflight">
@@ -160,21 +284,29 @@ const IndexPage = ({ posts = [] }: IndexPageProps) => {
         <header className="mb-8">
           <h1 className="text-6xl text-black">Blog</h1>
         </header>
+        <TagSelector
+          postsByTags={postsByTags}
+          allPostsCount={posts.length}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
 
-        <div className="mb-8 flex flex-row items-start lg:gap-[1.875rem]">
-          <section className="mb-0 w-full lg:mb-0 lg:w-[calc(67%-0.9375rem)]">
-            {featured_post ? (
-              <PostCard post={featured_post} title_size_class="text-2xl md:text-4xl" usePlaceholder />
-            ) : (
-              <p className="text-gray-600 border-gray-300 flex min-h-[300px] items-center justify-center rounded border-2 border-dashed p-8 text-center">
-                No featured post available.
-              </p>
-            )}
-          </section>
-          <CompactPostSection product_updates={product_updates} />
-        </div>
+        {activeTab ? null : (
+          <div className="mb-8 flex flex-row items-start lg:gap-[1.875rem]">
+            <section className="mb-0 w-full lg:mb-0 lg:w-[calc(67%-0.9375rem)]">
+              {featured_post ? (
+                <PostCard post={featured_post} title_size_class="text-2xl md:text-4xl" usePlaceholder />
+              ) : (
+                <p className="text-gray-600 border-gray-300 flex min-h-[300px] items-center justify-center rounded border-2 border-dashed p-8 text-center">
+                  No featured post available.
+                </p>
+              )}
+            </section>
+            <CompactPostSection product_updates={product_updates} />
+          </div>
+        )}
 
-        <PostsGrid posts={postsForGrid} />
+        {postsForGrid ? <PostsGrid posts={postsForGrid} /> : null}
       </div>
     </div>
   );

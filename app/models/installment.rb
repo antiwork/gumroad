@@ -814,6 +814,19 @@ class Installment < ApplicationRecord
       .truncate(200, separator: " ", omission: "...")
   end
 
+  def tags
+    return [] if message.blank?
+
+    fragment = Nokogiri::HTML.fragment(message)
+    last_element = fragment.element_children.last
+    return [] unless last_element&.name == "p"
+
+    tags = last_element.content.split
+    return [] unless tags.all? { |tag| tag.start_with?("#") }
+
+    tags.map { normalize_tag(it) }.uniq
+  end
+
   class InstallmentInvalid < StandardError
   end
 
@@ -903,5 +916,12 @@ class Installment < ApplicationRecord
     def trigger_iffy_ingest
       return unless saved_change_to_name? || saved_change_to_message?
       Iffy::Post::IngestJob.perform_async(id)
+    end
+
+    def normalize_tag(raw)
+      raw.delete_prefix("#")
+        .gsub(/([^[:alnum:]\s])/, ' \1 ')
+        .squish
+        .titleize
     end
 end
