@@ -1,6 +1,6 @@
 import cx from "classnames";
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
@@ -225,16 +225,18 @@ const TagSelector = ({
 
   const isAllPostsActive = activeTab === null;
 
+  const selectTag = useCallback((tag: string) => {
+    setActiveTab(tag);
+  }, []);
+  const selectAll = useCallback(() => {
+    setActiveTab(null);
+  }, []);
+
   return (
     <div className="mb-12" role="tablist">
       <ul className="flex flex-wrap gap-x-3 gap-y-3 text-lg">
         <li>
-          <TabButton
-            isActive={isAllPostsActive}
-            onClick={() => setActiveTab(null)}
-            count={allPostsCount}
-            showCount={isAllPostsActive}
-          >
+          <TabButton isActive={isAllPostsActive} onClick={selectAll} count={allPostsCount} showCount={isAllPostsActive}>
             All Posts
           </TabButton>
         </li>
@@ -244,7 +246,7 @@ const TagSelector = ({
 
           return (
             <li key={tag}>
-              <TabButton isActive={isActive} onClick={() => setActiveTab(tag)} count={count} showCount={isActive}>
+              <TabButton isActive={isActive} onClick={() => selectTag(tag)} count={count} showCount={isActive}>
                 {tag}
               </TabButton>
             </li>
@@ -261,17 +263,20 @@ const IndexPage = ({ posts = [] }: IndexPageProps) => {
   const featured_post = posts[0];
   const product_updates = posts.slice(1, 4);
 
-  const postsByTags: Record<string, Post[]> = {};
-  posts.forEach((post) => {
-    post.tags.forEach((tag) => {
-      if (!postsByTags[tag]) {
-        postsByTags[tag] = [];
-      }
-      postsByTags[tag].push(post);
+  const postsByTags = useMemo(() => {
+    const map: Record<string, Post[]> = {};
+    posts.forEach((post) => {
+      post.tags.forEach((tag) => {
+        if (!map[tag]) {
+          map[tag] = [];
+        }
+        map[tag].push(post);
+      });
     });
-  });
+    return map;
+  }, [posts]);
 
-  const postsForGrid = activeTab ? postsByTags[activeTab] : posts.slice(1);
+  const postsForGrid = useMemo(() => (activeTab ? postsByTags[activeTab] : posts.slice(1)), [activeTab, postsByTags]);
 
   return (
     <div className="scoped-tailwind-preflight">
