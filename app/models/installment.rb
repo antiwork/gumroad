@@ -321,7 +321,7 @@ class Installment < ApplicationRecord
   def message_with_inline_syntax_highlighting_and_upsells
     return message if message.blank?
 
-    doc = fragment
+    doc = Nokogiri::HTML.fragment(message)
 
     doc.search("pre > code").each do |node|
       language = node.attr("class")&.sub("language-", "")
@@ -795,6 +795,7 @@ class Installment < ApplicationRecord
   def featured_image_url
     return nil if message.blank?
 
+    fragment = Nokogiri::HTML.fragment(message)
     first_element = fragment.element_children.first
     return nil unless first_element&.name == "figure"
 
@@ -816,6 +817,7 @@ class Installment < ApplicationRecord
   def tags
     return [] if message.blank?
 
+    fragment = Nokogiri::HTML.fragment(message)
     last_element = fragment.element_children.last
     return [] unless last_element&.name == "p"
 
@@ -823,17 +825,6 @@ class Installment < ApplicationRecord
     return [] unless tags.all? { |tag| tag.start_with?("#") }
 
     tags.map { normalize_tag(it) }.uniq
-  end
-
-  def fragment
-    if message == @_fragment_message && @_fragment
-      @_fragment
-    else
-      @_fragment_message = message
-      @_fragment = Nokogiri::HTML.fragment(message)
-    end
-
-    @_fragment
   end
 
   class InstallmentInvalid < StandardError

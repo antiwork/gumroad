@@ -1123,23 +1123,4 @@ const b = 2;</code></pre>
       expect(installment.message_snippet).to eq("a " * 98 + "a...")
     end
   end
-
-  describe "#fragment" do
-    let(:installment) { create(:installment) }
-
-    it "caches the Nokogiri fragment based on message content" do
-      installment.message = "<p>Hello world!</p>"
-
-      first_fragment = installment.fragment
-      expect(first_fragment.to_html).to include("Hello world!")
-
-      second_fragment = installment.fragment
-      expect(second_fragment.object_id).to eq(first_fragment.object_id)
-
-      installment.message = "<p>Updated message</p>"
-
-      updated_fragment = installment.fragment
-      expect(updated_fragment.to_html).to include("Updated message")
-    end
-  end
 end
