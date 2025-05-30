@@ -14,7 +14,29 @@ function initHeroCoinParallax() {
     coin.mouseOffsetX = 0;
     coin.mouseOffsetY = 0;
     coin.scrollOffsetY = 0;
+    coin.currentMouseX = 0;
+    coin.currentMouseY = 0;
+    coin.targetMouseX = 0;
+    coin.targetMouseY = 0;
   });
+
+  let animationFrameId = null;
+
+  function lerp(start, end, factor) {
+    return start + (end - start) * factor;
+  }
+
+  function animate() {
+    coins.forEach((coin) => {
+      coin.currentMouseX = lerp(coin.currentMouseX, coin.targetMouseX, 0.1);
+      coin.currentMouseY = lerp(coin.currentMouseY, coin.targetMouseY, 0.1);
+
+      const combinedY = coin.currentMouseY + coin.scrollOffsetY;
+      coin.style.transform = `translate3d(${coin.currentMouseX}px, ${combinedY}px, 0)`;
+    });
+
+    animationFrameId = requestAnimationFrame(animate);
+  }
 
   function throttle(func, limit) {
     let lastFunc;
@@ -39,11 +61,6 @@ function initHeroCoinParallax() {
     };
   }
 
-  function applyCombinedTransform(coin) {
-    const combinedY = coin.mouseOffsetY + coin.scrollOffsetY;
-    coin.style.transform = `translate3d(${coin.mouseOffsetX}px, ${combinedY}px, 0)`;
-  }
-
   const handleMouseMove = (event) => {
     const rect = container.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -57,27 +74,24 @@ function initHeroCoinParallax() {
 
     coins.forEach((coin) => {
       const intensity = parseFloat(coin.dataset.parallaxIntensity) || 0.05;
-      coin.mouseOffsetX = deltaX * intensity;
-      coin.mouseOffsetY = deltaY * intensity;
-      applyCombinedTransform(coin);
+      coin.targetMouseX = deltaX * intensity;
+      coin.targetMouseY = deltaY * intensity;
     });
   };
-
-  const throttledMouseMove = throttle(handleMouseMove, 16);
 
   const handleScroll = () => {
     const scrollY = window.scrollY;
     coins.forEach((coin) => {
       const scrollIntensity = parseFloat(coin.dataset.scrollIntensity) || -0.05;
       coin.scrollOffsetY = scrollY * scrollIntensity;
-      applyCombinedTransform(coin);
     });
   };
 
   const isTouchDeviceOrSmallScreen = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 1024;
 
   if (!isTouchDeviceOrSmallScreen) {
-    container.addEventListener("mousemove", throttledMouseMove);
+    container.addEventListener("mousemove", handleMouseMove);
+    animationFrameId = requestAnimationFrame(animate);
   }
 
   const throttledScroll = throttle(handleScroll, 16);
@@ -85,6 +99,12 @@ function initHeroCoinParallax() {
   window.addEventListener("scroll", throttledScroll);
 
   handleScroll();
+
+  return () => {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+    }
+  };
 }
 
 if (document.readyState === "loading") {
