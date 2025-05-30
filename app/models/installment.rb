@@ -370,7 +370,7 @@ class Installment < ApplicationRecord
     default_checkout_url = Rails.application.routes.url_helpers.checkout_index_url(host: UrlService.domain_with_protocol)
     checkout_url ||= default_checkout_url
 
-    doc = fragment
+    doc = Nokogiri::HTML.fragment(message_with_inline_syntax_highlighting_and_upsells)
     doc.search("#{PRODUCT_LIST_PLACEHOLDER_TAG_NAME}").each do |node|
       node.replace(
         ApplicationController.renderer.render(
