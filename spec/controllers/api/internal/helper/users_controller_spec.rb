@@ -54,6 +54,7 @@ describe Api::Internal::Helper::UsersController do
                                                                  "email" => user.email,
                                                                  "value" => 0,
                                                                  "links" => {
+                                                                   "Admin" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
                                                                    "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}",
                                                                  }
                                                                })

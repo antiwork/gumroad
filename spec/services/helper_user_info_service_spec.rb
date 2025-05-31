@@ -24,6 +24,7 @@ describe HelperUserInfoService do
                                         email: user.email,
                                         value: 2250,
                                         links: {
+                                          "Admin": "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
                                           "Impersonate": "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}"
                                         }
                                       })
