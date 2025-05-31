@@ -14,7 +14,7 @@ module HelperWidget
   end
 
   def helper_widget_host
-    ENV.fetch("HELPER_WIDGET_HOST", "https://helper.ai")
+    ENV.fetch("HELPER_WIDGET_HOST", "https://help.gumroad.com")
   end
 
   def show_helper_widget?
@@ -57,16 +57,16 @@ module HelperWidget
 
     data = {
       title: "Support",
-      mailbox_slug: "gumroad",
-      icon_color: "#FF90E8",
-      enable_guide: true,
+      mailboxSlug: "gumroad",
+      iconColor: "#FF90E8",
+      enableGuide: true,
       timestamp: timestamp,
     }
 
     if current_seller.present?
       data[:email] = current_seller.email
-      data[:email_hash] = helper_widget_email_hmac(timestamp)
-      data[:customer_metadata] = helper_customer_metadata
+      data[:emailHash] = helper_widget_email_hmac(timestamp)
+      data[:customerMetadata] = helper_customer_metadata
     end
 
     data
