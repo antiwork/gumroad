@@ -38,6 +38,7 @@ class HelperUserInfoService
         purchases_cents_total(after: 90.days.ago)
       ].max,
       links: {
+        "Admin": admin_user_url(user, host: UrlService.domain_with_protocol),
         "Impersonate": admin_impersonate_helper_action_url(user_id: user.external_id, host: UrlService.domain_with_protocol)
       }
     }
