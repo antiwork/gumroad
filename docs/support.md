@@ -246,5 +246,3 @@ User.find_by_email("creator@example.com").links.each do |product|
     end
 end
 ```
-
-## Risk
