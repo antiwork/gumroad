@@ -3,7 +3,7 @@
     <% date_new_sellers.each do |date, sellers| %>
       <div class="box">
         <h2>
-          <span><%= "#{time_ago_in_words(date)} ago" %></span>
+          <span title="<%= "#{time_ago_in_words(date)} ago" %>"><%= date.strftime("%b %d, %Y") %></span>
         </h2>
         <div class="rule"></div>
         <ul>

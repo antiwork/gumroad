@@ -34,7 +34,8 @@ module AdminHelper
     return placeholder if value.nil?
 
     suffix = Time.current > value ? " ago" : " from now"
-    tag.span(time_ago_in_words(value) + suffix.html_safe, title: value)
+    relative_time = time_ago_in_words(value) + suffix
+    tag.span(value.strftime("%b %d, %Y at %l:%M %p").strip, title: relative_time)
   end
 
   def card_types_for_react
