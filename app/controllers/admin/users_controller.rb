@@ -188,7 +188,7 @@ class Admin::UsersController < Admin::BaseController
         amount_cents: credit_amount_cents,
         crediting_user: current_user
       )
-      if user_credit.save!
+      if user_credit.save
         user_credit.notify_user if credit_amount_cents > 0
         return render json: { success: true, amount: params[:credit][:credit_amount] }
       end
