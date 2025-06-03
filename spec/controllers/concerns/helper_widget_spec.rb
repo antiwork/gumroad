@@ -29,11 +29,11 @@ describe HelperWidget, type: :controller do
   describe "#helper_widget_host" do
     it "returns the default host when environment variable is not set" do
       expect(ENV["HELPER_WIDGET_HOST"]).to be_nil
-      expect(controller.helper_widget_host).to eq("https://helper.ai")
+      expect(controller.helper_widget_host).to eq("https://help.gumroad.com")
     end
 
     it "returns the environment variable value when set" do
-      allow(ENV).to receive(:fetch).with("HELPER_WIDGET_HOST", "https://helper.ai").and_return("https://custom.helper.ai")
+      allow(ENV).to receive(:fetch).with("HELPER_WIDGET_HOST", "https://help.gumroad.com").and_return("https://custom.helper.ai")
       expect(controller.helper_widget_host).to eq("https://custom.helper.ai")
     end
   end
@@ -137,13 +137,13 @@ describe HelperWidget, type: :controller do
 
         expect(controller.helper_widget_init_data).to eq(
           title: "Support",
-          mailbox_slug: "gumroad",
-          icon_color: "#FF90E8",
-          enable_guide: true,
+          mailboxSlug: "gumroad",
+          iconColor: "#FF90E8",
+          enableGuide: true,
           timestamp: timestamp,
           email: seller.email,
-          email_hash: controller.helper_widget_email_hmac(timestamp),
-          customer_metadata: HelperUserInfoService.new(email: seller.email).metadata
+          emailHash: controller.helper_widget_email_hmac(timestamp),
+          customerMetadata: HelperUserInfoService.new(email: seller.email).metadata
         )
       end
     end
@@ -154,9 +154,9 @@ describe HelperWidget, type: :controller do
 
         expect(controller.helper_widget_init_data).to eq(
           title: "Support",
-          mailbox_slug: "gumroad",
-          icon_color: "#FF90E8",
-          enable_guide: true,
+          mailboxSlug: "gumroad",
+          iconColor: "#FF90E8",
+          enableGuide: true,
           timestamp: timestamp,
         )
       end
