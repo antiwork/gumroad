@@ -11,7 +11,7 @@
       <% end %>
     </h2>
     <ul class="inline">
-      <li><%= format_relative_time(purchase.created_at) %></li>
+      <li><%= format_datetime_with_relative_tooltip(purchase.created_at) %></li>
       <li><%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %></li>
     </ul>
   </div>
@@ -361,8 +361,8 @@
   <hr>
   <dl>
     <dt>Updated</dt>
-    <dd><%= format_relative_time(purchase.updated_at) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(purchase.updated_at) %></dd>
     <dt>Deleted</dt>
-    <dd><%= format_relative_time(purchase.deleted_at, placeholder: icon_no) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(purchase.deleted_at, placeholder: icon_no) %></dd>
   </dl>
 </div>

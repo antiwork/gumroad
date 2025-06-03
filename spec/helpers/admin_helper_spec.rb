@@ -73,27 +73,27 @@ describe AdminHelper do
     end
   end
 
-  describe "#format_relative_time" do
+  describe "#format_datetime_with_relative_tooltip" do
     it "returns placeholder when value is nil" do
-      result = format_relative_time(nil, placeholder: "Nope")
+      result = format_datetime_with_relative_tooltip(nil, placeholder: "Nope")
       expect(result).to eq("Nope")
     end
 
-    it "returns relative time in the future" do
+    it "returns exact date with relative time in tooltip for future dates" do
       datetime = DateTime.parse("2022-02-22 10:00:01")
       travel_to(datetime) do
         puts Time.current
-        result = format_relative_time(1.day.from_now)
-        expect(result).to eq('<span title="2022-02-23 10:00:01 UTC">1 day from now</span>')
+        result = format_datetime_with_relative_tooltip(1.day.from_now)
+        expect(result).to eq('<span title="1 day from now">Feb 23, 2022 at 10:00 AM</span>')
       end
     end
 
-    it "returns relative time in the past" do
+    it "returns exact date with relative time in tooltip for past dates" do
       datetime = DateTime.parse("2022-02-22 10:00:01")
       travel_to(datetime) do
         puts Time.current
-        result = format_relative_time(1.day.ago)
-        expect(result).to eq('<span title="2022-02-21 10:00:01 UTC">1 day ago</span>')
+        result = format_datetime_with_relative_tooltip(1.day.ago)
+        expect(result).to eq('<span title="1 day ago">Feb 21, 2022 at 10:00 AM</span>')
       end
     end
   end

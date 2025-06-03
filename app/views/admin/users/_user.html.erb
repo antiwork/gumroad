@@ -11,7 +11,7 @@
           <% end %>
         </h2>
         <ul class="inline">
-          <li><%= format_relative_time(user.created_at) %></li>
+          <li><%= format_datetime_with_relative_tooltip(user.created_at) %></li>
           <% if user.username.present? %>
             <li><%= link_to user.username, user.subdomain_with_protocol, target: "_blank" %></li>
           <% end %>
@@ -95,8 +95,8 @@
   <hr>
   <dl>
     <dt>Updated</dt>
-    <dd><%= format_relative_time(user.updated_at) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(user.updated_at) %></dd>
     <dt>Deleted</dt>
-    <dd><%= format_relative_time(user.deleted_at, placeholder: icon_no) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(user.deleted_at, placeholder: icon_no) %></dd>
   </dl>
 </div>

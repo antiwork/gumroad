@@ -30,11 +30,12 @@ module AdminHelper
     product.is_tiered_membership? ? "Membership" : "Subscription"
   end
 
-  def format_relative_time(value, placeholder: nil)
+  def format_datetime_with_relative_tooltip(value, placeholder: nil)
     return placeholder if value.nil?
 
     suffix = Time.current > value ? " ago" : " from now"
-    tag.span(time_ago_in_words(value) + suffix.html_safe, title: value)
+    relative_time = time_ago_in_words(value) + suffix
+    tag.span(value.strftime("%b %d, %Y at %l:%M %p").strip, title: relative_time)
   end
 
   def card_types_for_react

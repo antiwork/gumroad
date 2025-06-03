@@ -9,7 +9,7 @@
         </h2>
         <div>
           <ul class="inline">
-            <li><%= format_relative_time(product.created_at) %></li>
+            <li><%= format_datetime_with_relative_tooltip(product.created_at) %></li>
             <li><%= link_to(user_name(product.user), admin_user_url(product.user)) %></li>
           </ul>
           <%= react_component "AdminProductStats", props: { product_id: product.id }, prerender: true %>
@@ -185,8 +185,8 @@
   <hr>
   <dl>
     <dt>Updated</dt>
-    <dd><%= format_relative_time(product.updated_at) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(product.updated_at) %></dd>
     <dt>Deleted</dt>
-    <dd><%= format_relative_time(product.deleted_at, placeholder: icon_no) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(product.deleted_at, placeholder: icon_no) %></dd>
   </dl>
 </article>
