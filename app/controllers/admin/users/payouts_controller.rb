@@ -81,13 +81,13 @@ class Admin::Users::PayoutsController < Admin::BaseController
   end
 
   def pause
-    @user.update!(payouts_paused: true)
+    @user.update!(payouts_paused_internally: true)
 
     render json: { success: true, message: "User's payouts paused" }
   end
 
   def resume
-    @user.update!(payouts_paused: false)
+    @user.update!(payouts_paused_internally: false)
 
     render json: { success: true, message: "User's payouts resumed" }
   end
