@@ -5,6 +5,7 @@ import ReactOnRails from "react-on-rails";
 
 import AdminActionButton from "$app/components/server-components/Admin/ActionButton";
 import AdminAddCommentForm from "$app/components/server-components/Admin/AddCommentForm";
+import AdminAddCreditForm from "$app/components/server-components/Admin/AddCreditForm";
 import AdminChangeEmailForm from "$app/components/server-components/Admin/ChangeEmailForm";
 import AdminFlagForFraudForm from "$app/components/server-components/Admin/FlagForFraudForm";
 import AdminManualPayoutForm from "$app/components/server-components/Admin/ManualPayoutForm";
@@ -120,6 +121,7 @@ ReactOnRails.register({
   AffiliatesPage,
   Alert,
   AnalyticsPage,
+  AdminAddCreditForm,
   ApplicationEditPage,
   ArchivedProductsPage,
   AudienceCustomersPage,

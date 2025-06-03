@@ -75,6 +75,14 @@
   <hr>
   <details>
     <summary>
+      <h3>Add credits</h3>
+    </summary>
+    <%= react_component "AdminAddCreditForm", props: { user_id: user.id }, prerender: true %>
+  </details>
+
+  <hr>
+  <details>
+    <summary>
       <h3>Mass-transfer purchases</h3>
     </summary>
     <%= react_component "AdminMassTransferPurchasesForm", props: { user_id: user.id }, prerender: true %>
