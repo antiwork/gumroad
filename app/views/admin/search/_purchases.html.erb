@@ -32,7 +32,7 @@
           <td data-label="By">
             <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>
             <small>
-              <%= format_relative_time(purchase.created_at) %>
+              <%= format_datetime_with_relative_tooltip(purchase.created_at) %>
             </small>
           </td>
         </tr>

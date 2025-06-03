@@ -4,7 +4,7 @@
       <h2>
         <%= "Merchant Account #{merchant_account.id}" %>
       </h2>
-      <%= format_relative_time(merchant_account.created_at) %>
+      <%= format_datetime_with_relative_tooltip(merchant_account.created_at) %>
     </div>
   </div>
 
@@ -89,9 +89,9 @@
   <hr>
   <dl>
     <dt>Updated</dt>
-    <dd><%= format_relative_time(merchant_account.updated_at) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(merchant_account.updated_at) %></dd>
 
     <dt>Deleted</dt>
-    <dd><%= format_relative_time(merchant_account.deleted_at, placeholder: icon_no) %></dd>
+    <dd><%= format_datetime_with_relative_tooltip(merchant_account.deleted_at, placeholder: icon_no) %></dd>
   </dl>
 </div>

@@ -103,7 +103,7 @@
                 <td data-label="Field"><%= field %></td>
                 <td data-label="Old"><%= values.first %></td>
                 <td data-label="New"><%= values.last %></td>
-                <td data-label="Changed"><%= format_relative_time(version.created_at) %></td>
+                <td data-label="Changed"><%= format_datetime_with_relative_tooltip(version.created_at) %></td>
               </tr>
             <% end %>
           <% end %>

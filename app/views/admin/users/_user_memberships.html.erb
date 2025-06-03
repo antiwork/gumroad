@@ -20,11 +20,11 @@
           <div style="text-align: right">
             <% if user_membership.last_accessed_at %>
               last accessed
-              <%= format_relative_time(user_membership.last_accessed_at) %>
+              <%= format_datetime_with_relative_tooltip(user_membership.last_accessed_at) %>
             <% end %>
             <div class="small">
               invited
-              <%= format_relative_time(user_membership.created_at) %>
+              <%= format_datetime_with_relative_tooltip(user_membership.created_at) %>
             </div>
           </div>
         </div>

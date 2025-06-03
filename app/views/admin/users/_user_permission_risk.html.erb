@@ -62,7 +62,7 @@
           <% user.last_5_created_posts.each do |post| %>
             <div>
               <h5><%= link_to_unless(user.suspended?, post.name, build_view_post_route(post: post)) %></h5>
-              <%= format_relative_time(post.created_at) %>
+              <%= format_datetime_with_relative_tooltip(post.created_at) %>
             </div>
           <% end %>
         </div>

@@ -16,7 +16,7 @@
         <td data-label="By">
           <%= link_to h(product.user.name.presence || "User #{product.user.id}"), admin_user_path(product.user) %>
           <small>
-            <%= format_relative_time(product.created_at) %>
+            <%= format_datetime_with_relative_tooltip(product.created_at) %>
           </small>
         </td>
       </tr>

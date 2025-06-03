@@ -5,7 +5,7 @@
       to
       <%= link_to_unless_current h(user_name(payment.user)), admin_user_url(payment.user) %>
     </h3>
-    <%= format_relative_time(payment.created_at) %>
+    <%= format_datetime_with_relative_tooltip(payment.created_at) %>
   </div>
   <hr>
   <div>
