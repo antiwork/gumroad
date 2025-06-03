@@ -180,6 +180,23 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }
   end
 
+  def add_credit
+    if params[:credit][:credit_amount]
+      credit_amount_cents = params[:credit][:credit_amount].to_f.round(2) * 100
+      user_credit = Credit.create_for_credit!(
+        user: @user,
+        amount_cents: credit_amount_cents,
+        crediting_user: current_user
+      )
+      if user_credit.save!
+        user_credit.notify_user if credit_amount_cents > 0
+        return render json: { success: true, amount: params[:credit][:credit_amount] }
+      end
+    end
+
+    render json: { success: false }
+  end
+
   private
     def fetch_user
       if params[:id].include?("@")

@@ -29,6 +29,7 @@ namespace :admin do
     end
     resources :service_charges, only: :index
     member do
+      post :add_credit
       post :mass_transfer_purchases
       post :probation_with_reminder
       post :refund_balance
