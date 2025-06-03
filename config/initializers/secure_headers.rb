@@ -83,7 +83,7 @@ SecureHeaders::Configuration.default do |config|
       "iframe.ly",
 
       # helper widget
-      "helper.ai",
+      "help.gumroad.com",
     ],
     script_src: [
       "'self'",
@@ -149,7 +149,7 @@ SecureHeaders::Configuration.default do |config|
       "analytics.twitter.com",
 
       # helper widget
-      "helper.ai",
+      "help.gumroad.com",
 
       # lottie - homepage
       "unpkg.com/@lottiefiles/lottie-player@latest/"
