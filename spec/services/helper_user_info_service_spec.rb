@@ -25,7 +25,7 @@ describe HelperUserInfoService do
                                         value: 2250,
                                         links: {
                                           "Admin (user)": "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
-                                          "Admin (purchases)": "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{user.email}",
+                                          "Admin (purchases)": "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
                                           "Impersonate": "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}"
                                         }
                                       })
