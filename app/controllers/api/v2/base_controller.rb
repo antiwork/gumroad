@@ -58,8 +58,9 @@ class Api::V2::BaseController < ApplicationController
 
     def log_method_use
       return unless current_resource_owner.present?
+      return unless doorkeeper_token.present?
 
-      Rails.logger.info("api v2 user:#{current_resource_owner.id} in #{params[:controller]}##{params[:action]}")
+      Rails.logger.info("api v2 user:#{current_resource_owner.id} token:#{doorkeeper_token.id} in #{params[:controller]}##{params[:action]}")
     end
 
     def next_page_url(page_key)
