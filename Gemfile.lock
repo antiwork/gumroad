@@ -1112,7 +1112,7 @@ DEPENDENCIES
   aws-sdk-sns (~> 1.57)
   aws-sdk-sqs (~> 1.69)
   babel-transpiler (~> 0.7)
-  benchmark (~> 0.3)
+  benchmark (~> 0.4)
   bootsnap (~> 1.15)
   braintree (~> 4.9)
   bugsnag (~> 6.25)
