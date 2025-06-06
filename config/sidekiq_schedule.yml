@@ -357,6 +357,11 @@ australia_backtax_transfer:
   cron: "0 10 7 * *" # UTC 10:00 on 7th of every month
   class: RecoverAusBacktaxesFromStripeAccountsJob
   description: Transfer funds for creators who have a negative credit applied for Australia backtaxes
+generate_ytd_sales_report:
+  cron: "0 2 1 * *" # UTC 02:00 on 1st of every month
+  class: Reports::GenerateYtdSalesReportJob
+  queue: low
+  description: Generates a YTD sales report by country and state and emails it.
 
 # Quarterly
 generate_financial_reports:

@@ -39,5 +39,6 @@ class RedisKey
     def create_vat_report_job_max_execution_time_seconds = "create_vat_report_job:max_execution_time_seconds"
     def transcoded_videos_recentness_limit_in_months = "transcoded_videos_recentness_limit_in_months"
     def generate_fees_by_creator_location_job_max_execution_time_seconds = "generate_fees_by_creator_location_job:max_execution_time_seconds"
+    def ytd_sales_report_emails = "reports:ytd_sales_report_emails"
   end
 end

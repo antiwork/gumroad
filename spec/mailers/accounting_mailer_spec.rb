@@ -113,4 +113,26 @@ describe AccountingMailer, :vcr do
       expect(@mail.body.encoded).to include "Total Outstanding Balances for Stripe(Held by Stripe): Active $4.0"
     end
   end
+
+  describe "ytd_sales_report" do
+    let(:csv_data) { "country,state,sales\\nUSA,CA,100\\nUSA,NY,200" }
+    let(:recipient_email) { "test@example.com" }
+    let(:mail) { AccountingMailer.ytd_sales_report(csv_data, recipient_email) }
+
+    it "sends the email to the correct recipient" do
+      expect(mail.to).to eq([recipient_email])
+    end
+
+    it "has the correct subject" do
+      expect(mail.subject).to eq("Year-to-Date Sales Report by Country/State")
+    end
+
+    it "attaches the CSV file" do
+      expect(mail.attachments.length).to eq(1)
+      attachment = mail.attachments[0]
+      expect(attachment.filename).to eq("ytd_sales_by_country_state.csv")
+      expect(attachment.content_type).to eq("text/csv; filename=ytd_sales_by_country_state.csv")
+      expect(Base64.decode64(attachment.body.encoded)).to eq(csv_data)
+    end
+  end
 end
