@@ -2,6 +2,9 @@
   <hr>
   <div style="display: flex; justify-content: space-between">
     <div class="button-group">
+      <% unless user.compliant? %>
+        <%= admin_action label: "Mark compliant", url: mark_compliant_admin_user_path(user), loading: "Marking compliant...", done: "Marked compliant!", success_message: "Marked compliant!", outline: true, color: "success" %>
+      <% end %>
       <% if user.suspended? && user.unpaid_balance_cents.positive? %>
         <%= admin_action label: "Refund balance", url: refund_balance_admin_user_path(user), confirm_message: "Are you sure you want to refund user #{user.id}'s not paid out purchases!?", done: "Refunded.", success_message: "Refunded" %>
       <% end %>

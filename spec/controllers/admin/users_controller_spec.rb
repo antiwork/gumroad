@@ -189,4 +189,29 @@ describe Admin::UsersController do
       post :add_credit, params: @params
     end
   end
+
+  describe "POST #mark_compliant" do
+    let(:user) { create(:user) }
+
+    it "marks the user as compliant" do
+      post :mark_compliant, params: { id: user.id }
+      expect(response).to be_successful
+      expect(user.reload.user_risk_state).to eq "compliant"
+    end
+
+    it "creates a comment when marking compliant" do
+      freeze_time do
+        expect do
+          post :mark_compliant, params: { id: user.id }
+        end.to change(user.comments, :count).by(1)
+
+        comment = user.comments.last
+        expect(comment).to have_attributes(
+          comment_type: Comment::COMMENT_TYPE_COMPLIANT,
+          content: "Marked compliant by #{@admin_user.username} on #{Time.current.strftime('%B %-d, %Y')}",
+          author: @admin_user
+        )
+      end
+    end
+  end
 end
