@@ -5,7 +5,6 @@ class UserBalanceStatsService
   include PayoutsHelper
   attr_reader :user
   DEFAULT_SALES_CACHING_THRESHOLD = 100_000
-  DEFAULT_DAYS_SINCE_SIGN_IN_CACHING_THRESHOLD = 7
 
   def initialize(user:)
     @user = user
@@ -25,17 +24,12 @@ class UserBalanceStatsService
   end
 
   def self.cacheable_users
-    sales_threshold, days_since_sign_in = $redis.mget(
-      RedisKey.balance_stats_sales_caching_threshold,
-      RedisKey.balance_stats_days_since_sign_in_caching_threshold,
-    )
+    sales_threshold = $redis.get(RedisKey.balance_stats_sales_caching_threshold)
     sales_threshold ||= DEFAULT_SALES_CACHING_THRESHOLD
-    days_since_sign_in ||= DEFAULT_DAYS_SINCE_SIGN_IN_CACHING_THRESHOLD
     excluded_user_ids = $redis.smembers(RedisKey.balance_stats_users_excluded_from_caching)
     users = User
       .joins(:large_seller)
       .where("large_sellers.sales_count >= ?", sales_threshold.to_i)
-      .where("users.current_sign_in_at >= ?", days_since_sign_in.to_i.days.ago)
     users = users.where("large_sellers.user_id NOT IN (?)", excluded_user_ids) unless excluded_user_ids.empty?
     users
   end
