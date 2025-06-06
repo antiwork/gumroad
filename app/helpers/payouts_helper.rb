@@ -157,9 +157,10 @@ module PayoutsHelper
 
   def payout_method_details(user: nil, payment: nil)
     return {} if user.blank? && payment.blank?
+
     bank_account = payment.present? ? payment.bank_account : user.active_bank_account
-    paypal_address = payment.present? ? payment.payment_address : user.paypal_payout_email
     stripe_connect_account_id = nil
+
     if payment.present?
       merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
       stripe_connect_account_id = payment.stripe_connect_account_id if merchant_account&.is_a_stripe_connect_account?
@@ -173,13 +174,16 @@ module PayoutsHelper
       { payout_method_type: "stripe_connect", stripe_connect_account_id: }
     elsif bank_account.present?
       bank_account.to_hash.merge(payout_method_type: "bank")
-    elsif paypal_address.present?
-      { payout_method_type: "paypal", paypal_address: }
     else
-      if payment.present?
-        { payout_method_type: "legacy-na" }
+      paypal_address = payment.present? ? payment.payment_address : user.paypal_payout_email
+      if paypal_address.present?
+        { payout_method_type: "paypal", paypal_address: }
       else
-        { payout_method_type: "none" }
+        if payment.present?
+          { payout_method_type: "legacy-na" }
+        else
+          { payout_method_type: "none" }
+        end
       end
     end
   end
