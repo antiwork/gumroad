@@ -160,7 +160,6 @@ describe UserBalanceStatsService do
     context "when user is large seller" do
       before do
         stub_const("#{described_class}::DEFAULT_SALES_CACHING_THRESHOLD", 100)
-        stub_const("#{described_class}::DEFAULT_DAYS_SINCE_SIGN_IN_CACHING_THRESHOLD", 7)
         user.current_sign_in_at = 1.day.ago
         user.save!
         expect(described_class).to receive(:cacheable_users).and_call_original
@@ -214,12 +213,9 @@ describe UserBalanceStatsService do
       user_4 = create(:large_seller, sales_count: 50, user: build(:user, current_sign_in_at: 3.days.ago)).user
       # With default values
       stub_const("#{described_class}::DEFAULT_SALES_CACHING_THRESHOLD", 100)
-      stub_const("#{described_class}::DEFAULT_DAYS_SINCE_SIGN_IN_CACHING_THRESHOLD", 7)
-      expect(described_class.cacheable_users).to match_array([user_2])
+      expect(described_class.cacheable_users).to match_array([user_1, user_2])
       # With custom redis set values
       $redis.set(RedisKey.balance_stats_sales_caching_threshold, 40)
-      expect(described_class.cacheable_users).to match_array([user_2, user_4])
-      $redis.set(RedisKey.balance_stats_days_since_sign_in_caching_threshold, 15)
       expect(described_class.cacheable_users).to match_array([user_1, user_2, user_3, user_4])
       $redis.sadd(RedisKey.balance_stats_users_excluded_from_caching, [user_1.id, user_3.id])
       expect(described_class.cacheable_users).to match_array([user_2, user_4])
