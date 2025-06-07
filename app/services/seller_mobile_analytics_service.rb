@@ -3,9 +3,10 @@
 class SellerMobileAnalyticsService
   SALES_LIMIT = 300
 
-  def initialize(user, range: "day", fields: [])
+  def initialize(user, range: "day", query: nil, fields: [])
     @user = user
     @range = range
+    @query = query
     @fields = fields
     @result = {}
   end
@@ -40,6 +41,7 @@ class SellerMobileAnalyticsService
       if @fields.include?(:purchases)
         params[:size] = SALES_LIMIT
         params[:sort] = [{ created_at: { order: :desc } }, { id: { order: :desc } }]
+        params[:seller_query] = @query if @query.present?
       end
       unless @range == "all"
         now = Time.now.in_time_zone(@user.timezone)
