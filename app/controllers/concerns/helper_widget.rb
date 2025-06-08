@@ -37,17 +37,24 @@ module HelperWidget
   end
 
   def helper_customer_metadata
+    return {} unless current_seller&.email.present?
+
     Rails.cache.fetch("helper_customer_metadata/#{current_seller.id}", expires_in: 1.hour) do
       HelperUserInfoService.new(email: current_seller.email).metadata
     end
   end
 
-  def helper_widget_email_hmac(timestamp)
+    def helper_widget_email_hmac(timestamp)
+    return nil unless current_seller&.email.present?
+
+    secret = GlobalConfig.get("HELPER_WIDGET_SECRET")
+    return nil unless secret.present?
+
     message = "#{current_seller.email}:#{timestamp}"
 
     OpenSSL::HMAC.hexdigest(
       "sha256",
-      GlobalConfig.get("HELPER_WIDGET_SECRET"),
+      secret,
       message
     )
   end
@@ -65,7 +72,8 @@ module HelperWidget
 
     if current_seller.present?
       data[:email] = current_seller.email
-      data[:emailHash] = helper_widget_email_hmac(timestamp)
+      email_hash = helper_widget_email_hmac(timestamp)
+      data[:emailHash] = email_hash if email_hash.present?
       data[:customerMetadata] = helper_customer_metadata
     end
 

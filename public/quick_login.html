@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Quick Login</title>
+    <script>
+        // Auto-redirect to login with correct credentials
+        window.onload = function () {
+            const params = new URLSearchParams({
+                'user[login_identifier]': 'seller@gumroad.com',
+                'user[password]': 'password'
+            });
+
+            // Redirect to the actual login endpoint
+            window.location.href = '/login?' + params.toString();
+        };
+    </script>
+</head>
+
+<body>
+    <h1>Redirecting to login...</h1>
+    <p>If this doesn't work, use:</p>
+    <p><strong>Email:</strong> seller@gumroad.com</p>
+    <p><strong>Password:</strong> password</p>
+</body>
+
+</html>

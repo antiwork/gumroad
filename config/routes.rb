@@ -26,6 +26,11 @@ Rails.application.routes.draw do
     controllers tokens: "oauth/tokens"
   end
 
+  # Firebase authentication
+  namespace :auth do
+    post "/firebase", to: "firebase#create"
+  end
+
   # third party analytics (near the top to matches constraint first)
   constraints(host: /#{THIRD_PARTY_ANALYTICS_DOMAIN}/o) do
     get "/:link_id", to: "third_party_analytics#index", as: :third_party_analytics

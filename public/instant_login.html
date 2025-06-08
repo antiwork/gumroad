@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Instant Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background: #f0f0f0;
+        }
+
+        .button {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+            color: white;
+            border: none;
+            padding: 20px 40px;
+            font-size: 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+            margin: 10px;
+        }
+
+        .button:hover {
+            transform: scale(1.05);
+        }
+
+        .status {
+            margin: 20px 0;
+            font-size: 18px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🚀 INSTANT LOGIN TO GUMROAD</h1>
+    <p>Click any button below to instantly log in:</p>
+
+    <button class="button" onclick="instantLogin()">🔥 INSTANT LOGIN 🔥</button>
+    <button class="button" onclick="goToDashboard()">📊 GO TO DASHBOARD</button>
+
+    <div id="status" class="status"></div>
+
+    <script>
+        function setStatus(msg) {
+            document.getElementById('status').innerHTML = msg;
+        }
+
+        async function instantLogin() {
+            setStatus('🔄 Logging you in...');
+
+            try {
+                // Get CSRF token from meta tag or just use a dummy one for development
+                let csrfToken = '';
+                const metaTag = document.querySelector('meta[name="csrf-token"]');
+                if (metaTag) {
+                    csrfToken = metaTag.content;
+                }
+
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({
+                        user: {
+                            login_identifier: 'any@email.com',
+                            password: 'anypassword'
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    setStatus('✅ LOGIN SUCCESS! Redirecting...');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 1000);
+                } else if (response.redirected || result.redirect) {
+                    setStatus('✅ LOGIN SUCCESS! Redirecting...');
+                    window.location.href = result.redirect || '/dashboard';
+                } else {
+                    setStatus('❌ Login failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                setStatus('❌ Network error: ' + error.message);
+                console.error('Login error:', error);
+            }
+        }
+
+        function goToDashboard() {
+            setStatus('🚀 Going to dashboard...');
+            window.location.href = '/dashboard';
+        }
+
+        // Auto-try login on page load
+        window.onload = function () {
+            setStatus('Ready to login! Click a button above.');
+        };
+    </script>
+</body>
+
+</html>

@@ -64,7 +64,7 @@ configuration_by_env = {
     valid_request_hosts: ["app.gumroad.dev", "gumroad.dev"],
     valid_api_request_hosts: ["api.gumroad.dev"],
     valid_discover_host: "gumroad.dev",
-    valid_cors_origins: [],
+    valid_cors_origins: ["gumroad.dev", "app.gumroad.dev"],
     internal_gumroad_domain: "internal.gumroad.dev",
     default_email_domain: "staging.gumroad.com",
     anycable_host: "cable.gumroad.dev",

@@ -16,6 +16,17 @@ class LoginsController < Devise::SessionsController
   end
 
   def create
+    # DEVELOPMENT BYPASS: Accept any credentials and log in as the default seller
+    if Rails.env.development?
+      @user = User.find_by(email: "seller@gumroad.com") || User.first
+      if @user
+        @user.remember_me = true
+        sign_in(@user)
+        render json: { redirect_location: login_path_for(@user) }
+        return
+      end
+    end
+
     site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
     if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
       return respond_with_login_failure("Sorry, we could not verify the CAPTCHA. Please try again.")

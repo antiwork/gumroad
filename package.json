@@ -38,6 +38,7 @@
     "date-fns": "^3.0.0",
     "date-fns-tz": "^3.0.0",
     "fast-average-color": "^9.4.0",
+    "firebase": "^11.9.0",
     "immer": "^10.0.0",
     "jquery": "^3.6.3",
     "js-yaml": "^4.1.0",

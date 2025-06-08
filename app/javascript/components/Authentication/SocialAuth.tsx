@@ -2,11 +2,22 @@ import * as React from "react";
 
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import FirebaseGoogleLogin from "$app/components/Authentication/FirebaseGoogleLogin";
+import DirectLoginButton from "$app/components/Authentication/DirectLoginButton";
 
 export const SocialAuth = () => {
   const next = new URL(useOriginalLocation()).searchParams.get("next");
-  return (
+    return (
     <section className="paragraphs">
+      <DirectLoginButton />
+      <FirebaseGoogleLogin
+        onSuccess={(userData) => {
+          console.log("Firebase login successful:", userData);
+        }}
+        onError={(error) => {
+          console.error("Firebase login error:", error);
+        }}
+      />
       <SocialAuthButton provider="facebook" href={Routes.user_facebook_omniauth_authorize_path({ referer: next })}>
         Facebook
       </SocialAuthButton>
