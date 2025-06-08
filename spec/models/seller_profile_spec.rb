@@ -15,7 +15,7 @@ describe SellerProfile do
     end
 
     it "rebuilds CSS when custom style attribute is saved" do
-      subject.update_attribute(:highlight_color, "#ff90e8")
+      subject.update_attribute(:highlight_color, "#ccff06")
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
       expect(subject.custom_styles).to include("--accent: 255 144 232;--contrast-accent: 0 0 0")
 

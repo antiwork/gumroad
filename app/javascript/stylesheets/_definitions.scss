@@ -4,7 +4,7 @@
 
 $unit: 1rem !default;
 $colors: (
-  "pink": #ff90e8,
+  "pink": #ccff06,
   "purple": #90a8ed,
   "green": #23a094,
   "orange": #ffc900,
@@ -13,42 +13,37 @@ $colors: (
 );
 
 $brands: (
-  facebook: (
-    color: #4267b2,
+  facebook: (color: #4267b2,
   ),
-  twitter: (
-    color: #000000,
+  twitter: (color: #000000,
   ),
-  paypal: (
-    color: #00457c,
+  paypal: (color: #00457c,
   ),
-  stripe: (
-    color: #625bf6,
+  stripe: (color: #625bf6,
   ),
-  apple: (
-    color: #000000,
+  apple: (color: #000000,
   ),
-  android: (
-    color: #142f40,
+  android: (color: #142f40,
   ),
-  kindle: (
-    color: #f3a642,
+  kindle: (color: #f3a642,
   ),
-  discord: (
-    color: #7289da,
+  discord: (color: #7289da,
     text-color: #ffffff,
   ),
-  zoom: (
-    color: #4087fc,
+  zoom: (color: #4087fc,
     text-color: #ffffff,
   ),
-  google: (
-    color: #5383ec,
+  google: (color: #5383ec,
     text-color: #ffffff,
   ),
 );
 
-$states: (success, danger, warning, info);
+$states: (
+  success,
+  danger,
+  warning,
+  info
+);
 $bg-colors: list.join($states, primary "black" accent filled);
 
 @function size($multiplier) {
@@ -56,23 +51,39 @@ $bg-colors: list.join($states, primary "black" accent filled);
 }
 
 @function sizes($multipliers...) {
-  $sizes: ();
-  @each $multiplier in $multipliers {
-    $sizes: list.append($sizes, size($multiplier));
-  }
-  @return $sizes;
+  $sizes: (
+  );
+
+@each $multiplier in $multipliers {
+  $sizes: list.append($sizes, size($multiplier));
+}
+
+@return $sizes;
 }
 
 $spacers: sizes(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4);
 $font-sizes: sizes(0.875, 1, 1.25, 1.5, 2.5);
-$line-heights: (1.3, 1.4, 1.4, 1.3, 1.2);
+$line-heights: (
+  1.3,
+  1.4,
+  1.4,
+  1.3,
+  1.2
+);
 $breakpoints: (
   sm: 640px,
   lg: 1024px,
 );
-$grays: (0.1, 0.2, 0.5);
+$grays: (
+  0.1,
+  0.2,
+  0.5
+);
 $border-radii: sizes(0.25, 0.5, 10);
-$box-shadows: ((size(0.25) size(0.25) size(0)), (size(0.5) size(0.5) size(0)));
+$box-shadows: (
+  (size(0.25) size(0.25) size(0)),
+  (size(0.5) size(0.5) size(0))
+);
 $z-indices: (
   base: 0,
   overlay: 1,
@@ -86,17 +97,22 @@ $z-indices: (
 @mixin breakpoint-up($name, $container: false) {
   @media (min-width: map-get($breakpoints, $name)) {
     @if $container {
+
       // This roughly emulates container queries using .squished and should be replaced once they're properly supported.
       &:not(.squished &) {
         @content;
       }
-    } @else {
+    }
+
+    @else {
       @content;
     }
   }
+
   @if $container {
     $keys: map-keys($breakpoints);
     $index: list.index($keys, $name);
+
     @if $index < list.length($keys) {
       @media (min-width: map-get($breakpoints, list.nth($keys, $index + 1))) {
         @content;
@@ -197,22 +213,28 @@ $z-indices: (
 }
 
 $light-body-bg: #f4f4f0 !default;
+
 @mixin globals {
   @for $i from 1 through length($spacers) {
     --spacer-#{$i}: #{nth($spacers, $i)};
   }
+
   @for $i from 1 through length($border-radii) {
     --border-radius-#{$i}: #{nth($border-radii, $i)};
   }
+
   @for $i from 1 through length($box-shadows) {
     --box-shadow-#{$i}: #{nth($box-shadows, $i)} var(--color);
   }
+
   @each $name, $z-index in $z-indices {
     --z-index-#{$name}: #{$z-index};
   }
+
   @each $name, $color in $colors {
     --#{$name}: #{$color};
   }
+
   @each $name, $breakpoint in $breakpoints {
     --breakpoint-#{$name}: #{$breakpoint};
   }
@@ -228,34 +250,36 @@ $light-body-bg: #f4f4f0 !default;
     "black": 0 0 0,
     "filled": 255 255 255,
   );
-  @each $name, $color in $base-colors {
-    --#{$name}: #{$color};
-    --contrast-#{$name}: #{split-color(fg-color(rgb($color)))};
-  }
-  --color: 0 0 0;
-  --body-bg: #{$light-body-bg};
-  --border-alpha: 1;
-  --font-family: #{$font-family};
-  --border-width: #{$border-width};
-  --big-icon-size: #{$big-icon-size};
-  --active-bg: #{full-color(filled)};
-  --main-stack-width: #{$main-stack-width};
-  //can't use $dynamic-grid here because postCSS dies; let's try it again for new versions
-  --dynamic-grid: min(100%, calc((#{$grid-wrap-breakpoint} - 100%) * 1000));
-  --disabled-opacity: #{$disabled-opacity};
-  --form-element-height: #{$form-element-height};
-  --transition-duration: 0.14s;
 
-  @media (prefers-color-scheme: dark) {
-    --body-bg: #242423;
-    --primary: 221 221 221;
-    --contrast-primary: 0 0 0;
-    --color: 221 221 221;
-    --filled: 0 0 0;
-    --contrast-filled: 221 221 221;
-    --contrast-black: 221 221 221;
-    --border-alpha: 0.35;
-  }
+@each $name, $color in $base-colors {
+  --#{$name}: #{$color};
+  --contrast-#{$name}: #{split-color(fg-color(rgb($color)))};
+}
+
+--color: 0 0 0;
+--body-bg: #{$light-body-bg};
+--border-alpha: 1;
+--font-family: #{$font-family};
+--border-width: #{$border-width};
+--big-icon-size: #{$big-icon-size};
+--active-bg: #{full-color(filled)};
+--main-stack-width: #{$main-stack-width};
+//can't use $dynamic-grid here because postCSS dies; let's try it again for new versions
+--dynamic-grid: min(100%, calc((#{$grid-wrap-breakpoint} - 100%) * 1000));
+--disabled-opacity: #{$disabled-opacity};
+--form-element-height: #{$form-element-height};
+--transition-duration: 0.14s;
+
+@media (prefers-color-scheme: dark) {
+  --body-bg: #242423;
+  --primary: 221 221 221;
+  --contrast-primary: 0 0 0;
+  --color: 221 221 221;
+  --filled: 0 0 0;
+  --contrast-filled: 221 221 221;
+  --contrast-black: 221 221 221;
+  --border-alpha: 0.35;
+}
 }
 
 $border-width: math.div(size(1), 16);
@@ -279,8 +303,7 @@ $body-padding-mobile: spacer(4);
 $disabled-opacity: 0.3;
 $grid-wrap-breakpoint: size(31.25);
 $main-stack-width: size(28);
-$form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heights, $form-element-font-size) +
-  $form-element-padding-y * 2 + $border-width * 2;
+$form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heights, $form-element-font-size) + $form-element-padding-y * 2 + $border-width * 2;
 $body-padding-desktop-center: max((100% - #{$body-max-width}) / 2, #{$body-padding-desktop});
 $button-hover-transform-length: spacer(1);
 $header-padding-y: spacer(6);

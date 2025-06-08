@@ -138,7 +138,7 @@ describe HelperWidget, type: :controller do
         expect(controller.helper_widget_init_data).to eq(
           title: "Support",
           mailboxSlug: "gumroad",
-          iconColor: "#FF90E8",
+          iconColor: "#ccff06",
           enableGuide: true,
           timestamp: timestamp,
           email: seller.email,
@@ -155,7 +155,7 @@ describe HelperWidget, type: :controller do
         expect(controller.helper_widget_init_data).to eq(
           title: "Support",
           mailboxSlug: "gumroad",
-          iconColor: "#FF90E8",
+          iconColor: "#ccff06",
           enableGuide: true,
           timestamp: timestamp,
         )

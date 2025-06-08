@@ -49,7 +49,7 @@ const NavLink = ({
         isCurrent
           ? "lg:bg-black lg:text-white dark:lg:bg-white dark:lg:text-black"
           : "lg:bg-transparent lg:text-black dark:lg:text-white"
-      } bg-black p-4 text-lg text-white no-underline transition-all duration-200 hover:border-black lg:w-auto lg:rounded-full lg:px-4 lg:py-2 lg:text-black dark:text-white lg:dark:hover:border-white/[.35]`}
+      } bg-black p-4 text-lg text-white no-underline transition-all duration-200 hover:border-black lg:w-auto lg:rounded lg:px-4 lg:py-2 lg:text-black dark:text-white lg:dark:hover:border-white/[.35]`}
     >
       {text}
     </a>

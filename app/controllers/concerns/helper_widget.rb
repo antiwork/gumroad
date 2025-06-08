@@ -65,7 +65,7 @@ module HelperWidget
     data = {
       title: "Support",
       mailboxSlug: "gumroad",
-      iconColor: "#FF90E8",
+      iconColor: "#ccff06",
       enableGuide: true,
       timestamp: timestamp,
     }

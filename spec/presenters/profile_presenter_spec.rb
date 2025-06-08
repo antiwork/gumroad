@@ -78,7 +78,7 @@ describe ProfilePresenter do
             username: seller.username,
             bio: seller.bio,
             background_color: "#ffffff",
-            highlight_color: "#ff90e8",
+            highlight_color: "#ccff06",
             font: "ABC Favorit",
             profile_picture_blob_id: nil,
           },

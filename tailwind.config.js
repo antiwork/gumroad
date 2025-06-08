@@ -59,7 +59,7 @@ export default {
       colors: {
         black: "#000000",
         white: "#ffffff",
-        pink: "#ff90e8",
+        pink: "#ccff06",
         purple: "#90a8ed",
         green: "#23a094",
         orange: "#ffc900",
