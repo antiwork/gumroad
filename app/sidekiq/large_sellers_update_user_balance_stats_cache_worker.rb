@@ -4,7 +4,7 @@ class LargeSellersUpdateUserBalanceStatsCacheWorker
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low
 
-  MINUTES_BETWEEN_JOBS = 5
+  MINUTES_BETWEEN_JOBS = 1
 
   def perform
     minutes_between_jobs = ($redis.get(RedisKey.balance_stats_scheduler_minutes_between_jobs) || MINUTES_BETWEEN_JOBS).to_i
