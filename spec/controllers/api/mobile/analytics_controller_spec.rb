@@ -15,7 +15,7 @@ describe Api::Mobile::AnalyticsController do
 
   describe "GET data_by_date" do
     before do
-      @purchase = create(:purchase, link: build(:product, user: @user))
+      @purchase = create(:purchase, link: build(:product, user: @user), email: "johndoe@example.com")
       index_model_records(Purchase)
     end
 
@@ -27,6 +27,78 @@ describe Api::Mobile::AnalyticsController do
         "purchases" => [JSON.load(@purchase.as_json(creator_app_api: true).to_json)],
         "revenue" => 100,
         "sales_count" => 1,
+      )
+    end
+
+    it "passes the query parameter to the service when provided" do
+      expect(SellerMobileAnalyticsService).to receive(:new).with(
+        @user,
+        range: "day",
+        fields: [:sales_count, :purchases],
+        query: "JOHNdoe"
+      ).and_call_original
+
+      get :data_by_date, params: @params.merge(range: "day", query: "JOHNdoe")
+
+      expect(response.parsed_body).to eq(
+        "formatted_revenue" => "$1",
+        "purchases" => [JSON.load(@purchase.as_json(creator_app_api: true).to_json)],
+        "revenue" => 100,
+        "sales_count" => 1,
+      )
+    end
+
+    it "passes nil query parameter to the service when not provided" do
+      expect(SellerMobileAnalyticsService).to receive(:new).with(
+        @user,
+        range: "month",
+        fields: [:sales_count, :purchases],
+        query: nil
+      ).and_call_original
+
+      get :data_by_date, params: @params.merge(range: "month")
+
+      expect(response.parsed_body).to eq(
+        "formatted_revenue" => "$1",
+        "purchases" => [JSON.load(@purchase.as_json(creator_app_api: true).to_json)],
+        "revenue" => 100,
+        "sales_count" => 1,
+      )
+    end
+
+    it "handles empty query parameter" do
+      expect(SellerMobileAnalyticsService).to receive(:new).with(
+        @user,
+        range: "week",
+        fields: [:sales_count, :purchases],
+        query: ""
+      ).and_call_original
+
+      get :data_by_date, params: @params.merge(range: "week", query: "")
+
+      expect(response.parsed_body).to eq(
+        "formatted_revenue" => "$1",
+        "purchases" => [JSON.load(@purchase.as_json(creator_app_api: true).to_json)],
+        "revenue" => 100,
+        "sales_count" => 1,
+      )
+    end
+
+    it "returns empty data when no matching purchases are found" do
+      expect(SellerMobileAnalyticsService).to receive(:new).with(
+        @user,
+        range: "week",
+        fields: [:sales_count, :purchases],
+        query: "not_found"
+      ).and_call_original
+
+      get :data_by_date, params: @params.merge(range: "week", query: "not_found")
+
+      expect(response.parsed_body).to eq(
+        "formatted_revenue" => "$0",
+        "purchases" => [],
+        "revenue" => 0,
+        "sales_count" => 0,
       )
     end
   end

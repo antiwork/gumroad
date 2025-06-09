@@ -168,6 +168,53 @@ describe SellerMobileAnalyticsService do
           result = described_class.new(@user, fields: [:purchases]).process
           expect(result[:purchases].size).to eq 5
         end
+
+        context "with query parameter" do
+          it "passes seller_query to search options when query is provided" do
+            create(:purchase, link: @product, email: "john@example.com", full_name: "John Doe")
+            create(:purchase, link: @product, email: "jane@example.com", full_name: "Jane Smith")
+            index_model_records(Purchase)
+
+            expect(PurchaseSearchService).to receive(:search).with(
+              hash_including(seller_query: "john")
+            ).and_call_original
+
+            described_class.new(@user, fields: [:purchases], query: "john").process
+          end
+
+          it "does not pass seller_query when query is nil" do
+            create(:purchase, link: @product)
+            index_model_records(Purchase)
+
+            expect(PurchaseSearchService).to receive(:search).with(
+              hash_not_including(:seller_query)
+            ).and_call_original
+
+            described_class.new(@user, fields: [:purchases], query: nil).process
+          end
+
+          it "does not pass seller_query when query is empty" do
+            create(:purchase, link: @product)
+            index_model_records(Purchase)
+
+            expect(PurchaseSearchService).to receive(:search).with(
+              hash_not_including(:seller_query)
+            ).and_call_original
+
+            described_class.new(@user, fields: [:purchases], query: "").process
+          end
+
+          it "does not pass seller_query when query is whitespace only" do
+            create(:purchase, link: @product)
+            index_model_records(Purchase)
+
+            expect(PurchaseSearchService).to receive(:search).with(
+              hash_not_including(:seller_query)
+            ).and_call_original
+
+            described_class.new(@user, fields: [:purchases], query: "   ").process
+          end
+        end
       end
 
       context "when requesting :sales_count" do
@@ -177,6 +224,19 @@ describe SellerMobileAnalyticsService do
           result = described_class.new(@user, fields: [:sales_count]).process
           expect(result.keys).to match_array([:revenue, :formatted_revenue, :sales_count])
           expect(result[:sales_count]).to eq(2)
+        end
+
+        context "with query parameter" do
+          it "does not pass seller_query to search options when only requesting sales_count" do
+            create(:purchase, link: @product)
+            index_model_records(Purchase)
+
+            expect(PurchaseSearchService).to receive(:search).with(
+              hash_not_including(:seller_query)
+            ).and_call_original
+
+            described_class.new(@user, fields: [:sales_count], query: "test").process
+          end
         end
       end
     end
