@@ -77,6 +77,7 @@ module User::Risk
         content: "Suspended because of high risk reported by Stripe"
       )
       ContactingCreatorMailer.suspended_due_to_stripe_risk(id).deliver_later
+      custom_domain&.mark_deleted!
     end
   end
 
@@ -114,6 +115,10 @@ module User::Risk
 
   def unblock_seller_ip!
     BlockedObject.unblock!(last_sign_in_ip) if last_sign_in_ip.present?
+  end
+
+  def delete_custom_domain!
+    custom_domain&.mark_deleted!
   end
 
   def suspended?
