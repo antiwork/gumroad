@@ -598,7 +598,10 @@ class User < ApplicationRecord
       bank_accounts.alive.each(&:mark_deleted!)
       cancel_active_subscriptions!
       invalidate_active_sessions!
-      custom_domain&.mark_deleted!
+
+      if custom_domain&.persisted? && !custom_domain.deleted?
+        custom_domain.mark_deleted!
+      end
 
       true
     rescue

@@ -118,7 +118,10 @@ module User::Risk
   end
 
   def delete_custom_domain!
-    custom_domain&.mark_deleted!
+    return if custom_domain.nil?
+    return if custom_domain.deleted?
+
+    custom_domain.mark_deleted!
   end
 
   def suspended?
