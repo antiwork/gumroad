@@ -4,6 +4,7 @@ class SignupController < Devise::RegistrationsController
   include OauthApplicationConfig, ValidateRecaptcha
 
   before_action :verify_captcha_and_handle_existing_users, only: :create
+  before_action :set_noindex_header, only: :new, if: -> { params[:next]&.start_with?("/oauth/authorize") }
 
   def new
     @hide_layouts = true
