@@ -107,11 +107,18 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           updated_at: user_data["actionStatusCreatedAt"],
           appeal_url: user_data["appealUrl"]
         }
+      elsif user.suspended?
+        render json: {
+          success: true,
+          status: "Suspended",
+          updated_at: user.comments.where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED]).order(created_at: :desc).first&.created_at,
+          appeal_url: nil
+        }
       else
         render json: {
           success: true,
           status: "Compliant",
-          suspended_at: nil,
+          updated_at: nil,
           appeal_url: nil
         }
       end
