@@ -77,7 +77,6 @@ module User::Risk
         content: "Suspended because of high risk reported by Stripe"
       )
       ContactingCreatorMailer.suspended_due_to_stripe_risk(id).deliver_later
-      custom_domain&.mark_deleted!
     end
   end
 
