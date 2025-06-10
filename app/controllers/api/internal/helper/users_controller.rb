@@ -118,7 +118,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         render json: {
           success: true,
           status: "Compliant",
-          suspended_at: nil,
+          updated_at: nil,
           appeal_url: nil
         }
       end
