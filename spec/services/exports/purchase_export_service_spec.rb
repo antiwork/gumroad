@@ -489,7 +489,7 @@ describe Exports::PurchaseExportService do
 
     it "includes access revoked status" do
       expect(field_value(last_data_row, "Access Revoked?")).to eq("0")
-      
+
       @purchase.update!(is_access_revoked: true)
       expect(field_value(last_data_row, "Access Revoked?")).to eq("1")
     end
