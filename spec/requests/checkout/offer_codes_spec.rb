@@ -198,4 +198,47 @@ describe "Checkout offer codes", :js, type: :feature do
       end
     end
   end
+
+  context "when product is replaced via upsell with discount applied" do
+    let(:seller) { create(:user, display_offer_code_field: true) }
+    let!(:original_product) { create(:product, user: seller, name: "Original Product", price_cents: 1000) }
+    let!(:upgraded_product) { create(:product, user: seller, name: "Upgraded Product", price_cents: 2000) }
+    let!(:universal_offer_code) { create(:percentage_offer_code, user: seller, universal: true, products: [], code: "SAVE50", amount_percentage: 50) }
+    let!(:replacement_upsell) do
+      create(:upsell,
+        text: "Upgrade to Premium",
+        seller: seller,
+        product: upgraded_product,
+        selected_products: [original_product],
+        cross_sell: true,
+        replace_selected_products: true
+      )
+    end
+
+    it "applies the discount to the replacement product correctly" do
+      visit original_product.long_url
+      add_to_cart(original_product)
+      fill_in "Discount code", with: "SAVE50"
+      click_on "Apply"
+      expect(page).to have_text("Discounts SAVE50 US$-5", normalize_ws: true)
+
+      fill_checkout_form(original_product)
+      click_on "Pay"
+
+      within_modal "Upgrade to Premium" do
+        expect(page).to have_text("Upgraded Product")
+        click_on "Upgrade"
+      end
+
+      expect(page).to have_section("Upgraded Product")
+      expect(page).to_not have_section("Original Product")
+
+      purchase = Purchase.last
+      expect(purchase.link).to eq(upgraded_product)
+      expect(purchase.offer_code).to eq(universal_offer_code)
+      expect(purchase.price_cents).to eq(1000)
+      expect(purchase.upsell_purchase.upsell).to eq(replacement_upsell)
+      expect(purchase.upsell_purchase.selected_product).to eq(original_product)
+    end
+  end
 end
