@@ -564,8 +564,23 @@ export const CheckoutPage = ({
       );
       const originalCartItem = originalCartItems[0];
       if (originalCartItem) {
+        const updatedDiscountCodes = cart.discountCodes.map((discountCode) => {
+          const originalProductDiscount = discountCode.products[originalCartItem.product.permalink];
+          if (originalProductDiscount && currentOffer.offered_product.product.has_offer_codes) {
+            return {
+              ...discountCode,
+              products: {
+                ...discountCode.products,
+                [currentOffer.offered_product.product.permalink]: originalProductDiscount,
+              },
+            };
+          }
+          return discountCode;
+        });
+
         return {
           ...cart,
+          discountCodes: updatedDiscountCodes,
           items: [
             ...(currentOffer.replace_selected_products
               ? cart.items.filter((item) => !originalCartItems.includes(item))
