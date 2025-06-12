@@ -737,7 +737,7 @@ GEM
       rack (>= 1.0, < 4)
     rack-cors (2.0.2)
       rack (>= 2.0.0)
-    rack-mini-profiler (3.3.1)
+    rack-mini-profiler (4.0.0)
       rack (>= 1.2.0)
     rack-oauth2 (1.21.3)
       activesupport
@@ -1201,7 +1201,7 @@ DEPENDENCIES
   pundit (~> 2.3)
   rack-attack (~> 6.6)
   rack-cors (~> 2.0)
-  rack-mini-profiler (~> 3.0)
+  rack-mini-profiler (~> 4.0)
   rack-ssl (~> 1.4)
   rack-timeout (~> 0.6)
   rack-utf8_sanitizer (~> 1.8)
