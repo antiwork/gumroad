@@ -1,14 +1,26 @@
 # frozen_string_literal: true
 
 # aws credentials for the web app are stored in the secrets
-AWS_ACCESS_KEY = GlobalConfig.get("AWS_ACCESS_KEY_ID")
-AWS_SECRET_KEY = GlobalConfig.get("AWS_SECRET_ACCESS_KEY")
+# In development, provide placeholder values if AWS credentials are not set
+if Rails.env.development?
+  AWS_ACCESS_KEY = GlobalConfig.get("AWS_ACCESS_KEY_ID", "development-placeholder-key")
+  AWS_SECRET_KEY = GlobalConfig.get("AWS_SECRET_ACCESS_KEY", "development-placeholder-secret")
+else
+  AWS_ACCESS_KEY = GlobalConfig.get("AWS_ACCESS_KEY_ID")
+  AWS_SECRET_KEY = GlobalConfig.get("AWS_SECRET_ACCESS_KEY")
+end
 AWS_DEFAULT_REGION = GlobalConfig.get("AWS_DEFAULT_REGION", "us-east-1")
 
-Aws.config.update(
-  region: AWS_DEFAULT_REGION,
-  credentials: Aws::Credentials.new(AWS_ACCESS_KEY, AWS_SECRET_KEY)
-)
+# Only configure AWS SDK with real credentials (not development placeholders)
+if Rails.env.development? && AWS_ACCESS_KEY == "development-placeholder-key"
+  # In development with placeholder credentials, skip AWS SDK configuration
+  # This prevents errors when AWS services are not actually used
+else
+  Aws.config.update(
+    region: AWS_DEFAULT_REGION,
+    credentials: Aws::Credentials.new(AWS_ACCESS_KEY, AWS_SECRET_KEY)
+  )
+end
 
 INVOICES_S3_BUCKET = GlobalConfig.get("INVOICES_S3_BUCKET", "gumroad-invoices")
 S3_CREDENTIALS = { access_key_id: AWS_ACCESS_KEY, secret_access_key: AWS_SECRET_KEY, s3_region: AWS_DEFAULT_REGION }.freeze

@@ -226,7 +226,7 @@ class ProductPresenter
       s3_url: "https://s3.amazonaws.com/#{S3_BUCKET}",
       aws_key: AWS_ACCESS_KEY,
       available_countries: ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } },
-      google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),
+      google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID", Rails.env.development? ? "development-placeholder" : nil),
       google_calendar_enabled: Feature.active?(:google_calendar_link, product.user),
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
