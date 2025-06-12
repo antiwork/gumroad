@@ -4,7 +4,7 @@ class UserBalanceStatsService
   include ActionView::Helpers::TranslationHelper
   include PayoutsHelper
   attr_reader :user
-  DEFAULT_SALES_CACHING_THRESHOLD = 100_000
+  DEFAULT_SALES_CACHING_THRESHOLD = 50_000
 
   def initialize(user:)
     @user = user

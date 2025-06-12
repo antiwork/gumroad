@@ -298,6 +298,7 @@ class User < ApplicationRecord
 
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :suspend_sellers_other_accounts
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
 
     after_transition any => :compliant, :do => :enable_refunds!
 
@@ -597,6 +598,10 @@ class User < ApplicationRecord
       bank_accounts.alive.each(&:mark_deleted!)
       cancel_active_subscriptions!
       invalidate_active_sessions!
+
+      if custom_domain&.persisted? && !custom_domain.deleted?
+        custom_domain.mark_deleted!
+      end
 
       true
     rescue

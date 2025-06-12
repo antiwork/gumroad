@@ -7,6 +7,7 @@ import { cast, is } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
+import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -64,7 +65,8 @@ export const Raw = TiptapNode.create({
   renderHTML: ({ HTMLAttributes }) => {
     const doc = document.createElement("div");
     doc.className = "tiptap__raw";
-    doc.innerHTML = cast(HTMLAttributes.html);
+    const processedHtml = sanitizeHtml(cast(HTMLAttributes.html));
+    doc.innerHTML = processedHtml;
     if (HTMLAttributes.title) doc.setAttribute("data-title", cast(HTMLAttributes.title));
     if (HTMLAttributes.url) doc.setAttribute("data-url", cast(HTMLAttributes.url));
     if (HTMLAttributes.thumbnail) doc.setAttribute("data-thumbnail", cast(HTMLAttributes.thumbnail));
@@ -143,7 +145,8 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
                 return;
               }
               const encoded = encodeURIComponent(inputRef.current.value);
-              const iframelyUrl = `https://iframe.ly/api/oembed?iframe=1&api_key=6317bed3ca048a1a75d850&url=${encoded}`;
+              // omit_script forces iframely to return an <iframe> tag
+              const iframelyUrl = `https://iframe.ly/api/oembed?iframe=1&api_key=6317bed3ca048a1a75d850&url=${encoded}&omit_script=1`;
               try {
                 const data: unknown = await (await request({ method: "GET", url: iframelyUrl, accept: "json" })).json();
                 if (is<IframelyEmbedData>(data)) {
@@ -243,7 +246,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
     return ReactNodeViewRenderer(({ editor, node, deleteNode }: NodeViewProps) => (
       <NodeViewWrapper>
         <div className="embed">
-          <div className="preview" dangerouslySetInnerHTML={{ __html: cast(node.attrs.html) }}></div>
+          <div className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }}></div>
           <div className="content">
             <Icon name="file-earmark-play-fill" className="type-icon" />
             <div>

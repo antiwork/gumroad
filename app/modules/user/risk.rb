@@ -116,6 +116,13 @@ module User::Risk
     BlockedObject.unblock!(last_sign_in_ip) if last_sign_in_ip.present?
   end
 
+  def delete_custom_domain!
+    return if custom_domain.nil?
+    return if custom_domain.deleted?
+
+    custom_domain.mark_deleted!
+  end
+
   def suspended?
     suspended_for_tos_violation? || suspended_for_fraud?
   end

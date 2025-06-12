@@ -4289,6 +4289,27 @@ describe Link, :vcr do
         expect(product.html_safe_description).to eq("<iframe src=\"http://cdn.iframe.ly\"></iframe><img src=\"http://example.com/image.jpg\">")
       end
     end
+
+    context "when description contains a script from an untrusted source" do
+      let(:product) { create(:product, description: "some text<script src='https://untrusted.example.com/script.js'></script>evil script") }
+
+      it "removes the script tag" do
+        expect(html_safe_description).to eq("some textevil script")
+      end
+    end
+
+    context "when description contains a script from iframe.ly" do
+      let(:product) { create(:product, description: "some text<script src='https://cdn.iframe.ly/script.js'></script>evil script") }
+
+      it "removes script tag if path is not embed.js" do
+        expect(product.html_safe_description).to eq("some textevil script")
+      end
+
+      it "keeps script tag if path is embed.js" do
+        product = create(:product, description: "some text<script src='https://cdn.iframe.ly/embed.js'></script>evil script")
+        expect(product.html_safe_description).to eq("some text<script src=\"https://cdn.iframe.ly/embed.js\"></script>evil script")
+      end
+    end
   end
 
   describe "#sku_title" do
