@@ -1,6 +1,7 @@
 # frozen_string_literal: true
-PLACEHOLDER_AWS_ACCESS_KEY  = "development-placeholder-key".freeze
-PLACEHOLDER_AWS_SECRET_KEY  = "development-placeholder-secret".freeze
+
+PLACEHOLDER_AWS_ACCESS_KEY  = "development-placeholder-key"
+PLACEHOLDER_AWS_SECRET_KEY  = "development-placeholder-secret"
 
 # aws credentials for the web app are stored in the secrets
 # In development, provide placeholder values if AWS credentials are not set
@@ -20,7 +21,7 @@ unless Rails.env.development? && AWS_ACCESS_KEY == PLACEHOLDER_AWS_ACCESS_KEY
      region: AWS_DEFAULT_REGION,
      credentials: Aws::Credentials.new(AWS_ACCESS_KEY, AWS_SECRET_KEY)
    )
- end
+end
 
 INVOICES_S3_BUCKET = GlobalConfig.get("INVOICES_S3_BUCKET", "gumroad-invoices")
 S3_CREDENTIALS = { access_key_id: AWS_ACCESS_KEY, secret_access_key: AWS_SECRET_KEY, s3_region: AWS_DEFAULT_REGION }.freeze
