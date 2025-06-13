@@ -6,8 +6,6 @@ require "shared_examples/authorize_called"
 describe GumroadBlog::PostsController do
   let(:blog_owner) { create(:user, username: "gumroad") }
 
-  before { Feature.activate(:gumroad_blog) }
-
   describe "GET index" do
     let!(:published_post_1) do
       create(
@@ -54,6 +52,7 @@ describe GumroadBlog::PostsController do
       let(:record) { :posts }
       let(:policy_klass) { GumroadBlog::PostsPolicy }
     end
+
     it "only includes posts that are visible on profile, order by published_at descending" do
       get :index
 
@@ -78,14 +77,6 @@ describe GumroadBlog::PostsController do
           },
         ]
       )
-    end
-
-    context "when then feature is disabled" do
-      before { Feature.deactivate(:gumroad_blog) }
-
-      it "raises routing error" do
-        expect { get :index }.to raise_error(ActionController::RoutingError, "Not Found")
-      end
     end
   end
 
@@ -134,15 +125,6 @@ describe GumroadBlog::PostsController do
       it "raises ActiveRecord::RecordNotFound" do
         expect { get :show, params: { slug: other_post.slug } }
           .to raise_error(ActiveRecord::RecordNotFound)
-      end
-    end
-
-    context "when feature is disabled" do
-      before { Feature.deactivate(:gumroad_blog) }
-
-      it "raises routing error" do
-        expect { get :show, params: { slug: post.slug } }
-          .to raise_error(ActionController::RoutingError, "Not Found")
       end
     end
   end
