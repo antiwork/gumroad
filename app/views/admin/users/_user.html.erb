@@ -18,14 +18,14 @@
           <% if user.form_email.present? %>
             <li>
               Email:
-              <%= mail_to(user.form_email) %>
+              <%= copy_to_clipboard(user.form_email) %>
               <%= blocked_email_tooltip(user.form_email) %>
             </li>
           <% end %>
           <% if user.support_email.present? %>
             <li>
               Support email:
-              <%= mail_to(user.support_email) %>
+              <%= copy_to_clipboard(user.support_email) %>
             </li>
           <% end %>
           <% if user.payments.any? %>
