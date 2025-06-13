@@ -177,8 +177,12 @@ class UsersController < ApplicationController
     def set_user_for_action
       @user = User.find_by_secure_external_id(params[:id], scope: "email_unsubscribe")
 
-      # TODO: Remove this when dropping support for old external_id
-      @user ||= User.find_by_external_id(params[:id])
+      if user_signed_in? && logged_in_user.external_id == params[:id]
+        @user = logged_in_user
+      else
+        # TODO: Remove this when dropping support for old external_id
+        @user ||= User.find_by_external_id(params[:id])
+      end
 
       e404 if @user.nil?
     end
