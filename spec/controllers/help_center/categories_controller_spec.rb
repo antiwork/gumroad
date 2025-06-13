@@ -3,8 +3,6 @@
 require "spec_helper"
 
 describe HelpCenter::CategoriesController do
-  before { Feature.activate(:help_center) }
-
   describe "GET show" do
     let(:category) { HelpCenter::Category.first }
 
@@ -30,15 +28,6 @@ describe HelpCenter::CategoriesController do
       it "raises ActiveHash::RecordNotFound" do
         expect { get :show, params: { slug: "nonexistent-slug" } }
           .to raise_error(ActiveHash::RecordNotFound)
-      end
-    end
-
-    context "when feature is disabled" do
-      before { Feature.deactivate(:help_center) }
-
-      it "raises routing error" do
-        expect { get :show, params: { slug: category.slug } }
-          .to raise_error(ActionController::RoutingError, "Not Found")
       end
     end
   end
