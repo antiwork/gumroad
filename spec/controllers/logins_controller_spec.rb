@@ -52,6 +52,16 @@ describe LoginsController do
         expect(assigns[:application]).to eq @oauth_application
         expect(assigns[:auth_presenter].application).to eq @oauth_application
       end
+
+      it "sets noindex header when next param starts with /oauth/authorize" do
+        get :new, params: { next: "/oauth/authorize?client_id=123" }
+        expect(response.headers["X-Robots-Tag"]).to eq "noindex"
+      end
+
+      it "does not set noindex header for regular login" do
+        get :new
+        expect(response.headers["X-Robots-Tag"]).to be_nil
+      end
     end
   end
 

@@ -1,0 +1,49 @@
+<% @description = "In this article reCAPTCHA Two-Factor Authentication (2FA) Not receiving your token Disable 2FA You can login to Gumroad here with an Email address, Twitter, or " %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><b>In this article</b></p>
+    <ul>
+      <li><a href="#reCAPTCHA-Sriml" target="_self">reCAPTCHA</a></li>
+      <li><a href="#Two-Factor-Authentication-2FA-ap6-D" target="_self">Two-Factor Authentication (2FA)</a>
+        <ul>
+          <li><a href="#Not-receiving-your-token--zGYKy" target="_self">Not receiving your token</a></li>
+          <li><a href="#Disable-2FA-lOgLu" target="_self">Disable 2FA</a></li>
+        </ul>
+      </li>
+    </ul>
+    <p>You can login to Gumroad <a href="https://app.gumroad.com/login">here</a> with an Email address, Twitter, or Facebook account. In case you've forgotten your password, you can click on the "Forgot your password?" button on the page and we will email you instructions to reset it. </p>
+    <h3 id="reCAPTCHA-Sriml">reCAPTCHA</h3>
+    <p>We use <a href="https://www.google.com/recaptcha/about/">Google reCAPTCHA</a> to protect Gumroad from spam and abuse. A “CAPTCHA” is a Turing test to tell humans and bots apart. It is easy for humans to solve, but hard for bots and other malicious software to figure out. </p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/624a92ebab585b230a8a8017/file-BhMyd8H221.png" %></figure>
+    <p>Unfortunately, CAPTCHAs can sometimes get too clever for its own good and prevent humans from getting through too. Usually such problems are browser-specific and the following actions might help in resolving them: </p>
+    <ol>
+      <li><b>Cookies Settings</b> — In Chrome, go to your settings, under 'Security and Privacy' click on 'Cookies and other site data,' then 'Enable cookies'. If you're on Safari, click your browser 'Preferences', then go to 'Privacy' to untick 'Block all cookies'. For any other browse, a quick Google search will tell you how to allow cookies.  </li>
+      <li><b>Clear browser cache </b>— Here's how to do this in <a href="https://support.google.com/accounts/answer/32050?co=GENIE.Platform%3DDesktop&amp;hl=en">Chrome</a>, <a href="https://support.mozilla.org/en-US/kb/how-clear-firefox-cache">Firefox</a>, <a href="https://clear-my-cache.com/en/apple-mac-os/safari.html">Safari</a>, <a href="https://support.microsoft.com/en-us/search?query=edge%20clear%20cookies%20and%20cache">Edge</a>, <a href="https://support.apple.com/en-us/HT201265">iOS</a> and <a href="https://support.google.com/accounts/answer/32050/clear-cache-amp-cookies-android?co=GENIE.Platform%3DAndroid&amp;oco=1">Android</a>.  </li>
+      <li><b>Update your browser</b> — Make sure your browser is up-to-date and running the most recent software. You can check if your browser is up-to-date <a href="https://updatemybrowser.org/">here</a>. </li>
+      <li><b>Different browser </b>— If nothing helps, just try logging in from a different browser (or device!) </li>
+    </ol>
+    <h3 id="Two-Factor-Authentication-2FA-ap6-D">Two-Factor Authentication (2FA)</h3>
+    <p>2FA is switched on by default for all users. When you login to Gumroad, we will send an authentication token to your registered email. You will have to either enter that code or click the  <b>Login</b> button in the email to log in to your account. This will help prevent hackers logging in with compromised credentials.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/624a93442ce7ed0fb091cd93/file-8ZMbP8Uooi.png" %></figure>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/624a9361c1688a6d26a7cb71/file-BBL9nPaVvq.png" %></figure>
+    <p>Once you've logged in after verifying through 2FA, we will not ask for 2FA again from that browser/IP for the next two months.</p>
+    <p>Currently, 2FA is available only in the web app and not in the mobile apps. </p>
+    <h3 id="Not-receiving-your-token--zGYKy">Not receiving your token? </h3>
+    <p>There are a few reasons why you might not be getting your 2FA token in your email:</p>
+    <ol>
+      <li>You changed your Gumroad email ID to something else but did not confirm it. If you don't get a 2FA token in your usual email, we recommend looking for it in all your alternate mailboxes as well! </li>
+      <li>If you don't see a token in any of your active email accounts, there might be a glitch with our email server while sending you the token. Contact us at <a href="mailto:support@gumroad.com">support@gumroad.com</a> we can take a closer look! </li>
+    </ol>
+    <h3 id="Disable-2FA-lOgLu">Disable 2FA</h3>
+    <p>2FA is considered as a hassle by some, but we highly recommend that you do not disable it. </p>
+    <p>We remember your 2FA auth status for 2 months, and will continue to remember as long as you use the app at least once in 2 months. Also, you have to do 2FA only once per IP, and we won't ask for the token from another device on the same IP as long as the previous 2FA is valid. As you can see, the number of times you have to input the 2FA code will be very less. </p>
+    <p>There's been an uptick in fraudsters logging in to creators' accounts with compromised passwords and changing their payout info. <b>Once a payout is triggered to an unauthorized account, we cannot do much to reverse it, unfortunately.</b> To prevent this, we decided to switch on 2FA for all users by default. We believe the minor inconvenience of 2FA is well worth the added security it provides. </p>
+    <p>Note: For security verification, if you’re requesting a change to your account’s 2FA settings, you need to write to us from the email address of the account you’re requesting a change to. If you do not have access to this email, you must provide the following details for at least three purchases from the account:</p>
+    <ol>
+      <li>Name of the product</li>
+      <li>Date of purchase</li>
+      <li>Payment method: Card brand + last 4 digits (Eg. VISA *1111) or your PayPal ID</li>
+    </ol>
+    <p>We will only execute your requested change after verifying the above information.</p>
+  </div>
+</div>

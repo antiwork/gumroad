@@ -747,6 +747,23 @@ describe User, :vcr do
         end
       end
 
+      context "when user has a custom domain" do
+        before do
+          @custom_domain = create(:custom_domain, user: @user)
+        end
+
+        it "marks the custom domain as deleted" do
+          expect do
+            @user.deactivate!
+          end.to change { @custom_domain.reload.deleted_at }.from(nil).to(be_present)
+        end
+
+        it "handles deactivation when custom domain is already deleted" do
+          @custom_domain.mark_deleted!
+          expect { @user.deactivate! }.not_to raise_error
+        end
+      end
+
       context "when the user has active subscriptions" do
         let!(:subscription1) { create(:subscription, link: create(:membership_product), user: @user, free_trial_ends_at: 30.days.from_now) }
         let!(:subscription2) { create(:subscription, link: create(:membership_product), user: @user, free_trial_ends_at: 30.days.from_now) }
@@ -1616,6 +1633,42 @@ describe User, :vcr do
       expect(@user).to receive(:block_seller_ip!)
       @user.flag_for_fraud(author_id: @admin_user.id)
       @user.suspend_for_fraud(author_id: @admin_user.id)
+    end
+
+    context "when user has a custom domain" do
+      before do
+        @custom_domain = create(:custom_domain, user: @user)
+      end
+
+      it "marks custom domain as deleted when suspended for fraud" do
+        @user.flag_for_fraud!(author_id: @admin_user.id)
+
+        expect do
+          @user.suspend_for_fraud!(author_id: @admin_user.id)
+        end.to change { @custom_domain.reload.deleted_at }.from(nil).to(be_present)
+      end
+
+      it "marks custom domain as deleted when suspended for TOS violation" do
+        @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
+
+        expect do
+          @user.suspend_for_tos_violation!(author_id: @admin_user.id)
+        end.to change { @custom_domain.reload.deleted_at }.from(nil).to(be_present)
+      end
+
+      it "handles suspension when custom domain is already deleted" do
+        @custom_domain.mark_deleted!
+        @user.flag_for_fraud!(author_id: @admin_user.id)
+
+        expect { @user.suspend_for_fraud!(author_id: @admin_user.id) }.not_to raise_error
+      end
+
+      it "handles suspension when user has no custom domain" do
+        @custom_domain.destroy!
+        @user.flag_for_fraud!(author_id: @admin_user.id)
+
+        expect { @user.suspend_for_fraud!(author_id: @admin_user.id) }.not_to raise_error
+      end
     end
 
     it "adds a comment when flagging for TOS violation" do

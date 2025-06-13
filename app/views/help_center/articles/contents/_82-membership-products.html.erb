@@ -1,0 +1,116 @@
+<% @description = "In this article: Creating a membership Creating and managing tiers Reorder and share tiers Free trials Create fixed-length memberships Discounts on memberships " %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><b>In this article:</b></p>
+    <ul>
+      <li><a href="#Creating-a-membership-nuIIF" target="_self">Creating a membership</a></li>
+      <li><a href="#Creating-and-managing-tiers-CcdNQ" target="_self">Creating and managing tiers</a>
+        <ul>
+          <li><a href="#Reorder-and-share-tiers-S8Y_9" target="_self">Reorder and share tiers</a></li>
+        </ul>
+      </li>
+      <li><a href="#Free-trials-AHLq5">Free trials</a></li>
+      <li><a href="#Create-fixed-length-memberships-ZO7lO">Create fixed-length memberships</a></li>
+      <li><a href="#Discounts-on-memberships-3YCh2">Discounts on memberships</a></li>
+      <li><a href="#Increase-membership-price-for-existing-customers-kdjpu">Increase membership price for existing customers</a></li>
+      <li><a href="#How-it-works-for-customers-zNvOY">How it works for customers</a>
+        <ul>
+          <li><a href="#Sending-updates-or-planned-emails-avBZ0">Sending updates or planned emails</a></li>
+          <li><a href="#Reassign-a-member-to-a-different-tier-i-iNW">Reassign a member to a different tier</a></li>
+          <li><a href="#Letting-customers-switch-tiers-or-payment-frequency-a2Mum">Letting customers switch tiers or payment frequency</a></li>
+          <li><a href="#What-happens-if-you-delete-an-active-tier-0nSPc">What happens if you delete an active tier?</a></li>
+        </ul>
+      </li>
+      <li><a href="#Restrictions-for-memberships-0_yOY">Restrictions for memberships</a></li>
+      <li><a href="#Using-the-Gumroad-API-x5xcu">Using the Gumroad API</a></li>
+    </ul>
+    <h3 id="Creating-a-membership-nuIIF">Creating a membership</h3>
+    <p>On your <a href="https://app.gumroad.com/products/" target="_self">Products dashboard</a>, click New product and choose Membership to create a product with recurring charges.</p>
+    <figure><%= image_tag "help_center/membership-product.png" %></figure>
+    <p>Except for Tiers and some membership-specific settings, the product creation flow is the same as any other digital product on Gumroad. Please read <a href="149-adding-a-product.html" target="_self">this article</a> for more help on that.</p>
+    <h3 id="Creating-and-managing-tiers-CcdNQ">Creating and managing tiers</h3>
+    <p>Tiers are versions you can create within a membership. They can help you:</p>
+    <ul>
+      <li>Create varying levels of membership access, with each tier providing different combinations of content.</li>
+      <li>Sell software with different license levels, like Individual or Team.</li>
+      <li>Offer an additional service on top of your digital product, such as a coaching call or access to your community.</li>
+    </ul>
+    <p>To create your first tier, go to the Tiers section and click Add tier. Give your tier a name and description and enable the payment frequency options you wish to provide.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f84931f3fa9421e28891b/file-RQHIDleZsJ.png" %></figure>
+    <p>Provide a value in ‘Maximum number of active supporters’ if you wish to limit product sales for a specific tier.</p>
+    <p>In the Settings area, you can set the default payment frequency to show when a customer lands on your membership page. You must enable this default payment frequency option in all your tiers, and all tiers must provide the same frequency options. For example, you cannot provide just a monthly option for Tier 1 and a yearly option for Tier 2.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f84ad5173914f806c263d/file-UdGm2tXqnK.png" %></figure>
+    <p>Next, head over to your Content tab to add files and content for each tier. The drop-down on the right lets you control content for each tier individually. More on that <a href="149-adding-a-product.html#content">here</a>.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f84bde1989867dcefe919/file-nZBAB4WUur.png" %></figure>
+    <h3 id="Reorder-and-share-tiers-S8Y_9">Reorder and share tiers</h3>
+    <p>To reorder your tiers, click the handle on the left of the tier and drag it to the desired position.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f84da5173914f806c263e/file-46QMNIDa3T.gif" %></figure>
+    <p>You can also direct your customers to a specific tier by grabbing its Share link:</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f84e7e1989867dcefe91a/file-xI9EJHBkQh.png" %></figure>
+    <h3 id="Free-trials-AHLq5">Free trials</h3>
+    <p>Sometimes like a fine wine, a taste test is needed before a customer fully commits. Gumroad offers the ability to give customers a free trial for a limited time—either a week or a month.</p>
+    <p>To set up a free trial for your membership, go to Settings at the bottom of your product edit page and toggle on Offer a free trial:</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f85005173914f806c263f/file-OMJDsfbjAf.png" %></figure>
+    <p><b>Note:</b> Customer cards will be charged at the end of their free trial, either in 7 days or 28-31 days, depending on the month. Currently, we only have these two options.</p>
+    <p>Forty-eight hours before the trial ends, your customers will also be sent an email indicating their upcoming charge. If they cancel, you will get an email about it.</p>
+    <p>Customers cannot sign up for another free trial if they cancel their membership during the first free trial. However, repeat free trials are allowed if they cancel the old membership after they’ve been charged.</p>
+    <p>If you decide to turn off the free trial, it will not affect people currently on them. Customers will continue on their free trial and will not be charged immediately. However, any new customers coming to your product will not get a free trial.</p>
+    <h3 id="Create-fixed-length-memberships-ZO7lO">Create fixed-length memberships</h3>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/667f85a95173914f806c2640/file-FOfJylJKcu.png" %></figure>
+    <p>To create a fixed-length membership, enable the ‘Automatically end memberships after a number of months’ toggle in your product’s settings and enter the desired length of membership.</p>
+    <p>Note: The number you enter must be a multiple of the payment options you are offering on the product. For example, if you are offering a yearly payment option, you can't set the membership to end after 13 months.</p>
+    <h3 id="Discounts-on-memberships-3YCh2">Discounts on memberships</h3>
+    <p>You can offer discounts on your membership that apply to all recurring charges, or only the first one. Learn more about that <a href="128-creating-offer-codes.html#Discounts-for-memberships-_Pxb_" target="_self">here</a>. </p>
+    <h3 id="Increase-membership-price-for-existing-customers-kdjpu">Increase membership price for existing customers</h3>
+    <p>If you update a membership tier’s price and want it to apply to your existing members as well, toggle on the ‘Apply price changes to existing customers’ setting.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/642e44cd4cd1ab01bbe8b912/file-ei3aKH76uU.png" %></figure>
+    <p>When you increase the price of a membership, all existing customers will receive a notification email with 7 days' notice before the change takes effect. This gives customers plenty of time to decide if they want to continue with their membership at the new price point.</p>
+    <p>You can customize the message going out to your customers and send yourself a sample email as well.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/642e44e81274e915f2f92e89/file-GeNgm0X8lp.png" %></figure>
+    <p>Here’s a demo of this feature from Helen: <a href="https://youtu.be/st8ns96z7d4?t=1293">https://youtu.be/st8ns96z7d4?t=1293</a></p>
+    <h3 id="How-it-works-for-customers-zNvOY">How it works for customers</h3>
+    <p>To get a sense of the buying experience of a membership, check out our <a href="https://gumroadhelp.gumroad.com/l/WByfg" target="_self">free example product</a>. </p>
+    <p>Your customers will be able to access their membership content from their email receipts or their <a href="247-what-your-customers-see.html" target="_self">Library</a>. Read <a href="282-how-do-purchases-work-for-my-customers.html" target="_self">this article</a> to learn more about the customers’ experience.</p>
+    <p>You can also direct your customers to <a href="/help/../customers.gumroad.com/article/278-guide-to-memberships.html" target="_self">this article</a> if they need help with managing their membership like canceling or restarting it, updating their payment method, etc. When a membership is canceled, the customer will have access to the content up until the end of their billing period.</p>
+    <h3 id="Sending-updates-or-planned-emails-avBZ0">Sending updates or planned emails</h3>
+    <p>You can use our <a href="169-how-to-send-an-update.html" target="_self">Emails</a> feature to update customers about new files being added or any changes to the membership in general. You can choose to send emails to customers of specific tiers or select the entire membership.</p>
+    <p>You can also send scheduled emails to your customers using <a href="131-using-workflows-to-send-automated-updates.html" target="_self">Workflows</a>. </p>
+    <h3 id="Reassign-a-member-to-a-different-tier-i-iNW">Reassign a member to a different tier</h3>
+    <p>Did your customer select the wrong tier? Are you deleting a tier and need to move customers to a new one? Reassigning tiers is easy.</p>
+    <p>Go to the <a href="https://app.gumroad.com/customers/" target="_self">Sales tab</a> and select the purchase to change the tier. Under Tier select the new tier and click Save:</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61f3e10068cd260cc2d358e7/file-8VNmLZzoUe.gif" %></figure>
+    <p>This does not charge or refund the customer; it simply changes their tier. The change does not affect pricing or payments – the customer will always continue to pay the same price they are currently paying. </p>
+    <h3 id="Letting-customers-switch-tiers-or-payment-frequency-a2Mum">Letting customers switch tiers or payment frequency</h3>
+    <p>For memberships with multiple tiers, customers can change tiers at any time from their Manage membership page. They can find this page through the link in their receipt, or if they have a Gumroad account, in their Library.</p>
+    <p>If they upgrade their membership to a higher tier, they will be charged a prorated amount. They will get a discount for the remaining part of their subscription, which will be subtracted from their new membership rate. The discount is calculated as of the end of the current day.</p>
+    <p>So, if they are paying $5/month and change to an $8/month tier, they will be charged $3 that day to make up for the rest of the month, until they are charged $8 again. </p>
+    <p>If they downgrade their membership (move to a lower tier), their current plan won’t be changed immediately. We will wait until the end of their billing cycle to downgrade.</p>
+    <p>We will email them a receipt showing the changes.</p>
+    <h3 id="What-happens-if-you-delete-an-active-tier-0nSPc">What happens if you delete an active tier?</h3>
+    <p>If you delete a tier, its associated content will be removed as well. Your existing customers who purchased it will see the content from the current cheapest tier as a fallback. If no tier exists, they will see the product-level content.</p>
+    <p>Also, deleting the tier does not stop customers' subscriptions. They will keep paying their recurring charge until the membership is canceled. The <a href="https://app.gumroad.com/api#licenses" target="_self">Licenses API</a> will also keep returning the deleted tier in the variants field.</p>
+    <p>To avoid any confusion, we recommend that you reassign the customer to another tier that will remain live before deleting a tier.</p>
+    <h3 id="Restrictions-for-memberships-0_yOY">Restrictions for memberships</h3>
+    <ul>
+      <li>You cannot set a specific payment date for customers; we will always charge them on the day they made the initial purchase.</li>
+      <li>You cannot change your display currency after you have created your membership.</li>
+      <li>You cannot delay payments on subscriptions - i.e., where customers buy the membership on a launch date in March but do not pay until May. </li>
+    </ul>
+    <h3 id="Using-the-Gumroad-API-x5xcu">Using the Gumroad API</h3>
+    <p>To pull information about your subscribers and membership products through the API, please refer to: </p>
+    <ul>
+      <li><a href="https://gumroad.com/api#resource-subscriptions" target="_self">https://gumroad.com/api#resource-subscriptions</a></li>
+      <li><a href="https://gumroad.com/api#subscribers" target="_self">https://gumroad.com/api#subscribers</a></li>
+    </ul>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="156-gumroad-and-adult-content.html"><span>Adult content on Gumroad</span></a></li>
+      <li><a href="149-adding-a-product.html"><span>Adding a product</span></a></li>
+      <li><a href="247-what-your-customers-see.html"><span>The Gumroad Library</span></a></li>
+      <li><a href="139-how-to-cancel-your-customers-subscriptions.html"><span>Cancel customer memberships</span></a></li>
+      <li><a href="78-my-customer-did-not-receive-a-receipt.html"><span>Customers not receiving receipts</span></a></li>
+    </ul>
+  </div>
+</div>

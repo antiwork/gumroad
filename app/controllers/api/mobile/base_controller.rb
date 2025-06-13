@@ -10,7 +10,7 @@ class Api::Mobile::BaseController < ApplicationController
   end
 
   # Secret token that mobile users must provide in each API call
-  MOBILE_TOKEN = "ps407sr3rno1561ro2o4n360q21248s4o24oq33770rpro59o11q9r5469ososoo"
+  MOBILE_TOKEN = GlobalConfig.get("MOBILE_TOKEN")
 
   def current_resource_owner
     impersonated_user || current_api_user

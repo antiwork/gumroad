@@ -1505,7 +1505,11 @@ class Link < ApplicationRecord
           else
             node.remove
           end
-        elsif node.name == "script" && !(node["src"].present? && (URI.parse(node["src"]) rescue nil)&.host == "cdn.iframe.ly")
+        elsif node.name == "script" && !(
+          node["src"].present? &&
+            (URI.parse(node["src"]) rescue nil)&.host == "cdn.iframe.ly" &&
+            (URI.parse(node["src"]) rescue nil)&.path == "/embed.js"
+        )
           node.remove
         elsif node.name == "upsell-card"
           node.attributes.each do |attr|

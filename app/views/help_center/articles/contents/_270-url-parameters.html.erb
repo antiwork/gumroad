@@ -1,0 +1,132 @@
+<% @description = "In this article: Send customers directly to checkout Autofill your checkout form Link your customer directly to a variant, version, or tier Auto-select payment " %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p>In this article:</p>
+    <ul>
+      <li><a href="#Send-customers-directly-to-checkout-Vr4vz" target="_self">Send customers directly to checkout</a></li>
+      <li><a href="#Autofill-your-checkout-form-FmJK-" target="_self">Autofill your checkout form</a></li>
+      <li><a href="#Pay-in-installments-parameter-behavior-Ks9Lp" target="_self">Pay in installments parameter behavior</a></li>
+      <li><a href="#Link-your-customer-directly-to-a-variant-version-or-tier-XRv3l" target="_self">Link your customer directly to a variant, version, or tier</a></li>
+      <li><a href="#Auto-select-payment-frequency-for-your-membership-RH6Md" target="_self">Auto-select payment frequency for your membership</a></li>
+      <li><a href="#Set-a-referring-domain-on-your-own-site-Z3xHw" target="_self">Set a referring domain on your own site</a></li>
+      <li><a href="#Discounts-codes--rwfP" target="_self">Discounts codes</a></li>
+      <li><a href="#Using-more-than-one-URL-parameter-iD37j" target="_self">Using more than one URL parameter</a></li>
+      <li><a href="#Here-are-some-example-URLs-to-test-out--get-inspired-wj7ZN" target="_self">Here are some example URLs to test out &amp; get inspired</a></li>
+    </ul>
+    <br>
+    <p>You can use URL parameters to save time for your customers and increase your conversion rate by:</p>
+    <ul>
+      <li>Auto-filling information</li>
+      <li>Select a specific product version</li>
+      <li>Take them directly to their shopping cart</li>
+    </ul>
+    <h3 id="Send-customers-directly-to-checkout-Vr4vz">Send customers directly to checkout</h3>
+    <p>To <a href="44-build-gumroad-into-your-website.html#direct-checkout">send the customer directly to the checkout page</a> upon clicking the link, simply add ?wanted=true to the end of any product link.</p>
+    <h3 id="Autofill-your-checkout-form-FmJK-">Autofill your checkout form</h3>
+    <p>You can optionally autofill every field within the Gumroad checkout flow using URL parameters, including</p>
+    <table>
+      <tbody>
+        <tr>
+          <td><strong>Field</strong></td>
+          <td><strong>Example parameter</strong></td>
+        </tr>
+        <tr>
+          <td>Email</td>
+          <td>?email=</td>
+        </tr>
+        <tr>
+          <td>Pay-what-you-want price</td>
+          <td>?price=</td>
+        </tr>
+        <tr>
+          <td>Quantity</td>
+          <td>?quantity=</td>
+        </tr>
+        <tr>
+          <td>Variants</td>
+          <td>?variant=</td>
+        </tr>
+        <tr>
+          <td>Payment frequency for subscriptions</td>
+          <td>?yearly=</td>
+        </tr>
+        <tr>
+          <td>Pay in installments</td>
+          <td>?pay_in_installments=true</td>
+        </tr>
+        <tr>
+          <td>Custom Fields</td>
+          <td>?CustomFieldName1=</td>
+        </tr>
+        <tr>
+          <td>Discounts</td>
+          <td>{YourProductID}/{YourDiscountCode}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Note: This will also work with our <a href="44-build-gumroad-into-your-website.html#overlay">overlay feature</a> and <a href="44-build-gumroad-into-your-website.html#custom-button">custom buttons on your website</a>.</p>
+    <h3 id="Pay-in-installments-parameter-behavior-Ks9Lp">Pay in installments parameter behavior</h3>
+    <p>When using the <code>pay_in_installments=true</code> parameter:</p>
+    <ul>
+      <li>On the product page, this parameter does not change the behavior of the CTA buttons. Products with installment plans will still display two separate buttons - one for paying in full and one for paying in installments.</li>
+      <li>When combined with <code>wanted=true</code>, the installment payment option will be pre-selected on the checkout page.</li>
+    </ul>
+    <p>Example:</p>
+    <ul>
+      <li><code>https://username.gumroad.com/l/product?wanted=true&amp;pay_in_installments=true</code></li>
+    </ul>
+    <h3 id="Link-your-customer-directly-to-a-variant-version-or-tier-XRv3l">Link your customer directly to a variant, version, or tier</h3>
+    <p>To link directly to a variant, version, or tier:</p>
+    <ol>
+      <li>Navigate to the product’s edit page</li>
+      <li>Scroll down to the variant, version, or tier</li>
+      <li>Click the “Share” button next to the name of your variant to copy the link</li>
+    </ol>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/659bc7135428390b5eedbb04/file-sxf2nv1U0V.png" %></figure>
+    <h3 id="Auto-select-payment-frequency-for-your-membership-RH6Md">Auto-select payment frequency for your membership</h3>
+    <p>If you have a <a href="82-membership-products.html">Membership</a> product, you can direct your customer to a pre-selected payment frequency using the "monthly", "quarterly", "biannually", or "yearly" URL parameters. </p>
+    <p>Example: </p>
+    <ul>
+      <li><a href="https://annagreen.gumroad.com/l/QaSmj?biannually=true">https://annagreen.gumroad.com/l/QaSmj?biannually=true</a></li>
+    </ul>
+    <h3 id="Set-a-referring-domain-on-your-own-site-Z3xHw">Set a referring domain on your own site</h3>
+    <p>When a customer purchases with a link from your website, the site itself will be set as the referrer. If you want to override this based on how they found your site, you can set this with a link. </p>
+    <p>Example:</p>
+    <ul>
+      <li> <a href="https://kambanthemaker.gumroad.com/l/elephas?monthly=true&amp;wanted=true&amp;variant=Pro&amp;referrer=https://twitter.com">https://kambanthemaker.gumroad.com/l/elephas?monthly=true&amp;wanted=true&amp;variant=Pro&amp;referrer=https://twitter.com</a></li>
+    </ul>
+    <h3 id="Discounts-codes--rwfP">Discounts codes</h3>
+    <p>Discount codes can be applied if <a href="128-creating-offer-codes.html">passed as a URL parameter</a> as well. Just attach it to the end of the URL! </p>
+    <p>For example: </p>
+    <ul>
+      <li><a href="https://username.gumroad.com/%7BYourProductID%7D">https://username.gumroad.com/{YourProductID}</a> </li>
+    </ul>
+    <p>becomes </p>
+    <ul>
+      <li><a href="https://username.gumroad.com/%7BYourProductID%7D/%7BYourOfferCode%7D">https://username.gumroad.com/{YourProductID}/{YourDiscountCode}</a></li>
+    </ul>
+    <h3 id="Using-more-than-one-URL-parameter-iD37j">Using more than one URL parameter</h3>
+    <p>If you wish to auto-select a version for your customers and also take them directly to the shopping cart, you can easily do so by using both the "variant=" parameter and the "wanted=true" parameter. To work correctly, these parameters must be separated with an ampersand '&amp;' symbol and not another '?'. The '?' symbol is only used for the first parameter. </p>
+    <br>
+    <p>Here's an example of a multi-parameter URL: </p>
+    <ul>
+      <li><a href="https://app.gumroad.com/l/demo?price=10&amp;wanted=true&amp;email=me@email.com">https://app.gumroad.com/l/demo?price=10&amp;wanted=true&amp;email=me@email.com</a></li>
+    </ul>
+    <h3 id="Here-are-some-example-URLs-to-test-out--get-inspired-wj7ZN">Here are some example URLs to test out &amp; get inspired</h3>
+    <ul>
+      <li>https://reallyniceimages.gumroad.com/l/rni-all-films-5-pro-lr?email=example@gmail.com&amp;wanted=true</li>
+      <li>https://jingsketch.gumroad.com/l/JingsketchLighting?price=20</li>
+      <li>https://nabillemsieh.gumroad.com/l/smart-image-resize-pro?variant=Professional&amp;yearly=true</li>
+      <li>https://dvassallo.gumroad.com/l/profit-and-loss?yearly=true</li>
+      <li>https://tomnoske.gumroad.com/l/typewriter?quantity=3&amp;Name=Ryan&amp;wanted=true</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="44-build-gumroad-into-your-website.html"><span>Integrating Gumroad into websites</span></a></li>
+      <li><a href="136-find-your-products-url.html"><span>Find a product’s URL</span></a></li>
+      <li><a href="81-custom-product-urls.html"><span>Custom product URLs</span></a></li>
+    </ul>
+  </div>
+</div>
