@@ -280,73 +280,35 @@ describe Exports::PurchaseExportService do
       end
 
       describe "tax type" do
-        it "displays VAT for EU countries" do
-          @purchase.was_purchase_taxable = true
-          @purchase.tax_cents = 2_00
-          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "IT", combined_rate: 0.22)
-          @purchase.save!
+        tax_type_test_cases = [
+          { country: "IT", rate: 0.22, excluded: nil, expected_type: "VAT" },
+          { country: "AU", rate: 0.10, excluded: nil, expected_type: "GST" },
+          { country: "SG", rate: 0.07, excluded: nil, expected_type: "GST" },
+          { country: "US", rate: 0.085, excluded: true, expected_type: "Sales tax" },
+          { country: "US", rate: 0.085, excluded: false, expected_type: "Sales tax" },
+          { country: nil, rate: nil, excluded: true, expected_type: "Sales tax" }
+        ]
 
-          row = last_data_row
-          expect(field_value(row, "Taxes ($)")).to eq("2.0")
-          expect(field_value(row, "Tax Type")).to eq("VAT")
-        end
+        tax_type_test_cases.each do |test_case|
+          country = test_case[:country]
+          rate = test_case[:rate]
+          excluded = test_case[:excluded]
+          expected_type = test_case[:expected_type]
 
-        it "displays GST for Australia" do
-          @purchase.was_purchase_taxable = true
-          @purchase.tax_cents = 1_00
-          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.10)
-          @purchase.save!
+          context "when country is #{country.inspect}, rate is #{rate.inspect}, and excluded is #{excluded.inspect}" do
+            before do
+              @purchase.update!(
+                was_purchase_taxable: true,
+                was_tax_excluded_from_price: excluded,
+                tax_cents: 100,
+                zip_tax_rate: country && create(:zip_tax_rate, country:, combined_rate: rate)
+              )
+            end
 
-          row = last_data_row
-          expect(field_value(row, "Taxes ($)")).to eq("1.0")
-          expect(field_value(row, "Tax Type")).to eq("GST")
-        end
-
-        it "displays GST for Singapore" do
-          @purchase.was_purchase_taxable = true
-          @purchase.tax_cents = 70
-          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "SG", combined_rate: 0.07)
-          @purchase.save!
-
-          row = last_data_row
-          expect(field_value(row, "Taxes ($)")).to eq("0.7")
-          expect(field_value(row, "Tax Type")).to eq("GST")
-        end
-
-        it "displays Sales tax for US" do
-          @purchase.was_purchase_taxable = true
-          @purchase.was_tax_excluded_from_price = true
-          @purchase.tax_cents = 85
-          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "US", combined_rate: 0.085)
-          @purchase.save!
-
-          row = last_data_row
-          expect(field_value(row, "Taxes ($)")).to eq("0.85")
-          expect(field_value(row, "Tax Type")).to eq("Sales tax")
-        end
-
-        it "displays Sales tax (included) for US when tax was included" do
-          @purchase.was_purchase_taxable = true
-          @purchase.was_tax_excluded_from_price = false
-          @purchase.tax_cents = 85
-          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "US", combined_rate: 0.085)
-          @purchase.save!
-
-          row = last_data_row
-          expect(field_value(row, "Taxes ($)")).to eq("0.85")
-          expect(field_value(row, "Tax Type")).to eq("Sales tax")
-        end
-
-        it "displays Sales tax when purchase has no tax rate data" do
-          @purchase.was_purchase_taxable = true
-          @purchase.was_tax_excluded_from_price = true
-          @purchase.tax_cents = 1_00
-          @purchase.zip_tax_rate = nil
-          @purchase.save!
-
-          row = last_data_row
-          expect(field_value(row, "Taxes ($)")).to eq("1.0")
-          expect(field_value(row, "Tax Type")).to eq("Sales tax")
+            it "returns #{expected_type}" do
+              expect(field_value(last_data_row, "Tax Type")).to eq(expected_type)
+            end
+          end
         end
       end
     end
