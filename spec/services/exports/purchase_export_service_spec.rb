@@ -217,6 +217,7 @@ describe Exports::PurchaseExportService do
         row = last_data_row
         expect(field_value(row, "Subtotal ($)")).to eq("100.0")
         expect(field_value(row, "Taxes ($)")).to eq("0.0")
+        expect(field_value(row, "Tax Type")).to eq("")
         expect(field_value(row, "Shipping ($)")).to eq("0.0")
         expect(field_value(row, "Sale Price ($)")).to eq("100.0")
         expect(field_value(row, "Fees ($)")).to eq("0.31")
@@ -276,6 +277,77 @@ describe Exports::PurchaseExportService do
         expect(field_value(row, "Net Total ($)")).to eq("99.69")
         expect(field_value(totals_row, "Net Total ($)")).to eq("99.69")
         expect(field_value(row, "Tax Included in Price?")).to eq("0")
+      end
+
+      describe "tax type" do
+        it "displays VAT for EU countries" do
+          @purchase.was_purchase_taxable = true
+          @purchase.tax_cents = 2_00
+          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "IT", combined_rate: 0.22)
+          @purchase.save!
+
+          row = last_data_row
+          expect(field_value(row, "Taxes ($)")).to eq("2.0")
+          expect(field_value(row, "Tax Type")).to eq("VAT")
+        end
+
+        it "displays GST for Australia" do
+          @purchase.was_purchase_taxable = true
+          @purchase.tax_cents = 1_00
+          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.10)
+          @purchase.save!
+
+          row = last_data_row
+          expect(field_value(row, "Taxes ($)")).to eq("1.0")
+          expect(field_value(row, "Tax Type")).to eq("GST")
+        end
+
+        it "displays GST for Singapore" do
+          @purchase.was_purchase_taxable = true
+          @purchase.tax_cents = 70
+          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "SG", combined_rate: 0.07)
+          @purchase.save!
+
+          row = last_data_row
+          expect(field_value(row, "Taxes ($)")).to eq("0.7")
+          expect(field_value(row, "Tax Type")).to eq("GST")
+        end
+
+        it "displays Sales tax for US" do
+          @purchase.was_purchase_taxable = true
+          @purchase.was_tax_excluded_from_price = true
+          @purchase.tax_cents = 85
+          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "US", combined_rate: 0.085)
+          @purchase.save!
+
+          row = last_data_row
+          expect(field_value(row, "Taxes ($)")).to eq("0.85")
+          expect(field_value(row, "Tax Type")).to eq("Sales tax")
+        end
+
+        it "displays Sales tax (included) for US when tax was included" do
+          @purchase.was_purchase_taxable = true
+          @purchase.was_tax_excluded_from_price = false
+          @purchase.tax_cents = 85
+          @purchase.zip_tax_rate = create(:zip_tax_rate, country: "US", combined_rate: 0.085)
+          @purchase.save!
+
+          row = last_data_row
+          expect(field_value(row, "Taxes ($)")).to eq("0.85")
+          expect(field_value(row, "Tax Type")).to eq("Sales tax")
+        end
+
+        it "displays Sales tax when purchase has no tax rate data" do
+          @purchase.was_purchase_taxable = true
+          @purchase.was_tax_excluded_from_price = true
+          @purchase.tax_cents = 1_00
+          @purchase.zip_tax_rate = nil
+          @purchase.save!
+
+          row = last_data_row
+          expect(field_value(row, "Taxes ($)")).to eq("1.0")
+          expect(field_value(row, "Tax Type")).to eq("Sales tax")
+        end
       end
     end
 
@@ -435,6 +507,7 @@ describe Exports::PurchaseExportService do
       headers, row = rows.first, rows[rows.size - 2]
 
       expect(headers).to eq(described_class::PURCHASE_FIELDS + ["Age", "Order Number", "Size"])
+      expect(headers).to include("Tax Type")
 
       expect(headers.count("Order Number")).to eq(2)
       native_field_index = headers.index("Order Number")
