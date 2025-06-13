@@ -24,7 +24,7 @@
     <p>Watch this Google Analytics setup video by our engineer, Connor:</p>
     <div data-html-block><iframe width="560" height="315" src="https://www.youtube.com/embed/xc_QJ5H4a8M" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
     <p>The easiest way to set up Google Analytics on your Gumroad account is to paste your GA-4 measurement ID  into the Google Analytics Property ID field on the <a href="https://app.gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics Settings page</a>. Your GA4 measurement ID will look like this: G-P2AB123Z3D</p>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816b2174c2142995f91831/file-emVO51HGYj.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816b2174c2142995f91831/file-emVO51HGYj.png" %></figure>
     <p><a href="https://support.google.com/analytics/answer/9304153" target="_blank">Here’s how</a> to create a new GA4 property. Please provide your Gumroad profile URL while you are setting up your data stream, which you can find in the username section of the <a href="https://app.gumroad.com/settings/profile" target="_blank">Profile settings</a>.</p>
     <p>For each product, we currently send three events and three pageviews:</p>
     <ol>
@@ -35,7 +35,7 @@
     <p>The three pageviews are for the same actions and are titled accordingly.</p>
     <p>Once the setup is complete, the data usually appears quickly on GA’s Realtime dashboard even if the "Data Streams" table suggests that no data has been received in the last 48 hours.</p>
     <p>You’ll see the Google Analytics conversion events in the Events tab of the Reports page.</p>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816b6a1211660f0912d4da/file-Rai50RULAo.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816b6a1211660f0912d4da/file-Rai50RULAo.png" %></figure>
     <p>Product events are listed under an event category named by that product’s shortlink. Choose “Event Action” as the Primary Dimension to see more details about how far customers progressed in a given product’s purchase flow.</p>
     <p>For purchase events, we also pass in the 'Value' of the event (the sale price) in the unit of the product's currency (for example, '100' for a $1 sale).</p>
     <p>Similarly, you can see how your customers move through the Gumroad purchase flow and how many drop off at each step by following the instructions in <a href="https://support.google.com/analytics/answer/13391283?hl=en&amp;sjid=10223370205564468262-NA" target="_blank">this Google help doc</a>.</p>
@@ -86,14 +86,14 @@
         </tr>
       </tbody>
     </table>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816e7a7f8c2575e354488a/file-lPClVp9pf7.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816e7a7f8c2575e354488a/file-lPClVp9pf7.png" %></figure>
     <p>The status of your Conversion ID will remain Unverified until someone clicks your product link on Facebook and buys your product. If you run a <a href="62-testing-a-purchase.html" target="_blank">test purchase</a> of the product through Facebook, this will verify and activate the pixel.</p>
     <p><b>Troubleshoot</b></p>
     <p>If you don't see events going through, try turning off your browser extensions or ad-blockers as they can often block Pixel requests too. You should also test your Pixel setup with the <a href="https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" rel="noopener noreferrer">Meta Pixel Helper Chrome extension</a>.</p>
     <p>Learn more about the Meta Pixel <a href="https://www.facebook.com/help/435189689870514/" target="_blank">here</a>.</p>
     <h3 id="Snippets-j1elc">Snippets</h3>
     <p>You can add snippets provided by services like Google, Facebook, Twitter, and others to track conversions, set up retargeting, and measure ad performance. This code will be triggered based on your Location selection - on a product page, after a purchase is completed, or both.</p>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816ecd7f8c2575e354488b/file-TUF4ntqLfY.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816ecd7f8c2575e354488b/file-TUF4ntqLfY.png" %></figure>
     <p>These third-party services will provide you with a block of code to insert between &lt;head&gt; and &lt;/head&gt; on your website. Copy that block of code and paste it into the code box. Additionally, you can include your own custom JavaScript in a snippet. For example, the following snippet will log “Hello Gumroad!” to the browser console:</p>
     <pre>&lt;script&gt;console.log(“Hello Gumroad!”);&lt;/script&gt; </pre>
     <p>The ‘Location’ field controls where the snippet runs. If you select ‘Product page’, the snippet will run on the product page. If you select ‘Receipt’, it will run after a successful purchase. If you select ‘All pages’, it will run on the product page, and after a successful purchase of the product.</p>
@@ -117,13 +117,13 @@
     <p>After creating a campaign, go to  "Events Manager" and get the id from "Universal Website Tag". If it doesn't appear, you can click "Add event source" to create it.</p>
     <p>In your Gumroad <a href="https://app.gumroad.com/settings/third_party_analytics">Third-party analytics settings</a>, click on 'Add snippet', set location to 'Receipt', and add the following code in the Code area (with your specific Pixel ID and Event ID):</p>
     <pre>&lt;!-- Twitter conversion tracking base code --&gt; &lt;script&gt; !function(e,t,n,s,u,a){e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments); },s.version='1.1',s.queue=[],u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js', a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))}(window,document,'script'); twq('config','REPLACE_WITH_YOUR_TWITTER_PIXEL_ID'); // Twitter Pixel ID &lt;/script&gt; &lt;!-- End Twitter conversion tracking base code --&gt; &lt;!-- Twitter conversion tracking event code --&gt; &lt;script type="text/javascript"&gt; // Insert Twitter Event ID twq('event', 'REPLACE_WITH_YOUR_EVENT_ID', { value: $VALUE, currency: '$CURRENCY', conversion_id: '$ORDER' }); &lt;/script&gt; &lt;!-- End Twitter conversion tracking event code --&gt; </pre>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b8fd5cd0b6de7e3be2a86c/file-dAnYDRZjYu.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b8fd5cd0b6de7e3be2a86c/file-dAnYDRZjYu.png" %></figure>
     <p>You can learn more about Twitter Conversion tracking <a href="https://business.twitter.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites.html" target="_blank">here</a>.</p>
     <h3 id="TikTok-nnzqY">TikTok</h3>
     <p><b>Setting up the TikTok pixel:</b></p>
     <p>You must set up your TikTok pixel first to begin tracking sales. You can receive your pixel by following the instructions explained <a href="https://ads.tiktok.com/help/article/get-started-pixel?lang=en" target="_blank">here</a>.</p>
     <p>After you’ve received the pixel, paste it into the code box.</p>
-    <p><%= image_tag "https://lh6.googleusercontent.com/B1iFItnbMT5709l_wxk02rE7n8Xh3ZBfw01rd7-SArOA8q4FrrftzgB9qRkSUkWGf35xDTYa_IqnWUx9lbWAb_APvwKTnlVdr8J1_755Ywxq1JHQyzgc1SDlhwrvDqM0vcqEh4HPyfqvC_jD8oyZ0OY" %></p>
+    <figure><%= image_tag "https://lh6.googleusercontent.com/B1iFItnbMT5709l_wxk02rE7n8Xh3ZBfw01rd7-SArOA8q4FrrftzgB9qRkSUkWGf35xDTYa_IqnWUx9lbWAb_APvwKTnlVdr8J1_755Ywxq1JHQyzgc1SDlhwrvDqM0vcqEh4HPyfqvC_jD8oyZ0OY" %></figure>
     <p><b>Tracking sales:</b></p>
     <p>To track sales via the TikTok pixel, set up a standard "Place an Order" event as detailed <a href="https://ads.tiktok.com/help/article/standard-events-parameters?redirected=2" target="_blank">here</a>. You can add the following code to the third-party analytics snippet section to track this event with the order value:</p>
     <pre>ttq.track("PlaceAnOrder", {  value: '$VALUE', currency: '$CURRENCY', });    </pre>

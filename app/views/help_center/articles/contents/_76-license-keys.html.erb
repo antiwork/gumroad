@@ -27,7 +27,7 @@
     <p>License keys will NOT help you limit access to digital audio, video, or ebook files that you are selling on Gumroad.</p>
     <h3 id="Setting-up-a-product-with-license-keys-CG7_h">Setting up a product with license keys</h3>
     <p>License keys can be enabled and embedded directly from the product's content page. Go to your product's content page, click on the three-dot menu item, and select 'License key'.</p>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9df7c5d8fe340f348195c/file-aPZY2hVKhU.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9df7c5d8fe340f348195c/file-aPZY2hVKhU.png" %></figure>
     <p>You can drag and reposition the license key module anywhere on the page, but it can only be added to any one page of your content.</p>
     <p>You can also retroactively add license keys to a product.</p>
     <h3 id="multi-seat">Issuing multi-seat licenses</h3>
@@ -36,10 +36,10 @@
     </div>
     <p>The “Multi-seat license” setting allows you to issue multiple seats for a single purchase or license key.</p>
     <p>Expand the License key module on your content page and toggle on "Allow customers to choose number of seats per license purchased"</p>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9e3495d8fe340f3481960/file-MYl4EnL4Of.png" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9e3495d8fe340f3481960/file-MYl4EnL4Of.png" %></figure>
     <p>If you'd like to prepopulate the number of seats for a given customer, you can use the quantity <a href="270-url-parameters.html">URL parameter</a> (Example: <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)</a></p>
     <p>You will be able to view and manage the number of seats linked with a license key from the customer’s drawer in the <a href="https://app.gumroad.com/customers/">Audience dashboard</a>, while your customers can do this from their “Manage membership” page.</p>
-    <p><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif" %></p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif" %></figure>
     <p>Customers will immediately be charged a prorated amount if the number of seats increases. However, for a decrease in seats, their membership will get updated at the end of the current billing cycle. After that, they will be charged the reduced amount starting from the next renewal.</p>
     <p>For such purchases, the is_multiseat_license field will be set to true in our API response, and the value of quantity will indicate the number of seats.</p>
     <h3 id="enforcement">How license key enforcement works</h3>
