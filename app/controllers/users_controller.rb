@@ -175,7 +175,11 @@ class UsersController < ApplicationController
     end
 
     def set_user_for_action
-      @user = User.find_by_external_id!(params[:id])
+      @user = if params[:secure_id].present?
+        User.find_by_secure_external_id(params[:secure_id], scope: "email_unsubscribe")
+      else
+        User.find_by_external_id(params[:id])
+      end
 
       e404 if @user.nil?
     end
