@@ -55,7 +55,7 @@
   def nav_links
     content_tag :div, class: "flex flex-col justify-center items-center lg:flex-row lg:gap-1 lg:px-6" do
       nav_link("Discover", discover_path) +
-      (can_see_gumroad_blog?(logged_in_user) ? nav_link("Blog", gumroad_blog_root_path, {current_page_predicate: -> { request.path.start_with?(gumroad_blog_root_path) }}) : "") +
+      nav_link("Blog", gumroad_blog_root_path, {current_page_predicate: -> { request.path.start_with?(gumroad_blog_root_path) }}) +
       nav_link("Pricing", pricing_path) +
       nav_link("Features", features_path) +
       nav_link("About", about_path, {current_page_predicate: -> { current_page?(root_path) }})
