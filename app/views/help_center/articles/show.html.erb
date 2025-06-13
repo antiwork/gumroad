@@ -1,0 +1,7 @@
+<%= render layout: "help_center/content_with_categories", locals: {
+  title: @article.title,
+  categories: @article.category.categories_for_same_audience,
+  active_category: @article.category
+} do %>
+  <%= render @article %>
+<% end %>

@@ -98,6 +98,8 @@ GEM
       erubi (~> 1.11)
       rails-dom-testing (~> 2.2)
       rails-html-sanitizer (~> 1.6)
+    active_hash (3.3.1)
+      activesupport (>= 5.0.0)
     active_model_otp (2.3.4)
       activemodel
       rotp (~> 6.3.0)
@@ -1097,6 +1099,7 @@ DEPENDENCIES
   acme-client (~> 2.0)
   actionpack-action_caching (~> 1.2)
   actionpack-cloudflare (~> 1.1)
+  active_hash (~> 3.3)
   active_model_otp (~> 2.3)
   active_record_query_trace (~> 1.8)
   activerecord-mysql-index-hint (~> 0.0)
