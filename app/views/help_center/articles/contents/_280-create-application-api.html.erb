@@ -1,0 +1,64 @@
+<% @description = "In this article: For just your Gumroad account Generating an access token For any Gumroad account Sign in with Gumroad Using a Redirect URI Enabling your applic" %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><b>In this article:</b></p>
+    <ul>
+      <li><a href="#For-just-your-account-Wr9_c">For just your Gumroad account</a>
+        <ul>
+          <li><a href="#Generating-an-access-token-mWCDy">Generating an access token</a></li>
+        </ul>
+      </li>
+      <li><a href="#For-any-Gumroad-account-5sl4e">For any Gumroad account</a>
+        <ul>
+          <li><a href="#Sign-in-with-Gumroad-RE3bQ">Sign in with Gumroad</a></li>
+          <li><a href="#Using-a-Redirect-URI-Kjogp">Using a Redirect URI</a></li>
+          <li><a href="#Enabling-your-application-WmZYs">Enabling your application</a></li>
+        </ul>
+      </li>
+    </ul>
+    <p>To create an application for general use, you'll need to build a <a href="https://www.oauth.com/oauth2-servers/redirect-uris/">Redirect URI</a> handler to generate access tokens for each of your users. However, if you only want to use the API on your own Gumroad account, you can manually generate an access token, which is a simpler process.</p>
+    <h3 id="For-just-your-account-Wr9_c">For just your account</h3>
+    <p>If you're writing some custom code you need to run with your Gumroad account, all you need is an access token. Your access token is used in the request header of every request to the API and should be kept secret, like a password.</p>
+    <h3 id="Generating-an-access-token-mWCDy">Generating an access token</h3>
+    <p>First, sign in to your Gumroad account. Then, go to <a href="https://gumroad.com/settings/advanced#application-form">advanced settings</a>. Here, you'll see a form to create a new application.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61f2620fd86136157d99e084/file-jo3TIGs2A6.png" %></figure>
+    <p>Provide the following information and click "Create application":</p>
+    <ul>
+      <li><b>Application icon: </b>A small thumbnail image to identify your application.</li>
+      <li><b>Application name:</b> A name for your application</li>
+      <li><b>Redirect URI:</b> While this is very important when making a general-purpose application, when you just want an access token to use the API with your own account, simply enter localhost (http://127.0.0.1) in this field, as its value is not meaningful.</li>
+    </ul>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61f2668b8200bc052eb82fdb/file-EqaVvlFOVC.png" %></figure>
+    <p>Keep the application ID and secret values safe and confidential, but they are not necessary for manually generating an access token. Instead, use the "Generate access token" button to get your access token.</p>
+    <p>Keep your access token safe and confidential, like a password. When you make an API call, include it in the request's header. Here's an example of a request with the access token (replace ACCESS_TOKEN with the string from your application):</p>
+    <pre><p><b>curl https://api.gumroad.com/v2/products \</b></p><p><b>-d "access_token=ACCESS_TOKEN" \</b></p><p><b>-X GET</b></p></pre>
+    <p>You can always edit your application or find your Access Token again through the <a href="https://gumroad.com/settings/advanced#application-form">advanced settings</a> page.</p>
+    <figure><%= image_tag "https://lh6.googleusercontent.com/UMeo3fb3gE4foWhgh58VZ4ZTIOmZmpKM5ThlR236oZDJnSA3QmCb324TyFuaFu_ZdIACXWs9CB-XMWihn6JGX1sdEj0SlW1Jp8mhwqgAIUpYoIP92WYzLI9fcTSFGfgNHyH0RuSO5mWmHnijcXDV-g" %></figure>
+    <p>While we also provide a <code class="inline-code">refresh_token</code> when authenticating a user, we do not expire the <code class="inline-code">access_token</code> until it is revoked manually. </p>
+    <p>With your access token in hand, head back to our <a href="https://app.gumroad.com/api">API documentation</a> for a list of endpoints the API makes available.</p>
+    <h3 id="For-any-Gumroad-account-5sl4e">For any Gumroad account</h3>
+    <p>Setting up an application to use with any account starts off with the same process: creating an application through the <a href="https://gumroad.com/settings/advanced#application-form">advanced settings</a> page.</p>
+    <figure><%= image_tag "https://lh6.googleusercontent.com/K_VUETV0ByI1_T8Yc8L0FRmNAd0OfDQuGSBoy55IInJMYs4VgktKeiK-qNI_sr9jElf2U_zJa0azu5wP24Muz8qd2-Z5eA_Yf7amwB1AOS8Zc-yZosDvffQ2XhxAglhcZzcx833IEn04Brwn6DTSDQ" %></figure>
+    <p>Again, you'll need an Application icon, Application name, and Redirect URI. Now, when creating an application for any Gumroad account, the Redirect URI is actually important. To explain why, we must first detour to "Sign in with Gumroad."</p>
+    <h3 id="Sign-in-with-Gumroad-RE3bQ">Sign in with Gumroad</h3>
+    <p>If your website is built on Ruby on Rails, you can use the <a href="https://github.com/antiwork/omniauth-gumroad">Gumroad Omniauth gem</a> to enable "Sign in with Gumroad" in your software. Otherwise, use whatever OAuth/OmniAuth library your framework of choice supports. You will be provided with an Application ID (aka client_id ) and Application Secret (aka  client_secret ) to use in the authentication process.</p>
+    <br>
+    <p><b>Here is a step-by-step example:</b></p>
+    <ol>
+      <li>From the third-party app, send the user to Gumroad for authorization using a URL like this:</li>
+    </ol>
+    <pre><p><a href="https://gumroad.com/oauth/authorize?client_id=CLIENT_ID&amp;redirect_uri=REDIRECT_URI&amp;scope=SCOPE">https://gumroad.com/oauth/authorize?client_id=CLIENT_ID&amp;redirect_uri=REDIRECT_URI&amp;scope=SCOPE</a></p></pre>
+    <p>2. Replace CLIENT_ID, REDIRECT_URI, and <a href="https://gumroad.com/api#api-scopes">SCOPE</a> with the correct values. Here's a sample URL:</p>
+    <pre><p><a href="https://gumroad.com/oauth/authorize?client_id=f74e4939f6f9efe74f85ff034af9e9e04540d1e8fce609d652715db5480d4dbe&amp;redirect_uri=https://oauthdebugger.com/debug&amp;scope=edit_products">https://gumroad.com/oauth/authorize?client_id=f74e4939f6f9efe74f85ff034af9e9e04540d1e8fce609d652715db5480d4dbe&amp;redirect_uri=https://oauthdebugger.com/debug&amp;scope=edit_products</a></p></pre>
+    <p>3. Get the temporary authorization code from the URL redirected from Gumroad after authorization. For example, after authorization, Gumroad would redirect the user to the configured redirect_uri,  something like this:</p>
+    <pre><p><a href="https://oauthdebugger.com/debug?code=c302a5e2330ea9a581e370c9c7c9b87760734336ae3253d37e5425a9aa1a04d9">https://oauthdebugger.com/debug?code=c302a5e2330ea9a581e370c9c7c9b87760734336ae3253d37e5425a9aa1a04d9</a></p></pre>
+    <p>4. Use that code with client_id and client_secret to send an HTTPS request to Gumroad (as shown in the curl example) to get the access_token. We can then use this access_token in all API requests. Here is an example of getting that token:</p>
+    <pre><p>curl --request POST \</p><p>--url https://api.gumroad.com/oauth/token \</p><p>--data code=c302a5e2330ea9a581e370c9c7c9b87760734336ae3253d37e5425a9aa1a04d9 \</p><p>--data client_id=f74e4939f6f9efe74f85ff034af9e9e04540d1e8fce609d652715db5480d4dbe \</p><p>--data client_secret=10173a92c55744b097f0e2a1c4ea03d9dd5b54ad04c82e8efaabbec2d3a8f1f6 \</p><p>--data redirect_uri=https://oauthdebugger.com/debug</p><p>{"access_token":"abf11e4ab2850ffd50ef690257f7a1c998a443059513d1a4826f2b3159620505","token_type":"Bearer","refresh_token":"77d7836232246508a6c5b1a9d153d8edbce74249edafaef228554e7be8a29b5e","scope":"edit_products","created_at":1609038258}</p></pre>
+    <h3 id="Using-a-Redirect-URI-Kjogp">Using a Redirect URI</h3>
+    <p>The <a href="https://www.oauth.com/oauth2-servers/redirect-uris/">Redirect URI</a> can be any endpoint on your website. After a user authenticates through a "Log in with Gumroad" button, Gumroad will redirect them back to the configured Redirect URI with a temporary authorization code. The application can then use that temporary code along with the Application ID and Application Secret to get an access token for that user. </p>
+    <p>You can change your Redirect URI at any time.</p>
+    <h3 id="Enabling-your-application-WmZYs">Enabling your application</h3>
+    <figure><%= image_tag "https://lh4.googleusercontent.com/pb5kAF9xH5hVrHiqbni9cYguJmucRe6esWjL8sjMV_oWtcubR7JmelYD6xuv0FzyIKupzgu5N_bGfLzNGkV96ytX2Rx_ZDUMhSaku2l48KGHeQ4s827T6-vVoAurLgZdyNO208hMcSPsdejQLBFMZg" %></figure>
+    <p>Following the OmniAuth library's documentation, configure your Application ID and Application Secret, and then make sure you store the Access Tokens that the system generates appropriately for each user during the Redirect URI step. Each of these values should be treated like passwords, kept secret and safe.</p>
+  </div>
+</div>

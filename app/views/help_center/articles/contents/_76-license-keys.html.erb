@@ -1,0 +1,93 @@
+<% @description = "⚠️ Important: Our license key verification API requires the product_id parameter instead of product_permalink for all products created on or after Jan 9, 2023. " %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <div class="callout-yellow">
+      <p>⚠️ <strong>Important:</strong> Our <a href="https://app.gumroad.com/api#licenses">license key verification API</a> requires the <code class="inline-code">product_id</code> parameter instead of <code class="inline-code">product_permalink</code> for all products created on or after Jan 9, 2023.</p>
+    </div>
+    <p><strong>In this article:</strong></p>
+    <ul>
+      <li><a href="#What-are-license-keys-for--WZQVz">What are license keys for?</a></li>
+      <li><a href="#Setting-up-a-product-with-license-keys-CG7_h">Setting up a product with license keys</a>
+        <ul>
+          <li><a href="#multi-seat">Issuing multi-seat licenses</a></li>
+        </ul>
+      </li>
+      <li><a href="#enforcement">How license key enforcement works</a></li>
+      <li><a href="#verification">Verifying a license key in your application</a>
+        <ul>
+          <li><a href="#curl">cURL example</a></li>
+          <li><a href="#api-example">API response example</a></li>
+        </ul>
+      </li>
+      <li><a href="#Managing-licenses-and-subscriptions-iiiW4">Managing licenses and subscriptions</a></li>
+      <li><a href="#faqs">FAQs</a></li>
+    </ul>
+    <h3 id="What-are-license-keys-for--WZQVz">What are license keys for? </h3>
+    <p>License keys are primarily used by creators selling software. License keys can help creators verify purchases through their application and authorize or revoke access to the software they have created.</p>
+    <p>License keys will NOT help you limit access to digital audio, video, or ebook files that you are selling on Gumroad.</p>
+    <h3 id="Setting-up-a-product-with-license-keys-CG7_h">Setting up a product with license keys</h3>
+    <p>License keys can be enabled and embedded directly from the product's content page. Go to your product's content page, click on the three-dot menu item, and select 'License key'.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9df7c5d8fe340f348195c/file-aPZY2hVKhU.png" %></figure>
+    <p>You can drag and reposition the license key module anywhere on the page, but it can only be added to any one page of your content.</p>
+    <p>You can also retroactively add license keys to a product.</p>
+    <h3 id="multi-seat">Issuing multi-seat licenses</h3>
+    <div class="callout-blue">
+      <p>This feature is currently only available for <a href="82-membership-products.html">Membership</a> products.</p>
+    </div>
+    <p>The “Multi-seat license” setting allows you to issue multiple seats for a single purchase or license key.</p>
+    <p>Expand the License key module on your content page and toggle on "Allow customers to choose number of seats per license purchased"</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9e3495d8fe340f3481960/file-MYl4EnL4Of.png" %></figure>
+    <p>If you'd like to prepopulate the number of seats for a given customer, you can use the quantity <a href="270-url-parameters.html">URL parameter</a> (Example: <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)</a></p>
+    <p>You will be able to view and manage the number of seats linked with a license key from the customer’s drawer in the <a href="https://app.gumroad.com/customers/">Audience dashboard</a>, while your customers can do this from their “Manage membership” page.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif" %></figure>
+    <p>Customers will immediately be charged a prorated amount if the number of seats increases. However, for a decrease in seats, their membership will get updated at the end of the current billing cycle. After that, they will be charged the reduced amount starting from the next renewal.</p>
+    <p>For such purchases, the is_multiseat_license field will be set to true in our API response, and the value of quantity will indicate the number of seats.</p>
+    <h3 id="enforcement">How license key enforcement works</h3>
+    <p>License key enforcement is completely up to the creator. You can decide how many uses each key gets depending on your “verify” <a href="https://app.gumroad.com/api#licenses">license API calls</a>. Gumroad performs no additional license key verification.</p>
+    <p>Remember that checking for a valid license on each launch will increment the usage count unless you set the “increment_uses_count” flag to false. You can also check if a purchase has been refunded or disputed by checking the refunded/disputed fields of the API call response.</p>
+    <h3 id="verification"> Verifying a license key in your application</h3>
+    <p>Use these parameters to verify a license key:</p>
+    <ul>
+      <li><strong>product_id</strong> (the unique ID of the product, get this by expanding the license key module on the content page)</li>
+      <li><strong>license_key</strong> (the license key provided by your customer)</li>
+      <li><strong>increment_uses_count</strong> ("true"/"false", optional, default: "true")</li>
+    </ul>
+    <h3 id="curl">cURL example</h3>
+    <pre>curl https://api.gumroad.com/v2/licenses/verify \ -d "product_id=SDGgCnivv6gTTHfVRfUBxQ==" \ -d "license_key=YOUR_CUSTOMERS_LICENSE_KEY" \ -X POST </pre>
+    <h3 id="api-example">API response example</h3>
+    <p>If the verification is successful, you will receive a response similar to this:</p>
+    <pre>{ "success": true, "uses": 3, "purchase": { "seller_id": "kL0psVL2admJSYRNs-OCMg==", "product_id": "32-nPAicqbLj8B_WswVlMw==", "product_name": "licenses demo product", "permalink": "QMGY", "product_permalink": "https://sahil.gumroad.com/l/pencil", "email": "customer@example.com", "price": 0, "gumroad_fee": 0, "currency": "usd", "quantity": 1, "discover_fee_charged": false, "can_contact": true, "referrer": "direct", "card": { "expiry_month": null, "expiry_year": null, "type": null, "visual": null }, "order_number": 524459935, "sale_id": "FO8TXN-dbxYaBdahG97Y-Q==", "sale_timestamp": "2021-01-05T19:38:56Z", "purchaser_id": "5550321502811", "subscription_id": "GDzW4_aBdQc-o7Gbjng7lw==", "variants": "", "license_key": "85DB562A-C11D4B06-A2335A6B-8C079166", "is_multiseat_license": false, "ip_country": "United States", "recurrence": "monthly", "is_gift_receiver_purchase": false, "refunded": false, "disputed": false, "dispute_won": false, "id": "FO8TXN-dvaYbBbahG97a-Q==", "created_at": "2021-01-05T19:38:56Z", "custom_fields": [], "chargebacked": false, # purchase was refunded, non-subscription product only "subscription_ended_at": null, # subscription was ended, subscription product only "subscription_cancelled_at": null, # subscription was cancelled, subscription product only "subscription_failed_at": null # we were unable to charge the subscriber's card }} </pre>
+    <p>You will receive a 404 response code with an error message if verification fails.</p>
+    <h3 id="Managing-licenses-and-subscriptions-iiiW4">Managing licenses and subscriptions</h3>
+    <br>
+    <p>Our <a href="https://app.gumroad.com/api#licenses">Licenses API</a> will continue to return the key state as enabled until you disable it; however, we set the following fields with the appropriate timestamps so you can know if and when the membership has ended:</p>
+    <ol>
+      <li><code class="inline-code">subscription_ended_at</code> : Timestamp of a membership's end for a fixed-length membership, i.e. if the "Automatically end memberships after a number of months" setting is enabled on the product.</li>
+      <li><code class="inline-code">subscription_cancelled_at</code> : Timestamp of a membership's end if it was cancelled by the customer or creator.</li>
+      <li><code class="inline-code">subscription_failed_at</code> : Timestamp of a membership's end if it failed to renew (usually due to a card error)</li>
+    </ol>
+    <p>Please note that all these timestamps correspond to the membership end date and not the cancellation requested date/time. Also, successfully renewing or restarting the membership will reverse the values of these fields back to <code class="inline-code">null</code> . </p>
+    <p>If one of these fields is not null, you can disable the license and terminate access to the software.</p>
+    <h3 id="faqs">FAQs</h3>
+    <ul>
+      <li><strong>Can I make API calls from the browser?</strong> Yes, you can send API requests to <code class="inline-code">api.gumroad.com</code> from the browser. </li>
+      <li><strong>Does the value of </strong><code class="inline-code"><strong>sale_timestamp</strong></code><strong> and </strong><code class="inline-code"><strong>created_at</strong></code><strong> update when a subscription is renewed?</strong> No. They both remain the same as the original value. </li>
+      <li><strong>Does the "disable" method cancel the customer’s subscription?</strong> No, it just disables the license key. <a href="139-how-to-cancel-your-customers-subscriptions.html">Here’s how</a> to cancel a subscription for a customer. </li>
+      <li><strong>Can I use my own license keys?</strong> You either have to choose the license keys we generate or manage your license keys outside of our system. We do not have a way for you to import license keys. </li>
+      <li><strong>Can I reset the </strong><code class="inline-code"><strong>uses</strong></code><strong>count parameter to zero?</strong> You can increment or decrement the <code class="inline-code">uses</code> count, but you cannot reset it directly to zero. If you do not wish to increment the <code class="inline-code">uses</code> count at all, there's an <code class="inline-code">increment_uses_count</code> flag in the verify API call that you can set to false. Refer to our API docs <a href="https://gumroad.com/api#licenses">here</a>. </li>
+      <li><strong>Can I generate license keys for past purchases that did not have a license attached to them originally?</strong> Yes. When you turn on the "Generate a unique license key per sale" setting, all previous purchases of that product will also get a license key. Your customers will be able to access the key from their respective download pages. </li>
+      <li><b>Why is “purchaser_id" missing from the returned payload? </b>We store and return a `purchaser_id` only when the purchase is made by a signed-in user. As you might be aware, it is not necessary to be logged in to Gumroad to make a purchase, and thus not every purchase might have a `purchaser_id` linked with it. When the purchase is made by a signed-in user, we store that user’s ID as the purchaser_id otherwise, it is nil. If it’s present, we respond with purchaser_id in the API, otherwise, we don’t even include the purchaser_id key in the response. (ref)</li>
+      <li><b>Can I create products or upload content with the API? </b>Sorry, that's not yet possible. While we’re not working on this at the moment, you can add this to our <a href="https://gumroad.nolt.io/">feature request page</a> (and also vote on others). Our Product team regularly checks this list while planning future releases.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="64-is-gumroad-for-me.html"><span>Why choose Gumroad?</span></a></li>
+      <li><a href="149-adding-a-product.html"><span>Adding a product</span></a></li>
+      <li><a href="82-membership-products.html"><span>Selling memberships and subscriptions</span></a></li>
+      <li><a href="70-can-i-sell-services.html"><span>Sell digital services: freelancing, coaching, and tip jars</span></a></li>
+      <li><a href="81-custom-product-urls.html"><span>Custom product URLs</span></a></li>
+    </ul>
+  </div>
+</div>

@@ -1,0 +1,78 @@
+<% @description = "In this article: Create a workflow Add emails to your workflow Send abandoned cart emails Testing your workflow Your audience's experience Workflows allow you t" %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><b>In this article:</b></p>
+    <ul>
+      <li><a href="#Create-a-workflow-HRsUU" target="_self">Create a workflow</a></li>
+      <li><a href="#Add-emails-to-your-workflows-CWCkU" target="_self">Add emails to your workflow</a>
+        <ul>
+          <li><a href="#Send-abandoned-cart-emails-UYdro" target="_self">Send abandoned cart emails</a></li>
+        </ul>
+      </li>
+      <li><a href="#Testing-your-workflow-z6ml8" target="_blank">Testing your workflow</a></li>
+      <li><a href="#Your-audiences-experience-ZpRZS" target="_self">Your audience's experience</a></li>
+    </ul>
+    <hr role="separator">
+    <p>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger. Its use cases include:</p>
+    <ul>
+      <li>Teaching an online course where learning materials are delivered every week</li>
+      <li>Sending a personal thank-you note after each purchase</li>
+      <li>Asking for feedback when a customer cancels their membership</li>
+      <li>Remind customers to complete the purchase in their abandoned cart</li>
+      <li>Sending monthly marketing tips to your affiliates</li>
+    </ul>
+    <div class="bg-red-100 text-red-700 p-4 rounded my-4">
+      <p><b>Note</b>: You cannot send emails until you have $100 in total earnings and received a payout. This limitation is in place to prevent spam and protect Gumroad's email reputation.</p>
+    </div>
+    <h3 id="Create-a-workflow-HRsUU">Create a workflow</h3>
+    <div class="callout-yellow">
+      <p>Besides the workflow’s name, you cannot update any of its settings once a workflow has been published for the first time.</p>
+    </div>
+    <p>Creating a workflow is quite similar to creating a product on Gumroad. </p>
+    <ol>
+      <li>Go to your <a href="https://app.gumroad.com/workflows">Workflows dashboard</a> and click ‘New workflow’ on the top right.</li>
+      <li>Name your workflow and choose a trigger to activate it:
+        <ol>
+          <li><b>Purchase:</b> A customer purchases your product</li>
+          <li><b>New subscriber:</b> A user subscribes to your email list</li>
+          <li><b>Member cancels:</b> A membership product subscriber cancels. This trigger runs at the end of the customer’s membership–i.e. when the already billed period ends, not when the membership cancellation is requested.</li>
+          <li><b>New affiliate:</b> A user becomes an affiliate of your products</li>
+          <li><b>Abandoned cart:</b> A user adds products to their cart and exits</li>
+        </ol>
+      </li>
+      <li>
+        <p>Customize the audience list for each trigger by applying filters. You can send the workflow only to customers of specific products by adding it to the ‘Has bought’ filter, or customers who have not bought a product with the ‘Has not yet bought’ filter. Please note that you can only add one product in the ‘Has not yet bought’ filter, and if a customer purchases this product mid-way through the workflow, they will not receive any subsequent emails in the series.</p>
+        <p>You can filter further by the date purchased/joined/canceled or the amount paid and choose to send emails to previously eligible audience members, wherever applicable.</p>
+      </li>
+      <li>Once ready, click ‘Save and continue’ to add emails to your workflow.</li>
+    </ol>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/664433f2340e4261ee1c4cfe/file-yd2jarFnSR.png" %></figure>
+    <h3 id="Add-emails-to-your-workflows-CWCkU">Add emails to your workflows</h3>
+    <p>Click ‘Create email’ to draft your first workflow email. You can schedule it to go out after a certain number of hours, days, weeks, or months after the trigger.</p>
+    <figure><%= image_tag "https://lh7-us.googleusercontent.com/V99cN8giCfPK0WdNsJMiQkuR22tAQrHfz6fwV37pLFQMLzz4556b_bu3B4hItWo_36_PbfZ-yWXQqOu5LjMLz-DO_8VTbbQhfNEYXKhDp0KZqV8CekgI4q3KHj5485xdEtX457EsrGjPzxBwC3jUEuE" %></figure>
+    <p>To add more emails to the workflow, just click ‘Add email’ and repeat!</p>
+    <p>Send yourself an email preview to see how your target audience will, and once you’re ready, click Publish to activate the workflow. </p>
+    <figure><%= image_tag "https://lh7-us.googleusercontent.com/qVayE-qc1_wcsnseHJP4ZuusXbaflRKe8TpyjC4OYYVP9La7rO8p37gw54VxjLnXBNz_tq_Bva0bndXmFkzimLZYSbLB6Enrr_gMMv7BMJXkQVMhEOTjyH89csDaoSc5QrjBACV_eu2zV9nHWApqF9o" %></figure>
+    <p>You can also just save your changes and come back to them later, or edit your emails even after publishing!</p>
+    <h3 id="Send-abandoned-cart-emails-UYdro">Send abandoned cart emails</h3>
+    <p>Unlike other workflow triggers, you get a default template email for Abandoned cart workflows that goes out 24 hours after cart abandonment. You can edit the subject and email copy, but you cannot remove the embedded product list, add more emails, or change the delay from 24 hours to something else.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/664b407972987f726dc81b5e/file-zEj6Ze1xcY.jpg" %></figure>
+    <p>We do not send a duplicate card abandonment email every 24 hours if the customer’s cart remains abandoned.</p>
+    <h3 id="Testing-your-workflow-z6ml8">Testing your workflow</h3>
+    <p>You can't test a workflow as part of a <a href="62-testing-a-purchase.html">test purchase</a>. As a test purchase isn't a real transaction, the workflow won’t be triggered.</p>
+    <p>Instead, you can test the workflow by creating a 100% <a href="128-creating-offer-codes.html">Discount Code</a> and purchasing using another email address.</p>
+    <h3 id="Your-audiences-experience-ZpRZS">Your audience's experience</h3>
+    <p>Your audience will receive workflows as emails with links to any files you've attached.</p>
+    <p>The emails will be addressed from you (specifically, the name you have entered in your <a href="https://app.gumroad.com/settings/profile">profile settings</a>), but with a @gumroad.com email. Unfortunately, it is not possible to use a custom email here as of now, but any replies to these emails will be sent to your support email.</p>
+    <p>Test out the experience for yourself by getting this <a href="https://gumroadhelp.gumroad.com/l/RkXRF?price=0&amp;wanted=true">free example product</a>!</p>
+    <figure><%= image_tag "https://lh7-us.googleusercontent.com/EwlQjb0XnTNv4PNpPNujb9XIUyVSZYeDMwxrElXjAab6TVgmaXdPb5s2vh6z2KM8ke7Byv0_HIAw6nJcLLF7NK4qpmXQlFETMoCjURy8bcb9fPqOKQu-sbry41KLleaqoM08DjPLb6T4wAhDLTn8XWg" %></figure>
+    <p>Please follow <a href="54-not-receiving-updates.html" target="_blank">this article</a> if your customers report about not receiving workflow emails, or if you’d like to resend them.</p>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="82-membership-products.html"><span>Selling memberships and subscriptions</span></a></li>
+      <li><a href="169-how-to-send-an-update.html"><span>Send email updates</span></a></li>
+    </ul>
+  </div>
+</div>

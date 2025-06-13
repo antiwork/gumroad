@@ -1,0 +1,43 @@
+<% content_for :meta do %>
+  <%= tag.link rel: "canonical", href: @canonical_url %>
+  <%= tag.meta name: "description", content: @description %>
+
+  <%= tag.meta property: "og:title", content: @title %>
+  <%= tag.meta property: "og:description", content: @description %>
+  <%= tag.meta property: "og:type", content: "website" %>
+  <%= tag.meta property: "og:url", content: @canonical_url %>
+
+  <%= tag.meta name: "twitter:card", content: "summary" %>
+  <%= tag.meta name: "twitter:title", content: @title %>
+  <%= tag.meta name: "twitter:description", content: @description %>
+<% end %>
+
+<% content_for :style do %>
+  <%= stylesheet_pack_tag :help_center %>
+<% end %>
+
+<% content_for :content do %>
+  <main>
+    <header>
+      <h1 class="group-[.sidebar-nav]:block hidden">Help</h1>
+      <h1 class="group-[.sidebar-nav]:hidden">
+        <%= link_to root_path, class: "flex items-center" do %>
+          <%= image_tag "logo.svg", alt: "Gumroad", class: "dark:invert h-8" %>
+        <% end %>
+      </h1>
+
+      <div class="actions">
+        <% unless current_page?(help_center_root_path) %>
+          <%= link_to help_center_root_path, class: "button",
+            aria: { label: "Search" }, title: "Search" do %>
+            <span class="icon icon-solid-search"></span>
+          <% end %>
+        <% end %>
+    </header>
+    <section class="paragraphs">
+      <%= yield %>
+    </section>
+  </main>
+<% end %>
+
+<%= render template: "layouts/application" %>

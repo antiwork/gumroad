@@ -1,0 +1,88 @@
+<% @description = "In this article: Getting started Gumroad Affiliate Program Sticky affiliate links Reasons you might not be credited for a sale Can the affiliate links be shorte" %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><strong>In this article:</strong></p>
+    <ul>
+      <li><a href="#getting-started">Getting started</a></li>
+      <li><a href="#Gumroad-Affiliate-Program-0awON" target="_blank">Gumroad Affiliate Program</a></li>
+      <li><a href="#sticky">Sticky affiliate links</a></li>
+      <li><a href="#not-credited">Reasons you might not be credited for a sale</a></li>
+      <li><a href="#shortened">Can the affiliate links be shortened/personalized?</a></li>
+      <li><a href="#verify">How to verify that your affiliate link works</a></li>
+      <li><a href="#website-integration">Integrating affiliate links into your website</a></li>
+      <li><a href="#getting-paid">Getting paid for your affiliate sales</a></li>
+      <li><a href="#membership">Membership products</a></li>
+      <li><a href="#refunds">Refunds</a></li>
+    </ul>
+    <h3 id="getting-started">Getting started</h3>
+    <p>As an affiliate on Gumroad, you can reach out to creators directly to promote their products.</p>
+    <p>To get started, first, <a href="http://app.gumroad.com/signup">create an account</a> and fill out <a href="https://app.gumroad.com/settings/payout">your payout settings</a>. After that, reach out to the creator you wish to sell for. They will need to know the email address attached to your Gumroad account, which you can double-check from the <a href="http://www.gumroad.com/settings">settings page</a>. We cannot give out the contact information of our creators, so you will have to do some research to find their email. </p>
+    <p>After a creator adds you as an affiliate, you'll get an email with your affiliate links and how much you'll be credited for each sale.</p>
+    <p>You can also go to your <a href="https://gumroad.com/products/affiliated">affiliated products dashboard</a> to see all the products you're affiliated with, how much money you've made on those products, and quickly copy your links: </p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/635696038a552811521e7e2f/file-oWnn2GNjtB.png" %></figure>
+    <h3 id="Gumroad-Affiliate-Program-0awON">Gumroad Affiliate Program</h3>
+    <p>Any product on <a href="http://discover.gumroad.com/">Gumroad Discover</a> is available for you to become an affiliate for. You don’t have to reach out to these creators to request to be an affiliate for their products. From the <a href="https://app.gumroad.com/products/affiliated?affiliates=true">Gumroad global affiliates dashboard</a>, you can generate affiliate links for <a href="http://discover.gumroad.com/">Gumroad Discover</a>, specific products, and creator profile pages. These links, which are specific to this one’s affiliate account, will add a browser cookie when clicked and track any purchases made via this link. This cookie will only be active for seven days. </p>
+    <p>Note: Some products on Gumroad Discover are not eligible to be an affiliate as some creators have chosen to opt out of the program.</p>
+    <h3 id="sticky">Sticky affiliate links</h3>
+    <p>You may want to create a "sticky" affiliate URL with your affiliate ID as a URL parameter. </p>
+    <p>Why? The standard affiliate URLs (with the "/a/" in them) depend on browser cookies to credit you. However, sometimes customers use browsers that block cookies. In such cases, the affiliate does not get credit for the sale, but sticky affiliate links will help you get credited regardless!</p>
+    <p>Your sticky affiliate URL will look like this:</p>
+    <ul>
+      <li><a href="https://gumroad.com/l/:product_permalink?affiliate_id="><b>https://gumroad.com/l/:product_permalink?affiliate_id=</b></a><b> &lt;affiliate_id&gt;. </b></li>
+    </ul>
+    <p>For example, if your affiliate URL for a given product is </p>
+    <ul>
+      <li><a href="https://gumroad.com/a/1234567"><strong>https://gumroad.com/a/1234567</strong></a></li>
+    </ul>
+    <p>and it redirects the customers to </p>
+    <ul>
+      <li><a href="https://gumroad.com/l/abcxyz"><strong>https://gumroad.com/l/abcxyz</strong></a></li>
+    </ul>
+    <p>then your sticky affiliate URL will be </p>
+    <ul>
+      <li><a href="https://gumroad.com/l/abcxyz?affiliate_id=1234567"><strong>https://gumroad.com/l/abcxyz?affiliate_id=1234567</strong></a></li>
+    </ul>
+    <p><b>Please note</b> - the only way you can be credited for your affiliate sales is if you share your affiliate links, found in the email we send you and on your affiliated products dashboard. </p>
+    <p>We can't credit you for the sale if you accidentally share a product link. </p>
+    <h3 id="not-credited">Other reasons you might not be credited for a sale</h3>
+    <ol>
+      <li>The customer's web browser does not accept cookies. </li>
+      <li>The customer did not buy the product within 30 days of clicking your link. Our cookies expire after 30 days. </li>
+      <li>The customer clicked a different affiliate's link <strong>after</strong> they clicked yours and bought the product.</li>
+    </ol>
+    <h3 id="shortened">Can the affiliate links be shortened/personalized?</h3>
+    <p>Yes, affiliates can use link shorteners like bit.ly and they will get credited for the sales as expected as long as the customized link points to the affiliate URL. </p>
+    <h3 id="verify">How to verify that your affiliate link works</h3>
+    <p>If you've got all the above steps right, your link is ready to earn you some $$$. But for those who always like to double-check: there's a handy way to ensure that the link works fine! </p>
+    <ol>
+      <li>Click on your affiliate link — this will take you to the product/profile page of which you're an affiliate</li>
+      <li>Open your browser's dev tools. If you're on Chrome, the shortcut is Command+Option+C (Mac) or Control+Shift+C (Windows, Linux, Chrome OS)</li>
+      <li>Follow the steps on <a href="https://developers.google.com/web/tools/chrome-devtools/storage/cookies" target="_blank">this page</a> to reach the "Cookies" panel</li>
+      <li>
+        <p>Click on gumroad.com (of course) from the various cookie origins, and look for the cookie name starting with <em>_gumroad_affiliate_id_</em></p>
+        <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5fd4be0d23119734ee37edfd/file-6RuhnY5h86.png" %></figure>
+        <p>You can even check when your cookie will expire in the "Expires/Max-Age" column.</p>
+      </li>
+    </ol>
+    <h3 id="website-integration">Integrating affiliate links into your website</h3>
+    <p>You can grab the affiliated product's widget code from the <a href="https://gumroad.com/widgets">Widgets</a> page while logged in to your account:</p>
+    <figure><%= image_tag "https://lh6.googleusercontent.com/L63X-lZ1KsUmMlX-Myjn0EoOekc8PdTr6jJB9nWBsPwbA82Rt4c9xxp7H6pyj1oFd5VPEJHct7tIMM31BXysXlRfszeVHmMobWffZiVmjKKjvm6nJHkE33aLvXc3DNP6nIxkDanSGN5sIDQWh7ah9fakWAv_R7o3yqzhBrA8QFCrzrMCIqOKlk_UpQ", width: 624, height: 328 %></figure>
+    <p>Also note that you can provide <a href="270-url-parameters.html">URL parameters</a> (for example, &amp;wanted=true&amp;offer_code=thanksgiving) to our overlay as well.</p>
+    <p>If you need more help with setting up these widgets on your website, please refer to <a href="44-build-gumroad-into-your-website.html">this article</a>. </p>
+    <p> As a Gumroad affiliate, you will not be able to see any sales on the iOS <a href="177-the-gumroad-dashboard-app.html" style="font-size: 14px;" target="_blank">Gumroad Dashboard app</a>. That means there is no place for you to track your sales or see analytics on how your links are being shared. If you wish to get detailed insights into how your links are performing, you can use a service like <a href="https://bitly.com/" style="font-size: 14px;" target="_blank">bit.ly</a> and utilize the analytics tools they offer.  </p>
+    <h3 id="getting-paid">Getting paid for your affiliate sales</h3>
+    <p>We pay affiliates the same way we pay creators. You can read in detail about that process in <a href="13-getting-paid.html">this article</a>. </p>
+    <figure><%= image_tag "https://lh5.googleusercontent.com/AS3KAKcfZABQCEjGJNfDbaAC1ySuWZxc4iSbuN23vpabQloLwElz29FqJUYWo-GEDD5cukMYPqttis48IXjL_Cw3JgRDlxI_OXHZ938Fx9TFZWyShNnF7Uf7LYZtOPIOCxc5WzNML3Lx7bm7PSy-DKHAaI3eAiGC2XnfVqcPs1nJ0oqsY8jblEvkBg", width: 624, height: 163 %></figure>
+    <h3 id="membership">Membership products </h3>
+    <p>Membership products charge customers on a recurring basis, and if you help make a sale of a membership, you will get a portion of every charge.</p>
+    <h3 id="refunds">Refunds</h3>
+    <p>When a customer is refunded, 100% of the sale price is refunded to them. That, unfortunately, means you would also lose your share of the sale. </p>
+    <p>If you have already been paid out for that sale, the refunded money will come out of your balance, which could make your balance go negative. To be paid out again, you would have to make enough sales to get your balance over $10.</p>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="333-affiliates-on-gumroad.html"><span>Affiliates on Gumroad</span></a></li>
+    </ul>
+  </div>
+</div>

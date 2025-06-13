@@ -1,0 +1,402 @@
+<% @description = "In this article: Payout modes Get paid to your bank account Get paid to Stripe Get paid to PayPal Other payout modes Stripe verification process Payout schedule" %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><strong>In this article:</strong></p>
+    <ul>
+      <li><a href="#payout-modes">Payout modes</a>
+        <ul>
+          <li><a href="#bank-account">Get paid to your bank account</a></li>
+          <li><a href="#paypal">Get paid to PayPal</a></li>
+        </ul>
+      </li>
+      <li><a href="#Stripe-verification-process-ZFq5c" target="_self">Verification process</a></li>
+      <li><a href="#schedule">Payout schedule</a></li>
+      <ul>
+        <li><a href="#instant-payouts">Instant payouts</a></li>
+      </ul>
+      <li><a href="#paypal-connect">Enable payments via PayPal</a></li>
+      <li><a href="#review">The account review process</a></li>
+    </ul>
+    <h3 id="payout-modes">Payout modes</h3>
+    <p>We support direct bank deposits in the local currency for most countries. For countries where bank deposits are not available, we offer PayPal transfers as the only payment option.</p>
+    <p>We do <i>not</i> support alternative payout modes like Payoneer, Wise, check, money order, wire transfer, etc. If your country is not supported by direct bank deposits or PayPal, then unfortunately, we have no way to pay you out for now.</p>
+    <p>To get paid for your sales, start by filling out your <a href="https://app.gumroad.com/settings/payments">payments settings</a>.</p>
+    <h3 id="bank-account">Get paid to your bank account</h3>
+    <div class="callout-yellow">
+      <p><b>Note: </b>Due to restrictions from our payment partners, you may have to forfeit your balance if you want to change your country in the future. Choose carefully!</p>
+    </div>
+    <p>We currently support bank payouts in the following countries:</p>
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Country</th>
+            <th>Payout Currency</th>
+            <th>Country</th>
+            <th>Payout Currency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Albania</td>
+            <td>ALL</td>
+            <td>Algeria</td>
+            <td>DZD</td>
+          </tr>
+          <tr>
+            <td>Angola</td>
+            <td>AOA</td>
+            <td>Antigua and Barbuda</td>
+            <td>XCD</td>
+          </tr>
+          <tr>
+            <td>Argentina</td>
+            <td>ARS</td>
+            <td>Armenia</td>
+            <td>AMD</td>
+          </tr>
+          <tr>
+            <td>Australia</td>
+            <td>AUD</td>
+            <td>Azerbaijan</td>
+            <td>AZN</td>
+          </tr>
+          <tr>
+            <td>Bahamas</td>
+            <td>BSD</td>
+            <td>Bahrain</td>
+            <td>BHD</td>
+          </tr>
+          <tr>
+            <td>Bangladesh</td>
+            <td>BDT</td>
+            <td>Benin</td>
+            <td>XOF</td>
+          </tr>
+          <tr>
+            <td>Bhutan</td>
+            <td>BTN</td>
+            <td>Bolivia</td>
+            <td>BOB</td>
+          </tr>
+          <tr>
+            <td>Bosnia and Herzegovina</td>
+            <td>BAM</td>
+            <td>Botswana</td>
+            <td>BWP</td>
+          </tr>
+          <tr>
+            <td>Brunei</td>
+            <td>BND</td>
+            <td>Bulgaria</td>
+            <td>BGN</td>
+          </tr>
+          <tr>
+            <td>Cambodia</td>
+            <td>KHR</td>
+            <td>Canada</td>
+            <td>CAD</td>
+          </tr>
+          <tr>
+            <td>Chile</td>
+            <td>CLP</td>
+            <td>Colombia</td>
+            <td>COP</td>
+          </tr>
+          <tr>
+            <td>Costa Rica</td>
+            <td>CRC</td>
+            <td>Côte d'Ivoire</td>
+            <td>XOF</td>
+          </tr>
+          <tr>
+            <td>Czech Republic</td>
+            <td>CZK</td>
+            <td>Denmark</td>
+            <td>DKK</td>
+          </tr>
+          <tr>
+            <td>Dominican Republic</td>
+            <td>DOP</td>
+            <td>Ecuador</td>
+            <td>USD</td>
+          </tr>
+          <tr>
+            <td>Egypt</td>
+            <td>EGP</td>
+            <td>El Salvador</td>
+            <td>USD</td>
+          </tr>
+          <tr>
+            <td>Ethiopia</td>
+            <td>ETB</td>
+            <td>European Union</td>
+            <td>EUR</td>
+          </tr>
+          <tr>
+            <td>Gabon</td>
+            <td>XAF</td>
+            <td>Ghana</td>
+            <td>GHS</td>
+          </tr>
+          <tr>
+            <td>Gibraltar</td>
+            <td>GBP</td>
+            <td>Guatemala</td>
+            <td>GTQ</td>
+          </tr>
+          <tr>
+            <td>Guyana</td>
+            <td>GYD</td>
+            <td>Hong Kong</td>
+            <td>HKD</td>
+          </tr>
+          <tr>
+            <td>Hungary</td>
+            <td>HUF</td>
+            <td>Iceland</td>
+            <td>EUR</td>
+          </tr>
+          <tr>
+            <td>India</td>
+            <td>INR</td>
+            <td>Indonesia</td>
+            <td>IDR</td>
+          </tr>
+          <tr>
+            <td>Israel</td>
+            <td>ILS</td>
+            <td>Jamaica</td>
+            <td>JMD</td>
+          </tr>
+          <tr>
+            <td>Japan</td>
+            <td>JPY</td>
+            <td>Jordan</td>
+            <td>JOD</td>
+          </tr>
+          <tr>
+            <td>Kazakhstan</td>
+            <td>KZT</td>
+            <td>Kenya</td>
+            <td>KES</td>
+          </tr>
+          <tr>
+            <td>Korea</td>
+            <td>KRW</td>
+            <td>Kuwait</td>
+            <td>KWD</td>
+          </tr>
+          <tr>
+            <td>Laos</td>
+            <td>LAK</td>
+            <td>Liechtenstein</td>
+            <td>CHF</td>
+          </tr>
+          <tr>
+            <td>Macao</td>
+            <td>MOP</td>
+            <td>Madagascar</td>
+            <td>MGA</td>
+          </tr>
+          <tr>
+            <td>Malaysia</td>
+            <td>MYR</td>
+            <td>Mauritius</td>
+            <td>MUR</td>
+          </tr>
+          <tr>
+            <td>Mexico</td>
+            <td>MXN</td>
+            <td>Moldova</td>
+            <td>MDL</td>
+          </tr>
+          <tr>
+            <td>Monaco</td>
+            <td>EUR</td>
+            <td>Mongolia</td>
+            <td>MNT</td>
+          </tr>
+          <tr>
+            <td>Morocco</td>
+            <td>MAD</td>
+            <td>Mozambique</td>
+            <td>MZN</td>
+          </tr>
+          <tr>
+            <td>Namibia</td>
+            <td>NAD</td>
+            <td>New Zealand</td>
+            <td>NZD</td>
+          </tr>
+          <tr>
+            <td>Niger</td>
+            <td>XOF</td>
+            <td>Nigeria</td>
+            <td>NGN</td>
+          </tr>
+          <tr>
+            <td>North Macedonia</td>
+            <td>MKD</td>
+            <td>Norway</td>
+            <td>NOK</td>
+          </tr>
+          <tr>
+            <td>Oman</td>
+            <td>OMR</td>
+            <td>Pakistan</td>
+            <td>PKR</td>
+          </tr>
+          <tr>
+            <td>Panama</td>
+            <td>USD</td>
+            <td>Paraguay</td>
+            <td>PYG</td>
+          </tr>
+          <tr>
+            <td>Peru</td>
+            <td>PEN</td>
+            <td>Philippines</td>
+            <td>PHP</td>
+          </tr>
+          <tr>
+            <td>Poland</td>
+            <td>PLN</td>
+            <td>Qatar</td>
+            <td>QAR</td>
+          </tr>
+          <tr>
+            <td>Romania</td>
+            <td>RON</td>
+            <td>Rwanda</td>
+            <td>RWF</td>
+          </tr>
+          <tr>
+            <td>Saint Lucia</td>
+            <td>XCD</td>
+            <td>San Marino</td>
+            <td>EUR</td>
+          </tr>
+          <tr>
+            <td>Saudi Arabia</td>
+            <td>SAR</td>
+            <td>Senegal</td>
+            <td>XOF</td>
+          </tr>
+          <tr>
+            <td>Serbia</td>
+            <td>RSD</td>
+            <td>Singapore</td>
+            <td>SGD</td>
+          </tr>
+          <tr>
+            <td>South Africa</td>
+            <td>ZAR</td>
+            <td>Sri Lanka</td>
+            <td>LKR</td>
+          </tr>
+          <tr>
+            <td>Sweden</td>
+            <td>SEK</td>
+            <td>Switzerland</td>
+            <td>CHF</td>
+          </tr>
+          <tr>
+            <td>Taiwan</td>
+            <td>TWD</td>
+            <td>Tanzania</td>
+            <td>TZS</td>
+          </tr>
+          <tr>
+            <td>Thailand</td>
+            <td>THB</td>
+            <td>Trinidad and Tobago</td>
+            <td>TTD</td>
+          </tr>
+          <tr>
+            <td>Tunisia</td>
+            <td>TND</td>
+            <td>Turkey</td>
+            <td>TRY</td>
+          </tr>
+          <tr>
+            <td>UAE</td>
+            <td>AED</td>
+            <td>UK</td>
+            <td>GBP</td>
+          </tr>
+          <tr>
+            <td>Uruguay</td>
+            <td>UYU</td>
+            <td>Uzbekistan</td>
+            <td>UZS</td>
+          </tr>
+          <tr>
+            <td>Vietnam</td>
+            <td>VND</td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>We can only pay out to a local bank account and in your local currency. We cannot pay you out in USD if it is not listed above as your country's payout currency. All currency conversions happen based on the exchange rates at the time of sale, not at the time of the payout. These are typically mid-market rates that you can estimate <a href="https://dashboard.stripe.com/currency_conversion">here</a>.</p>
+    <p>For prompt payouts, please ensure that you have the following for your country of residence: </p>
+    <ul>
+      <li>A valid, government-issued photo ID</li>
+      <li>Proof of residence within the country</li>
+    </ul>
+    <p>If you are selling as a business, the business must be registered in the same country. You cannot get paid to another country's bank account by just having a business registered in that country. You must physically live (and can prove residence) in that country.</p>
+    <p>Depending on your country, bank payouts can take 2-7 business days to process, and can be delayed around bank holidays.</p>
+    <h3 id="paypal">Get paid to PayPal</h3>
+    <p>If bank payouts are not supported in your country, you will be paid out via PayPal. You just need to have an individual or business PayPal account without any restrictions.</p>
+    <p>Users from other countries where we support bank deposits can also receive payouts via PayPal, with a 2% processing fee applied to each payout.</p>
+    <p>PayPal payouts are always processed in USD, and usually in 1-3 business days.</p>
+    <h3 id="Stripe-verification-process-ZFq5c">Verification process</h3>
+    <p>Our payment processor, Stripe, requires additional information to verify the identity of the account holder after a certain amount of time has passed and sales accrued. This is a standard practice in the financial industry and is part of their <a href="https://support.stripe.com/questions/know-your-customer-obligations">Know Your Customer (KYC) obligations</a>.</p>
+    <h3>ID verification</h3>
+    <p>You can learn the correct documents needed for ID verification for your specific location <a href="https://docs.stripe.com/connect/handling-api-verification?country=CA&amp;document-type=identity#acceptable-verification-documents">here</a>. </p>
+    <h3>Address verification</h3>
+    <p>You can learn the correct documents needed for address verification for your specific location <a href="https://docs.stripe.com/connect/handling-api-verification?country=CA&amp;document-type=address#acceptable-verification-documents">here</a>. </p>
+    <h3>SSN</h3>
+    <p>SSN is required for US sellers. The name and date of birth on your SSN must match exactly with the info filled in your <a href="https://app.gumroad.com/settings/payments">Payments settings</a>. Refer to your social security card to see how your name is formatted, and enter your name in the settings exactly as it is on the card. If you have a middle name, you can add it to the First Name field on the settings page.</p>
+    <br>
+    <p>If you don't have your social security card, or if you believe you've entered the correct information but still receive an error, contact the Social Security Administration to request a copy of your social security card or update your name here: https://www.ssa.gov/ssnumber/ </p>
+    <h3 id="schedule">Payout schedule</h3>
+    <div class="callout-red">
+      <p><b>⚠️ To receive a payout, you must have a minimum balance of US $10. </b></p>
+      <p>Certain countries have higher minimum payout balances. For example, Thailand (600 THB) and Korea (40,000 KRW).</p>
+    </div>
+    <p>You can choose to get your payouts daily, weekly, monthly, or quarterly; and even set a minimum payout threshold. You can also manually pause and resume your payouts for a custom payout schedule.</p>
+    <p>Daily payouts are only available for US users with eligible bank accounts and more than 4 previous payouts.</p>
+    <p>Payouts include sales made through the previous Friday (UTC). All sales have a minimum 7-day holding period in your Gumroad balance before they become eligible for payout.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63bb91fed851444a9b4d27ef/file-5kClaU1t2C.png" %></figure>
+    <p>You can download a CSV report for each payout from the <a href="269-balance-page.html">Payouts dashboard</a>, which includes a breakdown of all <a href="66-gumroads-fees.html">Gumroad fees</a> and customer data. </p>
+    <h3 id="instant-payouts">Instant payouts</h3>
+    <p>Creators from the US can get paid within minutes for amounts up to $10K and a 3% fee. Instant payouts are available only to creators from the US who have completed four payouts.</p>
+    <p>If you are eligible for an instant payout, you will see the option to get paid instantly on your <a href="https://app.gumroad.com/payouts">Payouts dashboard</a>. </p>
+    <p>Not all debit cards are eligible for instant payouts. If you connect a debit card and still see a message to connect a debit card to receive instant payouts, the card you connected is not eligible. You will need to try a different card. </p>
+    <h3 id="paypal-connect">Enable payments via PayPal</h3>
+    <p>If you have <a href="275-paypal-connect.html">connected your PayPal account</a> with Gumroad, proceeds from all sales via PayPal will be credited to your connected account at the time of sale, in the default currency of your PayPal account. This appears on your <a href="269-balance-page.html">Payouts page</a> as "PayPal Payouts".</p>
+    <h3 id="review">The account review process</h3>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63bb9209d0b6de7e3be2a8e4/file-5aTUwIGukY.png" %></figure>
+    <p>For our review, we require your account to be legitimate in two major ways:</p>
+    <ol>
+      <li>You comply with both <a href="https://gumroad.com/terms">Gumroad's terms</a> and those of our payment processors.</li>
+      <li>Your account is not racking up chargebacks and suspicious purchases.</li>
+    </ol>
+    <p>The review process can take 1-3 weeks depending on your sales and the data we can analyze. Typically, this means 3-4 sales with a balance over US$10; however, every account is unique so we thank you for your patience. </p>
+    <p>You cannot speed up the review process by purchasing your own product. Payment processors view purchasing your own products as fraudulent, and this can get you suspended or permanently banned. If you just want to test your product, please use the <a href="62-testing-a-purchase.html">test purchase feature</a>.</p>
+    <p>There can be other reasons for a payout delay that you can know more about here: <a href="281-payout-delays.html">Payout delays</a></p>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="66-gumroads-fees.html"><span>Gumroad's fees</span></a></li>
+      <li><a href="64-is-gumroad-for-me.html"><span>Why choose Gumroad?</span></a></li>
+      <li><a href="281-payout-delays.html"><span>Payout delays</span></a></li>
+      <li><a href="15-1099s.html"><span>Does Gumroad issue form 1099-K and 1099-MISC?</span></a></li>
+      <li><a href="330-stripe-connect.html"><span>Connect your Stripe account to Gumroad</span></a></li>
+    </ul>
+  </div>
+</div>

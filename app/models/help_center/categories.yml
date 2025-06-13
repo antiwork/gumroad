@@ -1,0 +1,45 @@
+---
+- id: 219
+  title: "Accessing your purchase"
+  slug: "219-after-your-purchase"
+  audience: "customer"
+- id: 220
+  title: "Before you buy"
+  slug: "220-before-you-buy"
+  audience: "customer"
+- id: 316
+  title: "Open an account"
+  slug: "316-open-an-account"
+  audience: "creator"
+- id: 318
+  title: "Add a product"
+  slug: "318-add-a-product"
+  audience: "creator"
+- id: 319
+  title: "Start selling"
+  slug: "319-start-selling"
+  audience: "creator"
+- id: 320
+  title: "Get paid"
+  slug: "320-get-paid"
+  audience: "creator"
+- id: 321
+  title: "Advanced"
+  slug: "321-advanced"
+  audience: "creator"
+- id: 322
+  title: "Contact Gumroad"
+  slug: "322-contact-gumroad"
+  audience: "creator"
+- id: 328
+  title: "Market your work"
+  slug: "328-market-your-work"
+  audience: "creator"
+- id: 337
+  title: "Receipts and refunds"
+  slug: "337-receipts-and-refunds"
+  audience: "customer"
+- id: 338
+  title: "Issues with your purchase"
+  slug: "338-issues-with-your-purchase"
+  audience: "customer"
