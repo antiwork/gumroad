@@ -58,7 +58,7 @@
         </tr>
       </tbody>
     </table>
-    <p>Note: For the CNAME record, you need to put "domains.gumroad.com," not {username}.gumroad.com. We also provide support for custom domains through CNAME records, so you don't have to re-configure nameservers for it.</p>
+    <p>Note: For the CNAME record, you need to put "domains.gumroad.com," not {username}.gumroad.com. We also provide support for custom domains through CNAME records, so you don't have to re-configure nameservers for it.</p>
     <h3 id="subdomains">Subdomains</h3>
     <p>If you wish to use a subdomain, like store.example.com, your DNS records should be as follows:</p>
     <table>
@@ -76,7 +76,7 @@
       </tbody>
     </table>
     <h3 id="settings">Update your Gumroad settings</h3>
-    <p>There are two ways to add a custom domain name on Gumroad. </p>
+    <p>There are two ways to add a custom domain name on Gumroad. </p>
     <ul>
       <li><a href="#Custom-domains-for-profiles-0pt96" target="_self">Custom domains for profiles</a> allow you to set a domain for your entire profile. This means your profile and the products within it will all show up under your custom domain.</li>
       <li><a href="#Custom-domains-for-products-vk1Jr" target="_self">Custom domains for products</a> allow you to set a custom domain for just an individual product.</li>
@@ -85,24 +85,24 @@
     <p>To set up a custom domain for your profile:</p>
     <ol>
       <li>Navigate to your Gumroad <a href="https://app.gumroad.com/settings/advanced">Advanced settings</a></li>
-      <li>Enter your domain name in the “Custom domain” section and click “Verify” on the right. </li>
-      <li>If you see a failure message, recheck your DNS settings and wait for 24-48 hours for them to propagate. </li>
+      <li>Enter your domain name in the “Custom domain” section and click “Verify” on the right. </li>
+      <li>If you see a failure message, recheck your DNS settings and wait for 24-48 hours for them to propagate. </li>
       <li>Click “Update settings” to save your changes.</li>
     </ol>
     <figure><%= image_tag "https://lh5.googleusercontent.com/j3hrqxTdBnIAbtRX5JiVCdZJV3TLfGjUwx4Iiwa0MyJRkYLMTfB59ijVwm22k3jB8MYgCwtvAN_FUbvhaCGo7iBn1qpG6OeG-ZU5XO93xKEAocU648-mSQtxQ9kSXFF0Ir52INy0YWzybBVr31SBqag" %></figure>
     <h3 id="Custom-domains-for-products-vk1Jr">Custom domains for products</h3>
     <p>To set up a custom domain for an individual product:</p>
     <ol>
-      <li>Navigate to the “edit” page of that product. </li>
+      <li>Navigate to the “edit” page of that product. </li>
       <li>Enter your domain name in the “Custom domain” section and click “Verify” on the right.</li>
-      <li>If you see a failure message, recheck your DNS settings and wait for 24-48 hours for them to propagate. </li>
+      <li>If you see a failure message, recheck your DNS settings and wait for 24-48 hours for them to propagate. </li>
       <li>Click “Save changes” to save your changes.</li>
     </ol>
     <figure><%= image_tag "https://lh5.googleusercontent.com/_-KWHBXiIiTgS3Sg8qVnYHGTwuCz8aMZDGebz6kwJpaRemcEJEdLvk0jqMDVDRZXXHkHToswwuDgAlkQeOw8PezwYT5Mq8h4l4b5IFBJzwNVmivpVe7H1tcAn9h8WKpG2v3mB4KGAH8yAsjFc4jUJAE" %></figure>
     <h3 id="ip-issues">IP address issues </h3>
-    <p>Some providers may ask you to enter an IP address to set up a custom domain. You can enter  <strong>34.198.93.169</strong>.</p>
+    <p>Some providers may ask you to enter an IP address to set up a custom domain. You can enter  <strong>34.198.93.169</strong>.</p>
     <h3 id="cloudflare-issues">Cloudflare issues</h3>
-    <p>Unfortunately, we don't support Cloudflare Proxies for custom domain verification. In the case you have Cloudflare Proxy enabled, you will have to disable it and then click the "Update settings" button on your <a href="https://app.gumroad.com/settings/advanced" target="_blank">Advanced Settings</a> page. </p>
+    <p>Unfortunately, we don't support Cloudflare Proxies for custom domain verification. In the case you have Cloudflare Proxy enabled, you will have to disable it and then click the "Update settings" button on your <a href="https://app.gumroad.com/settings/advanced" target="_blank">Advanced Settings</a> page. </p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61ad9ab548287b457880922d/file-JTL1q5JvuV.png" %></figure>
     <br>
     <p>Also, the "URL Redirect" record type is just to ensure that <em>example.com</em> is redirected to <a href="http://www.example.com"><em>www.example.com</em></a>. For Cloudflare, you can point the CNAME of both <code class="inline-code">@</code> and <code class="inline-code">www</code> records to <code class="inline-code">domains.gumroad.com</code> .</p>
@@ -138,7 +138,7 @@
     </ol>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/5fb916e1cff47e0017d342f4/file-5OyBRNl3ux.gif" %></figure>
     <br>
-    <p>For CNAME, you actually need to put "domains.gumroad.com", not {yourusername}.gumroad.com. </p>
+    <p>For CNAME, you actually need to put "domains.gumroad.com", not {yourusername}.gumroad.com. </p>
     <ol start="6">
       <li>
         <p>Your audience might not always enter the "www" part while typing your address. They might just enter example.com, and unless you set up the DNS settings for this root or naked domain, they will not land at your Gumroad profile. So, let's fix that now!</p>
@@ -156,14 +156,14 @@
     <ol start="9">
       <li>Click on the Preview button to make sure it works, and if it all looks good, hit Save.</li>
     </ol>
-    <p>That's all for GoDaddy. You don't have to bother with any of the other settings.  </p>
+    <p>That's all for GoDaddy. You don't have to bother with any of the other settings.  </p>
     <h3 id="In-your-Gumroad-account-mlIHA">In your Gumroad account</h3>
     <p>Head to the <a href="https://gumroad.com/settings/advanced">advanced settings page</a> and enter your domain name in the “Custom domain” box, and hit the pink “Update settings" button on the top.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/624435f8c1e53608cf9ee4e7/file-2sUud72ikH.gif" %></figure>
     <br>
     <p>Annnd we're done! If you're lucky, your custom domain will be functional within a few hours. However, on some unfortunate days, it might take up to 24 hours for it to kick in finally.</p>
     <h3 id="What-does-your-audience-see-HOJPZ">What does your audience see?</h3>
-    <p>Once the custom domain setup is complete and everything is up and running, yourcustomdomain.com will point to your Gumroad profile or product page based on your settings. </p>
+    <p>Once the custom domain setup is complete and everything is up and running, yourcustomdomain.com will point to your Gumroad profile or product page based on your settings. </p>
     <p>We also provide your custom domain with a free SSL certificate; please give it up to 24 hours to activate.</p>
     <p>In case you do not have any products published yet, your audience will be taken to yourcustomdomain.com/subscribe, which is your Gumroad subscribe page, identical to https://username.gumroad.com/subscribe.</p>
     <p>Also, this feature does not allow customers to access their content through your own URL. They still have access their content through a Gumroad download link.</p>
