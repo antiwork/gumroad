@@ -43,6 +43,15 @@ describe HelpCenter::ArticlesController do
 
         expect(response.body).to include(article.title)
       end
+
+      HelpCenter::Article.all.each do |article|
+        it "renders the article #{article.slug}" do
+          get :show, params: { slug: article.slug }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.body).to include(ERB::Util.html_escape(article.title))
+        end
+      end
     end
 
     context "when article is not found" do
