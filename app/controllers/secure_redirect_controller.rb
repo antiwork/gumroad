@@ -25,7 +25,7 @@ class SecureRedirectController < ApplicationController
         render :new
       end
     else
-      flash[:error] = "Confirmation text does not match"
+      flash[:error] = @error_message
       render :new
     end
   end
@@ -43,5 +43,6 @@ class SecureRedirectController < ApplicationController
     @encrypted_confirmation_text = params[:encrypted_confirmation_text]
     @message = params[:message].presence || "Please enter the confirmation text to continue to your destination."
     @field_name = params[:field_name].presence || "Confirmation text"
+    @error_message = params[:error_message].presence || "Confirmation text does not match"
   end
 end

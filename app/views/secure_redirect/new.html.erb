@@ -8,6 +8,7 @@
     <%= hidden_field_tag :encrypted_destination, @encrypted_destination %>
     <%= hidden_field_tag :encrypted_confirmation_text, @encrypted_confirmation_text %>
     <%= hidden_field_tag :field_name, @field_name %>
+    <%= hidden_field_tag :error_message, @error_message %>
     <%= hidden_field_tag :message, @message %>
     <%= label_tag :confirmation_text, @field_name, class: "form-label" %>
     <%= text_field_tag :confirmation_text, nil, placeholder: @field_name, required: true %>
