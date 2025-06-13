@@ -119,9 +119,11 @@ module SecureExternalId
         raise Error, "SecureExternalId configuration is missing" if config.blank?
         raise Error, "primary_key_version is required in SecureExternalId config" if config[:primary_key_version].blank?
         raise Error, "keys are required in SecureExternalId config" if config[:keys].blank?
-        raise Error, "Primary key version '#{config[:primary_key_version]}' not found in keys" unless config[:keys].key?(config[:primary_key_version])
 
-        config[:keys].each do |version, key|
+        keys_hash = config[:keys].with_indifferent_access
+        raise Error, "Primary key version '#{config[:primary_key_version]}' not found in keys" unless keys_hash.key?(config[:primary_key_version])
+
+        keys_hash.each do |version, key|
           raise Error, "Key for version '#{version}' must be exactly 32 bytes for aes-256-gcm" unless key.bytesize == 32
         end
       end
