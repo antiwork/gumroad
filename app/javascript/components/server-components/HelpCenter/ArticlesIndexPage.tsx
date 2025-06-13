@@ -66,8 +66,6 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
       }))
     : categories;
 
-
-
   return (
     <div>
       <input
@@ -83,7 +81,6 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
           <CategoryArticles key={category.url} category={category} searchTerm={searchTerm} />
         ))}
       </div>
-
     </div>
   );
 };
