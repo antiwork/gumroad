@@ -77,7 +77,11 @@ module AdminHelper
       concat block_given? ? capture(&block) : tag.span(text)
       concat(
         with_tooltip(tip: "Copy to clipboard") do
-          tag.button(data: { clipboard_text: text }) do
+          tag.button(
+            type: "button",
+            aria: { label: "Copy to clipboard" },
+            data: { clipboard_text: text },
+          ) do
             icon("outline-duplicate")
           end
         end
