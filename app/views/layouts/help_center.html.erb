@@ -28,8 +28,9 @@
 
       <div class="actions">
         <% unless current_page?(help_center_root_path) %>
-          <%= link_to help_center_root_path do %>
-            <div class="button"><span class="icon icon-solid-search"></span></div>
+          <%= link_to help_center_root_path, class: "button",
+            aria: { label: "Search" }, title: "Search" do %>
+            <span class="icon icon-solid-search"></span>
           <% end %>
         <% end %>
     </header>
