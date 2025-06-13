@@ -1,0 +1,65 @@
+<% @description = "In this article: Circle Discord Customize your integration further FAQ Gumroad allows creators to integrate services like Circle and Discord into their products" %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p><b>In this article:</b></p>
+    <ul>
+      <li><a href="#circle" target="_self">Circle</a></li>
+      <li><a href="#discord" target="_self">Discord</a></li>
+      <li><a href="#customization" target="_self">Customize your integration further</a></li>
+      <li><a href="#FAQ-ZOEHy" target="_self">FAQ</a></li>
+    </ul>
+    <p>Gumroad allows creators to integrate services like Circle and Discord into their products to auto-add new customers to their private communities.</p>
+    <h3 id="circle">Circle</h3>
+    <p>To add a <a href="https://circle.so/">Circle</a> community to your product offering:</p>
+    <ol>
+      <li>
+        <p>Toggle the button under “Integrations” on the product’s edit page: </p>
+        <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62453bd1c1688a6d26a7b8d5/file-v8IoMwMPZe.png" %></figure>
+        <br>
+      </li>
+      <li>Authorize Gumroad to access your Circle account by copying and pasting an API token from your Circle settings. Community admins can obtain an API key by going to the Settings → API page in their community.</li>
+    </ol>
+    <p>After Circle is connected, pick the community you’d like customers to be auto-added to.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65141c3d556a3e3cf18cbede/file-AGjCg6qXmu.png" %></figure>
+    <p>Once the Circle integration is enabled, new customers will automatically receive an invite from Circle to join your community.</p>
+    <h3 id="discord">Discord</h3>
+    <p>To add new customers to a Discord server:</p>
+    <ol>
+      <li>
+        <p>Toggle the button under “Integrations” on the product’s edit page:</p>
+        <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62944a82a2c316231c2010cc/file-nPcX7i79hg.png" %></figure>
+      </li>
+      <li>
+        <p>Click the “Connect to Discord” button and select the server that you’d like to connect with your product. </p>
+        <p><strong>Note: </strong>You’ll need “Manage server” permissions for the server you wish to connect.</p>
+      </li>
+      <li>Grant Gumroad the requested permissions on the next page and click “Authorize.”</li>
+      <li>Click “Save changes” after you’ve successfully connected your server to save your product.</li>
+    </ol>
+    <p>And we’re done! You will now have your Discord account and server name displayed in the “Integrations” section along with the button to disconnect if you wish to.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65141ccc084f3f45e9a7b8e5/file-MeRXoo0lcL.png" %></figure>
+    <p>Once the Discord integration is set up, new customers will see a “Join Discord” button on their purchase receipts and the product download page. They can click on this button to get access to your server!</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62944b6ca2c316231c2010cf/file-Tvaay0AdmZ.png" %></figure>
+    <h3 id="customization">Customize your integration further</h3>
+    <p>If your product has <a href="149-adding-a-product.html#versions">versions</a> or you have a <a href="82-membership-products.html#Tiers">membership with tiers</a>, you can choose to either: </p>
+    <p>1) Enable the integration for all your versions from the Integrations section, or </p>
+    <p>2) Enable specific ones from the respective version's settings.</p>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62944c4438bfe828b462f449/file-VyrJdK7sAV.gif" %></figure>
+    <p>For <a href="82-membership-products.html">membership products</a>, by default, Gumroad will automatically remove the customer from the connected service if and when the membership ends. You can turn this off when adding an integration.</p>
+    <p>In Discord, ensure that the Gumroad bot's role in your server is above the role of any users who you may want to remove automatically. </p>
+    <p style="text-align: center;" class="align-center"><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6606cbe7f5fc5034ca571318/file-hz0Kd8w3kr.png" %></p>
+    <h3 id="FAQ-ZOEHy">FAQ</h3>
+    <p><b>Can the discord bot auto-assign a role to members after they join?</b></p>
+    <p>No. You can use services like <a href="https://zapier.com/apps/gumroad/integrations/discord" target="_blank">Zapier</a> to automate role assignments though. </p>
+    <br>
+    <p><b>What do I do when a customer is still active in my Discord server after their subscription has expired?</b></p>
+    <p>If a customer is still active in your Discord server after canceling their membership, it is for one of the following reasons:</p>
+    <ul>
+      <li>Their role is above the role of our Gumroad bot, so we don't have the power to remove them.</li>
+      <li>They still have time left in their membership before it officially cancels. Their access will remain active until the end of the billing period, so they should lose access after the period they paid for ends, not when they request a cancelation.</li>
+    </ul>
+    <br>
+    <p><b>Is the Gumroad bot working even when it's “offline”?</b></p>
+    <p>Yes, it is! The Gumroad bot's offline/online status does not affect its ability to add or remove members.</p>
+  </div>
+</div>

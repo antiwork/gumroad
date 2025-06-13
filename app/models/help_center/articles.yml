@@ -1,0 +1,493 @@
+---
+- id: 10
+  slug: "10-dealing-with-vat"
+  title: "EU & UK VAT on Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 13
+  slug: "13-getting-paid"
+  title: "Getting paid by Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 15
+  slug: "15-1099s"
+  title: "Does Gumroad issue form 1099-K and 1099-MISC?"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 20
+  slug: "20-how-do-i-contact-gumroad"
+  title: "Contact Gumroad"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 37
+  slug: "37-how-to-delete-your-gumroad-account"
+  title: "Deleting a Gumroad account"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 42
+  slug: "42-content-security"
+  title: "Content protection on Gumroad"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 43
+  slug: "43-streaming-videos"
+  title: "Prepare videos for streaming"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 44
+  slug: "44-build-gumroad-into-your-website"
+  title: "Integrating Gumroad into websites"
+  category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
+- id: 46
+  slug: "46-what-currency-does-gumroad-use"
+  title: "What currency does Gumroad use?"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 47
+  slug: "47-how-to-refund-a-customer"
+  title: "Issuing a refund"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 51
+  slug: "51-what-is-gumroads-refund-policy"
+  title: "Gumroad's refund policy"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 53
+  slug: "53-what-browsers-does-gumroad-support"
+  title: "Supported browsers"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 54
+  slug: "54-not-receiving-updates"
+  title: "Customers not receiving emails"
+  category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
+- id: 60
+  slug: "60-adding-a-cover-image"
+  title: "Adding cover and thumbnail images"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 62
+  slug: "62-testing-a-purchase"
+  title: "Testing a purchase"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 64
+  slug: "64-is-gumroad-for-me"
+  title: "Why choose Gumroad?"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 66
+  slug: "66-gumroads-fees"
+  title: "Gumroad's fees"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 67
+  slug: "67-the-settings-menu"
+  title: "Account settings"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 70
+  slug: "70-can-i-sell-services"
+  title: "Sell digital services: freelancing, coaching, and tip jars"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 74
+  slug: "74-the-analytics-dashboard"
+  title: "The sales analytics dashboard"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 76
+  slug: "76-license-keys"
+  title: "License keys"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 78
+  slug: "78-my-customer-did-not-receive-a-receipt"
+  title: "Customers not receiving receipts"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 79
+  slug: "79-gumroad-discover"
+  title: "Gumroad Discover"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 81
+  slug: "81-custom-product-urls"
+  title: "Custom product URLs"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 82
+  slug: "82-membership-products"
+  title: "Selling memberships and subscriptions"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 101
+  slug: "101-designing-your-product-page"
+  title: "Checkout customization"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 107
+  slug: "107-common-zapier-integrations-with-gumroad"
+  title: "Zapier integrations with Gumroad"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 110
+  slug: "110-gumroads-subprocessors"
+  title: "Gumroad's subprocessors"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 112
+  slug: "112-mobile-friendly-files"
+  title: "Mobile-friendly files"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 120
+  slug: "120-protecting-your-privacy-on-gumroad"
+  title: "Protecting creator privacy"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 121
+  slug: "121-sales-tax-on-gumroad"
+  title: "Sales tax on Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 124
+  slug: "124-your-gumroad-profile-page"
+  title: "Build a website on Gumroad"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 125
+  slug: "125-how-to-compress-a-video-using-handbrake"
+  title: "Compress videos using Handbrake"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 126
+  slug: "126-setting-up-versions-on-a-digital-product"
+  title: "Setting up versions"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 128
+  slug: "128-discount-codes"
+  title: "Discount codes"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 130
+  slug: "130-pdf-stamping"
+  title: "PDF stamping"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 131
+  slug: "131-using-workflows-to-send-automated-updates"
+  title: "Send automated emails with Workflows"
+  category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
+- id: 133
+  slug: "133-pay-what-you-want-pricing"
+  title: '"Pay what you want" pricing'
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 134
+  slug: "134-how-does-gumroad-handle-chargebacks"
+  title: "Chargebacks on Gumroad"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 136
+  slug: "136-find-your-products-url"
+  title: "Customize and Share Your Product's URL"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 139
+  slug: "139-how-to-cancel-your-customers-subscriptions"
+  title: "Cancel customer memberships"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 144
+  slug: "144-send-customers-directly-to-your-payment-form"
+  title: "Send customers to the payment form"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 149
+  slug: "149-adding-a-product"
+  title: "Adding a product"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 153
+  slug: "153-setting-up-a-custom-domain"
+  title: "Setting up a custom domain"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 155
+  slug: "155-things-you-cant-sell-on-gumroad"
+  title: "Things not allowed on Gumroad"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 156
+  slug: "156-gumroad-and-adult-content"
+  title: "Adult content on Gumroad"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 160
+  slug: "160-suspension"
+  title: "Account suspension FAQ"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 161
+  slug: "161-what-gumroad-considers-fraud"
+  title: "Defining fraud on Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 169
+  slug: "169-how-to-send-an-update"
+  title: "Send email updates"
+  category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
+- id: 170
+  slug: "170-audience"
+  title: "Starting an email newsletter"
+  category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
+- id: 174
+  slug: "174-third-party-analytics"
+  title: "Third-party analytics"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 176
+  slug: "176-metadata-for-audio-files"
+  title: "Metadata for audio files"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 177
+  slug: "177-the-gumroad-dashboard-app"
+  title: "Gumroad mobile app"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 189
+  slug: "189-safe-gumroad-buying"
+  title: "Safe buying on Gumroad"
+  category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
+- id: 190
+  slug: "190-how-do-i-get-a-refund"
+  title: "How do I get a refund?"
+  category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
+- id: 191
+  slug: "191-a-guide-to-buying-on-gumroad"
+  title: "A guide to buying on Gumroad"
+  category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
+- id: 192
+  slug: "192-how-do-i-cancel-my-membership"
+  title: "How do I cancel my membership?"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 193
+  slug: "193-my-purchase-isnt-downloading"
+  title: "My purchase isn't downloading"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 194
+  slug: "194-i-need-an-invoice"
+  title: "I need an invoice"
+  category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
+- id: 195
+  slug: "195-theres-an-issue-with-my-purchase"
+  title: "There's an issue with my purchase"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 196
+  slug: "196-contact-gumroad"
+  title: "How do I contact Gumroad?"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 197
+  slug: "197-why-do-i-have-a-1-charge-from-gumroad"
+  title: "Why do I have a $1 charge from Gumroad?"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 198
+  slug: "198-your-gumroad-library"
+  title: "Your Gumroad Library"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 199
+  slug: "199-how-do-i-access-my-purchase"
+  title: "How do I access my purchase?"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 200
+  slug: "200-i-need-a-vat-refund"
+  title: "I need a VAT refund"
+  category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
+- id: 203
+  slug: "203-why-did-my-payment-fail"
+  title: "Why did my payment fail?"
+  category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
+- id: 204
+  slug: "204-get-to-know-your-gumroad-receipt"
+  title: "Get to know your Gumroad receipt"
+  category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
+- id: 206
+  slug: "206-how-to-open-zip-and-rar-files"
+  title: "How to open ZIP and RAR files"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 208
+  slug: "208-how-do-i-send-my-gumroad-purchase-to-my-kindle"
+  title: "How do I send my purchases to Kindle?"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 209
+  slug: "209-how-do-i-combine-two-accounts"
+  title: "Combining multiple accounts"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 210
+  slug: "210-send-your-purchase-to-dropbox"
+  title: "How do I send my purchase to Dropbox?"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 211
+  slug: "211-im-not-receiving-updates"
+  title: "I'm not receiving updates"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 212
+  slug: "212-i-never-received-a-receipt"
+  title: "I never received a receipt"
+  category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
+- id: 213
+  slug: "213-how-do-i-give-a-product-as-a-gift"
+  title: "How do I give a product as a gift?"
+  category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
+- id: 214
+  slug: "214-why-was-i-charged-by-gumroad"
+  title: "Why was I charged by Gumroad?"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 215
+  slug: "215-when-will-my-purchase-be-shipped"
+  title: "When will my purchase be shipped?"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 216
+  slug: "216-delete-credit-card-information"
+  title: "How do I delete my credit card information?"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 217
+  slug: "217-i-have-extra-charges-from-gumroad-after-my-purchase"
+  title: "I have extra charges from Gumroad after my purchase"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 222
+  slug: "222-product-ratings-on-gumroad"
+  title: "Product ratings and reviews"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 223
+  slug: "223-payoneer-and-gumroad"
+  title: "Payoneer, Transferwise, and Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 247
+  slug: "247-what-your-customers-see"
+  title: "The Gumroad Library"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 248
+  slug: "248-delete-a-product"
+  title: "Unpublish or delete a product"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 249
+  slug: "249-affiliate-faq"
+  title: "Becoming an affiliate on Gumroad"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 251
+  slug: "251-incorrect-recurring-charge"
+  title: "Incorrect recurring charge"
+  category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
+- id: 252
+  slug: "252-multiple-accounts"
+  title: "Having multiple accounts"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 260
+  slug: "260-your-payout-settings-page"
+  title: "Filling out payout settings"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 266
+  slug: "266-why-are-my-customers-purchases-failing"
+  title: "Why customer payments fail"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 268
+  slug: "268-customer-dashboard"
+  title: "The sales dashboard"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 269
+  slug: "269-balance-page"
+  title: "The payouts dashboard"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 270
+  slug: "270-url-parameters"
+  title: "URL parameters"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 275
+  slug: "275-paypal-connect"
+  title: "Adding PayPal to checkout"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 278
+  slug: "278-guide-to-memberships"
+  title: "Guide to memberships"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 280
+  slug: "280-create-application-api"
+  title: "Create an application for the API"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 281
+  slug: "281-payout-delays"
+  title: "Payout delays"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 282
+  slug: "282-how-do-purchases-work-for-my-customers"
+  title: "How Gumroad works for customers"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 283
+  slug: "283-fraudulent-purchases"
+  title: "Fraudulent purchases"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 284
+  slug: "284-jobs-at-gumroad"
+  title: "Jobs at Gumroad"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 285
+  slug: "285-turning-off-third-party-trackers"
+  title: "Turn off third-party trackers"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 286
+  slug: "286-how-do-i-report-a-gumroad-creator"
+  title: "Report a Gumroad creator"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 288
+  slug: "288-dmca-counter-notices"
+  title: "DMCA counter notices"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 289
+  slug: "289-file-size-limits-on-gumroad"
+  title: "File size limits"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 290
+  slug: "290-facebook-domain-verification"
+  title: "Facebook domain verification"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 292
+  slug: "292-account-login-security"
+  title: "Account login security"
+  category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
+- id: 295
+  slug: "295-external-integration"
+  title: "Integrating products with external services"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 304
+  slug: "304-products-dashboard"
+  title: "The products dashboard"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 324
+  slug: "324-accessibiility-statement"
+  title: "Accessibility statement for Gumroad"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 325
+  slug: "325-indirect-taxes-on-sales-via-discover"
+  title: "Indirect taxes on sales via Gumroad Discover"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 326
+  slug: "326-teams-and-roles"
+  title: "Teams and Roles"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 327
+  slug: "327-purchasing-power-parity"
+  title: "Purchasing Power Parity"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 329
+  slug: "329-customer-moderation"
+  title: "Customer Moderation"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 330
+  slug: "330-stripe-connect"
+  title: "Connect your Stripe account to Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 331
+  slug: "331-creating-upsells"
+  title: "Creating an Upsell"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 333
+  slug: "333-affiliates-on-gumroad"
+  title: "Affiliates on Gumroad"
+  category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
+- id: 334
+  slug: "334-more-like-this"
+  title: "Recommend related products"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 335
+  slug: "335-custom-refund-policy"
+  title: "Set a custom refund policy"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 336
+  slug: "336-singaporean-gst"
+  title: "Singaporean GST on Gumroad"
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
+- id: 339
+  slug: "339-product-bundles"
+  title: "Product bundles"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 341
+  slug: "341-collaborations"
+  title: "Collaborate with another creator"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 343
+  slug: "343-wishlists"
+  title: "Wishlists"
+  category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
+- id: 344
+  slug: "344-rate-and-review-your-purchase"
+  title: "Rate and review your purchase"
+  category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
+- id: 345
+  slug: "345-tipping"
+  title: "Tipping"
+  category_id: <%= HelpCenter::Category::START_SELLING.id %>
+- id: 346
+  slug: "346-installment-plans"
+  title: "Allowing installment plans"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 347
+  slug: "347-gumroad-community"
+  title: "Gumroad Community"
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>

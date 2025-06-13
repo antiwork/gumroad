@@ -287,6 +287,15 @@ Rails.application.routes.draw do
       resources :posts, only: [:index, :show], param: :slug, path: "p"
     end
 
+    namespace :help_center, path: "help" do
+      root to: "articles#index"
+
+      # Custom singular `path` name for backwards compatibility with old routes
+      # for SEO.
+      resources :articles, only: [:index, :show], param: :slug, path: "article"
+      resources :categories, only: [:show], param: :slug, path: "category"
+    end
+
     get "/ifttt/v1/status" => "api/v2/users#ifttt_status"
     get "/ifttt/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
     get "/ifttt/v1/oauth2/authorize(.:format)" => "oauth/authorizations#new"
