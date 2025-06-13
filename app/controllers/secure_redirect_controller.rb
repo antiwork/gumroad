@@ -3,6 +3,7 @@
 class SecureRedirectController < ApplicationController
   before_action :validate_params, only: [:new, :create]
   before_action :set_encrypted_params, only: [:new, :create]
+  before_action :set_react_component_props, only: [:new, :create]
 
   def new
   end
@@ -11,8 +12,7 @@ class SecureRedirectController < ApplicationController
     confirmation_text = params[:confirmation_text]
 
     if confirmation_text.blank?
-      flash[:error] = "Please enter the confirmation text"
-      render :new and return
+      return render json: { error: "Please enter the confirmation text" }, status: :unprocessable_entity
     end
 
     if SecureEncryptService.verify(@encrypted_confirmation_text, confirmation_text)
@@ -21,12 +21,10 @@ class SecureRedirectController < ApplicationController
       if destination.present?
         redirect_to destination, allow_other_host: true
       else
-        flash[:error] = "Invalid destination"
-        render :new
+        render json: { error: "Invalid destination" }, status: :unprocessable_entity
       end
     else
-      flash[:error] = @error_message
-      render :new
+      render json: { error: @error_message }, status: :unprocessable_entity
     end
   end
 
@@ -44,5 +42,21 @@ class SecureRedirectController < ApplicationController
     @message = params[:message].presence || "Please enter the confirmation text to continue to your destination."
     @field_name = params[:field_name].presence || "Confirmation text"
     @error_message = params[:error_message].presence || "Confirmation text does not match"
+  end
+
+  def set_react_component_props
+    props = {
+      message: @message,
+      field_name: @field_name,
+      error_message: @error_message,
+      encrypted_destination: @encrypted_destination,
+      encrypted_confirmation_text: @encrypted_confirmation_text,
+      form_action: secure_url_redirect_path,
+      authenticity_token: form_authenticity_token
+    }
+
+    props[:flash_error] = flash[:error] if flash[:error].present?
+
+    @react_component_props = props
   end
 end

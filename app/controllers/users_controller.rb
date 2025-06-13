@@ -187,13 +187,15 @@ class UsersController < ApplicationController
           encrypted_destination = SecureEncryptService.encrypt(destination_url)
           encrypted_confirmation_text = SecureEncryptService.encrypt(user.email)
           message = "Please enter the email address to unsubscribe"
+          error_message = "Email address does not match"
           field_name = "Email address"
 
           redirect_to secure_url_redirect_path(
             encrypted_destination: encrypted_destination,
             encrypted_confirmation_text: encrypted_confirmation_text,
             message: message,
-            field_name: field_name
+            field_name: field_name,
+            error_message: error_message
           )
           return
         end
