@@ -89,8 +89,7 @@ export const Nav = (props: Props) => {
             <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
           ) : null}
           <NavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
-          {/* Update this to Routes.help_center_root_url(routeParams) when we're ready to switch over. */}
-          <NavLink text="Help" icon="book" href="https://gumroad.com/help" />
+          <NavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
           <Popover
             position="top"
             trigger={

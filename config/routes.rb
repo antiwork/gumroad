@@ -287,8 +287,7 @@ Rails.application.routes.draw do
       resources :posts, only: [:index, :show], param: :slug, path: "p"
     end
 
-    # `help2` is temporary until we completely switch over.
-    namespace :help_center, path: "help2" do
+    namespace :help_center, path: "help" do
       root to: "articles#index"
 
       # Custom singular `path` name for backwards compatibility with old routes
