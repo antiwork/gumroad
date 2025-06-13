@@ -186,7 +186,7 @@ class UsersController < ApplicationController
           destination_url = user_unsubscribe_url(id: user.secure_external_id(scope: "email_unsubscribe"), email_type: params[:email_type], expires_at: 1.day.from_now)
           encrypted_destination = SecureEncryptService.encrypt(destination_url)
           encrypted_confirmation_text = SecureEncryptService.encrypt(user.email)
-          message = "Please enter the email address to unsubscribe"
+          message = "Please enter your email address to unsubscribe"
           error_message = "Email address does not match"
           field_name = "Email address"
 
