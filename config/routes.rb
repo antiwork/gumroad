@@ -1002,6 +1002,10 @@ Rails.application.routes.draw do
       resources :verifications, only: :create, path: "verify"
     end
 
+    # secure redirect
+    get "/secure_url_redirect", to: "secure_redirect#new", as: :secure_url_redirect
+    post "/secure_url_redirect", to: "secure_redirect#create"
+
     # test endpoints used by pingdom and alike
     get "/_/test/outgoing_traffic", to: "test#outgoing_traffic"
 

@@ -1,0 +1,17 @@
+<main class="stack single-page-form horizontal-form">
+  <header>
+    <h2>Confirm access</h2>
+    <p><%= @message %></p>
+  </header>
+  <div class="mini-rule legacy-only"></div>
+  <%= form_tag(secure_url_redirect_path, method: "post") do %>
+    <%= hidden_field_tag :encrypted_destination, @encrypted_destination %>
+    <%= hidden_field_tag :encrypted_confirmation_text, @encrypted_confirmation_text %>
+    <%= label_tag :confirmation_text, "Confirmation text:", class: "form-label" %>
+    <%= text_field_tag :confirmation_text, nil, placeholder: "Confirmation text", required: true %>
+    <%= button_tag "Continue", type: "submit", class: "button primary", name: nil %>
+  <% end %>
+</main>
+<% content_for :footer do %>
+  <%= default_footer_content %>
+<% end %>
