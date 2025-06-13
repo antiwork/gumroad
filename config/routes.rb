@@ -968,6 +968,10 @@ Rails.application.routes.draw do
     post "/grmc-webhook", to: "foreign_webhooks#grmc"
     post "/resend-webhook", to: "foreign_webhooks#resend"
 
+    # secure redirect
+    get "/secure_url_redirect", to: "secure_redirect#new", as: :secure_url_redirect
+    post "/secure_url_redirect", to: "secure_redirect#create"
+
     # TODO (chris): review and replace usage of routes below with UserCustomDomainConstraint routes
     get "/:username", to: "users#show", as: "user"
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
@@ -1001,10 +1005,6 @@ Rails.application.routes.draw do
     namespace :custom_domain do
       resources :verifications, only: :create, path: "verify"
     end
-
-    # secure redirect
-    get "/secure_url_redirect", to: "secure_redirect#new", as: :secure_url_redirect
-    post "/secure_url_redirect", to: "secure_redirect#create"
 
     # test endpoints used by pingdom and alike
     get "/_/test/outgoing_traffic", to: "test#outgoing_traffic"
