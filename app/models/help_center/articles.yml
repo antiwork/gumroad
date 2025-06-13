@@ -383,10 +383,7 @@
   slug: "283-fraudulent-purchases"
   title: "Fraudulent purchases"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
-- id: 284
-  slug: "284-jobs-at-gumroad"
-  title: "Jobs at Gumroad"
-  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+
 - id: 285
   slug: "285-turning-off-third-party-trackers"
   title: "Turn off third-party trackers"
