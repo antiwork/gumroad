@@ -1,0 +1,93 @@
+<% @description = "In this article:  What’s a chargeback? Why do they happen? When chargebacks occur Understanding the Dispute form The timeline of a chargeback Multiple chargebac" %>
+<div class="scoped-tailwind-preflight help-center-article">
+  <div>
+    <p>In this article: </p>
+    <ul>
+      <li><a href="#Whats-a-chargeback-YN1sf" target="_self">What’s a chargeback?</a></li>
+      <li><a href="#Why-do-they-happen--gg9r4" target="_self">Why do they happen?</a></li>
+      <li><a href="#When-Chargebacks-Strike-7gSXj" target="_self">When chargebacks occur</a>
+        <ul>
+          <li><a href="#Understanding-the-dispute-form-wy_30" target="_self">Understanding the Dispute form</a></li>
+        </ul>
+      </li>
+      <li><a href="#The-timeline-of-a-chargeback-QOYRs" target="_blank">The timeline of a chargeback</a></li>
+      <li><a href="#Multiple-Chargebacks-Xqzl6" target="_self">Multiple chargebacks</a></li>
+      <li><a href="#Reverse-Chargebacks-vs-Repurchasing--Numu" target="_self">Reverse chargebacks vs repurchasing</a></li>
+      <li><a href="#FAQs-gv1pb" target="_self">FAQ’s</a></li>
+    </ul>
+    <h3 id="Whats-a-chargeback-YN1sf">What's a chargeback?</h3>
+    <p>A chargeback (also known as a charge dispute or reversal) occurs when a customer asks their credit card provider to cancel a transaction. This isn't a refund request through Gumroad; it's the card provider forcibly reversing the payment.</p>
+    <p>Think of it as an "unauthorized refund" — the customer takes their money back without your consent.</p>
+    <p>Unfortunately, chargebacks are an unavoidable part of online payments, and no platform can fully prevent them. Chargebacks are a necessary evil when it comes to processing online payments that any website processing credit cards, debit cards, and PayPal will be subject to.</p>
+    <p>As the creator, you are responsible for covering both the refunded amount and any payment processing fees. Gumroad will return our <a href="66-gumroads-fees.html">platform fee</a> to you.</p>
+    <h3 id="Why-do-they-happen--gg9r4">Why do they happen? </h3>
+    <p>There are a few reasons why chargebacks are issued: </p>
+    <ol>
+      <li>A purchase was made of one of your products using a stolen credit card, and the credit card provider is now canceling that charge</li>
+      <li>A customer does not recognize the charge on their credit card statement and, for lack of a better word, "freaks out" (<a href="#FAQs-gv1pb">see below for more information</a>) </li>
+      <li>A customer believes they have not received the product they paid for and rather than talking with you about this, simply cancels the charge</li>
+    </ol>
+    <h3 id="When-Chargebacks-Strike-7gSXj">When chargebacks occur</h3>
+    <p>Until Jan 1, 2021, we used to fight every chargeback (or dispute, in PayPal's lingo), irrespective of whether the payment was made through a card or PayPal. But unfortunately, that changed when <a href="275-paypal-connect.html">PayPal Connect</a> and <a href="330-stripe-connect.html#disputes">Stripe Connect</a> kicked in. </p>
+    <p>Now, resolving disputes on those transactions is the creator's responsibility. Since the customer directly paid to your account, and not through us. You can go <a href="https://www.paypal.com/us/webapps/mpp/security/resolve-disputes">here</a> for more information on the PayPal dispute process, or <a href="https://support.stripe.com/topics/disputes">here</a> for more information on the Stripe dispute process. Additionally, you can reach out to the appropriate support team for further assistance. </p>
+    <p>If the dispute is filed for a <a href="330-stripe-connect.html">Stripe Connect</a> or <a href="275-paypal-connect.html">PayPal Connect</a> purchase, you will need to fight this dispute through your respective Stripe or PayPal accounts. </p>
+    <p>We also email your customer, asking them to cancel the dispute. In our email, we tell them what they bought and what email address was used for the purchase.  It is very helpful to us if you also email them and ask them to cancel the dispute, or at least ask them (nicely) why they canceled the payment.</p>
+    <p>To provide additional information, click the Submit Additional Information button within the email. You have 72 hours to submit any additional information using the form below; after that, we will auto-submit on your behalf. You can only submit additional information once. </p>
+    <h3 id="Understanding-the-dispute-form-wy_30">Understanding the dispute form</h3>
+    <ul>
+      <li>You can find the dispute reason (explanation) displayed at the top of the form.  </li>
+      <li>Under the dispute reason, there is a question asking why you should win and a list of reasons to select. </li>
+      <li>If the dispute is related to a membership subscription, you will also see the question, "Why wasn't the customer's subscription canceled?"</li>
+      <li>If you have additional evidence, such as customer communication, you can upload it to the bottom of the form. If you have multiple files to upload, please make sure they are all on one single PDF.</li>
+    </ul>
+    <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65d759991c2f8d3d7ebfd181/file-1xAvgFWOS5.png" %></figure>
+    <p>This is, unfortunately, all we can legally do. Chargeback dispute policies at banks only allow us to state our case, but there is no guarantee that we will win our dispute.</p>
+    <p>The chargeback will appear to you as a full refund of the sale. We will notify you of the chargeback and provide you with the email address of the customer in question. When you export <a href="74-the-analytics-dashboard.html#sales-csv">customer information</a>, chargebacks appear in the "Disputed" column.</p>
+    <p>As a means of preventing further chargebacks, which hurt our credit rating, we also block that customer from purchasing via Gumroad again.</p>
+    <p>If we do win a dispute, we will notify you immediately.</p>
+    <h3 id="The-timeline-of-a-chargeback-QOYRs">The timeline of a chargeback</h3>
+    <p>1) A customer issues a chargeback for whatever reason. We are legally required to honor chargebacks, no matter how unfair they might seem.</p>
+    <p>2) Next, we begin the dispute process. </p>
+    <p>3) We wait for the credit card provider to read through our dispute and decide whether or not we get the money back</p>
+    <p>4) We wait</p>
+    <p>5) We continue to wait. We can not check in on the process to see how the dispute is faring. We can't. Sorry. We don't have any insight into this. It sucks, we know.</p>
+    <p>6) We wait. This can take months, sometimes.</p>
+    <p>7) IF we win the dispute, the card processor will send that money back to us with a letter saying we won the dispute, and we add that money back to your Gumroad balance. We will send you an automated email notifying you that you won the dispute.</p>
+    <h3 id="Multiple-Chargebacks-Xqzl6">Multiple Chargebacks</h3>
+    <p>If your account has had too many chargebacks issued against it, our risk team may get involved, as per our <a href="http://www.gumroad.com/terms">Terms &amp; Conditions</a>. Chargebacks hurt Gumroad's credit rating, and the better our credit rating, the lower we can keep our fees for creators and build cool features. </p>
+    <p>Let's say you have $1,000 in sales, and you incur $100 in chargebacks. You now have a 10% chargeback-to-sales volume rate, meaning 10% of all of your sales have resulted in chargebacks. As you know, we also swallow the resulting penalties that are attached to chargebacks. Theoretically, if we were to continue processing your sales, we would continue to accrue fees and chargebacks on your behalf. </p>
+    <p>From the viewpoint of our partners, this is unsustainable, and your account will have to be suspended. We do make exceptions if your account is relatively new.</p>
+    <h3 id="Reverse-Chargebacks-vs-Repurchasing--Numu">Reverse Chargebacks vs. Repurchasing</h3>
+    <p>When we win a dispute, you receive an email from us, as well as a credit on your balance page and next payout. </p>
+    <p>That said, reversing or winning a dispute can take longer than anyone would expect. Chargebacks are often manually reviewed and slower to process than your average daily payment. Chargeback reversals (or reversal-reversals) were hacked in on top of that. It's kind of a mess.</p>
+    <p>To see your funds return to your account, it is often easier to ask your customer to repurchase the product again. They will have to:</p>
+    <ol>
+      <li>Use a different browser, or <b>Incognito</b> mode to make the purchase</li>
+      <li>Use a different email address to make the purchase</li>
+    </ol>
+    <h3 id="FAQs-gv1pb">FAQs:</h3>
+    <p><b>Q: Can Gumroad prevent chargebacks from happening? </b></p>
+    <p>A: No. Not at all. There is no payment processing entity in the universe we presently inhabit that can stop a customer from issuing a chargeback. If someone at another payments website smugly informs you that their system prevents chargebacks, please verify that their pants are not currently burning due to their patent dishonesty.</p>
+    <p><b>Q: Why wouldn't a customer recognize a charge on their credit card? </b></p>
+    <p>A: At the moment, we send 14 characters to customers' credit card providers for processing. The first six characters are "gumrd.com" and the remaining eight are either your Full Name as listed in the <a href="https://www.gumroad.com/settings">Settings menu</a>, or the username, or the product's name (It depends on the card processor so we cannot be sure). If your <b>full name</b> is not reflected in the title of your products or your branding, you may run into issues.</p>
+    <p>For example, if you sell films under the heading <b>Breadcrumb Films</b> but your full name on Gumroad is <b>Mildred Peppercorn</b> - your customers will be understandably alarmed when they see "GUM.CO MILDRED P" on their credit card bill. Rather, go with the name of your brand as your full name.</p>
+    <p><b>Q: I contacted my customer but they're not responding! This chargeback is therefore false, and I demand that it be removed.  </b></p>
+    <p>A: Unfortunately, we can't simply cancel a chargeback. We have to follow the same procedures we always do, even on legitimate chargebacks. It sucks, we know!</p>
+    <p><b>Q: I had a customer issue a chargeback 3 months ago - what happened?  </b></p>
+    <p>A: If we win the chargeback, we will send you an automatic notification. If we don't win it, you're not informed otherwise. </p>
+    <p><b>Q: But this means that the person got the product for free!</b></p>
+    <p>A: Yes, unfortunately, it can mean this. But again, neither we nor any other marketplace website can preemptively stop chargebacks from happening. Sometimes customers and other humans act badly - all we can do is fight the dispute with data, not arguments about the ethics of chargebacks.</p>
+    <br>
+    <h4>Further (boring but informative) reading</h4>
+    <p><a href="https://chargebacks911.com/chargebacks/">https://chargebacks911.com/chargebacks/</a></p>
+    <p><a href="https://www.investopedia.com/terms/c/chargeback.asp">https://www.investopedia.com/terms/c/chargeback.asp</a></p>
+    <p><a href="https://en.wikipedia.org/wiki/Chargeback">https://en.wikipedia.org/wiki/Chargeback</a></p>
+  </div>
+  <div>
+    <h3>Related Articles</h3>
+    <ul>
+      <li><a href="47-how-to-refund-a-customer.html"><span>Issuing a refund</span></a></li>
+      <li><a href="161-what-gumroad-considers-fraud.html"><span>Defining fraud on Gumroad</span></a></li>
+    </ul>
+  </div>
+</div>
