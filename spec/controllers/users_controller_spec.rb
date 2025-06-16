@@ -566,7 +566,7 @@ describe UsersController do
         sign_in(@user)
         get :email_unsubscribe, params: { email_type: "notify", id: @user.external_id }
         expect(@user.reload.enable_payment_email).to be(false)
-        expect(response).to be_successful
+        expect(response).to redirect_to(root_path)
       end
     end
 
