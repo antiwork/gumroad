@@ -545,11 +545,8 @@ describe UsersController do
 
         get :email_unsubscribe, params: { email_type: "seller_update", id: @user.external_id }
 
-        expect(SecureEncryptService).to have_received(:encrypt) do |url|
-          expect(url).to include("/unsubscribe/")
-          expect(url).to include("email_type=seller_update")
-          expect(url).to include("expires_at=")
-        end
+        expect(SecureEncryptService).to have_received(:encrypt).twice
+        expect(SecureEncryptService).to have_received(:encrypt).with(a_string_matching(%r{/unsubscribe/.*email_type=seller_update.*expires_at=}))
       end
 
       it "includes encrypted user email for confirmation" do
