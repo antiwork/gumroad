@@ -532,12 +532,13 @@ describe UsersController do
       it "redirects to secure redirect page for confirmation" do
         get :email_unsubscribe, params: { email_type: "notify", id: @user.external_id }
 
-        expect(response).to redirect_to(secure_url_redirect_path)
+        expect(response).to be_redirect
+        expect(response.location).to start_with(secure_url_redirect_url)
         expect(response.location).to include("encrypted_destination")
         expect(response.location).to include("encrypted_confirmation_text")
-        expect(response.location).to include("message=Please%20enter%20your%20email%20address%20to%20unsubscribe")
-        expect(response.location).to include("field_name=Email%20address")
-        expect(response.location).to include("error_message=Email%20address%20does%20not%20match")
+        expect(response.location).to include("message=Please+enter+your+email+address+to+unsubscribe")
+        expect(response.location).to include("field_name=Email+address")
+        expect(response.location).to include("error_message=Email+address+does+not+match")
       end
 
       it "includes correct destination URL in redirect params" do
