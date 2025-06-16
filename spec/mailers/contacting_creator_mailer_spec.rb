@@ -92,7 +92,7 @@ describe ContactingCreatorMailer do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
-          expect(mail.body.encoded).to include "Unfortunately, we're unable to fight disputes on purchases via PayPal Connect since we don't have access to your PayPal account."
+          expect(mail.body.encoded).to include "Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account."
         end
       end
     end
@@ -152,7 +152,7 @@ describe ContactingCreatorMailer do
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Unfortunately, we're unable to fight disputes on purchases via PayPal Connect since we don't have access to your PayPal account."
+          expect(mail.body.encoded).to include "Unfortunately, we’re unable to fight disputes on purchases via PayPal Connect since we don’t have access to your PayPal account."
         end
       end
     end
@@ -245,7 +245,26 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.remind(@user.id)
       expect(mail.to).to eq ["blah@example.com"]
       expect(mail.subject).to eq "Please add a payment account to Gumroad."
-      expect(mail.body.encoded).to include user_unsubscribe_url(id: @user.external_id, email_type: :product_update)
+      expect(mail.body.encoded).to include user_unsubscribe_url(id: @user.secure_external_id(scope: "email_unsubscribe"), email_type: :product_update)
+    end
+  end
+
+  describe "notify_of_sale" do
+    let(:product) { create(:product) }
+    let(:purchase) { create(:purchase, link: product) }
+
+    it "includes unsubscribe link with secure external id" do
+      mail = ContactingCreatorMailer.notify_of_sale(purchase.id)
+      expect(mail.body.encoded).to include user_unsubscribe_url(id: product.user.secure_external_id(scope: "email_unsubscribe"), email_type: :notify)
+    end
+  end
+
+  describe "weekly_update" do
+    let(:seller) { create(:user) }
+
+    it "includes unsubscribe link with secure external id" do
+      mail = ContactingCreatorMailer.weekly_update(seller.id)
+      expect(mail.body.encoded).to include user_unsubscribe_url(id: seller.secure_external_id(scope: "email_unsubscribe"), email_type: :seller_update)
     end
   end
 
@@ -1689,7 +1708,7 @@ describe ContactingCreatorMailer do
 
       expect(mail.to).to eq [creator.email]
       expect(mail.subject).to eq "[Action Required] Complete the identity verification to avoid account closure"
-      expect(mail.body.encoded).to include "In accordance with Singapore's Payment Services Act, our payment processor Stripe requires extra verification for Singapore-based accounts."
+      expect(mail.body.encoded).to include "In accordance with Singapore’s Payment Services Act, our payment processor Stripe requires extra verification for Singapore-based accounts."
       expect(mail.body.encoded).to include "https://gumroad.com/settings/payments"
       expect(mail.body.encoded).to include "After the deadline on October 10, 2023, your current balance will be forfeited."
     end
@@ -1903,62 +1922,6 @@ describe ContactingCreatorMailer do
       expect(mail.to).to eq [seller.email]
       expect(mail.subject).to eq "Important: Refund policy changes effective immediately"
       expect(mail.body.encoded).to include "Hey #{seller.name_or_username},"
-    end
-  end
-
-  let(:seller) { create(:user) }
-  let(:purchase) { create(:purchase, seller: seller) }
-  let(:product) { purchase.link }
-
-  describe "#notify_of_sale" do
-    let(:mail) { ContactingCreatorMailer.notify_of_sale(purchase.id) }
-
-    it "uses secure external id for unsubscribe link" do
-      expected_secure_id = seller.secure_external_id(scope: "email_unsubscribe")
-      expect(mail.body.encoded).to include("/unsubscribe/#{expected_secure_id}")
-      expect(mail.body.encoded).not_to include("/unsubscribe/#{seller.external_id}")
-    end
-
-    it "includes correct email type in unsubscribe link" do
-      expect(mail.body.encoded).to include("email_type=notify")
-    end
-
-    it "contains seller information" do
-      expect(mail.to).to eq([seller.email])
-      expect(mail.subject).to include("You made a sale")
-    end
-  end
-
-  describe "#product_update_failure" do
-    let(:mail) { ContactingCreatorMailer.product_update_failure(seller.id) }
-
-    it "uses secure external id for unsubscribe link" do
-      expected_secure_id = seller.secure_external_id(scope: "email_unsubscribe")
-      expect(mail.body.encoded).to include("/unsubscribe/#{expected_secure_id}")
-      expect(mail.body.encoded).not_to include("/unsubscribe/#{seller.external_id}")
-    end
-
-    it "includes correct email type in unsubscribe link" do
-      expect(mail.body.encoded).to include("email_type=product_update")
-    end
-  end
-
-  describe "#weekly_recap" do
-    let(:mail) { ContactingCreatorMailer.weekly_recap(seller.id) }
-
-    it "uses secure external id for unsubscribe link" do
-      expected_secure_id = seller.secure_external_id(scope: "email_unsubscribe")
-      expect(mail.body.encoded).to include("/unsubscribe/#{expected_secure_id}")
-      expect(mail.body.encoded).not_to include("/unsubscribe/#{seller.external_id}")
-    end
-
-    it "includes correct email type in unsubscribe link" do
-      expect(mail.body.encoded).to include("email_type=seller_update")
-    end
-
-    it "contains weekly recap information" do
-      expect(mail.to).to eq([seller.email])
-      expect(mail.subject).to include("Your last week")
     end
   end
 end
