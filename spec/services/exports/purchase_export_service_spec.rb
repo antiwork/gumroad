@@ -487,6 +487,13 @@ describe Exports::PurchaseExportService do
       expect(field_value(last_data_row, "Sent Abandoned Cart Email?")).to eq("1")
     end
 
+    it "includes access revoked status" do
+      expect(field_value(last_data_row, "Access Revoked?")).to eq("0")
+
+      @purchase.update!(is_access_revoked: true)
+      expect(field_value(last_data_row, "Access Revoked?")).to eq("1")
+    end
+
     context "when the purchase has a tip" do
       before do
         create(:tip, purchase: @purchase, value_usd_cents: 100, created_at: 2.minutes.ago)

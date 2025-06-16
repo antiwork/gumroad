@@ -22,11 +22,11 @@
     <dl>
       <% if purchase.seller.support_email.present? %>
         <dt>Seller support email</dt>
-        <dd><%= mail_to purchase.seller.support_email %></dd>
+        <dd><%= copy_to_clipboard purchase.seller.support_email %></dd>
       <% end %>
 
       <dt>Seller email</dt>
-      <dd><%= mail_to purchase.seller.email %></dd>
+      <dd><%= copy_to_clipboard purchase.seller.email %></dd>
 
       <% if purchase.merchant_account %>
         <dt>Merchant account</dt>
