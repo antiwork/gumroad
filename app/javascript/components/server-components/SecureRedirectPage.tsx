@@ -17,6 +17,12 @@ type SecureRedirectPageProps = {
   flash_error?: string | null;
 };
 
+type ErrorData = {
+  error?: string;
+};
+
+const castToErrorData = createCast<ErrorData>();
+
 const SecureRedirectPage = ({
   message,
   field_name,
@@ -40,7 +46,7 @@ const SecureRedirectPage = ({
     e.preventDefault();
 
     if (!confirmationText.trim()) {
-      showAlert("Please enter the confirmation text", "error");
+      showAlert("Please enter your email address to unsubscribe", "error");
       return;
     }
 
@@ -64,12 +70,12 @@ const SecureRedirectPage = ({
       if (response.redirected) {
         window.location.href = response.url;
       } else if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = castToErrorData(await response.json());
         showAlert(errorData.error || "An error occurred. Please try again.", "error");
       } else {
         showAlert("An error occurred. Please try again.", "error");
       }
-    } catch (error) {
+    } catch (_error) {
       showAlert("An error occurred. Please try again.", "error");
     } finally {
       setIsSubmitting(false);
@@ -83,7 +89,11 @@ const SecureRedirectPage = ({
         <p>{message}</p>
       </header>
       <div className="mini-rule legacy-only"></div>
-      <form onSubmit={handleSubmit}>
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+      >
         <label htmlFor="confirmation_text" className="form-label">
           {field_name}
         </label>
