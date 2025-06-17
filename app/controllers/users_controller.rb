@@ -183,7 +183,7 @@ class UsersController < ApplicationController
       else
         user = User.find_by_external_id(params[:id])
         if user.present?
-          destination_url = user_unsubscribe_url(id: user.secure_external_id(scope: "email_unsubscribe"), email_type: params[:email_type], expires_at: 1.day.from_now)
+          destination_url = user_unsubscribe_url(id: user.secure_external_id(scope: "email_unsubscribe", expires_at: 2.days.from_now), email_type: params[:email_type])
           encrypted_destination = SecureEncryptService.encrypt(destination_url)
           encrypted_confirmation_text = SecureEncryptService.encrypt(user.email)
           message = "Please enter your email address to unsubscribe"
