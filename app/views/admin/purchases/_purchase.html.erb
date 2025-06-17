@@ -251,6 +251,21 @@
         <dd><%= link_to(purchase.affiliate.affiliate_user.form_email, admin_search_users_path(query: "#{purchase.affiliate.affiliate_user.form_email}")) %></dd>
       <% end %>
 
+      <% if purchase.purchase_refund_policy.present? %>
+        <dt>Refund Policy</dt>
+        <dd>
+          <strong><%= purchase.purchase_refund_policy.title %></strong>
+          <% if purchase.purchase_refund_policy.fine_print.present? %>
+            <br>
+            <%= simple_format(purchase.purchase_refund_policy.fine_print) %>
+          <% end %>
+          <% if purchase.purchase_refund_policy.max_refund_period_in_days.present? %>
+            <br>
+            <small>Max refund period: <%= purchase.purchase_refund_policy.max_refund_period_in_days %> days</small>
+          <% end %>
+        </dd>
+      <% end %>
+
       <dt>Can email</dt>
       <dd aria-label="Can email">
         <%= purchase.can_contact? ? icon_yes : icon_no %>
