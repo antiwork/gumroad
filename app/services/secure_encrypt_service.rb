@@ -37,15 +37,14 @@ class SecureEncryptService
     end
 
     private
+      def encryptor
+        @encryptor ||= begin
+          key = GlobalConfig.get("SECURE_ENCRYPT_KEY")
+          raise MissingKeyError, "SECURE_ENCRYPT_KEY is not set." if key.blank?
+          raise InvalidKeyError, "SECURE_ENCRYPT_KEY must be 32 bytes for aes-256-gcm." if key.bytesize != 32
 
-    def encryptor
-      @encryptor ||= begin
-        key = GlobalConfig.get('SECURE_ENCRYPT_KEY')
-        raise MissingKeyError, 'SECURE_ENCRYPT_KEY is not set.' if key.blank?
-        raise InvalidKeyError, 'SECURE_ENCRYPT_KEY must be 32 bytes for aes-256-gcm.' if key.bytesize != 32
-
-        ActiveSupport::MessageEncryptor.new(key, cipher: 'aes-256-gcm')
+          ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm")
+        end
       end
-    end
   end
 end

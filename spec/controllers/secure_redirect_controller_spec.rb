@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe SecureRedirectController, type: :controller do
-  let(:destination_url) { user_unsubscribe_url(id: 'sample-id', email_type: 'notify') }
+  let(:destination_url) { user_unsubscribe_url(id: "sample-id", email_type: "notify") }
   let(:confirmation_text) { "user@example.com" }
   let(:encrypted_destination) { SecureEncryptService.encrypt(destination_url) }
   let(:encrypted_confirmation_text) { SecureEncryptService.encrypt(confirmation_text) }
