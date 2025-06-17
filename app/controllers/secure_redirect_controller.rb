@@ -19,7 +19,7 @@ class SecureRedirectController < ApplicationController
       destination = SecureEncryptService.decrypt(@encrypted_destination)
 
       if destination.present?
-        redirect_to destination, allow_other_host: true
+        redirect_to destination
       else
         render json: { error: "Invalid destination" }, status: :unprocessable_entity
       end

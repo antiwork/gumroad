@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe SecureRedirectController, type: :controller do
-  let(:destination_url) { "https://example.com/destination" }
+  let(:destination_url) { user_unsubscribe_url(id: 'sample-id', email_type: 'notify') }
   let(:confirmation_text) { "user@example.com" }
   let(:encrypted_destination) { SecureEncryptService.encrypt(destination_url) }
   let(:encrypted_confirmation_text) { SecureEncryptService.encrypt(confirmation_text) }
@@ -124,11 +124,6 @@ describe SecureRedirectController, type: :controller do
         post :create, params: valid_params
 
         expect(response).to redirect_to(destination_url)
-      end
-
-      it "allows other hosts in redirect" do
-        expect(controller).to receive(:redirect_to).with(destination_url, allow_other_host: true)
-        post :create, params: valid_params
       end
     end
 
