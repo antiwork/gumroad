@@ -74,7 +74,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
     @buyer_name = @purchase.try(:full_name)
     @seller = @product.user
-    @unsub_link = user_unsubscribe_url(id: @seller.external_id, email_type: :notify)
+    @unsub_link = user_unsubscribe_url(id: @seller.secure_external_id(scope: "email_unsubscribe"), email_type: :notify)
     @reply_to = @purchase.try(:email)
 
     set_notify_of_sale_headers(is_preorder:)
@@ -127,7 +127,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = User.find_by(id: user_id)
     return unless @seller
 
-    @unsub_link = user_unsubscribe_url(id: @seller.external_id, email_type: :product_update)
+    @unsub_link = user_unsubscribe_url(id: @seller.secure_external_id(scope: "email_unsubscribe"), email_type: :product_update)
     @sales_count = @seller.sales.successful.count
     @subject = "Please add a payment account to Gumroad."
   end
@@ -142,7 +142,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @end_of_period = Date.today.beginning_of_week(:sunday).to_datetime
     @start_of_period = @end_of_period - 7.days
     @seller = User.find(user_id)
-    @unsub_link = user_unsubscribe_url(id: @seller.external_id, email_type: :seller_update)
+    @unsub_link = user_unsubscribe_url(id: @seller.secure_external_id(scope: "email_unsubscribe"), email_type: :seller_update)
     @subject = "Your last week."
   end
 
