@@ -519,23 +519,83 @@ describe UsersController do
       @user = create(:user, enable_payment_email: true, weekly_notification: true)
     end
 
+    context "with secure external id" do
+      it "allows access with valid secure external id" do
+        secure_id = @user.secure_external_id(scope: "email_unsubscribe")
+        get :email_unsubscribe, params: { email_type: "notify", id: secure_id }
+        expect(@user.reload.enable_payment_email).to be(false)
+        expect(response).to redirect_to(root_path)
+      end
+    end
+
+    context "with regular external id when user exists" do
+      it "redirects to secure redirect page for confirmation" do
+        get :email_unsubscribe, params: { email_type: "notify", id: @user.external_id }
+
+        expect(response).to be_redirect
+        expect(response.location).to start_with(secure_url_redirect_url)
+        expect(response.location).to include("encrypted_destination")
+        expect(response.location).to include("encrypted_confirmation_text")
+        expect(response.location).to include("message=Please+enter+your+email+address+to+unsubscribe")
+        expect(response.location).to include("field_name=Email+address")
+        expect(response.location).to include("error_message=Email+address+does+not+match")
+      end
+
+      it "includes correct destination URL in redirect params" do
+        allow(SecureEncryptService).to receive(:encrypt).and_call_original
+
+        get :email_unsubscribe, params: { email_type: "seller_update", id: @user.external_id }
+
+        expect(SecureEncryptService).to have_received(:encrypt).twice
+        expect(SecureEncryptService).to have_received(:encrypt).with(a_string_matching(%r{/unsubscribe/.*email_type=seller_update}))
+      end
+
+      it "includes encrypted user email for confirmation" do
+        allow(SecureEncryptService).to receive(:encrypt).and_call_original
+
+        get :email_unsubscribe, params: { email_type: "product_update", id: @user.external_id }
+
+        expect(SecureEncryptService).to have_received(:encrypt).with(@user.email)
+      end
+    end
+
+    context "with signed in user matching the external id" do
+      it "allows access without redirect" do
+        sign_in(@user)
+        get :email_unsubscribe, params: { email_type: "notify", id: @user.external_id }
+        expect(@user.reload.enable_payment_email).to be(false)
+        expect(response).to redirect_to(root_path)
+      end
+    end
+
+    context "with invalid external id" do
+      it "raises 404 error" do
+        expect do
+          get :email_unsubscribe, params: { email_type: "notify", id: "invalid_id" }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
     describe "payment_notifications" do
       it "redirects home, sets column correctly" do
-        get :email_unsubscribe, params: { email_type: "notify", id: @user.external_id }
+        secure_id = @user.secure_external_id(scope: "email_unsubscribe")
+        get :email_unsubscribe, params: { email_type: "notify", id: secure_id }
         expect(@user.reload.enable_payment_email).to be(false)
       end
     end
 
     describe "weekly notifications" do
       it "redirects home, sets column correctly" do
-        get :email_unsubscribe, params: { email_type: "seller_update", id: @user.external_id }
+        secure_id = @user.secure_external_id(scope: "email_unsubscribe")
+        get :email_unsubscribe, params: { email_type: "seller_update", id: secure_id }
         expect(@user.reload.weekly_notification).to be(false)
       end
     end
 
     describe "announcement notifications" do
       it "redirects home, sets column correctly" do
-        get :email_unsubscribe, params: { email_type: "product_update", id: @user.external_id }
+        secure_id = @user.secure_external_id(scope: "email_unsubscribe")
+        get :email_unsubscribe, params: { email_type: "product_update", id: secure_id }
         expect(@user.reload.announcement_notification_enabled).to be(false)
       end
     end
