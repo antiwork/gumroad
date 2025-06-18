@@ -382,11 +382,7 @@ export const DashboardPage = ({
           <h2>Activity</h2>
 
           <div className="stats-grid">
-            <Stats
-              title="Balance"
-              description="Your current balance available for payout"
-              value={balances.balance}
-            />
+            <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
             <Stats
               title="Last 7 days"
               description="Your total sales in the last 7 days"
