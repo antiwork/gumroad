@@ -40,5 +40,7 @@ class RedisKey
     def transcoded_videos_recentness_limit_in_months = "transcoded_videos_recentness_limit_in_months"
     def generate_fees_by_creator_location_job_max_execution_time_seconds = "generate_fees_by_creator_location_job:max_execution_time_seconds"
     def ytd_sales_report_emails = "reports:ytd_sales_report_emails"
+    def failed_seller_purchases_watch_minutes = "failed_seller_purchases_watch_minutes"
+    def max_seller_failed_purchases_price_cents = "max_seller_failed_purchases_price_cents"
   end
 end

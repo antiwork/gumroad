@@ -559,6 +559,107 @@ describe Purchase::Blockable do
         end
       end
     end
+
+    describe "probate seller based on recent failures" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller) }
+      let!(:purchase) { create(:purchase, link: product, purchase_state: "in_progress") }
+
+      before do
+        Feature.activate(:block_seller_based_on_recent_failures)
+        $redis.set(RedisKey.failed_seller_purchases_watch_minutes, 60)
+        $redis.set(RedisKey.max_seller_failed_purchases_price_cents, 1000) # $10
+      end
+
+      context "when feature is inactive" do
+        before { Feature.deactivate(:block_seller_based_on_recent_failures) }
+
+        it "does not probate the seller" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.mark_failed!
+          expect(seller.reload.on_probation?).to be(false)
+        end
+      end
+
+      context "when error code is ignored" do
+        it "does not probate the seller" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.update!(error_code: PurchaseErrorCode::PERCEIVED_PRICE_CENTS_NOT_MATCHING)
+          purchase.mark_failed!
+          expect(seller.reload.on_probation?).to be(false)
+        end
+      end
+
+      context "when total failed amount is below threshold" do
+        it "does not probate the seller" do
+          create_list(:failed_purchase, 3, link: product, price_cents: 250)
+          purchase.mark_failed!
+          expect(seller.reload.on_probation?).to be(false)
+        end
+      end
+
+      context "when total failed amount is above threshold" do
+        it "probates the seller" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.mark_failed!
+          expect(seller.reload.on_probation?).to be(true)
+        end
+
+        it "adds a comment with the correct probation reason" do
+          travel_to Time.current do
+            create_list(:failed_purchase, 5, link: product, price_cents: 250)
+            purchase.mark_failed!
+
+            expect(seller.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of $13.50 in 60 minutes")
+          end
+        end
+
+        context "when some purchases are outside the watch window" do
+          it "does not probate the seller" do
+            travel_to Time.current do
+              create_list(:failed_purchase, 2, link: product, price_cents: 250)
+              create_list(:failed_purchase, 3, link: product, price_cents: 250, created_at: 61.minutes.ago)
+              purchase.mark_failed!
+              expect(seller.reload.on_probation?).to be(false)
+            end
+          end
+        end
+      end
+
+      context "when redis keys are not set" do
+        before do
+          $redis.del(RedisKey.failed_seller_purchases_watch_minutes)
+          $redis.del(RedisKey.max_seller_failed_purchases_price_cents)
+        end
+
+        context "when total failed amount is below default threshold" do
+          it "does not probate the seller" do
+            # default max amount is $2000
+            create_list(:failed_purchase, 5, link: product, price_cents: 200_00)
+            purchase.mark_failed!
+            expect(seller.reload.on_probation?).to be(false)
+          end
+        end
+
+        context "when total failed amount is above default threshold" do
+          it "probates the seller" do
+            # default max amount is $2000
+            create_list(:failed_purchase, 11, link: product, price_cents: 200_00)
+            purchase.mark_failed!
+            expect(seller.reload.on_probation?).to be(true)
+          end
+
+          it "adds a comment with the correct probation reason using default values" do
+            travel_to Time.current do
+              create_list(:failed_purchase, 11, link: product, price_cents: 200_00)
+              purchase.mark_failed!
+
+              expect(seller.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of $2,201 in 60 minutes")
+            end
+          end
+        end
+      end
+    end
   end
 
   describe "#charge_processor_fingerprint" do

@@ -158,6 +158,33 @@ module Purchase::Blockable
       block_buyer!
     end
 
+    def probate_seller_based_on_recent_failures!
+      return if Feature.inactive?(:block_seller_based_on_recent_failures)
+      return if IGNORED_ERROR_CODES.include?(error_code)
+
+      failed_seller_purchases_watch_minutes,
+      max_seller_failed_purchases_price_cents = $redis.mget(
+        RedisKey.failed_seller_purchases_watch_minutes,
+        RedisKey.max_seller_failed_purchases_price_cents
+      )
+
+      failed_seller_purchases_watch_minutes = failed_seller_purchases_watch_minutes.try(:to_i) || 60 # 1 hour
+      max_seller_failed_purchases_price_cents = max_seller_failed_purchases_price_cents.try(:to_i) || 200_000 # $2000
+
+      failed_seller_purchases = seller.sales.failed.with_stripe_fingerprint
+                                       .where(created_at: failed_seller_purchases_watch_minutes.minutes.ago..)
+
+      failed_price_cents = failed_seller_purchases.sum(:price_cents)
+      if failed_price_cents > max_seller_failed_purchases_price_cents
+        amount_in_dollars = MoneyFormatter.format(failed_price_cents, :usd, no_cents_if_whole: true, symbol: true)
+        content = <<~TEXT
+          Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of #{amount_in_dollars} in #{failed_seller_purchases_watch_minutes} minutes
+        TEXT
+
+        seller.put_on_probation(author_name: "fraudulent_purchases_blocker", content:)
+      end
+    end
+
     def block_ip_address_based_on_recent_failures!
       return if BlockedObject.ip_address.find_active_object(ip_address).present?
 
