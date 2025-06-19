@@ -168,6 +168,15 @@ class User < ApplicationRecord
   validates :purchasing_power_parity_limit, allow_nil: true, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
 
   validates_presence_of :email, if: :email_required?
+
+  # Validate custom fee percentages are within reasonable ranges
+  validates :custom_direct_fee_percentage, 
+    numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 50 }, 
+    allow_nil: true
+    
+  validates :custom_discover_fee_percentage, 
+    numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, 
+    allow_nil: true
   validate :email_almost_unique
   validates_format_of :email, with: EMAIL_REGEX, allow_blank: true, if: :email_changed?
   validates_format_of :kindle_email, with: KINDLE_EMAIL_REGEX, allow_blank: true, if: :kindle_email_changed?
