@@ -176,7 +176,7 @@ module Purchase::Blockable
 
       failed_price_cents = failed_seller_purchases.sum(:price_cents)
       if failed_price_cents > max_seller_failed_purchases_price_cents
-        amount_in_dollars = MoneyFormatter.format(failed_price_cents, :usd, no_cents_if_whole: true, symbol: true)
+        seller.update!(payouts_paused_internally: true)
         content = <<~TEXT
           Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of #{amount_in_dollars} in #{failed_seller_purchases_watch_minutes} minutes
         TEXT

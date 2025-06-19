@@ -599,28 +599,25 @@ describe Purchase::Blockable do
       end
 
       context "when total failed amount is above threshold" do
-        it "probates the seller" do
+        it "pauses payouts internally" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.mark_failed!
-          expect(seller.reload.on_probation?).to be(true)
+          expect(seller.reload.payouts_paused_internally).to be(true)
         end
 
-        it "adds a comment with the correct probation reason" do
-          travel_to Time.current do
-            create_list(:failed_purchase, 5, link: product, price_cents: 250)
-            purchase.mark_failed!
-
-            expect(seller.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of $13.50 in 60 minutes")
-          end
+        it "does not put seller on probation" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.mark_failed!
+          expect(seller.reload.on_probation?).to be(false)
         end
 
         context "when some purchases are outside the watch window" do
-          it "does not probate the seller" do
+          it "does not pause payouts internally" do
             travel_to Time.current do
               create_list(:failed_purchase, 2, link: product, price_cents: 250)
               create_list(:failed_purchase, 3, link: product, price_cents: 250, created_at: 61.minutes.ago)
               purchase.mark_failed!
-              expect(seller.reload.on_probation?).to be(false)
+              expect(seller.reload.payouts_paused_internally).to be(false)
             end
           end
         end
@@ -633,29 +630,20 @@ describe Purchase::Blockable do
         end
 
         context "when total failed amount is below default threshold" do
-          it "does not probate the seller" do
+          it "does not pause payouts internally" do
             # default max amount is $2000
             create_list(:failed_purchase, 5, link: product, price_cents: 200_00)
             purchase.mark_failed!
-            expect(seller.reload.on_probation?).to be(false)
+            expect(seller.reload.payouts_paused_internally).to be(false)
           end
         end
 
         context "when total failed amount is above default threshold" do
-          it "probates the seller" do
+          it "pauses payouts internally" do
             # default max amount is $2000
             create_list(:failed_purchase, 11, link: product, price_cents: 200_00)
             purchase.mark_failed!
-            expect(seller.reload.on_probation?).to be(true)
-          end
-
-          it "adds a comment with the correct probation reason using default values" do
-            travel_to Time.current do
-              create_list(:failed_purchase, 11, link: product, price_cents: 200_00)
-              purchase.mark_failed!
-
-              expect(seller.comments.last.content).to eq("Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of $2,201 in 60 minutes")
-            end
+            expect(seller.reload.payouts_paused_internally).to be(true)
           end
         end
       end
