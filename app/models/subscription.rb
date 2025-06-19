@@ -16,8 +16,6 @@ class Subscription < ApplicationRecord
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
 
-  attr_accessor :paused_at, :resumed_at, :next_charge_at
-
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
   ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE = 5.days
   # time before subscription fails to send reminder about card declined

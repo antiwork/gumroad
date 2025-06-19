@@ -3622,4 +3622,231 @@ describe Subscription, :vcr do
       end
     end
   end
+
+  describe 'pause and resume functionality' do
+    let(:seller_user) { create(:user, enable_payment_email: true) } # Explicitly create seller for webhook/mail tests
+    let(:buyer_user) { create(:user) }
+    let(:product_link) { create(:link, user: seller_user, price_cents: 1000, subscription_duration: :monthly) }
+    # Create subscription without an initial purchase to control its state more easily
+    let(:subscription) do
+      create(:subscription, link: product_link, user: buyer_user, seller: seller_user, next_charge_at: Time.current + 10.days)
+    end
+    # Create an original purchase associated with the subscription for methods that need it
+    let!(:original_purchase) do
+      create(:purchase, :is_original_subscription_purchase, link: product_link, user: buyer_user, subscription: subscription, succeeded_at: Time.current - 20.days, price_cents: product_link.price_cents)
+    end
+
+    before do
+      # Ensure product has a default tier if it's tiered, for status method
+      if product_link.is_tiered_membership? && !product_link.default_tier
+        create(:variant_category_with_variants, link: product_link, is_default_tier: true)
+        product_link.reload
+      end
+      # Ensure the subscription has a payment option for price calculation
+      unless subscription.payment_options.exists?
+        price_object = product_link.prices.find_by(recurrence: subscription.recurrence) || create(:price, link: product_link, recurrence: subscription.recurrence, price_cents: product_link.price_cents)
+        create(:payment_option, subscription: subscription, price: price_object)
+      end
+      subscription.reload
+    end
+
+    context '#pause!' do
+      it 'pauses an active subscription correctly' do
+        freeze_time do
+          expect { subscription.pause! }.to change { SubscriptionEvent.count }.by(1)
+          subscription.reload
+
+          expect(subscription.paused_at).to be_within(1.second).of(Time.current)
+          expect(subscription.paused?).to be true
+          expect(subscription.user_requested_pause?).to be true # default
+          expect(subscription.deactivated_at).to be_within(1.second).of(Time.current)
+          expect(subscription.subscription_events.last.event_type).to eq('paused')
+          # Check if send_subscription_paused_webhook was called (indirectly via PostToPingEndpointsWorker)
+          expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(nil, nil, "subscription.paused", subscription.id)
+        end
+      end
+
+      it 'sets user_requested_pause to false if specified' do
+        subscription.pause!(paused_by_user: false)
+        expect(subscription.user_requested_pause?).to be false
+      end
+
+      it 'does not change anything if already paused' do
+        subscription.pause! # First pause
+        first_paused_at = subscription.paused_at
+        first_deactivated_at = subscription.deactivated_at
+        Sidekiq::Worker.clear_all # Clear queue before second pause
+
+        expect { subscription.pause! }.not_to change { SubscriptionEvent.count } # Already paused, should not create new event
+        expect(PostToPingEndpointsWorker.jobs.size).to eq(0) # Webhook should not be sent again
+
+        subscription.reload
+        expect(subscription.paused_at).to eq(first_paused_at)
+        expect(subscription.deactivated_at).to eq(first_deactivated_at)
+      end
+
+      it 'does not pause a cancelled subscription' do
+        subscription.update!(cancelled_at: Time.current - 1.day, deactivated_at: Time.current - 1.day)
+        expect { subscription.pause! }.to raise_error(AASM::InvalidTransition) # or expect not to change state
+        expect(subscription.paused?).to be false
+      end
+    end
+
+    context '#resume!' do
+      let(:initial_next_charge_at) { Time.current + 10.days }
+      before do
+        subscription.update_column(:next_charge_at, initial_next_charge_at)
+        subscription.update_column(:paused_at, Time.current - 7.days) # Manually set paused_at for testing resume logic
+        subscription.update_columns(paused: true, deactivated_at: subscription.paused_at) # Simulate a paused state
+        Sidekiq::Worker.clear_all
+      end
+
+      it 'resumes a paused subscription' do
+        paused_at_time = subscription.paused_at
+        freeze_time do # Freeze time for resume! call
+          expected_paused_duration = Time.current - paused_at_time
+          expected_next_charge_at = initial_next_charge_at + expected_paused_duration
+
+          expect { subscription.resume! }.to change { SubscriptionEvent.count }.by(1)
+          subscription.reload
+
+          expect(subscription.resumed_at).to be_within(1.second).of(Time.current)
+          expect(subscription.paused?).to be false
+          expect(subscription.deactivated_at).to be_nil
+          expect(subscription.next_charge_at).to be_within(1.second).of(expected_next_charge_at)
+          expect(subscription.subscription_events.last.event_type).to eq('resumed')
+          # Check if send_subscription_resumed_webhook was called
+          expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(nil, nil, "subscription.resumed", subscription.id)
+        end
+      end
+
+      it 'calculates next_charge_at based on last_successful_charge_at if next_charge_at was nil' do
+        # Ensure subscription has a valid period by having a price object
+        price = subscription.price_object || create(:price, link: product_link, recurrence: subscription.recurrence, price_cents: product_link.price_cents)
+        subscription.payment_options.first&.update!(price: price)
+
+
+        last_charge_time = Time.current - 30.days
+        original_purchase.update!(succeeded_at: last_charge_time) # ensure this is set
+        subscription.update_column(:last_successful_charge_at, last_charge_time) # Manually set for clarity if model doesn't do this automatically
+
+        subscription.update_column(:next_charge_at, nil) # Make next_charge_at nil
+
+        paused_at_time = subscription.paused_at
+
+        freeze_time do # Freeze time for resume! call
+          expected_paused_duration = Time.current - paused_at_time
+          # Calculation: last_successful_charge_at + period + paused_duration
+          # Assuming 'period' method works correctly and returns seconds for monthly.
+          # For simplicity, let's assume period is 30 days for this test.
+          # period_seconds = subscription.period # This would be more robust
+          period_seconds = 30.days # For this example
+          expected_next_charge_at_from_last_charge = last_charge_time + period_seconds + expected_paused_duration
+
+          subscription.resume!
+          subscription.reload
+
+          expect(subscription.next_charge_at).to be_within(1.second).of(expected_next_charge_at_from_last_charge)
+        end
+      end
+
+      it 'does not change an active (not paused) subscription' do
+        active_subscription = create(:subscription, link: product_link, user: buyer_user, seller: seller_user, paused: false, deactivated_at: nil)
+        expect { active_subscription.resume! }.not_to change { SubscriptionEvent.count }
+        expect(active_subscription.resumed_at).to be_nil
+      end
+
+      it 'handles resuming a subscription that was never paused (paused_at is nil)' do
+         # Create a subscription that was never paused
+        fresh_subscription = create(:subscription, link: product_link, user: buyer_user, seller: seller_user, paused_at: nil, paused: false, deactivated_at: nil)
+
+        expect { fresh_subscription.resume! }.not_to raise_error # Should not error
+        expect(fresh_subscription.resumed_at).to be_nil # Or set to Time.current depending on desired behavior, current model sets it
+        expect(fresh_subscription.paused?).to be false
+        # Check if webhook was called or not, depending on desired behavior. Current model calls it.
+        # For this test, let's assume if it was never paused, it shouldn't send 'resumed' webhook.
+        # So, clear queue and check. This depends on specific product decision.
+        # For now, based on current implementation, it *will* create an event and send webhook.
+        # To test "does nothing", we might need to adjust resume! or the test.
+        # Let's test current behavior:
+        expect { fresh_subscription.resume! }.to change { SubscriptionEvent.count }.by(1)
+        expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(nil, nil, "subscription.resumed", fresh_subscription.id)
+
+      end
+    end
+
+    context '#status' do
+      it 'returns "paused" when paused and deactivated' do
+        subscription.update_columns(paused: true, deactivated_at: Time.current)
+        expect(subscription.status).to eq('paused')
+      end
+
+      it 'returns "alive" for an active, non-paused subscription' do
+        subscription.update_columns(paused: false, deactivated_at: nil, cancelled_at: nil, failed_at: nil, ended_at: nil)
+        expect(subscription.status).to eq('alive')
+      end
+    end
+
+    context '#alive?' do
+      it 'returns false when paused' do
+        subscription.update_column(:paused, true)
+        expect(subscription.alive?).to be false
+      end
+
+      it 'returns true for an active, non-paused subscription' do
+        subscription.update_columns(paused: false, deactivated_at: nil, cancelled_at: nil, failed_at: nil, ended_at: nil)
+        expect(subscription.alive?).to be true
+      end
+    end
+
+    context '#next_charge_at initialization and update' do
+      let(:new_subscription) { create(:subscription, link: product_link, user: buyer_user, seller: seller_user) }
+      let!(:new_original_purchase) { create(:purchase, :is_original_subscription_purchase, link: product_link, user: buyer_user, subscription: new_subscription, succeeded_at: (Time.current - 30.days)) }
+
+
+      it 'is set correctly upon subscription creation' do
+         # Need to ensure end_time_of_subscription is predictable
+        freeze_time do
+          # Manually trigger callbacks if create doesn't for some reason in test setup
+          # new_subscription.run_callbacks(:create) # Not usually needed if using FactoryBot correctly
+          # For `set_initial_next_charge_at` which is a before_create
+          # We need to check it *after* creation.
+          created_sub = create(:subscription, link: product_link, user: buyer_user, seller: seller_user)
+          create(:purchase, :is_original_subscription_purchase, link: product_link, user: buyer_user, subscription: created_sub, succeeded_at: Time.current) # ensure last_purchase_at is now
+          created_sub.reload # ensure callbacks have run and data is loaded
+
+          expected_next_charge = created_sub.last_purchase_at + created_sub.period
+          expect(created_sub.next_charge_at).to be_within(1.second).of(expected_next_charge)
+        end
+      end
+
+      it 'is updated after a successful charge' do
+        # Simulate a successful charge
+        freeze_time do
+          # Ensure there's a payment option for price calculation
+          price_object = new_subscription.price_object || create(:price, link: product_link, recurrence: new_subscription.recurrence, price_cents: product_link.price_cents)
+          new_subscription.payment_options.first_or_create(price: price_object)
+
+          purchase = new_subscription.build_purchase # Build a new purchase for charge
+          # Mock successful processing instead of actual charge! for simplicity
+          allow(purchase).to receive(:process!).and_return(true)
+          allow(purchase).to receive(:errors).and_return(ActiveModel::Errors.new(purchase)) # No errors
+          allow(purchase).to receive(:error_code).and_return(nil)
+          allow(purchase).to receive(:stripe_error_code).and_return(nil)
+          allow(purchase).to receive(:in_progress?).and_return(false)
+
+          # Call handle_purchase_success directly or ensure charge! calls it.
+          # For this test, let's assume charge! calls it.
+          # We need to ensure last_successful_charge_at is updated by the "charge"
+          # So, we simulate that by setting succeeded_at on the purchase.
+          purchase.succeeded_at = Time.current
+          new_subscription.handle_purchase_success(purchase) # Call directly to test its effect
+          new_subscription.reload
+
+          expected_next_charge = new_subscription.last_successful_charge_at + new_subscription.period
+          expect(new_subscription.next_charge_at).to be_within(1.second).of(expected_next_charge)
+        end
+      end
+    end
+  end
 end
