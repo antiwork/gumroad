@@ -609,6 +609,16 @@ describe Purchase::Blockable do
           expect(seller.reload.payouts_paused_internally).to be(true)
         end
 
+        it "creates a comment with the failed amount" do
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.mark_failed!
+
+          comment = seller.comments.last
+          expect(comment.content).to eq("Payouts paused due to high volume of failed purchases ($13.50 USD in 60 minutes).")
+          expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
+          expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_recent_failures")
+        end
+
         context "when some purchases are outside the watch window" do
           it "does not pause payouts internally" do
             travel_to Time.current do
