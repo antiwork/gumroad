@@ -16,6 +16,8 @@ class Subscription < ApplicationRecord
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
 
+  attr_accessor :paused_at, :resumed_at, :next_charge_at
+
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
   ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE = 5.days
   # time before subscription fails to send reminder about card declined
@@ -36,6 +38,8 @@ class Subscription < ApplicationRecord
             5 => :is_resubscription_pending_confirmation,
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
+            8 => :paused,
+            9 => :user_requested_pause,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -65,6 +69,7 @@ class Subscription < ApplicationRecord
 
   before_create :enable_flat_fee
   before_create :enable_mor_fee
+  before_create :set_initial_next_charge_at
   after_create :update_last_payment_option
   after_save :create_interruption_event, if: -> { deactivated_at_previously_changed? }
   after_create :create_interruption_event, if: -> { deactivated_at.present? } # needed in addition to the `after_save`. See https://github.com/gumroad/web/pull/26305#discussion_r1336425626
@@ -119,6 +124,7 @@ class Subscription < ApplicationRecord
   # ended), there are few instances where we want pending cancellation subscriptions to not be considered alive and in those instances, the caller
   # sets include_pending_cancellation as false and those subscriptions will not be considered alive. This is named different from active to avoid confusion.
   def alive?(include_pending_cancellation: true)
+    return false if paused?
     return false if failed_at.present? || ended_at.present?
     return true if cancelled_at.nil?
 
@@ -313,6 +319,7 @@ class Subscription < ApplicationRecord
     purchase.update_balance_and_mark_successful!
     original_purchase.update!(should_exclude_product_review: false) if original_purchase.should_exclude_product_review?
     self.credit_card_id = purchase.credit_card_id
+    self.next_charge_at = end_time_of_subscription
     save!
     create_purchase_event(purchase)
     if purchase.was_product_recommended
@@ -827,7 +834,9 @@ class Subscription < ApplicationRecord
   end
 
   def status
-    if deactivated_at.present?
+    if paused? && deactivated_at.present?
+      "paused"
+    elsif deactivated_at.present?
       termination_reason
     elsif pending_failure?
       "pending_failure"
@@ -868,7 +877,54 @@ class Subscription < ApplicationRecord
     true_original_purchase.is_gift_sender_purchase?
   end
 
+  def pause!(paused_by_user: true)
+    self.paused_at = Time.current
+    self.paused = true
+    self.user_requested_pause = paused_by_user
+    self.deactivated_at = Time.current # stop current access and billing
+    save!
+
+    subscription_events.create!(event_type: :paused, occurred_at: self.paused_at)
+    send_subscription_paused_webhook
+  end
+
+  def resume!
+    self.resumed_at = Time.current
+    self.paused = false
+    paused_duration = self.resumed_at - self.paused_at
+
+    if self.next_charge_at.present?
+      self.next_charge_at += paused_duration
+    elsif self.last_successful_charge_at.present? # Calculate based on last charge + period + paused_duration
+      self.next_charge_at = self.last_successful_charge_at + period + paused_duration
+    end
+
+    self.deactivated_at = nil # resume access and billing
+    save!
+
+    subscription_events.create!(event_type: :resumed, occurred_at: self.resumed_at)
+    send_subscription_resumed_webhook
+  end
+
+  def send_subscription_paused_webhook
+    # TODO: Define parameters for paused webhook
+    # params = { paused_at: self.paused_at.as_json }
+    # send_notification_webhook(resource_name: "subscription.paused", params: params)
+    send_notification_webhook(resource_name: "subscription.paused") # Placeholder
+  end
+
+  def send_subscription_resumed_webhook
+    # TODO: Define parameters for resumed webhook
+    # params = { resumed_at: self.resumed_at.as_json, next_charge_at: self.next_charge_at.as_json }
+    # send_notification_webhook(resource_name: "subscription.resumed", params: params)
+    send_notification_webhook(resource_name: "subscription.resumed") # Placeholder
+  end
+
   private
+    def set_initial_next_charge_at
+      self.next_charge_at = end_time_of_subscription
+    end
+
     def send_notification_webhook(resource_name:, params: nil)
       args = [5.seconds, nil, nil, resource_name, id]
       args << params.deep_stringify_keys if params.present?

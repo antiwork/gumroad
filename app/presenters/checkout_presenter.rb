@@ -216,6 +216,10 @@ class CheckoutPresenter
         is_overdue_for_charge: subscription.overdue_for_charge?,
         is_gift: subscription.gift?,
         is_installment_plan: subscription.is_installment_plan,
+        status: subscription.status,
+        paused_at: subscription.paused_at&.iso8601,
+        next_charge_at: subscription.next_charge_at&.iso8601,
+        resumed_at: subscription.resumed_at&.iso8601,
       }
     }
   end

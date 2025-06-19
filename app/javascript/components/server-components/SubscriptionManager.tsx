@@ -77,6 +77,8 @@ type Props = {
     is_overdue_for_charge: boolean;
     is_gift: boolean;
     is_installment_plan: boolean;
+    status: string; // Added: 'alive', 'paused', 'cancelled', etc.
+    paused_at: string | null; // Added
   };
   contact_info: {
     email: string;
@@ -107,6 +109,16 @@ const SubscriptionManager = ({
   used_card,
 }: Props) => {
   const url = new URL(useOriginalLocation());
+
+  // Determine initial paused state from props
+  const initialIsPaused = subscription.status === "paused";
+  const [isPaused, setIsPaused] = React.useState(initialIsPaused);
+  // Update isPaused if subscription.status changes (e.g. after successful API call and prop refresh)
+  React.useEffect(() => {
+    setIsPaused(subscription.status === "paused");
+  }, [subscription.status]);
+
+  const [isLoadingPauseResume, setIsLoadingPauseResume] = React.useState(false);
 
   const subscriptionEntity = subscription.is_installment_plan ? "installment plan" : "membership";
   const restartable = !subscription.alive || subscription.pending_cancellation;
@@ -310,6 +322,61 @@ const SubscriptionManager = ({
     }
   });
 
+  const handlePauseSubscription = async () => {
+    setIsLoadingPauseResume(true);
+    try {
+      const response = await fetch(`/subscriptions/${subscription.id}/pause`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector<HTMLMetaElement>('[name=csrf-token]')?.content || '',
+        },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIsPaused(true); // Update local state immediately
+        // Ideally, the parent component would refresh the subscription prop,
+        // which would then flow down and update via useEffect.
+        // For now, we'll update local state and show a message.
+        // Consider passing a function from parent to trigger data refresh if needed.
+        showAlert(`Your ${subscriptionEntity} has been paused.`, "success");
+        // TODO: Potentially update subscription.status and subscription.paused_at locally
+        // or rely on a full prop refresh if this component re-fetches data.
+      } else {
+        showAlert(data.error || `Failed to pause ${subscriptionEntity}.`, "error");
+      }
+    } catch (error) {
+      showAlert(`An error occurred while pausing the ${subscriptionEntity}.`, "error");
+      console.error("Pause subscription error:", error);
+    }
+    setIsLoadingPauseResume(false);
+  };
+
+  const handleResumeSubscription = async () => {
+    setIsLoadingPauseResume(true);
+    try {
+      const response = await fetch(`/subscriptions/${subscription.id}/resume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector<HTMLMetaElement>('[name=csrf-token]')?.content || '',
+        },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIsPaused(false); // Update local state immediately
+        showAlert(`Your ${subscriptionEntity} has been resumed.`, "success");
+        // TODO: Potentially update subscription.status and subscription.paused_at locally
+      } else {
+        showAlert(data.error || `Failed to resume ${subscriptionEntity}.`, "error");
+      }
+    } catch (error) {
+      showAlert(`An error occurred while resuming the ${subscriptionEntity}.`, "error");
+      console.error("Resume subscription error:", error);
+    }
+    setIsLoadingPauseResume(false);
+  };
+
   const hasSavedCard = state.savedCreditCard != null;
   const isPendingFirstGifteePayment = subscription.is_gift && subscription.successful_purchases_count === 1;
   const formattedSubscriptionEndDate = parseISO(subscription.end_time_of_subscription).toLocaleDateString(undefined, {
@@ -367,6 +434,51 @@ const SubscriptionManager = ({
           ) : null}
         </div>
       </StateContext.Provider>
+
+      {/* Pause and Resume Section */}
+      {!subscription.is_installment_plan && ( // Assuming pause/resume is not for installment plans for now
+        <div style={{ marginTop: '1rem', marginBottom: '1rem', padding: '1rem', border: '1px solid #eee', borderRadius: '4px' }}>
+          <h4>Subscription Status</h4>
+          {isPaused ? (
+            <>
+              <p>
+                Status: Paused
+                {subscription.paused_at && (
+                  <>
+                    {' since '}
+                    {new Date(subscription.paused_at).toLocaleDateString(undefined, {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </>
+                )}
+              </p>
+              <p>Your {subscriptionEntity} is currently paused. You will not be billed, and access to content may be limited. Resume to restore access and billing.</p>
+              <Button
+                color="primary"
+                onClick={handleResumeSubscription}
+                disabled={isLoadingPauseResume}
+              >
+                {isLoadingPauseResume ? "Resuming..." : `Resume ${subscriptionEntity}`}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>Status: Active</p>
+              {/* Could add 'Resumed on [date]' if subscription.resumed_at is available */}
+              <p>You can pause your {subscriptionEntity}. While paused, you will not be billed, and your access may be limited until you resume.</p>
+              <Button
+                color="secondary"
+                onClick={handlePauseSubscription}
+                disabled={isLoadingPauseResume || cancelled /* Do not allow pause if already cancelled or request to cancel is made */}
+              >
+                {isLoadingPauseResume ? "Pausing..." : `Pause ${subscriptionEntity}`}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
       {!restartable && !subscription.is_installment_plan ? (
         <div>

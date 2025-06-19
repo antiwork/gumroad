@@ -30,6 +30,10 @@ class Subscription::UpdaterService
   end
 
   def perform
+    if subscription.paused?
+      return { success: false, error_message: "Cannot update a paused #{subscription_entity}. Please resume it first." }
+    end
+
     error_message = validate_params
     return { success: false, error_message: } if error_message.present?
 

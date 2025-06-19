@@ -9,6 +9,7 @@ class RecurringChargeWorker
     SuoSemaphore.recurring_charge(subscription_id).lock do
       Rails.logger.info("Processing RecurringChargeWorker#perform(#{subscription_id})")
       subscription = Subscription.find(subscription_id)
+      return if subscription.paused?
       return if subscription.link.user.suspended?
       return unless subscription.alive?(include_pending_cancellation: false)
       return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0

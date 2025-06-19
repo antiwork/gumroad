@@ -781,6 +781,8 @@ Rails.application.routes.draw do
         post :unsubscribe_by_user
         post :unsubscribe_by_seller
         put :update, to: "purchases#update_subscription"
+        post :pause
+        post :resume
       end
     end
 

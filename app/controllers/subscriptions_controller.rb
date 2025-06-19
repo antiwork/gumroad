@@ -5,7 +5,7 @@ class SubscriptionsController < ApplicationController
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
 
-  before_action :fetch_subscription, only: %i[unsubscribe_by_seller unsubscribe_by_user magic_link send_magic_link]
+  before_action :fetch_subscription, only: %i[unsubscribe_by_seller unsubscribe_by_user magic_link send_magic_link pause resume]
   before_action :hide_layouts, only: [:manage, :magic_link, :send_magic_link]
   before_action :set_noindex_header, only: [:manage]
   before_action :check_can_manage, only: [:manage, :unsubscribe_by_user]
@@ -55,6 +55,26 @@ class SubscriptionsController < ApplicationController
     CustomerMailer.subscription_magic_link(@subscription.id, email).deliver_later(queue: "critical")
 
     head :no_content
+  end
+
+  def pause
+    authorize @subscription
+    @subscription.pause!(paused_by_user: true)
+    render json: { success: true }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, error: e.message }
+  rescue StandardError => e # Catching generic StandardError for other potential issues from the model
+    render json: { success: false, error: e.message }, status: :unprocessable_entity
+  end
+
+  def resume
+    authorize @subscription
+    @subscription.resume!
+    render json: { success: true }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, error: e.message }
+  rescue StandardError => e # Catching generic StandardError for other potential issues from the model
+    render json: { success: false, error: e.message }, status: :unprocessable_entity
   end
 
   private
