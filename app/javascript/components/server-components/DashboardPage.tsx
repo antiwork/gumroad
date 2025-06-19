@@ -382,29 +382,21 @@ export const DashboardPage = ({
           <h2>Activity</h2>
 
           <div className="stats-grid">
-            <Stats
-              title="Balance"
-              description="Your current balance available for payout"
-              value={balances.balance}
-              url={Routes.balance_path()}
-            />
+            <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
             <Stats
               title="Last 7 days"
               description="Your total sales in the last 7 days"
               value={balances.last_seven_days_sales_total}
-              url={Routes.sales_dashboard_path()}
             />
             <Stats
               title="Last 28 days"
               description="Your total sales in the last 28 days"
               value={balances.last_28_days_sales_total}
-              url={Routes.sales_dashboard_path()}
             />
             <Stats
               title="Total earnings"
               description="Your all-time net earnings from all products, excluding refunds and chargebacks"
               value={balances.total}
-              url={Routes.dashboard_total_revenue_path()}
             />
           </div>
 
