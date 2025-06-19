@@ -8,6 +8,7 @@ class Subscription < ApplicationRecord
   end
 
   class UpdateFailed < StandardError; end
+  class StateError < StandardError; end
 
   has_paper_trail
   include ExternalId
@@ -876,32 +877,42 @@ class Subscription < ApplicationRecord
   end
 
   def pause!(paused_by_user: true)
-    self.paused_at = Time.current
-    self.paused = true
-    self.user_requested_pause = paused_by_user
-    self.deactivated_at = Time.current # stop current access and billing
-    save!
+    raise Subscription::StateError, "Subscription cannot be paused in its current state (#{status})" unless alive?(include_pending_cancellation: false) && !paused?
 
-    subscription_events.create!(event_type: :paused, occurred_at: self.paused_at)
-    send_subscription_paused_webhook
+    ActiveRecord::Base.transaction do
+      self.paused_at = Time.current
+      self.paused = true
+      self.user_requested_pause = paused_by_user
+      self.deactivated_at = Time.current # stop current access and billing
+      save!
+
+      subscription_events.create!(event_type: :paused, occurred_at: self.paused_at)
+      send_subscription_paused_webhook
+    end
   end
 
   def resume!
-    self.resumed_at = Time.current
-    self.paused = false
-    paused_duration = self.resumed_at - self.paused_at
+    return unless self.paused_at.present? # Skip if never paused
+    raise Subscription::StateError, "Subscription is not paused" unless paused?
 
-    if self.next_charge_at.present?
-      self.next_charge_at += paused_duration
-    elsif self.last_successful_charge_at.present? # Calculate based on last charge + period + paused_duration
-      self.next_charge_at = self.last_successful_charge_at + period + paused_duration
+    ActiveRecord::Base.transaction do
+      self.resumed_at = Time.current
+      self.paused = false
+      # paused_duration is calculated from self.paused_at which is guaranteed to be present by the guard clause above.
+      paused_duration = self.resumed_at - self.paused_at
+
+      if self.next_charge_at.present?
+        self.next_charge_at += paused_duration
+      elsif self.last_successful_charge_at.present? # Calculate based on last charge + period + paused_duration
+        self.next_charge_at = self.last_successful_charge_at + period + paused_duration
+      end
+
+      self.deactivated_at = nil # resume access and billing
+      save!
+
+      subscription_events.create!(event_type: :resumed, occurred_at: self.resumed_at)
+      send_subscription_resumed_webhook
     end
-
-    self.deactivated_at = nil # resume access and billing
-    save!
-
-    subscription_events.create!(event_type: :resumed, occurred_at: self.resumed_at)
-    send_subscription_resumed_webhook
   end
 
   def send_subscription_paused_webhook

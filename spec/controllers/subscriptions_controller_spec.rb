@@ -246,4 +246,193 @@ describe SubscriptionsController do
       end
     end
   end
+
+  # Helper method to parse JSON response bodies
+  def json_response
+    JSON.parse(response.body)
+  end
+
+  describe 'POST #pause' do
+    let!(:subscription_to_pause) { create(:subscription, link: @product, user: subscriber, seller: seller) }
+
+    context 'when user is not authenticated' do
+      it 'returns an unauthorized status or redirects' do
+        post :pause, params: { id: subscription_to_pause.external_id }, format: :json
+        # Depending on Devise setup, this might be a redirect (302) or 401
+        # For JSON API, 401 is more common. Let's assume it redirects to login for HTML,
+        # but for JSON, it should be 401 or a similar error if not handled gracefully by a before_action.
+        # Given PUBLIC_ACTIONS does not include pause, authenticate_user! will trigger.
+        # By default, Devise returns 401 for unauthenticated JSON requests.
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
+    context 'when user is authenticated' do
+      before do
+        sign_in subscriber # Assumes sign_in helper from Devise::Test::ControllerHelpers or similar
+      end
+
+      context 'and authorized' do
+        before do
+          # Stub Pundit authorization
+          allow(controller).to receive(:authorize).with(instance_of(Subscription)).and_return(true)
+          # Ensure the correct subscription is found
+          allow(Subscription).to receive(:find_by_external_id).with(subscription_to_pause.external_id).and_return(subscription_to_pause)
+        end
+
+        it 'calls pause! on the subscription and returns success' do
+          expect(subscription_to_pause).to receive(:pause!).with(paused_by_user: true).and_call_original
+          post :pause, params: { id: subscription_to_pause.external_id }, format: :json
+          expect(response).to have_http_status(:ok)
+          expect(json_response['success']).to be true
+        end
+
+        it 'returns an error if pausing fails (e.g., RecordInvalid)' do
+          allow(subscription_to_pause).to receive(:pause!).and_raise(ActiveRecord::RecordInvalid.new(subscription_to_pause))
+          post :pause, params: { id: subscription_to_pause.external_id }, format: :json
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(json_response['success']).to be false
+          expect(json_response['error']).to be_present
+        end
+
+        it 'returns an error if pausing fails (e.g., Subscription::StateError)' do
+          allow(subscription_to_pause).to receive(:pause!).and_raise(Subscription::StateError.new("Cannot pause this"))
+          post :pause, params: { id: subscription_to_pause.external_id }, format: :json
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(json_response['success']).to be false
+          expect(json_response['error']).to eq("Cannot pause this")
+        end
+
+        it 'returns an error if pausing fails (e.g., unexpected StandardError)' do
+          allow(subscription_to_pause).to receive(:pause!).and_raise(StandardError.new("Something went wrong"))
+          post :pause, params: { id: subscription_to_pause.external_id }, format: :json
+          expect(response).to have_http_status(:internal_server_error)
+          expect(json_response['success']).to be false
+          expect(json_response['error']).to eq("An unexpected error occurred.")
+        end
+      end
+
+      context 'and not authorized' do
+        it 'returns a forbidden status or redirects' do
+          # Simulate Pundit denying authorization
+          allow(controller).to receive(:authorize).with(instance_of(Subscription)).and_raise(Pundit::NotAuthorizedError)
+          allow(Subscription).to receive(:find_by_external_id).with(subscription_to_pause.external_id).and_return(subscription_to_pause)
+
+          post :pause, params: { id: subscription_to_pause.external_id }, format: :json
+          # Default Pundit behavior is often to raise error, which Rails turns into 403 if not rescued by app's ApplicationController
+          # Or the controller itself might rescue_from Pundit::NotAuthorizedError
+          # For this test, let's assume a generic error handler might lead to 403 or redirect.
+          # If ApplicationController#user_not_authorized is default, it's a redirect for HTML, 403 for JSON.
+          expect(response).to have_http_status(:forbidden) # Or :redirect or check specific app rescue behavior
+        end
+      end
+    end
+
+    context 'when subscription is not found' do
+      before { sign_in subscriber }
+      it 'returns a not found status or error' do
+        allow(Subscription).to receive(:find_by_external_id).with("invalid-id").and_return(nil)
+        post :pause, params: { id: "invalid-id" }, format: :json
+        # The controller's fetch_subscription does: render json: { success: false } if @subscription.nil?
+        expect(response).to have_http_status(:ok)
+        expect(json_response['success']).to be false
+      end
+    end
+  end
+
+  describe 'POST #resume' do
+    let!(:subscription_to_resume) { create(:subscription, link: @product, user: subscriber, seller: seller, paused_at: Time.current, paused: true, deactivated_at: Time.current) }
+
+    context 'when user is not authenticated' do
+      it 'returns an unauthorized status' do
+        post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
+    context 'when user is authenticated' do
+      before do
+        sign_in subscriber
+      end
+
+      context 'and authorized' do
+        before do
+          allow(controller).to receive(:authorize).with(instance_of(Subscription)).and_return(true)
+          allow(Subscription).to receive(:find_by_external_id).with(subscription_to_resume.external_id).and_return(subscription_to_resume)
+        end
+
+        context 'when subscription is actually paused' do
+          before do
+            allow(subscription_to_resume).to receive(:paused?).and_return(true)
+          end
+
+          it 'calls resume! on the subscription and returns success' do
+            expect(subscription_to_resume).to receive(:resume!).and_call_original
+            post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+            expect(response).to have_http_status(:ok)
+            expect(json_response['success']).to be true
+          end
+
+          it 'returns an error if resuming fails (e.g., RecordInvalid)' do
+            allow(subscription_to_resume).to receive(:resume!).and_raise(ActiveRecord::RecordInvalid.new(subscription_to_resume))
+            post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+            expect(response).to have_http_status(:unprocessable_entity)
+            expect(json_response['success']).to be false
+            expect(json_response['error']).to be_present
+          end
+
+          it 'returns an error if resuming fails (e.g., Subscription::StateError)' do
+            allow(subscription_to_resume).to receive(:resume!).and_raise(Subscription::StateError.new("Cannot resume this"))
+            post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+            expect(response).to have_http_status(:unprocessable_entity)
+            expect(json_response['success']).to be false
+            expect(json_response['error']).to eq("Cannot resume this")
+          end
+
+          it 'returns an error if resuming fails (e.g., unexpected StandardError)' do
+            allow(subscription_to_resume).to receive(:resume!).and_raise(StandardError.new("Something went wrong"))
+            post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+            expect(response).to have_http_status(:internal_server_error)
+            expect(json_response['success']).to be false
+            expect(json_response['error']).to eq("An unexpected error occurred.")
+          end
+        end
+
+        context 'when subscription is not currently paused (controller pre-check)' do
+          before do
+            # Ensure find_by_external_id still returns the subscription, but it's not paused
+            allow(Subscription).to receive(:find_by_external_id).with(subscription_to_resume.external_id).and_return(subscription_to_resume)
+            allow(subscription_to_resume).to receive(:paused?).and_return(false)
+            expect(subscription_to_resume).not_to receive(:resume!) # Model method should not be called
+          end
+
+          it 'returns an unprocessable_entity error with specific message' do
+            post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+            expect(response).to have_http_status(:unprocessable_entity)
+            expect(json_response['success']).to be false
+            expect(json_response['error']).to eq("Subscription is not currently paused.")
+          end
+        end
+      end
+
+      context 'and not authorized' do
+        it 'returns a forbidden status' do
+          allow(controller).to receive(:authorize).with(instance_of(Subscription)).and_raise(Pundit::NotAuthorizedError)
+          allow(Subscription).to receive(:find_by_external_id).with(subscription_to_resume.external_id).and_return(subscription_to_resume)
+          post :resume, params: { id: subscription_to_resume.external_id }, format: :json
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+    end
+
+    context 'when subscription is not found' do
+      before { sign_in subscriber }
+      it 'returns a not found error' do
+        allow(Subscription).to receive(:find_by_external_id).with("invalid-id").and_return(nil)
+        post :resume, params: { id: "invalid-id" }, format: :json
+        expect(response).to have_http_status(:ok)
+        expect(json_response['success']).to be false
+      end
+    end
+  end
 end

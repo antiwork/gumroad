@@ -7,6 +7,77 @@ describe Subscription::UpdaterService, :vcr do
   include CurrencyHelper
 
   describe "#perform" do
+    # New contexts for pause functionality testing
+    let(:base_seller_user) { create(:user, :seller) }
+    let(:base_buyer_user) { create(:user) }
+    let(:base_product_link) { create(:link, user: base_seller_user) }
+    let!(:base_subscription) do
+      sub = create(:subscription, link: base_product_link, user: base_buyer_user, seller: base_seller_user)
+      create(:purchase, :is_original_subscription_purchase, subscription: sub, link: base_product_link, user: base_buyer_user)
+      price_object = base_product_link.prices.find_by(recurrence: sub.recurrence) || create(:price, link: base_product_link, recurrence: sub.recurrence, price_cents: base_product_link.price_cents)
+      create(:payment_option, subscription: sub, price: price_object)
+      sub.reload
+    end
+
+    let(:default_service_args) do
+      {
+        subscription: base_subscription, # Will be overridden in specific contexts if needed
+        params: params, # `params` will be defined in nested contexts
+        logged_in_user: base_buyer_user,
+        gumroad_guid: 'test_guid',
+        remote_ip: '127.0.0.1'
+      }
+    end
+
+    subject(:perform_service_call) { described_class.new(**default_service_args).perform }
+
+    context 'when the subscription is paused' do
+      let(:params) { { contact_info: { full_name: 'Attempted Update on Paused' } } }
+
+      before do
+        base_subscription.update_columns(paused: true, paused_at: Time.current, deactivated_at: Time.current)
+      end
+
+      it 'returns an error and does not proceed with the update' do
+        # Ensure that core update methods are not called
+        expect(base_subscription).not_to receive(:update_current_plan!)
+        expect(base_subscription.original_purchase).not_to receive(:update!)
+        # Add more expectations if other critical methods should not be called
+
+        result = perform_service_call
+
+        expect(result[:success]).to be false
+        subscription_entity_term = base_subscription.send(:subscription_entity) # Use the private helper if needed, or hardcode
+        expect(result[:error_message]).to eq("Cannot update a paused #{subscription_entity_term}. Please resume it first.")
+      end
+    end
+
+    context 'when the subscription is active (not paused)' do
+      let(:new_name) { 'Updated Active Subscription Name' }
+      let(:params) { { contact_info: { full_name: new_name } } } # Simple, valid update
+
+      before do
+        base_subscription.update_columns(paused: false, paused_at: nil, deactivated_at: nil)
+      end
+
+      it 'allows updates and returns success for a contact info update' do
+        # This test focuses on ensuring the pause check doesn't interfere with normal operations.
+        # It assumes that if contact_info is provided, original_purchase.update! will be called.
+        # We spy on the method to ensure it's called, then check the outcome.
+        # We use `allow` and `and_call_original` to ensure the original method is still executed.
+        allow(base_subscription.original_purchase).to receive(:update!).and_call_original
+
+        result = perform_service_call
+
+        expect(result[:success]).to be true
+        expect(result[:error_message]).to be_nil
+        expect(base_subscription.original_purchase.reload.full_name).to eq(new_name)
+        expect(base_subscription.original_purchase).to have_received(:update!).with(contact_info: { full_name: new_name, country: nil })
+      end
+    end
+
+    # End of new contexts for pause functionality testing
+
     context "tiered membership subscription" do
       let(:gift) { nil }
       before :each do

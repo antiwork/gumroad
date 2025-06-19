@@ -62,19 +62,29 @@ class SubscriptionsController < ApplicationController
     @subscription.pause!(paused_by_user: true)
     render json: { success: true }
   rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, error: e.message }
-  rescue StandardError => e # Catching generic StandardError for other potential issues from the model
     render json: { success: false, error: e.message }, status: :unprocessable_entity
+  rescue Subscription::StateError => e
+    render json: { success: false, error: e.message }, status: :unprocessable_entity
+  rescue StandardError => e # Catching generic StandardError for other potential issues from the model
+    Rails.logger.error "Pause Subscription Error: #{e.class.name} - #{e.message}\n#{e.backtrace.join("\n")}"
+    render json: { success: false, error: "An unexpected error occurred." }, status: :internal_server_error
   end
 
   def resume
     authorize @subscription
+    unless @subscription.paused?
+      render json: { success: false, error: "Subscription is not currently paused." }, status: :unprocessable_entity
+      return
+    end
     @subscription.resume!
     render json: { success: true }
   rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, error: e.message }
-  rescue StandardError => e # Catching generic StandardError for other potential issues from the model
     render json: { success: false, error: e.message }, status: :unprocessable_entity
+  rescue Subscription::StateError => e
+    render json: { success: false, error: e.message }, status: :unprocessable_entity
+  rescue StandardError => e # Catching generic StandardError for other potential issues from the model
+    Rails.logger.error "Resume Subscription Error: #{e.class.name} - #{e.message}\n#{e.backtrace.join("\n")}"
+    render json: { success: false, error: "An unexpected error occurred." }, status: :internal_server_error
   end
 
   private

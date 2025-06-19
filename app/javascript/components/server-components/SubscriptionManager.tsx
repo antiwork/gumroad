@@ -471,7 +471,11 @@ const SubscriptionManager = ({
               <Button
                 color="secondary"
                 onClick={handlePauseSubscription}
-                disabled={isLoadingPauseResume || cancelled /* Do not allow pause if already cancelled or request to cancel is made */}
+                disabled={
+                  isLoadingPauseResume ||
+                  subscription.status === 'cancelled' ||
+                  subscription.status === 'pending_cancellation'
+                }
               >
                 {isLoadingPauseResume ? "Pausing..." : `Pause ${subscriptionEntity}`}
               </Button>

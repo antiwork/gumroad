@@ -3671,24 +3671,28 @@ describe Subscription, :vcr do
         expect(subscription.user_requested_pause?).to be false
       end
 
-      it 'does not change anything if already paused' do
+      it 'raises StateError if already paused' do
         subscription.pause! # First pause
-        first_paused_at = subscription.paused_at
-        first_deactivated_at = subscription.deactivated_at
-        Sidekiq::Worker.clear_all # Clear queue before second pause
-
-        expect { subscription.pause! }.not_to change { SubscriptionEvent.count } # Already paused, should not create new event
-        expect(PostToPingEndpointsWorker.jobs.size).to eq(0) # Webhook should not be sent again
-
-        subscription.reload
-        expect(subscription.paused_at).to eq(first_paused_at)
-        expect(subscription.deactivated_at).to eq(first_deactivated_at)
+        expect { subscription.pause! }.to raise_error(Subscription::StateError, /Subscription cannot be paused/)
       end
 
-      it 'does not pause a cancelled subscription' do
-        subscription.update!(cancelled_at: Time.current - 1.day, deactivated_at: Time.current - 1.day)
-        expect { subscription.pause! }.to raise_error(AASM::InvalidTransition) # or expect not to change state
-        expect(subscription.paused?).to be false
+      it 'raises StateError if trying to pause a cancelled subscription' do
+        # Ensure the subscription is truly not alive for the state check
+        subscription.update_columns(cancelled_at: Time.current - 1.day, deactivated_at: Time.current - 1.day)
+        expect(subscription.alive?(include_pending_cancellation: false)).to be false
+        expect { subscription.pause! }.to raise_error(Subscription::StateError, /Subscription cannot be paused/)
+      end
+
+      it 'raises StateError if trying to pause an ended subscription' do
+        subscription.update_columns(ended_at: Time.current - 1.day, deactivated_at: Time.current - 1.day)
+        expect(subscription.alive?(include_pending_cancellation: false)).to be false
+        expect { subscription.pause! }.to raise_error(Subscription::StateError, /Subscription cannot be paused/)
+      end
+
+      it 'raises StateError if trying to pause a failed subscription' do
+        subscription.update_columns(failed_at: Time.current - 1.day, deactivated_at: Time.current - 1.day)
+        expect(subscription.alive?(include_pending_cancellation: false)).to be false
+        expect { subscription.pause! }.to raise_error(Subscription::StateError, /Subscription cannot be paused/)
       end
     end
 
@@ -3750,28 +3754,29 @@ describe Subscription, :vcr do
         end
       end
 
-      it 'does not change an active (not paused) subscription' do
-        active_subscription = create(:subscription, link: product_link, user: buyer_user, seller: seller_user, paused: false, deactivated_at: nil)
-        expect { active_subscription.resume! }.not_to change { SubscriptionEvent.count }
-        expect(active_subscription.resumed_at).to be_nil
+      it 'raises StateError if resuming an already active (not paused but previously paused) subscription' do
+        # This subscription was paused in the main before block, then we resume it here.
+        subscription.resume!
+        subscription.reload
+        expect(subscription.paused?).to be false # Now it's active
+
+        # Try to resume again
+        expect { subscription.resume! }.to raise_error(Subscription::StateError, "Subscription is not paused")
       end
 
-      it 'handles resuming a subscription that was never paused (paused_at is nil)' do
-         # Create a subscription that was never paused
+      it 'does nothing if resume! is called on an active, never-paused subscription (paused_at is nil)' do
+        # This is the target for reformatting (L3759-L3776 in original full file context)
+        # Create a fresh subscription that was never paused
         fresh_subscription = create(:subscription, link: product_link, user: buyer_user, seller: seller_user, paused_at: nil, paused: false, deactivated_at: nil)
 
-        expect { fresh_subscription.resume! }.not_to raise_error # Should not error
-        expect(fresh_subscription.resumed_at).to be_nil # Or set to Time.current depending on desired behavior, current model sets it
-        expect(fresh_subscription.paused?).to be false
-        # Check if webhook was called or not, depending on desired behavior. Current model calls it.
-        # For this test, let's assume if it was never paused, it shouldn't send 'resumed' webhook.
-        # So, clear queue and check. This depends on specific product decision.
-        # For now, based on current implementation, it *will* create an event and send webhook.
-        # To test "does nothing", we might need to adjust resume! or the test.
-        # Let's test current behavior:
-        expect { fresh_subscription.resume! }.to change { SubscriptionEvent.count }.by(1)
-        expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(nil, nil, "subscription.resumed", fresh_subscription.id)
+        Sidekiq::Worker.clear_all # Clear queue before action
 
+        # Expect no error, no change in events, no webhooks, and attributes remain unchanged
+        expect { fresh_subscription.resume! }.not_to raise_error
+        expect(fresh_subscription.resumed_at).to be_nil
+        expect(fresh_subscription.paused?).to be false
+        expect(fresh_subscription.subscription_events.where(event_type: :resumed).count).to eq 0
+        expect(PostToPingEndpointsWorker.jobs.size).to eq 0
       end
     end
 

@@ -32,10 +32,26 @@ describe RecurringChargeWorker, :vcr do
 
   it "doesn't call charge if there was a purchase made the period for a monthly subscription" do
     link = create(:product, user: create(:user), subscription_duration: "monthly")
-    subscription = create(:subscription, user: create(:user), link:)
-    create(:purchase, link:, price_cents: link.price_cents, is_original_subscription_purchase: true, subscription:)
-    expect_any_instance_of(Subscription).to_not receive(:charge!)
-    described_class.new.perform(subscription.id)
+    subscription_not_due = create(:subscription, user: create(:user), link: link)
+    create(:purchase, link: link, price_cents: link.price_cents, is_original_subscription_purchase: true, subscription: subscription_not_due, succeeded_at: Time.current - 10.days) # Charged 10 days ago for a monthly sub
+
+    allow(Subscription).to receive(:find).with(subscription_not_due.id).and_return(subscription_not_due)
+    allow(subscription_not_due).to receive(:paused?).and_return(false) # Explicitly not paused
+
+    # Add other necessary stubs for this specific subscription_not_due instance
+    allow(subscription_not_due).to receive_message_chain(:link, :user, :suspended?).and_return(false)
+    allow(subscription_not_due).to receive(:alive?).with(include_pending_cancellation: false).and_return(true)
+    allow(subscription_not_due).to receive(:is_test_subscription).and_return(false)
+    allow(subscription_not_due).to receive(:current_subscription_price_cents).and_return(link.price_cents)
+    allow(subscription_not_due).to receive(:charges_completed?).and_return(false)
+    allow(subscription_not_due).to receive(:in_free_trial?).and_return(false)
+    allow(subscription_not_due).to receive_message_chain(:purchases, :in_progress, :exists?).and_return(false)
+    allow(subscription_not_due).to receive(:has_a_charge_in_progress?).and_return(false)
+    allow(subscription_not_due).to receive(:latest_applicable_plan_change).and_return(nil)
+
+
+    expect(subscription_not_due).not_to receive(:charge!)
+    described_class.new.perform(subscription_not_due.id)
   end
 
   it "doesn't call charge if there was a purchase made the period for a yearly subscription" do
@@ -57,9 +73,34 @@ describe RecurringChargeWorker, :vcr do
   end
 
   it "calls `charge` when invoked at the end of the subscription period" do
-    create(:purchase, link: @product, price_cents: @product.price_cents, is_original_subscription_purchase: true, subscription: @subscription)
-    travel_to(@subscription.period.from_now) do
-      expect_any_instance_of(Subscription).to receive(:charge!)
+    # This test ensures an active, due subscription is charged.
+    # It needs to bypass the paused check and meet other criteria of the worker.
+    create(:purchase, link: @product, price_cents: @product.price_cents, is_original_subscription_purchase: true, subscription: @subscription, succeeded_at: @subscription.period.ago)
+
+    allow(Subscription).to receive(:find).with(@subscription.id).and_return(@subscription)
+    # Explicitly ensure it's not paused for this test
+    allow(@subscription).to receive(:paused?).and_return(false)
+
+    # Re-apply necessary stubs for this specific test context if they were too broad or overridden
+    allow(@subscription).to receive_message_chain(:link, :user, :suspended?).and_return(false)
+    allow(@subscription).to receive(:alive?).with(include_pending_cancellation: false).and_return(true)
+    allow(@subscription).to receive(:is_test_subscription).and_return(false)
+    allow(@subscription).to receive(:current_subscription_price_cents).and_return(@product.price_cents)
+    allow(@subscription).to receive(:charges_completed?).and_return(false)
+    allow(@subscription).to receive(:in_free_trial?).and_return(false)
+    # Simulate that the subscription is due based on `last_successful_purchase` logic
+    # The original purchase created in the `create` block is 30 days ago.
+    # If period is monthly, it should be due.
+    # The worker's logic: `return if last_successful_purchase && (last_successful_purchase.created_at + subscription.period) > Time.current`
+    # To ensure it proceeds, we either need `last_successful_purchase` to be nil (which it isn't due to the create block)
+    # or `(last_successful_purchase.created_at + subscription.period)` to be <= `Time.current`.
+    # The `travel_to` below handles this.
+    allow(@subscription).to receive_message_chain(:purchases, :in_progress, :exists?).and_return(false) # No other charge in progress
+    allow(@subscription).to receive(:has_a_charge_in_progress?).and_return(false)
+    allow(@subscription).to receive(:latest_applicable_plan_change).and_return(nil) # No pending plan changes
+
+    travel_to(@subscription.period.from_now) do # Travel to when it's due
+      expect(@subscription).to receive(:charge!) # Expect charge on this specific instance
       described_class.new.perform(@subscription.id)
     end
   end
@@ -135,6 +176,39 @@ describe RecurringChargeWorker, :vcr do
           described_class.new.perform(@subscription.id, true)
         end
       end
+    end
+  end
+
+  context 'when the subscription is paused' do
+    before do
+      # Reuse @subscription, ensure it's set up as expected for a charge attempt, then mark as paused
+      create(:purchase, link: @product, price_cents: @product.price_cents, is_original_subscription_purchase: true, subscription: @subscription, succeeded_at: @subscription.period.ago)
+
+      allow(Subscription).to receive(:find).with(@subscription.id).and_return(@subscription)
+      allow(@subscription).to receive(:paused?).and_return(true)
+
+      # Common stubs for an otherwise chargeable subscription
+      allow(@subscription).to receive_message_chain(:link, :user, :suspended?).and_return(false)
+      allow(@subscription).to receive(:alive?).with(include_pending_cancellation: false).and_return(true)
+      allow(@subscription).to receive(:is_test_subscription).and_return(false)
+      allow(@subscription).to receive(:current_subscription_price_cents).and_return(@product.price_cents)
+      allow(@subscription).to receive(:charges_completed?).and_return(false)
+      allow(@subscription).to receive(:in_free_trial?).and_return(false)
+      allow(@subscription).to receive_message_chain(:purchases, :in_progress, :exists?).and_return(false)
+      allow(@subscription).to receive(:has_a_charge_in_progress?).and_return(false)
+      allow(@subscription).to receive(:latest_applicable_plan_change).and_return(nil)
+
+      expect(@subscription).not_to receive(:charge!) # Core expectation
+    end
+
+    it 'does not attempt to charge the subscription' do
+      # The main check is `expect(@subscription).not_to receive(:charge!)` in the before block
+      # or it can be here if preferred.
+      described_class.new.perform(@subscription.id)
+    end
+
+    it 'does not create a new purchase' do
+      expect { described_class.new.perform(@subscription.id) }.not_to change { Purchase.count }
     end
   end
 
