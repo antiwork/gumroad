@@ -158,6 +158,35 @@ module Purchase::Blockable
       block_buyer!
     end
 
+    def pause_payouts_for_seller_based_on_recent_failures!
+      return if Feature.inactive?(:block_seller_based_on_recent_failures)
+      return if IGNORED_ERROR_CODES.include?(error_code)
+
+      failed_seller_purchases_watch_minutes,
+      max_seller_failed_purchases_price_cents = $redis.mget(
+        RedisKey.failed_seller_purchases_watch_minutes,
+        RedisKey.max_seller_failed_purchases_price_cents
+      )
+
+      failed_seller_purchases_watch_minutes = failed_seller_purchases_watch_minutes.try(:to_i) || 60 # 1 hour
+      max_seller_failed_purchases_price_cents = max_seller_failed_purchases_price_cents.try(:to_i) || 200_000 # $2000
+
+      failed_seller_purchases = seller.sales.failed.with_stripe_fingerprint
+                                       .where(created_at: failed_seller_purchases_watch_minutes.minutes.ago..)
+
+      failed_price_cents = failed_seller_purchases.sum(:price_cents)
+      if failed_price_cents > max_seller_failed_purchases_price_cents
+        seller.update!(payouts_paused_internally: true)
+
+        failed_price_amount = MoneyFormatter.format(failed_price_cents, :usd, no_cents_if_whole: true, symbol: true)
+        seller.comments.create(
+          content: "Payouts paused due to high volume of failed purchases (#{failed_price_amount} USD in #{failed_seller_purchases_watch_minutes} minutes).",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: "pause_payouts_for_seller_based_on_recent_failures"
+        )
+      end
+    end
+
     def block_ip_address_based_on_recent_failures!
       return if BlockedObject.ip_address.find_active_object(ip_address).present?
 
