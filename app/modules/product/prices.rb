@@ -77,16 +77,12 @@ module Product::Prices
     self.suggested_price_cents = price.present? ? clean_price(price.to_s) : nil
   end
 
-  def format_price(price)
-    price == "$0.99" ? "99¢" : price
-  end
-
   def price_formatted
-    format_price(display_price)
+    format_just_price_in_cents(display_price_cents, price_currency_type)
   end
 
   def rental_price_formatted
-    format_price(rental_display_price)
+    format_just_price_in_cents(rental_price_cents, price_currency_type)
   end
 
   def price_formatted_verbose
