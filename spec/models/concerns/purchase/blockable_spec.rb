@@ -560,7 +560,7 @@ describe Purchase::Blockable do
       end
     end
 
-    describe "probate seller based on recent failures" do
+    describe "pause payouts for seller internally based on recent failures" do
       let(:seller) { create(:user) }
       let(:product) { create(:product, user: seller) }
       let!(:purchase) { create(:purchase, link: product, purchase_state: "in_progress") }
@@ -574,27 +574,30 @@ describe Purchase::Blockable do
       context "when feature is inactive" do
         before { Feature.deactivate(:block_seller_based_on_recent_failures) }
 
-        it "does not probate the seller" do
+        it "does not pause payouts for the seller" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.mark_failed!
-          expect(seller.reload.on_probation?).to be(false)
+
+          expect(seller.reload.payouts_paused_internally).to be(false)
         end
       end
 
       context "when error code is ignored" do
-        it "does not probate the seller" do
+        it "does not pause payouts for the seller" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.update!(error_code: PurchaseErrorCode::PERCEIVED_PRICE_CENTS_NOT_MATCHING)
           purchase.mark_failed!
-          expect(seller.reload.on_probation?).to be(false)
+
+          expect(seller.reload.payouts_paused_internally).to be(false)
         end
       end
 
       context "when total failed amount is below threshold" do
-        it "does not probate the seller" do
+        it "does not pause payouts for the seller" do
           create_list(:failed_purchase, 3, link: product, price_cents: 250)
           purchase.mark_failed!
-          expect(seller.reload.on_probation?).to be(false)
+
+          expect(seller.reload.payouts_paused_internally).to be(false)
         end
       end
 
@@ -602,13 +605,8 @@ describe Purchase::Blockable do
         it "pauses payouts internally" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
           purchase.mark_failed!
-          expect(seller.reload.payouts_paused_internally).to be(true)
-        end
 
-        it "does not put seller on probation" do
-          create_list(:failed_purchase, 5, link: product, price_cents: 250)
-          purchase.mark_failed!
-          expect(seller.reload.on_probation?).to be(false)
+          expect(seller.reload.payouts_paused_internally).to be(true)
         end
 
         context "when some purchases are outside the watch window" do
@@ -634,6 +632,7 @@ describe Purchase::Blockable do
             # default max amount is $2000
             create_list(:failed_purchase, 5, link: product, price_cents: 200_00)
             purchase.mark_failed!
+
             expect(seller.reload.payouts_paused_internally).to be(false)
           end
         end
@@ -643,6 +642,7 @@ describe Purchase::Blockable do
             # default max amount is $2000
             create_list(:failed_purchase, 11, link: product, price_cents: 200_00)
             purchase.mark_failed!
+
             expect(seller.reload.payouts_paused_internally).to be(true)
           end
         end

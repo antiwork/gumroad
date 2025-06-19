@@ -158,7 +158,7 @@ module Purchase::Blockable
       block_buyer!
     end
 
-    def probate_seller_based_on_recent_failures!
+    def pause_payouts_for_seller_based_on_recent_failures!
       return if Feature.inactive?(:block_seller_based_on_recent_failures)
       return if IGNORED_ERROR_CODES.include?(error_code)
 
@@ -177,11 +177,6 @@ module Purchase::Blockable
       failed_price_cents = failed_seller_purchases.sum(:price_cents)
       if failed_price_cents > max_seller_failed_purchases_price_cents
         seller.update!(payouts_paused_internally: true)
-        content = <<~TEXT
-          Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of failed sales of #{amount_in_dollars} in #{failed_seller_purchases_watch_minutes} minutes
-        TEXT
-
-        seller.put_on_probation(author_name: "fraudulent_purchases_blocker", content:)
       end
     end
 
