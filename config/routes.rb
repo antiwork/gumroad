@@ -334,7 +334,8 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
-      get "logout", to: "logins#destroy" # TODO: change the method to DELETE to conform to REST
+      delete "logout", to: "logins#destroy"
+      get "logout", to: "logins#destroy" # Fallback for legacy links
       post "forgot_password", to: "user/passwords#create"
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"

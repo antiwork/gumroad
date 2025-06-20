@@ -307,4 +307,40 @@ describe LoginsController do
       end
     end
   end
+
+  describe "DELETE destroy" do
+    let(:user) { create(:user) }
+
+    before do
+      sign_in user
+    end
+
+    it "clears cookies on sign out" do
+      cookies["last_viewed_dashboard"] = "sales"
+
+      delete :destroy
+
+      # Ensure that the server instructs the client to clear the cookie
+      expect(response.cookies.key?("last_viewed_dashboard")).to eq(true)
+      expect(response.cookies["last_viewed_dashboard"]).to be_nil
+    end
+
+    context "when impersonating" do
+      let(:admin) { create(:admin_user) }
+
+      before do
+        sign_in admin
+        controller.impersonate_user(user)
+      end
+
+      it "resets impersonated user" do
+        expect(controller.impersonated_user).to eq(user)
+
+        delete :destroy
+
+        expect(controller.impersonated_user).to be_nil
+        expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil
+      end
+    end
+  end
 end
