@@ -56,7 +56,6 @@
     "react-select": "^5.7.0",
     "react-sortablejs": "^6.1.4",
     "recharts": "^2.12.1",
-    "sidekiq": "^1.1.1",
     "sortablejs": "^1.15.0",
     "ts-safe-cast": "^1.0.2",
     "whatwg-fetch": "^3.6.19"
