@@ -243,6 +243,52 @@ describe User, :vcr do
     end
   end
 
+  describe "validations" do
+    describe "custom_direct_fee_percentage" do
+      it "allows nil" do
+        user = build(:user, custom_direct_fee_percentage: nil)
+        expect(user).to be_valid
+      end
+
+      it "is valid between 0 and 100" do
+        [0, 5, 25.5, 100].each do |value|
+          user = build(:user, custom_direct_fee_percentage: value)
+          expect(user).to be_valid, "expected #{value} to be valid"
+        end
+      end
+
+      it "is invalid below 0 or above 100" do
+        [-1, 101].each do |value|
+          user = build(:user, custom_direct_fee_percentage: value)
+          expect(user).to be_invalid, "expected #{value} to be invalid"
+          expect(user.errors[:custom_direct_fee_percentage]).to be_present
+        end
+      end
+    end
+
+    describe "custom_discover_fee_percentage" do
+      it "allows nil" do
+        user = build(:user, custom_discover_fee_percentage: nil)
+        expect(user).to be_valid
+      end
+
+      it "is valid between 0 and 100" do
+        [0, 5, 25.5, 100].each do |value|
+          user = build(:user, custom_discover_fee_percentage: value)
+          expect(user).to be_valid, "expected #{value} to be valid"
+        end
+      end
+
+      it "is invalid below 0 or above 100" do
+        [-1, 101].each do |value|
+          user = build(:user, custom_discover_fee_percentage: value)
+          expect(user).to be_invalid, "expected #{value} to be invalid"
+          expect(user.errors[:custom_discover_fee_percentage]).to be_present
+        end
+      end
+    end
+  end
+
   describe "has_cdn_url" do
     before do
       stub_const("CDN_URL_MAP", { "https://gumroad-specs.s3.amazonaws.com" => "https://public-files.gumroad.com", "https://s3.amazonaws.com/gumroad/" => "https://public-files.gumroad.com/res/gumroad/" })

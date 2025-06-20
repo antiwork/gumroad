@@ -182,6 +182,8 @@ class User < ApplicationRecord
 
   validates :timezone, inclusion: { in: ActiveSupport::TimeZone::MAPPING.keys << nil, message: "%{value} is not a known time zone." }
   validates :recommendation_type, inclusion: { in: User::RecommendationType::TYPES }
+  validates :custom_direct_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
+  validates :custom_discover_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
 
   validates :currency_type, inclusion: { in: CURRENCY_CHOICES.keys, message: "%{value} is not a supported currency." }
 
