@@ -988,6 +988,36 @@ class User < ApplicationRecord
       .exists?
   end
 
+  def guardian_verification_status
+    return nil unless stripe_account.present?
+
+    begin
+      stripe_persons = Stripe::Account.list_persons(stripe_account.charge_processor_merchant_id)["data"]
+      guardian_person = stripe_persons.find do |person|
+        person["relationship"]&.fetch("legal_guardian", false)
+      end
+
+      return nil unless guardian_person
+
+      guardian_person["verification"]["status"]
+    rescue => e
+      Rails.logger.error "Error fetching guardian verification status for user #{id}: #{e.message}"
+      nil
+    end
+  end
+
+  def is_legal_guardian_information_required?
+    user_compliance_info = alive_user_compliance_info
+    return false unless user_compliance_info&.birthday
+
+    is_under_18 = user_compliance_info.birthday > 18.years.ago.to_date
+    return false unless is_under_18
+
+    guardian_status = guardian_verification_status
+
+    guardian_status != "verified"
+  end
+
   def eligible_for_ai_product_generation?
     return false unless Feature.active?(:ai_product_generation, self)
     return true if Rails.env.development?

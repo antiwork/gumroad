@@ -78,6 +78,14 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, person_params)
     end
 
+    # Create guardian person if user is under 18
+    if user_under_18?(user_compliance_info)
+      guardian_params = guardian_person_hash(user_compliance_info, passphrase)
+      if guardian_params
+        Stripe::Account.create_person(stripe_account.id, guardian_params)
+      end
+    end
+
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
     # It is a property on the `person` entity associated with the Stripe::Account.
     # Ref: https://stripe.com/docs/api/persons/object#person_object-full_name_aliases
@@ -186,10 +194,20 @@ module StripeMerchantAccountManager
     capabilities = capabilities.map(&:to_sym) | stripe_account.capabilities.keys
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
-    Stripe::Account.update(stripe_account.id, diff_attributes)
+    begin
+      Stripe::Account.update(stripe_account.id, diff_attributes)
+    rescue Stripe::InvalidRequestError => e
+      Bugsnag.notify(e)
+      raise
+    end
 
     if user_compliance_info.is_business?
       update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
+    end
+
+    # Add guardian person update logic
+    if user_under_18?(user_compliance_info)
+      update_guardian_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
     end
   end
 
@@ -216,6 +234,51 @@ module StripeMerchantAccountManager
     end
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+  end
+
+  def self.update_guardian_person(user, stripe_account, last_user_compliance_info_id, passphrase)
+    # Find guardian person (legal_guardian: true)
+    stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
+    guardian_person = stripe_persons.find { |person| person["relationship"]["legal_guardian"] }
+
+    last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
+    user_compliance_info = user.alive_user_compliance_info
+
+    current_attributes = guardian_person_hash(user_compliance_info, passphrase)
+    return unless current_attributes
+
+    if guardian_person
+      # Update existing guardian person
+      diff_attributes = current_attributes
+      last_attributes = guardian_person_hash(last_user_compliance_info, passphrase)
+
+      if last_attributes
+        last_attributes[:email] = nil
+        last_attributes[:phone] = nil
+        diff_attributes = get_diff_attributes(current_attributes, last_attributes)
+      end
+
+      # If we have a full SSN, don't send the last 4 digits at the same time. If the last 4 digits are from a previous
+      # compliance info and don't match the new full SSN, this will result in an invalid request.
+      # Also, if we're sending id_number, we should not send ssn_last_4 regardless of what the diff shows
+      if diff_attributes[:id_number].present?
+        diff_attributes.delete(:ssn_last_4)
+      elsif diff_attributes[:ssn_last_4].present? && current_attributes[:id_number].present?
+        # If current attributes has id_number but diff wants to send ssn_last_4, prioritize id_number
+        diff_attributes.delete(:ssn_last_4)
+        diff_attributes[:id_number] = current_attributes[:id_number]
+      end
+
+      if diff_attributes[:dob].present?
+        # Re-add the full DOB field if any part of it is being kept
+        diff_attributes[:dob] = current_attributes[:dob]
+      end
+
+      Stripe::Account.update_person(stripe_account.id, guardian_person.id, diff_attributes)
+    else
+      # Create new guardian person if it doesn't exist
+      Stripe::Account.create_person(stripe_account.id, current_attributes)
+    end
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
@@ -814,5 +877,90 @@ module StripeMerchantAccountManager
     return unless user_has_stripe_connect_merchant_account?(bank_account.user)
 
     update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+  end
+
+  def self.guardian_person_hash(user_compliance_info, passphrase)
+    return nil unless user_compliance_info &&
+                      (user_compliance_info.guardian_first_name.present? || user_compliance_info.guardian_last_name.present?)
+
+    guardian_tax_id = user_compliance_info.guardian_individual_tax_id&.decrypt(passphrase)
+
+    hash = {
+      first_name: user_compliance_info.guardian_first_name,
+      last_name: user_compliance_info.guardian_last_name,
+      email: user_compliance_info.guardian_email,
+      phone: user_compliance_info.guardian_phone,
+      dob: {
+        day: user_compliance_info.guardian_birthday.try(:day),
+        month: user_compliance_info.guardian_birthday.try(:month),
+        year: user_compliance_info.guardian_birthday.try(:year)
+      },
+      relationship: {
+        legal_guardian: true
+      }
+    }
+
+    guardian_country = user_compliance_info.guardian_country_code || user_compliance_info.country_code
+
+    if guardian_country == Compliance::Countries::CAN.alpha2
+      hash.deep_merge!(relationship: { legal_guardian: true, title: user_compliance_info.guardian_job_title.presence || DEFAULT_RELATIONSHIP_TITLE })
+    end
+
+    if guardian_country == Compliance::Countries::JPN.alpha2
+      hash.deep_merge!({
+                         first_name_kanji: user_compliance_info.guardian_first_name_kanji,
+                         last_name_kanji: user_compliance_info.guardian_last_name_kanji,
+                         first_name_kana: user_compliance_info.guardian_first_name_kana,
+                         last_name_kana: user_compliance_info.guardian_last_name_kana,
+                         address_kanji: {
+                           line1: user_compliance_info.guardian_building_number,
+                           line2: user_compliance_info.guardian_street_address_kanji,
+                           postal_code: user_compliance_info.guardian_zip_code
+                         },
+                         address_kana: {
+                           line1: user_compliance_info.guardian_building_number,
+                           line2: user_compliance_info.guardian_street_address_kana,
+                           postal_code: user_compliance_info.guardian_zip_code
+                         }
+                       })
+    else
+      hash.deep_merge!({
+                         address: {
+                           line1: user_compliance_info.guardian_street_address,
+                           line2: nil,
+                           city: user_compliance_info.guardian_city,
+                           state: user_compliance_info.guardian_state,
+                           postal_code: user_compliance_info.guardian_zip_code,
+                           country: guardian_country
+                         }
+                       })
+    end
+
+    # For US accounts, only submit the Guardian Tax ID if it's longer than four digits, otherwise the field contains the SSN Last 4.
+    # For non-US accounts, always submit the Guardian Tax ID.
+    if guardian_tax_id && (guardian_country != Compliance::Countries::USA.alpha2 || guardian_tax_id.length > 4)
+      hash.deep_merge!(id_number: guardian_tax_id)
+    end
+
+    # For US accounts, only submit the SSN Last 4 if we have enough digits in the Tax ID to get the last 4.
+    # For non-US accounts, never submit this field, it is for US accounts only.
+    if guardian_country == Compliance::Countries::USA.alpha2 && guardian_tax_id && guardian_tax_id.length == 4
+      hash.deep_merge!(ssn_last_4: guardian_tax_id.last(4))
+    end
+
+    if [Compliance::Countries::ARE.alpha2,
+        Compliance::Countries::SGP.alpha2,
+        Compliance::Countries::BGD.alpha2,
+        Compliance::Countries::PAK.alpha2].include?(guardian_country)
+      hash.deep_merge!(nationality: user_compliance_info.guardian_nationality)
+    end
+
+    hash.deep_values_strip!
+  end
+
+  def self.user_under_18?(user_compliance_info)
+    return false unless user_compliance_info&.birthday
+
+    user_compliance_info.birthday > 18.years.ago.to_date
   end
 end
