@@ -25,6 +25,11 @@ class UserComplianceInfo < ApplicationRecord
                           public_key: OpenSSL::PKey.read(GlobalConfig.get("STRONGBOX_GENERAL"),
                                                          GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
                           private_key: GlobalConfig.get("STRONGBOX_GENERAL")
+  encrypt_with_public_key :guardian_individual_tax_id,
+                          symmetric: :never,
+                          public_key: OpenSSL::PKey.read(GlobalConfig.get("STRONGBOX_GENERAL"),
+                                                         GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
+                          private_key: GlobalConfig.get("STRONGBOX_GENERAL")
   serialize :verticals, type: Array, coder: YAML
 
   validate :birthday_is_over_minimum_age
@@ -54,6 +59,19 @@ class UserComplianceInfo < ApplicationRecord
   attr_json_data_accessor :business_building_number
   attr_json_data_accessor :business_street_address_kanji
   attr_json_data_accessor :business_street_address_kana
+  attr_json_data_accessor :guardian_first_name
+  attr_json_data_accessor :guardian_last_name
+  attr_json_data_accessor :guardian_email
+  attr_json_data_accessor :guardian_phone
+  attr_json_data_accessor :guardian_street_address
+  attr_json_data_accessor :guardian_city
+  attr_json_data_accessor :guardian_state
+  attr_json_data_accessor :guardian_country
+  attr_json_data_accessor :guardian_zip_code
+  attr_json_data_accessor :guardian_dob_year
+  attr_json_data_accessor :guardian_dob_month
+  attr_json_data_accessor :guardian_dob_day
+  attr_json_data_accessor :guardian_country_code
 
   def is_individual?
     !is_business?
@@ -84,6 +102,18 @@ class UserComplianceInfo < ApplicationRecord
           business_zip_code.present?
         )
       )
+  end
+
+  def has_completed_guardian_info?
+    guardian_first_name.present? &&
+      guardian_last_name.present? &&
+      guardian_birthday.present? &&
+      guardian_street_address.present? &&
+      guardian_city.present? &&
+      guardian_state.present? &&
+      guardian_zip_code.present? &&
+      guardian_country.present? &&
+      guardian_individual_tax_id.present?
   end
 
   # Public: Returns the ISO_3166-1 Alpha-2 country code for the country stored in this compliance info.
@@ -160,6 +190,18 @@ class UserComplianceInfo < ApplicationRecord
 
   def legal_entity_tax_id
     is_business? ? business_tax_id : individual_tax_id
+  end
+
+  def guardian_country_code
+    guardian_country.present? ? Compliance::Countries.find_by_name(guardian_country)&.alpha2 : nil
+  end
+
+  def guardian_birthday
+    return nil unless guardian_dob_year.present? && guardian_dob_month.present? && guardian_dob_day.present?
+
+    Date.new(guardian_dob_year, guardian_dob_month, guardian_dob_day)
+  rescue Date::Error
+    nil
   end
 
   private

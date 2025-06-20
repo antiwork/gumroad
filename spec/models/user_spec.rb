@@ -3696,4 +3696,218 @@ describe User, :vcr do
       expect(user.eligible_for_ai_product_generation?).to eq(true)
     end
   end
+
+  describe "#guardian_verification_status" do
+    let(:user) { create(:user) }
+
+    before do
+      # Stub any decryption calls to avoid encryption issues
+      allow_any_instance_of(Strongbox::Lock).to receive(:decrypt).and_return("")
+    end
+
+    context "when user has no Stripe account" do
+      it "returns nil" do
+        expect(user.guardian_verification_status).to be_nil
+      end
+    end
+
+    context "when user has a Stripe account" do
+      # Use the basic merchant_account factory instead of merchant_account_stripe
+      let!(:stripe_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+      before do
+        allow(user).to receive(:stripe_account).and_return(stripe_account)
+      end
+
+      context "when Stripe API call succeeds" do
+        let(:guardian_person) do
+          {
+            "relationship" => { "legal_guardian" => true },
+            "verification" => { "status" => "verified" }
+          }
+        end
+
+        let(:stripe_persons_response) do
+          { "data" => [guardian_person] }
+        end
+
+        before do
+          allow(Stripe::Account).to receive(:list_persons)
+            .with(stripe_account.charge_processor_merchant_id)
+            .and_return(stripe_persons_response)
+        end
+
+        it "returns the guardian person verification status" do
+          expect(user.guardian_verification_status).to eq("verified")
+        end
+
+        context "when guardian person verification status is pending" do
+          let(:guardian_person) do
+            {
+              "relationship" => { "legal_guardian" => true },
+              "verification" => { "status" => "pending" }
+            }
+          end
+
+          it "returns pending status" do
+            expect(user.guardian_verification_status).to eq("pending")
+          end
+        end
+
+        context "when no guardian person exists" do
+          let(:stripe_persons_response) do
+            { "data" => [] }
+          end
+
+          it "returns nil" do
+            expect(user.guardian_verification_status).to be_nil
+          end
+        end
+
+        context "when persons exist but none are guardians" do
+          let(:regular_person) do
+            {
+              "relationship" => { "legal_guardian" => false },
+              "verification" => { "status" => "verified" }
+            }
+          end
+
+          let(:stripe_persons_response) do
+            { "data" => [regular_person] }
+          end
+
+          it "returns nil" do
+            expect(user.guardian_verification_status).to be_nil
+          end
+        end
+      end
+
+      context "when Stripe API call fails" do
+        before do
+          allow(Stripe::Account).to receive(:list_persons)
+            .with(stripe_account.charge_processor_merchant_id)
+            .and_raise(Stripe::APIError.new("API Error"))
+          allow(Rails.logger).to receive(:error)
+        end
+
+        it "returns nil and logs the error" do
+          expect(user.guardian_verification_status).to be_nil
+          expect(Rails.logger).to have_received(:error)
+            .with("Error fetching guardian verification status for user #{user.id}: API Error")
+        end
+      end
+    end
+  end
+
+  describe "#is_legal_guardian_information_required?" do
+    let(:user) { create(:user) }
+
+    context "when user has no compliance info" do
+      it "returns false" do
+        expect(user.is_legal_guardian_information_required?).to eq(false)
+      end
+    end
+
+    context "when user has compliance info but no birthday" do
+      before do
+        create(:user_compliance_info, user:, birthday: nil)
+      end
+
+      it "returns false" do
+        expect(user.is_legal_guardian_information_required?).to eq(false)
+      end
+    end
+
+    context "when user is 18 or older" do
+      before do
+        create(:user_compliance_info, user:, birthday: 20.years.ago.to_date)
+      end
+
+      it "returns false" do
+        expect(user.is_legal_guardian_information_required?).to eq(false)
+      end
+    end
+
+    context "when user is under 18" do
+      before do
+        create(:user_compliance_info, user:, birthday: 16.years.ago.to_date)
+      end
+
+      context "when guardian verification status is verified" do
+        before do
+          allow(user).to receive(:guardian_verification_status).and_return("verified")
+        end
+
+        it "returns false" do
+          expect(user.is_legal_guardian_information_required?).to eq(false)
+        end
+      end
+
+      context "when guardian verification status is pending" do
+        before do
+          allow(user).to receive(:guardian_verification_status).and_return("pending")
+        end
+
+        it "returns true" do
+          expect(user.is_legal_guardian_information_required?).to eq(true)
+        end
+      end
+
+      context "when guardian verification status is nil" do
+        before do
+          allow(user).to receive(:guardian_verification_status).and_return(nil)
+        end
+
+        it "returns true" do
+          expect(user.is_legal_guardian_information_required?).to eq(true)
+        end
+      end
+
+      context "when guardian verification status is unverified" do
+        before do
+          allow(user).to receive(:guardian_verification_status).and_return("unverified")
+        end
+
+        it "returns true" do
+          expect(user.is_legal_guardian_information_required?).to eq(true)
+        end
+      end
+    end
+
+    context "when user is exactly 18 years old" do
+      before do
+        create(:user_compliance_info, user:, birthday: 18.years.ago.to_date)
+      end
+
+      it "returns false" do
+        expect(user.is_legal_guardian_information_required?).to eq(false)
+      end
+    end
+
+    context "when user turned 18 today" do
+      before do
+        create(:user_compliance_info, user:, birthday: 18.years.ago.to_date)
+      end
+
+      it "returns false" do
+        expect(user.is_legal_guardian_information_required?).to eq(false)
+      end
+    end
+
+    context "when user will turn 18 tomorrow" do
+      before do
+        create(:user_compliance_info, user:, birthday: 18.years.ago.to_date + 1.day)
+      end
+
+      context "when guardian verification status is not verified" do
+        before do
+          allow(user).to receive(:guardian_verification_status).and_return("pending")
+        end
+
+        it "returns true" do
+          expect(user.is_legal_guardian_information_required?).to eq(true)
+        end
+      end
+    end
+  end
 end
