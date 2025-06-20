@@ -3150,10 +3150,19 @@ class Purchase < ApplicationRecord
         return
       end
 
-      fee_per_thousand = calculate_gumroad_fee_per_thousand
+      fee_per_thousand = if seller&.custom_direct_fee_percentage.present?
+        (seller.custom_direct_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
+      else
+        calculate_gumroad_fee_per_thousand
+      end
 
       if charge_discover_fee?
-        discover_fee_per_thousand = calculate_additional_discover_fee_per_thousand
+        discover_fee_per_thousand = if seller&.custom_discover_fee_percentage.present?
+          (seller.custom_discover_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
+        else
+          calculate_additional_discover_fee_per_thousand
+        end
+
         if discover_fee_per_thousand > 0
           fee_per_thousand += discover_fee_per_thousand
           self.was_discover_fee_charged = true
