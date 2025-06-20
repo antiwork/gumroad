@@ -3180,13 +3180,21 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_additional_discover_fee_per_thousand
-      # Check for custom discover fee percentage first
       if seller.custom_discover_fee_percentage.present?
-        # Convert percentage to per-thousand (e.g., 30% becomes 300)
-        return (seller.custom_discover_fee_percentage * 10).round
-      end
+        custom_total_fee = (seller.custom_discover_fee_percentage * 10).round
+        base_fee = if is_recurring_subscription_charge || is_updated_original_subscription_purchase
+          subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        elsif is_preorder_charge?
+          preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
+        else
+          if Feature.active?(:merchant_of_record_fee, seller)
+            GUMROAD_DISCOVER_FEE_PER_THOUSAND - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+          else
+            link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
+          end
+        end
+        return custom_total_fee - base_fee      end
 
-      # Existing logic if no custom discover fee is set
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
@@ -3202,14 +3210,12 @@ class Purchase < ApplicationRecord
 
 
     def calculate_gumroad_fee_per_thousand
-      # Check for custom direct fee percentage first
       if seller.custom_direct_fee_percentage.present?
         # Convert percentage to per-thousand (e.g., 8.5% becomes 85)
         custom_fee_per_thousand = (seller.custom_direct_fee_percentage * 10).round
         return custom_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       end
 
-      # Existing logic if no custom fee is set
       if flat_fee_applicable?
         gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?

@@ -1186,14 +1186,4 @@ class User < ApplicationRecord
       payments.completed.exists? ||
         made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
     end
-
-  # Admin methods for custom fee management
-  def self.set_custom_fees(user_id, direct_fee: nil, discover_fee: nil)
-    user = find(user_id)
-    user.update!(custom_direct_fee_percentage: direct_fee, custom_discover_fee_percentage: discover_fee)
-  end
-
-  def self.users_with_custom_fees
-    where("custom_direct_fee_percentage IS NOT NULL OR custom_discover_fee_percentage IS NOT NULL")
-  end
 end
