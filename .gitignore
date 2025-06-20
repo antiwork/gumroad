@@ -11,6 +11,7 @@
 .byebug_history
 .DS_Store
 .env
+.env.development
 .env.*.local
 .foreman
 .idea

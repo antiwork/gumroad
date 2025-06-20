@@ -9,7 +9,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { request, assertResponseError } from "$app/utils/request";
+import { assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
@@ -20,6 +20,7 @@ import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/
 import { CountrySelectionModal } from "$app/components/server-components/CountrySelectionModal";
 import { StripeConnectEmbeddedNotificationBanner } from "$app/components/server-components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { CreditCardForm } from "$app/components/server-components/Settings/CreditCardForm";
+import { Under18WarningAlert } from "$app/components/server-components/Settings/Under18WarningAlert";
 import { UpdateCountryConfirmationModal } from "$app/components/server-components/UpdateCountryConfirmationModal";
 import { Layout } from "$app/components/Settings/Layout";
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
@@ -51,10 +52,12 @@ export type User = {
   individual_tax_id_needed_countries: string[];
   individual_tax_id_entered: boolean;
   business_tax_id_entered: boolean;
+  guardian_individual_tax_id_entered: boolean;
   requires_credit_card: boolean;
   can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;
   joined_at: string;
+  is_legal_guardian_information_required: boolean;
 };
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
@@ -98,6 +101,21 @@ export type ComplianceInfo = {
   business_building_number?: string | null;
   business_street_address_kanji?: string | null;
   business_street_address_kana?: string | null;
+  guardian_first_name?: string | null;
+  guardian_last_name?: string | null;
+  guardian_email?: string | null;
+  guardian_phone?: string | null;
+  guardian_street_address?: string | null;
+  guardian_city?: string | null;
+  guardian_state?: string | null;
+  guardian_country?: string | null;
+  guardian_zip_code?: string | null;
+  guardian_dob_month?: number | null;
+  guardian_dob_day?: number | null;
+  guardian_dob_year?: number | null;
+  guardian_individual_tax_id?: string | null;
+  guardian_stripe_tos_accepted?: boolean;
+  guardian_stripe_processing_tos_accepted?: boolean;
 };
 
 type Props = {
@@ -182,6 +200,20 @@ export type FormFieldName =
   | "business_phone"
   | "job_title"
   | "business_tax_id"
+  | "guardian_first_name"
+  | "guardian_last_name"
+  | "guardian_email"
+  | "guardian_phone"
+  | "guardian_street_address"
+  | "guardian_city"
+  | "guardian_state"
+  | "guardian_zip_code"
+  | "guardian_dob_month"
+  | "guardian_dob_day"
+  | "guardian_dob_year"
+  | "guardian_individual_tax_id"
+  | "guardian_stripe_tos_accepted"
+  | "guardian_stripe_processing_tos_accepted"
   | "routing_number"
   | "transit_number"
   | "institution_number"
@@ -876,7 +908,8 @@ const PaymentsPage = (props: Props) => {
           </div>
         ) : null}
 
-        <section className="p-4! md:p-8!">
+        {props.user.is_legal_guardian_information_required ? <Under18WarningAlert /> : null}
+        <section>
           <header>
             <h2>Verification</h2>
           </header>
@@ -1131,6 +1164,8 @@ const PaymentsPage = (props: Props) => {
                 canadaBusinessTypes={props.canada_business_types}
                 states={props.states}
                 errorFieldNames={errorFieldNames}
+                payoutMethod={selectedPayoutMethod}
+                isLegalGuardianInformationRequired={props.user.is_legal_guardian_information_required}
               />
             ) : (
               <StripeConnectSection
