@@ -260,7 +260,13 @@ export const ProductTab = () => {
                       }
                     />
                     {product.native_type === "commission" ? (
-                      <p style={{ marginTop: "var(--spacer-2)", fontSize: "var(--font-size-small)", color: "var(--color-text-secondary)" }}>
+                      <p
+                        style={{
+                          marginTop: "var(--spacer-2)",
+                          fontSize: "var(--font-size-small)",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
                         Commission products use a 50% deposit upfront, 50% upon completion payment split.
                       </p>
                     ) : null}
