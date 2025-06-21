@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
 class CreatorAnalytics::Web
-  def initialize(user:, dates:)
+  def initialize(user:, dates:, first_sale_created_at: nil, products: nil)
     @user = user
     @dates = dates
+    @first_sale_created_at = first_sale_created_at
+    @products = products
   end
 
   def by_date
@@ -104,7 +106,7 @@ class CreatorAnalytics::Web
         start_date: D3.formatted_date(@dates.first),
         end_date: D3.formatted_date(@dates.last),
       }
-      first_sale_created_at = @user.first_sale_created_at_for_analytics
+      first_sale_created_at = self.first_sale_created_at
       metadata[:first_sale_date] = D3.formatted_date_with_timezone(first_sale_created_at, @user.timezone) if first_sale_created_at
       metadata
     end
@@ -117,8 +119,12 @@ class CreatorAnalytics::Web
       CreatorAnalytics::Sales.new(user: @user, products:, dates: @dates)
     end
 
+    def first_sale_created_at
+      @_first_sale_created_at ||= @first_sale_created_at || @user.first_sale_created_at_for_analytics
+    end
+
     def products
-      @_products ||= @user.products_for_creator_analytics.load
+      @_products ||= @products || @user.products_for_creator_analytics.load
     end
 
     def product_permalinks

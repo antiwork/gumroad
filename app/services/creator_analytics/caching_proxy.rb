@@ -31,7 +31,7 @@ class CreatorAnalytics::CachingProxy
   # Generates cached data for all possible dates for a seller
   def generate_cache
     return if @user.suspended?
-    first_sale_created_at = @user.first_sale_created_at_for_analytics
+    first_sale_created_at = self.first_sale_created_at
     return if first_sale_created_at.nil?
 
     first_sale_date = first_sale_created_at.in_time_zone(@user.timezone).to_date
@@ -101,7 +101,12 @@ class CreatorAnalytics::CachingProxy
 
     # Direct proxy for CreatorAnalytics::Web
     def analytics_data(start_date, end_date, by: :date)
-      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a).public_send("by_#{by}")
+      CreatorAnalytics::Web.new(
+        user: @user,
+        dates: (start_date .. end_date).to_a,
+        first_sale_created_at: first_sale_created_at,
+        products: products
+      ).public_send("by_#{by}")
     end
 
     # Fetches and caches the analytics data for one specific date
@@ -154,5 +159,13 @@ class CreatorAnalytics::CachingProxy
         hash[ hash.key(date - 1) || date ] = date
       end
       hash_result.map { |array| Range.new(*array) }
+    end
+
+    def first_sale_created_at
+      @_first_sale_created_at ||= @user.first_sale_created_at_for_analytics
+    end
+
+    def products
+      @_products ||= @user.products_for_creator_analytics.load
     end
 end
