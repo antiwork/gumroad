@@ -1097,11 +1097,11 @@ class Purchase < ApplicationRecord
       label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
       label
     else
-      if was_tax_excluded_from_price
-        "Sales tax"
-      else
-        "Sales tax (included)"
+      label = "Sales tax"
+      if include_tax_rate && !was_tax_excluded_from_price
+        label += " (included)"
       end
+      label
     end
   end
 
