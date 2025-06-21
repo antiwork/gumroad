@@ -48,7 +48,7 @@ export const Nav = ({ title, current_user }: Props) => {
                 <hr />
               </>
             ) : null}
-            <LogoutDropdownItem />
+            <LogoutDropdownItem routeParams={routeParams} />
             {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
           </div>
         </Popover>

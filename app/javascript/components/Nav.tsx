@@ -91,24 +91,30 @@ export const Nav = ({ title, children, footer, compact }: Props) => {
   );
 };
 
-export const LogoutDropdownItem = () => {
+export const LogoutDropdownItem = ({
+  routeParams,
+}: {
+  routeParams?: {
+    host?: string;
+  };
+}) => {
   const makeRequest = asyncVoid(async (ev: React.MouseEvent<HTMLAnchorElement>) => {
     ev.preventDefault();
 
     try {
-      await request({ method: "DELETE", accept: "html", url: Routes.logout_url() });
+      await request({ method: "DELETE", accept: "html", url: Routes.logout_url(routeParams) });
     } catch (e) {
       // Even if there's an error, continue with logout since the session might be invalid
     }
 
-    window.location.href = Routes.login_url();
+    window.location.href = Routes.login_url(routeParams);
   });
 
   return (
     <NavLinkDropdownItem
       text="Logout"
       icon="box-arrow-in-right-fill"
-      href={Routes.logout_url()}
+      href={Routes.logout_url(routeParams)}
       onClick={makeRequest}
       method="DELETE"
     />

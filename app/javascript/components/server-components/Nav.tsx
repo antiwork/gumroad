@@ -120,7 +120,7 @@ export const Nav = (props: Props) => {
                 href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
               />
               <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
-              <LogoutDropdownItem />
+              <LogoutDropdownItem routeParams={routeParams} />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
             </div>
           </Popover>
