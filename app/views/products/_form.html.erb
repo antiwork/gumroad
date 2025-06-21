@@ -1,0 +1,88 @@
+<%= form_for @product, :html => { :class => 'product-form' } do |f| %>
+  <% if @product.errors.any? %>
+    <div id="error_explanation">
+      <h2><%= pluralize(@product.errors.count, "error") %> prohibited this product from being saved:</h2>
+      <ul>
+      <% @product.errors.full_messages.each do |msg| %>
+        <li><%= msg %></li>
+      <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%= form_field f, :name, :text_field, placeholder: 'e.g. My Awesome E-book' %>
+
+  <%= form_field f, :price, :text_field, description: 'in USD. Enter 0 for a free product.', placeholder: '25' %>
+
+  <div class="field">
+    <%= f.label :description, 'Description' %>
+    <p class="description">Describe your product. Use <a href="http://daringfireball.net/projects/markdown/syntax" target="_blank">Markdown</a> for formatting.</p>
+    <%= f.text_area :description, :rows => 15 %>
+  </div>
+
+  <div class="field">
+    <%= f.label :file, 'Files' %>
+    <p class="description">To upload multiple files, just select them all at once. Max file size: 256MB.</p>
+    <div class="file-upload-wrapper" data-max-file-size="268435456">
+      <%= f.file_field :file, :multiple => true, 'data-url' => '/uploads', 'data-max-file-size' => 268435456 %>
+      <div id="progress" class="progress progress-success progress-striped"><div class="bar"></div></div>
+      <div id="uploads">
+        <%= f.fields_for :attachments do |attachment_form| %>
+          <% if attachment_form.object.file_file_name.present? %>
+            <div class="upload">
+              <%= link_to attachment_form.object.file_file_name, attachment_form.object.file.url %>
+              <%= attachment_form.hidden_field :id %>
+              <%= attachment_form.hidden_field :_destroy %>
+              <%= link_to 'Remove', '#', :class => 'remove-upload' %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <%= form_field f, :url, :text_field, description: "We'll redirect the buyer to this URL instead of the Gumroad receipt page.", placeholder: 'http://yoursite.com/thanks' %>
+
+  <div class="field">
+    <%= f.label :thumbnail, 'Cover image' %>
+    <p class="description">A 210x210px PNG, JPG, or GIF. This will be resized automatically.</p>
+    <div class="cover-photo">
+      <%= image_tag @product.thumbnail.url(:small_thumb) if @product.thumbnail.present? %>
+      <%= f.file_field :thumbnail %>
+    </div>
+  </div>
+
+  <hr>
+
+  <h3>Offer codes</h3>
+  <div id="offer-codes">
+    <%= f.fields_for :offer_codes do |builder| %>
+      <%= render 'offer_code_fields', f: builder %>
+    <% end %>
+    <%= link_to_add_fields "Add an offer code", f, :offer_codes %>
+  </div>
+
+  <hr>
+
+  <h3>Product Variants</h3>
+  <p class="description">Let your buyers choose between different versions of your product (e.g. Small, Medium, Large).</p>
+  <div id="variant-categories">
+    <%= f.fields_for :variant_categories do |builder| %>
+      <%= render 'variant_category_fields', f: builder %>
+    <% end %>
+    <%= link_to_add_fields "Add a product variant", f, :variant_categories %>
+  </div>
+
+  <hr>
+
+  <h3>Advanced</h3>
+
+  <%= form_field f, :limit, :text_field, description: 'The total number of times this product can be sold. Leave blank for unlimited.' %>
+
+  <%= form_field f, :shown, :check_box, description: 'Uncheck to hide this product from your profile page.' %>
+
+  <div class="actions">
+    <%= f.submit %>
+    or <%= link_to 'cancel', products_path %>
+  </div>
+<% end %>

@@ -40,4 +40,14 @@ module ApplicationHelper
       format: "%n%u"
     )
   end
+  def form_field(form, method, field_type = :text_field, options = {})
+  description = options.delete(:description)
+  label_text = options.delete(:label)
+
+  content_tag(:div, class: 'field') do
+    concat(form.label(method, label_text))
+    concat(content_tag(:p, description, class: 'description')) if description.present?
+    concat(form.send(field_type, method, options))
+  end
+ end
 end
