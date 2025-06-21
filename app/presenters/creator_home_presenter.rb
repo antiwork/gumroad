@@ -28,10 +28,20 @@ class CreatorHomePresenter
 
     today = Time.now.in_time_zone(seller.timezone).to_date
     analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - 30, today)
-    sales = analytics[:by_date][:sales]
+    top_sales_data = analytics[:by_date][:sales]
       .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
-      .map do |p|
-      product = seller.products.find_by(unique_permalink: p[0])
+
+    # Preload products with thumbnail attachments to avoid N+1 queries
+    product_permalinks = top_sales_data.map(&:first)
+    products_by_permalink = seller.products
+      .where(unique_permalink: product_permalinks)
+      .includes(thumbnail_alive: { file_attachment: :blob })
+      .index_by(&:unique_permalink)
+
+    sales = top_sales_data.map do |p|
+      product = products_by_permalink[p[0]]
+      next unless product
+
       {
         "id" => product.unique_permalink,
         "name" => product.name,
@@ -43,7 +53,7 @@ class CreatorHomePresenter
         "last_7" => analytics[:by_date][:totals][product.unique_permalink]&.last(7)&.sum || 0,
         "last_30" => analytics[:by_date][:totals][product.unique_permalink]&.sum || 0,
       }
-    end
+    end.compact
     balances = UserBalanceStatsService.new(user: seller).fetch[:overview]
 
     stripe_verification_message = nil
