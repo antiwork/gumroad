@@ -286,7 +286,7 @@ describe Exports::PurchaseExportService do
           { country: "SG", rate: 0.07, excluded: nil, expected_type: "GST" },
           { country: "US", rate: 0.085, excluded: true, expected_type: "Sales tax" },
           { country: "US", rate: 0.085, excluded: false, expected_type: "Sales tax" },
-          { country: nil, rate: nil, excluded: true, expected_type: "Sales tax" }
+          { country: nil, rate: nil, excluded: true, expected_type: "Sales tax" },
         ]
 
         tax_type_test_cases.each do |test_case|
