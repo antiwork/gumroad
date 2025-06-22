@@ -218,6 +218,7 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_fraudulent_buyer_browser_guid!
     after_transition any => :failed, :do => :ban_card_testers!
     after_transition any => :failed, :do => :block_purchases_on_product!, if: lambda { |purchase| purchase.price_cents.nonzero? && !purchase.is_recurring_subscription_charge }
+    after_transition any => :failed, :do => :pause_payouts_for_seller_based_on_recent_failures!, if: lambda { |purchase| purchase.price_cents.nonzero? }
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email

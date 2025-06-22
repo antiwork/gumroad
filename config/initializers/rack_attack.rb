@@ -146,7 +146,7 @@ class Rack::Attack
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
 
-  throttle_by_ip path: "/oauth/token", requests: 400, period: 60.seconds # Initial: 400rpm, Max: 2000 requests/9 hours
+  throttle_by_ip path: "/oauth/token", requests: 3000, period: 60.seconds # Initial: 3000rpm, Max: 15000 requests/9 hours
 
   # Spammers have been abusing follower's endpoints. This degrades our email reputation since we send confirmation email to each follower.
   # The following rules impose stricter and per-creator rate-limiting to prevent spammers from creating followers through a distributed attack.

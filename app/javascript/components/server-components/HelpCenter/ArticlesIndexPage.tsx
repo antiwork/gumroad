@@ -66,8 +66,6 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
       }))
     : categories;
 
-  const totalArticles = filteredCategories.reduce((acc, category) => acc + category.articles.length, 0);
-
   return (
     <div>
       <input
@@ -83,9 +81,6 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
           <CategoryArticles key={category.url} category={category} searchTerm={searchTerm} />
         ))}
       </div>
-      <p className="mt-12 text-xl font-semibold">
-        {searchTerm ? `Found ${totalArticles} article${totalArticles === 1 ? "" : "s"}` : "All articles"}
-      </p>
     </div>
   );
 };

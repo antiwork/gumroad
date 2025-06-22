@@ -22,11 +22,11 @@
     <dl>
       <% if purchase.seller.support_email.present? %>
         <dt>Seller support email</dt>
-        <dd><%= mail_to purchase.seller.support_email %></dd>
+        <dd><%= copy_to_clipboard purchase.seller.support_email %></dd>
       <% end %>
 
       <dt>Seller email</dt>
-      <dd><%= mail_to purchase.seller.email %></dd>
+      <dd><%= copy_to_clipboard purchase.seller.email %></dd>
 
       <% if purchase.merchant_account %>
         <dt>Merchant account</dt>
@@ -249,6 +249,21 @@
       <% if purchase.affiliate.present? %>
         <dt>Affiliate</dt>
         <dd><%= link_to(purchase.affiliate.affiliate_user.form_email, admin_search_users_path(query: "#{purchase.affiliate.affiliate_user.form_email}")) %></dd>
+      <% end %>
+
+      <% if purchase.purchase_refund_policy.present? %>
+        <dt>Refund Policy</dt>
+        <dd>
+          <strong><%= purchase.purchase_refund_policy.title %></strong>
+          <% if purchase.purchase_refund_policy.fine_print.present? %>
+            <br>
+            <%= simple_format(purchase.purchase_refund_policy.fine_print) %>
+          <% end %>
+          <% if purchase.purchase_refund_policy.max_refund_period_in_days.present? %>
+            <br>
+            <small>Max refund period: <%= purchase.purchase_refund_policy.max_refund_period_in_days %> days</small>
+          <% end %>
+        </dd>
       <% end %>
 
       <dt>Can email</dt>

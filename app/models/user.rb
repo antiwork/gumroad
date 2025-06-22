@@ -4,6 +4,7 @@ class User < ApplicationRecord
   devise :database_authenticatable, :registerable, :confirmable, :omniauthable,
          :recoverable, :rememberable, :trackable, :pwned_password
 
+  include SecureExternalId
   has_paper_trail
   has_one_time_password
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, Mongoable, JsonData, Deletable, MoneyBalance,

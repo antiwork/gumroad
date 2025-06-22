@@ -243,7 +243,7 @@ const PRODUCT_TYPES = {
     title: "Coffee",
   },
   commission: {
-    description: "Sell unique tailored work or services to your customers.",
+    description: "Sell custom services with 50% deposit upfront, 50% upon completion.",
     title: "Commission",
   },
   course: {
