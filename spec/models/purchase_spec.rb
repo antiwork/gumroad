@@ -1265,6 +1265,12 @@ describe Purchase, :vcr do
       purchase = create(:purchase, price_cents: 120, total_transaction_cents: 120, tax_cents: 20, zip_tax_rate:, was_tax_excluded_from_price: true)
       expect(purchase.tax_label).to eq("Sales tax")
     end
+
+    it "exported tax label properly" do
+      zip_tax_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.1)
+      purchase = create(:purchase, price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate:)
+      expect(purchase.tax_label(include_tax_rate: false)).to eq("GST")
+    end
   end
 
   describe "tax_label_with_creator_tax_info" do
