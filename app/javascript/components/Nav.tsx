@@ -45,14 +45,17 @@ export const NavLinkDropdownItem = ({
   text,
   icon,
   href,
+  method = "GET",
   onClick,
+  ...props
 }: {
   text: string;
   icon: IconName;
   href: string;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
-}) => (
-  <a role="menuitem" href={href} onClick={onClick}>
+} & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  <a role="menuitem" href={href} data-method={method.toLowerCase()} onClick={onClick} {...props}>
     <Icon name={icon} />
     {text}
   </a>
@@ -85,6 +88,36 @@ export const Nav = ({ title, children, footer, compact }: Props) => {
       {children}
       <footer>{footer}</footer>
     </nav>
+  );
+};
+
+export const LogoutDropdownItem = ({
+  routeParams,
+}: {
+  routeParams?: {
+    host?: string;
+  };
+}) => {
+  const makeRequest = asyncVoid(async (ev: React.MouseEvent<HTMLAnchorElement>) => {
+    ev.preventDefault();
+
+    try {
+      await request({ method: "DELETE", accept: "html", url: Routes.logout_url(routeParams) });
+    } catch (e) {
+      // Even if there's an error, continue with logout since the session might be invalid
+    }
+
+    window.location.href = Routes.login_url(routeParams);
+  });
+
+  return (
+    <NavLinkDropdownItem
+      text="Logout"
+      icon="box-arrow-in-right-fill"
+      href={Routes.logout_url(routeParams)}
+      onClick={makeRequest}
+      method="DELETE"
+    />
   );
 };
 
