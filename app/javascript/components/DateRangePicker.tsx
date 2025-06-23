@@ -35,7 +35,7 @@ export const DateRangePicker = ({
         setOpen(open);
       }}
       trigger={
-        <div className="input">
+        <div className="input" aria-label="Date range selector">
           <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
           <Icon name="outline-cheveron-down" style={{ marginLeft: "auto" }} />
         </div>
