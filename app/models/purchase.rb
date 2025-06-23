@@ -343,6 +343,7 @@ class Purchase < ApplicationRecord
   before_create :validate_shipping
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
+  before_create :set_custom_fee_percentages
 
   before_save :assign_default_rental_expired
   before_save :to_mongo
@@ -3150,15 +3151,15 @@ class Purchase < ApplicationRecord
         return
       end
 
-      fee_per_thousand = if seller&.custom_direct_fee_percentage.present?
-        (seller.custom_direct_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
+      fee_per_thousand = if custom_direct_fee_percentage.present?
+        (custom_direct_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
       else
         calculate_gumroad_fee_per_thousand
       end
 
       if charge_discover_fee?
-        discover_fee_per_thousand = if seller&.custom_discover_fee_percentage.present?
-          (seller.custom_discover_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
+        discover_fee_per_thousand = if custom_discover_fee_percentage.present?
+          (custom_discover_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
         else
           calculate_additional_discover_fee_per_thousand
         end
@@ -3839,5 +3840,18 @@ class Purchase < ApplicationRecord
 
     def fetch_installment_plan
       installment_plan || subscription&.last_payment_option&.installment_plan
+    end
+
+    def set_custom_fee_percentages
+      if is_recurring_subscription_charge || is_updated_original_subscription_purchase
+        self.custom_direct_fee_percentage = subscription.original_purchase.custom_direct_fee_percentage
+        self.custom_discover_fee_percentage = subscription.original_purchase&.custom_discover_fee_percentage
+      elsif is_preorder_charge?
+        self.custom_direct_fee_percentage = preorder.authorization_purchase.custom_direct_fee_percentage
+        self.custom_discover_fee_percentage = preorder.authorization_purchase&.custom_discover_fee_percentage
+      else
+        self.custom_direct_fee_percentage = seller&.custom_direct_fee_percentage
+        self.custom_discover_fee_percentage = seller&.custom_discover_fee_percentage
+      end
     end
 end
