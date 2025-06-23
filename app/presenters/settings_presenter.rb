@@ -331,6 +331,8 @@ class SettingsPresenter
         guardian_dob_month: user_compliance_info.guardian_birthday.try(:month).to_i,
         guardian_dob_day: user_compliance_info.guardian_birthday.try(:day).to_i,
         guardian_dob_year: user_compliance_info.guardian_birthday.try(:year).to_i,
+        guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
+        guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
       }
     end
 

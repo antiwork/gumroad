@@ -2239,7 +2239,7 @@ const AccountDetailsSection = ({
                       id={`${uid}-guardian-tos-accepted`}
                       type="checkbox"
                       checked={complianceInfo.guardian_stripe_tos_accepted || false}
-                      disabled={isFormDisabled}
+                      disabled={isFormDisabled || complianceInfo.guardian_stripe_tos_accepted}
                       required
                       onChange={(e) => updateComplianceInfo({ guardian_stripe_tos_accepted: e.target.checked })}
                     />
@@ -2261,7 +2261,7 @@ const AccountDetailsSection = ({
                       id={`${uid}-guardian-additional-tos-accepted`}
                       type="checkbox"
                       checked={complianceInfo.guardian_stripe_processing_tos_accepted || false}
-                      disabled={isFormDisabled}
+                      disabled={isFormDisabled || complianceInfo.guardian_stripe_processing_tos_accepted}
                       required
                       onChange={(e) =>
                         updateComplianceInfo({ guardian_stripe_processing_tos_accepted: e.target.checked })
