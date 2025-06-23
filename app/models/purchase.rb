@@ -3846,10 +3846,10 @@ class Purchase < ApplicationRecord
 
     def set_custom_fee_percentages
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        self.custom_direct_fee_percentage = subscription.original_purchase.custom_direct_fee_percentage
+        self.custom_direct_fee_percentage = subscription.original_purchase&.custom_direct_fee_percentage
         self.custom_discover_fee_percentage = subscription.original_purchase&.custom_discover_fee_percentage
       elsif is_preorder_charge?
-        self.custom_direct_fee_percentage = preorder.authorization_purchase.custom_direct_fee_percentage
+        self.custom_direct_fee_percentage = preorder.authorization_purchase&.custom_direct_fee_percentage
         self.custom_discover_fee_percentage = preorder.authorization_purchase&.custom_discover_fee_percentage
       else
         self.custom_direct_fee_percentage = seller&.custom_direct_fee_percentage
