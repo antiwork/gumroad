@@ -1083,22 +1083,26 @@ class Purchase < ApplicationRecord
     usd_cents_to_currency(link.price_currency_type, tax_amount, rate_converted_to_usd)
   end
 
-  def tax_label
+  def tax_label(include_tax_rate: true)
     return unless has_tax_label?
 
     if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
        Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
        Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
        Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      "VAT" + " (#{(zip_tax_rate.combined_rate * 100).to_i}%)"
+      label = "VAT"
+      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
+      label
     elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      "GST" + " (#{(zip_tax_rate.combined_rate * 100).to_i}%)"
+      label = "GST"
+      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
+      label
     else
-      if was_tax_excluded_from_price
-        "Sales tax"
-      else
-        "Sales tax (included)"
+      label = "Sales tax"
+      if include_tax_rate && !was_tax_excluded_from_price
+        label += " (included)"
       end
+      label
     end
   end
 

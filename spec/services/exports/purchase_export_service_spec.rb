@@ -217,6 +217,7 @@ describe Exports::PurchaseExportService do
         row = last_data_row
         expect(field_value(row, "Subtotal ($)")).to eq("100.0")
         expect(field_value(row, "Taxes ($)")).to eq("0.0")
+        expect(field_value(row, "Tax Type")).to eq("")
         expect(field_value(row, "Shipping ($)")).to eq("0.0")
         expect(field_value(row, "Sale Price ($)")).to eq("100.0")
         expect(field_value(row, "Fees ($)")).to eq("0.31")
@@ -276,6 +277,39 @@ describe Exports::PurchaseExportService do
         expect(field_value(row, "Net Total ($)")).to eq("99.69")
         expect(field_value(totals_row, "Net Total ($)")).to eq("99.69")
         expect(field_value(row, "Tax Included in Price?")).to eq("0")
+      end
+
+      describe "tax type" do
+        tax_type_test_cases = [
+          { country: "IT", rate: 0.22, excluded: nil, expected_type: "VAT" },
+          { country: "AU", rate: 0.10, excluded: nil, expected_type: "GST" },
+          { country: "SG", rate: 0.07, excluded: nil, expected_type: "GST" },
+          { country: "US", rate: 0.085, excluded: true, expected_type: "Sales tax" },
+          { country: "US", rate: 0.085, excluded: false, expected_type: "Sales tax" },
+          { country: nil, rate: nil, excluded: true, expected_type: "Sales tax" },
+        ]
+
+        tax_type_test_cases.each do |test_case|
+          country = test_case[:country]
+          rate = test_case[:rate]
+          excluded = test_case[:excluded]
+          expected_type = test_case[:expected_type]
+
+          context "when country is #{country.inspect}, rate is #{rate.inspect}, and excluded is #{excluded.inspect}" do
+            before do
+              @purchase.update!(
+                was_purchase_taxable: true,
+                was_tax_excluded_from_price: excluded,
+                tax_cents: 100,
+                zip_tax_rate: country && create(:zip_tax_rate, country:, combined_rate: rate)
+              )
+            end
+
+            it "returns #{expected_type}" do
+              expect(field_value(last_data_row, "Tax Type")).to eq(expected_type)
+            end
+          end
+        end
       end
     end
 
@@ -435,6 +469,7 @@ describe Exports::PurchaseExportService do
       headers, row = rows.first, rows[rows.size - 2]
 
       expect(headers).to eq(described_class::PURCHASE_FIELDS + ["Age", "Order Number", "Size"])
+      expect(headers).to include("Tax Type")
 
       expect(headers.count("Order Number")).to eq(2)
       native_field_index = headers.index("Order Number")
