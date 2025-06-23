@@ -75,7 +75,7 @@ export const DateRangePicker = ({
           </div>
           <div
             role="menuitem"
-            onClick={() => quickSet(startOfMonth(today), endOfMonth(today))}
+            onClick={() => quickSet(startOfMonth(today), today)}
           >
             This month
           </div>
