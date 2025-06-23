@@ -327,6 +327,8 @@ class Purchase < ApplicationRecord
   validates :call, presence: true, if: -> { link.native_type == Link::NATIVE_TYPE_CALL }
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
+  validates :custom_direct_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
+  validates :custom_discover_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
