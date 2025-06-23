@@ -234,9 +234,9 @@ class Purchase < ApplicationRecord
     after_transition any => %i[successful gift_receiver_purchase_successful not_charged], do: :transcode_product_videos, if: lambda { |purchase|
       purchase.link.transcode_videos_on_purchase? && !purchase.not_charged_and_not_free_trial? }
     after_transition any => %i[successful gift_receiver_purchase_successful preorder_authorization_successful
-                               test_successful test_preorder_successful not_charged], :do => :send_notification_webhook, unless: lambda { |purchase|
-                                                                                                                                   purchase.not_charged_and_not_free_trial?
-                                                                                                                                 }
+                               test_successful test_preorder_successful not_charged],
+                     :do => :send_notification_webhook,
+                     unless: ->(purchase) { purchase.not_charged_and_not_free_trial? }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
     after_transition any => any, :do => :log_transition
     after_transition any => [:successful, :not_charged, :gift_receiver_purchase_successful], :do => :trigger_iffy_moderation, if: lambda { |purchase|
@@ -2789,6 +2789,7 @@ class Purchase < ApplicationRecord
     # credit card. The new chargeable will be returned.
     #
     # Returns: The final chargeable that should be used for charging. May be the same object passed in or different.
+    # If there is no chargeable available nil will be returned.
     def prepare_chargeable_for_charge!(chargeable)
       begin
         self.card_visual = chargeable.visual
@@ -3141,6 +3142,7 @@ class Purchase < ApplicationRecord
     #
     # This is called multiple times from process!.
     # This function should only set fee_cents and not change any other state.
+    public
     def calculate_fees
       return unless self.price_cents
 
@@ -3179,7 +3181,7 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_additional_discover_fee_per_thousand
-      if is_recurring_subscription_charge || is_updated_original_subscription_purchase
+      discover_fee = if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
         preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
@@ -3190,10 +3192,19 @@ class Purchase < ApplicationRecord
           link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
         end
       end
+
+      if seller.custom_discover_fee_percentage.present?
+        custom_total_fee = (seller.custom_discover_fee_percentage * 10).round
+        return custom_total_fee - discover_fee
+      end
+
+      discover_fee
     end
 
     def calculate_gumroad_fee_per_thousand
-      if flat_fee_applicable?
+      if seller.custom_direct_fee_percentage.present?
+        return (seller.custom_direct_fee_percentage * 10).round
+      elsif flat_fee_applicable?
         gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?
         (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round

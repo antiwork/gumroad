@@ -1177,4 +1177,14 @@ class User < ApplicationRecord
       payments.completed.exists? ||
         made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
     end
+    validates :custom_direct_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 50 }, allow_nil: true
+    validates :custom_discover_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
+
+    def self.set_custom_fees(user_id, direct_fee: nil, discover_fee: nil)
+      raise ArgumentError, "Invalid direct fee" if direct_fee && (direct_fee < 0 || direct_fee > 50)
+      raise ArgumentError, "Invalid discover fee" if discover_fee && (discover_fee < 0 || discover_fee > 100)
+
+      user = find(user_id)
+      user.update!(custom_direct_fee_percentage: direct_fee, custom_discover_fee_percentage: discover_fee)
+    end
 end
