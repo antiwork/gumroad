@@ -559,9 +559,8 @@ module User::Stats
   # Public: Returns the list of products that should be considered for creator analytics purposes.
   # We omit products only if they've been deleted or archived *and* they don't have any sales.
   def products_for_creator_analytics
-    one_successful_purchase_sql = Purchase.successful_or_preorder_authorization_successful.where("purchases.link_id = links.id").select(:id).limit(1).to_sql
-    links.joins("left join purchases on purchases.id = (#{one_successful_purchase_sql})")
-         .where("purchases.id IS NOT NULL OR (links.deleted_at IS NULL AND #{Link.not_archived_condition})")
+    successful_purchase_exists_sql = Purchase.successful_or_preorder_authorization_successful.where("purchases.link_id = links.id").to_sql
+    links.where("EXISTS (#{successful_purchase_exists_sql}) OR (links.deleted_at IS NULL AND #{Link.not_archived_condition})")
          .order(id: :desc)
   end
 
