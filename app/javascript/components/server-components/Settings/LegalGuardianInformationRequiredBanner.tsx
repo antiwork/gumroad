@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { Icon } from "$app/components/Icons";
 
-export function Under18WarningAlert() {
+export function LegalGuardianInformationRequiredBanner() {
   return (
     <div className="mb-6 rounded-lg border-2 border-[#ff90e8] bg-white p-4 shadow-lg">
       <div className="flex items-start gap-3">
