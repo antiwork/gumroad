@@ -3195,7 +3195,8 @@ class Purchase < ApplicationRecord
 
       if seller.custom_discover_fee_percentage.present?
         custom_total_fee = (seller.custom_discover_fee_percentage * 10).round
-        return custom_total_fee - discover_fee
+        additional_fee = custom_total_fee - discover_fee
+        return [additional_fee, 0].max  # Prevent negative fees
       end
 
       discover_fee
@@ -3203,7 +3204,7 @@ class Purchase < ApplicationRecord
 
     def calculate_gumroad_fee_per_thousand
       if seller.custom_direct_fee_percentage.present?
-        return (seller.custom_direct_fee_percentage * 10).round
+        (seller.custom_direct_fee_percentage * 10).round
       elsif flat_fee_applicable?
         gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?
