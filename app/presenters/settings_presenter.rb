@@ -279,7 +279,6 @@ class SettingsPresenter
         can_connect_stripe: seller.can_connect_stripe?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,
         joined_at: seller.created_at.iso8601,
-        is_legal_guardian_information_required: seller.is_legal_guardian_information_required?
       }
     end
 
