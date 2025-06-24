@@ -41,6 +41,7 @@ end
 
 # NOTE Add only valid errors here. Do not errors we should handle and fix on specs themselves
 JSErrorReporter.set_global_ignores [
+  /Warning: %s: Support for defaultProps will be removed from function components in a future major release/,
   /(Component closed|Object|zoid destroyed all components)\n\t \(https:\/\/www.paypal.com\/sdk\/js/,
   /The method FB.getLoginStatus can no longer be called from http pages/,
   /The user aborted a request./,
