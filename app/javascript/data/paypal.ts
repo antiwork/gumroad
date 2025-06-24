@@ -45,37 +45,6 @@ export const createBillingAgreement = async (billingAgreementTokenId: string): P
   }
 };
 
-type Order = { id: string; payer_email: string; payer_country: string };
-export const fetchOrder = async ({
-  orderId,
-}: {
-  orderId: string;
-}): Promise<{ type: "done"; order: Order } | { type: "error" }> => {
-  try {
-    const response = await request({
-      method: "GET",
-      url: Routes.fetch_order_paypal_path({ order_id: orderId }),
-      accept: "json",
-    });
-
-    if (response.ok) {
-      const responseData = cast<PaypalOrderResponse>(await response.json());
-      return {
-        type: "done",
-        order: {
-          id: responseData.id,
-          payer_email: responseData.payer.email_address,
-          payer_country: responseData.payer.address.country_code,
-        },
-      };
-    }
-    return { type: "error" };
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("Error fetching a PayPal order", e);
-    return { type: "error" };
-  }
-};
 type PaypalOrderResponse = { id: string; payer: { email_address: string; address: { country_code: string } } };
 
 export type LineItemInfoForNativePayPalCheckout = {
@@ -92,50 +61,6 @@ export type LineItemInfoForNativePayPalCheckout = {
   exclusive_vat_cents: number;
   tax_country: string | null;
   was_recommended: boolean;
-};
-export const createOrder = async (
-  product: LineItemInfoForNativePayPalCheckout,
-): Promise<{ type: "done"; orderId: string } | { type: "error" }> => {
-  try {
-    const response = await request({
-      url: Routes.order_paypal_path(),
-      method: "POST",
-      accept: "json",
-      data: { product },
-    });
-    const responseData = cast<{ order_id: string | null }>(await response.json());
-    if (responseData.order_id != null) {
-      return { type: "done", orderId: responseData.order_id };
-    }
-    return { type: "error" };
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("Error creating a PayPal order", e);
-    return { type: "error" };
-  }
-};
-
-export const updateOrder = async (
-  orderId: string | null,
-  product: LineItemInfoForNativePayPalCheckout | null,
-): Promise<{ type: "done"; orderId: string | null } | { type: "error"; orderId: string | null }> => {
-  try {
-    const response = await request({
-      url: Routes.update_order_paypal_path(),
-      method: "POST",
-      accept: "json",
-      data: { order_id: orderId, product },
-    });
-    const responseData = cast<{ success: boolean }>(await response.json());
-    if (responseData.success) {
-      return { type: "done", orderId };
-    }
-    return { type: "error", orderId };
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("Error updating a PayPal order", e);
-    return { type: "error", orderId };
-  }
 };
 
 export const createBillingAgreementToken = async (data: { shipping: boolean }): Promise<string> => {

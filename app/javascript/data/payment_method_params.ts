@@ -71,14 +71,6 @@ export type AnyPaymentMethodParams =
   | ReusablePaymentRequestPaymentMethodParams
   | AnyPayPalMethodParams;
 
-export const isSuccessfulParams = (
-  cardParams: AnyPaymentMethodParams | StripeErrorParams,
-): cardParams is AnyPaymentMethodParams => cardParams.status === "success";
-
-export const isPaymentRequestParams = (
-  cardParams: AnyPaymentMethodParams | StripeErrorParams,
-): cardParams is PaymentRequestPaymentMethodParams | ReusablePaymentRequestPaymentMethodParams =>
-  cardParams.status === "success" && cardParams.type === "payment-request";
 
 export const isPayPalNativeParams = (
   cardParams: AnyPaymentMethodParams | StripeErrorParams,
