@@ -5,7 +5,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, NavLinkDropdownItem, UnbecomeDropdownItem } from "$app/components/Nav";
+import { Nav as NavFramework, NavLink, UnbecomeDropdownItem, LogoutDropdownItem } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
 
 type ImpersonatedUser = {
@@ -48,7 +48,7 @@ export const Nav = ({ title, current_user }: Props) => {
                 <hr />
               </>
             ) : null}
-            <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url()} />
+            <LogoutDropdownItem routeParams={routeParams} />
             {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
           </div>
         </Popover>

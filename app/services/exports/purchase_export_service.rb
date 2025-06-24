@@ -3,7 +3,7 @@
 class Exports::PurchaseExportService
   PURCHASE_FIELDS = [
     "Purchase ID", "Item Name", "Buyer Name", "Purchase Email", "Buyer Email", "Do not contact?",
-    "Purchase Date", "Purchase Time (UTC timezone)", "Subtotal ($)", "Taxes ($)", "Shipping ($)",
+    "Purchase Date", "Purchase Time (UTC timezone)", "Subtotal ($)", "Taxes ($)", "Tax Type", "Shipping ($)",
     "Sale Price ($)", "Fees ($)", "Net Total ($)", "Tip ($)", "Tax Included in Price?",
     "Street Address", "City", "Zip Code", "State", "Country", "Referrer", "Refunded?",
     "Partial Refund ($)", "Fully Refunded?", "Disputed?", "Dispute Won?", "Access Revoked?", "Variants",
@@ -137,6 +137,7 @@ class Exports::PurchaseExportService
         "Purchase Time (UTC timezone)" => purchase.created_at.to_time.to_s,
         "Subtotal ($)" => purchase.sub_total,
         "Taxes ($)" => purchase.tax_dollars,
+        "Tax Type" => purchase.has_tax_label? ? purchase.tax_label(include_tax_rate: false) : "",
         "Shipping ($)" => purchase.shipping_dollars,
         "Sale Price ($)" => purchase.price_dollars,
         "Fees ($)" => purchase.fee_dollars,
