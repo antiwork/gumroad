@@ -3152,21 +3152,12 @@ class Purchase < ApplicationRecord
       end
 
       fee_per_thousand = calculate_gumroad_fee_per_thousand
-
-      if charge_discover_fee?
-        discover_fee_per_thousand = calculate_additional_discover_fee_per_thousand
-        if discover_fee_per_thousand > 0
-          fee_per_thousand += discover_fee_per_thousand
-          self.was_discover_fee_charged = true
-        end
-      end
-
       variable_fee_cents = (price_cents * fee_per_thousand / 1000.0).round
 
       fixed_processor_fee_cents = charged_using_gumroad_merchant_account? ? PROCESSOR_FIXED_FEE_CENTS : 0
       fixed_fee_cents = if is_recurring_subscription_charge
         if subscription.mor_fee_applicable?
-          was_discover_fee_charged? ? 0 : GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
+          GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
         else
           fixed_processor_fee_cents
         end
@@ -3181,7 +3172,7 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_additional_discover_fee_per_thousand
-      discover_fee = if is_recurring_subscription_charge || is_updated_original_subscription_purchase
+      if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
         preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
@@ -3192,14 +3183,6 @@ class Purchase < ApplicationRecord
           link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
         end
       end
-
-      if seller.custom_discover_fee_percentage.present?
-        custom_total_fee = (seller.custom_discover_fee_percentage * 10).round
-        additional_fee = custom_total_fee - discover_fee
-        return [additional_fee, 0].max  # Prevent negative fees
-      end
-
-      discover_fee
     end
 
     def calculate_gumroad_fee_per_thousand

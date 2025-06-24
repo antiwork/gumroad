@@ -44,29 +44,6 @@ RSpec.describe "CustomFeeStructure" do
     end
   end
 
-  describe "custom discover fee calculation" do
-    it "returns additional amount for 25% discover fee" do
-      user.update!(custom_discover_fee_percentage: 25.0)
-      purchase = Purchase.new(seller: user, price_cents: 1000, link: product)
-      additional = purchase.calculate_additional_discover_fee_per_thousand
-      expect(additional).to eq(50) # 250 - 200 base = 50 additional
-    end
-
-    it "returns additional amount for 30% discover fee" do
-      user.update!(custom_discover_fee_percentage: 30.0)
-      purchase = Purchase.new(seller: user, price_cents: 1000, link: product)
-      additional = purchase.calculate_additional_discover_fee_per_thousand
-      expect(additional).to eq(100) # 300 - 200 base = 100 additional
-    end
-
-    it "handles exactly 100% boundary" do
-      user.update!(custom_discover_fee_percentage: 100.0)
-      purchase = Purchase.new(seller: user, price_cents: 1000, link: product)
-      additional = purchase.calculate_additional_discover_fee_per_thousand
-      expect(additional).to eq(800) # 1000 - 200 base = 800 additional
-    end
-  end
-
   describe "validation" do
     it "rejects direct fee above 50%" do
       user.custom_direct_fee_percentage = 51
@@ -80,24 +57,17 @@ RSpec.describe "CustomFeeStructure" do
       expect(user.errors[:custom_direct_fee_percentage]).to be_present
     end
 
-    it "rejects discover fee above 100%" do
-      user.custom_discover_fee_percentage = 101
-      expect(user.valid?).to be false
-      expect(user.errors[:custom_discover_fee_percentage]).to be_present
-    end
-
     it "accepts valid fees within range" do
-      user.update!(custom_direct_fee_percentage: 25, custom_discover_fee_percentage: 50)
+      user.update!(custom_direct_fee_percentage: 25)
       expect(user.valid?).to be true
     end
   end
 
   describe "admin methods" do
     it "sets custom fees correctly" do
-      User.set_custom_fees(user.id, direct_fee: 10.0, discover_fee: 30.0)
+      User.set_custom_fees(user.id, direct_fee: 10.0)
       user.reload
       expect(user.custom_direct_fee_percentage).to eq(10.0)
-      expect(user.custom_discover_fee_percentage).to eq(30.0)
     end
   end
 
