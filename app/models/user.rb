@@ -1182,7 +1182,7 @@ class User < ApplicationRecord
 
     def self.set_custom_fees(user_id, direct_fee: nil)
       user = find(user_id)
-      user.assign_attributes(custom_direct_fee_percentage: direct_fee, custom_discover_fee_percentage: nil)
+      user.assign_attributes(custom_direct_fee_percentage: direct_fee)
       raise ArgumentError, "Invalid fees: #{user.errors.full_messages.join(', ')}" unless user.valid?
       user.save!
     end

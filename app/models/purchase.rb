@@ -3145,19 +3145,28 @@ class Purchase < ApplicationRecord
     public
     def calculate_fees
       return unless self.price_cents
-
+      
       if price_cents == 0 || merchant_account&.is_a_brazilian_stripe_connect_account?
         self.fee_cents = 0
         return
       end
-
+      
       fee_per_thousand = calculate_gumroad_fee_per_thousand
+      
+      if charge_discover_fee?
+        discover_fee_per_thousand = calculate_additional_discover_fee_per_thousand
+        if discover_fee_per_thousand > 0
+          fee_per_thousand += discover_fee_per_thousand
+          self.was_discover_fee_charged = true
+        end
+      end
+      
       variable_fee_cents = (price_cents * fee_per_thousand / 1000.0).round
-
       fixed_processor_fee_cents = charged_using_gumroad_merchant_account? ? PROCESSOR_FIXED_FEE_CENTS : 0
+      
       fixed_fee_cents = if is_recurring_subscription_charge
         if subscription.mor_fee_applicable?
-          GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
+          was_discover_fee_charged? ? 0 : GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
         else
           fixed_processor_fee_cents
         end
@@ -3166,7 +3175,7 @@ class Purchase < ApplicationRecord
       else
         fixed_processor_fee_cents
       end
-
+      
       self.fee_cents = variable_fee_cents + fixed_fee_cents
       self.affiliate_credit_cents = determine_affiliate_balance_cents
     end
