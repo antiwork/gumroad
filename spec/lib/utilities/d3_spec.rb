@@ -3,8 +3,6 @@
 require "spec_helper"
 
 describe D3 do
-
-
   describe ".formatted_date" do
     it "returns 'Today' if date is today" do
       expect(described_class.formatted_date(Date.today)).to eq("Today")

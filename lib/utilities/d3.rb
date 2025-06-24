@@ -6,8 +6,6 @@
 
 class D3
   class << self
-
-
     def formatted_date(date, today_date: Date.today)
       date == today_date ? "Today" : date.strftime("%b %e, %Y")
     end

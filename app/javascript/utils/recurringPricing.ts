@@ -2,16 +2,6 @@ import { FreeTrial } from "$app/parsers/product";
 
 // Should match BasePrice::Recurrence::ALLOWED_RECURRENCES
 export const recurrenceIds = ["monthly", "quarterly", "biannually", "yearly", "every_two_years"] as const;
-export const getRecurrenceDurationInMonths = (recurrenceId: RecurrenceId) => {
-  const map: { [rec in RecurrenceId]: number } = {
-    monthly: 1,
-    quarterly: 3,
-    biannually: 6,
-    yearly: 12,
-    every_two_years: 24,
-  };
-  return map[recurrenceId];
-};
 export type RecurrenceId = "biannually" | "every_two_years" | "monthly" | "quarterly" | "yearly";
 
 export type RecurringCostDetails = {

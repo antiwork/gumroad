@@ -20,10 +20,6 @@ class RecurringService < ApplicationRecord
     renewal_at.strftime("%B #{renewal_at.day.ordinalize}, %Y")
   end
 
-  def last_successful_charge_at
-    charges.successful.last.succeeded_at.strftime("%B #{charges.successful.last.succeeded_at.day.ordinalize}, %Y")
-  end
-
   def cancelled_or_failed?
     cancelled_at.present? || failed_at.present?
   end
@@ -31,26 +27,4 @@ class RecurringService < ApplicationRecord
   def renewal_at
     charges.successful.last.succeeded_at + recurrence_duration
   end
-
-  def formatted_price
-    "#{MoneyFormatter.format(price_cents, :usd, no_cents_if_whole: true, symbol: true)} #{recurrence_long_indicator}"
-  end
-
-  private
-    def create_service_charge_event(service_charge)
-      original_service_charge_event = Event.find_by(service_charge_id: charges.successful.first.id)
-      return nil if original_service_charge_event.nil?
-
-      new_service_charge_event = original_service_charge_event.dup
-      new_service_charge_event.assign_attributes(
-        service_charge_id: service_charge.id,
-        purchase_state: service_charge.state,
-        price_cents: service_charge.charge_cents,
-        card_visual: service_charge.card_visual,
-        card_type: service_charge.card_type,
-        billing_zip: service_charge.card_zip_code
-      )
-
-      new_service_charge_event.save!
-    end
 end

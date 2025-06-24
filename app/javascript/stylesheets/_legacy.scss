@@ -12,7 +12,6 @@ button[draggable="true"] {
   -webkit-user-drag: element;
 }
 
-
 // Fix dropdown arrow positioning for post publish date input
 .post-letter--create > .popover[open] {
   &::before {
