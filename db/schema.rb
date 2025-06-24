@@ -2506,7 +2506,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_20_202855) do
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
     t.decimal "custom_direct_fee_percentage", precision: 5, scale: 2
-    t.decimal "custom_discover_fee_percentage", precision: 5, scale: 2
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"
