@@ -162,6 +162,17 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }
   end
 
+  def custom_direct_fee
+    custom_direct_fee = params.require(:custom_direct_fee).permit(:percentage)
+    percentage_value = custom_direct_fee[:percentage]
+
+    @user.update!(custom_direct_fee_percentage: percentage_value.present? ? percentage_value.to_f : nil)
+
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
   def flag_for_fraud
     if !@user.flagged_for_fraud? && !@user.suspended_for_fraud?
       @user.flag_for_fraud!(author_id: current_user.id)

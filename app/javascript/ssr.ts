@@ -7,6 +7,7 @@ import AdminActionButton from "$app/components/server-components/Admin/ActionBut
 import AdminAddCommentForm from "$app/components/server-components/Admin/AddCommentForm";
 import AdminAddCreditForm from "$app/components/server-components/Admin/AddCreditForm";
 import AdminChangeEmailForm from "$app/components/server-components/Admin/ChangeEmailForm";
+import AdminCustomDirectFeeForm from "$app/components/server-components/Admin/CustomDirectFeeForm";
 import AdminFlagForFraudForm from "$app/components/server-components/Admin/FlagForFraudForm";
 import AdminManualPayoutForm from "$app/components/server-components/Admin/ManualPayoutForm";
 import AdminMassTransferPurchasesForm from "$app/components/server-components/Admin/MassTransferPurchasesForm";
@@ -105,6 +106,7 @@ ReactOnRails.register({
   AdminAddCommentForm,
   AdminChangeEmailForm,
   AdminFlagForFraudForm,
+  AdminCustomDirectFeeForm,
   AdminManualPayoutForm,
   AdminMassTransferPurchasesForm,
   AdminNav,
