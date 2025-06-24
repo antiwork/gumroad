@@ -103,7 +103,7 @@ export const LogoutDropdownItem = ({
 
     try {
       await request({ method: "DELETE", accept: "html", url: Routes.logout_url(routeParams) });
-    } catch (e) {
+    } catch (_e) {
       // Even if there's an error, continue with logout since the session might be invalid
     }
 
