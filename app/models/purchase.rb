@@ -328,7 +328,6 @@ class Purchase < ApplicationRecord
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
   validates :custom_direct_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
-  validates :custom_discover_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
@@ -345,7 +344,7 @@ class Purchase < ApplicationRecord
   before_create :validate_shipping
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
-  before_create :set_custom_fee_percentages
+  before_create :set_custom_fee_percentage
 
   before_save :assign_default_rental_expired
   before_save :to_mongo
@@ -3153,19 +3152,10 @@ class Purchase < ApplicationRecord
         return
       end
 
-      fee_per_thousand = if custom_direct_fee_percentage.present?
-        (custom_direct_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
-      else
-        calculate_gumroad_fee_per_thousand
-      end
+      fee_per_thousand = calculate_gumroad_fee_per_thousand
 
       if charge_discover_fee?
-        discover_fee_per_thousand = if custom_discover_fee_percentage.present?
-          (custom_discover_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
-        else
-          calculate_additional_discover_fee_per_thousand
-        end
-
+        discover_fee_per_thousand = calculate_additional_discover_fee_per_thousand
         if discover_fee_per_thousand > 0
           fee_per_thousand += discover_fee_per_thousand
           self.was_discover_fee_charged = true
@@ -3206,7 +3196,9 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_gumroad_fee_per_thousand
-      if flat_fee_applicable?
+      if custom_direct_fee_percentage.present?
+        (custom_direct_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
+      elsif flat_fee_applicable?
         gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?
         (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
@@ -3844,16 +3836,13 @@ class Purchase < ApplicationRecord
       installment_plan || subscription&.last_payment_option&.installment_plan
     end
 
-    def set_custom_fee_percentages
+    def set_custom_fee_percentage
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        self.custom_direct_fee_percentage = subscription.original_purchase&.custom_direct_fee_percentage
-        self.custom_discover_fee_percentage = subscription.original_purchase&.custom_discover_fee_percentage
+        self.custom_direct_fee_percentage = subscription&.original_purchase&.custom_direct_fee_percentage
       elsif is_preorder_charge?
-        self.custom_direct_fee_percentage = preorder.authorization_purchase&.custom_direct_fee_percentage
-        self.custom_discover_fee_percentage = preorder.authorization_purchase&.custom_discover_fee_percentage
+        self.custom_direct_fee_percentage = preorder&.authorization_purchase&.custom_direct_fee_percentage
       else
         self.custom_direct_fee_percentage = seller&.custom_direct_fee_percentage
-        self.custom_discover_fee_percentage = seller&.custom_discover_fee_percentage
       end
     end
 end

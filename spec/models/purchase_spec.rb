@@ -1159,6 +1159,63 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#calculate_fees" do
+    let!(:seller) { create(:user, custom_direct_fee_percentage: 7.0) }
+    let!(:product) { create(:product, user: seller) }
+
+    context "when purchase has custom fee percentages stored" do
+      let!(:purchase) do
+        create(:purchase,
+          link: product,
+          seller: seller,
+          price_cents: 1000
+        )
+      end
+
+      it "uses the stored custom fee percentage, not the seller's current rate retroactively" do
+        # Change seller's fee after purchase creation
+        seller.update!(custom_direct_fee_percentage: 10.0)
+
+        purchase.send(:calculate_fees)
+
+        expect(purchase.fee_cents).to eq(150) # 70 variable + 80 fixed
+      end
+    end
+
+    context "for recurring subscription charges" do
+      let(:original_purchase) do
+        create(:purchase,
+          link: product,
+          seller: seller,
+          is_original_subscription_purchase: true,
+          subscription:, purchase_state: "in_progress"
+        )
+      end
+
+      let!(:subscription) { create(:subscription, link: product) }
+
+      let(:recurring_purchase) do
+        create(:purchase,
+          link: product,
+          seller: seller,
+          subscription: subscription,
+          is_original_subscription_purchase: false,
+          price_cents: 1000
+        )
+      end
+
+      it "uses the original purchase's stored custom fee rate" do
+        original_purchase
+        seller.update!(custom_direct_fee_percentage: 20.0)
+        recurring_purchase
+
+        recurring_purchase.send(:calculate_fees)
+
+        expect(recurring_purchase.fee_cents).to eq(150) # 70 variable + 80 fixed
+      end
+    end
+  end
+
   it "allows > $1000 if seller is verified" do
     expect(build(:purchase, link: create(:product, user: create(:user, verified: true)), price_cents: 100_100)).to be_valid
   end
