@@ -15,7 +15,8 @@ describe CreatorAnalytics::CachingProxy do
     end
 
     def web_data(by, start_date, end_date)
-      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a).public_send("by_#{by}")
+      web = CreatorAnalytics::Web.new(user: @user)
+      web.public_send("by_#{by}", dates: (start_date .. end_date).to_a)
     end
 
     it "returns merged mix of cached and generated data" do
@@ -237,10 +238,15 @@ describe CreatorAnalytics::CachingProxy do
       user = create(:user, timezone: "London")
       start_date, end_date = Date.new(2019, 1, 1), Date.new(2019, 1, 7)
       dates = (start_date .. end_date).to_a
-      expect(CreatorAnalytics::Web).to receive(:new).with(user:, dates:).thrice.and_call_original
-      expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_date).and_call_original
-      expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_state).and_call_original
-      expect_any_instance_of(CreatorAnalytics::Web).to receive(:by_referral).and_call_original
+
+      # Web instance should be created once in the proxy's initialize
+      web_instance = instance_double(CreatorAnalytics::Web)
+      expect(CreatorAnalytics::Web).to receive(:new).with(user:).once.and_return(web_instance)
+
+      # Each by_* method should be called with dates parameter
+      expect(web_instance).to receive(:by_date).with(dates:).and_return({})
+      expect(web_instance).to receive(:by_state).with(dates:).and_return({})
+      expect(web_instance).to receive(:by_referral).with(dates:).and_return({})
 
       service = described_class.new(user)
       service.send(:analytics_data, start_date, end_date, by: :date)

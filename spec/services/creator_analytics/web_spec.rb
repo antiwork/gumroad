@@ -6,10 +6,8 @@ describe CreatorAnalytics::Web do
   before do
     @user = create(:user, timezone: "UTC")
     @products = create_list(:product, 2, user: @user)
-    @service = described_class.new(
-      user: @user,
-      dates: (Date.new(2021, 1, 1) .. Date.new(2021, 1, 3)).to_a
-    )
+    @service = described_class.new(user: @user)
+    @dates = (Date.new(2021, 1, 1) .. Date.new(2021, 1, 3)).to_a
 
     add_page_view(@products[0], Time.utc(2021, 1, 1))
     add_page_view(@products[0], Time.utc(2021, 1, 3), country: "France")
@@ -43,7 +41,7 @@ describe CreatorAnalytics::Web do
         }
       }
 
-      expect(@service.by_date).to eq(expected_result)
+      expect(@service.by_date(dates: @dates)).to eq(expected_result)
     end
   end
 
@@ -84,7 +82,7 @@ describe CreatorAnalytics::Web do
         }
       }
 
-      expect(@service.by_state).to eq(expected_result)
+      expect(@service.by_state(dates: @dates)).to eq(expected_result)
     end
   end
 
@@ -130,7 +128,7 @@ describe CreatorAnalytics::Web do
         }
       }
 
-      expect(@service.by_referral).to eq(expected_result)
+      expect(@service.by_referral(dates: @dates)).to eq(expected_result)
     end
   end
 end

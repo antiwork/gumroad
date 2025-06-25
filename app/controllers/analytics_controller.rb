@@ -18,7 +18,7 @@ class AnalyticsController < Sellers::BaseController
     authorize :analytics, :index?
 
     if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_date
+      data = creator_analytics_web.by_date(dates: (@start_date .. @end_date).to_a)
     else
       data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :date)
     end
@@ -29,7 +29,7 @@ class AnalyticsController < Sellers::BaseController
     authorize :analytics, :index?
 
     if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_state
+      data = creator_analytics_web.by_state(dates: (@start_date .. @end_date).to_a)
     else
       data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :state)
     end
@@ -40,7 +40,7 @@ class AnalyticsController < Sellers::BaseController
     authorize :analytics, :index?
 
     if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_referral
+      data = creator_analytics_web.by_referral(dates: (@start_date .. @end_date).to_a)
     else
       data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :referral)
     end
@@ -61,7 +61,7 @@ class AnalyticsController < Sellers::BaseController
     end
 
     def creator_analytics_web
-      CreatorAnalytics::Web.new(user: current_seller, dates: (@start_date .. @end_date).to_a)
+      @creator_analytics_web ||= CreatorAnalytics::Web.new(user: current_seller)
     end
 
     def set_title

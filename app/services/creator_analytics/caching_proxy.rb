@@ -8,6 +8,7 @@ class CreatorAnalytics::CachingProxy
 
   def initialize(user)
     @user = user
+    @analytics_web = CreatorAnalytics::Web.new(user: @user)
   end
 
   # Proxy for cached values of CreatorAnalytics::Web#by_(date|state|referral)
@@ -101,7 +102,7 @@ class CreatorAnalytics::CachingProxy
 
     # Direct proxy for CreatorAnalytics::Web
     def analytics_data(start_date, end_date, by: :date)
-      CreatorAnalytics::Web.new(user: @user, dates: (start_date .. end_date).to_a).public_send("by_#{by}")
+      @analytics_web.public_send("by_#{by}", dates: (start_date .. end_date).to_a)
     end
 
     # Fetches and caches the analytics data for one specific date
