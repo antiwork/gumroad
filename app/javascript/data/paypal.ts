@@ -45,8 +45,6 @@ export const createBillingAgreement = async (billingAgreementTokenId: string): P
   }
 };
 
-type PaypalOrderResponse = { id: string; payer: { email_address: string; address: { country_code: string } } };
-
 export type LineItemInfoForNativePayPalCheckout = {
   external_id: string;
   permalink: string;
