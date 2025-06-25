@@ -459,36 +459,6 @@ $accent-color: map-get($colors, "pink"); // [1]
   }
 }
 
-// TODO: Remove this along with CreatorMailer.gumroad_day_fee_saved mailer once emails are sent
-.announcement {
-  .main {
-    & > .header {
-      padding: 0;
-
-      @include breakpoint-up(sm) {
-        // [2]
-        padding: 0 !important;
-      }
-    }
-
-    & > *:not(.header) {
-      padding: spacer(6);
-
-      @include breakpoint-up(sm) {
-        // [2]
-        padding: spacer(6) !important;
-      }
-    }
-
-    .button {
-      &.primary {
-        /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
-        background-color: #ff90e8;
-        color: #000000;
-      }
-    }
-  }
-}
 
 .post {
   .title {

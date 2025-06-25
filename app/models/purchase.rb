@@ -381,7 +381,6 @@ class Purchase < ApplicationRecord
             5 => :is_multi_buy,
             6 => :is_gift_receiver_purchase,
             7 => :is_gift_sender_purchase,
-            8 => :DEPRECATED_credit_card_zipcode_required,
             9 => :was_product_recommended,
             10 => :chargeback_reversed,
             11 => :was_zipcode_check_performed,
