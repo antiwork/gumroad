@@ -794,7 +794,7 @@ Rails.application.routes.draw do
 
     # emails
     get "/emails", to: "emails#index", as: :emails
-    get "/posts", to: redirect("/emails")
+    get "/posts", to: redirect("/emails")  # Keep this redirect as requested by reviewer
 
     # workflows
     get "/workflows", to: "workflows#index", as: :workflows
