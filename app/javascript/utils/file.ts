@@ -29,7 +29,8 @@ const FileUtils = {
   getGuidBase: (): string => "xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx",
   getGuidLength: (): number => FileUtils.getGuidBase().length,
   generateGuid: (): string =>
-    // neat hack from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
+    // RFC4122 version 4 compliant UUID implementation
+    // Source: http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
     FileUtils.getGuidBase().replace(/[xy]/gu, (c) => {
       const r = (Math.random() * 16) | 0,
         v = c === "x" ? r : (r & 0x3) | 0x8;

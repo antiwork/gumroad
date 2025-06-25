@@ -26,11 +26,18 @@ export function assertResponseError(e: unknown): asserts e is ResponseError {
   if (!(e instanceof ResponseError)) throw e;
 }
 
+/**
+ * Counter for tracking active AJAX requests
+ * Used in testing with `wait_for_ajax` helper
+ */
 declare global {
-  // eslint-disable-next-line -- hack, used in `wait_for_ajax` in testing
   var __activeRequests: number;
 }
-globalThis.__activeRequests = 0;
+
+// Initialize the counter if it doesn't already exist
+if (typeof globalThis.__activeRequests === 'undefined') {
+  globalThis.__activeRequests = 0;
+}
 
 export const defaults: RequestInit = {};
 

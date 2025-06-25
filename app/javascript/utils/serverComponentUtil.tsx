@@ -98,7 +98,8 @@ export const buildStaticRouter = async (global: GlobalProps, routes: RouteObject
   const request = new Request(new URL(global.href));
   const handler = createStaticHandler(routes);
   const context = await handler.query(request);
-  // eslint-disable-next-line @typescript-eslint/only-throw-error -- hacky, but handled correctly by the backend
+  // Special case for Response objects - they are used to signal redirects to the backend
+  // This exception is caught by ReactRuntime in config/initializers/react_on_rails.rb
   if (context instanceof Response) throw context;
   const router = createStaticRouter(routes, context);
   return { router, context };
