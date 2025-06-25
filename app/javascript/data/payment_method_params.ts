@@ -71,7 +71,6 @@ export type AnyPaymentMethodParams =
   | ReusablePaymentRequestPaymentMethodParams
   | AnyPayPalMethodParams;
 
-
 export const isPayPalNativeParams = (
   cardParams: AnyPaymentMethodParams | StripeErrorParams,
 ): cardParams is PayPalNativePaymentMethodParams | ReusablePayPalNativePaymentMethodParams =>
