@@ -7,18 +7,6 @@ module User::SocialFacebook
     base.extend(FacebookClassMethods)
   end
 
-  def facebook_name
-    if facebook_uid
-      begin
-        User.fb_object(facebook_uid, token: User.fb_app_access_token)["name"]
-      rescue Koala::Facebook::ClientError, *INTERNET_EXCEPTIONS
-        name
-      end
-    else
-      name
-    end
-  end
-
   def renew_facebook_access_token
     oauth = Koala::Facebook::OAuth.new(FACEBOOK_APP_ID, FACEBOOK_APP_SECRET)
     new_token = oauth.exchange_access_token(facebook_access_token)
