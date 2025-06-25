@@ -160,7 +160,6 @@ Rails.application.routes.draw do
       get "/*taxonomy", to: "discover#index", as: :discover_taxonomy
     end
 
-    get "/animation(*path)", to: redirect { |_, req| req.fullpath.sub("animation", "3d") }
   end
 
   # embeddable js
@@ -278,7 +277,6 @@ Rails.application.routes.draw do
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
     get "/privacy", to: "home#privacy"
-    get "/taxes", to: redirect("/pricing", status: 301)
     get "/hackathon", to: "home#hackathon"
     resource :github_stars, only: [:show]
 
@@ -719,7 +717,6 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/links/:id/edit" => redirect("/products/%{id}/edit")
 
     post "/products/:id/release_preorder", to: "links#release_preorder", as: :release_preorder
 
@@ -736,10 +733,6 @@ Rails.application.routes.draw do
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }, as: :short_link_offer_code
     get "/cart_items_count", to: "links#cart_items_count"
 
-    get "/products/:id" => redirect("/l/%{id}")
-    get "/product/:id" => redirect("/l/%{id}")
-    get "/products/:id/:code" => redirect("/l/%{id}/%{code}")
-    get "/product/:id/:code" => redirect("/l/%{id}/%{code}")
 
     # events
     post "/events/track_user_action", to: "events#create"
@@ -750,18 +743,15 @@ Rails.application.routes.draw do
     get "/product_files_utility/folder_archive/:folder_id", to: "product_files_utility#download_folder_archive", as: :download_folder_archive
 
     # analytics
-    get "/analytics" => redirect("/dashboard/sales")
     get "/dashboard/sales", to: "analytics#index", as: :sales_dashboard
     get "/analytics/data/by_date", to: "analytics#data_by_date", as: "analytics_data_by_date"
     get "/analytics/data/by_state", to: "analytics#data_by_state", as: "analytics_data_by_state"
     get "/analytics/data/by_referral", to: "analytics#data_by_referral", as: "analytics_data_by_referral"
 
     # audience
-    get "/audience" => redirect("/dashboard/audience")
     get "/dashboard/audience", to: "audience#index", as: :audience_dashboard
     get "/audience/data/by_date/:start_time/:end_time", to: "audience#data_by_date", as: "audience_data_by_date"
     post "/audience/export", to: "audience#export", as: :audience_export
-    get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices
     get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
@@ -771,9 +761,6 @@ Rails.application.routes.draw do
     post "/purchases/:id/cancel_preorder_by_seller", to: "purchases#cancel_preorder_by_seller", as: :cancel_preorder_by_seller
 
     # subscriptions
-    get "/subscriptions/cancel_subscription/:id", to: redirect(path: "/subscriptions/%{id}/manage")
-    get "/subscriptions/:id/cancel_subscription", to: redirect(path: "/subscriptions/%{id}/manage")
-    get "/subscriptions/:id/edit_card", to: redirect(path: "/subscriptions/%{id}/manage")
     resources :subscriptions, only: [] do
       member do
         get :manage
@@ -794,13 +781,11 @@ Rails.application.routes.draw do
 
     # emails
     get "/emails", to: "emails#index", as: :emails
-    get "/posts", to: redirect("/emails")
 
     # workflows
     get "/workflows", to: "workflows#index", as: :workflows
 
     # utm links
-    get "/utm_links" => redirect("/dashboard/utm_links")
     get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
 
     # shipments
@@ -936,17 +921,11 @@ Rails.application.routes.draw do
     post "/working-webhook", to: "public#working_webhook"
 
     get "/ping", to: "public#ping", as: "ping"
-    get "/webhooks", to: redirect("/ping")
     get "/widgets", to: "public#widgets", as: "widgets"
-    get "/overlay" => redirect("/widgets")
-    get "/embed" => redirect("/widgets")
-    get "/modal" => redirect("/widgets")
-    get "/button" => redirect("/widgets")
     get "/charge", to: "public#charge", as: "charge"
     get "/license-key-lookup", to: "public#license_key_lookup"
     get "/charge_data", to: "public#charge_data", as: :charge_data
     get "/paypal_charge_data", to: "public#paypal_charge_data", as: :paypal_charge_data
-    get "/CHARGE" => redirect("/charge")
 
     # discover
     get "/discover", to: "discover#index"
@@ -978,9 +957,7 @@ Rails.application.routes.draw do
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
     get "/:username/posts_paginated", to: "users/posts#paginated", as: "user_posts_paginated"
-    get "/:username/posts", to: redirect("/%{username}")
     get "/:username/subscribe_preview", to: "users#subscribe_preview", as: :user_subscribe_preview
-    get "/:username/updates", to: redirect("/%{username}/posts")
     get "/:username/affiliates", to: "affiliate_requests#new", as: :new_affiliate_request
 
     # braintree
@@ -1029,18 +1006,15 @@ Rails.application.routes.draw do
     post "/posts/:id/increment_post_views", to: "posts#increment_post_views"
     get "/p/:slug", to: "posts#show", as: :custom_domain_view_post
     get "/:username/posts_paginated", to: "users/posts#paginated"
-    get "/posts", to: redirect("/")
     get "/posts/:post_id/comments", to: "comments#index", as: :custom_domain_post_comments
     post "/posts/:post_id/comments", to: "comments#create", as: :custom_domain_create_post_comment
     put "/posts/:post_id/comments/:id", to: "comments#update", as: :custom_domain_update_post_comment
     delete "/posts/:post_id/comments/:id", to: "comments#destroy", as: :custom_domain_delete_post_comment
     get "/affiliates", to: "affiliate_requests#new", as: :custom_domain_new_affiliate_request
     post "/affiliate_requests", to: "affiliate_requests#create", as: :custom_domain_create_affiliate_request
-    get "/updates", to: redirect("/posts")
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
     get "/subscribe", to: "users#subscribe", as: :custom_domain_subscribe
-    get "/follow", to: redirect("/subscribe")
     get "/coffee", to: "users#coffee", as: :custom_domain_coffee
 
     # url redirects
