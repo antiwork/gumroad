@@ -104,12 +104,7 @@ class StripeChargeProcessor
   def get_charge(charge_id, merchant_account: nil)
     with_stripe_error_handler do
       if merchant_migrated? merchant_account
-        begin
-          charge = Stripe::Charge.retrieve({ id: charge_id, expand: %w[balance_transaction application_fee.balance_transaction] }, { stripe_account: merchant_account.charge_processor_merchant_id })
-        rescue StandardError => e
-          Rails.logger.error("Falling back to retrieving charge from Gumroad due to #{e.inspect}")
-          charge = Stripe::Charge.retrieve(id: charge_id, expand: %w[balance_transaction application_fee.balance_transaction])
-        end
+        charge = Stripe::Charge.retrieve({ id: charge_id, expand: %w[balance_transaction application_fee.balance_transaction] }, { stripe_account: merchant_account.charge_processor_merchant_id })
       else
         charge = Stripe::Charge.retrieve(id: charge_id, expand: %w[balance_transaction application_fee.balance_transaction])
       end
@@ -368,12 +363,7 @@ class StripeChargeProcessor
 
   def refund!(charge_id, amount_cents: nil, merchant_account: nil, reverse_transfer: true, is_for_fraud: nil, **_args)
     if merchant_migrated? merchant_account
-      begin
-        stripe_charge = Stripe::Charge.retrieve({ id: charge_id }, { stripe_account: merchant_account.charge_processor_merchant_id })
-      rescue StandardError => e
-        Rails.logger.error "Falling back to retrieve from Gumroad account due to #{e.inspect}"
-        stripe_charge = Stripe::Charge.retrieve(charge_id)
-      end
+      stripe_charge = Stripe::Charge.retrieve({ id: charge_id }, { stripe_account: merchant_account.charge_processor_merchant_id })
     else
       stripe_charge = Stripe::Charge.retrieve(charge_id)
     end
@@ -396,13 +386,8 @@ class StripeChargeProcessor
     end
 
     if merchant_migrated? merchant_account
-      begin
-        params[:refund_application_fee] = false
-        stripe_refund = Stripe::Refund.create(params, stripe_account: merchant_account.charge_processor_merchant_id)
-      rescue StandardError => e
-        Rails.logger.error "Falling back to retrieve from Gumroad account due to #{e.inspect}"
-        stripe_refund = Stripe::Refund.create(params)
-      end
+      params[:refund_application_fee] = false
+      stripe_refund = Stripe::Refund.create(params, stripe_account: merchant_account.charge_processor_merchant_id)
     else
       stripe_refund = Stripe::Refund.create(params)
     end
@@ -727,7 +712,7 @@ class StripeChargeProcessor
       return if stripe_event["type"] == "charge.dispute.closed" && stripe_event["data"]["object"]["status"] == "charge_refunded"
 
       stripe_dispute_id = stripe_event["data"]["object"]["id"]
-      stripe_connect_account_id = stripe_event["user_id"].present? ? stripe_event["user_id"] : stripe_event["account"]
+      stripe_connect_account_id = stripe_event["account"]
       stripe_dispute = if stripe_connect_account_id.present? && stripe_connect_account_id != Stripe::Account.retrieve.id
         Stripe::Dispute.retrieve({ id: stripe_dispute_id, expand: %w[balance_transactions] }, { stripe_account: stripe_connect_account_id })
       else
@@ -868,18 +853,9 @@ class StripeChargeProcessor
                                                            expand: %w[refunds.data.balance_transaction application_fee.refunds] },
                                                          { stripe_account: destination_transfer.destination })
 
-    if stripe_charge.application_fee.present?
-      # For old charges with `application_fee_amount` parameter, we get the gumroad amount from the
-      # application_fee object attached to the charge.
-      gumroad_amount_currency = stripe_charge.application_fee.refunds.first.balance_transaction.currency
-      gumroad_amount_cents = stripe_charge.application_fee.refunds.first.balance_transaction.amount
-    else
-      # For new charges with `transfer_data[amount]` parameter instead of `application_fee_amoount`, there's
-      # no application_fee object attached to the charge so we calculate the gumroad amount as difference between
-      # the total charge amount and the amount transferred to the connect account.
-      gumroad_amount_currency = stripe_charge.currency
-      gumroad_amount_cents = -1 * (stripe_charge.amount - destination_transfer.amount)
-    end
+    # Calculate the gumroad amount as difference between the total charge amount and the amount transferred to the connect account
+    gumroad_amount_currency = stripe_charge.currency
+    gumroad_amount_cents = -1 * (stripe_charge.amount - destination_transfer.amount)
     gumroad_amount = FlowOfFunds::Amount.new(currency: gumroad_amount_currency, cents: gumroad_amount_cents)
 
     merchant_account_gross_amount = FlowOfFunds::Amount.new(

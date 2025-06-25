@@ -69,18 +69,9 @@ class StripeCharge < BaseProcessorCharge
                                                cents: stripe_charge_balance_transaction[:amount])
 
       if stripe_charge[:destination]
-        if stripe_application_fee_balance_transaction.present?
-          # For old charges with `application_fee_amount` parameter, we get the gumroad amount from the
-          # application_fee object attached to the charge.
-          gumroad_amount_currency = stripe_application_fee_balance_transaction[:currency]
-          gumroad_amount_cents = stripe_application_fee_balance_transaction[:amount]
-        else
-          # For new charges with `transfer_data[amount]` parameter instead of `application_fee_amoount`, there's
-          # no application_fee object attached to the charge so we calculate the gumroad amount as difference between
-          # the total charge amount and the amount transferred to the connect account.
-          gumroad_amount_currency = stripe_charge[:currency]
-          gumroad_amount_cents = stripe_charge[:amount] - stripe_destination_transfer[:amount]
-        end
+        # Calculate the gumroad amount as difference between the total charge amount and the amount transferred to the connect account
+        gumroad_amount_currency = stripe_charge[:currency]
+        gumroad_amount_cents = stripe_charge[:amount] - stripe_destination_transfer[:amount]
         gumroad_amount = FlowOfFunds::Amount.new(currency: gumroad_amount_currency, cents: gumroad_amount_cents)
 
         # Note: The settled and merchant account gross amount will always be the same with Stripe Connect.
@@ -91,23 +82,7 @@ class StripeCharge < BaseProcessorCharge
 
         merchant_account_net_amount = FlowOfFunds::Amount.new(currency: stripe_destination_payment_balance_transaction[:currency],
                                                               cents: stripe_destination_payment_balance_transaction[:net])
-      elsif stripe_application_fee_balance_transaction.present?
-        # For direct charges in case of Stripe Connect accounts, there will be no destination on the Stripe charge,
-        # but there will be an associated application_fee. We get the gumroad amount from the
-        # application_fee object attached to the charge in this case.
-        gumroad_amount_currency = stripe_application_fee_balance_transaction[:currency]
-        gumroad_amount_cents = stripe_application_fee_balance_transaction[:amount]
-
-        gumroad_amount = FlowOfFunds::Amount.new(currency: gumroad_amount_currency, cents: gumroad_amount_cents)
-
-        # Note: The settled and merchant account gross amount will always be the same with Stripe Connect.
-        # The transaction settles in the merchant account currency and the gross amount is the full settled amount.
-
-        merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: stripe_charge_balance_transaction[:currency],
-                                                                cents: stripe_charge_balance_transaction[:amount])
-
-        merchant_account_net_amount = FlowOfFunds::Amount.new(currency: stripe_charge_balance_transaction[:currency],
-                                                              cents: stripe_charge_balance_transaction[:net])
+      # Direct charges without destination are now handled via transfer_data approach
       else
         gumroad_amount = settled_amount
         merchant_account_gross_amount = nil

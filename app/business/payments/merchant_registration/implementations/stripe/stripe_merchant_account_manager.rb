@@ -405,12 +405,7 @@ module StripeMerchantAccountManager
 
     attributes = {
       metadata:,
-      # TODO replace `bank_account` with `external_account` (https://stripe.com/docs/upgrades#2015-10-01)
-      # The `bank_account` is a deprecated field that continues to be supported, but the docs say it should
-      # be renamed to `external_account`. Renaming the field causes a problem when calling `update_bank_account`
-      # ("Cannot save property `external_account` containing an API resource. It doesn't appear to be persisted and is not marked as `save_with_parent`.")
-      # Everything works well during account creation. Seems to be an issue with stripe ruby gem.
-      bank_account: bank_account_field,
+      external_account: bank_account_field,
       settings:
     }
     attributes.deep_values_strip!

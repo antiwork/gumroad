@@ -29,13 +29,8 @@ class StripeChargeIntent < ChargeIntent
 
   private
     def load_charge(payment_intent, merchant_account)
-      # TODO:: Remove the `|| payment_intent.charges.first&.id` part below
-      # once all webhooks and the default API version have been upgraded to 2023-10-16 on Stripe dashboard.
-      # Need to keep it for the transition phase to support webhooks in the old API version along with new.
-      # The `charges` property on PaymentIntent has been replaced with `latest_charge`, in API version 2022-11-15.
-      # Ref: https://stripe.com/docs/upgrades#2022-11-15
-      charge_id = payment_intent.latest_charge || payment_intent.charges.first&.id
-
+      charge_id = payment_intent.latest_charge
+      
       # For PaymentIntents with capture_method = automatic we always expect a single charge
       raise "Expected a charge for payment intent #{payment_intent.id}, but got nil" unless charge_id.present?
 
