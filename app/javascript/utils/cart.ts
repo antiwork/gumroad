@@ -45,7 +45,6 @@ export const PLACEHOLDER_CART_ITEM: CartItem = {
     installment_plan: null,
     is_preorder: false,
     is_tiered_membership: false,
-    is_legacy_subscription: false,
     is_multiseat_license: false,
     is_quantity_enabled: false,
     free_trial: null,

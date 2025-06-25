@@ -84,7 +84,6 @@ export const BundleProductItem = ({
                           currency_code: "usd",
                           price_cents: 0,
                           is_tiered_membership: false,
-                          is_legacy_subscription: false,
                           is_multiseat_license: false,
                           quantity_remaining: null,
                           recurrences: null,

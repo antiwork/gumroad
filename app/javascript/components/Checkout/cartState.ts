@@ -31,7 +31,6 @@ export type Product = {
   installment_plan: { number_of_installments: number } | null;
   is_preorder: boolean;
   is_tiered_membership: boolean;
-  is_legacy_subscription: boolean;
   is_multiseat_license: boolean;
   is_quantity_enabled: boolean;
   free_trial: FreeTrial | null;

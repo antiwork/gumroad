@@ -95,7 +95,6 @@ export type Product = {
   pwyw: { suggested_price_cents: number | null } | null;
   installment_plan: InstallmentPlan | null;
   ratings: RatingsWithPercentages | null;
-  is_legacy_subscription: boolean;
   is_tiered_membership: boolean;
   is_physical: boolean;
   custom_view_content_button_text: string | null;

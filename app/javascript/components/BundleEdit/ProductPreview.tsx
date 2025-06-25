@@ -48,7 +48,6 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           pwyw: bundle.customizable_price ? { suggested_price_cents: bundle.suggested_price_cents } : null,
           installment_plan: bundle.allow_installment_plan ? bundle.installment_plan : null,
           ratings: bundle.display_product_reviews ? ratings : null,
-          is_legacy_subscription: false,
           is_tiered_membership: false,
           is_physical: false,
           custom_view_content_button_text: null,

@@ -52,7 +52,6 @@ type Props = {
     options: Option[];
     price_cents: number;
     is_tiered_membership: boolean;
-    is_legacy_subscription: boolean;
     is_multiseat_license: boolean;
     recurrences: { id: string; recurrence: RecurrenceId; price_cents: number }[];
     pwyw: { suggested_price_cents: number | null } | null;
@@ -143,7 +142,6 @@ const SubscriptionManager = ({
     ),
     recurrences: { default: subscription.recurrence, enabled: product.recurrences },
     is_tiered_membership: product.is_tiered_membership,
-    is_legacy_subscription: product.is_legacy_subscription,
     rental: null,
     is_quantity_enabled: false,
     quantity_remaining: null,
