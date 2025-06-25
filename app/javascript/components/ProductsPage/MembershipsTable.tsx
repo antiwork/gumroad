@@ -2,22 +2,16 @@ import * as React from "react";
 
 import { getPagedMemberships, Membership, SortKey } from "$app/data/products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
-import { showAlert } from "$app/components/server-components/Alert";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
+import { ProductStatusIndicator } from "./ProductStatusIndicator";
+import { usePagedTableData } from "./usePagedTableData";
 
-type State = {
-  entries: readonly Membership[];
-  pagination: PaginationProps;
-  isLoading: boolean;
-};
 
 export const ProductsPageMembershipsTable = (props: {
   entries: Membership[];
@@ -26,62 +20,31 @@ export const ProductsPageMembershipsTable = (props: {
   query: string | null;
   setEnableArchiveTab: ((enable: boolean) => void) | undefined;
 }) => {
-  const [{ entries: memberships, pagination, isLoading }, setState] = React.useState<State>({
-    entries: props.entries,
-    pagination: props.pagination,
-    isLoading: false,
-  });
-
   const userAgentInfo = useUserAgentInfo();
-
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
   const thProps = useSortingTableDriver<SortKey>(sort, setSort);
-
-  React.useEffect(() => {
-    if (sort) void loadMemberships(1);
-  }, [sort]);
-
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const loadMemberships = async (page: number) => {
-    setState((prevState) => ({ ...prevState, isLoading: true }));
-    try {
-      activeRequest.current?.cancel();
-      const request = getPagedMemberships({
-        forArchivedMemberships: props.selectedTab === "archived",
-        page,
-        query: props.query,
-        sort,
-      });
-      activeRequest.current = request;
-
-      const response = await request.response;
-
-      setState((prevState) => ({
-        ...prevState,
-        ...response,
-        isLoading: false,
-      }));
-      activeRequest.current = null;
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      showAlert(e.message, "error");
-      setState((prevState) => ({ ...prevState, isLoading: false }));
-    }
-  };
-  const debouncedLoadMemberships = useDebouncedCallback(() => void loadMemberships(1), 300);
-
-  React.useEffect(() => {
-    if (props.query !== null) debouncedLoadMemberships();
-  }, [props.query]);
-
-  const reloadMemberships = () => loadMemberships(pagination.page);
+  
+  const {
+    entries: memberships,
+    pagination,
+    isLoading,
+    tableRef,
+    loadData: loadMemberships,
+    reloadData: reloadMemberships,
+  } = usePagedTableData(
+    getPagedMemberships,
+    props.entries,
+    props.pagination,
+    props.query,
+    sort,
+    { forArchivedMemberships: props.selectedTab === "archived" }
+  );
 
   if (!memberships.length) return null;
 
   return (
     <section className="paragraphs">
-      <table aria-busy={isLoading}>
+      <table aria-busy={isLoading} ref={tableRef}>
         <caption>Memberships</caption>
         <thead>
           <tr>
@@ -155,28 +118,7 @@ export const ProductsPageMembershipsTable = (props: {
               <td data-label="Price">{membership.price_formatted}</td>
 
               <td data-label="Status">
-                {(() => {
-                  switch (membership.status) {
-                    case "unpublished":
-                      return (
-                        <>
-                          <Icon name="circle" /> Unpublished
-                        </>
-                      );
-                    case "preorder":
-                      return (
-                        <>
-                          <Icon name="circle" /> Pre-order
-                        </>
-                      );
-                    case "published":
-                      return (
-                        <>
-                          <Icon name="circle-fill" /> Published
-                        </>
-                      );
-                  }
-                })()}
+                <ProductStatusIndicator status={membership.status} />
               </td>
               {membership.can_duplicate || membership.can_destroy ? (
                 <td>

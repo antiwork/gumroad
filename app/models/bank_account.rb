@@ -59,14 +59,18 @@ class BankAccount < ApplicationRecord
   end
 
   def to_hash
-    hash = {
-      bank_number:,
-      routing_number:,
+    base_hash = {
+      routing_number: routing_number,
       account_number: account_number_visual,
-      bank_account_type:
+      bank_account_type: bank_account_type
     }
-    hash[:bank_name] = bank_name if bank_name.present?
-    hash
+    base_hash[:bank_number] = bank_number if bank_number.present?
+    base_hash[:bank_name] = bank_name if bank_name.present?
+    base_hash.merge(additional_hash_fields)
+  end
+
+  def additional_hash_fields
+    {}
   end
 
   def mark_deleted!

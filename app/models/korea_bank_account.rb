@@ -30,14 +30,6 @@ class KoreaBankAccount < BankAccount
     Currency::KRW
   end
 
-  def to_hash
-    {
-      routing_number:,
-      account_number: account_number_visual,
-      bank_account_type:
-    }
-  end
-
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)

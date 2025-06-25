@@ -38,14 +38,6 @@ class HongKongBankAccount < BankAccount
     "******#{account_number_last_four}"
   end
 
-  def to_hash
-    {
-      routing_number:,
-      account_number: account_number_visual,
-      bank_account_type:
-    }
-  end
-
   private
     def validate_clearing_code
       return if CLEARING_CODE_FORMAT_REGEX.match?(clearing_code)

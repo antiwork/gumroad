@@ -30,14 +30,6 @@ class IndianBankAccount < BankAccount
     Currency::INR
   end
 
-  def to_hash
-    {
-      routing_number:,
-      account_number: account_number_visual,
-      bank_account_type:
-    }
-  end
-
   private
     def validate_ifsc
       errors.add :base, "The IFSC is invalid." unless IFSC_FORMAT_REGEX.match?(ifsc)

@@ -2,22 +2,16 @@ import * as React from "react";
 
 import { getPagedProducts, Product, SortKey } from "$app/data/products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
-import { showAlert } from "$app/components/server-components/Alert";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
+import { ProductStatusIndicator } from "./ProductStatusIndicator";
+import { usePagedTableData } from "./usePagedTableData";
 
-type State = {
-  entries: readonly Product[];
-  pagination: PaginationProps;
-  isLoading: boolean;
-};
 
 export const ProductsPageProductsTable = (props: {
   entries: Product[];
@@ -26,57 +20,25 @@ export const ProductsPageProductsTable = (props: {
   query: string | null;
   setEnableArchiveTab: ((enable: boolean) => void) | undefined;
 }) => {
-  const [{ entries: products, pagination, isLoading }, setState] = React.useState<State>({
-    entries: props.entries,
-    pagination: props.pagination,
-    isLoading: false,
-  });
-  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
-  const tableRef = React.useRef<HTMLTableElement>(null);
   const { locale } = useUserAgentInfo();
-
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
   const thProps = useSortingTableDriver<SortKey>(sort, setSort);
-
-  React.useEffect(() => {
-    if (sort) void loadProducts(1);
-  }, [sort]);
-
-  const loadProducts = async (page: number) => {
-    setState((prevState) => ({ ...prevState, isLoading: true }));
-    try {
-      activeRequest.current?.cancel();
-
-      const request = getPagedProducts({
-        page,
-        query: props.query,
-        sort,
-        forArchivedProducts: props.selectedTab === "archived",
-      });
-      activeRequest.current = request;
-
-      const response = await request.response;
-      setState((prevState) => ({
-        ...prevState,
-        ...response,
-        isLoading: false,
-      }));
-      activeRequest.current = null;
-      tableRef.current?.scrollIntoView({ behavior: "smooth" });
-    } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      setState((prevState) => ({ ...prevState, isLoading: false }));
-      showAlert(e.message, "error");
-    }
-  };
-  const debouncedLoadProducts = useDebouncedCallback(() => void loadProducts(1), 300);
-
-  React.useEffect(() => {
-    if (props.query !== null) debouncedLoadProducts();
-  }, [props.query]);
-
-  const reloadProducts = () => loadProducts(pagination.page);
+  
+  const {
+    entries: products,
+    pagination,
+    isLoading,
+    tableRef,
+    loadData: loadProducts,
+    reloadData: reloadProducts,
+  } = usePagedTableData(
+    getPagedProducts,
+    props.entries,
+    props.pagination,
+    props.query,
+    sort,
+    { forArchivedProducts: props.selectedTab === "archived" }
+  );
 
   if (!products.length) return null;
 
@@ -149,28 +111,7 @@ export const ProductsPageProductsTable = (props: {
               </td>
 
               <td data-label="Status" style={{ whiteSpace: "nowrap" }}>
-                {(() => {
-                  switch (product.status) {
-                    case "unpublished":
-                      return (
-                        <>
-                          <Icon name="circle" /> Unpublished
-                        </>
-                      );
-                    case "preorder":
-                      return (
-                        <>
-                          <Icon name="circle" /> Pre-order
-                        </>
-                      );
-                    case "published":
-                      return (
-                        <>
-                          <Icon name="circle-fill" /> Published
-                        </>
-                      );
-                  }
-                })()}
+                <ProductStatusIndicator status={product.status} />
               </td>
               {product.can_duplicate || product.can_destroy ? (
                 <td>

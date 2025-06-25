@@ -6,7 +6,6 @@ class UkBankAccount < BankAccount
   SORT_CODE_FORMAT_REGEX = /^\d{2}-\d{2}-\d{2}$/
   private_constant :SORT_CODE_FORMAT_REGEX
 
-
   alias_attribute :sort_code, :bank_number
 
   validate :validate_sort_code
