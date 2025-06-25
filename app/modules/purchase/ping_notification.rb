@@ -2,8 +2,6 @@
 
 module Purchase::PingNotification
   def payload_for_ping_notification(url_parameters: nil, resource_name: nil)
-    # general_permalink was being sent as "permalink' which is wrong because it's not a full url unlike the name suggests.
-    # Consider it deprecated; it's removed from the ping docs and replaced with product_permalink, which is a url.
     payload = {
       seller_id: ObfuscateIds.encrypt(seller.id),
       product_id: ObfuscateIds.encrypt(link.id),
@@ -21,12 +19,7 @@ module Purchase::PingNotification
       referrer:,
       card: {
         visual: card_visual,
-        type: card_type,
-
-        # legacy params
-        bin: nil,
-        expiry_month: nil,
-        expiry_year: nil
+        type: card_type
       }
     }
 
@@ -66,9 +59,7 @@ module Purchase::PingNotification
     end
 
     if link.skus_enabled || link.is_physical
-      # Hack for accutrak (accuhack?)
       payload[:sku_id] = sku_custom_name_or_external_id
-      # Hack for printful (hackful?)
       payload[:original_sku_id] = sku.external_id if sku.try(:custom_sku).present?
     end
 
@@ -77,8 +68,6 @@ module Purchase::PingNotification
 
     payload[:disputed] = chargedback?
     payload[:dispute_won] = chargeback_reversed?
-
-    Rails.logger.info("payload_for_ping_notification #{payload.inspect}")
 
     payload
   end
