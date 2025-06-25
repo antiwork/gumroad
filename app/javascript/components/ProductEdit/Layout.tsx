@@ -212,8 +212,6 @@ export const Layout = ({
   return (
     <>
       <NotifyAboutProductUpdatesAlert />
-      {/* TODO: remove this legacy uploader stuff */}
-      <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
       <header className="sticky-top">
         <h1>{product.name || "Untitled"}</h1>
         <div className="actions">

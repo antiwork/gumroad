@@ -55,19 +55,7 @@ select[multiple].chosen-fallback {
   opacity: $disabled-opacity;
 }
 
-// Temporary styles until we have `:has`
-@each $name, $color in $states {
-  label.#{$name} {
-    color: $color;
-    a {
-      color: $color;
-    }
-
-    input[type="checkbox"]:not([role="switch"]) {
-      border-color: $color;
-    }
-  }
-}
+// Removed temporary styles for :has selector support - now supported in modern browsers
 
 body#overlay-page {
   display: flex;
@@ -110,28 +98,8 @@ main > header {
   }
 }
 
-// Temporary fix for the files view under the "Content" tab on the product edit
-// page when the content editor is disabled. It is needed to enforce the
-// "form > section" styles on the files view which is now wrapped in "form > main".
-// See https://github.com/gumroad/web/pull/26111#discussion_r1232782397 for more
-// details.
-form > main section {
-  $y-gap: spacer(6);
-  display: grid;
-  padding: spacer(7) 0;
-  border-top: $border;
-  gap: $y-gap;
-  & > header {
-    display: grid;
-    gap: spacer(3);
-    align-content: start;
-  }
-
-  &:not(form + form section):first-of-type {
-    padding-top: 0;
-    border-top: none;
-  }
-}
+// Removed temporary fix for the files view that was needed for a specific PR
+// See https://github.com/gumroad/web/pull/26111#discussion_r1232782397
 
 // Adds fallback styles to the .product-content class when @container
 // queries are not supported, ensuring consistent scrollbar behavior
