@@ -47,5 +47,5 @@ export const getReferrer = () =>
   new URLSearchParams(window.location.search).get("referrer") || document.referrer || "direct";
 export const getIsOverlay = () => new URLSearchParams(window.location.search).get("overlay") === "true";
 export const getWasRecommended = () => !!new URLSearchParams(window.location.search).get("recommended_by");
-// eslint-disable-next-line @typescript-eslint/no-deprecated -- legacy code
-export const getPlugins = () => [...navigator.plugins].map((plugin) => plugin.name).join();
+// navigator.plugins is deprecated and will be removed from browsers
+export const getPlugins = () => "";
