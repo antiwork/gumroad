@@ -77,7 +77,7 @@ class BankAccount < ApplicationRecord
   def supports_instant_payouts?
     return false unless stripe_connect_account_id.present? && stripe_external_account_id.present?
 
-    begin
+    @supports_instant_payouts ||= begin
       external_account = Stripe::Account.retrieve_external_account(
         stripe_connect_account_id,
         stripe_external_account_id

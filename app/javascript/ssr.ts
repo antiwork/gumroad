@@ -77,6 +77,7 @@ import PurchaseProductPage from "$app/components/server-components/Purchase/Prod
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
 import ReviewsPage from "$app/components/server-components/ReviewsPage";
+import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import AdvancedSettingsPage from "$app/components/server-components/Settings/AdvancedPage";
 import ApplicationEditPage from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
 import AuthorizedApplicationsSettingsPage from "$app/components/server-components/Settings/AuthorizedApplicationsPage";
@@ -177,6 +178,7 @@ ReactOnRails.register({
   PublicChargePage,
   PublicLicenseKeyPage,
   ReviewsPage,
+  SecureRedirectPage,
   SignupPage,
   SubscribePage,
   SubscribePreview,

@@ -1,4 +1,4 @@
-import { range } from "lodash";
+import range from "lodash/range";
 import * as React from "react";
 import { createCast, is } from "ts-safe-cast";
 

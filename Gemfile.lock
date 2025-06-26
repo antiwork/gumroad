@@ -216,7 +216,7 @@ GEM
     braintree (4.21.0)
       builder (>= 3.2.4)
       rexml (>= 3.1.9)
-    bson (5.0.1)
+    bson (5.1.1)
     buftok (0.3.0)
     bugsnag (6.27.1)
       concurrent-ruby (~> 1.0)

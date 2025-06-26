@@ -13,7 +13,6 @@ class ProductSortKey
   HIGHEST_RATED = "highest_rated"
   PAGE_LAYOUT = "page_layout"
   RECENTLY_UPDATED = "recently_updated"
-  PURCHASE_DATE = "purchase_date"
   HOT_AND_NEW = "hot_and_new"
   STAFF_PICKED = "staff_picked"
   REVENUE_ASCENDING = "sales_volume_asc"

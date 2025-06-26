@@ -260,17 +260,6 @@ class ProductPresenter
       skus_enabled && skus.alive.not_is_default_sku.empty? ? skus.is_default_sku.first : nil
     end
 
-    def recurrence_values_for_recurring_product
-      product.is_recurring_billing ? BasePrice::Recurrence.all.map do |recurrence|
-        {
-          id: recurrence,
-          enabled: product.has_price_for_recurrence?(recurrence),
-          suggested: product.suggested_price_formatted_without_dollar_sign_for_recurrence(recurrence),
-          value: product.has_price_for_recurrence?(recurrence) && product.price_formatted_without_dollar_sign_for_recurrence(recurrence)
-        }
-      end : nil
-    end
-
     def collaborating_user
       return @_collaborating_user if defined?(@_collaborating_user)
 

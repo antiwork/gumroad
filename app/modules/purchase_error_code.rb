@@ -19,13 +19,9 @@ module PurchaseErrorCode
   SAFE_MODE_RESTRICTED_ORGANIZATION = "safe_mode_restricted_organization"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
-  CANADIAN_PAYPAL_SCAMMER = "canadian_paypal_scammer"
   PRICE_CENTS_TOO_LOW = "price_cents_too_low"
   CONTRIBUTION_TOO_LOW = "contribution_too_low"
-  ADDITIONAL_CONTRIBUTION_TOO_LOW = "additional_contribution_too_low" # deprecated
   BAD_PLUGINS = "bad_plugins"
-  FORCED_APPEARANCE_AS_SUCCESSFUL_CHARGE = "forced_appearance_as_successful_charge"
-  FORCED_APPERANCE_AS_FAILED_CHARGE = "forced_appearance_as_failed_charge"
   CREDIT_CARD_NOT_PROVIDED = "credit_card_not_provided"
   OFFER_CODE_INACTIVE = "offer_code_inactive"
   OFFER_CODE_INSUFFICIENT_QUANTITY = "offer_code_insufficient_quantity"

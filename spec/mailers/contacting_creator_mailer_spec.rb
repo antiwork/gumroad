@@ -239,19 +239,21 @@ describe ContactingCreatorMailer do
   describe "remind" do
     before do
       @user = create(:user, email: "blah@example.com")
+      allow_any_instance_of(User).to receive(:secure_external_id).and_return("sample-secure-id")
     end
 
     it "sends out a reminder" do
       mail = ContactingCreatorMailer.remind(@user.id)
       expect(mail.to).to eq ["blah@example.com"]
       expect(mail.subject).to eq "Please add a payment account to Gumroad."
-      expect(mail.body.encoded).to include user_unsubscribe_url(id: @user.external_id, email_type: :product_update)
+      expect(mail.body.encoded).to include user_unsubscribe_url(id: "sample-secure-id", email_type: :product_update)
     end
   end
 
   describe "seller_update" do
     before do
       @user = create(:user)
+      allow_any_instance_of(User).to receive(:secure_external_id).and_return("sample-secure-id")
       end_of_period = Date.today.beginning_of_week(:sunday).to_datetime
       @start_of_period = end_of_period - 7.days
     end
@@ -260,7 +262,7 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.seller_update(@user.id)
       expect(mail.subject).to eq "Your last week."
       expect(mail.to).to eq [@user.email]
-      expect(mail.body.encoded).to include user_unsubscribe_url(id: @user.external_id, email_type: :seller_update)
+      expect(mail.body.encoded).to include user_unsubscribe_url(id: "sample-secure-id", email_type: :seller_update)
     end
 
     describe "subscriptions" do

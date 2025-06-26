@@ -1236,34 +1236,143 @@ describe Purchase, :vcr do
   end
 
   describe "tax_label" do
-    it "returns nil for no taxes" do
-      purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100)
+    describe "GST" do
+      let(:au_tax_rate) { create(:zip_tax_rate, country: "AU", combined_rate: 0.1) }
+      let(:sg_tax_rate) { create(:zip_tax_rate, country: "SG", combined_rate: 0.07) }
+      let(:purchase_au) { create(:purchase, price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate: au_tax_rate) }
+      let(:purchase_sg) { create(:purchase, price_cents: 100, total_transaction_cents: 107, gumroad_tax_cents: 7, zip_tax_rate: sg_tax_rate) }
 
-      expect(purchase.tax_label).to eq(nil)
+      context "when include_tax_rate is true" do
+        it "returns GST with percentage for Australia" do
+          expect(purchase_au.tax_label).to eq("GST (10%)")
+        end
+
+        it "returns GST with percentage for Singapore" do
+          expect(purchase_sg.tax_label).to eq("GST (7%)")
+        end
+      end
+
+      context "when include_tax_rate is false" do
+        it "returns GST without percentage" do
+          expect(purchase_au.tax_label(include_tax_rate: false)).to eq("GST")
+          expect(purchase_sg.tax_label(include_tax_rate: false)).to eq("GST")
+        end
+      end
     end
 
-    it "shows vat properly" do
-      zip_tax_rate = create(:zip_tax_rate, country: "DE", combined_rate: 0.2)
-      purchase = create(:purchase, price_cents: 100, total_transaction_cents: 120, gumroad_tax_cents: 20, zip_tax_rate:)
-      expect(purchase.tax_label).to eq("VAT (20%)")
+    describe "VAT" do
+      let(:eu_tax_rate) { create(:zip_tax_rate, country: "DE", combined_rate: 0.19) }
+      let(:norway_tax_rate) { create(:zip_tax_rate, country: "NO", combined_rate: 0.25) }
+      let(:japan_tax_rate) { create(:zip_tax_rate, country: "JP", combined_rate: 0.1) }
+      let(:digital_tax_rate) { create(:zip_tax_rate, country: "BY", combined_rate: 0.2) }
+
+      let(:eu_purchase) { create(:purchase, price_cents: 100, total_transaction_cents: 119, gumroad_tax_cents: 19, zip_tax_rate: eu_tax_rate) }
+      let(:norway_purchase) { create(:purchase, price_cents: 100, total_transaction_cents: 125, gumroad_tax_cents: 25, zip_tax_rate: norway_tax_rate) }
+      let(:japan_purchase) { create(:purchase, price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate: japan_tax_rate) }
+      let(:digital_purchase) { create(:purchase, price_cents: 100, total_transaction_cents: 120, gumroad_tax_cents: 20, zip_tax_rate: digital_tax_rate) }
+
+      context "when include_tax_rate is true" do
+        it "returns VAT with percentage for EU countries" do
+          expect(eu_purchase.tax_label).to eq("VAT (19%)")
+        end
+
+        it "returns VAT with percentage for Norway" do
+          expect(norway_purchase.tax_label).to eq("VAT (25%)")
+        end
+
+        it "returns VAT with percentage for countries that collect tax on all products" do
+          expect(japan_purchase.tax_label).to eq("VAT (10%)")
+        end
+
+        it "returns VAT with percentage for countries that collect tax on digital products" do
+          expect(digital_purchase.tax_label).to eq("VAT (20%)")
+        end
+
+        it "rounds down the percentage" do
+          tax_rate = create(:zip_tax_rate, country: "DE", combined_rate: 0.196)
+          purchase = create(:purchase, price_cents: 100, total_transaction_cents: 119, gumroad_tax_cents: 19, zip_tax_rate: tax_rate)
+          expect(purchase.tax_label).to eq("VAT (19%)")
+        end
+      end
+
+      context "when include_tax_rate is false" do
+        it "returns VAT without percentage" do
+          expect(eu_purchase.tax_label(include_tax_rate: false)).to eq("VAT")
+          expect(norway_purchase.tax_label(include_tax_rate: false)).to eq("VAT")
+          expect(japan_purchase.tax_label(include_tax_rate: false)).to eq("VAT")
+          expect(digital_purchase.tax_label(include_tax_rate: false)).to eq("VAT")
+        end
+      end
     end
 
-    it "shows GST properly" do
-      zip_tax_rate = create(:zip_tax_rate, country: "AU", combined_rate: 0.1)
-      purchase = create(:purchase, price_cents: 100, total_transaction_cents: 110, gumroad_tax_cents: 10, zip_tax_rate:)
-      expect(purchase.tax_label).to eq("GST (10%)")
+    describe "Sales tax" do
+      let(:us_tax_rate) { create(:zip_tax_rate, country: "US", combined_rate: 0.08) }
+      let(:ca_tax_rate) { create(:zip_tax_rate, country: "CA", combined_rate: 0.13) }
+      let(:other_tax_rate) { create(:zip_tax_rate, country: "BR", combined_rate: 0.15) }
+
+      context "when include_tax_rate is true" do
+        context "when was_tax_excluded_from_price is true" do
+          it "returns 'Sales tax' for US" do
+            purchase = create(:purchase, price_cents: 108, total_transaction_cents: 108, tax_cents: 8, zip_tax_rate: us_tax_rate, was_tax_excluded_from_price: true)
+            expect(purchase.tax_label).to eq("Sales tax")
+          end
+
+          it "returns 'Sales tax' for Canada" do
+            purchase = create(:purchase, price_cents: 113, total_transaction_cents: 113, tax_cents: 13, zip_tax_rate: ca_tax_rate, was_tax_excluded_from_price: true)
+            expect(purchase.tax_label).to eq("Sales tax")
+          end
+
+          it "returns 'Sales tax' for other countries" do
+            purchase = create(:purchase, price_cents: 115, total_transaction_cents: 115, tax_cents: 15, zip_tax_rate: other_tax_rate, was_tax_excluded_from_price: true)
+            expect(purchase.tax_label).to eq("Sales tax")
+          end
+        end
+
+        context "when was_tax_excluded_from_price is false" do
+          it "returns 'Sales tax (included)' for US" do
+            purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100, tax_cents: 8, zip_tax_rate: us_tax_rate, was_tax_excluded_from_price: false)
+            expect(purchase.tax_label).to eq("Sales tax (included)")
+          end
+
+          it "returns 'Sales tax (included)' for Canada" do
+            purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100, tax_cents: 13, zip_tax_rate: ca_tax_rate, was_tax_excluded_from_price: false)
+            expect(purchase.tax_label).to eq("Sales tax (included)")
+          end
+
+          it "returns 'Sales tax (included)' for other countries" do
+            purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100, tax_cents: 15, zip_tax_rate: other_tax_rate, was_tax_excluded_from_price: false)
+            expect(purchase.tax_label).to eq("Sales tax (included)")
+          end
+        end
+      end
+
+      context "when include_tax_rate is false" do
+        it "returns 'Sales tax' regardless of was_tax_excluded_from_price" do
+          included_purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100, tax_cents: 8, zip_tax_rate: us_tax_rate, was_tax_excluded_from_price: false)
+          excluded_purchase = create(:purchase, price_cents: 108, total_transaction_cents: 108, tax_cents: 8, zip_tax_rate: us_tax_rate, was_tax_excluded_from_price: true)
+
+          expect(included_purchase.tax_label(include_tax_rate: false)).to eq("Sales tax")
+          expect(excluded_purchase.tax_label(include_tax_rate: false)).to eq("Sales tax")
+        end
+      end
     end
 
-    it "shows sales tax (included) properly" do
-      zip_tax_rate = create(:zip_tax_rate, country: "US", combined_rate: 0.2)
-      purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100, tax_cents: 20, zip_tax_rate:)
-      expect(purchase.tax_label).to eq("Sales tax (included)")
-    end
+    describe "edge cases" do
+      it "returns nil when has_tax_label? is false" do
+        purchase = create(:purchase, price_cents: 100, total_transaction_cents: 100, was_purchase_taxable: false, gumroad_tax_cents: 0, tax_cents: 0)
+        expect(purchase.tax_label).to be_nil
+      end
 
-    it "shows sales tax (excluded) properly" do
-      zip_tax_rate = create(:zip_tax_rate, country: "US", combined_rate: 0.2)
-      purchase = create(:purchase, price_cents: 120, total_transaction_cents: 120, tax_cents: 20, zip_tax_rate:, was_tax_excluded_from_price: true)
-      expect(purchase.tax_label).to eq("Sales tax")
+      it "defaults to 'Sales tax (included)' when zip_tax_rate is nil" do
+        purchase = create(:purchase, price_cents: 100, total_transaction_cents: 120, gumroad_tax_cents: 20, zip_tax_rate: nil)
+        expect(purchase.tax_label).to eq("Sales tax (included)")
+      end
+
+      it "uses tax_cents when gumroad_tax_cents is 0" do
+        tax_rate = create(:zip_tax_rate, country: "DE", combined_rate: 0.19)
+        purchase = create(:purchase, price_cents: 100, total_transaction_cents: 119, gumroad_tax_cents: 0, tax_cents: 19, zip_tax_rate: tax_rate, was_purchase_taxable: true)
+        expect(purchase.tax_label).to eq("VAT (19%)")
+      end
     end
   end
 

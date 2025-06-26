@@ -534,10 +534,6 @@ class Link < ApplicationRecord
     twitter_url(long_url, social_share_text)
   end
 
-  def facebook_share_url(title: true)
-    title ? facebook_url(long_url, social_share_text) : facebook_url(long_url)
-  end
-
   def social_share_text
     if user.twitter_handle.present?
       return "I pre-ordered #{name} from @#{user.twitter_handle} on @Gumroad" if is_in_preorder_state
@@ -841,19 +837,6 @@ class Link < ApplicationRecord
     variants
   end
 
-  def serialized_shipping_destinations
-    {
-      destinations: shipping_destinations.alive.map do |shipping_destination|
-        {
-          country_code: shipping_destination.country_code,
-          name: shipping_destination.country_name,
-          one_item_rate: shipping_destination.displayed_one_item_rate(price_currency_type, with_symbol: false),
-          multiple_items_rate: shipping_destination.displayed_multiple_items_rate(price_currency_type, with_symbol: false)
-        }
-      end
-    }
-  end
-
   def reorder_previews(preview_positions)
     asset_previews.alive.each do |preview|
       position = preview_positions[preview.guid].try(:to_i)
@@ -862,29 +845,6 @@ class Link < ApplicationRecord
         preview.save!
       end
     end
-  end
-
-  def offer_code_info(code)
-    offer_code_params = {}
-    if code.present?
-      offer_code = find_offer_code(code:)
-      offer_code_error_message = nil
-      if offer_code.nil?
-        offer_code_error_message = "Sorry, the discount code you wish to use is invalid."
-      elsif !offer_code.is_valid_for_purchase?
-        offer_code_error_message = "Sorry, the discount code you wish to use has expired."
-      end
-
-      if offer_code_error_message.present?
-        offer_code_params[:is_valid] = false
-        offer_code_params[:error_message] = offer_code_error_message
-      else
-        offer_code_params[:is_valid] = true
-        offer_code_params[:amount] = offer_code.amount
-        offer_code_params[:is_percent] = offer_code.is_percent?
-      end
-    end
-    offer_code_params
   end
 
   def find_offer_code(code:)

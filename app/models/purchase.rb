@@ -218,6 +218,7 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_fraudulent_buyer_browser_guid!
     after_transition any => :failed, :do => :ban_card_testers!
     after_transition any => :failed, :do => :block_purchases_on_product!, if: lambda { |purchase| purchase.price_cents.nonzero? && !purchase.is_recurring_subscription_charge }
+    after_transition any => :failed, :do => :pause_payouts_for_seller_based_on_recent_failures!, if: lambda { |purchase| purchase.price_cents.nonzero? }
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email
@@ -1082,22 +1083,26 @@ class Purchase < ApplicationRecord
     usd_cents_to_currency(link.price_currency_type, tax_amount, rate_converted_to_usd)
   end
 
-  def tax_label
+  def tax_label(include_tax_rate: true)
     return unless has_tax_label?
 
     if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
        Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
        Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
        Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      "VAT" + " (#{(zip_tax_rate.combined_rate * 100).to_i}%)"
+      label = "VAT"
+      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
+      label
     elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      "GST" + " (#{(zip_tax_rate.combined_rate * 100).to_i}%)"
+      label = "GST"
+      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
+      label
     else
-      if was_tax_excluded_from_price
-        "Sales tax"
-      else
-        "Sales tax (included)"
+      label = "Sales tax"
+      if include_tax_rate && !was_tax_excluded_from_price
+        label += " (included)"
       end
+      label
     end
   end
 

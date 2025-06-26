@@ -8,7 +8,13 @@ import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser, TeamMembership } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, NavLinkDropdownItem, UnbecomeDropdownItem } from "$app/components/Nav";
+import {
+  Nav as NavFramework,
+  NavLink,
+  NavLinkDropdownItem,
+  UnbecomeDropdownItem,
+  LogoutDropdownItem,
+} from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -114,7 +120,7 @@ export const Nav = (props: Props) => {
                 href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
               />
               <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
-              <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url(routeParams)} />
+              <LogoutDropdownItem routeParams={routeParams} />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
             </div>
           </Popover>

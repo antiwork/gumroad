@@ -130,33 +130,6 @@ describe Admin::BaseController do
   end
 
   describe "user_not_authorized" do
-    class DummyPolicy < ApplicationPolicy
-      def index_with_policy?
-        false
-      end
-    end
-
-    controller(Admin::BaseController) do
-      def index
-        render json: { success: true }
-      end
-
-      def index_with_policy
-        authorize :dummy
-
-        render json: { success: true }
-      end
-    end
-
-    before do
-      routes.draw do
-        namespace :admin do
-          get :index, to: "base#index"
-          get :index_with_policy, to: "base#index_with_policy"
-        end
-      end
-    end
-
     before do
       sign_in admin_user
     end

@@ -6,16 +6,6 @@
 
 class D3
   class << self
-    # Deprecated: Consider using `formatted_date_with_timezone` instead.
-    def date_to_string(date, timezone_offset = nil)
-      if timezone_offset
-        zone = [[timezone_offset.to_i, 13].min, -11].max
-        date == DateTime.current.in_time_zone(zone).to_date ? "Today" : date.strftime("%b %e, %Y")
-      else
-        date == Date.today ? "Today" : date.strftime("%b %e %y")
-      end
-    end
-
     def formatted_date(date, today_date: Date.today)
       date == today_date ? "Today" : date.strftime("%b %e, %Y")
     end
