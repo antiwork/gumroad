@@ -325,12 +325,7 @@ class LinksController < ApplicationController
     authorize @product
     begin
       ActiveRecord::Base.transaction do
-        permitted_params = product_permitted_params.to_h
-        if permitted_params.key?(:hide_sold_out_variants)
-          val = permitted_params[:hide_sold_out_variants]
-          permitted_params[:hide_sold_out_variants] = val.to_s == 'true' || val.to_s == '1'
-        end
-        @product.assign_attributes(permitted_params.except(
+        @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
           :cancellation_discount,
