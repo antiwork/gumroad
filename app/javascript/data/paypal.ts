@@ -1,6 +1,5 @@
 import { cast } from "ts-safe-cast";
 
-import { CurrencyCode } from "$app/utils/currency";
 import { request } from "$app/utils/request";
 
 type BillingAgreement = {
@@ -43,22 +42,6 @@ export const createBillingAgreement = async (billingAgreementTokenId: string): P
     console.error("Error creating a PayPal billing agreement", e);
     throw e;
   }
-};
-
-export type LineItemInfoForNativePayPalCheckout = {
-  external_id: string;
-  permalink: string;
-  quantity: number;
-  currency_code: CurrencyCode;
-  total_cents: number;
-  price_cents: number;
-  shipping_cents: number;
-  tax_cents: number;
-  exclusive_tax_cents: number;
-  vat_cents: number;
-  exclusive_vat_cents: number;
-  tax_country: string | null;
-  was_recommended: boolean;
 };
 
 export const createBillingAgreementToken = async (data: { shipping: boolean }): Promise<string> => {
