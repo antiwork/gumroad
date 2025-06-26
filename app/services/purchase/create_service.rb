@@ -13,7 +13,6 @@ class Purchase::CreateService < Purchase::BaseService
     @product = product
     @params = params
     @purchase_params = params[:purchase]
-    # TODO discount codes cleanup
     if @purchase_params[:offer_code_name].present?
       @purchase_params[:discount_code] = @purchase_params.delete(:offer_code_name)
     end
@@ -138,10 +137,7 @@ class Purchase::CreateService < Purchase::BaseService
 
       raise Purchase::PurchaseInvalid, purchase.errors.full_messages[0] if purchase.errors.present?
 
-      # TODO(helen): remove after debugging potential offer code vulnerability
-      if purchase.displayed_price_cents == 0 && purchase.offer_code.present?
-        logger.info("Free purchase with offer code - purchaser_email: #{purchase.email} | offer_code: #{purchase_params[:discount_code]} | id: #{purchase.id} | params: #{params}")
-      end
+
     rescue Purchase::PurchaseInvalid => e
       if purchase.present?
         handle_purchase_failure

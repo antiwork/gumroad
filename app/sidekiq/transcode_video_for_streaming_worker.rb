@@ -17,10 +17,8 @@ class TranscodeVideoForStreamingWorker
 
   def perform(id, klass_name = ProductFile.name, transcoder = GRMC, allowed_when_processing = false)
     ActiveRecord::Base.connection.stick_to_primary!
-    Rails.logger.info "TranscodeVideoForStreamingWorker: performing for id=#{id}, klass_name=#{klass_name}, transcoder=#{transcoder}"
 
     if klass_name == Link.name
-      Rails.logger.warn "TranscodeVideoForStreamingWorker called for Link ID #{id}. We don't transcode Links anymore."
       return
     end
     streamable = klass_name.constantize.find(id)
@@ -33,7 +31,6 @@ class TranscodeVideoForStreamingWorker
     if streamable.transcodable?
       create_hls_transcode_job(streamable, streamable.s3_key, streamable.height, transcoder)
     else
-      Rails.logger.warn "ProductFile with ID #{id} is not transcodable"
       streamable.transcoding_failed
     end
   end
@@ -183,12 +180,12 @@ class TranscodeVideoForStreamingWorker
 
           return
         elsif response.code == "429"
-          Rails.logger.warn("GRMC is busy (#{streamable.class.name} ID #{streamable.id})")
+          # GRMC is busy
         else
-          Rails.logger.warn("Failed request to GRMC (#{streamable.class.name} ID #{streamable.id}): #{response.code} => #{response.body}")
+          # Failed request to GRMC
         end
       rescue => e
-        Rails.logger.warn("Failed attempt to request GRMC: #{e.class} => #{e.message}")
+        # Failed attempt to request GRMC
       end
     end
 

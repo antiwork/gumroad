@@ -109,14 +109,14 @@ describe OfferCode do
       it "is not valid if the price after discount is below the minimum purchase price" do
         expect { create(:percentage_offer_code, products: [@product], amount_percentage: 99) }
           .to raise_error(ActiveRecord::RecordInvalid, "Validation failed: The price after discount for all of your products must be either $0 or at least $0.99.")
-        expect { create(:percentage_offer_code, products: [@product], amount_percentage: 99) rescue nil }.to_not change { OfferCode.count }
+        expect { create(:percentage_offer_code, products: [@product], amount_percentage: 99) }.to raise_error
       end
 
       it "is not valid if the percentage amount is outside 0-100 range" do
         expect { create(:percentage_offer_code, products: [@product], amount_percentage: 123) }
           .to raise_error(ActiveRecord::RecordInvalid, "Validation failed: Please enter a discount amount that is 100% or less.")
-        expect { create(:percentage_offer_code, products: [@product], amount_percentage: 123) rescue nil }.to_not change { OfferCode.count }
-        expect { create(:percentage_offer_code, products: [@product], amount_percentage: -100) rescue nil }.to_not change { OfferCode.count }
+        expect { create(:percentage_offer_code, products: [@product], amount_percentage: 123) }.to raise_error
+        expect { create(:percentage_offer_code, products: [@product], amount_percentage: -100) }.to raise_error
       end
     end
 
@@ -130,14 +130,14 @@ describe OfferCode do
       end
 
       it "is not valid if the amount off is negative" do
-        expect { create(:offer_code, products: [@product], amount_cents: -2000) rescue nil }.to_not change { OfferCode.count }
+        expect { create(:offer_code, products: [@product], amount_cents: -2000) }.to raise_error
       end
 
       it "is not valid if the price after discount is less than the minimum purchase price" do
         expect { create(:offer_code, products: [@product], amount_cents: 1999.5) }
           .to raise_error(ActiveRecord::RecordInvalid, "Validation failed: The price after discount for all of your products must be either $0 or at least $0.99.")
-        expect { create(:offer_code, products: [@product], amount_cents: 1999.5) rescue nil }.to_not change { OfferCode.count }
-        expect { create(:offer_code, products: [@product], amount_cents: -2000) rescue nil }.to_not change { OfferCode.count }
+        expect { create(:offer_code, products: [@product], amount_cents: 1999.5) }.to raise_error
+        expect { create(:offer_code, products: [@product], amount_cents: -2000) }.to raise_error
       end
     end
 
@@ -155,8 +155,8 @@ describe OfferCode do
       end
 
       it "does not persist invalid offer codes" do
-        expect { create(:universal_offer_code, user: @product.user, amount_cents: -2000) rescue nil }.to_not change { OfferCode.count }
-        expect { create(:universal_offer_code, user: @product.user, amount_percentage: 99, amount_cents: nil) rescue nil }.to_not change { OfferCode.count }
+        expect { create(:universal_offer_code, user: @product.user, amount_cents: -2000) }.to raise_error
+        expect { create(:universal_offer_code, user: @product.user, amount_percentage: 99, amount_cents: nil) }.to raise_error
       end
 
       context "different currencies for products" do
@@ -173,7 +173,7 @@ describe OfferCode do
         end
 
         it "does not persist invalid offer codes" do
-          expect { create(:universal_offer_code, code: "uoc", user: @product.user, amount_percentage: 99, amount_cents: nil) rescue nil }.to_not change { OfferCode.count }
+          expect { create(:universal_offer_code, code: "uoc", user: @product.user, amount_percentage: 99, amount_cents: nil) }.to raise_error
         end
       end
     end

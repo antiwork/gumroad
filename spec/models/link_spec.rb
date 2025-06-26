@@ -975,7 +975,7 @@ describe Link, :vcr do
             direct_affiliate = create(:direct_affiliate, seller: @user, apply_to_all_products: true)
 
             expect do
-              @product.publish! rescue nil
+              @product.publish!
             end.to_not have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product).with(direct_affiliate.id, @product.id)
 
             expect(@product.reload.direct_affiliates).to match_array []

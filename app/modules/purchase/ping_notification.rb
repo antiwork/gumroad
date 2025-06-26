@@ -66,9 +66,7 @@ module Purchase::PingNotification
     end
 
     if link.skus_enabled || link.is_physical
-      # Hack for accutrak (accuhack?)
       payload[:sku_id] = sku_custom_name_or_external_id
-      # Hack for printful (hackful?)
       payload[:original_sku_id] = sku.external_id if sku.try(:custom_sku).present?
     end
 
@@ -77,8 +75,6 @@ module Purchase::PingNotification
 
     payload[:disputed] = chargedback?
     payload[:dispute_won] = chargeback_reversed?
-
-    Rails.logger.info("payload_for_ping_notification #{payload.inspect}")
 
     payload
   end

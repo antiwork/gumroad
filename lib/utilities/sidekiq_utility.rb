@@ -25,19 +25,6 @@ class SidekiqUtility
         # Break the loop and proceed with termination if waiting times out.
         break if timeout_exceeded?
 
-        # Fix for stuck HandleSendgridEventJob jobs
-        # TODO: Remove this once we fix the root cause of the stuck jobs
-        workers = Sidekiq::Workers.new.select do |process_id, _, _|
-          process_id == sidekiq_process["identity"]
-        end
-
-        ignored_classes = ["HandleSendgridEventJob", "SaveToMongoWorker"]
-
-        if workers.any? && workers.all? { |_, _, work| ignored_classes.include?(JSON.parse(work["payload"])["class"]) }
-          Rails.logger.info("[SidekiqUtility] #{ignored_classes.join(", ")} jobs are stuck. Proceeding with instance termination.")
-          break
-        end
-
         asg_client.record_lifecycle_action_heartbeat(lifecycle_params)
         sleep 60
       end

@@ -31,19 +31,8 @@ class UpdateProductFilesArchiveWorker
     return if Rails.env.test?
 
     product_files_archive = ProductFilesArchive.find(product_files_archive_id)
-    # Check for nil immediately, product_files_archive has mysteriously been
-    # nil which locks up workers by not failing properly
-    if product_files_archive.nil?
-      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Archive var was not set")
-      return
-    end
 
-    if product_files_archive.deleted?
-      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Archive is deleted")
-      return
-    end
-
-    Rails.logger.info("Beginning UpdateProductFilesArchive Job for #{product_files_archive.id}")
+    return if product_files_archive.nil? || product_files_archive.deleted?
     product_files_archive.mark_in_progress!
 
     # Check the estimated size of the archive. If it is larger than our limit,
@@ -51,7 +40,6 @@ class UpdateProductFilesArchiveWorker
     estimated_size = calculate_estimated_size(product_files_archive)
     if estimated_size > PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
       product_files_archive.mark_failed!
-      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Archive is too large.")
       return
     end
 
@@ -78,7 +66,7 @@ class UpdateProductFilesArchiveWorker
           rescue Aws::S3::Errors::NotFound
             # If the file does not exist on S3 for any reason, abandon this job without raising an error.
             product_files_archive.mark_failed!
-            Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - missing file #{product_file.id}")
+
             return
           end
           temp_file.rewind
@@ -89,7 +77,7 @@ class UpdateProductFilesArchiveWorker
 
     unless File.exist?(zip_archive_filename)
       product_files_archive.mark_failed!
-      Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - Zip file was not written.")
+
       return
     end
 
@@ -99,14 +87,14 @@ class UpdateProductFilesArchiveWorker
     archive_s3_object = product_files_archive.s3_object
     archive_s3_object.upload_file(file, content_type: "application/zip")
     product_files_archive.mark_ready!
-    Rails.logger.info("UpdateProductFilesArchive job completed for id #{product_files_archive.id}.")
+
   rescue NoMemoryError, Aws::S3::Errors::NoSuchKey, Errno::ENOENT, Seahorse::Client::NetworkingError, Aws::S3::Errors::ServiceError => e
     file&.close
     delete_temp_zip_file_if_exists(zip_archive_filename)
 
     product_files_archive.mark_failed!
     Bugsnag.notify(e)
-    Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - #{e.class.name}: #{e.message}")
+
     raise e
   ensure
     file&.close
@@ -116,22 +104,16 @@ class UpdateProductFilesArchiveWorker
   # Helper method to delete any zip files that might get left around
   def delete_temp_zip_file_if_exists(zip_archive_filename)
     if zip_archive_filename && File.exist?(zip_archive_filename)
-      if File.delete(zip_archive_filename)
-        Rails.logger.info("Temporary zip file deleted.")
-      else
-        Rails.logger.info("Zip file was not deleted.")
-      end
+      File.delete(zip_archive_filename)
     end
   end
 
   def calculate_estimated_size(product_files_archive)
-    Rails.logger.info("Calculating estimated archive size.")
     estimated_size = 0
     product_files_archive.product_files.each do |product_file|
       if product_file.size
         estimated_size += product_file.size
       else
-        Rails.logger.info("Fetching product file size from S3.")
         estimated_size += product_file.s3_object.content_length if product_file.s3?
       end
     end

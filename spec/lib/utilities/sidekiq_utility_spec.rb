@@ -104,6 +104,7 @@ describe SidekiqUtility do
   describe "#wait_for_sidekiq_to_process_existing_jobs" do
     before do
       allow(@sidekiq_utility).to receive(:sidekiq_process).and_return({ "busy" => 2, "identity" => "test_identity" })
+      allow_any_instance_of(described_class).to receive(:sleep) # Don't sleep!
     end
 
     context "when timeout is exceeded" do
@@ -111,7 +112,7 @@ describe SidekiqUtility do
         allow(@sidekiq_utility).to receive(:timeout_exceeded?).and_return(true)
       end
 
-      it "doesn't record the lifecycle heartbeat" do
+      it "doesn't record the lifecycle heartbeat and breaks the loop" do
         expect(@asg_double).not_to receive(:record_lifecycle_action_heartbeat)
 
         @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
@@ -120,7 +121,6 @@ describe SidekiqUtility do
 
     context "when timeout is not exceeded" do
       before do
-        allow_any_instance_of(described_class).to receive(:sleep) # Don't sleep!
         allow(@sidekiq_utility).to receive(:timeout_exceeded?).and_return(false, false, true) # Return different values per invocation
       end
 
@@ -131,37 +131,13 @@ describe SidekiqUtility do
       end
     end
 
-    context "when all jobs in the worker belong to ignored classes" do
+    context "when sidekiq process has no busy jobs" do
       before do
-        workers = [
-          ["test_identity", "worker1", { "payload" => { "class" => "HandleSendgridEventJob" }.to_json }],
-          ["test_identity", "worker1", { "payload" => { "class" => "SaveToMongoWorker" }.to_json }]
-        ]
-        allow(Sidekiq::Workers).to receive(:new).and_return(workers)
-        allow(Rails.logger).to receive(:info)
+        allow(@sidekiq_utility).to receive(:sidekiq_process).and_return({ "busy" => 0, "identity" => "test_identity" })
       end
 
-      it "logs the stuck jobs and breaks the loop" do
-        expect(Rails.logger).to receive(:info).with("[SidekiqUtility] HandleSendgridEventJob, SaveToMongoWorker jobs are stuck. Proceeding with instance termination.")
+      it "exits the loop immediately without heartbeat" do
         expect(@asg_double).not_to receive(:record_lifecycle_action_heartbeat)
-
-        @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
-      end
-    end
-
-    context "when not all jobs in the worker belong to ignored classes" do
-      before do
-        workers = [
-          ["test_identity", "worker1", { "payload" => { "class" => "HandleSendgridEventJob" }.to_json }],
-          ["test_identity", "worker1", { "payload" => { "class" => "OtherJob" }.to_json }]
-        ]
-        allow(Sidekiq::Workers).to receive(:new).and_return(workers)
-        allow(@sidekiq_utility).to receive(:timeout_exceeded?).and_return(false, true)
-      end
-
-      it "continues the loop and records the lifecycle heartbeat" do
-        expect(Rails.logger).not_to receive(:info).with("[SidekiqUtility] HandleSendgridEventJob, SaveToMongoWorker jobs are stuck. Proceeding with instance termination.")
-        expect(@asg_double).to receive(:record_lifecycle_action_heartbeat).once
 
         @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
       end

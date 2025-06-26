@@ -575,8 +575,10 @@ class Link < ApplicationRecord
         "formatted_price" => price_formatted_verbose,
         "recommendable" => recommendable?,
         "rated_as_adult" => rated_as_adult?,
+        "url" => nil, # Deprecated
+        "custom_delivery_url" => nil, # Deprecated
       )
-      json["custom_delivery_url"] = nil # Deprecated
+
       if preorder_link.present?
         json.merge!(
           "is_preorder" => true,
@@ -1354,7 +1356,7 @@ class Link < ApplicationRecord
 
       json = super_as_json(only: keep).merge!(
         "id" => external_id,
-        "url" => nil, # Deprecated
+
         "price" => cached_default_price_cents,
         "currency" => price_currency_type,
         "short_url" => long_url,
@@ -1405,7 +1407,7 @@ class Link < ApplicationRecord
       end
 
       if options[:api_scopes].include?("view_sales")
-        json["custom_delivery_url"] = nil # Deprecated
+
         json["sales_count"] = successful_sales_count
         json["sales_usd_cents"] = total_usd_cents
       end

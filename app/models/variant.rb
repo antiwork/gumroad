@@ -101,10 +101,6 @@ class Variant < BaseVariant
     variant.apply_price_changes_to_existing_memberships = params[:apply_price_changes_to_existing_memberships]
     variant.variant_category = params[:variant_category] if params.key?(:variant_category)
     variant.save!
-    # TODO (helen): Remove after debugging this issue: https://gumroad.slack.com/archives/C01DBV0A257/p1695383751410679
-    if !notify_members_of_price_change && (variant.flags_previously_changed? || variant.subscription_price_change_effective_date_previously_changed?)
-      Bugsnag.notify("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: #{params[:apply_price_changes_to_existing_memberships]}; subscription_price_change_effective_date: #{params[:subscription_price_change_effective_date]}")
-    end
     ScheduleMembershipPriceUpdatesJob.perform_async(variant.id) if notify_members_of_price_change
 
     variant

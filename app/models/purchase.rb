@@ -2008,7 +2008,7 @@ class Purchase < ApplicationRecord
       json_data[:product_updates_data] = update_json_data_for_mobile
       json_data[:user_id] = purchaser.external_id if purchaser
       json_data[:is_archived] = is_archived
-      json_data[:custom_delivery_url] = nil # Deprecated
+
     end
 
     if subscription.present?

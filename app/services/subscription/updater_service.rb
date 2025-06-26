@@ -231,7 +231,7 @@ class Subscription::UpdaterService
         new_purchase.url_redirect.destroy! if new_purchase.url_redirect.present?
         new_purchase.events.destroy_all
         new_purchase.destroy!
-        Rails.logger.info("Destroyed purchase #{new_purchase.id}")
+
       end
       original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
       subscription.last_payment_option.update!(price: original_price)

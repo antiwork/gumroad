@@ -5,7 +5,7 @@ import { createCast, cast } from "ts-safe-cast";
 import { SurchargesResponse } from "$app/data/customer_surcharge";
 import { startOrderCreation } from "$app/data/order";
 import { LineItemResult } from "$app/data/purchase";
-import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
+import { trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION, CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";

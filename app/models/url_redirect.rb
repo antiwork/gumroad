@@ -323,7 +323,7 @@ class UrlRedirect < ApplicationRecord
     missing_because_deleted = missing & deleted
     return if missing_because_deleted.empty?
 
-    Rails.logger.info("[url_redirect=#{id}, purchase=#{purchase_id}] Stamped PDFs for files #{missing_because_deleted.join(", ")} were deleted, enqueuing job to regenerate them")
+
     StampPdfForPurchaseJob.perform_async(purchase_id)
   end
 

@@ -16,6 +16,7 @@ import { RecurrenceId } from "$app/utils/recurringPricing";
 
 import { PublicFile, Seller } from "$app/components/Product";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
+import { UploadProgress } from "$app/components/useConfigureEvaporate";
 
 import { Page } from "./ContentTab/PageTab";
 import { Attribute } from "./ProductTab/AttributesEditor";
@@ -189,9 +190,6 @@ export const ProductEditContext = React.createContext<{
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
-
-//TODO: clean up this legacy file state
-type UploadProgress = { percent: number; bitrate: number };
 
 type FileStatus =
   | { type: "saved" }

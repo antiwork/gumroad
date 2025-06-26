@@ -12,10 +12,12 @@ class Order < ApplicationRecord
 
   attr_accessor :setup_future_charges
 
-  has_flags 1 => :DEPRECATED_seller_receipt_enabled,
+  has_flags 1 => :seller_receipt_enabled,
             column: "flags",
             flag_query_mode: :bit_operator,
             check_for_column: false
+
+
 
   delegate :card_type, :card_visual, :full_name, to: :purchase_with_payment_as_orderable
 

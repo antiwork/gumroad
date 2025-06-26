@@ -86,10 +86,10 @@ const SecureRedirectPage = ({
     <main className="stack single-page-form horizontal-form">
       <header>
         <h2>Confirm access</h2>
-        <p>{message}</p>
-      </header>
-      <div className="mini-rule legacy-only"></div>
-      <form
+                  <p>{message}</p>
+        </header>
+        <div className="mini-rule legacy-only"></div>
+        <form
         onSubmit={(e) => {
           void handleSubmit(e);
         }}

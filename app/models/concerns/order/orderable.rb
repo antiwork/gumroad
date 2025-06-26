@@ -14,7 +14,7 @@ module Order::Orderable
   end
 
   def seller_receipt_enabled?
-    is_a?(Order)
+    is_a?(Order) ? super : false
   end
 
   def test?

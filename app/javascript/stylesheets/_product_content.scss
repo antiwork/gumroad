@@ -99,7 +99,6 @@ main.product-content {
 
       [role="tab"],
       > button {
-        // TODO (product_edit_react) make this a grid
         display: flex;
         gap: spacer(2);
         padding: spacer(4);
@@ -111,12 +110,7 @@ main.product-content {
         border-bottom-right-radius: border-radius(1);
       }
 
-      // TODO (product_edit_react) remove
-      @include breakpoint-up(lg) {
-        > :first-child {
-          border-radius: border-radius(1);
-        }
-      }
+
 
       .content {
         flex: 1;
@@ -125,17 +119,7 @@ main.product-content {
       [role="tab"] {
         position: relative;
 
-        // TODO (product_edit_react) remove
-        &[contenteditable="true"] {
-          cursor: text;
-          outline: $outline;
-          outline-offset: -#{size(0.125)};
 
-          &::before {
-            @extend %icon;
-            mask-image: var(--prefix-icon);
-          }
-        }
 
         [contenteditable="true"] {
           cursor: text;

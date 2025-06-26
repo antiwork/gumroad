@@ -3,7 +3,7 @@
 class TranscodedVideo < ApplicationRecord
   include FlagShihTzu, Deletable, CdnDeletable
 
-  self.ignored_columns += [:product_file_id]
+
 
   has_paper_trail
 
@@ -34,7 +34,7 @@ class TranscodedVideo < ApplicationRecord
   scope :completed,     -> { where(state: "completed") }
   scope :not_completed, -> { where("state != 'completed'") }
   scope :processing,    -> { where(state: "processing") }
-  scope :s3, -> { } # assume they're all on S3 (needed for CdnDeletable)
+
 
   def mark(state)
     send("mark_#{state}")

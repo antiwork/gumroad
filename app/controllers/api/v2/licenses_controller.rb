@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::LicensesController < Api::V2::BaseController
-  before_action :log_params, only: [:verify]
+
   before_action :clean_params, only: [:verify]
   before_action(only: [:enable, :disable, :decrement_uses_count]) { doorkeeper_authorize! :edit_products }
   before_action :fetch_valid_license
@@ -87,7 +87,8 @@ class Api::V2::LicensesController < Api::V2::BaseController
     end
 
     def success_with_license
-      Rails.logger.info("License information for #{@license.serial} , license.purchase: #{@license.purchase&.id} , license.imported_customer: #{@license.imported_customer&.id}")
+      Rails.logger.info("License verification successful for #{@license.serial}, license.purchase: #{@license.purchase&.id}, license.imported_customer: #{@license.imported_customer&.id}")
+
       json = { success: true }.merge(@license.as_json(only: [:uses]))
       if @license.purchase.present?
         purchase = @license.purchase
@@ -112,10 +113,7 @@ class Api::V2::LicensesController < Api::V2::BaseController
       json
     end
 
-    # Temporary debug output
-    def log_params
-      logger.info "Verify license API request: #{params.inspect}"
-    end
+
 
     def redis_namespace
       @_redis_namespace ||= Redis::Namespace.new(:license_verifications, redis: $redis)

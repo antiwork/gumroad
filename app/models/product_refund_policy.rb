@@ -27,10 +27,8 @@ class ProductRefundPolicy < RefundPolicy
 
     response = ask_ai(no_refunds_prompt)
     value = JSON.parse(response.dig("choices", 0, "message", "content"))["no_refunds"]
-    Rails.logger.debug("AI determined refund policy #{id} is no-refunds: #{value}")
     value
   rescue => e
-    Rails.logger.debug("Error determining if refund policy #{id} is no-refunds: #{e.message}")
     false
   end
 
@@ -45,11 +43,9 @@ class ProductRefundPolicy < RefundPolicy
       if RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.key?(days)
         days
       else
-        Rails.logger.debug("Unknown refund period for policy #{id}: #{days}")
         RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
       end
     rescue => e
-      Rails.logger.debug("Error determining max refund period for policy #{id}: #{e.message}")
       RefundPolicy::DEFAULT_REFUND_PERIOD_IN_DAYS
     end
   end
