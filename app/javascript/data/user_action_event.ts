@@ -1,11 +1,11 @@
 import { request } from "$app/utils/request";
 
-const getPlugins = () => {
+export const getPlugins = () => {
   if (!navigator.plugins) return "";
   return Array.from(navigator.plugins)
     .map((plugin) => plugin.name)
     .sort()
-    .join(",");
+    .join("");
 };
 
 export const trackUserProductAction = async ({

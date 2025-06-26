@@ -1,13 +1,5 @@
-import { getIsOverlay, getReferrer, getWasRecommended } from "$app/data/user_action_event";
+import { getIsOverlay, getReferrer, getWasRecommended, getPlugins } from "$app/data/user_action_event";
 import { request } from "$app/utils/request";
-
-const getPlugins = () => {
-  if (!navigator.plugins) return "";
-  return Array.from(navigator.plugins)
-    .map((plugin) => plugin.name)
-    .sort()
-    .join(",");
-};
 
 export const incrementProductViews = ({
   permalink,
