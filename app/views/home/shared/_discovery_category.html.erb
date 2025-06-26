@@ -1,29 +1,31 @@
-<div class="flex flex-col gap-4 rounded-lg border border-black <%= bg %> p-4 lg:p-8" role="listitem">
-  <%= link_to discover_taxonomy_url(path, host: DISCOVER_DOMAIN), class: "flex flex-col gap-4 no-underline" do %>
-    <div class="flex flex-col gap-3">
-      <%= image_tag icon,
-          alt: title,
+<% if defined?(item) %>
+  <% if item[:type] == :tag %>
+    <%= link_to item[:text],
+        discover_taxonomy_url(item[:path], tags: item[:text], host: DISCOVER_DOMAIN),
+        class: "px-4 py-2 bg-white rounded-full text-lg md:text-2xl font-medium text-black border border-black no-underline hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all whitespace-nowrap" %>
+  <% elsif item[:type] == :icon %>
+    <%= link_to discover_taxonomy_url(item[:path], host: DISCOVER_DOMAIN) do %>
+      <%= image_tag item[:icon],
+          alt: "#{item[:path].humanize} category icon",
           loading: "lazy",
-          class: "w-[100px] h-[72px]" %>
-      <div class="text-3xl lg:text-4xl hover:underline">
-        <%= title %>
-      </div>
-      <div class="text-xl lg:text-2xl">
-        <%= description %>
-      </div>
-    </div>
+          class: "w-10 h-10 md:w-20 md:h-20 flex-shrink-0" %>
+    <% end %>
   <% end %>
-
-  <div class="flex flex-col gap-3">
-    <div class="text-base">Popular tags</div>
-    <div class="flex flex-wrap gap-2">
-      <% tags.each do |tag| %>
-        <%= link_to(
-          tag,
-          discover_taxonomy_url(path, tags: tag, host: DISCOVER_DOMAIN),
-          class: "px-3 py-1 text-sm bg-white rounded-full border border-black no-underline hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all"
-        ) %>
-      <% end %>
+<% else %>
+  <a href="<%= discover_taxonomy_url(path, host: DISCOVER_DOMAIN) %>" class="group block no-underline h-full" role="listitem">
+    <div class="p-8 h-full rounded-2xl <%= bg %> border-2 border-black flex flex-col">
+      <div class="flex-shrink-0">
+        <%= image_tag icon,
+            alt: "#{title} category icon",
+            class: "w-24 h-24 mb-4" %>
+        <h3 class="text-3xl font-medium mb-2"><%= title %></h3>
+      </div>
+      <p class="text-lg mb-4 flex-grow"><%= description %></p>
+      <div class="flex flex-wrap gap-2">
+        <% tags.first(3).each do |tag_name| %>
+          <span class="px-3 py-1 bg-black/10 rounded-full text-sm font-medium"><%= tag_name %></span>
+        <% end %>
+      </div>
     </div>
-  </div>
-</div>
+  </a>
+<% end %>

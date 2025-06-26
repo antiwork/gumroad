@@ -1,0 +1,8 @@
+  <div class="flex flex-wrap gap-4 items-center justify-center">
+    <% @discovery_categories.each do |category| %>
+      <% category[:tags].each do |tag_text| %>
+        <%= render "home/shared/discovery_category", item: { type: :tag, text: tag_text, path: category[:path] } %>
+      <% end %>
+    <% end %>
+  </div>
+</div>
