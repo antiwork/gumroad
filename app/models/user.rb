@@ -16,17 +16,11 @@ class User < ApplicationRecord
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
-  # Minimum products count to show tags section on user profile page
-  MIN_PRODUCTS_TO_SHOW_TAGS = 9
-
   # Minimum tags count to show tags section on user profile page
   MIN_TAGS_TO_SHOW_TAGS = 2
 
   # Max price (in US¢) for an unverified creator
   MAX_PRICE_USD_CENTS_UNLESS_VERIFIED = 500_000
-
-  # Minimum products count to enable sorting on user profile page.
-  MIN_PRODUCTS_FOR_SORTING = 5
 
   # Max length for facebook_meta_tag
   MAX_LENGTH_FACEBOOK_META_TAG = 100
@@ -493,10 +487,6 @@ class User < ApplicationRecord
 
       product.update!(purchasing_power_parity_disabled: should_disable) unless should_disable && product.purchasing_power_parity_disabled?
     end
-  end
-
-  def all_alive_memberships
-    links.alive.not_archived.is_tiered_membership
   end
 
   def save_external_id
