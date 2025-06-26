@@ -132,6 +132,7 @@ export type Product = {
   pwyw: { suggested_price_cents: number | null } | null;
   ppp_details: PurchasingPowerParityDetails | null;
   native_type: ProductNativeType;
+  hide_sold_out_variants?: boolean;
 };
 
 export const getMaxQuantity = (product: Product, option: Option | null) =>
@@ -695,30 +696,32 @@ export const ConfigurationSelector = React.forwardRef<
           itemType="https://schema.org/AggregateOffer"
           itemScope
         >
-          {product.options.map((option) => (
-            <OptionRadioButton
-              key={option.id}
-              disabled={
-                option.quantity_left === 0 ||
-                (product.is_tiered_membership &&
-                  !!selection.recurrence &&
-                  !option.recurrence_price_values?.[selection.recurrence])
-              }
-              selected={option.id === selection.optionId}
-              onClick={() => update({ optionId: option.id, price: { value: null, error: false } })}
-              priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
-              name={option.name}
-              description={option.description}
-              quantityLeft={option.quantity_left}
-              currencyCode={product.currency_code}
-              isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
-              status={option.status}
-              discount={discount}
-              recurrence={selection.recurrence}
-              product={product}
-              hidePrice={hidePrices}
-            />
-          ))}
+          {product.options
+            .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
+            .map((option) => (
+              <OptionRadioButton
+                key={option.id}
+                disabled={
+                  option.quantity_left === 0 ||
+                  (product.is_tiered_membership &&
+                    !!selection.recurrence &&
+                    !option.recurrence_price_values?.[selection.recurrence])
+                }
+                selected={option.id === selection.optionId}
+                onClick={() => update({ optionId: option.id, price: { value: null, error: false } })}
+                priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
+                name={option.name}
+                description={option.description}
+                quantityLeft={option.quantity_left}
+                currencyCode={product.currency_code}
+                isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
+                status={option.status}
+                discount={discount}
+                recurrence={selection.recurrence}
+                product={product}
+                hidePrice={hidePrices}
+              />
+            ))}
           <div itemProp="offerCount" hidden>
             {product.options.length}
           </div>
