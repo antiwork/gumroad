@@ -124,7 +124,7 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
     name: "Smart move",
     getCompleted: (stats) => stats.purchased_small_bets,
-    link: "https://gumroad.com/small-bets",
+    link: "/small-bets",
     IconComponent: SmallBetsIcon,
     description: "Sign up for Small Bets.",
   },

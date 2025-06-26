@@ -8,6 +8,8 @@ class HomeController < ApplicationController
   before_action :set_meta_data
   before_action :set_layout_and_title
 
+  def small_bets; end
+
   private
     def set_layout_and_title
       @hide_layouts = true
