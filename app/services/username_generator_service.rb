@@ -34,10 +34,13 @@ class UsernameGeneratorService
     # 4. Between 3 and 20 characters
     def ensure_valid_username(name)
       name = name.downcase.gsub(/[^a-z0-9]/, "")
-      name += "a" if name.blank? || name.match?(/^[0-9]+$/)
+      if name.match?(/^[0-9]+$/) && name.length >= 19
+        return name[0, 19] + "a"
+      end
+      name += "a" if name.nil? || name.empty? || name.match?(/^[0-9]+$/)
       name += random_digit if DENYLIST.include?(name)
       name += random_digit while name.length < 3
-      name.first(20)
+      return name[0, 20]
     end
 
     def random_digit
