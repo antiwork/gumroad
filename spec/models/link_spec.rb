@@ -3217,44 +3217,7 @@ describe Link, :vcr do
     end
   end
 
-  describe "#offer_code_info" do
-    let(:offer_code) { create(:offer_code, products: [link], max_purchase_count: 1) }
 
-    describe "when offer code exist" do
-      it "returns amount, is_valid true , and is_percent false if offer code is valid" do
-        allow(offer_code).to receive(:is_valid_for_purchase?).and_return(true)
-
-        expect(link.offer_code_info(offer_code.code)).to eq(is_valid: true, amount: 100, is_percent: false)
-      end
-
-      it "returns sold out message and is_valid false if offer code is sold out" do
-        create(:purchase, offer_code:)
-
-        expect(link.offer_code_info(offer_code.code)).to eq(is_valid: false, error_message: "Sorry, the discount code you wish to use has expired.")
-      end
-
-      it "returns the alive offer code, not the deleted one" do
-        offer_code.update_column(:deleted_at, Time.current)
-        create(:offer_code, products: [link], code: offer_code.code)
-
-        expect(link.offer_code_info(offer_code.code)).to eq(is_valid: true, amount: 100, is_percent: false)
-      end
-
-      it "returns the universal offer code" do
-        universal_offer_code = create(:universal_offer_code, user: link.user, code: "code")
-
-        expect(link.offer_code_info(universal_offer_code.code)).to eq(is_valid: true, amount: 100, is_percent: false)
-      end
-    end
-
-    it "returns error message and is_valid false if offer code doesn't exist" do
-      expect(link.offer_code_info("invalid")).to eq(is_valid: false, error_message: "Sorry, the discount code you wish to use is invalid.")
-    end
-
-    it "returns empty hash if offer code is not given" do
-      expect(link.offer_code_info(nil)).to eq({})
-    end
-  end
 
   describe "offer_code creation" do
     before :each do
@@ -3766,24 +3729,6 @@ describe Link, :vcr do
     it "uris escape the product name" do
       product = create(:product, name: "you & i")
       expect(product.twitter_share_url).to eq "https://twitter.com/intent/tweet?text=I+got+you+%26+i+on+%40Gumroad:%20#{product.long_url}"
-    end
-  end
-
-  describe ".facebook_share_url" do
-    context "when title is true" do
-      it "generates the facebook share url" do
-        product = create(:product, name: "you & i")
-
-        expect(product.facebook_share_url).to eq "https://www.facebook.com/sharer/sharer.php?u=#{product.long_url}&quote=I+got+you+%26+i+on+%40Gumroad"
-      end
-    end
-
-    context "when title is false" do
-      it "generates the facebook share url" do
-        product = create(:product, name: "you & i")
-
-        expect(product.facebook_share_url(title: false)).to eq "https://www.facebook.com/sharer/sharer.php?u=#{product.long_url}"
-      end
     end
   end
 

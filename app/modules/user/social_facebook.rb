@@ -1,22 +1,8 @@
 # frozen_string_literal: true
 
 module User::SocialFacebook
-  FACEBOOK_PROPERTIES = %w[facebook_uid].freeze
-
   def self.included(base)
     base.extend(FacebookClassMethods)
-  end
-
-  def facebook_name
-    if facebook_uid
-      begin
-        User.fb_object(facebook_uid, token: User.fb_app_access_token)["name"]
-      rescue Koala::Facebook::ClientError, *INTERNET_EXCEPTIONS
-        name
-      end
-    else
-      name
-    end
   end
 
   def renew_facebook_access_token
