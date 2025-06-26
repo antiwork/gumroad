@@ -60,3 +60,8 @@ docker/local-nginx/certs/*.key
 lib/GeoIP2-City.mmdb
 nomad/
 docs/ssh.md
+
+# Property-based testing temporary files
+PROPERTY_TESTING_SUMMARY.md
+debug_test.rb
+test_property_*.rb
