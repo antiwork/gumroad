@@ -54,6 +54,7 @@ group :test do
                                        ref: "161b8c5b1a0a5408af914d7544956372e9da2c9e"
   gem "puffing-billy", "~> 4.0.0", require: "billy/capybara/rspec"
   gem "super_diff", "~> 0.12.0", require: false
+  gem "prop_check"
 end
 
 group :deployer do
