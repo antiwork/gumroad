@@ -635,7 +635,13 @@ class Link < ApplicationRecord
     if skus_enabled
       skus.not_is_default_sku.alive.map(&:to_option_for_product)
     else
-      (variant_category = variant_categories_alive.first) ? variant_category.variants.in_order.alive.map(&:to_option) : []
+      if (variant_category = variant_categories_alive.first)
+      variants = variant_category.variants.in_order.alive
+            variants = variants.reject(&:sold_out?) if hide_sold_out_variants?
+      variants.map(&:to_option)
+    else
+      []
+    end
     end
   end
 

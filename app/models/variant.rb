@@ -119,6 +119,19 @@ class Variant < BaseVariant
     apply_price_changes_to_existing_memberships != params[:apply_price_changes_to_existing_memberships] || subscription_price_change_effective_date != params[:subscription_price_change_effective_date]&.to_date
   end
 
+  def purchase_count
+    # A variant has many prices, and each price can have many purchases.
+    # We need to count all successful purchases across all prices for this variant.
+    Purchase.where(price_id: self.price_ids).counts_towards_inventory.count
+  end
+
+  def sold_out?
+    # A variant is sold out if it has a max_purchase_count and the number of purchases has reached it.
+    return false unless max_purchase_count.present? && max_purchase_count > 0
+
+    purchase_count >= max_purchase_count
+  end
+
   private
     def set_position
       return if self.position_in_category.present?
