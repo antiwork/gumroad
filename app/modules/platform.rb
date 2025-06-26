@@ -14,4 +14,11 @@ module Platform
       OTHER
     ]
   end
+
+  def self.all_mobile
+    [
+      IPHONE,
+      ANDROID
+    ]
+  end
 end
