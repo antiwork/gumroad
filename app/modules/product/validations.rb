@@ -4,15 +4,8 @@ module Product::Validations
   include ActionView::Helpers::TextHelper
 
   MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
-  CUSTOM_FIELD_TYPES = %w[text terms checkbox].freeze
 
   private
-    def preview_url_https
-      return if preview_url.blank?
-
-      errors.add(:base, "Sorry, the product must have a secure (https) preview URL.") unless URI(URI::DEFAULT_PARSER.escape(preview_url).gsub("[", "%5B").gsub("]", "%5D")).is_a?(URI::HTTPS)
-    end
-
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
       return unless max_purchase_count_changed?
       return if max_purchase_count.nil?

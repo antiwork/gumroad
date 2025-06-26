@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 module User::SocialFacebook
-  FACEBOOK_PROPERTIES = %w[facebook_uid].freeze
-
   def self.included(base)
     base.extend(FacebookClassMethods)
   end
