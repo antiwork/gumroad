@@ -4,7 +4,6 @@ require "spec_helper"
 
 describe "Tiered Membership VAT Spec", type: :feature, js: true do
   include ManageSubscriptionHelpers
-  include ProductWantThisHelpers
   before :each do
     setup_subscription
     travel_to(@originally_subscribed_at + 1.month)

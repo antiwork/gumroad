@@ -4,7 +4,6 @@ require "spec_helper"
 
 describe "Tiered Membership Free Trial Spec", type: :feature, js: true do
   include ManageSubscriptionHelpers
-  include ProductWantThisHelpers
 
   let(:is_pwyw) { false }
   before :each do

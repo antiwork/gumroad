@@ -100,30 +100,10 @@ module UserComplianceInfoFields
 
   ALL = ALL_FIELDS_ON_USER_COMPLIANCE_INFO + ALL_ADDITIONAL_FIELDS
 
-  VERIFICATION_PROMPT_FIELDS = [
-    Individual::TAX_ID,
-    Business::VAT_NUMBER,
-    Individual::STRIPE_IDENTITY_DOCUMENT_ID,
-    Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
-    Business::STRIPE_COMPANY_DOCUMENT_ID,
-    Individual::PASSPORT,
-    Individual::VISA,
-    Individual::POWER_OF_ATTORNEY,
-    Business::MEMORANDUM_OF_ASSOCIATION,
-    Business::BANK_STATEMENT,
-    Business::PROOF_OF_REGISTRATION,
-    Business::COMPANY_REGISTRATION_VERIFICATION,
-    Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION
-  ].freeze
-
   private_constant :ALL, :ALL_ADDITIONAL_FIELDS, :ALL_FIELDS_ON_USER_COMPLIANCE_INFO
 
   def self.all_fields_on_user_compliance_info
     ALL_FIELDS_ON_USER_COMPLIANCE_INFO
-  end
-
-  def self.all_additional_fields
-    ALL_ADDITIONAL_FIELDS
   end
 
   def self.all

@@ -4,7 +4,6 @@ require "spec_helper"
 
 describe "Tiered Membership Price Changes Spec", type: :feature, js: true do
   include ManageSubscriptionHelpers
-  include ProductWantThisHelpers
   include CurrencyHelper
 
   before :each do

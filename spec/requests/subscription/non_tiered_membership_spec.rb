@@ -4,7 +4,6 @@ require "spec_helper"
 
 describe "Non Tiered Membership Subscriptions", type: :feature, js: true do
   include ManageSubscriptionHelpers
-  include ProductWantThisHelpers
 
   context "that are active" do
     before :each do

@@ -130,10 +130,6 @@ class ProductFile < ApplicationRecord
     filetype == "pdf"
   end
 
-  def mobi?
-    filetype == "mobi"
-  end
-
   def streamable?
     filegroup == "video"
   end
@@ -252,20 +248,6 @@ class ProductFile < ApplicationRecord
       pagelength: (epub? ? nil : pagelength),
       duration:,
     }
-  end
-
-  def read_consumption_markers
-    markers = Array.new(pagelength, "")
-    if pdf?
-      (1..pagelength).each do |page_number|
-        # markers is 0-based; page_number is 1-based:
-        markers[page_number - 1] = "Page #{page_number}"
-      end
-    elsif epub?
-      markers = epub_section_info.values.map { |epub_section_info_hash| epub_section_info_hash["section_name"] }
-    end
-
-    markers
   end
 
   def schedule_file_analyze

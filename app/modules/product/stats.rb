@@ -45,16 +45,6 @@ module Product::Stats
     successful_sales_count(track_total_hits: nil) > 0
   end
 
-  def sales_unit
-    if is_recurring_billing
-      "subscribers"
-    elsif is_in_preorder_state
-      "preorders"
-    else
-      "sales"
-    end
-  end
-
   def balance_formatted(total_cents = nil)
     Money.new(total_cents || total_usd_cents).format(no_cents_if_whole: true)
   end

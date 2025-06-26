@@ -385,7 +385,6 @@ RSpec.configure do |config|
   config.include ProductRowHelpers, type: :feature
   config.include ProductVariantsHelpers, type: :feature
   config.include PreviewBoxHelpers, type: :feature
-  config.include ProductWantThisHelpers, type: :feature
   config.include PayWorkflowHelpers, type: :feature
   config.include CheckoutHelpers, type: :feature
   config.include RichTextEditorHelpers, type: :feature

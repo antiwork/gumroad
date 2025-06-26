@@ -11,18 +11,6 @@ describe WithFileProperties do
     allow(Subexec).to receive(:run).and_return(output_double)
   end
 
-  def stub_for_pdf
-    output_double = double
-    allow(output_double).to receive(:page_count).and_return("6")
-    allow(PDF::Reader).to receive(:new).and_return(output_double)
-  end
-
-  def stub_for_ppt
-    output_double = double
-    allow(output_double).to receive(:output).and_return("Number of Slides = 7")
-    allow(Subexec).to receive(:run).and_return(output_double)
-  end
-
   before do
     allow(FFMPEG::Movie).to receive(:new) do |path|
       extension = File.extname(path)

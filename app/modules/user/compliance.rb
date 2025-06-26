@@ -228,10 +228,6 @@ module User::Compliance
         signed_up_from_cote_d_ivoire?
   end
 
-  def needs_info_of_significant_company_owners?
-    false
-  end
-
   # Public: Returns whether the user has ever been asked to provide the field given.
   # If `only_needs_to_have_been_requested_partially` is provided as `true` or `false` the function
   # will only return true if the field was requested in part or in full, respecively.

@@ -198,13 +198,6 @@ module Product::Prices
     price_for_recurrence(recurrence).present?
   end
 
-  def suggested_price_formatted_without_dollar_sign_for_recurrence(recurrence)
-    suggested_price_cents = suggested_price_cents_for_recurrence(recurrence)
-    return nil if suggested_price_cents.blank?
-
-    display_price_for_price_cents(suggested_price_cents, symbol: false)
-  end
-
   def save_subscription_prices_and_duration!(recurrence_price_values:, subscription_duration:)
     ActiveRecord::Base.transaction do
       self.subscription_duration = subscription_duration
@@ -218,12 +211,6 @@ module Product::Prices
 
       save_recurring_prices!(recurrence_price_values)
     end
-  end
-
-  def has_multiple_recurrences?
-    return false unless is_recurring_billing
-
-    prices.alive.is_buy.select(:recurrence).distinct.count > 1
   end
 
   def available_price_cents
