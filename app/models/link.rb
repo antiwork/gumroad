@@ -574,9 +574,7 @@ class Link < ApplicationRecord
         "short_url" => long_url,
         "formatted_price" => price_formatted_verbose,
         "recommendable" => recommendable?,
-        "rated_as_adult" => rated_as_adult?,
-        "url" => nil, # Deprecated
-        "custom_delivery_url" => nil, # Deprecated
+        "rated_as_adult" => rated_as_adult?
       )
 
       if preorder_link.present?
