@@ -10,7 +10,6 @@ class SubscriptionsController < ApplicationController
   before_action :set_noindex_header, only: [:manage]
   before_action :check_can_manage, only: [:manage, :unsubscribe_by_user]
 
-  SUBSCRIPTIONS_PER_PAGE = 15
   SUBSCRIPTION_COOKIE_EXPIRY = 1.week
 
   def unsubscribe_by_seller

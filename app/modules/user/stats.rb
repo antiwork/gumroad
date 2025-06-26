@@ -73,12 +73,6 @@ module User::Stats
     formatted_dollar_amount(unpaid_balance_cents(via:), with_currency: should_be_shown_currencies_always?)
   end
 
-  def affiliate_credits_sum_for_credits_created_after(previous_time)
-    paid_scope = affiliate_credits.paid.where("created_at > ?", previous_time)
-    all_scope = affiliate_credits.where("affiliate_credits.created_at > ?", previous_time)
-    affiliate_credit_sum_from_scope(paid_scope, all_scope)
-  end
-
   def affiliate_credits_sum_for_credits_created_between(start_time, end_time)
     paid_scope = affiliate_credits.paid.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
     all_scope = affiliate_credits.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
