@@ -1,16 +1,4 @@
-<div class="rounded-lg border border-black bg-white overflow-hidden flex flex-col w-full mx-auto">
-  <div class="relative w-full h-52 flex items-start <%= bg_color %>">
-    <div class="flex w-full h-full">
-      <div class="flex flex-col justify-between flex-1 py-6 pl-6 pr-2">
-        <div class="text-xl font-semibold mb-1"><%= title %></div>
-        <div class="text-base font-medium text-black/70"><%= name %></div>
-      </div>
-      <div class="h-full flex items-stretch justify-end">
-        <img src="<%= image_url %>" alt="<%= name %>" class="h-full object-cover rounded-none" style="margin-right:0;"/>
-      </div>
-    </div>
-  </div>
-  <div class="flex flex-col items-start gap-8 p-8 flex-1 flex-grow flex-shrink-0 basis-0 self-stretch text-lg w-full border-t border-black">
-    <%= description %>
-  </div>
+<div class="border border-black rounded-sm bg-white p-6 text-left flex flex-col break-inside-avoid">
+  <p><%= description.html_safe %></p>
+  <div class="mt-4 font-medium"><%= name %></div>
 </div>
