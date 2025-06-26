@@ -185,7 +185,7 @@ class TranscodeVideoForStreamingWorker
           # Failed request to GRMC
         end
       rescue => e
-        # Failed attempt to request GRMC
+        Rails.logger.error("GRMC request failed: #{e.message}")
       end
     end
 
