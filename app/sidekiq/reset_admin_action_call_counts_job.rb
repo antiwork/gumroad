@@ -11,7 +11,7 @@ class ResetAdminActionCallCountsJob
       AdminActionCallInfo.destroy_all
       Admin::BaseController.descendants.each do |controller_class|
         controller_class.public_instance_methods(false).each do |action_name|
-          AdminActionCallInfo.create!(controller_name: controller_class.name, action_name:)
+          AdminActionCallInfo.create_or_find_by!(controller_name: controller_class.name, action_name:)
         end
       end
     end
