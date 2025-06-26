@@ -375,6 +375,14 @@ export const ProductTab = () => {
                       </Toggle>
                     </>
                   ) : null}
+                  {product.variants.length > 0 ? (
+                    <Toggle
+                      value={product.hide_sold_out_variants}
+                      onChange={(newValue) => updateProduct({ hide_sold_out_variants: newValue })}
+                    >
+                      Hide sold out versions
+                    </Toggle>
+                  ) : null}
                   <Toggle
                     value={product.should_show_sales_count}
                     onChange={(newValue) => updateProduct({ should_show_sales_count: newValue })}
