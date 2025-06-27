@@ -614,7 +614,6 @@ describe("ProductShowScenario", type: :feature, js: true) do
     let!(:available_variant) { create(:variant, name: "Standard", variant_category: variant_category) }
 
     before do
-      stub_const("ObfuscateIds::CIPHER_KEY", "a-test-cipher-key")
       sold_out_variant.update!(max_purchase_count: 1)
       price = create(:variant_price, variant: sold_out_variant)
       purchase = create(:purchase, link: product, price_id: price.id)
