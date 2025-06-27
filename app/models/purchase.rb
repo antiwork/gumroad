@@ -3230,72 +3230,7 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_taxes
-      return unless self.price_cents
-      return if price_cents == 0
-      return unless tax_location_valid?
-      return if seller.has_brazilian_stripe_connect_account?
-
-      customer_country = country_or_ip_country
-      country_code = Compliance::Countries.find_by_name(customer_country)&.alpha2
-
-      in_eu_country = Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country_code)
-      in_australia = customer_country == Compliance::Countries::AUS.common_name
-      in_singapore = customer_country == Compliance::Countries::SGP.common_name
-      in_norway = customer_country == Compliance::Countries::NOR.common_name
-      in_other_taxable_country = (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS).include?(country_code)
-      in_other_taxable_country ||= (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS).include?(country_code) && !link.is_physical?
-      # Will return zip from shipping information if available before guessing from IP.
-      # Shipping info is saved in Purchase during its creation the in the Purchases controller
-      # See best_guess_zip for more detail on parsing / guessing zip
-      postal_code = best_guess_zip
-
-      calculator = SalesTaxCalculator.new(product: link,
-                                          price_cents:,
-                                          shipping_cents: shipping_cents.to_i,
-                                          quantity:,
-                                          buyer_location: { postal_code:, country: country_code, state:, ip_address: },
-                                          buyer_vat_id: business_vat_id,
-                                          from_discover: was_product_recommended)
-
-      return unless in_eu_country || in_australia || in_singapore || in_norway || (in_other_taxable_country && Feature.active?("collect_tax_#{country_code.downcase}")) || calculator.is_us_taxable_state || calculator.is_ca_taxable
-
-      tax_calculation = calculator.calculate
-
-      if tax_calculation.zip_tax_rate.present?
-        self.zip_tax_rate = tax_calculation.zip_tax_rate
-
-        if tax_calculation.zip_tax_rate.is_seller_responsible
-          self.tax_cents = tax_calculation.tax_cents
-        else
-          self.gumroad_tax_cents = tax_calculation.tax_cents
-        end
-      elsif tax_calculation.used_taxjar
-
-        if tax_calculation.gumroad_is_mpf
-          self.gumroad_tax_cents = tax_calculation.tax_cents
-        else
-          self.tax_cents = tax_calculation.tax_cents
-        end
-
-        if tax_calculation.taxjar_info.present?
-          (purchase_taxjar_info || build_purchase_taxjar_info).tap do |info|
-            info.combined_tax_rate = tax_calculation.taxjar_info[:combined_tax_rate]
-            info.state_tax_rate = tax_calculation.taxjar_info[:state_tax_rate]
-            info.county_tax_rate = tax_calculation.taxjar_info[:county_tax_rate]
-            info.city_tax_rate = tax_calculation.taxjar_info[:city_tax_rate]
-            info.gst_tax_rate = tax_calculation.taxjar_info[:gst_tax_rate]
-            info.pst_tax_rate = tax_calculation.taxjar_info[:pst_tax_rate]
-            info.qst_tax_rate = tax_calculation.taxjar_info[:qst_tax_rate]
-            info.jurisdiction_state = tax_calculation.taxjar_info[:jurisdiction_state]
-            info.jurisdiction_county = tax_calculation.taxjar_info[:jurisdiction_county]
-            info.jurisdiction_city = tax_calculation.taxjar_info[:jurisdiction_city]
-            info.save!
-          end
-        end
-      end
-
-      self.was_purchase_taxable = gumroad_tax_cents > 0 || tax_cents > 0
-      self.was_tax_excluded_from_price = true
+      Purchase::TaxCalculationService.new(self).call
     end
 
     def calculate_shipping
