@@ -606,7 +606,7 @@ describe("ProductShowScenario", type: :feature, js: true) do
     it_behaves_like "discover navigation when layout is discover", selected_taxonomy: "Design"
   end
 
-  context "when hiding sold out variants" do
+  context "sold out variants" do
     let!(:creator) { create(:named_user) }
     let!(:product) { create(:product, user: creator, name: "Test Product with Variants", hide_sold_out_variants: false) }
     let!(:variant_category) { create(:variant_category, link: product) }
@@ -622,7 +622,7 @@ describe("ProductShowScenario", type: :feature, js: true) do
       login_as(creator)
     end
 
-    it "toggles the visibility of sold out variants on the product page" do
+    it "disables or hides the variant based on the hide_sold_out_variants setting" do
       # The sold out variant should be visible, but in a disabled state.
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_css("button[aria-label='#{sold_out_variant.name}'][disabled]")
