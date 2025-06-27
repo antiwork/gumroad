@@ -122,7 +122,6 @@ const CustomersPage = ({
 }) => {
   const currentSeller = useCurrentSeller();
   const userAgentInfo = useUserAgentInfo();
-  const isMobile = userAgentInfo.isMobile;
 
   const [{ customers, pagination, count }, setState] = React.useState<{
     customers: Customer[];
@@ -458,7 +457,7 @@ const CustomersPage = ({
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
                       </td>
-                      {isMobile ? customer.name ? <td>{customer.name}</td> : null : <td>{customer.name}</td>}
+                      <td>{customer.name}</td>
                       <td>
                         {customer.product.name}
                         {customer.subscription?.is_installment_plan ? (
