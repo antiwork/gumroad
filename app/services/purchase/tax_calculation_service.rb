@@ -8,13 +8,9 @@ class Purchase::TaxCalculationService
   def call
     return unless should_calculate_taxes?
 
-    customer_country = @purchase.country_or_ip_country
-    country_code = Compliance::Countries.find_by_name(customer_country)&.alpha2
+    return unless tax_calculation_required?
 
-    return unless tax_calculation_required?(customer_country, country_code)
-
-    calculator = build_tax_calculator(customer_country, country_code)
-    tax_calculation = calculator.calculate
+    tax_calculation = tax_calculator.calculate
 
     apply_tax_calculation(tax_calculation)
 
@@ -30,7 +26,19 @@ class Purchase::TaxCalculationService
         !@purchase.seller.has_brazilian_stripe_connect_account?
     end
 
-    def tax_calculation_required?(customer_country, country_code)
+    def customer_country
+      @customer_country ||= @purchase.country_or_ip_country
+    end
+
+    def country_code
+      @country_code ||= Compliance::Countries.find_by_name(customer_country)&.alpha2
+    end
+
+    def tax_calculator
+      @tax_calculator ||= build_tax_calculator
+    end
+
+    def tax_calculation_required?
       in_eu_country = Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country_code)
       in_australia = customer_country == Compliance::Countries::AUS.common_name
       in_singapore = customer_country == Compliance::Countries::SGP.common_name
@@ -38,18 +46,16 @@ class Purchase::TaxCalculationService
       in_other_taxable_country = (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS).include?(country_code)
       in_other_taxable_country ||= (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS).include?(country_code) && !@purchase.link.is_physical?
 
-      calculator = build_tax_calculator(customer_country, country_code)
-
       in_eu_country ||
         in_australia ||
         in_singapore ||
         in_norway ||
         (in_other_taxable_country && Feature.active?("collect_tax_#{country_code.downcase}")) ||
-        calculator.is_us_taxable_state ||
-        calculator.is_ca_taxable
+        tax_calculator.is_us_taxable_state ||
+        tax_calculator.is_ca_taxable
     end
 
-    def build_tax_calculator(customer_country, country_code)
+    def build_tax_calculator
       # Will return zip from shipping information if available before guessing from IP.
       # Shipping info is saved in Purchase during its creation in the Purchases controller
       # See best_guess_zip for more detail on parsing / guessing zip
