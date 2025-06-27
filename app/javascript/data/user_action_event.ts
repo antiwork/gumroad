@@ -5,7 +5,7 @@ export const getPlugins = () => {
   return Array.from(navigator.plugins)
     .map((plugin) => plugin.name)
     .sort()
-    .join("");
+    .join(",");
 };
 
 export const trackUserProductAction = async ({
