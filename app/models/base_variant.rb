@@ -71,6 +71,12 @@ class BaseVariant < ApplicationRecord
     quantity_left > 0
   end
 
+  def sold_out?
+    return false if max_purchase_count.nil?
+
+    quantity_left == 0
+  end
+
   def free?
     !((price_difference_cents.present? && price_difference_cents > 0) || prices.alive.is_buy.where("price_cents > 0").exists?)
   end
