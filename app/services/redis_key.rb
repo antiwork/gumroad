@@ -42,5 +42,6 @@ class RedisKey
     def ytd_sales_report_emails = "reports:ytd_sales_report_emails"
     def failed_seller_purchases_watch_minutes = "failed_seller_purchases_watch_minutes"
     def max_seller_failed_purchases_price_cents = "max_seller_failed_purchases_price_cents"
+    def seller_age_threshold_days = "seller_age_threshold_days"
   end
 end
