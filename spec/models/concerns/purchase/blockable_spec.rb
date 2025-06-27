@@ -592,6 +592,52 @@ describe Purchase::Blockable do
         end
       end
 
+      context "when seller account is older than 2 years" do
+        let(:old_seller) { create(:user, created_at: 3.years.ago) }
+        let(:old_product) { create(:product, user: old_seller) }
+        let!(:old_purchase) { create(:purchase, link: old_product, purchase_state: "in_progress") }
+
+        it "does not pause payouts for the seller even with high failed amounts" do
+          create_list(:failed_purchase, 10, link: old_product, price_cents: 500)
+          old_purchase.mark_failed!
+
+          expect(old_seller.reload.payouts_paused_internally).to be(false)
+        end
+
+        it "does not create a comment" do
+          create_list(:failed_purchase, 10, link: old_product, price_cents: 500)
+          old_purchase.mark_failed!
+
+          expect(old_seller.comments.count).to eq(0)
+        end
+      end
+
+      context "when seller account is exactly 2 years old" do
+        let(:two_year_seller) { create(:user, created_at: 2.years.ago) }
+        let(:two_year_product) { create(:product, user: two_year_seller) }
+        let!(:two_year_purchase) { create(:purchase, link: two_year_product, purchase_state: "in_progress") }
+
+        it "pauses payouts for the seller when threshold is exceeded" do
+          create_list(:failed_purchase, 5, link: two_year_product, price_cents: 250)
+          two_year_purchase.mark_failed!
+
+          expect(two_year_seller.reload.payouts_paused_internally).to be(true)
+        end
+      end
+
+      context "when seller account is slightly newer than 2 years" do
+        let(:newer_seller) { create(:user, created_at: 23.months.ago) }
+        let(:newer_product) { create(:product, user: newer_seller) }
+        let!(:newer_purchase) { create(:purchase, link: newer_product, purchase_state: "in_progress") }
+
+        it "pauses payouts for the seller when threshold is exceeded" do
+          create_list(:failed_purchase, 5, link: newer_product, price_cents: 250)
+          newer_purchase.mark_failed!
+
+          expect(newer_seller.reload.payouts_paused_internally).to be(true)
+        end
+      end
+
       context "when total failed amount is below threshold" do
         it "does not pause payouts for the seller" do
           create_list(:failed_purchase, 3, link: product, price_cents: 250)
