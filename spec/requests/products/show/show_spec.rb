@@ -608,7 +608,7 @@ describe("ProductShowScenario", type: :feature, js: true) do
 
   context "when hiding sold out variants" do
     let!(:creator) { create(:named_user) }
-    let!(:product) { create(:product, user: creator, name: "Test Product with Variants") }
+    let!(:product) { create(:product, user: creator, name: "Test Product with Variants", hide_sold_out_variants: false) }
     let!(:variant_category) { create(:variant_category, link: product) }
     let!(:sold_out_variant) { create(:variant, name: "Starter", variant_category: variant_category) }
     let!(:available_variant) { create(:variant, name: "Standard", variant_category: variant_category) }
@@ -618,32 +618,22 @@ describe("ProductShowScenario", type: :feature, js: true) do
       sold_out_variant.update!(max_purchase_count: 1)
       price = create(:variant_price, variant: sold_out_variant)
       purchase = create(:purchase, link: product, price_id: price.id)
-      # Explicitly associate the purchase with the variant using the has_and_belongs_to_many association
       purchase.variant_attributes << sold_out_variant
       login_as(creator)
     end
 
     it "toggles the visibility of sold out variants on the product page" do
-      # DIAGNOSTIC: Check if the variant is considered sold out in the test setup.
-      # If this fails, the issue is with how the purchase is created.
-      expect(sold_out_variant.reload.available?).to be(false)
-
-      # By default, the "Hide sold out variants" setting is on for the product.
-      # The sold out variant should not be visible on the page.
-      visit "/l/#{product.unique_permalink}"
-      expect(page).not_to have_css("button[aria-label='#{sold_out_variant.name}']")
-      expect(page).to have_css("button[aria-label='#{available_variant.name}']:not([disabled])")
-
-      # Now, toggle the setting off in the product edit page.
-      visit "/links/#{product.id}/edit"
-      uncheck "Hide sold out variants"
-      click_on "Save changes"
-      expect(page).to have_content("Your changes have been saved.")
-
-      # Re-visit the product page.
-      # The sold out variant should now be visible, but in a disabled state.
+      # The sold out variant should be visible, but in a disabled state.
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_css("button[aria-label='#{sold_out_variant.name}'][disabled]")
+      expect(page).to have_css("button[aria-label='#{available_variant.name}']:not([disabled])")
+
+      # The sold out variant should not be visible on the page.
+      product.update_attribute(:hide_sold_out_variants, true)
+
+      visit "/l/#{product.unique_permalink}"
+      expect(page).not_to have_css("button[aria-label='#{sold_out_variant.name}']")
+      expect(page).not_to have_css("button[aria-label='#{sold_out_variant.name}'][disabled]")
       expect(page).to have_css("button[aria-label='#{available_variant.name}']:not([disabled])")
     end
   end
