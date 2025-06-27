@@ -2794,6 +2794,7 @@ class Purchase < ApplicationRecord
     # credit card. The new chargeable will be returned.
     #
     # Returns: The final chargeable that should be used for charging. May be the same object passed in or different.
+    # If there is no chargeable available nil will be returned.
     def prepare_chargeable_for_charge!(chargeable)
       begin
         self.card_visual = chargeable.visual
@@ -3106,6 +3107,23 @@ class Purchase < ApplicationRecord
       purchase_sales_tax_info.elected_country_code = sales_tax_country_code_election
 
       if business_vat_id
+        purchase_sales_tax_info.business_vat_id = business_vat_id if TaxIdValidatorService.new(business_vat_id, purchase_sales_tax_info.country_code, purchase_sales_tax_info.state_code).process
+      end
+
+      if Compliance::Countries::AUS.alpha2 == purchase_sales_tax_info.country_code
+        purchase_sales_tax_info.business_vat_id = business_vat_id if AbnValidationService.new(business_vat_id).process
+      elsif Compliance::Countries::SGP.alpha2 == purchase_sales_tax_info.country_code
+        purchase_sales_tax_info.business_vat_id = business_vat_id if GstValidationService.new(business_vat_id).process
+      elsif Compliance::Countries::CAN.alpha2 == purchase_sales_tax_info.country_code &&
+            QUEBEC == purchase_sales_tax_info.state_code
+        purchase_sales_tax_info.business_vat_id = business_vat_id if QstValidationService.new(business_vat_id).process
+      elsif Compliance::Countries::NOR.alpha2 == purchase_sales_tax_info.country_code
+        purchase_sales_tax_info.business_vat_id = business_vat_id if MvaValidationService.new(business_vat_id).process
+      elsif Compliance::Countries::BHR.alpha2 == purchase_sales_tax_info.country_code
+        purchase_sales_tax_info.business_vat_id = business_vat_id if TrnValidationService.new(business_vat_id).process
+      elsif Compliance::Countries::KEN.alpha2 == purchase_sales_tax_info.country_code
+        purchase_sales_tax_info.business_vat_id = business_vat_id if KraPinValidationService.new(business_vat_id).process
+      elsif Compliance::Countries::OMN.alpha2 == purchase_sales_tax_info.country_code
         if Compliance::Countries::AUS.alpha2 == purchase_sales_tax_info.country_code
           purchase_sales_tax_info.business_vat_id = business_vat_id if AbnValidationService.new(business_vat_id).process
         elsif Compliance::Countries::SGP.alpha2 == purchase_sales_tax_info.country_code

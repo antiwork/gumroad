@@ -100,62 +100,7 @@ class InvoicePresenter::OrderInfo
       value = business_vat_id || purchase_sales_tax_info&.business_vat_id
       return if value.blank?
 
-      label = \
-        if purchase_sales_tax_info&.country_code == Compliance::Countries::ARE.alpha2 || purchase_sales_tax_info&.country_code == Compliance::Countries::BHR.alpha2
-          "TRN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::AUS.alpha2
-          "ABN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::BLR.alpha2
-          "UNP ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CHL.alpha2
-          "RUT ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::COL.alpha2
-          "NIT ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CRI.alpha2
-          "CPJ ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::ECU.alpha2
-          "RUC ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::EGY.alpha2
-          "TN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::GEO.alpha2 ||
-              purchase_sales_tax_info&.country_code == Compliance::Countries::KAZ.alpha2 ||
-              purchase_sales_tax_info&.country_code == Compliance::Countries::MAR.alpha2 || purchase_sales_tax_info&.country_code == Compliance::Countries::THA.alpha2
-          "TIN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::KOR.alpha2
-          "BRN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::RUS.alpha2
-          "INN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SRB.alpha2
-          "PIB ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::TUR.alpha2
-          "VKN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::UKR.alpha2
-          "EDRPOU ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::ISL.alpha2
-          "VSK ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::MEX.alpha2
-          "RFC ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::MYS.alpha2
-          "SST ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NZL.alpha2
-          "IRD ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::JPN.alpha2
-          "CN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
-          "CN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SGP.alpha2 ||
-              purchase_sales_tax_info&.country_code == Compliance::Countries::IND.alpha2
-          "GST ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CAN.alpha2 &&
-              purchase_sales_tax_info.state_code == QUEBEC
-          "QST ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NOR.alpha2
-          "Norway VAT Registration"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
-          "MST ID"
-        else
-          "VAT ID"
-        end
+      label = TaxIdLabelService.new(purchase_sales_tax_info&.country_code, purchase_sales_tax_info&.state_code).label
 
       {
         label:,

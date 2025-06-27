@@ -388,174 +388,81 @@ const PaymentsPage = (props: Props) => {
     if (bankAccount.type === "JapanBankAccount" && !bankAccount.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "BotswanaBankAccount" && !bankAccount.bank_code) {
+
+    const bankAccountTypesRequiringBankCode = [
+      "BotswanaBankAccount",
+      "SerbiaBankAccount",
+      "SouthAfricaBankAccount",
+      "KenyaBankAccount",
+      "NorthMacedoniaBankAccount",
+      "EgyptBankAccount",
+      "AntiguaAndBarbudaBankAccount",
+      "TanzaniaBankAccount",
+      "NamibiaBankAccount",
+      "EthiopiaBankAccount",
+      "BruneiBankAccount",
+      "GuyanaBankAccount",
+      "GuatemalaBankAccount",
+      "ColombiaBankAccount",
+      "SaudiArabiaBankAccount",
+      "UruguayBankAccount",
+      "MauritiusBankAccount",
+      "JamaicaBankAccount",
+      "EcuadorBankAccount",
+      "KazakhstanBankAccount",
+      "OmanBankAccount",
+      "RwandaBankAccount",
+      "DominicanRepublicBankAccount",
+      "UzbekistanBankAccount",
+      "BoliviaBankAccount",
+      "GhanaBankAccount",
+      "AlbaniaBankAccount",
+      "BahrainBankAccount",
+      "JordanBankAccount",
+      "NigeriaBankAccount",
+      "AngolaBankAccount",
+      "SanMarinoBankAccount",
+      "AzerbaijanBankAccount",
+      "MoldovaBankAccount",
+      "PanamaBankAccount",
+      "ElSalvadorBankAccount",
+      "ParaguayBankAccount",
+      "ArmeniaBankAccount",
+      "SriLankaBankAccount",
+      "BangladeshBankAccount",
+      "BhutanBankAccount",
+      "LaosBankAccount",
+      "MozambiqueBankAccount",
+      "KuwaitBankAccount",
+      "QatarBankAccount",
+      "BahamasBankAccount",
+      "SaintLuciaBankAccount",
+      "CambodiaBankAccount",
+      "MongoliaBankAccount",
+      "AlgeriaBankAccount",
+      "MacaoBankAccount"
+    ];
+
+    const bankAccountTypesRequiringBranchCode = [
+      "JamaicaBankAccount",
+      "UzbekistanBankAccount",
+      "BoliviaBankAccount",
+      "AzerbaijanBankAccount",
+      "SriLankaBankAccount"
+    ];
+
+    if (bankAccountTypesRequiringBankCode.includes(bankAccount.type) && !bankAccount.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (bankAccount.type === "SerbiaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
+
+    if (bankAccountTypesRequiringBranchCode.includes(bankAccount.type) && !bankAccount.branch_code) {
+      markFieldInvalid("branch_code");
     }
-    if (bankAccount.type === "SouthAfricaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "KenyaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "NorthMacedoniaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "EgyptBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "AntiguaAndBarbudaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "TanzaniaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "NamibiaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "EthiopiaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "BruneiBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "GuyanaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "GuatemalaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "ColombiaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
+
     if (bankAccount.type === "ColombiaBankAccount" && !bankAccount.account_type) {
       markFieldInvalid("account_type");
     }
-    if (bankAccount.type === "SaudiArabiaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "UruguayBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "MauritiusBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "JamaicaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "JamaicaBankAccount" && !bankAccount.branch_code) {
-      markFieldInvalid("branch_code");
-    }
-    if (bankAccount.type === "EcuadorBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "KazakhstanBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "OmanBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "RwandaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "DominicanRepublicBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "UzbekistanBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "UzbekistanBankAccount" && !bankAccount.branch_code) {
-      markFieldInvalid("branch_code");
-    }
-    if (bankAccount.type === "BoliviaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("branch_code");
-    }
-    if (bankAccount.type === "GhanaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "AlbaniaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "BahrainBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "JordanBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "NigeriaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "AngolaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "SanMarinoBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "AzerbaijanBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "AzerbaijanBankAccount" && !bankAccount.branch_code) {
-      markFieldInvalid("branch_code");
-    }
-    if (bankAccount.type === "MoldovaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "PanamaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "ElSalvadorBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "ParaguayBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "ArmeniaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "SriLankaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "SriLankaBankAccount" && !bankAccount.branch_code) {
-      markFieldInvalid("branch_code");
-    }
-    if (bankAccount.type === "BangladeshBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "BhutanBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "LaosBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "MozambiqueBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "KuwaitBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "QatarBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "BahamasBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "SaintLuciaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "CambodiaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "MongoliaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "AlgeriaBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
-    if (bankAccount.type === "MacaoBankAccount" && !bankAccount.bank_code) {
-      markFieldInvalid("bank_code");
-    }
+
     if (!bankAccount.account_number) {
       markFieldInvalid("account_number");
     }
