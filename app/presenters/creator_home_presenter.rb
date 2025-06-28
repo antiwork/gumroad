@@ -35,7 +35,7 @@ class CreatorHomePresenter
     product_permalinks = top_sales_data.map(&:first)
     products_by_permalink = seller.products
       .where(unique_permalink: product_permalinks)
-      .includes(thumbnail: { file_attachment: :blob })
+      .includes(thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
       .index_by(&:unique_permalink)
 
     sales = top_sales_data.map do |p|

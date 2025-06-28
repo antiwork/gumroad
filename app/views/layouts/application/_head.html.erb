@@ -26,10 +26,11 @@
   <%= yield :smart_app_banner %>
   <% if @product && @is_on_product_page %>
     <% og_title = @product.name %>
+    <% product_description = @product.description.present? ? @product.plaintext_description : "Available on Gumroad" %>
     <meta content="Gumroad" property="og:site_name">
     <meta content="<%= Addressable::URI.escape(@product.long_url).html_safe %>" property="og:url">
-    <meta content="<%= @product.description.present? ? @product.plaintext_description : "Available on Gumroad" %>" property="og:description">
-    <meta content="<%= @product.description.present? ? @product.plaintext_description : "Available on Gumroad" %>" name="description">
+    <meta content="<%= product_description %>" property="og:description">
+    <meta content="<%= product_description %>" name="description">
     <meta content="<%= @product.unique_permalink %>" property="product:retailer_item_id">
     <meta content="<%= (@product.price_cents/100.0).round(2) %>" property="product:price:amount">
     <meta content="<%= @product.price_currency_type.upcase %>" property="product:price:currency">
