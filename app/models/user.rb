@@ -786,6 +786,11 @@ class User < ApplicationRecord
     tier_pricing_enabled? ? tier >= TIER_3 : sales_cents_total >= TIER_3
   end
 
+  def read_attribute_for_validation(attr)
+    return read_attribute(attr) if attr == :username
+    super
+  end
+
   def compliance_info_resettable?
     return true if stripe_account.blank?
     return false if balances.where(merchant_account_id: stripe_account.id).exists?
