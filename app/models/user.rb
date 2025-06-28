@@ -456,10 +456,6 @@ class User < ApplicationRecord
     currency.upcase
   end
 
-  def debit_card_payout_supported?
-    max_payment_amount_cents < StripePayoutProcessor::DEBIT_CARD_PAYOUT_MAX
-  end
-
   # Public: Get the maximum product price for a user.
   # This is the maximum price that a user can receive in payment for a product.
   # The function returns nil if there is no maximum.
@@ -558,10 +554,6 @@ class User < ApplicationRecord
 
   def is_buyer?
     !links.exists? && purchases.successful.exists?
-  end
-
-  def is_creator?
-    !buyer_signup || links.exists?
   end
 
   def is_affiliate?
@@ -792,11 +784,6 @@ class User < ApplicationRecord
 
   def auto_transcode_videos?
     tier_pricing_enabled? ? tier >= TIER_3 : sales_cents_total >= TIER_3
-  end
-
-  def read_attribute_for_validation(attr)
-    return read_attribute(attr) if attr == :username
-    super
   end
 
   def compliance_info_resettable?
@@ -1039,28 +1026,6 @@ class User < ApplicationRecord
       products.find_each do |product|
         product.enqueue_index_update_for(change_list)
       end
-    end
-
-    def products_sorted_by_reviews_count_desc
-      sorted_product_ids = links.select(:id, :unique_permalink, :flags).sort_by do |product|
-        # Consider reviews count of the products as 0 for sorting if they have display_product_reviews? set to false
-        # so that when sorted by reviews count on the user profile page
-        # they show up *after* all the other products for whom ratings are displayed.
-        reviews_count_for_sorting = product.display_product_reviews? ? -product.reviews_count : 0
-        [reviews_count_for_sorting, product.unique_permalink]
-      end.map(&:id)
-      links.ordered_by_ids(sorted_product_ids)
-    end
-
-    def products_sorted_by_average_rating_desc
-      # Consider average rating of the products as 0 for sorting if they have display_product_reviews? set to false
-      # so that when sorted by average rating on the user profile page
-      # they show up *after* all the other products for whom ratings are displayed.
-      sorted_product_ids = links.select(:id, :unique_permalink, :flags).sort_by do |product|
-        average_rating_for_sorting = product.display_product_reviews? ? -product.average_rating : 0
-        [average_rating_for_sorting, product.unique_permalink]
-      end.map(&:id)
-      links.ordered_by_ids(sorted_product_ids)
     end
 
     def make_affiliate_of_the_matching_approved_affiliate_requests
