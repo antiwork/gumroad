@@ -40,4 +40,9 @@ module ApplicationHelper
       format: "%n%u"
     )
   end
+  def form_field(form, field, label:, type: :text_field, **options)
+  content_tag(:div, class: "mb-4") do
+    form.label(field, label, class: "block text-sm font-medium text-gray-700") +
+    form.send(type, field, { class: "mt-1 block w-full", **options })
+  end
 end

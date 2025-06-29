@@ -15,13 +15,13 @@
         <legend>
           <label for="user_password">Enter a new password</label>
         </legend>
-        <%= f.password_field :password, placeholder: "Password", autofocus: true %>
+        <%= form_field(f, :password, :password_field, placeholder: "Password", autofocus: true) %>
       </fieldset>
       <fieldset>
         <legend>
           <label for="user_password_confirmation">Enter same password to confirm</label>
         </legend>
-        <%= f.password_field :password_confirmation, placeholder: "Password (to confirm)" %>
+        <%= form_field(f, :password_confirmation, :password_field, placeholder: "Password (to confirm)") %>
       </fieldset>
       <button class="button primary" type="submit">Reset password</button>
     </section>
