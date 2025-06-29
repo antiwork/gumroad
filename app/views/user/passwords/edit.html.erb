@@ -12,8 +12,10 @@
     <section>
       <%= f.hidden_field :reset_password_token, value: @reset_password_token %>
       
-      <%= form_field(f, :password, type: :password_field, placeholder: "Password", autofocus: true) %>
-      <%= form_field(f, :password_confirmation, type: :password_field, placeholder: "Password (to confirm)") %>
+      <%= form_field(f, :password, type: :password_field, label: "Enter a new password", placeholder: "Password", autofocus: true) %>
+
+      <%= form_field(f, :password_confirmation, type: :password_field, label: "Enter same password to confirm", placeholder: "Password (to confirm)") %>
+
 
 
       <button class="button primary" type="submit">Reset password</button>
