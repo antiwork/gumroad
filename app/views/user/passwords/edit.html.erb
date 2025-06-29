@@ -11,22 +11,16 @@
   <%= form_for(:user, as: :user, url: password_path(:user), html: {method: :put, id: "reset-password-form", autocomplete: "off"}) do |f| %>
     <section>
       <%= f.hidden_field :reset_password_token, value: @reset_password_token %>
-      <fieldset>
-        <legend>
-          <label for="user_password">Enter a new password</label>
-        </legend>
-        <%= form_field(f, :password, :password_field, placeholder: "Password", autofocus: true) %>
-      </fieldset>
-      <fieldset>
-        <legend>
-          <label for="user_password_confirmation">Enter same password to confirm</label>
-        </legend>
-        <%= form_field(f, :password_confirmation, :password_field, placeholder: "Password (to confirm)") %>
-      </fieldset>
+      
+      <%= form_field(f, :password, label: "Enter a new password", field_type: :password_field, placeholder: "Password", autofocus: true) %>
+
+      <%= form_field(f, :password_confirmation, label: "Enter same password to confirm", field_type: :password_field, placeholder: "Password (to confirm)") %>
+
       <button class="button primary" type="submit">Reset password</button>
     </section>
   <% end %>
 </main>
+
 <aside>
   <img src="<%= image_url("auth/background.png") %>">
 </aside>
