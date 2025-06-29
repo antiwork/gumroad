@@ -1121,20 +1121,41 @@ class User < ApplicationRecord
       %w[font background_color highlight_color].intersect?(seller_profile.saved_changes.keys)
     end
 
-    def cancel_active_subscriptions!
-      subscriptions.active.each { |s| s.cancel!(by_seller: false) }
-    end
+ 
 
-    def trigger_iffy_ingest
-      return unless saved_change_to_name? ||
-                    saved_change_to_username? ||
-                    saved_change_to_bio?
+  def cancel_active_subscriptions!
+    subscriptions.active.each { |s| s.cancel!(by_seller: false) }
+  end
 
-      Iffy::Profile::IngestJob.perform_async(id)
-    end
+  def trigger_iffy_ingest
+    return unless saved_change_to_name? ||
+                  saved_change_to_username? ||
+                  saved_change_to_bio?
 
-    def has_completed_payouts?
-      payments.completed.exists? ||
-        made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
-    end
+    Iffy::Profile::IngestJob.perform_async(id)
+  end
+
+  def has_completed_payouts?
+    payments.completed.exists? ||
+      made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
+  end
+
+  # Add this to group it with other associations (usually at the top of the file)
+  has_many :sales, through: :products
+
+  # 🚀 New dashboard stat methods
+  def total_sales_count_all_time
+    sales.count
+  end
+
+  def total_revenue_all_time
+    sales.sum(:price_cents)
+  end
+
+  def average_sale_price_all_time
+    return Money.new(0) if total_sales_count_all_time.zero?
+
+    total_revenue_all_time / total_sales_count_all_time
+  end
 end
+

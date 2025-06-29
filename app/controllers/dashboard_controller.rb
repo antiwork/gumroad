@@ -54,4 +54,17 @@ class DashboardController < Sellers::BaseController
     flash[:alert] = "A 1099 form for #{year} was not filed for your account."
     redirect_to dashboard_path
   end
+
+  # ✅ NEW: Seller stats for dashboard block
+  def seller_stats
+    authorize :dashboard
+
+    stats = {
+      total_sales: current_seller.total_sales_count_all_time,
+      total_revenue: formatted_dollar_amount(current_seller.total_revenue_all_time.cents),
+      average_sale: formatted_dollar_amount(current_seller.average_sale_price_all_time.cents)
+    }
+
+    render json: { success: true, stats: stats }
+  end
 end
