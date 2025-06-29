@@ -1148,14 +1148,16 @@ class User < ApplicationRecord
     sales.count
   end
 
-  def total_revenue_all_time
-    sales.sum(:price_cents)
-  end
+ def total_revenue_all_time
+  Money.new(purchases.sum(:price_cents))
+ end
 
-  def average_sale_price_all_time
-    return Money.new(0) if total_sales_count_all_time.zero?
+ def average_sale_price_all_time
+  total_sales = purchases.count
+  return Money.new(0) if total_sales.zero?
 
-    total_revenue_all_time / total_sales_count_all_time
-  end
+  Money.new(purchases.sum(:price_cents) / total_sales)
+ end
+
 end
 
