@@ -730,6 +730,7 @@ Rails.application.routes.draw do
     get "/dashboard/active_members_count" => "dashboard#active_members_count", as: :dashboard_active_members_count
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
+    get "dashboard/seller_stats", to: "dashboard#seller_stats"
 
     get "/products", to: "links#index", as: :products
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
