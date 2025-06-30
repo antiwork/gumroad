@@ -1,0 +1,27 @@
+<div class="rounded-lg border border-black bg-white overflow-hidden flex flex-col w-full mx-auto">
+  <%= tag.div class: ["relative w-full h-56 flex items-center justify-center", bg_color] do %>
+    <%= image_tag image_url, alt: name, class: "w-full h-full object-cover" %>
+  <% end %>
+  <div class="flex-1 flex flex-col justify-between p-8 border-t border-black">
+    <div>
+      <div class="text-2xl font-medium mb-4"><%= name %></div>
+      <div class="flex flex-wrap gap-3 mb-6">
+        <% Array(tags).each do |tag| %>
+          <span class="px-4 py-2 border border-black rounded-full text-base"><%= tag %></span>
+        <% end %>
+      </div>
+    </div>
+    <div class="flex gap-4 mt-auto">
+      <% if twitter_url.present? %>
+        <%= link_to twitter_url, target: "_blank", rel: "noopener", class: "hover:opacity-80" do %>
+          <%= image_tag "icons/twitter.svg", class: "w-6 h-6" %>
+        <% end %>
+      <% end %>
+      <% if linkedin_url.present? %>
+        <%= link_to linkedin_url, target: "_blank", rel: "noopener", class: "hover:opacity-80" do %>
+          <%= image_tag "icons/linkedin.svg", class: "w-6 h-6" %>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+</div>

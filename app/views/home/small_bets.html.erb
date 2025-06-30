@@ -1,0 +1,380 @@
+<header class="grid border-b border-black">
+  <div class="flex items-center justify-center px-4 py-20 lg:px-32">
+    <div class="flex flex-col items-center gap-4 max-w-screen-lg text-center">
+      <%= image_tag "smallbets/smallbets.svg", alt: "Small bets", class: "h-48" %>
+      <h1 class="text-5xl md:text-7xl leading-none">
+        You made your $1.<br>Now let's make many more.
+      </h1>
+      <div class="text-xl max-w-md lg:max-w-3xl">
+        Small Bets is a community of creators who support and learn from
+        <br class="hidden sm:block">
+        each other how to build a business, one small bet at a time.
+      </div>
+      <div class="pt-6">
+        <%= render "home/shared/button",
+            text: "Join Small Bets",
+            url: "https://smallbets.com/join",
+            variant: "light",
+            size: "default" %>
+      </div>
+      <div class="text-lg text-muted">
+        Join <span class="font-medium text-black">6,947 amazing people</span> and get
+        immediate access <br class="hidden sm:block"> to our support network.
+      </div>
+    </div>
+  </div>
+</header>
+<section class="flex flex-col lg:flex-row border-b border-black">
+  <div class="bg-black p-8 py-24 lg:w-1/2 lg:border-r border-black flex items-center justify-center">
+    <div class="relative w-full max-w-xl">
+      <%= image_tag "about/book-gumhead.svg",
+          alt: "Don't do it alone illustration",
+          class: "w-full h-auto object-cover mx-auto max-w-lg" %>
+      <div class="absolute top-[-4rem] left-0 sm:left-[-4rem] bg-white rounded-3xl px-6 sm:px-12 py-4 sm:py-8 border border-black">
+        <p class="text-xl font-medium m-0">Don't do it alone...</p>
+      </div>
+    </div>
+  </div>
+  <div class="bg-orange p-8 py-24 lg:w-1/2 flex items-center justify-center">
+    <div class="relative">
+      <%= image_tag "smallbets/friends-gumhead.png",
+          alt: "Sell anywhere feature illustration",
+          class: "w-full max-w-lg mx-auto" %>
+      <div class="absolute top-[-4rem] left-0 sm:left-[-4rem] bg-white rounded-3xl px-6 sm:px-12 py-4 sm:py-8 border border-black">
+        <p class="text-xl font-medium m-0">...do it with friends, instead!</p>
+      </div>
+      <%= image_tag "about/exciting.svg",
+          loading: "lazy",
+          alt: "Exciting sticker",
+          class: "absolute bottom-[-4rem] sm:bottom-[-12rem] right-[0rem] sm:right-[-10rem] lg:right-[-4rem] w-36 sm:w-48 md:w-56 xl:w-80 rotate-6 z-10",
+          style: "will-change: transform; transform: translate3d(0px, 1.5956vh, 0px) scale3d(1, 1, 1) rotateX(0deg) rotateY(0deg) rotateZ(0deg) skew(0deg, 0deg); transform-style: preserve-3d;" %>
+    </div>
+  </div>
+</section>
+<section class="relative flex flex-col items-center justify-center h-auto border-b border-black bg-yellow text-center gap-20 px-8 pt-16 pb-20 md:pt-20 md:pb-24 lg:pt-28 lg:pb-36">
+  <div class="flex flex-col max-w-screen-sm gap-8 lg:gap-10 lg:max-w-screen-md">
+    <h1 class="text-5xl font-medium md:text-6xl md:leading-[0.9]">What is <br class="block sm:hidden">Small Bets?</h1>
+    <div class="text-xl md:text-2xl">
+      Small Bets is a community of 6,947+ creators learning to build businesses through small experiments instead of big risks. You'll get 50+ masterclasses, expert guidance, and a supportive network—all focused on helping you grow from your first dollar to sustainable income without the overwhelm.
+    </div>
+  </div>
+  <div class="hidden relative mx-auto h-96 w-full max-w-6xl overflow-hidden border-y border-black bg-pink p-8 rounded-full border lg:block" role="img" aria-label="Small Bets process flow: Join Community, Get Idea, Launch Quick, Learn Fast, Scale What Works, Repeat">
+  <div class="relative z-10 flex h-full flex-col justify-between border border-black bg-pink rounded-full px-8">
+    <div class="-mt-3 justify-between px-32 flex">
+      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
+        <div class="text-xl xl:text-2xl">Join Community</div>
+      </div>
+      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
+        <div class="text-xl xl:text-2xl">Get Idea</div>
+      </div>
+      <div class="flex h-6 items-center bg-pink pr-6 gap-x-3">
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 -translate-x-3 -translate-y-px" %>
+        <div class="text-xl xl:text-2xl">Launch Quick</div>
+      </div>
+    </div>
+    <div class="flex justify-around space-x-4">
+      <%= image_tag "smallbets/hand.svg" %>
+      <%= image_tag "features/books-and-writing.svg" %>
+      <%= image_tag "smallbets/rocket.svg" %>
+      <%= image_tag "smallbets/gumroad.svg" %>
+    </div>
+    <div class="-mb-3 justify-between px-32 flex">
+      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+        <div class="text-xl xl:text-2xl">Repeat</div>
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3 translate-y-px rotate-180", alt: "" %>
+      </div>
+      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+        <div class="text-xl xl:text-2xl">Scale What Works</div>
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3 translate-y-px rotate-180", alt: "" %>
+      </div>
+      <div class="flex h-6 items-center bg-pink pl-6 gap-x-3">
+        <div class="text-xl xl:text-2xl">Learn Fast</div>
+        <%= image_tag "features/arrowhead-right.svg", class: "h-6 w-6 translate-x-3 translate-y-px rotate-180", alt: "" %>
+      </div>
+    </div>
+    </div>
+  </div>
+</section>
+<section class="max-w-7xl mx-auto text-center flex flex-col gap-4 px-8 py-24">
+    <h2 class="text-4xl lg:text-6xl lg:leading-tight">
+      One-time payment, Lifetime access
+    </h2>
+    <p class="text-xl max-w-2xl mx-auto">
+      100% satisfaction or your money back. No questions asked.
+    </p>
+</section>
+<section class="flex flex-col overflow-hidden border-y border-black lg:flex-row">
+  <div class="flex items-center justify-center border-b border-black bg-purple lg:w-1/2 lg:border-b-0 lg:border-r">
+    <div class="relative max-w-4xl overflow-hidden">
+      <%= image_tag "smallbets/features-small-bets.svg", class: "h-auto w-full", data: { parallax: true }, alt: "Illustration showing small bets feature" %>
+    </div>
+  </div>
+  <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+    <div class="max-w-2xl space-y-12 md:space-y-16">
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Scale beyond your first product
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Learn how successful creators built multiple income streams, from digital products to courses and memberships.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Get feedback
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Test your next product idea with our community before investing time and energy - the "small bets" approach that works.
+        </p>
+      </div>
+      <div class="space-y-4">
+        <h3 class="text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">
+          Connect with fellow creators
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          Join creators from music to architecture, woodworking to education - all building businesses around what they're good at.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="bg-[#f0f0f0]">
+  <div class="max-w-7xl mx-auto px-8 py-24 text-center">
+    <h2 class="text-5xl lg:text-6xl lg:leading-tight">
+      Start small, <br class="block md:hidden"> win big
+    </h2>
+    <p class="mx-auto mt-4 max-w-3xl text-xl">
+      Perfect for creators who want to experiment with new ideas without risking everything.
+    </p>
+    <div class="mx-auto mt-12 max-w-6xl columns-1 gap-6 space-y-6 md:columns-2 lg:columns-3">
+      <%= render layout: "home/shared/review_card", locals: { name: "Miche Priest" } do %>
+        Top notch, creative, generous, engaged people coming together to figure out how to design work around life. <mark class="bg-orange px-0.5 font-semibold">Making solopreneurship not so solo.</mark>
+      <% end %>
+      <%= render layout: "home/shared/review_card", locals: { name: "Greg Gilbert" } do %>
+        I rarely recommend products publicly, but <mark class="bg-orange px-0.5 font-semibold">the Small Bets community offers incredible value for the price.</mark>
+      <% end %>
+      <%= render layout: "home/shared/review_card", locals: { name: "Espree Devora" } do %>
+        Small Bets is the most high value engaged helpful business community on the internet. We pay a one time small fee for lifetime access to <mark class="bg-orange px-0.5 font-semibold">quality connections and impactful education that transforms</mark> our lives.
+      <% end %>
+      <%= render layout: "home/shared/review_card", locals: { name: "Shivam Dewan" } do %>
+        Small Bets is <mark class="bg-orange px-0.5 font-semibold">my new idea generator.</mark> If you need inspiration and a supportive community, this is the place to be.
+      <% end %>
+      <%= render layout: "home/shared/review_card", locals: { name: "Kunal Modi" } do %>
+        Thanks to Daniel's Small Bets course and its amazing community, <mark class="bg-orange px-0.5 font-semibold">I got the jumpstart that would have otherwise taken me ages to figure out on my own.</mark>
+      <% end %>
+      <%= render layout: "home/shared/review_card", locals: { name: "Manny de Souza" } do %>
+        By far, the <mark class="bg-orange px-0.5 font-semibold">best content I consumed</mark> about entrepreneurship and lifestyle. It is amazing to be among of so many like minded people.
+      <% end %>
+    </div>
+  </div>
+</section>
+<section class="flex flex-col border-t border-black overflow-hidden lg:flex-row">
+  <div class="bg-white py-16 px-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-24">
+    <div class="max-w-2xl space-y-12 md:space-y-8">
+      <div class="space-y-4">
+        <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl">
+          Video library of 50 classes
+        </h3>
+        <p class="text-lg lg:text-xl xl:text-2xl">
+          90 hours of high quality education on all topics in one place to level up your knowledge.
+        </p>
+      </div>
+      <ul class="grid grid-cols-1 gap-3 pl-0 text-lg md:grid-cols-2">
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          Make $500 on Upwork by Monday - Sean O'Dowd
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          Emerging from the void on X - Daniel Vassallo
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          Growing on Substack - Elle Griffin
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          AI for the rest of us - Sairam Sundaresan
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          Intro to SEO - Jordan O'Connor
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          Building & launching macOS apps with SwiftUI - Grace Huang
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          A practical guide to self-employment taxes - Catherine Cusick
+        </li>
+        <li class="flex items-start">
+          <span class="mr-3 flex items-center justify-center w-8 h-8 shrink-0">
+            <%= icon "solid-check-circle" %>
+          </span>
+          Crowdfunding crash course - Tugra Sahiner
+        </li>
+        <li class="flex items-start">
+          +42 more!
+        </li>
+      </ul>
+    </div>
+  </div>
+    <div class="bg-yellow border-t lg:border-t-0 lg:w-1/2 lg:border-l overflow-hidden">
+      <div class="relative w-full h-full overflow-hidden">
+        <%= image_tag "smallbets/videolibrary.svg",
+            alt: "Video library of 50 classes",
+            class: "w-full h-full object-cover" %>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="flex flex-col border-t border-black gap-16 px-8 py-16 lg:px-[4vw] lg:py-24 lg:gap-24">
+  <div class="flex flex-col justify-center gap-6 mx-auto text-center max-w-7xl">
+    <h2 class="text-5xl md:text-6xl">Looking for a more bespoke help?</h2>
+    <p class="text-lg md:text-2xl">Just @mention any of these always available resident experts and they will be more than happy to help you out!</p>
+  </div>
+  <div class="override grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
+    <% [
+      {
+        bg_color: "bg-purple",
+        name: "Kilian Ekamp",
+        image_url: image_url("smallbets/re-kilianekamp.png"),
+        twitter_url: "https://x.com/kilianekamp",
+        linkedin_url: "https://www.linkedin.com/in/kilianekamp/",
+        tags: ["coding for non-coders", "youtube", "education", "chatgpt"]
+      },
+      {
+        bg_color: "bg-[#98282A]",
+        name: "Daniel Vassallo",
+        image_url: image_url("smallbets/re-danielvassallo.png"),
+        twitter_url: "https://x.com/dvassallo",
+        linkedin_url: "https://www.linkedin.com/in/danielvassallo/",
+        tags: ["audience building", "communities", "digital products", "marketing"],
+      },
+      {
+        bg_color: "bg-orange",
+        name: "Krystian Zun",
+        image_url: image_url("smallbets/re-krystianzun.png"),
+        twitter_url: "https://x.com/krystianzun",
+        linkedin_url: "https://www.linkedin.com/in/krystianzun/",
+        tags: ["ui/ux", "web design", "branding", "rapid prototyping"]
+      },
+      {
+        bg_color: "bg-green",
+        name: "Nesters Kovalkovs",
+        image_url: image_url("smallbets/re-nesterskovalkovs.png"),
+        twitter_url: "https://x.com/nestersk",
+        linkedin_url: "https://www.linkedin.com/in/nestersk/",
+        tags: ["seo", "e-commerce", "shopify", "conversion rate optimization"]
+      },
+      {
+        bg_color: "bg-yellow",
+        name: "Ira Zayats",
+        image_url: image_url("smallbets/re-irazayatas.png"),
+        twitter_url: "https://x.com/izayats",
+        linkedin_url: "https://www.linkedin.com/in/izayats/",
+        tags: ["campfire mods", "ruby", "rails"]
+      },
+      {
+        bg_color: "bg-pink",
+        name: "Peter Askew",
+        image_url: image_url("smallbets/re-peteraskew.png"),
+        twitter_url: "https://x.com/searchbound",
+        linkedin_url: "https://www.linkedin.com/in/peteraskew/",
+        tags: ["domains", "wordpress", "shopify", "job boards", "directories"]
+      },
+      {
+        bg_color: "bg-[#B23386]",
+        name: "Fernando Torres",
+        image_url: image_url("smallbets/re-fernandotorres.png"),
+        twitter_url: "https://x.com/YvrFernando",
+        linkedin_url: "https://www.linkedin.com/in/fernandotorres91/",
+        tags: ["amazon fba", "physical products", "manufacturing"]
+      },
+      {
+        bg_color: "bg-purple",
+        name: "Hassan Osman",
+        image_url: image_url("smallbets/re-hassanosman.png"),
+        twitter_url: "https://x.com/AuthorOnTheSide",
+        linkedin_url: "https://www.linkedin.com/in/hassano",
+        tags: ["amazon kdp", "udemy", "writing", "podcasting", "newsletters", "beehiiv"]
+      },
+      {
+        bg_color: "bg-[#98282A]",
+        name: "Katt Risen",
+        image_url: image_url("smallbets/re-kattrisen.png"),
+        twitter_url: "https://x.com/kattrisen",
+        linkedin_url: "https://www.linkedin.com/in/katt-risen",
+        tags: ["no-code", "newsletters", "solopreneur tools", "job boards", "directories"]
+      },
+      {
+        bg_color: "bg-yellow",
+        name: "Sairam Sundaresan",
+        image_url: image_url("smallbets/re-sairamsundaresan.png"),
+        twitter_url: "https://x.com/DSaience",
+        linkedin_url: "https://www.linkedin.com/in/sairam-sundaresan",
+        tags: ["ai apps", "ai research", "ai coding", "writing with ai"]
+      },
+      {
+        bg_color: "bg-red",
+        name: "Greg Lim",
+        image_url: image_url("smallbets/re-greglim.png"),
+        twitter_url: "https://x.com/greglim81",
+        tags: ["amazon kdp", "udemy", "tech writing"]
+      },
+      {
+        bg_color: "bg-orange",
+        name: "Francesco Ambrosiano",
+        image_url: image_url("smallbets/re-francescoambrosiano.png"),
+        twitter_url: "https://x.com/giftedio",
+        linkedin_url: "https://www.linkedin.com/in/francescoambrosiano/",
+        tags: ["google ads", "facebook ads"]
+      },
+      {
+        bg_color: "bg-purple",
+        name: "Espree Devora",
+        image_url: image_url("smallbets/re-espreedevora.png"),
+        twitter_url: "https://x.com/EspreeDevora",
+        linkedin_url: "https://www.linkedin.com/in/espree/",
+        tags: ["podcasting"]
+      }
+    ].each do |expert| %>
+      <%= render "home/shared/expert_card",
+        image_url: expert[:image_url],
+        name: expert[:name],
+        tags: expert[:tags],
+        twitter_url: expert[:twitter_url],
+        linkedin_url: expert[:linkedin_url],
+        bg_color: expert[:bg_color]
+      %>
+    <% end %>
+  </div>
+</section>
+<section class="border-t border-black bg-pink px-8 py-16 lg:px-[4vw] lg:py-24">
+  <div class="flex flex-col gap-8 max-w-5xl mx-auto lg:items-center">
+    <h1 class="font-medium text-center text-4xl sm:text-5xl lg:text-7xl"> Ready to turn that <br> $1 into $1000?</h1>
+    <%= render "home/shared/button", text: "Join Small Bets", url: "https://smallbets.com/join" %>
+    <div class="text-lg text-muted text-center">
+    Join <span class="font-medium text-black">6,947 amazing people</span> and get immediate access to our support network.
+    </div>
+  </div>
+</section>
+<%= render "home/shared/footer" %>
+

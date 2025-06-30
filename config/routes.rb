@@ -280,6 +280,7 @@ Rails.application.routes.draw do
     get "/privacy", to: "home#privacy"
     get "/taxes", to: redirect("/pricing", status: 301)
     get "/hackathon", to: "home#hackathon"
+    get "/small-bets", to: "home#small_bets"
     resource :github_stars, only: [:show]
 
     namespace :gumroad_blog, path: "blog" do

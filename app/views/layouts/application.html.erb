@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <%= render("layouts/application/head") %>
-  <% bclass = ["group"] %>
+  <% bclass = [] %>
   <% bclass.push "mac" if request.headers["User-Agent"]&.include? "Macintosh" %>
   <% bclass.push(@body_class) if @body_class %>
   <% show_nav = !@hide_layouts && user_signed_in? %>
