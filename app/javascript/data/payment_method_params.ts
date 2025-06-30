@@ -71,20 +71,6 @@ export type AnyPaymentMethodParams =
   | ReusablePaymentRequestPaymentMethodParams
   | AnyPayPalMethodParams;
 
-export const isPayPalNativeParams = (
-  cardParams: AnyPaymentMethodParams | StripeErrorParams,
-): cardParams is PayPalNativePaymentMethodParams | ReusablePayPalNativePaymentMethodParams =>
-  cardParams.status === "success" && cardParams.type === "paypal-native";
-
-export const isPayPalBraintreeParams = (
-  cardParams: AnyPaymentMethodParams | StripeErrorParams,
-): cardParams is ReusablePayPalBraintreePaymentMethodParams =>
-  cardParams.status === "success" && cardParams.type === "paypal-braintree";
-
-export const isPayPalParams = (
-  cardParams: AnyPaymentMethodParams | StripeErrorParams,
-): cardParams is AnyPayPalMethodParams => isPayPalNativeParams(cardParams) || isPayPalNativeParams(cardParams);
-
 // We should be able to change `AnyPaymentMethodParams` representation on the frontend without making any backend changes
 // Since `AnyPaymentMethodParams` is being used to construct query params for the request to save the payment method,
 // we'd have more flexibility with a function to convert a local `AnyPaymentMethodParams` type into the shape the backend expects.

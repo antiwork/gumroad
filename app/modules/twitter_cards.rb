@@ -5,10 +5,13 @@ module TwitterCards
 
   module_function
 
-  def twitter_product_card(link)
+  def twitter_product_card(link, product_description: nil)
     card = "summary"
     preview = {}
-    description = if link.description.present?
+
+    description = if product_description.present?
+      product_description
+    elsif link.description.present?
       link.plaintext_description
     else
       "Available on Gumroad"
