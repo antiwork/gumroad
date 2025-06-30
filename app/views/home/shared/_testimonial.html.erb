@@ -5,7 +5,7 @@
       <%= testimonial[:quote] %>
     </div>
   </div>
-  <div class="flex items-center gap-4">
+  <a href="<%= testimonial[:url] %>" rel="noopener noreferrer" class="flex items-center gap-4 hover:opacity-80 transition-opacity no-underline">
     <div class="w-12 h-12 rounded-full overflow-hidden">
       <%= image_tag testimonial[:avatar_path], alt: testimonial[:name] + " avatar", class: "h-12 w-12 object-cover" %>
     </div>
@@ -17,5 +17,5 @@
         <%= testimonial[:description] %>
       </div>
     </div>
-  </div>
+  </a>
 </div>
