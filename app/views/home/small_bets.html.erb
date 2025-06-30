@@ -251,7 +251,7 @@
     <p class="text-lg md:text-2xl">Just @mention any of these always available resident experts and they will be more than happy to help you out!</p>
   </div>
   <div class="override grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
-    <% expert_card = [
+    <% [
       {
         bg_color: "bg-purple",
         name: "Kilian Ekamp",
@@ -355,8 +355,7 @@
         linkedin_url: "https://www.linkedin.com/in/espree/",
         tags: ["podcasting"]
       }
-    ] %>
-    <% expert_card.each do |expert| %>
+    ].each do |expert| %>
       <%= render "home/shared/expert_card",
         image_url: expert[:image_url],
         name: expert[:name],
