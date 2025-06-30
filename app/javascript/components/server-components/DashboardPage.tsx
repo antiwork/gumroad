@@ -124,7 +124,7 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   {
     name: "Smart move",
     getCompleted: (stats) => stats.purchased_small_bets,
-    link: "/small-bets",
+    link: Routes.small_bets_url(),
     IconComponent: SmallBetsIcon,
     description: "Sign up for Small Bets.",
   },
