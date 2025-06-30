@@ -42,7 +42,7 @@
       <% og_image_alt = "" %>
     <% end %>
     <meta content="<%= FACEBOOK_OG_NAMESPACE %>:product" property="og:type">
-    <%= twitter_product_card(@product).html_safe %>
+    <%= twitter_product_card(@product, product_description:).html_safe %>
     <% @product.display_asset_previews.select { |asset| asset.file.image? }.each do |asset| %>
       <link rel="preload" as="image" href="<%= asset.url %>">
     <% end %>
