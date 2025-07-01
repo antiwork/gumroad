@@ -1155,8 +1155,9 @@ class User < ApplicationRecord
   total_sales = sales.count
   return Money.new(0) if total_sales.zero?
 
-  Money.new(sales.sum(:price_cents) / total_sales)
+  Money.new((sales.sum(:price_cents).to_f / total_sales).round)
  end
+
 
 end
 
