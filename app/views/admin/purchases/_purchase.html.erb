@@ -303,11 +303,10 @@
 
     <hr>
    <details>
-  <summary>Edit giftee email</summary> <!-- ✅ KEEP THIS -->
+  <summary>Edit giftee email</summary> 
 
   <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
-    <%= form_field(f, :giftee_email, type: :text_field, placeholder: "Enter new giftee email") %> <!-- ❌ REMOVE label: here -->
-
+    <%= form_field(f, :giftee_email, type: :text_field, placeholder: "Enter new giftee email") %> 
     <%= f.button "Update", class: "button" %>
   <% end %>
 </details>
