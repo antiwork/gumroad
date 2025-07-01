@@ -302,14 +302,16 @@
     </details>
 
     <hr>
-    <details>
-      
-      <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
-        <%= form_field(f, :giftee_email, type: :text_field, label: "New giftee email", placeholder: "Enter new giftee email") %>
+   <details>
+  <summary>Edit giftee email</summary> <!-- ✅ KEEP THIS -->
 
-        <%= f.button "Update", class: "button" %>
-      <% end %>
-    </details>
+  <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
+    <%= form_field(f, :giftee_email, type: :text_field, placeholder: "Enter new giftee email") %> <!-- ❌ REMOVE label: here -->
+
+    <%= f.button "Update", class: "button" %>
+  <% end %>
+</details>
+
   <% end %>
 
   <% if purchase.is_gift_receiver_purchase %>
