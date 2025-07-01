@@ -1140,10 +1140,7 @@ class User < ApplicationRecord
       made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
   end
 
-  # Add this to group it with other associations (usually at the top of the file)
-  has_many :products
-  has_many :sales, through: :products
-  has_many :preorders_bought, class_name: "Preorder", foreign_key: :purchaser_id
+ 
 
 
   # 🚀 New dashboard stat methods
