@@ -1141,12 +1141,17 @@ class User < ApplicationRecord
   end
 
   # Add this to group it with other associations (usually at the top of the file)
+  has_many :products
   has_many :sales, through: :products
+  has_many :preorders_bought, class_name: "Preorder", foreign_key: :purchaser_id
+
 
   # 🚀 New dashboard stat methods
-  def total_sales_count_all_time
-    sales.count
-  end
+ # Dashboard statistics methods
+ def total_sales_count_all_time
+  sales.count
+ end
+
  def total_revenue_all_time
   Money.new(sales.sum(:price_cents))
  end
