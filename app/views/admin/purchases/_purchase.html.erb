@@ -307,7 +307,8 @@
         <h3>Edit giftee email</h3>
       </summary>
       <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
-        <%= f.text_field :giftee_email, placeholder: "Enter new giftee email" %>
+        <%= form_field(f, :giftee_email, type: :text_field, label: "New giftee email", placeholder: "Enter new giftee email") %>
+
         <%= f.button "Update", class: "button" %>
       <% end %>
     </details>
