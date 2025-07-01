@@ -1,4 +1,4 @@
-.PHONY: build_base build_base_test build build_nginx build_branch_app_nginx build_test build_staging build_production clean clean_local pull stop clean .setup
+.PHONY: build_base build_base_test build build_nginx build_branch_app_nginx build_test build_staging build_production clean clean_local pull stop
 
 NEW_BASE_REPO ?= $(ECR_REGISTRY)/gumroad/web_base
 NEW_WEB_REPO ?= $(ECR_REGISTRY)/gumroad/web
@@ -17,7 +17,7 @@ DOCKER_COMPOSE_CMD ?= docker compose
 AWS_CLI_DOCKER_IMAGE ?= garland/aws-cli-docker
 PUSH_ASSETS ?= false
 LOCAL_DETACHED ?= false
-LOCAL_DOCKER_COMPOSE_CONFIG = $(if $(and $(filter Linux,$(shell uname -s)),$(shell test ! -e /proc/sys/fs/binfmt_misc/WSLInterop && echo true)),docker-compose-local-linux.yml,docker-compose-local.yml)
+LOCAL_DOCKER_COMPOSE_CONFIG = docker-compose-local.yml
 
 build_base:
 	rm -f docker/base/Gemfile* docker/base/.ruby-version
@@ -194,7 +194,7 @@ clean_local:
 pull:
 	$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml pull db_test mongo elasticsearch
 
-local: .setup
+local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/$(LOCAL_DOCKER_COMPOSE_CONFIG) up $(if $(filter true,$(LOCAL_DETACHED)),-d)
 
@@ -202,11 +202,7 @@ stop_local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/$(LOCAL_DOCKER_COMPOSE_CONFIG) down
 
-.setup:
-	mkdir -p docker/tmp/elasticsearch
-	mkdir -p docker/tmp/mongo
-	mkdir -p docker/tmp/mysql
-	mkdir -p docker/tmp/redis
+
 
 stop:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
