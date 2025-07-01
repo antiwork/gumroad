@@ -1,8 +1,8 @@
 services:
   db_test:
     image: mysql:8.0.32
-    tmpfs:
-      - /var/lib/mysql:rw
+    volumes:
+      - mysql_data:/var/lib/mysql
     ports:
       - "3306"
     environment:
@@ -15,15 +15,15 @@ services:
 
   redis:
     image: redis:7.0.7
-    tmpfs:
-      - /data:rw
+    volumes:
+      - redis_data:/data
     ports:
       - "6379"
 
   mongo:
     image: mongo:3.6.16
-    tmpfs:
-      - /data/db:rw
+    volumes:
+      - mongo_data:/data/db
     ports:
       - "27017"
     command: "mongod --smallfiles"
@@ -40,3 +40,8 @@ services:
     image: memcached
     ports:
       - "11211"
+
+volumes:
+  mysql_data:
+  redis_data:
+  mongo_data:
