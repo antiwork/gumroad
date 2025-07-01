@@ -8,7 +8,8 @@ require_relative "stripe_payment_method_helper"
 class StripeBalanceEnforcer
   include StripeChargesHelper
 
-  # As of July 2025, running the suite requires a balance of ~$70.
+  # As of July 2025, running the suite requires a balance of ~$70. 100x that as
+  # a buffer should be sufficient for the foreseeable future.
   DEFAULT_MINIMUM_BALANCE_CENTS = 70_00 * 100
 
   def self.ensure_sufficient_balance(minimum_balance_cents = DEFAULT_MINIMUM_BALANCE_CENTS)
@@ -44,6 +45,8 @@ class StripeBalanceEnforcer
 
       create_stripe_charge(
         payment_method_id,
+        # This is the maximum amount that can be charged per transaction. Use
+        # the largest possible value to reduce top up frequency.
         amount: 999_999_99,
         currency: "usd",
         confirm: true
