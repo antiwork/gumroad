@@ -25,7 +25,7 @@ Run this in **PowerShell as Administrator** to avoid long file path issues:
 
 ```bash
 git config --system core.longpaths true
-````
+```
 
 ### Install WSL and Ubuntu
 
@@ -185,9 +185,9 @@ Visit: [https://gumroad.dev](https://gumroad.dev)
 
 Use:
 
-* **Email:** `seller@gumroad.com`
-* **Password:** `password`
-* **2FA:** `000000`
+- **Email:** `seller@gumroad.com`
+- **Password:** `password`
+- **2FA:** `000000`
 
 See [Users & authentication](../users.md) for other roles.
 
@@ -229,11 +229,11 @@ git config --local core.hooksPath .githooks
 
 ## 🛑 Fixing HTTPS or Privacy Warnings in Chrome
 
-* On `Your connection is not private`, type: `thisisunsafe`
-* To clear HSTS:
+- On `Your connection is not private`, type: `thisisunsafe`
+- To clear HSTS:
 
-  * Go to `chrome://net-internals/#hsts`
-  * Under **Delete domain security policies**, enter `gumroad.dev`
+  - Go to `chrome://net-internals/#hsts`
+  - Under **Delete domain security policies**, enter `gumroad.dev`
 
 ---
 
@@ -253,18 +253,17 @@ sudo nano /etc/hosts
 
 ## ✅ Final Tips
 
-* Use **WSL Ubuntu only**, never PowerShell or CMD.
-* Use the versions from `.ruby-version` and `.node-version`.
-* If port `:8080` is occupied, kill the process:
+- Use **WSL Ubuntu only**, never PowerShell or CMD.
+- Use the versions from `.ruby-version` and `.node-version`.
+- If port `:8080` is occupied, kill the process:
 
 ```bash
 sudo lsof -i :8080
 kill -9 <PID>
 ```
 
-* Ensure the following environment variable is set (for seller login):
+- Ensure the following environment variable is set (for seller login):
 
 ```
 HELPER_WIDGET_SECRET=<any random string>
 ```
-
