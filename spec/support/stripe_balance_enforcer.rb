@@ -26,28 +26,27 @@ class StripeBalanceEnforcer
   end
 
   private
+    attr_reader :minimum_balance_cents
 
-  attr_reader :minimum_balance_cents
+    def insufficient_balance?
+      current_balance_cents < minimum_balance_cents
+    end
 
-  def insufficient_balance?
-    current_balance_cents < minimum_balance_cents
-  end
+    def current_balance_cents
+      balance = Stripe::Balance.retrieve
+      usd_balance = balance.available.find { |b| b["currency"] == "usd" }
+      usd_balance ? usd_balance["amount"] : 0
+    end
 
-  def current_balance_cents
-    balance = Stripe::Balance.retrieve
-    usd_balance = balance.available.find { |b| b["currency"] == "usd" }
-    usd_balance ? usd_balance["amount"] : 0
-  end
+    def top_up!
+      available_balance_card = StripePaymentMethodHelper.success_available_balance
+      payment_method_id = available_balance_card.to_stripejs_payment_method_id
 
-  def top_up!
-    available_balance_card = StripePaymentMethodHelper.success_available_balance
-    payment_method_id = available_balance_card.to_stripejs_payment_method_id
-
-    create_stripe_charge(
-      payment_method_id,
-      amount: 999_999_99,
-      currency: "usd",
-      confirm: true
-    )
-  end
+      create_stripe_charge(
+        payment_method_id,
+        amount: 999_999_99,
+        currency: "usd",
+        confirm: true
+      )
+    end
 end
