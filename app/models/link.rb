@@ -1446,7 +1446,7 @@ class Link < ApplicationRecord
 
     def validate_daily_link_creation_limit
       return unless user.present?
-      
+
       today_links_count = user.links.where(created_at: Time.current.beginning_of_day..Time.current.end_of_day).count
       if today_links_count >= 100
         errors.add(:base, "Sorry, you can only create 100 products per day.")

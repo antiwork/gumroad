@@ -277,20 +277,20 @@ describe Link, :vcr do
 
   describe "daily link creation limit validation" do
     let(:user) { create(:user) }
-    
+
     it "allows creating up to 100 links per day" do
       create_list(:product, 99, user: user)
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
-    
+
     it "prevents creating more than 100 links per day" do
       create_list(:product, 100, user: user)
       new_product = build(:product, user: user)
       expect(new_product).not_to be_valid
       expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
     end
-    
+
     it "allows different users to each create 100 links per day" do
       user1 = create(:user)
       user2 = create(:user)
@@ -298,13 +298,13 @@ describe Link, :vcr do
       new_product = build(:product, user: user2)
       expect(new_product).to be_valid
     end
-    
+
     it "resets the limit each day" do
       create_list(:product, 100, user: user, created_at: 1.day.ago)
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
-    
+
     it "does not apply to products without a user" do
       create_list(:product, 100, user: user)
       new_product = build(:product, user: nil)
