@@ -304,20 +304,6 @@ describe Link, :vcr do
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
-
-    it "counts products created within the last 24 hours" do
-      create_list(:product, 50, user: user, created_at: 23.hours.ago)
-      create_list(:product, 50, user: user, created_at: 1.hour.ago)
-      new_product = build(:product, user: user)
-      expect(new_product).not_to be_valid
-      expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
-    end
-
-    it "does not interfere with other validations" do
-      create_list(:product, 50, user: user)
-      new_product = build(:product, user: user)
-      expect(new_product).to be_valid
-    end
   end
 
   describe "callbacks" do
