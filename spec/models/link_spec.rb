@@ -313,6 +313,11 @@ describe Link, :vcr do
       expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
     end
     
+||||||| e3efcf2c75
+    
+=======
+
+>>>>>>> 338f63102b732acf10745e03e1c3a5802bdb9bdd
     it "does not apply to products without a user" do
       create_list(:product, 100, user: user)
       new_product = build(:product, user: nil)
