@@ -275,23 +275,23 @@ describe Link, :vcr do
     end
   end
 
-  describe "daily link creation limit validation" do
+  describe "daily product creation limit validation" do
     let(:user) { create(:user) }
     
-    it "allows creating up to 100 links per day" do
+    it "allows creating up to 100 products in 24 hours" do
       create_list(:product, 99, user: user)
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
     
-    it "prevents creating more than 100 links per day" do
+    it "prevents creating more than 100 products in 24 hours" do
       create_list(:product, 100, user: user)
       new_product = build(:product, user: user)
       expect(new_product).not_to be_valid
       expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
     end
     
-    it "allows different users to each create 100 links per day" do
+    it "allows different users to each create 100 products in 24 hours" do
       user1 = create(:user)
       user2 = create(:user)
       create_list(:product, 100, user: user1)
@@ -299,10 +299,18 @@ describe Link, :vcr do
       expect(new_product).to be_valid
     end
     
-    it "resets the limit each day" do
-      create_list(:product, 100, user: user, created_at: 1.day.ago)
+    it "allows creating products after 24 hours have passed" do
+      create_list(:product, 100, user: user, created_at: 25.hours.ago)
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
+    end
+    
+    it "counts products created within the last 24 hours" do
+      create_list(:product, 50, user: user, created_at: 23.hours.ago)
+      create_list(:product, 50, user: user, created_at: 1.hour.ago)
+      new_product = build(:product, user: user)
+      expect(new_product).not_to be_valid
+      expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
     end
     
     it "does not apply to products without a user" do
