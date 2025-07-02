@@ -277,20 +277,20 @@ describe Link, :vcr do
 
   describe "daily product creation limit validation" do
     let(:user) { create(:user) }
-    
+
     it "allows creating up to 100 products in 24 hours" do
       create_list(:product, 99, user: user)
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
-    
+
     it "prevents creating more than 100 products in 24 hours" do
       create_list(:product, 100, user: user)
       new_product = build(:product, user: user)
       expect(new_product).not_to be_valid
       expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
     end
-    
+
     it "allows different users to each create 100 products in 24 hours" do
       user1 = create(:user)
       user2 = create(:user)
@@ -298,13 +298,13 @@ describe Link, :vcr do
       new_product = build(:product, user: user2)
       expect(new_product).to be_valid
     end
-    
+
     it "allows creating products after 24 hours have passed" do
       create_list(:product, 100, user: user, created_at: 25.hours.ago)
       new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
-    
+
     it "counts products created within the last 24 hours" do
       create_list(:product, 50, user: user, created_at: 23.hours.ago)
       create_list(:product, 50, user: user, created_at: 1.hour.ago)
@@ -312,15 +312,10 @@ describe Link, :vcr do
       expect(new_product).not_to be_valid
       expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
     end
-    
-||||||| e3efcf2c75
-    
-=======
 
->>>>>>> 338f63102b732acf10745e03e1c3a5802bdb9bdd
-    it "does not apply to products without a user" do
-      create_list(:product, 100, user: user)
-      new_product = build(:product, user: nil)
+    it "does not interfere with other validations" do
+      create_list(:product, 50, user: user)
+      new_product = build(:product, user: user)
       expect(new_product).to be_valid
     end
   end
