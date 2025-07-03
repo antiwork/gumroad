@@ -6,7 +6,9 @@ import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
+import { ButtonColor } from "$app/components/design";
+import { Modal } from "$app/components/Modal";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
@@ -23,7 +25,9 @@ type Props = {
   selection: PriceSelection;
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
-  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement> | undefined;
+  outline?: boolean | undefined;
+  color?: ButtonColor | undefined;
 };
 
 export const trackCtaClick = ({
@@ -77,8 +81,40 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
   "utm_term",
 ]);
 
-export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
-  ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
+export const defaultCtaButtonText = ({
+  purchase,
+  product,
+  selection,
+}: {
+  product: Product;
+  purchase: Purchase | null;
+  selection: PriceSelection;
+}) =>
+  purchase
+    ? "Purchase again"
+    : product.recurrences
+      ? "Subscribe"
+      : selection.rent
+        ? "Rent"
+        : product.custom_button_text_option
+          ? getCtaName(product.custom_button_text_option)
+          : "I want this!";
+
+const CtaButtonInner = React.forwardRef<HTMLAnchorElement, Props>(
+  (
+    {
+      product,
+      purchase,
+      discountCode,
+      selection,
+      label,
+      onClick,
+      outline,
+      color = "accent",
+      showInstallmentPlanNotes = false,
+    },
+    ref,
+  ) => {
     const { searchParams } = new URL(useOriginalLocation());
 
     const [referrer, setReferrer] = React.useState("");
@@ -144,17 +180,13 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     return (
       <>
-        <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
+        <NavigationButton ref={ref} href={url.toString()} color={color} outline={outline} {...buttonCommonProps}>
           {label ??
-            (purchase
-              ? "Purchase again"
-              : product.recurrences
-                ? "Subscribe"
-                : selection.rent
-                  ? "Rent"
-                  : product.custom_button_text_option
-                    ? getCtaName(product.custom_button_text_option)
-                    : "I want this!")}
+            defaultCtaButtonText({
+              purchase,
+              product,
+              selection,
+            })}
         </NavigationButton>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
@@ -177,4 +209,93 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     );
   },
 );
+CtaButtonInner.displayName = "CtaButton";
+
+export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>((props, ref) => {
+  if (props.purchase?.subscription_has_lapsed)
+    return (
+      <ResumeSubscriptionModal
+        product={props.product}
+        purchase={props.purchase}
+        discountCode={props.discountCode}
+        selection={props.selection}
+        onStartNewSubscription={props.onClick}
+        ctaButtonRef={ref}
+        ctaLabel={props.label}
+      />
+    );
+
+  return <CtaButtonInner {...props} ref={ref} />;
+});
 CtaButton.displayName = "CtaButton";
+
+const ResumeSubscriptionModal = ({
+  product,
+  purchase,
+  discountCode,
+  selection,
+  onStartNewSubscription,
+  ctaButtonRef,
+  ctaLabel,
+}: {
+  product: Product;
+  purchase: Purchase;
+  selection: PriceSelection;
+  onStartNewSubscription: React.MouseEventHandler<HTMLAnchorElement> | undefined;
+  ctaLabel: string | undefined;
+  discountCode?: ProductDiscount | null;
+  ctaButtonRef?: React.ForwardedRef<HTMLAnchorElement>;
+}) => {
+  const [showResumeSubscriptionModal, setShowResumeSubscriptionModal] = React.useState(false);
+
+  if (purchase.membership === null) return null;
+
+  return (
+    <>
+      <a ref={ctaButtonRef} className="contents">
+        <Button color="accent" onClick={() => setShowResumeSubscriptionModal(true)}>
+          {ctaLabel ??
+            defaultCtaButtonText({
+              purchase,
+              product,
+              selection,
+            })}
+        </Button>
+      </a>
+      {showResumeSubscriptionModal ? (
+        <Modal
+          open={showResumeSubscriptionModal}
+          onClose={() => setShowResumeSubscriptionModal(false)}
+          title="Resume your previous subscription?"
+          footer={
+            <>
+              <CtaButtonInner
+                product={product}
+                purchase={purchase}
+                discountCode={discountCode ?? null}
+                selection={selection}
+                label="No, start a new subscription"
+                showInstallmentPlanNotes
+                outline
+                color="filled"
+                onClick={onStartNewSubscription}
+              />
+              <NavigationButton
+                color="primary"
+                onClick={() => setShowResumeSubscriptionModal(false)}
+                href={purchase.membership.manage_url}
+              >
+                Yes, resume subscription
+              </NavigationButton>
+            </>
+          }
+        >
+          <p>
+            You've previously subscribed to this product. Would you like to <b>pick up where you left off, </b>
+            or <b>start fresh with a new subscription</b>?
+          </p>
+        </Modal>
+      ) : null}
+    </>
+  );
+};

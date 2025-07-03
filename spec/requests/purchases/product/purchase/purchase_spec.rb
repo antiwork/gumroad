@@ -104,10 +104,24 @@ describe("Purchases from the product page", type: :feature, js: true) do
         expect(page).to have_link "Manage membership", href: @manage_membership_url
       end
 
-      it "shows restart membership button for an inactive membership" do
-        @purchase.subscription.update!(cancelled_at: 1.minute.ago)
-        visit "#{@product.user.subdomain_with_protocol}/l/#{@product.unique_permalink}"
-        expect(page).to have_link "Restart membership", href: @manage_membership_url
+      context "when membership is inactive" do
+        before do
+          @purchase.subscription.update!(cancelled_at: 1.minute.ago)
+        end
+
+        it "shows restart membership button" do
+          visit "#{@product.user.subdomain_with_protocol}/l/#{@product.unique_permalink}"
+          expect(page).to have_link "Restart membership", href: @manage_membership_url
+        end
+
+        it "shows resume membership modal when clicking purchase" do
+          visit "#{@product.user.subdomain_with_protocol}/l/#{@product.unique_permalink}"
+          click_on "Purchase again", match: :first
+
+          within_modal "Resume your previous subscription?" do
+            expect(page).to have_text("You've previously subscribed to this product. Would you like to pick up where you left off, or start fresh with a new subscription?")
+          end
+        end
       end
     end
   end
