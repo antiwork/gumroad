@@ -6,17 +6,18 @@ import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
-import { ButtonProps, NavigationButton } from "$app/components/Button";
+import { NavigationButton } from "$app/components/Button";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
   hasMetDiscountConditions,
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
+import { Modal } from "$app/components/Modal";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-type Props = ButtonProps & {
+type Props = {
   product: Product;
   purchase: Purchase | null;
   discountCode: ProductDiscount | null;
@@ -24,6 +25,7 @@ type Props = ButtonProps & {
   label: string | undefined;
   showInstallmentPlanNotes?: boolean;
   onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  validate?: () => boolean;
 };
 
 export const trackCtaClick = ({
@@ -97,9 +99,46 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
   "utm_term",
 ]);
 
+const ResumeSubscriptionModal = ({
+  open,
+  onClose,
+  manageUrl,
+  checkoutUrl,
+}: {
+  open: boolean;
+  onClose: () => void;
+  manageUrl: string;
+  checkoutUrl: string;
+}) => (
+  <Modal open={open} onClose={onClose} title="Resume your previous subscription?">
+    <div className="paragraphs">
+      <p>
+        You've previously subscribed to this product. Would you like to <b>pick up where you left off,</b>
+        or <b>start fresh with a new subscription?</b>
+      </p>
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--spacer-2)",
+          justifyContent: "end",
+          marginTop: "var(--spacer-3)",
+        }}
+      >
+        <NavigationButton href={checkoutUrl} target="_top">
+          No, start a new subscription
+        </NavigationButton>
+        <NavigationButton color="primary" onClick={onClose} href={manageUrl}>
+          Yes, resume subscription
+        </NavigationButton>
+      </div>
+    </div>
+  </Modal>
+);
+
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
-  ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false, outline }, ref) => {
+  ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
     const { searchParams } = new URL(useOriginalLocation());
+    const [showResumeModal, setShowResumeModal] = React.useState(false);
 
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
@@ -149,7 +188,15 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     const buttonCommonProps = {
       target: "_top",
-      onClick: (evt: React.MouseEvent<HTMLAnchorElement>) => {
+      // Resolves a Safari rendering bug that makes the button too tall
+      style: { alignItems: "unset" },
+    };
+
+    const handleButtonClick = (evt: React.MouseEvent<HTMLAnchorElement>) => {
+      if (purchase?.membership) {
+        evt.preventDefault();
+        setShowResumeModal(true);
+      } else {
         onClick?.(evt);
         if (evt.defaultPrevented) return;
         trackCtaClick({
@@ -157,20 +204,48 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           name: product.name,
           permalink: product.permalink,
         });
-      },
-      // Resolves a Safari rendering bug that makes the button too tall
-      style: { alignItems: "unset" },
+      }
     };
-
     return (
       <>
-        <NavigationButton ref={ref} href={url.toString()} color={outline ? undefined : "accent"} {...buttonCommonProps}>
-          {getCtaLabel(product, purchase, selection, label)}
-        </NavigationButton>
+        {purchase && purchase?.membership ? (
+          <>
+            <NavigationButton
+              ref={ref}
+              href={url.toString()}
+              color="accent"
+              onClick={handleButtonClick}
+              {...buttonCommonProps}
+            >
+              {getCtaLabel(product, purchase, selection, label)}
+            </NavigationButton>
+            <ResumeSubscriptionModal
+              open={showResumeModal}
+              onClose={() => setShowResumeModal(false)}
+              manageUrl={purchase.membership.manage_url}
+              checkoutUrl={url.toString()}
+            />
+          </>
+        ) : (
+          <NavigationButton
+            ref={ref}
+            href={url.toString()}
+            color="accent"
+            onClick={handleButtonClick}
+            {...buttonCommonProps}
+          >
+            {getCtaLabel(product, purchase, selection, label)}
+          </NavigationButton>
+        )}
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
           <>
-            <NavigationButton color="black" href={urlWithInstallments.toString()} {...buttonCommonProps}>
+            <NavigationButton
+              color="black"
+              href={urlWithInstallments.toString()}
+              onClick={handleButtonClick}
+              {...buttonCommonProps}
+            >
               Pay in {product.installment_plan.number_of_installments} installments
             </NavigationButton>
             {showInstallmentPlanNotes ? (
