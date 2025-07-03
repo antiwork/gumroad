@@ -3,7 +3,7 @@
 - Always write the code
 - Don't leave comments in the code
 - No explanatory comments please
-- Don’t apologize for errors, fix them
+- Don't apologize for errors, fix them
 - Prefer re-using deprecated boolean flags (https://github.com/pboling/flag_shih_tzu) instead of creating new ones. Deprecated flags are named `DEPRECATED_<something>`. To re-use this flag you'll first need to reset the values for it on staging and production and then rename the flag to the new name. You can reset the flag like this:
     
     ```ruby
