@@ -1,560 +1,322 @@
-<header class="grid border-b border-black override grid-cols-1 bg-[#f0f0f0]">
-  <div data-hero-parallax-container class="relative flex items-center justify-center border-b border-black bg-gray-100 px-8 py-40 lg:px-[8vw] md:py-[12rem]">
-    <div class="flex flex-col max-w-screen-lg items-center gap-6 text-center z-10">
-      <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from<br class="sm:hidden"> <span class="whitespace-nowrap">0 to $1</span></h1>
-      <div class="text-xl max-w-md lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
-      <div class="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-[384px] sm:max-w-none sm:w-auto mx-auto">
-        <div class="w-full sm:w-auto [&>div]:!block">
-          <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+<div class="bg-gray min-h-screen">
+  <header class="grid override grid-cols-1 bg-gray">
+    <div data-hero-parallax-container class="relative flex items-center justify-center bg-gray-100 px-8 py-40 lg:px-[8vw] md:py-[14rem]">
+      <div class="flex flex-col max-w-screen-lg items-center gap-6 text-center z-10">
+        <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from<br class="sm:hidden"> <span class="whitespace-nowrap">0 to $1</span></h1>
+        <div class="text-xl max-w-md lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
+        <div class="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-[384px] sm:max-w-none sm:w-auto mx-auto">
+          <div class="w-full sm:w-auto [&>div]:!block">
+            <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+          </div>
+          <form action="<%= discover_path %>" method="get" class="relative w-full sm:w-auto">
+            <label for="marketplace-search" class="sr-only">Search marketplace</label>
+            <input
+              id="marketplace-search"
+              type="text"
+              name="query"
+              placeholder="Search marketplace ..."
+              class="!bg-gray px-8 pr-20 mr-8 rounded-lg focus:outline-none focus:ring-1 focus:ring-black focus:border-black/60 w-full sm:w-64 !text-xl !h-14 lg:!h-16 dark:bg-gray-800 border !border-dark-gray dark:!bg-dark-gray dark:!placeholder-white dark:border-gray-600 dark:!text-white"
+            />
+            <button
+              type="submit"
+              aria-label="Search"
+              class="bg-white p-2 rounded-md absolute mr-3 right-0 top-1/2 -translate-y-[50%]"
+              style="border: 1px solid #242423 !important;"
+            >
+              <svg class="w-6 h-6 text-dark-gray" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </button>
+          </form>
         </div>
-        <form action="<%= discover_path %>" method="get" class="relative w-full sm:w-auto">
-          <label for="marketplace-search" class="sr-only">Search marketplace</label>
-          <input
-            id="marketplace-search"
-            type="text"
-            name="query"
-            placeholder="Search marketplace ..."
-            class="px-4 pr-12 border !border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black w-full sm:w-64 !text-xl !h-14 lg:!h-16"
-          />
-          <button
-            type="submit"
-            aria-label="Search"
-            class="absolute mr-3 right-0 top-1/2 -translate-y-[55%]"
-          >
-            <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-          </button>
-        </form>
-      </div>
-      <div class="text-base">
-        Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black inline-flex items-center gap-1 ml-1">
-          <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-          </svg>
-          GitHub
-        </a>
-      </div>
-    </div>
-    <div class="absolute inset-0 pointer-events-none overflow-visible parallax-up">
-      <div class="hero-coin absolute z-[1] w-[8rem] invisible md:visible sm:w-[8rem] sm:top-[20rem] sm:right-[-3rem] md:w-[10rem] md:top-[58rem] md:right-[15rem] lg:w-[12rem] lg:top-[55rem]" data-parallax-intensity="0.03" data-scroll-intensity="-0.20">
-        <%= image_tag "about/coin-1.svg", loading: "lazy", alt: "Decorative coin 1", class: "w-full h-auto" %>
-      </div>
-      <div class="hero-coin absolute z-[1] w-[10rem] top-[28rem] left-[-12vw] sm:left-[-7vw] md:left-[3vw] md:w-[11rem] md:top-[30rem] md:left-[8vw]" data-parallax-intensity="-0.02" data-scroll-intensity="-0.15">
-        <%= image_tag "about/coin-2.svg", loading: "lazy", alt: "Decorative coin 2", class: "w-full h-auto" %>
-      </div>
-      <div class="hero-coin absolute z-[1] w-[9rem] right-[-3vw] top-[-7rem] invisible sm:visible md:w-[8rem] md:top-[26rem] md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.18">
-        <%= image_tag "about/coin-3.svg", loading: "lazy", alt: "Decorative coin 3", class: "w-full h-auto" %>
-      </div>
-      <div class="hero-coin absolute z-[1] w-[9rem] top-[53rem] right-[-14vw] sm:top-[42rem] sm:right-[-5rem] md:w-[11rem] md:top-[44rem] md:right-[-5rem] lg:w-[12rem] lg:top-[46rem] lg:right-[-4rem]" data-parallax-intensity="-0.035" data-scroll-intensity="-0.16">
-        <%= image_tag "about/coin-4.svg", loading: "lazy", alt: "Decorative Coin 4", class: "w-full h-auto" %>
-      </div>
-      <div class="hero-coin absolute z-[1] w-[10rem] left-[-2rem] top-[63rem] sm:w-[10rem] sm:top-[50rem] sm:left-[3rem] md:w-[14rem] md:top-[45rem] md:left-[-6rem] lg:w-[16rem] lg:left-[-3rem]" data-parallax-intensity="0.04" data-scroll-intensity="-0.17">
-        <%= image_tag "about/coin-5.svg", loading: "lazy", alt: "Decorative Coin 5", class: "w-full h-auto" %>
-      </div>
-    </div>
-  </div>
-</header>
-
-<div class="relative py-24 lg:border-b lg:border-black lg:py-32">
-  <div class="px-8 lg:px-[4vw]">
-    <div class="max-w-4xl mx-auto text-center text-4xl mb-20 lg:mb-24 lg:leading-tight lg:text-5xl">
-      You know all those great ideas you have?
-    </div>
-  </div>
-  <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
-    <div id="lottie-animation" class="absolute w-56 h-56 z-20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:top-20 lg:w-80 lg:h-80">
-      <lottie-player
-        src="<%= asset_path("about/gumhead.json") %>"
-        speed="1"
-        loop
-        autoplay>
-      </lottie-player>
-    </div>
-    <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black bg-orange z-10 lg:px-8 lg:rounded-full">
-      <div class="override hidden px-4 flex justify-between -mt-3 lg:flex lg:px-40">
-        <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
-          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
-          <div class="lg:text-2xl">The Gumroad Way</div>
-        </div>
-        <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
-          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
-          <div class="lg:text-2xl">Start Small</div>
+        <div class="text-base">
+          <p class="text-dark-gray/50">
+            Contribute or fork on <a href="https://github.com/antiwork/gumroad" target="_blank" rel="noopener noreferrer" class="underline hover:text-black inline-flex items-center gap-1 ml-1">
+              <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+              </svg>
+              GitHub
+            </a>
+          </p>
         </div>
       </div>
-      <div class="override hidden px-4 flex justify-between -mb-3 lg:flex lg:px-40">
-        <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
-          <div class="lg:text-2xl">Get Better Together</div>
-          <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
+      <div class="absolute inset-0 pointer-events-none overflow-visible parallax-up">
+        <div class="hero-coin absolute z-[1] w-[8rem] invisible md:visible sm:w-[8rem] sm:top-[20rem] sm:right-[-3rem] md:w-[10rem] md:top-[58rem] md:right-[15rem] lg:w-[12rem] lg:top-[55rem]" data-parallax-intensity="0.03" data-scroll-intensity="-0.20">
+          <%= image_tag "about/coin-1.svg", loading: "lazy", alt: "Decorative coin 1", class: "w-full h-auto" %>
         </div>
-        <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
-          <div class="lg:text-2xl">Learn Quickly</div>
-          <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
+        <div class="hero-coin absolute z-[1] w-[10rem] top-[28rem] left-[-12vw] sm:left-[-7vw] md:left-[3vw] md:w-[11rem] md:top-[30rem]" data-parallax-intensity="-0.02" data-scroll-intensity="-0.15">
+          <%= image_tag "about/coin-2.svg", loading: "lazy", alt: "Decorative coin 2", class: "w-full h-auto" %>
+        </div>
+        <div class="hero-coin absolute z-[1] w-[9rem] right-[-3vw] top-[-7rem] invisible sm:visible md:w-[8rem] md:top-[26rem] md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.18">
+          <%= image_tag "about/coin-3.svg", loading: "lazy", alt: "Decorative coin 3", class: "w-full h-auto" %>
+        </div>
+        <div class="hero-coin absolute z-[1] w-[9rem] top-[53rem] right-[-14vw] sm:top-[42rem] sm:right-[-5rem] md:w-[11rem] md:top-[44rem] md:right-[-5rem] lg:w-[12rem] lg:top-[46rem] lg:right-[-4rem]" data-parallax-intensity="-0.035" data-scroll-intensity="-0.16">
+          <%= image_tag "about/coin-4.svg", loading: "lazy", alt: "Decorative Coin 4", class: "w-full h-auto" %>
+        </div>
+        <div class="hero-coin absolute z-[1] w-[10rem] left-[-2rem] top-[63rem] sm:w-[10rem] sm:top-[50rem] sm:left-[3rem] md:w-[14rem] md:top-[45rem] md:left-[-6rem] lg:w-[16rem] lg:left-[-3rem]" data-parallax-intensity="0.04" data-scroll-intensity="-0.17">
+          <%= image_tag "about/coin-5.svg", loading: "lazy", alt: "Decorative Coin 5", class: "w-full h-auto" %>
         </div>
       </div>
-      <div class="override flex h-6 items-center bg-orange absolute top-0 -ml-2 pr-3 -mt-3 left-1/2 -translate-x-1/2 lg:hidden">
-        <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
-        <div class="whitespace-nowrap lg:text-2xl">The Gumroad Way</div>
-      </div>
-      <div class="override flex h-6 items-center bg-orange absolute right-0 pr-3 origin-center rotate-90 top-1/2 -translate-y-1/2 translate-x-1/2 lg:hidden">
-        <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
-        <div class="whitespace-nowrap lg:text-2xl">Start Small</div>
-      </div>
-      <div class="override flex h-6 items-center bg-orange absolute bottom-0 -ml-2 pl-3 -mb-3 left-1/2 -translate-x-1/2 lg:hidden">
-        <div class="whitespace-nowrap lg:text-2xl">Get Better Together</div>
-        <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-4 w-4 translate-x-2 translate-y-px rotate-180" %>
-      </div>
-      <div class="override flex h-6 items-center bg-orange absolute left-0 pr-3 origin-center -rotate-90 top-1/2 -translate-y-1/2 -translate-x-1/2 lg:hidden">
-        <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
-        <div class="whitespace-nowrap lg:text-2xl">Learn Quickly</div>
-      </div>
     </div>
-  </div>
-  <div class="max-w-4xl mx-auto text-center flex flex-col gap-4 px-8">
-    <h2 class="text-4xl lg:text-5xl lg:leading-tight">
-      We want you to try them, lots of them, and find out what works.
-    </h2>
-    <p class="text-xl max-w-2xl mx-auto">
-      You don't have to be a tech expert or even understand how to start a business. You just gotta take what you know and sell it.
-    </p>
-    <div class="w-full mt-4">
-      <%= render "home/shared/button", text: "Find out how", url: features_path %>
-    </div>
-  </div>
-</div>
+  </header>
 
-<div class="flex flex-col border-b border-black overflow-hidden lg:flex-row">
-  <div class="bg-violet flex items-center justify-center text-center lg:w-1/2 px-4 py-16 md:p-24 xl:p-32 border-b lg:border-b-0 lg:border-r">
-  <div class="max-w-xl space-y-12 md:space-y-8">
-  <div class="space-y-4">
-    <h3 class="font-medium text-5xl lg:text-6xl">
-      Don't take risks. That's scary!
-    </h3>
-  </div>
-</div>
-  </div>
-  <div class="bg-pink flex items-center justify-center text-center lg:w-1/2 px-4 py-16 md:p-16 xl:p-32">
-    <div class="max-w-xl space-y-12 md:space-y-8">
-      <div class="space-y-4">
-        <h3 class="font-medium text-5xl lg:text-6xl">
-          Place small bets. That's exciting!
-        </h3>
+  <div class="flex flex-col bg-gray max-w-6xl mx-auto px-4 gap-8 md:-mt-20">
+    <div class="flex flex-col lg:flex-row gap-8">
+      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-[30rem]">
+        <div class="order-1 md:order-none">
+          <p class="text-4xl text-balance">
+            Sell anything
+          </p>
+          <p class="text-lg md:absolute md:bottom-8 md:left-8 md:w-1/2 mt-4 md:mt-0">
+            Video lessons. Monthly subscriptions. Whatever! Gumroad was created to help you experiment with all kinds of ideas and formats.
+          </p>
+        </div>
+        <div class="w-[484px] order-2 md:order-none md:absolute md:top-[-4rem] md:right-[-0.5rem] mt-4 md:mt-0">
+          <%= image_tag "about/ukulele.png", alt: "Sell anything feature illustration", class: "w-full h-auto" %>
+        </div>
+      </div>
+      <div class="flex flex-col md:relative overflow-hidden bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-[30rem]">
+        <div class="order-1 md:order-none">
+          <p class="text-4xl mb-4 text-balance">Make your own road</p>
+          <p class="text-lg mb-4">
+            Whether you need more balance, flexibility, or just a different gig, we make it easy to chart a new path.
+          </p>
+        </div>
+        <div class="order-2 md:order-none md:absolute md:bottom-0 md:left-0 mt-8 md:mt-0">
+          <%= image_tag "about/make-your-road.svg", alt: "Make your own road feature illustration", class: "w-full h-auto" %>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-col lg:flex-row gap-8">
+      <div class="overflow-hidden flex flex-col justify-between bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-[30rem]">
+        <p class="text-4xl mb-8 md:mb-0 text-balance">Sell to anyone</p>
+        <div class="flex flex-col gap-4">
+          <% [
+            "Go from 0 to $1 and automated workflows.",
+            "Let your customers pay in their own currency.",
+            "Choose between one-time, recurring, or fixed-length payments in your currency of choice."
+          ].each do |text| %>
+          <div class="flex gap-4">
+            <div class="h-7 flex-none flex items-center justify-center">
+              <%= image_tag "icons/outline-check-circle-about.svg",
+                            alt: "Check",
+                            class: "s-5" %>
+            </div>
+            <p class="text-lg text-balance"><%= text %></p>
+          </div>
+          <% end %>
+        </div>
+      </div>
+      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-[30rem]">
+        <div class="order-1 md:order-none">
+          <p class="text-4xl text-balance">
+            Sell anywhere
+          </p>
+          <p class="text-lg md:absolute md:bottom-8 md:left-8 md:w-[18rem] mt-4 md:mt-0">
+            Create and customize your storefront with our all-in-one platform or choose to use your personal site instead. Seamlessly connect your Gumroad account to thousands of apps in your current stack.
+          </p>
+        </div>
+        <div class="w-[389px] order-2 md:order-none md:absolute md:top-[2rem] md:right-[-2rem] mt-8 md:mt-0">
+          <%= image_tag "about/sell-anywhere.png", alt: "Sell to anyone feature illustration", class: "w-full h-auto" %>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-9">
+      <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 md:p-14 flex-1">
+        <div class="flex flex-col md:relative">
+          <div class="order-2 md:order-none">
+            <%= image_tag "about/side-project-1.svg", alt: "Side project 1", class: "w-full h-auto" %>
+          </div>
+          <div class="order-1 md:order-none md:absolute md:top-[-1rem] md:left-0 sm:md:left-[-2rem] bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black mb-4 md:mb-0">
+            <p class="text-xl font-medium m-0">Instead of building a company...</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 flex-1">
+        <div class="flex flex-col md:relative">
+          <div class="order-2 md:order-none">
+            <%= image_tag "about/side-project-2.svg", alt: "Side project 2", class: "w-full h-auto object-cover mx-auto" %>
+          </div>
+          <div class="order-1 md:order-none md:absolute md:bottom-1 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black mb-4 md:mb-0">
+            <p class="text-xl font-medium m-0">...start selling a side project!</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<div class="flex flex-col border-black overflow-hidden lg:flex-row border-b overflow-visible">
-  <div class="bg-black py-24 p-8 border-b sm:p-32 md:p-32 lg:py-24 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-36 flex items-center justify-center">
-    <div class="relative w-full max-w-xl">
-      <%= image_tag "about/book-gumhead.svg",
-          alt: "Sell anywhere feature illustration",
-          class: "w-full h-auto object-cover mx-auto",
-          data: { parallax: true } %>
-      <div class="absolute top-[-4rem] left-0 sm:left-[-4rem] bg-white rounded-3xl px-6 sm:px-12 py-4 sm:py-8 border border-black">
-        <p class="text-xl font-medium m-0">Instead of selling a book...</p>
+  <div class="relative bg-gray py-24 lg:py-32">
+    <div class="px-8 lg:px-[4vw]">
+      <div class="max-w-4xl mx-auto text-center text-4xl mb-20 lg:mb-24 lg:leading-tight lg:text-5xl">
+        You know all those great ideas you have?
       </div>
     </div>
-  </div>
-  <div class="bg-orange py-24 p-8 flex items-center justify-center sm:p-32 md:p-32 lg:py-24 lg:w-1/2 xl:p-32">
-    <div class="relative">
-      <%= image_tag "about/blog-post.svg",
-          alt: "Sell anywhere feature illustration",
-          class: "w-full h-auto object-cover mx-auto",
-          data: { parallax: true } %>
-      <div class="absolute top-[-4rem] left-0 sm:left-[-4rem] bg-white rounded-3xl px-6 sm:px-12 py-4 sm:py-8 border border-black">
-        <p class="text-xl font-medium m-0">...start by selling a blog post!</p>
+    <div class="relative max-w-6xl mx-auto mb-12 h-80 bg-orange p-8 border-y border-black lg:border lg:rounded-full">
+      <div id="lottie-animation" class="absolute w-56 h-56 z-20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:top-20 lg:w-80 lg:h-80">
+        <lottie-player
+          src="<%= asset_path("about/gumhead.json") %>"
+          speed="1"
+          loop
+          autoplay>
+        </lottie-player>
       </div>
-      <%= image_tag "about/exciting.svg",
-          loading: "lazy",
-          alt: "Exciting sticker",
-          class: "absolute bottom-[-4rem] sm:bottom-[-12rem] right-[0rem] sm:right-[-10rem] lg:right-[-4rem] w-36 sm:w-48 md:w-56 xl:w-80 transform rotate-6 z-10",
-          style: "will-change: transform; transform: translate3d(0px, 1.5956vh, 0px) scale3d(1, 1, 1) rotateX(0deg) rotateY(0deg) rotateZ(0deg) skew(0deg, 0deg); transform-style: preserve-3d;" %>
-    </div>
-  </div>
-</div>
-
-<div class="pt-20 pb-24 px-8 md:pt-24 md:pb-32 md:px-12">
-  <div class="max-w-5xl mx-auto">
-    <div class="flex flex-col items-start space-y-7 text-left md:items-center md:text-center">
-      <h2 class="font-medium text-5xl md:text-6xl lg:text-7xl xl:text-8xl">Make your own road</h2>
-      <p class="text-lg md:text-2xl xl:text-3xl xl:leading-10">Whether you need more balance, flexibility, or just a different gig, we make it easier to chart a new path. You don't have to be a tech expert or even understand how to start a business. You just gotta take what you know and sell it.</p>
-      <a href="/features" class="group inline-flex items-center text-xl font-bold no-underline relative">
-        <span class="inline-flex items-center gap-2 relative">
-          Explore Features
-          <span>→</span>
-          <span class="absolute -bottom-1 left-0 w-full h-[0.1em] bg-black transform scale-x-0 transition-transform origin-left group-hover:scale-x-100"></span>
-        </span>
-      </a>
-    </div>
-  </div>
-</div>
-
-<div class="flex flex-col border-t border-black overflow-hidden lg:flex-row">
-  <div class="bg-green h-auto lg:w-1/2 lg:border-r overflow-hidden">
-    <div class="relative">
-      <%= image_tag "about/home-feature-1.svg",
-          alt: "Sell anything feature illustration",
-          class: "w-full h-auto pr-[7.5vw]",
-          data: { parallax: true } %>
-    </div>
-  </div>
-  <div class="bg-white py-16 px-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-24">
-    <div class="max-w-2xl space-y-12 md:space-y-8">
-      <div class="space-y-4">
-        <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl">
-          Sell anything
-        </h3>
-        <p class="text-lg lg:text-xl xl:text-2xl">
-          Video lessons. Monthly subscriptions. Whatever! Gumroad was created to help you experiment with all kinds of ideas and formats.
-        </p>
-      </div>
-      <ul class="grid grid-cols-1 gap-3 pl-0 text-lg md:grid-cols-2">
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Sell your Top 10 lists
-        </li>
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Sell your crypto tips
-        </li>
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Sell your fractal pack
-        </li>
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Sell your keto cookbook
-        </li>
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Sell your C4D scenes
-        </li>
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Sell your new emojis
-        </li>
-        <li class="flex items-center">
-          <span class="mr-2">→</span>
-          Seriously, sell anything!
-        </li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<div class="flex flex-col border-t border-black bg-pink py-16 lg:flex-row">
-  <div class="px-8 text-left mx-auto flex items-center justify-end order-2 md:px-24 md:text-center lg:w-1/2 lg:text-left lg:order-1">
-    <div class="max-w-xl grid !gap-y-10 md:max-w-2xl lg:max-w-3xl">
-      <h2 class="text-2xl md:text-3xl lg:text-4xl">
- “I launched MaxPacks as an experimental side gig; but within 2 years those Procreate brushes were earning more than my 6-figure salary in CG. Leaving in favor of Gumroad enabled me to explore other aspects of my art, develop new hobbies, and finally prioritize my personal life.”      </h2>
-      <div class="text-xl font-bold">
-      Max Ulichney sells Procreate Brush Packs      </div>
-    </div>
-  </div>
-  <div class="w-full flex items-center justify-center h-full min-h-[22rem] p-[6.5vw] order-1 lg:w-1/2 lg:order-2">
-    <div class="relative flex flex-col items-center justify-center">
-      <%= image_tag "creators/max.png",
-        alt: "Max Ulichney portrait",
-        class: "w-full h-full object-contain transform -translate-y-4 transition-transform duration-500"
-      %>
-      <%= image_tag "about/writing.svg",
-        alt: "Hand writing illustration",
-        class: "absolute w-36 lg:w-48 xl:w-64 -bottom-12 -left-6 sm:-left-8 parallax-up" %>
-      <a
-        href="https://maxulichney.gumroad.com/?recommended_by=search"
-        class="absolute flex items-center gap-2 bg-white pl-1 pr-3 py-1 rounded-full border border-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000] bottom-10 right-0 sm:bottom-12 sm:right-6 md:bottom-16 md:right-16 lg:bottom-12 lg:right-8"
-      >
-        <%= image_tag "logo-g.svg",
-          alt: "Gumroad icon",
-          class: "w-9 h-9"
-        %>
-        <span class="text-lg font-medium">maxulichney</span>
-      </a>
-    </div>
-  </div>
-</div>
-
-<div class="flex flex-col border-t border-black overflow-hidden lg:flex-row">
-  <div class="bg-black py-24 p-8 border-b sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
-    <div class="relative">
-      <%= image_tag "about/home-feature-2.svg",
-        alt: "Sell to anyone feature illustration",
-        class: "w-full h-auto",
-        data: { parallax: true } %>
-    </div>
-  </div>
-  <div class="bg-white py-16 p-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
-    <div class="max-w-2xl space-y-12 md:space-y-8">
-      <div class="space-y-4">
-        <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl">
-          Sell to anyone
-        </h3>
-        <p class="text-lg lg:text-xl xl:text-2xl">
-          Build a loyal following with simple posts, email newsletters, and automated workflows. Plus let your customers pay what they want or choose between one-time, recurring, or fixed-length payments in your currency of choice. (We'll handle the fine print, like VAT).
-        </p>
+      <div class="relative flex h-full flex-col justify-between rounded-2xl border border-black bg-orange z-10 lg:px-8 lg:rounded-full">
+        <div class="override hidden px-4 md:flex justify-between -mt-3 lg:px-40">
+          <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
+            <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
+            <div class="lg:text-2xl">The Gumroad Way</div>
+          </div>
+          <div class="flex h-6 items-center bg-orange pr-6 lg:gap-x-10">
+            <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-6 w-6 -translate-x-3" %>
+            <div class="lg:text-2xl">Start Small</div>
+          </div>
+        </div>
+        <div class="override hidden px-4 md:flex justify-between -mb-3 lg:flex lg:px-40">
+          <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
+            <div class="lg:text-2xl">Get Better Together</div>
+            <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
+          </div>
+          <div class="flex h-6 items-center bg-orange pl-6 lg:gap-x-10">
+            <div class="lg:text-2xl">Learn Quickly</div>
+            <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-6 w-6 translate-x-3 rotate-180" %>
+          </div>
+        </div>
+        <div class="override flex h-6 items-center bg-orange absolute top-0 -ml-2 pr-3 -mt-3 left-1/2 -translate-x-1/2 lg:hidden">
+          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
+          <div class="whitespace-nowrap lg:text-2xl">The Gumroad Way</div>
+        </div>
+        <div class="override flex h-6 items-center bg-orange absolute right-0 pr-3 origin-center rotate-90 top-1/2 -translate-y-1/2 translate-x-1/2 lg:hidden">
+          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
+          <div class="whitespace-nowrap lg:text-2xl">Start Small</div>
+        </div>
+        <div class="override flex h-6 items-center bg-orange absolute bottom-0 -ml-2 pl-3 -mb-3 left-1/2 -translate-x-1/2 lg:hidden">
+          <div class="whitespace-nowrap lg:text-2xl">Get Better Together</div>
+          <%= image_tag "about/arrowhead-right.svg", alt: "Left arrow", class: "h-4 w-4 translate-x-2 translate-y-px rotate-180" %>
+        </div>
+        <div class="override flex h-6 items-center bg-orange absolute left-0 pr-3 origin-center -rotate-90 top-1/2 -translate-y-1/2 -translate-x-1/2 lg:hidden">
+          <%= image_tag "about/arrowhead-right.svg", alt: "Right arrow", class: "h-4 w-4 -translate-x-2 -translate-y-px" %>
+          <div class="whitespace-nowrap lg:text-2xl">Learn Quickly</div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
-
-<div class="flex flex-col border-t border-black bg-green py-16 lg:flex-row">
-  <div class="px-8 text-left mx-auto flex items-center justify-end order-2 md:px-24 md:text-center lg:w-1/2 lg:text-left lg:order-1">
-    <div class="max-w-xl grid !gap-y-10 md:max-w-2xl lg:max-w-3xl">
-      <h2 class="text-2xl md:text-3xl lg:text-4xl">
-        “Originally, I took pre-orders for my Trend Reports on Gumroad. But I received... exactly $0. So I changed tactics: I made half of my report free, and the other half paid. Today, 99% of Trends.VC revenue is recurring in the form of annual and quarterly subscriptions.”
+    <div class="max-w-4xl mx-auto text-center flex flex-col gap-4 px-8">
+      <h2 class="text-4xl lg:text-5xl lg:leading-tight">
+        We want you to try them, lots of them, and find out what works.
       </h2>
-      <div class="text-xl font-bold">
-        Dru Riley sells business insights and expertise
+      <p class="text-xl max-w-2xl mx-auto">
+        You don't have to be a tech expert or even understand how to start a business. You just gotta take what you know and sell it.
+      </p>
+      <div class="w-full mt-4">
+        <%= render "home/shared/button", text: "Find out how", url: features_path %>
       </div>
     </div>
   </div>
-  <div class="w-full flex items-center justify-center h-full min-h-[22rem] p-[6.5vw] order-1 lg:w-1/2 lg:order-2">
-    <div class="relative flex flex-col items-center justify-center">
-      <%= image_tag "creators/dru.png",
-        alt: "Dru Riley portrait",
-        class: "w-full max-w-[36rem] h-full object-contain transform -translate-y-4 transition-transform duration-500"
-      %>
-      <%= image_tag "about/free.svg",
-        alt: "Free illustration",
-        class: "absolute w-36 -top-4 -right-4 parallax-up sm:w-48 md:w-64 md:-top-8 md:-right-8"
-      %>
-      <%= image_tag "about/book.svg",
-        alt: "Book illustration",
-        class: "absolute w-36 -bottom-4 -left-4 parallax-up sm:w-48 md:w-64 md:-bottom-8 md:-left-32"
-      %>
-      <a
-        href="https://trendsvc.gumroad.com/?recommended_by=search"
-        class="absolute flex items-center gap-2 bg-white pl-1 pr-3 py-1 rounded-full border border-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000] bottom-8 -right-4 sm:bottom-16 sm:-right-4 md:-right-8 md:bottom-16"
-      >
-        <%= image_tag "logo-g.svg",
-          alt: "Gumroad icon",
-          class: "w-9 h-9"
-        %>
-        <span class="text-lg font-medium">trendsvc</span>
-      </a>
-    </div>
-  </div>
-</div>
 
-<div class="flex flex-col border-t border-black overflow-hidden lg:flex-row">
-  <div class="bg-orange py-24 p-8 border-b sm:p-12 md:p-16 lg:py-24 xl:py-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
-    <div class="relative">
-      <%= image_tag "about/home-feature-4.svg",
-        alt: "Sell anywhere feature illustration",
-        class: "w-full h-auto",
-        data: { parallax: true } %>
-    </div>
-  </div>
-  <div class="bg-white py-16 p-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
-    <div class="max-w-2xl space-y-12 md:space-y-8">
-      <div class="space-y-4">
-        <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl">
-          Sell anywhere
-        </h3>
-        <p class="text-lg lg:text-xl xl:text-2xl">
-          Create and customize your storefront with our all-in-one platform or choose to use your personal site instead. With Zapier, you can seamlessly connect your Gumroad account to thousands of apps in your current stack.
-        </p>
+  <div class="relative bg-gray w-full">
+    <div class="flex flex-col justify-center gap-8 px-8 text-center py-20 md:items-center md:gap-16 md:pt-40">
+      <h1 class="text-left md:text-center text-7xl sm:text-7xl md:text-9xl lg:text-[12rem] md:leading-[0.9] font-medium">
+        $3,129,297
+      </h1>
+      <div class="text-left md:text-center text-2xl md:text-3xl max-w-screen-sm">
+        The amount of income earned by Gumroad digital entrepreneurs last week.
       </div>
     </div>
   </div>
-</div>
 
-<div class="flex flex-col border-t border-black gap-16 px-8 py-16 lg:px-[4vw] lg:py-24 lg:gap-24">
-  <div class="flex flex-col justify-center gap-10 mx-auto text-center max-w-5xl">
-    <h2 class="text-5xl md:text-6xl lg:text-7xl">Looking for inspiration on what you can sell?</h2>
-    <p class="text-lg md:text-2xl lg:text-3xl">Discover the best-selling products and creators on Gumroad</p>
-  </div>
-  <div class="override grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3" role="list">
-    <% discovery_categories = [
+  <div class="grid override grid-cols-1 lg:grid-cols-2 bg-gray max-w-6xl mx-auto px-4 gap-x-8 gap-y-12">
+    <% testimonials = [
       {
-        bg: "bg-green",
-        path: "3d",
-        icon: "discover/animation.svg",
-        title: "3D",
-        description: "Perfect your craft with the same tools used at Dreamworks and Pixar.",
-        tags: ["blender", "3d model", "spark ar"]
+        quote: "I launched MaxPacks as an experimental side gig; but within 2 years those Procreate brushes were earning more than my 6-figure salary in CG. Leaving in favor of Gumroad enabled me to explore other aspects of my art, develop new hobbies, and finally prioritize my personal life.",
+        avatar_path: "creators/max-full.png",
+        name: "Max Ulichney",
+        description: "Sells Procreate brush packs"
       },
       {
-        bg: "bg-red",
-        path: "audio",
-        icon: "discover/audio.svg",
-        title: "Audio",
-        description: "Open your ears and mind to interviews, meditations, and true crime thrillers.",
-        tags: ["meditation", "hypnosis", "subliminal messages"]
+        quote: "For years, I had a goal to develop 'passive' income streams, but struggled to make that a reality. Last year, I started selling informational products on Gumroad and since then have made $10k+ per month building products that I love.",
+        avatar_path: "creators/steph-full.png",
+        name: "Steph Smith",
+        description: "Sells content tutorials"
       },
       {
-        bg: "bg-green",
-        path: "business-and-money",
-        icon: "discover/crafts.svg",
-        title: "Business & Money",
-        description: "Learn to earn in an increasingly unpredictable world.",
-        tags: ["notion template", "investing", "instagram"]
+        quote: "Originally, I took pre-orders for my Trend Reports on Gumroad. But I received... exactly $0. So I changed tactics: I made half of my report free, and the other half paid. Today, 99% of Trends.VC revenue is recurring in the form of annual and quarterly subscriptions.",
+        avatar_path: "creators/dru-full.png",
+        name: "trendsvc",
+        description: "Sells business insights and expertise"
       },
       {
-        bg: "bg-yellow",
-        path: "comics-and-graphic-novels",
-        icon: "discover/comics.svg",
-        title: "Comics & Graphic Novels",
-        description: "Sequential art with loads of heart. Welcome to a paradise of panels.",
-        tags: ["comic", "manga", "anime"]
-      },
-      {
-        bg: "bg-orange",
-        path: "design",
-        icon: "discover/design.svg",
-        title: "Design",
-        description: "Code, design, and ship your dream product with these technical resources.",
-        tags: ["textures", "mockup", "font"]
-      },
-      {
-        bg: "bg-purple",
-        path: "drawing-and-painting",
-        icon: "discover/drawing.svg",
-        title: "Drawing & Painting",
-        description: "Tutorials, plugins, and brushes from pro concept artists and illustrators.",
-        tags: ["procreate", "brushes", "art"]
-      },
-      {
-        bg: "bg-green",
-        path: "education",
-        icon: "discover/education.svg",
-        title: "Education",
-        description: "Pick up a new skill with courses and guides from world-class pros.",
-        tags: ["education", "certification exams", "learning"]
-      },
-      {
-        bg: "bg-purple",
-        path: "fiction-books",
-        icon: "discover/writing.svg",
-        title: "Fiction Books",
-        description: "Short stories, novellas, and epic tomes full of interesting characters and worlds.",
-        tags: ["sci-fi", "poetry", "fiction"]
-      },
-      {
-        bg: "bg-red",
-        path: "films",
-        icon: "discover/film.svg",
-        title: "Films",
-        description: "Have a movie night with some of the best stories to hit the small screen.",
-        tags: ["after effects", "vj loops", "luts"]
-      },
-      {
-        bg: "bg-orange",
-        path: "fitness-and-health",
-        icon: "discover/sports.svg",
-        title: "Fitness & Health",
-        description: "Whether you're looking to shed or shred, here are coaches to pump you up.",
-        tags: ["fitness", "workout program", "yoga"]
-      },
-      {
-        bg: "bg-red",
-        path: "gaming",
-        icon: "discover/games.svg",
-        title: "Gaming",
-        description: "Explore new worlds from the world's most creative indie developers.",
-        tags: ["vrchat", "avatar", "assets"]
-      },
-      {
-        bg: "bg-yellow",
-        path: "music-and-sound-design",
-        icon: "discover/music.svg",
-        title: "Music & Sound Design",
-        description: "Tracks, beats, and loops from the best musicians and engineers in the biz.",
-        tags: ["ableton", "sample pack", "sheet music"]
-      },
-      {
-        bg: "bg-green",
-        path: "photography",
-        icon: "discover/photography.svg",
-        title: "Photography",
-        description: "Get snapping with pro presets, stock imagery, and digi darkroom needs.",
-        tags: ["reference photos", "stock photos", "photobash"]
-      },
-      {
-        bg: "bg-yellow",
-        path: "recorded-music",
-        icon: "discover/music.svg",
-        title: "Recorded Music",
-        description: "Tracks and albums from the best musicians and artists in the biz.",
-        tags: ["singles", "jazz", "instrumental music"]
-      },
-      {
-        bg: "bg-red",
-        path: "self-improvement",
-        icon: "discover/dance.svg",
-        title: "Self Improvement",
-        description: "Move your body and your audience with guides, videos, and more.",
-        tags: ["coloring page", "printable", "productivity"]
-      },
-      {
-        bg: "bg-yellow",
-        path: "software-development",
-        icon: "discover/software.svg",
-        title: "Software Development",
-        description: "Learn to code and tools to help you code more productively.",
-        tags: ["programming", "windows", "theme"]
-      },
-      {
-        bg: "bg-purple",
-        path: "writing-and-publishing",
-        icon: "discover/writing.svg",
-        title: "Writing & Publishing",
-        description: "Fill your brain with words and wisdom from creative authors and storytellers.",
-        tags: ["kdp interior", "ebook", "low content books"]
+        quote: "I love Gumroad because it can't be any simpler. I upload a file, set a price, and I can start selling on the internet. The money I make from my sales lands directly in my bank account every Friday.",
+        avatar_path: "creators/daniel-full.png",
+        name: "Daniel Vassallo",
+        description: "Sells business insights and expertise"
       }
     ] %>
-    <% discovery_categories.each do |category| %>
-      <%= render "home/shared/discovery_category", **category %>
+
+    <% testimonials.each do |testimonial| %>
+      <%= render "home/shared/testimonial", **testimonial %>
     <% end %>
   </div>
-</div>
 
-<div class="flex flex-col border-t border-black bg-pink py-16 lg:flex-row">
-  <div class="px-8 text-left mx-auto flex items-center justify-end order-2 md:px-24 md:text-center lg:w-1/2 lg:text-left lg:order-1">
-    <div class="max-w-xl grid !gap-y-10 md:max-w-2xl lg:max-w-3xl">
-      <h2 class="text-2xl md:text-3xl lg:text-4xl">
-        "For years, I had a goal to develop 'passive' income streams, but struggled to make that a reality. Last year, I started selling informational products on Gumroad and since then have made $10k+ per month building products that I love."
-      </h2>
-      <div class="text-xl font-bold">
-        Steph Smith sells content tutorials
+  <div class="flex flex-col gap-16 py-16 lg:py-64 lg:gap-24">
+    <div class="flex flex-col justify-center px-8 lg:px-[4vw] gap-6 mx-auto text-center max-w-5xl">
+      <h2 class="text-5xl md:text-6xl lg:text-7xl">Unlimited possibilities</h2>
+      <p class="text-xl md:text-2xl">Discover the best-selling products and creators on Gumroad</p>
+    </div>
+
+    <%= render "home/shared/discovery_category" %>
+  </div>
+
+  <div class="bg-gray flex flex-col lg:flex-row rounded-2xl px-4 gap-8 mx-auto max-w-6xl">
+    <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
+      <div class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl">
+        <h3 class="font-medium text-4xl md:text-5xl">
+          Don't take risks.
+          <br />
+          That's scary!
+        </h3>
+      </div>
+      <div class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50">
+        <div class="relative">
+          <%= image_tag "about/blog-post-circle-1.svg",
+              alt: "Sell anywhere feature illustration",
+              class: "w-full h-auto object-cover mx-auto",
+              data: { parallax: true } %>
+          <div class="absolute top-[-1rem] left-0 sm:left-[-2rem] bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black">
+            <p class="text-xl font-medium m-0">Instead of selling a book...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col overflow-hidden lg:flex-col lg:w-1/2 gap-8">
+      <div class="bg-white py-12 md:py-24 p-8 sm:p-32 md:p-32 lg:py-10 lg:px-12 flex items-center justify-center border lg:border rounded-2xl border-dark-gray/50">
+        <div class="relative">
+          <%= image_tag "about/blog-post-circle-2.svg",
+              alt: "Sell anywhere feature illustration",
+              class: "w-full h-auto object-cover mx-auto",
+              data: { parallax: true } %>
+          <div class="absolute bottom-[-0.5rem] left-0 sm:left-[-2rem] bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black">
+            <p class="text-xl font-medium m-0">...start by selling a blog post!</p>
+          </div>
+        </div>
+      </div>
+      <div class="flex bg-white items-center px-4 py-10 md:p-10 border lg:border border-dark-gray/50 rounded-2xl">
+        <h3 class="font-medium text-4xl md:text-5xl">
+          Place small bets.
+          <br />
+          That's exciting!
+        </h3>
       </div>
     </div>
   </div>
-  <div class="w-full flex items-center justify-center h-full min-h-[22rem] p-[6.5vw] order-1 lg:w-1/2 lg:order-2">
-    <div class="relative flex flex-col items-center justify-center">
-      <%= image_tag "creators/stephsmithio.png", alt: "Steph Smith portrait", class: "w-full max-w-[36rem] h-full object-contain transform -translate-y-4 transition-transform duration-500" %>
-      <%= image_tag "about/dollar.svg", alt: "Dollar symbol illustration", class: "absolute w-16 top-8 left-0 parallax-up sm:w-24 md:top-10 md:left-12" %>
-      <%= image_tag "about/how-to-colors.svg", alt: "Decorative colors illustration", class: "absolute w-36 -bottom-4 -right-8 parallax-up sm:w-64 md:-bottom-8 md:-right-12" %>
-      <a
-        href="https://stephsmithio.gumroad.com/?recommended_by=search"
-        class="absolute flex items-center gap-2 bg-white pl-1 pr-3 py-1 rounded-full border border-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000] bottom-8 -left-2 sm:bottom-24 sm:left-12 md:left-8 lg:-left-4"
-      >
-        <%= image_tag "logo-g.svg", alt: "Gumroad icon", class: "w-9 h-9" %>
-        <span class="text-lg font-medium">stephsmithio</span>
-      </a>
+
+  <div class="px-8 py-16 lg:px-[4vw] lg:py-24">
+    <div class="flex flex-col lg:flex-row gap-8 lg:gap-16 max-w-5xl mx-auto lg:items-center">
+      <h1 class="font-medium text-4xl sm:text-5xl lg:text-6xl"> Share your work. <br> Someone out there needs it.</h1>
+      <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
     </div>
   </div>
+
+  <%= image_tag "about/new-sale.svg", alt: "New sale illustration", class: "w-full min-h-[300px] object-cover" %>
+
+  <%= render "home/shared/footer" %>
+
+  <%= javascript_include_tag 'hero_parallax', nonce: SecureHeaders.content_security_policy_script_nonce(request), defer: true %>
 </div>
-
-<div class="relative w-full border-t border-black bg-white">
-  <div class="flex flex-col justify-center gap-8 px-8 text-center my-20 md:items-center md:gap-16 md:my-40">
-    <h1 class="text-left md:text-center text-5xl sm:text-7xl md:text-9xl lg:text-[12rem] md:leading-[0.9] font-medium">
-      $3,129,297
-    </h1>
-    <div class="text-left md:text-center text-2xl md:text-3xl max-w-screen-sm">
-      The amount of income earned by Gumroad digital entrepreneurs last week.
-    </div>
-  </div>
-</div>
-
-<%= image_tag "about/new-sale.svg", alt: "New sale illustration", class: "w-full min-h-[300px] object-cover" %>
-
-<div class="border-t border-black bg-pink px-8 py-16 lg:px-[4vw] lg:py-24">
-  <div class="flex flex-col gap-8 max-w-5xl mx-auto lg:items-center">
-    <h1 class="font-medium text-center text-4xl sm:text-5xl lg:text-7xl"> Share your work. <br> Someone out there needs it.</h1>
-    <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
-  </div>
-</div>
-
-<%= render "home/shared/footer" %>
-
-<%= javascript_include_tag 'hero_parallax', nonce: SecureHeaders.content_security_policy_script_nonce(request), defer: true %>
