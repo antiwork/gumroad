@@ -143,9 +143,9 @@ export const ShareSection = ({
           aria-label="Share"
           trigger={
             <WithTooltip tip="Share" position="bottom">
-              <div className="button">
+              <Button aria-label="Share">
                 <Icon name="share" />
-              </div>
+              </Button>
             </WithTooltip>
           }
         >
