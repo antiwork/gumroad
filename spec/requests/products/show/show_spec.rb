@@ -587,7 +587,7 @@ describe("ProductShowScenario", type: :feature, js: true) do
     end
   end
 
-  it "includes a button that copies the product link to the clipboard" do
+  it "includes a share menu with social links and copy functionality" do
     product = create(:product)
     visit product.long_url
     select_disclosure "Share" do
