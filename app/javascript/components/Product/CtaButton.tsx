@@ -209,7 +209,7 @@ const CtaButtonInner = React.forwardRef<HTMLAnchorElement, Props>(
     );
   },
 );
-CtaButtonInner.displayName = "CtaButton";
+CtaButtonInner.displayName = "InnerCtaButton";
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>((props, ref) => {
   if (props.purchase?.subscription_has_lapsed)
