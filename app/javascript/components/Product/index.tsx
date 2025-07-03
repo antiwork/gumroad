@@ -579,6 +579,7 @@ export const Product = ({
                                                     onClick={(e) => {
                                                         if (!validate()) e.preventDefault();
                                                     }}
+                                                    outline
                                                 />
                                                 <NavigationButton
                                                     color="primary"

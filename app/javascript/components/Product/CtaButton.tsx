@@ -6,7 +6,7 @@ import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
+import { ButtonProps, NavigationButton } from "$app/components/Button";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
     applySelection,
@@ -16,7 +16,7 @@ import {
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-type Props = {
+type Props = ButtonProps & {
     product: Product;
     purchase: Purchase | null;
     discountCode: ProductDiscount | null;
@@ -92,7 +92,7 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 ]);
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
-    ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
+    ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false, outline }, ref) => {
         const { searchParams } = new URL(useOriginalLocation());
 
         const [referrer, setReferrer] = React.useState("");
@@ -158,7 +158,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
         return (
             <>
-                <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
+                <NavigationButton ref={ref} href={url.toString()} color={outline ? undefined : "accent"} {...buttonCommonProps}>
                     {getCtaLabel(product, purchase, selection, label)}
                 </NavigationButton>
 
