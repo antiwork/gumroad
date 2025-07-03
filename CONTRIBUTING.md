@@ -47,12 +47,13 @@ bundle exec rspec spec
 
 1. Update documentation if you're changing behavior
 2. Add or update tests for your changes
-3. Make sure all tests pass
-4. Request a review from maintainers
-5. After reviews begin, avoid force-pushing to your branch
+3. Provide before & after screenshots/videos for UI changes
+4. Make sure all tests pass
+5. Request a review from maintainers
+6. After reviews begin, avoid force-pushing to your branch
    - Force-pushing rewrites history and makes review threads hard to follow
    - Don't worry about messy commits - we squash everything when merging to main
-6. The PR will be merged once you have the sign-off of at least one other developer
+7. The PR will be merged once you have the sign-off of at least one other developer
 
 ## Style Guide
 
