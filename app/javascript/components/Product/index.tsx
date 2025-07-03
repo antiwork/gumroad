@@ -536,14 +536,12 @@ export const Product = ({
                             {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
                         </div>
                     ) : null}
-                    {purchase ? (
+                    {purchase && purchase.membership ? (
                         <>
                             <Button
                                 color="accent"
                                 onClick={() => {
-                                    if (purchase) {
-                                        setShowResumeModal(true);
-                                    }
+                                    setShowResumeModal(true);
                                 }}
                             >
                                 {getCtaLabel(product, purchase, selection, ctaLabel)}
