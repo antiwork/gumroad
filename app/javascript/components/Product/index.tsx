@@ -536,66 +536,63 @@ export const Product = ({
                             {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
                         </div>
                     ) : null}
-                    {purchase ?
-                        (
-                            <>
-                                <Button
-                                    color="accent"
-                                    onClick={() => {
-                                        if (purchase) {
-                                            setShowResumeModal(true);
-                                        }
-                                    }}
+                    {purchase ? (
+                        <>
+                            <Button
+                                color="accent"
+                                onClick={() => {
+                                    if (purchase) {
+                                        setShowResumeModal(true);
+                                    }
+                                }}
+                            >
+                                {getCtaLabel(product, purchase, selection, ctaLabel)}
+                            </Button>
+                            {showResumeModal && purchase?.membership ? (
+                                <Modal
+                                    open={showResumeModal}
+                                    onClose={() => setShowResumeModal(false)}
+                                    title="Resume your previous subscription?"
                                 >
-                                    {getCtaLabel(product, purchase, selection, ctaLabel)}
-                                </Button>
-                                {showResumeModal && purchase?.membership ? (
-                                    <Modal
-                                        open={showResumeModal}
-                                        onClose={() => setShowResumeModal(false)}
-                                        title="Resume your previous subscription?"
-                                    >
-                                        <div className="paragraphs">
-                                            <p>
-                                                You've previously subscribed to this product. Would you like to <b>pick up where you left off,</b>or{" "}
-                                                <b>start fresh with a new subscription?</b>
-                                            </p>
-                                            <div
-                                                style={{
-                                                    display: "flex",
-                                                    gap: "var(--spacer-2)",
-                                                    justifyContent: "end",
-                                                    marginTop: "var(--spacer-3)",
+                                    <div className="paragraphs">
+                                        <p>
+                                            You've previously subscribed to this product. Would you like to <b>pick up where you left off,</b>
+                                            or <b>start fresh with a new subscription?</b>
+                                        </p>
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                gap: "var(--spacer-2)",
+                                                justifyContent: "end",
+                                                marginTop: "var(--spacer-3)",
+                                            }}
+                                        >
+                                            <CtaButton
+                                                ref={ctaButtonRef}
+                                                product={product}
+                                                purchase={purchase}
+                                                discountCode={discountCode ?? null}
+                                                selection={selection}
+                                                label="No, start a new subscription"
+                                                showInstallmentPlanNotes
+                                                onClick={(e) => {
+                                                    if (!validate()) e.preventDefault();
                                                 }}
+                                                outline
+                                            />
+                                            <NavigationButton
+                                                color="primary"
+                                                onClick={() => setShowResumeModal(false)}
+                                                href={purchase.membership.manage_url}
                                             >
-                                                <CtaButton
-                                                    ref={ctaButtonRef}
-                                                    product={product}
-                                                    purchase={purchase}
-                                                    discountCode={discountCode ?? null}
-                                                    selection={selection}
-                                                    label="No, start a new subscription"
-                                                    showInstallmentPlanNotes
-                                                    onClick={(e) => {
-                                                        if (!validate()) e.preventDefault();
-                                                    }}
-                                                    outline
-                                                />
-                                                <NavigationButton
-                                                    color="primary"
-                                                    onClick={() => setShowResumeModal(false)}
-                                                    href={purchase.membership.manage_url}
-                                                >
-                                                    Yes, resume subscription
-                                                </NavigationButton>
-                                            </div>
+                                                Yes, resume subscription
+                                            </NavigationButton>
                                         </div>
-                                    </Modal>
-                                ) :
-                                    null}
-
-                            </>
-                        ) :
+                                    </div>
+                                </Modal>
+                            ) : null}
+                        </>
+                    ) : (
                         <CtaButton
                             ref={ctaButtonRef}
                             product={product}
@@ -608,7 +605,7 @@ export const Product = ({
                                 if (!validate()) e.preventDefault();
                             }}
                         />
-                    }
+                    )}
                     {product.sales_count !== null ? (
                         <div role="status" className="info">
                             <span>
