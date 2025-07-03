@@ -80,14 +80,14 @@ describe ReceiptPresenter::FooterInfo, :vcr do
 
   describe "#unsubscribe_link" do
     let(:chargeable) { purchase }
-    let(:expected_url) do
-      Rails.application.routes.url_helpers.unsubscribe_purchase_url(
-        purchase.external_id,
-        host: UrlService.domain_with_protocol,
-      )
-    end
 
     it "returns the expected link" do
+      allow_any_instance_of(Purchase).to receive(:secure_external_id).and_return("sample-secure-id")
+      expected_url = Rails.application.routes.url_helpers.unsubscribe_purchase_url(
+        "sample-secure-id",
+        host: UrlService.domain_with_protocol,
+      )
+
       expect(presenter.unsubscribe_link).to include("Unsubscribe")
       expect(presenter.unsubscribe_link).to include(expected_url)
     end
