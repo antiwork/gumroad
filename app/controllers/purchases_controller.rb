@@ -54,8 +54,61 @@ class PurchasesController < ApplicationController
   end
 
   def unsubscribe
-    (@purchase = Purchase.find_by_external_id(params[:id])) || e404
-    @purchase.unsubscribe_buyer
+    @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "unsubscribe")
+
+    # If the confirmation_text is present, we are here from secure_redirect_controller#create.
+    # There's a chance Charge#id is used instead of Purchase#id in the original unsubscribe URL.
+    # We need to look up the purchase by Charge#id in that case.
+    if params[:confirmation_text].present? && @purchase&.email != params[:confirmation_text]
+      @purchase = Purchase.find_by(id: @purchase.charge.id)
+      e404 if @purchase&.email != params[:confirmation_text]
+    end
+
+    if @purchase.present?
+      @purchase.unsubscribe_buyer
+      return
+    end
+
+    # Fall back to legacy external_id and initiate secure redirect flow
+    purchase = Purchase.find_by_external_id(params[:id])
+    charge = Charge.find_by_external_id(params[:id])
+    e404 if purchase.blank? && charge.blank?
+
+    confirmation_emails = Set.new
+    if charge.present? && charge.successful_purchases.any?
+      confirmation_emails += charge.successful_purchases.map(&:email)
+      unless purchase.present?
+        purchase = charge.successful_purchases.last
+      end
+    end
+    confirmation_emails << purchase.email
+
+    if confirmation_emails.any?
+      destination_url = unsubscribe_purchase_url(id: purchase.secure_external_id(scope: "unsubscribe", expires_at: 2.days.from_now))
+
+      # Bundle confirmation_text and destination into a single encrypted payload
+      secure_payload = {
+        destination: destination_url,
+        confirmation_texts: confirmation_emails.to_a,
+        created_at: Time.current.to_i,
+        send_confirmation_text: true
+      }
+      encrypted_payload = SecureEncryptService.encrypt(secure_payload.to_json)
+
+      message = "Please enter your email address to unsubscribe"
+      error_message = "Email address does not match"
+      field_name = "Email address"
+
+      redirect_to secure_url_redirect_path(
+        encrypted_payload: encrypted_payload,
+        message: message,
+        field_name: field_name,
+        error_message: error_message
+      )
+      return
+    end
+
+    e404
   end
 
   def subscribe

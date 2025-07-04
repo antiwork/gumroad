@@ -10,8 +10,7 @@ type SecureRedirectPageProps = {
   message: string;
   field_name: string;
   error_message: string;
-  encrypted_destination: string;
-  encrypted_confirmation_text: string;
+  encrypted_payload: string;
   form_action: string;
   authenticity_token: string;
   flash_error?: string | null;
@@ -27,8 +26,7 @@ const SecureRedirectPage = ({
   message,
   field_name,
   error_message,
-  encrypted_destination,
-  encrypted_confirmation_text,
+  encrypted_payload,
   form_action,
   authenticity_token,
   flash_error,
@@ -55,8 +53,7 @@ const SecureRedirectPage = ({
     try {
       const formData = new FormData();
       formData.append("authenticity_token", authenticity_token);
-      formData.append("encrypted_destination", encrypted_destination);
-      formData.append("encrypted_confirmation_text", encrypted_confirmation_text);
+      formData.append("encrypted_payload", encrypted_payload);
       formData.append("field_name", field_name);
       formData.append("error_message", error_message);
       formData.append("message", message);

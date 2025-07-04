@@ -32,6 +32,8 @@
 
 ### Prerequisites
 
+> 💡 If you're on Windows, follow our [Windows setup guide](docs/development/windows.md) instead.
+
 Before you begin, ensure you have the following installed:
 
 #### Ruby

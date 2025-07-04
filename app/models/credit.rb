@@ -413,41 +413,6 @@ class Credit < ApplicationRecord
     credit
   end
 
-  def self.create_for_australia_backtaxes!(backtax_agreement:, amount_cents:)
-    credit = new
-    credit.user = backtax_agreement.user
-    credit.amount_cents = amount_cents
-
-    credit.merchant_account = credit.user.stripe_account&.can_accept_charges? ? credit.user.stripe_account : MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-
-    credit.backtax_agreement = backtax_agreement
-    credit.save!
-
-    balance_transaction_amount = BalanceTransaction::Amount.new(
-      currency: Currency::USD,
-      gross_cents: credit.amount_cents,
-      net_cents: credit.amount_cents
-    )
-
-    balance_transaction_holding_amount = BalanceTransaction::Amount.new(
-      currency: credit.merchant_account.currency,
-      gross_cents: credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents),
-      net_cents: credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
-    )
-
-    balance_transaction = BalanceTransaction.create!(
-      user: credit.user,
-      merchant_account: credit.merchant_account,
-      credit:,
-      issued_amount: balance_transaction_amount,
-      holding_amount: balance_transaction_holding_amount
-    )
-
-    credit.balance = balance_transaction.balance
-    credit.save!
-    credit
-  end
-
   def self.create_for_balance_forfeit!(user:, amount_cents:, merchant_account:)
     credit = new
     credit.user = user

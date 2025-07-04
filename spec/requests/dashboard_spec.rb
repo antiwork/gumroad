@@ -138,14 +138,24 @@ describe "Dashboard", js: true, type: :feature do
   end
 
   describe "tax form download notice" do
-    it "displays a 1099 form ready notice with a link to download" do
+    it "displays a 1099 form ready notice with a link to download if eligible" do
       download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+      allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(true)
       allow_any_instance_of(User).to receive(:tax_form_1099_download_url).and_return(download_url)
 
       visit dashboard_path
 
       expect(page).to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
       expect(page).to have_link("Click here to download", href: dashboard_download_tax_form_path)
+    end
+
+    it "does not display a 1099 form ready notice if not eligible" do
+      allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(false)
+
+      visit dashboard_path
+
+      expect(page).not_to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
+      expect(page).not_to have_link("Click here to download", href: dashboard_download_tax_form_path)
     end
   end
 end

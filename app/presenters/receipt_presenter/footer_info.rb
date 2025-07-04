@@ -34,10 +34,16 @@ class ReceiptPresenter::FooterInfo
   end
 
   def unsubscribe_link
+    purchase = chargeable
+
+    if chargeable.is_a?(Charge) && chargeable.successful_purchases.any?
+      purchase = chargeable.successful_purchases.last
+    end
+
     link_to(
       "Unsubscribe",
       Rails.application.routes.url_helpers.unsubscribe_purchase_url(
-        chargeable.external_id,
+        purchase.secure_external_id(scope: "unsubscribe"),
         host: UrlService.domain_with_protocol
       )
     )

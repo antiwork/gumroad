@@ -134,20 +134,6 @@ RSpec.describe PostEmailBlast do
     end
   end
 
-  describe ".format_latency" do
-    it "returns a string with the latency in minutes and seconds" do
-      expect(described_class.format_latency(0)).to eq("0s")
-      expect(described_class.format_latency(30)).to eq("30s")
-      expect(described_class.format_latency(1.minute)).to eq("1m 0s")
-      expect(described_class.format_latency(1.hour)).to eq("1h 0m 0s")
-      expect(described_class.format_latency(1.hour + 1.minute + 1.second)).to eq("1h 1m 1s")
-    end
-
-    it "returns nil if the latency is nil" do
-      expect(described_class.format_latency(nil)).to be_nil
-    end
-  end
-
   describe ".format_datetime" do
     it "returns a string without the timezone" do
       expect(described_class.format_datetime(Time.zone.local(2001, 2, 3, 4, 5, 6))).to eq("2001-02-03 04:05:06")

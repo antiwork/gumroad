@@ -50,6 +50,11 @@ class HomeController < ApplicationController
           url: :terms_url,
           title: "Gumroad terms of service",
           description: "Review the rules and guidelines for using Gumroad's services. Stay informed and compliant."
+        },
+        "small_bets" => {
+          url: :small_bets_url,
+          title: "Small Bets by Gumroad",
+          description: "Explore the Small Bets initiative by Gumroad. Learn, experiment, and grow with small, actionable projects."
         }
       }
     end
