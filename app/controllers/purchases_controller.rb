@@ -60,8 +60,11 @@ class PurchasesController < ApplicationController
     # There's a chance Charge#id is used instead of Purchase#id in the original unsubscribe URL.
     # We need to look up the purchase by Charge#id in that case.
     if params[:confirmation_text].present? && @purchase&.email != params[:confirmation_text]
-      @purchase = Purchase.find_by(id: @purchase.charge.id)
-      e404 if @purchase&.email != params[:confirmation_text]
+      @purchase = Purchase.find_by(id: @purchase.charge.id) if @purchase.charge.present?
+      if @purchase&.email != params[:confirmation_text]
+        Rails.logger.info("[Error unsubscribing buyer] purchase: #{@purchase&.id}, confirmation_text: #{params[:confirmation_text]}")
+        return redirect_to(root_path)
+      end
     end
 
     if @purchase.present?
