@@ -166,9 +166,34 @@ RSpec.describe ProductInstallmentPlan do
       expect(result).to eq([1000, 1000, 1000])
     end
 
-    it "adds remainder to first installment when price not evenly divisible" do
-      result = installment_plan.calculate_installment_payment_price_cents(3002)
-      expect(result).to eq([1002, 1000, 1000])
+    context "when price is not evenly divisible" do
+      it "distributes remainder evenly across first installments with 2 cent remainder" do
+        result = installment_plan.calculate_installment_payment_price_cents(3002)
+        expect(result).to eq([1001, 1001, 1000])
+      end
+
+      it "distributes remainder evenly across first installments with 1 cent remainder" do
+        result = installment_plan.calculate_installment_payment_price_cents(3001)
+        expect(result).to eq([1001, 1000, 1000])
+      end
+
+      it "distributes remainder evenly with 4 installments and 3 cent remainder" do
+        installment_plan.number_of_installments = 4
+        result = installment_plan.calculate_installment_payment_price_cents(1003)
+        expect(result).to eq([251, 251, 251, 250])
+      end
+
+      it "distributes remainder evenly with 5 installments and 2 cent remainder" do
+        installment_plan.number_of_installments = 5
+        result = installment_plan.calculate_installment_payment_price_cents(1002)
+        expect(result).to eq([201, 201, 200, 200, 200])
+      end
+
+      it "handles large remainder with many installments" do
+        installment_plan.number_of_installments = 7
+        result = installment_plan.calculate_installment_payment_price_cents(1006)
+        expect(result).to eq([144, 144, 144, 144, 144, 144, 142])
+      end
     end
   end
 
