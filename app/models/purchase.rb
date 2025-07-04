@@ -2589,8 +2589,7 @@ class Purchase < ApplicationRecord
     return if seller.custom_direct_fee_percentage.present? || seller.custom_discover_fee_percentage.present?
     return if custom_flat_fee_per_thousand_charged.present? || custom_discover_fee_per_thousand_charged.present?
 
-    self.custom_flat_fee_per_thousand_charged = gumroad_flat_fee_per_thousand
-    self.custom_discover_fee_per_thousand_charged = calculate_additional_discover_fee_per_thousand if charge_discover_fee?
+    self.calculate_fees!
     save!
   end
 
