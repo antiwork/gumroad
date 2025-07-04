@@ -1241,13 +1241,20 @@ describe PurchasesController, :vcr do
             expect(other_purchase.reload.can_contact).to eq false
           end
 
-          it "returns 404 when confirmation_text doesn't match any associated email" do
+          it "redirects to root path when confirmation_text doesn't match any associated email" do
             purchase = create(:purchase, can_contact: true, email: "test@example.com", charge: create(:charge))
             secure_id = purchase.secure_external_id(scope: "unsubscribe")
 
-            expect do
-              get :unsubscribe, params: { id: secure_id, confirmation_text: "wrong@example.com" }
-            end.to raise_error(ActionController::RoutingError)
+            get :unsubscribe, params: { id: secure_id, confirmation_text: "wrong@example.com" }
+            expect(response).to redirect_to(root_path)
+          end
+
+          it "redirects to root path when confirmation_text doesn't match and purchase has no charge" do
+            purchase = create(:purchase, can_contact: true, email: "test@example.com", charge: nil)
+            secure_id = purchase.secure_external_id(scope: "unsubscribe")
+
+            get :unsubscribe, params: { id: secure_id, confirmation_text: "wrong@example.com" }
+            expect(response).to redirect_to(root_path)
           end
         end
       end
