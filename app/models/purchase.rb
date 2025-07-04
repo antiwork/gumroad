@@ -327,6 +327,8 @@ class Purchase < ApplicationRecord
   validates :call, presence: true, if: -> { link.native_type == Link::NATIVE_TYPE_CALL }
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
+  validates :custom_flat_fee_per_thousand_charged, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }, allow_nil: true
+  validates :custom_discover_fee_per_thousand_charged, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }, allow_nil: true
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
@@ -3155,11 +3157,12 @@ class Purchase < ApplicationRecord
       end
 
       fee_per_thousand = calculate_gumroad_fee_per_thousand
-
+      self.custom_flat_fee_per_thousand_charged = gumroad_flat_fee_per_thousand
       if charge_discover_fee?
         discover_fee_per_thousand = calculate_additional_discover_fee_per_thousand
         if discover_fee_per_thousand > 0
           fee_per_thousand += discover_fee_per_thousand
+          self.custom_discover_fee_per_thousand_charged = discover_fee_per_thousand
           self.was_discover_fee_charged = true
         end
       end
@@ -3183,6 +3186,14 @@ class Purchase < ApplicationRecord
       self.affiliate_credit_cents = determine_affiliate_balance_cents
     end
 
+    def seller_based_discover_fee_per_thousand
+      if seller.custom_discover_fee_percentage.present?
+        seller.custom_discover_fee_percentage / 100.0 * 1000
+      else
+        GUMROAD_DISCOVER_FEE_PER_THOUSAND
+      end
+    end
+
     def calculate_additional_discover_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
@@ -3190,7 +3201,7 @@ class Purchase < ApplicationRecord
         preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
       else
         if Feature.active?(:merchant_of_record_fee, seller)
-          GUMROAD_DISCOVER_FEE_PER_THOUSAND - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+          Math.max(seller_based_discover_fee_per_thousand - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0), 0)
         else
           link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
         end
@@ -3211,8 +3222,27 @@ class Purchase < ApplicationRecord
       end
     end
 
+    def seller_based_flat_fee_per_thousand
+      if seller.custom_direct_fee_percentage.present?
+        seller.custom_direct_fee_percentage / 100.0 * 1000
+      else
+        GUMROAD_FLAT_FEE_PER_THOUSAND
+      end
+    end
+
+
     def gumroad_flat_fee_per_thousand
-      seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : GUMROAD_FLAT_FEE_PER_THOUSAND
+      seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : seller_based_flat_fee_per_thousand
+    end
+
+    def backfill_custom_fee_per_thousand_charged!
+      ## Need to run it before setting any new custom fee percentages for the seller
+      return if seller.custom_direct_fee_percentage.present? || seller.custom_discover_fee_percentage.present?
+      return if custom_flat_fee_per_thousand_charged.present? || custom_discover_fee_per_thousand_charged.present?
+
+      self.custom_flat_fee_per_thousand_charged = gumroad_flat_fee_per_thousand
+      self.custom_discover_fee_per_thousand_charged = calculate_additional_discover_fee_per_thousand if charge_discover_fee?
+      save!
     end
 
     def flat_fee_applicable?

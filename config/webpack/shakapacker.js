@@ -1,7 +1,13 @@
 import fs from "fs";
 import yaml from "js-yaml";
-import { fileURLToPath } from "node:url";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
-export default yaml.load(fs.readFileSync(fileURLToPath(import.meta.resolve("../shakapacker.yml"))))[
-  process.env.RAILS_ENV
-];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const configPath = path.resolve(__dirname, "../shakapacker.yml");
+const config = yaml.load(fs.readFileSync(configPath, "utf8"));
+
+export default config[process.env.RAILS_ENV];
