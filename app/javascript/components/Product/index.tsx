@@ -109,6 +109,7 @@ export type Product = {
   streamable: boolean;
   is_quantity_enabled: boolean;
   is_multiseat_license: boolean;
+  hide_sold_out_variants?: boolean;
   native_type: ProductNativeType;
   sales_count: number | null;
   summary: string | null;

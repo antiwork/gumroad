@@ -609,4 +609,29 @@ describe("ProductShowScenario", type: :feature, js: true) do
 
     it_behaves_like "discover navigation when layout is discover", selected_taxonomy: "Design"
   end
+
+  context "sold out variants" do
+    let!(:creator) { create(:named_user) }
+    let!(:product) { create(:product, user: creator, name: "Test Product with Variants", hide_sold_out_variants: false) }
+    let!(:variant_category) { create(:variant_category, link: product) }
+    let!(:available_variant) { create(:variant, name: "Standard", variant_category: variant_category) }
+    let!(:sold_out_variant) { create(:variant, name: "Starter", variant_category: variant_category, max_purchase_count: 1) }
+    let!(:sold_out_variant_purchase) { create(:purchase, link: product, variant_attributes: [sold_out_variant]) }
+
+    it "disables or hides the variant based on the hide_sold_out_variants setting" do
+      # The sold out variant should be visible, but in a disabled state.
+      product.update!(hide_sold_out_variants: false)
+
+      visit product.long_url
+      expect(page).to have_radio_button(sold_out_variant.name, disabled: true)
+      expect(page).to have_radio_button(available_variant.name, disabled: false)
+
+      # The sold out variant should not be visible on the page.
+      product.update!(hide_sold_out_variants: true)
+
+      visit product.long_url
+      expect(page).not_to have_radio_button(sold_out_variant.name)
+      expect(page).to have_radio_button(available_variant.name, disabled: false)
+    end
+  end
 end
