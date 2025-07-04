@@ -102,7 +102,7 @@ export const DateRangePicker = ({
           >
             Last 3 months
           </div>
-          <div role="menuitem" onClick={() => quickSet(startOfQuarter(today), endOfQuarter(today))}>
+          <div role="menuitem" onClick={() => quickSet(startOfQuarter(today), today)}>
             This quarter
           </div>
           <div
