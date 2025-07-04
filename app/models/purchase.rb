@@ -613,6 +613,8 @@ class Purchase < ApplicationRecord
       product_has_variants: (link.association_cached?(:variant_categories_alive) ? !link.variant_categories_alive.empty? : link.variant_categories_alive.exists?),
       price: version == 1 ? formatted_display_price : price_cents,
       gumroad_fee: fee_cents,
+      custom_flat_fee_per_thousand_charged:,
+      custom_discover_fee_per_thousand_charged:,
       is_bundle_purchase:,
       is_bundle_product_purchase:,
     }
@@ -2582,6 +2584,16 @@ class Purchase < ApplicationRecord
     full_name.presence || email
   end
 
+  def backfill_custom_fee_per_thousand_charged!
+    ## Need to run it before setting any new custom fee percentages for the seller
+    return if seller.custom_direct_fee_percentage.present? || seller.custom_discover_fee_percentage.present?
+    return if custom_flat_fee_per_thousand_charged.present? || custom_discover_fee_per_thousand_charged.present?
+
+    self.custom_flat_fee_per_thousand_charged = gumroad_flat_fee_per_thousand
+    self.custom_discover_fee_per_thousand_charged = calculate_additional_discover_fee_per_thousand if charge_discover_fee?
+    save!
+  end
+
   def build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
     total_issued_amount_cents = combined_flow_of_funds.issued_amount.cents
     purchase_portion = total_transaction_cents * 1.0 / charge.amount_cents
@@ -3201,7 +3213,7 @@ class Purchase < ApplicationRecord
         preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
       else
         if Feature.active?(:merchant_of_record_fee, seller)
-          Math.max(seller_based_discover_fee_per_thousand - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0), 0)
+          [seller_based_discover_fee_per_thousand - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0), 0].max
         else
           link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
         end
@@ -3233,16 +3245,6 @@ class Purchase < ApplicationRecord
 
     def gumroad_flat_fee_per_thousand
       seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : seller_based_flat_fee_per_thousand
-    end
-
-    def backfill_custom_fee_per_thousand_charged!
-      ## Need to run it before setting any new custom fee percentages for the seller
-      return if seller.custom_direct_fee_percentage.present? || seller.custom_discover_fee_percentage.present?
-      return if custom_flat_fee_per_thousand_charged.present? || custom_discover_fee_per_thousand_charged.present?
-
-      self.custom_flat_fee_per_thousand_charged = gumroad_flat_fee_per_thousand
-      self.custom_discover_fee_per_thousand_charged = calculate_additional_discover_fee_per_thousand if charge_discover_fee?
-      save!
     end
 
     def flat_fee_applicable?

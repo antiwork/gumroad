@@ -1590,6 +1590,54 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "backfill custom fee charged for purchases" do
+    it "backfills custom fee charged for purchases" do
+      purchase = create(:purchase, custom_flat_fee_per_thousand_charged: nil, custom_discover_fee_per_thousand_charged: nil, was_product_recommended: true)
+      purchase.backfill_custom_fee_per_thousand_charged!
+      expect(purchase.custom_flat_fee_per_thousand_charged).to eq 100
+      expect(purchase.custom_discover_fee_per_thousand_charged).to eq 171.0 ## 300(GUMROAD_DISCOVER_FEE_PER_THOUSAND) - 100(GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - 29(PROCESSOR_FEE_PER_THOUSAND)
+    end
+
+    it "does not backfill custom fee charged for purchases if seller has custom fee percentages before backfilling" do
+      link = create(:product)
+      purchase = create(:purchase, was_product_recommended: true, seller: link.user, link:)
+      purchase.update!(custom_flat_fee_per_thousand_charged: nil, custom_discover_fee_per_thousand_charged: nil) ## Old products will have this nil after migration
+      link.user.update!(custom_direct_fee_percentage: 5, custom_discover_fee_percentage: 5)
+      purchase.backfill_custom_fee_per_thousand_charged!
+      expect(purchase.custom_flat_fee_per_thousand_charged).to eq nil
+      expect(purchase.custom_discover_fee_per_thousand_charged).to eq nil
+    end
+
+    it "does not backfill if purchase has custom fee percentages" do
+      link = create(:product)
+      purchase = create(:purchase, was_product_recommended: true, seller: link.user, link:)
+      purchase.update!(custom_flat_fee_per_thousand_charged: 100, custom_discover_fee_per_thousand_charged: 171.0)
+      link.user.update!(custom_direct_fee_percentage: 5, custom_discover_fee_percentage: 5)
+      purchase.backfill_custom_fee_per_thousand_charged!
+      expect(purchase.custom_flat_fee_per_thousand_charged).to eq 100
+      expect(purchase.custom_discover_fee_per_thousand_charged).to eq 171.0
+    end
+  end
+
+  describe "calculate fees" do
+    it "calculates fees correctly when custom fee percentages are set" do
+      seller = create(:user, custom_direct_fee_percentage: 5, custom_discover_fee_percentage: 15)
+      link = create(:product, user: seller)
+      purchase = create(:purchase, was_product_recommended: true, seller:, link:)
+      expect(purchase.as_json[:custom_flat_fee_per_thousand_charged]).to eq(50)
+      expect(purchase.as_json[:custom_discover_fee_per_thousand_charged]).to eq(150 - 100 - 29)
+    end
+
+    it "calculates fees correctly when custom fee percentages are not set" do
+      seller = create(:user)
+      link = create(:product, user: seller)
+      purchase = create(:purchase, was_product_recommended: true, seller:, link:)
+      expect(purchase.as_json[:custom_flat_fee_per_thousand_charged]).to eq(100)
+      expect(purchase.as_json[:custom_discover_fee_per_thousand_charged]).to eq(171.0)
+    end
+  end
+
+
   describe "mass assignment" do
     it "sets price" do
       expect(Purchase.new(price_cents: 100).price_cents).to eq 1_00
