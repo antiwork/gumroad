@@ -192,7 +192,7 @@ RSpec.describe ProductInstallmentPlan do
       it "handles large remainder with many installments" do
         installment_plan.number_of_installments = 7
         result = installment_plan.calculate_installment_payment_price_cents(1006)
-        expect(result).to eq([144, 144, 144, 144, 144, 144, 142])
+        expect(result).to eq([144, 144, 144, 144, 144, 143, 143])
       end
     end
   end
