@@ -2585,12 +2585,16 @@ class Purchase < ApplicationRecord
   end
 
   def backfill_custom_fee_per_thousand_charged!
+    return unless seller.present?
     ## Need to run it before setting any new custom fee percentages for the seller
     return if seller.custom_direct_fee_percentage.present? || seller.custom_discover_fee_percentage.present?
     return if custom_flat_fee_per_thousand_charged.present? || custom_discover_fee_per_thousand_charged.present?
 
-    self.calculate_fees!
-    save!
+    transaction do
+      reload
+      self.calculate_fees!
+      save!
+    end
   end
 
   def build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
@@ -3198,7 +3202,7 @@ class Purchase < ApplicationRecord
     end
 
     def seller_based_discover_fee_per_thousand
-      if seller.custom_discover_fee_percentage.present?
+      if seller&.custom_discover_fee_percentage.present?
         seller.custom_discover_fee_percentage / 100.0 * 1000
       else
         GUMROAD_DISCOVER_FEE_PER_THOUSAND
@@ -3234,7 +3238,7 @@ class Purchase < ApplicationRecord
     end
 
     def seller_based_flat_fee_per_thousand
-      if seller.custom_direct_fee_percentage.present?
+      if seller&.custom_direct_fee_percentage.present?
         seller.custom_direct_fee_percentage / 100.0 * 1000
       else
         GUMROAD_FLAT_FEE_PER_THOUSAND

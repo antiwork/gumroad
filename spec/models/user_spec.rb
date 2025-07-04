@@ -244,35 +244,28 @@ describe User, :vcr do
   end
 
   describe "custom fee percentages" do
-    it "validates custom direct fee percentage" do
-      [101, -1].each do |percentage|
-        user = create(:user)
-        user.custom_direct_fee_percentage = percentage
-        expect(user.valid?).to be false
-      end
-    end
+    %i[custom_direct_fee_percentage custom_discover_fee_percentage].each do |attribute|
+      context "for #{attribute}" do
+        let(:user) { build(:user) }
 
-    it "validates custom discover fee percentage" do
-      [101, -1].each do |percentage|
-        user = create(:user)
-        user.custom_discover_fee_percentage = percentage
-        expect(user.valid?).to be false
-      end
-    end
+        it "validates values outside 0-100 range are invalid" do
+          [101, -1].each do |percentage|
+            user.public_send("#{attribute}=", percentage)
+            expect(user.valid?).to be false
+          end
+        end
 
-    it "values between 0 and 100 are valid" do
-      [0, 100, 50, 1].each do |percentage|
-        user = create(:user)
-        user.custom_direct_fee_percentage = percentage
-        expect(user.valid?).to be true
-      end
-    end
+        it "validates values between 0 and 100 are valid" do
+          [0, 100, 50, 1].each do |percentage|
+            user.public_send("#{attribute}=", percentage)
+            expect(user.valid?).to be true
+          end
+        end
 
-    it "values between 0 and 100 are valid" do
-      [0, 100, 50, 1].each do |percentage|
-        user = create(:user)
-        user.custom_discover_fee_percentage = percentage
-        expect(user.valid?).to be true
+        it "validates nil values are valid" do
+          user.public_send("#{attribute}=", nil)
+          expect(user.valid?).to be true
+        end
       end
     end
 
