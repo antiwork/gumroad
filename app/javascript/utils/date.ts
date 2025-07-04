@@ -33,4 +33,3 @@ export const formatCallDate = (
 
   return date.toLocaleString("en-US", localeStringOptions);
 };
-
