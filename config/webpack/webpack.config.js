@@ -5,8 +5,9 @@ import webpack from "webpack";
 import WebpackAssetsManifest from "webpack-assets-manifest";
 import { merge } from "webpack-merge";
 
+import shakapackerConfig from "./shakapacker.js";
+
 export default async () => {
-  const shakapackerConfig = (await import("./shakapacker.js")).default;
   const baseConfigs = (await import(`./${process.env.NODE_ENV}.js`)).default;
   const clientConfigs = baseConfigs;
 
