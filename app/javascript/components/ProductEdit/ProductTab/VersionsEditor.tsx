@@ -187,7 +187,9 @@ const VersionEditor = ({
                 onChange={(value) => updateVersion({ max_purchase_count: value })}
                 value={version.max_purchase_count}
               >
-                {(inputProps) => <input type="number" placeholder="∞" {...inputProps} />}
+                {(inputProps) => (
+                  <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                )}
               </NumberInput>
             </fieldset>
           </section>

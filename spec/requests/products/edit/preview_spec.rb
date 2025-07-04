@@ -84,7 +84,7 @@ describe("Product Edit Previews", type: :feature, js: true) do
         expect(page).to have_text("$1")
         expect(page).to_not have_text("$1+")
         expect(page).to_not have_text("a month")
-        expect(page).to have_text("Sold out")
+        expect(page).to have_text("0 left")
       end
     end
 
