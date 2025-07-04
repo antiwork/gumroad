@@ -9,7 +9,6 @@ class ServiceCharge < ApplicationRecord
   include ExternalId
   include JsonData
   include TimestampScopes
-  include RiskState
   include Purchase::CardCountrySource
   include Rails.application.routes.url_helpers
   include FlagShihTzu
