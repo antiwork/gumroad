@@ -1253,6 +1253,7 @@ describe PurchasesController, :vcr do
             purchase = create(:purchase, can_contact: true, email: "test@example.com", charge: create(:charge))
             secure_id = purchase.secure_external_id(scope: "unsubscribe")
 
+            allow(Rails.logger).to receive(:info)
             expect(Rails.logger).to receive(:info).with("[Error unsubscribing buyer] purchase: #{purchase.id}, confirmation_text: wrong@example.com")
 
             get :unsubscribe, params: { id: secure_id, confirmation_text: "wrong@example.com" }
