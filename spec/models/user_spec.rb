@@ -243,6 +243,52 @@ describe User, :vcr do
     end
   end
 
+  describe "custom fee percentages" do
+    it "validates custom direct fee percentage" do
+      [101, -1].each do |percentage|
+        user = create(:user)
+        user.custom_direct_fee_percentage = percentage
+        expect(user.valid?).to be false
+      end
+    end
+
+    it "validates custom discover fee percentage" do
+      [101, -1].each do |percentage|
+        user = create(:user)
+        user.custom_discover_fee_percentage = percentage
+        expect(user.valid?).to be false
+      end
+    end
+
+    it "values between 0 and 100 are valid" do
+      [0, 100, 50, 1].each do |percentage|
+        user = create(:user)
+        user.custom_direct_fee_percentage = percentage
+        expect(user.valid?).to be true
+      end
+    end
+
+    it "values between 0 and 100 are valid" do
+      [0, 100, 50, 1].each do |percentage|
+        user = create(:user)
+        user.custom_discover_fee_percentage = percentage
+        expect(user.valid?).to be true
+      end
+    end
+
+    it "validates custom direct fee percentage is nil" do
+      user = create(:user)
+      user.custom_direct_fee_percentage = nil
+      expect(user.valid?).to be true
+    end
+
+    it "validates custom discover fee percentage is nil" do
+      user = create(:user)
+      user.custom_discover_fee_percentage = nil
+      expect(user.valid?).to be true
+    end
+  end
+
   describe "has_cdn_url" do
     before do
       stub_const("CDN_URL_MAP", { "https://gumroad-specs.s3.amazonaws.com" => "https://public-files.gumroad.com", "https://s3.amazonaws.com/gumroad/" => "https://public-files.gumroad.com/res/gumroad/" })
