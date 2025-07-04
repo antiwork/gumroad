@@ -123,6 +123,7 @@ describe ProductPresenter do
             free_trial: nil,
             is_quantity_enabled: false,
             is_multiseat_license: false,
+            hide_sold_out_variants: false,
             native_type: "digital",
             is_stream_only: false,
             streamable: false,
