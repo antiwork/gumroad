@@ -159,6 +159,56 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       expect(page).to have_disclosure("12/14/2023")
       expect(page).to have_current_path(sales_dashboard_path(from: "2023-12-14", to: "2023-12-14"))
     end
+
+    it "supports quarterly date range selection" do
+      freeze_time Time.zone.parse("2023-07-15 12:00:00") do # Middle of Q3
+        visit sales_dashboard_path
+
+        # Test "This quarter" option (Q3: July 1 - July 15, quarter-to-date)
+        select_disclosure "This month" do
+          click_on "This quarter"
+        end
+        expect(page).to have_current_path(sales_dashboard_path(from: "2023-07-01", to: "2023-07-15"))
+        expect(page).to have_disclosure("7/1/2023 – 7/15/2023")
+
+        # Test "Last quarter" option (Q2: April 1 - June 30, full quarter)
+        select_disclosure "7/1/2023 – 7/15/2023" do
+          click_on "Last quarter"
+        end
+        expect(page).to have_current_path(sales_dashboard_path(from: "2023-04-01", to: "2023-06-30"))
+        expect(page).to have_disclosure("4/1/2023 – 6/30/2023")
+      end
+    end
+
+    it "handles quarterly date ranges across different quarters" do
+      # Test Q1 (January - March)
+      freeze_time Time.zone.parse("2023-02-15 12:00:00") do
+        visit sales_dashboard_path
+        select_disclosure "This month" do
+          click_on "This quarter"
+        end
+        expect(page).to have_current_path(sales_dashboard_path(from: "2023-01-01", to: "2023-02-15"))
+
+        select_disclosure "1/1/2023 – 2/15/2023" do
+          click_on "Last quarter"
+        end
+        expect(page).to have_current_path(sales_dashboard_path(from: "2022-10-01", to: "2022-12-31"))
+      end
+
+      # Test Q4 (October - December)
+      freeze_time Time.zone.parse("2023-11-30 12:00:00") do
+        visit sales_dashboard_path
+        select_disclosure "This month" do
+          click_on "This quarter"
+        end
+        expect(page).to have_current_path(sales_dashboard_path(from: "2023-10-01", to: "2023-11-30"))
+
+        select_disclosure "10/1/2023 – 11/30/2023" do
+          click_on "Last quarter"
+        end
+        expect(page).to have_current_path(sales_dashboard_path(from: "2023-07-01", to: "2023-09-30"))
+      end
+    end
   end
 
   context "with many differrent referrers" do
