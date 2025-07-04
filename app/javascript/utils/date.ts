@@ -34,24 +34,3 @@ export const formatCallDate = (
   return date.toLocaleString("en-US", localeStringOptions);
 };
 
-export const getQuarter = (date: Date): number => {
-  return Math.floor(date.getMonth() / 3) + 1;
-};
-
-export const startOfQuarter = (date: Date): Date => {
-  const quarter = getQuarter(date);
-  const startMonth = (quarter - 1) * 3;
-  return new Date(date.getFullYear(), startMonth, 1);
-};
-
-export const endOfQuarter = (date: Date): Date => {
-  const quarter = getQuarter(date);
-  const endMonth = quarter * 3 - 1;
-  return new Date(date.getFullYear(), endMonth + 1, 0);
-};
-
-export const subQuarters = (date: Date, quarters: number): Date => {
-  const newDate = new Date(date);
-  newDate.setMonth(newDate.getMonth() - quarters * 3);
-  return newDate;
-};

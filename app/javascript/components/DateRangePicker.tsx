@@ -1,11 +1,21 @@
-import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths, subYears } from "date-fns";
+import {
+  endOfMonth,
+  endOfYear,
+  startOfMonth,
+  startOfYear,
+  subDays,
+  subMonths,
+  subYears,
+  endOfQuarter,
+  startOfQuarter,
+  subQuarters,
+} from "date-fns";
 import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { endOfQuarter, startOfQuarter, subQuarters } from "$app/utils/date";
 
 export const DateRangePicker = ({
   from,
@@ -92,7 +102,7 @@ export const DateRangePicker = ({
           >
             Last 3 months
           </div>
-          <div role="menuitem" onClick={() => quickSet(startOfQuarter(today), today)}>
+          <div role="menuitem" onClick={() => quickSet(startOfQuarter(today), endOfQuarter(today))}>
             This quarter
           </div>
           <div
