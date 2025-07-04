@@ -41,6 +41,7 @@ end
 
 # NOTE Add only valid errors here. Do not errors we should handle and fix on specs themselves
 JSErrorReporter.set_global_ignores [
+  /Warning: %s: Support for defaultProps will be removed from function components in a future major release/,
   /(Component closed|Object|zoid destroyed all components)\n\t \(https:\/\/www.paypal.com\/sdk\/js/,
   /The method FB.getLoginStatus can no longer be called from http pages/,
   /The user aborted a request./,
@@ -145,6 +146,18 @@ RSpec.configure do |config|
       Thread.new { prepare_mysql },
       Thread.new { ElasticsearchSetup.prepare_test_environment }
     ].each(&:join)
+  end
+
+  config.before(:suite) do
+    examples = RSpec.world.filtered_examples.values.flatten
+
+    if examples.any? { |ex| ex.metadata[:type] == :feature }
+      begin
+        StripeBalanceEnforcer.ensure_sufficient_balance
+      rescue StandardError => e
+        warn "Stripe balance check failed: #{e.class} #{e.message}"
+      end
+    end
   end
 
   config.before(:all) do |example|

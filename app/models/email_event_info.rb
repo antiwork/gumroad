@@ -86,8 +86,9 @@ class EmailEventInfo
       click_url =~ %r{#{DOMAIN}/d/[a-z0-9]{32}}o
     end
 
-    # The regex corresponds to possible ExternalIds, which are base64 encoded with urlsafe parameters (- and _ instead of + and /)
-    # An ExternalId may also end in = or == (denotes padding)
+    # The regex corresponds to possible ExternalIds and SecureExternalIds
+    # Legacy ExternalIds: base64 encoded with urlsafe parameters (- and _ instead of + and /) and may end in = or ==
+    # Secure ExternalIds: longer strings using URL-safe characters (letters, digits, hyphens, underscores)
     EXTERNAL_ID_PATTERN = "[\\w-]+={0,2}"
     private_constant :EXTERNAL_ID_PATTERN
 

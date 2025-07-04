@@ -23,7 +23,7 @@
       <a href="<%= manage_subscription_url(@purchase.subscription.external_id) %>">Manage membership</a>
     <% else %>
       You'll get posts from this creator in the future.
-      <a href="<%= unsubscribe_purchase_url(@purchase.external_id) %>">Unsubscribe</a>
+      <a href="<%= unsubscribe_purchase_url(@purchase.secure_external_id(scope: "unsubscribe")) %>">Unsubscribe</a>
     <% end %>
   <% end %>
 </p>

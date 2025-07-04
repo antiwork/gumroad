@@ -4,12 +4,12 @@ class Purchase < ApplicationRecord
   has_paper_trail
 
   include Rails.application.routes.url_helpers
-  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, RiskState, PurchaseErrorCode,
+  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
           Refundable, Reviews, PingNotification, Searchable,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
-          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns
+          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns, SecureExternalId
 
   extend PreorderHelper
   extend ProductsHelper

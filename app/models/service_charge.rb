@@ -9,12 +9,9 @@ class ServiceCharge < ApplicationRecord
   include ExternalId
   include JsonData
   include TimestampScopes
-  include RiskState
   include Purchase::CardCountrySource
   include Rails.application.routes.url_helpers
   include FlagShihTzu
-
-  FREE_TRIAL_PERIOD = 14.days
 
   attr_json_data_accessor :locale, default: -> { "en" }
   attr_json_data_accessor :card_country_source

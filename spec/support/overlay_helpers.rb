@@ -22,10 +22,6 @@ module OverlayHelpers
     @products[:physical].shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::USA.alpha2, one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
   end
 
-  def cleanup_overlay_artifacts
-    Dir.glob(Rails.root.join("public", "overlay_spec_page_*.html")).each { |f| File.delete(f) }
-  end
-
   def create_page(urls, single_mode = false, trigger_checkout: false, template_name: "overlay_page.html.erb", custom_domain_base_uri: nil, query_params: {})
     template = Rails.root.join("spec", "support", "fixtures", template_name)
     filename = Rails.root.join("public", "overlay_spec_page_#{urls.join('_').gsub(/[^a-zA-Z]/, '_')}.html")

@@ -1204,24 +1204,161 @@ describe PurchasesController, :vcr do
         expect { get :unsubscribe, params: { id: "notreal" } }.to raise_error(ActionController::RoutingError)
       end
 
-      it "only sets can_contact to false" do
-        purchase = create(:purchase, can_contact: true)
-        get :unsubscribe, params: { id: purchase.external_id }
-        expect(response).to be_successful
-        expect(purchase.reload.can_contact).to eq false
+      context "with secure_external_id" do
+        it "sets can_contact to false for all purchases from same seller and email" do
+          purchase = create(:purchase, can_contact: true)
+          purchase2 = create(:purchase, seller_id: purchase.seller.id, link: create(:product, user: purchase.seller), email: purchase.email, can_contact: true)
+          secure_id = purchase.secure_external_id(scope: "unsubscribe")
+          get :unsubscribe, params: { id: secure_id }
+          expect(response).to be_successful
+          expect(purchase.reload.can_contact).to eq false
+          expect(purchase2.reload.can_contact).to eq false
+        end
 
-        get :unsubscribe, params: { id: purchase.external_id }
-        expect(response).to be_successful
-        expect(purchase.reload.can_contact).to eq false
+        context "with confirmation_text from secure_redirect_controller" do
+          it "handles correct confirmation_text" do
+            purchase = create(:purchase, can_contact: true, email: "test@example.com")
+            secure_id = purchase.secure_external_id(scope: "unsubscribe")
+            get :unsubscribe, params: { id: secure_id, confirmation_text: "test@example.com" }
+            expect(response).to be_successful
+            expect(purchase.reload.can_contact).to eq false
+          end
+
+          it "handles incorrect confirmation_text by checking charge ID" do
+            charge = create(:charge)
+            purchase = create(:purchase, can_contact: true, email: "test@example.com", charge:)
+            secure_id = purchase.secure_external_id(scope: "unsubscribe")
+
+            # This simulates the case where the secure_id corresponds to a charge ID rather than purchase ID
+            allow(Purchase).to receive(:find_by_secure_external_id).and_return(purchase)
+
+            # Create another purchase with same charge ID but different email
+            other_purchase = create(:purchase, can_contact: true, email: "other@example.com")
+            allow(Purchase).to receive(:find_by).with(id: charge.id).and_return(other_purchase)
+
+            get :unsubscribe, params: { id: secure_id, confirmation_text: "other@example.com" }
+            expect(response).to be_successful
+            expect(other_purchase.reload.can_contact).to eq false
+          end
+
+          it "returns 404 when confirmation_text doesn't match any associated email" do
+            purchase = create(:purchase, can_contact: true, email: "test@example.com", charge: create(:charge))
+            secure_id = purchase.secure_external_id(scope: "unsubscribe")
+
+            expect do
+              get :unsubscribe, params: { id: secure_id, confirmation_text: "wrong@example.com" }
+            end.to raise_error(ActionController::RoutingError)
+          end
+        end
       end
 
-      it "sets can_contact to false for all purchases if initial purchase is true" do
-        purchase = create(:purchase, can_contact: true)
-        purchase2 = create(:purchase, seller_id: purchase.seller.id, link: create(:product, user: purchase.seller), email: purchase.email, can_contact: true)
-        get :unsubscribe, params: { id: purchase.external_id }
-        expect(response).to be_successful
-        expect(purchase.reload.can_contact).to eq false
-        expect(purchase2.reload.can_contact).to eq false
+      context "with legacy external_id" do
+        context "when purchase exists" do
+          it "redirects to secure redirect page for confirmation" do
+            purchase = create(:purchase, can_contact: true, email: "test@example.com")
+            get :unsubscribe, params: { id: purchase.external_id }
+
+            expect(response).to be_redirect
+            expect(response.location).to start_with(secure_url_redirect_url)
+            expect(response.location).to include("encrypted_payload")
+            expect(response.location).to include("message=Please+enter+your+email+address+to+unsubscribe")
+            expect(response.location).to include("field_name=Email+address")
+            expect(response.location).to include("error_message=Email+address+does+not+match")
+          end
+
+          it "includes correct destination URL in redirect params" do
+            purchase = create(:purchase, can_contact: true, email: "test@example.com")
+            allow(SecureEncryptService).to receive(:encrypt).and_call_original
+
+            get :unsubscribe, params: { id: purchase.external_id }
+
+            expect(SecureEncryptService).to have_received(:encrypt).once
+            # Verify that the encrypted payload contains the expected data
+            encrypted_payload = URI.decode_www_form(URI.parse(response.location).query).to_h["encrypted_payload"]
+            decrypted_payload = JSON.parse(SecureEncryptService.decrypt(encrypted_payload))
+            expect(decrypted_payload["destination"]).to match(%r{/purchases/.*unsubscribe})
+            expect(decrypted_payload["confirmation_texts"]).to include(purchase.email)
+            expect(decrypted_payload["send_confirmation_text"]).to be(true)
+          end
+
+          it "includes encrypted purchase email for confirmation" do
+            purchase = create(:purchase, can_contact: true, email: "test@example.com")
+            allow(SecureEncryptService).to receive(:encrypt).and_call_original
+
+            get :unsubscribe, params: { id: purchase.external_id }
+
+            expect(SecureEncryptService).to have_received(:encrypt).once
+            # Verify that the encrypted payload contains the expected data
+            encrypted_payload = URI.decode_www_form(URI.parse(response.location).query).to_h["encrypted_payload"]
+            decrypted_payload = JSON.parse(SecureEncryptService.decrypt(encrypted_payload))
+            expect(decrypted_payload["confirmation_texts"]).to include(purchase.email)
+          end
+        end
+
+        context "when charge exists with multiple successful purchases" do
+          it "collects all emails from charge's successful purchases" do
+            seller = create(:user)
+            product = create(:product, user: seller)
+            charge = create(:charge, seller: seller)
+            create(:purchase, link: product, seller: seller, email: "buyer1@example.com", charge: charge, purchase_state: "successful")
+            create(:purchase, link: product, seller: seller, email: "buyer2@example.com", charge: charge, purchase_state: "successful")
+
+            allow(SecureEncryptService).to receive(:encrypt).and_call_original
+
+            get :unsubscribe, params: { id: charge.external_id }
+
+            expect(SecureEncryptService).to have_received(:encrypt).once
+            # Verify that the encrypted payload contains all emails
+            encrypted_payload = URI.decode_www_form(URI.parse(response.location).query).to_h["encrypted_payload"]
+            decrypted_payload = JSON.parse(SecureEncryptService.decrypt(encrypted_payload))
+            expect(decrypted_payload["confirmation_texts"]).to include("buyer1@example.com")
+            expect(decrypted_payload["confirmation_texts"]).to include("buyer2@example.com")
+          end
+
+          it "handles case where charge external_id is used but purchase also exists" do
+            seller = create(:user)
+            product = create(:product, user: seller)
+            charge = create(:charge, seller: seller)
+            purchase = create(:purchase, link: product, seller: seller, email: "buyer@example.com", charge: charge, purchase_state: "successful")
+
+            # Create a purchase with the same external_id as the charge (the bug scenario)
+            allow(Purchase).to receive(:find_by_external_id).with(charge.external_id).and_return(purchase)
+            allow(Charge).to receive(:find_by_external_id).with(charge.external_id).and_return(charge)
+
+            allow(SecureEncryptService).to receive(:encrypt).and_call_original
+
+            get :unsubscribe, params: { id: charge.external_id }
+
+            expect(SecureEncryptService).to have_received(:encrypt).once
+            # Verify that the encrypted payload contains the email
+            encrypted_payload = URI.decode_www_form(URI.parse(response.location).query).to_h["encrypted_payload"]
+            decrypted_payload = JSON.parse(SecureEncryptService.decrypt(encrypted_payload))
+            expect(decrypted_payload["confirmation_texts"]).to include("buyer@example.com")
+          end
+
+          it "redirects to secure redirect when no purchase found but charge exists" do
+            seller = create(:user)
+            product = create(:product, user: seller)
+            charge = create(:charge, seller: seller)
+            create(:purchase, link: product, seller: seller, email: "buyer@example.com", charge: charge, purchase_state: "successful")
+
+            allow(Purchase).to receive(:find_by_external_id).with(charge.external_id).and_return(nil)
+            allow(Charge).to receive(:find_by_external_id).with(charge.external_id).and_return(charge)
+
+            get :unsubscribe, params: { id: charge.external_id }
+
+            expect(response).to be_redirect
+            expect(response.location).to start_with(secure_url_redirect_url)
+          end
+        end
+
+        context "when neither purchase nor charge exists" do
+          it "returns 404 error" do
+            expect do
+              get :unsubscribe, params: { id: "invalid_id" }
+            end.to raise_error(ActionController::RoutingError)
+          end
+        end
       end
     end
 

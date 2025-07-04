@@ -1,0 +1,21 @@
+<div class="space-y-6">
+  <div class="bg-white border border-gray-300 rounded-3xl px-8 py-4 relative rounded-tl-3xl rounded-tr-3xl rounded-br-3xl rounded-bl-sm">
+    <div class="mb-4">
+      <%= image_tag "icons/quote-squared.svg", alt: "Quote squared", class: "w-5 h-3" %>
+    </div>
+    <p class="text-black text-xl leading-relaxed font-medium">
+      <%= quote %>
+    </p>
+  </div>
+  <div class="flex items-center gap-4 pl-2">
+    <div class="rounded-full p-1">
+      <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center overflow-hidden">
+        <%= image_tag avatar_path, alt: name, class: "w-full h-full object-cover rounded-full" %>
+      </div>
+    </div>
+    <div>
+      <h3 class="font-bold text-black text-lg"><%= name %></h3>
+      <p class="text-black text-sm"><%= description %></p>
+    </div>
+  </div>
+</div>

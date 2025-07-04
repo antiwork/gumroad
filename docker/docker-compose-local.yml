@@ -4,7 +4,7 @@ services:
   db:
     image: mysql:8.0.32
     volumes:
-      - ./tmp/mysql:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
     ports:
       - "3306:3306"
     environment:
@@ -21,14 +21,14 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./tmp/redis:/data
+      - redis_data:/data
 
   mongo:
     image: mongo:3.6.16
     ports:
       - "27017:27017"
     volumes:
-      - ./tmp/mongo:/data/db
+      - mongo_data:/data/db
     command: "mongod --smallfiles"
 
   elasticsearch:
@@ -44,8 +44,8 @@ services:
   nginx:
     image: nginx:1.23.3
     volumes:
-      - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf
-      - ./local-nginx/certs:/etc/ssl/certs/
+      - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf:Z
+      - ./local-nginx/certs:/etc/ssl/certs/:Z
     ports:
       - 80:80
       - 8081:8081
@@ -55,3 +55,6 @@ services:
 
 volumes:
   elasticsearch7data:
+  mysql_data:
+  redis_data:
+  mongo_data:

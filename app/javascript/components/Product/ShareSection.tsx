@@ -7,11 +7,15 @@ import { Button } from "$app/components/Button";
 import { ComboBox } from "$app/components/ComboBox";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Popover } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
+import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 
@@ -134,11 +138,27 @@ export const ShareSection = ({
           }}
           open={loggedInUser ? undefined : false}
         />
-        <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
-          <Button aria-label="Copy product URL">
-            <Icon name="link" />
-          </Button>
-        </CopyToClipboard>
+
+        <Popover
+          aria-label="Share"
+          trigger={
+            <WithTooltip tip="Share" position="bottom">
+              <Button aria-label="Share">
+                <Icon name="share" />
+              </Button>
+            </WithTooltip>
+          }
+        >
+          <div className="grid grid-cols-1">
+            <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
+            <FacebookShareButton url={product.long_url} text={product.name} />
+            <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
+              <Button aria-label="Copy product URL">
+                <Icon name="link" /> Copy link
+              </Button>
+            </CopyToClipboard>
+          </div>
+        </Popover>
       </div>
       {saveState.type === "success" ? (
         <div role="alert" className="success">

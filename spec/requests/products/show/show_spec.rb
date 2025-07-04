@@ -587,14 +587,18 @@ describe("ProductShowScenario", type: :feature, js: true) do
     end
   end
 
-  it "includes a button that copies the product link to the clipboard" do
+  it "includes a share menu with social links and copy functionality" do
     product = create(:product)
     visit product.long_url
-    copy_button = find_button("Copy product URL")
-    copy_button.hover
-    expect(copy_button).to have_tooltip(text: "Copy product URL")
-    copy_button.click
-    expect(copy_button).to have_tooltip(text: "Copied")
+    select_disclosure "Share" do
+      expect(page).to have_link("Share on X")
+      expect(page).to have_link("Share on Facebook")
+      copy_button = find_button("Copy link")
+      copy_button.hover
+      expect(copy_button).to have_tooltip(text: "Copy product URL")
+      copy_button.click
+      expect(copy_button).to have_tooltip(text: "Copied")
+    end
   end
 
   describe "discover layout" do

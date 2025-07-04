@@ -534,8 +534,7 @@ describe UsersController do
 
         expect(response).to be_redirect
         expect(response.location).to start_with(secure_url_redirect_url)
-        expect(response.location).to include("encrypted_destination")
-        expect(response.location).to include("encrypted_confirmation_text")
+        expect(response.location).to include("encrypted_payload")
         expect(response.location).to include("message=Please+enter+your+email+address+to+unsubscribe")
         expect(response.location).to include("field_name=Email+address")
         expect(response.location).to include("error_message=Email+address+does+not+match")
@@ -546,8 +545,12 @@ describe UsersController do
 
         get :email_unsubscribe, params: { email_type: "seller_update", id: @user.external_id }
 
-        expect(SecureEncryptService).to have_received(:encrypt).twice
-        expect(SecureEncryptService).to have_received(:encrypt).with(a_string_matching(%r{/unsubscribe/.*email_type=seller_update}))
+        expect(SecureEncryptService).to have_received(:encrypt).once
+        # Verify that the encrypted payload contains the expected data
+        encrypted_payload = URI.decode_www_form(URI.parse(response.location).query).to_h["encrypted_payload"]
+        decrypted_payload = JSON.parse(SecureEncryptService.decrypt(encrypted_payload))
+        expect(decrypted_payload["destination"]).to match(%r{/unsubscribe/.*email_type=seller_update})
+        expect(decrypted_payload["confirmation_texts"]).to include(@user.email)
       end
 
       it "includes encrypted user email for confirmation" do
@@ -555,7 +558,11 @@ describe UsersController do
 
         get :email_unsubscribe, params: { email_type: "product_update", id: @user.external_id }
 
-        expect(SecureEncryptService).to have_received(:encrypt).with(@user.email)
+        expect(SecureEncryptService).to have_received(:encrypt).once
+        # Verify that the encrypted payload contains the expected data
+        encrypted_payload = URI.decode_www_form(URI.parse(response.location).query).to_h["encrypted_payload"]
+        decrypted_payload = JSON.parse(SecureEncryptService.decrypt(encrypted_payload))
+        expect(decrypted_payload["confirmation_texts"]).to include(@user.email)
       end
     end
 

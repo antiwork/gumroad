@@ -52,18 +52,6 @@ export type CardProduct = {
   description?: string;
 };
 
-export type PurchaseType = "buy_only" | "rent_only" | "buy_and_rent";
-
-export type SpecificAttributes = {
-  audio: boolean;
-  can_enable_rentals: boolean;
-  is_listenable: boolean;
-  is_rentable: boolean;
-  is_streamable: boolean;
-  permalink: string;
-  purchase_type: PurchaseType;
-};
-
 export type AnalyticsData = {
   google_analytics_id: string | null;
   facebook_pixel_id: string | null;

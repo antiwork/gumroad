@@ -14,14 +14,6 @@ type FetchSpaceGroupsSuccessResponse = { success: true; space_groups: CircleSpac
 
 type FetchSpaceGroupsErrorResponse = { success: false };
 
-type FetchCommunitiesAndSpaceGroupsSuccessResponse = {
-  success: true;
-  space_groups: CircleSpaceGroup[];
-  communities: CircleCommunity[];
-};
-
-type FetchCommunitiesAndSpaceGroupsErrorResponse = { success: false };
-
 export const fetchCommunities = async (apiKey: string) => {
   const response = await request({
     method: "GET",
@@ -46,21 +38,4 @@ export const fetchSpaceGroups = async (apiKey: string, communityId: number) => {
   const responseData = cast<FetchSpaceGroupsSuccessResponse | FetchSpaceGroupsErrorResponse>(await response.json());
   if (!responseData.success) throw new ResponseError();
   return { spaceGroups: responseData.space_groups };
-};
-
-export const fetchCommunitiesAndSpaceGroups = async (apiKey: string, communityId: number) => {
-  const response = await request({
-    method: "GET",
-    url: Routes.communities_and_space_groups_integrations_circle_index_path({
-      format: "json",
-      api_key: apiKey,
-      community_id: communityId,
-    }),
-    accept: "json",
-  });
-  const responseData = cast<
-    FetchCommunitiesAndSpaceGroupsSuccessResponse | FetchCommunitiesAndSpaceGroupsErrorResponse
-  >(await response.json());
-  if (!responseData.success) throw new ResponseError();
-  return { spaceGroups: responseData.space_groups, communities: responseData.communities };
 };

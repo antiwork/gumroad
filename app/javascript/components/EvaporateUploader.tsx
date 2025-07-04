@@ -22,5 +22,3 @@ export const useEvaporateUploader = (): ContextValue => {
   const value = React.useContext(Context);
   return value;
 };
-
-export const useIsEvaporateSupported = (): boolean => useEvaporateUploader() != null;
