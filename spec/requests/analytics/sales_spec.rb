@@ -170,33 +170,33 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
     it "supports quarterly date range selection" do
       visit sales_dashboard_path
-      
+
       # Get the initial date picker text
       initial_date_picker_text = find('[aria-label="Date range selector"]').text
-      
+
       # Test "This quarter" option - verify it's available and clickable
       select_disclosure initial_date_picker_text do
         expect(page).to have_content("This quarter")
         click_on "This quarter"
       end
-      
+
       # Verify the URL parameters changed to quarter dates
       expect(page.current_url).to include("from=")
       expect(page.current_url).to include("to=")
-      
+
       # Get the new date picker text after selecting "This quarter"
       quarter_date_picker_text = find('[aria-label="Date range selector"]').text
-      
+
       # Test "Last quarter" option - verify it's available and clickable
       select_disclosure quarter_date_picker_text do
         expect(page).to have_content("Last quarter")
         click_on "Last quarter"
       end
-      
+
       # Verify the URL parameters changed again for last quarter
       expect(page.current_url).to include("from=")
       expect(page.current_url).to include("to=")
-      
+
       # Verify the date picker text changed to show the last quarter range
       last_quarter_date_picker_text = find('[aria-label="Date range selector"]').text
       expect(last_quarter_date_picker_text).not_to eq(initial_date_picker_text)
@@ -205,41 +205,41 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
     it "handles quarterly date ranges and verifies quarterly options are present" do
       visit sales_dashboard_path
-      
+
       # Get the initial date picker text
       initial_date_picker_text = find('[aria-label="Date range selector"]').text
-      
+
       # Verify both quarterly options are available in the dropdown
       select_disclosure initial_date_picker_text do
         expect(page).to have_content("This quarter")
         expect(page).to have_content("Last quarter")
-        
+
         # Verify other expected options are also present
         expect(page).to have_content("This month")
         expect(page).to have_content("Last month")
         expect(page).to have_content("This year")
         expect(page).to have_content("Last year")
-        
+
         # Test both quarterly options work
         click_on "This quarter"
       end
-      
+
       # Verify "This quarter" produces valid URL parameters
       expect(page.current_url).to match(/from=\d{4}-\d{2}-\d{2}/)
       expect(page.current_url).to match(/to=\d{4}-\d{2}-\d{2}/)
-      
+
       # Get the new date range after "This quarter"
       this_quarter_text = find('[aria-label="Date range selector"]').text
-      
+
       # Test "Last quarter" option
       select_disclosure this_quarter_text do
         click_on "Last quarter"
       end
-      
+
       # Verify "Last quarter" produces different valid URL parameters
       expect(page.current_url).to match(/from=\d{4}-\d{2}-\d{2}/)
       expect(page.current_url).to match(/to=\d{4}-\d{2}-\d{2}/)
-      
+
       # Verify the date range changed
       last_quarter_text = find('[aria-label="Date range selector"]').text
       expect(last_quarter_text).not_to eq(initial_date_picker_text)
