@@ -29,8 +29,7 @@ describe "Dropbox uploads", type: :feature, js: true do
     sleep 0.5 # wait for the editor to update the content
     save_change
     expect(product.reload.alive_product_files.count).to eq 2
-    expect(product.alive_product_files.first.display_name).to eq("Download-Card")
-    expect(product.alive_product_files.last.display_name).to eq("SmallTestFile")
+    expect(product.alive_product_files.map(&:display_name)).to eq(%w(Download-Card SmallTestFile))
     expect(product.alive_rich_contents.sole.description).to match_array([
                                                                           { "type" => "fileEmbed", "attrs" => { "id" => product.alive_product_files.first.external_id, "uid" => anything, "collapsed" => false } },
                                                                           { "type" => "fileEmbed", "attrs" => { "id" => product.alive_product_files.last.external_id, "uid" => anything, "collapsed" => false } },
