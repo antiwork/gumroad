@@ -37,8 +37,7 @@ class Link < ApplicationRecord
             28 => :is_collab,
             29 => :is_unpublished_by_admin,
             30 => :community_chat_enabled,
-            31 => :DEPRECATED_excluded_from_mobile_app_discover,
-            32 => :moderated_by_iffy,
+            31 => :moderated_by_iffy,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -361,10 +360,6 @@ class Link < ApplicationRecord
 
     country_code = GeoIp.lookup(ip)&.country_code
     country_code.present? && Compliance::Countries.blocked?(country_code)
-  end
-
-  def admins_can_generate_url_redirects?
-    product_files.alive.exists?
   end
 
   def rentable?
@@ -776,11 +771,6 @@ class Link < ApplicationRecord
     end
   end
 
-  def save_default_sku!(sku_id, custom_sku)
-    sku = skus.find_by_external_id(sku_id)
-    sku.update!(custom_sku:) unless sku.nil?
-  end
-
   def sku_title
     variant_categories_alive.present? ? variant_categories_alive.map(&:title).join(" - ") : "Version"
   end
@@ -882,11 +872,6 @@ class Link < ApplicationRecord
 
     bought_purchase = eligible_purchases.not_is_gift_sender_purchase.last
     bought_purchase&.purchase_info unless bought_purchase&.rental_expired?
-  end
-
-  def save_duration!(duration)
-    self.duration_in_months = duration.present? ? duration.to_i : nil
-    save!
   end
 
   def confirmed_collaborator
@@ -1090,10 +1075,6 @@ class Link < ApplicationRecord
       facebook_pixel_id: user.facebook_pixel_id,
       free_sales: !user.skip_free_sale_analytics?,
     }
-  end
-
-  def has_multiple_variants?
-    skus_enabled? ? skus.alive.not_is_default_sku.count > 1 : alive_variants.count > 1
   end
 
   def has_active_paid_variants?

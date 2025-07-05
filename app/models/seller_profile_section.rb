@@ -9,8 +9,7 @@ class SellerProfileSection < ApplicationRecord
   attribute :json_data, default: {}
   scope :on_profile, -> { where(product_id: nil) }
 
-  has_flags 1 => :DEPRECATED_add_new_products,
-            2 => :hide_header,
+  has_flags 1 => :hide_header,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

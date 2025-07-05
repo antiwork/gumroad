@@ -126,10 +126,6 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_name : first_and_last_name
   end
 
-  def legal_entity_dba
-    dba.presence || legal_entity_name
-  end
-
   def legal_entity_street_address
     is_business? ? business_street_address : street_address
   end

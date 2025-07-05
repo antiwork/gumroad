@@ -43,11 +43,6 @@ class Tag < ApplicationRecord
     flagged_at.present?
   end
 
-  def unflag!
-    self.flagged_at = nil
-    save!
-  end
-
   private
     def clean_name
       return if name.nil?

@@ -188,11 +188,6 @@ class UrlRedirect < ApplicationRecord
     save!
   end
 
-  def mark_unseen
-    self.has_been_seen = false
-    save!
-  end
-
   def smil_xml_for_product_file(product_file)
     smil_xml = ::Builder::XmlMarkup.new
 

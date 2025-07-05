@@ -9,8 +9,6 @@ class ThirdPartyAnalytic < ApplicationRecord
 
   validates :user, presence: true
 
-  after_commit :clear_related_products_cache
-
   scope :universal, -> { where("link_id is null") }
 
   FOR_ALL_PRODUCTS = "#all_products"
@@ -61,9 +59,5 @@ class ThirdPartyAnalytic < ApplicationRecord
 
   def self.product_from_permalink(permalink)
     permalink == FOR_ALL_PRODUCTS ? nil : Link.find_by(unique_permalink: permalink)
-  end
-
-  def clear_related_products_cache
-    user.clear_products_cache
   end
 end

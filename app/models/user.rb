@@ -300,7 +300,6 @@ class User < ApplicationRecord
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation],
                      :do => :enable_links_and_tell_chat
     after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => %i[compliant on_probation], :do => :unblock_seller_ip!
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, do: :enable_sellers_other_accounts
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation], :do => :create_updated_stripe_apple_pay_domain
 
     event :mark_compliant do
@@ -415,14 +414,6 @@ class User < ApplicationRecord
     PayoutProcessorType.all.any? { PayoutProcessorType.get(_1).has_valid_payout_info?(self) }
   end
 
-  def stripe_and_paypal_merchant_accounts_exist?
-    merchant_account(StripeChargeProcessor.charge_processor_id) && merchant_account(PaypalChargeProcessor.charge_processor_id)
-  end
-
-  def stripe_or_paypal_merchant_accounts_exist?
-    merchant_account(StripeChargeProcessor.charge_processor_id) || merchant_account(PaypalChargeProcessor.charge_processor_id)
-  end
-
   def stripe_connect_account
     merchant_accounts.alive.charge_processor_alive.stripe.find { |ma| ma.is_a_stripe_connect_account? }
   end
@@ -496,13 +487,6 @@ class User < ApplicationRecord
         found = true
       end
     end
-  end
-
-  def self.serialize_from_session(key, _salt)
-    # logged in user calls this to get users from sessions. redefined
-    # so as to use the cache
-    single_key = key.is_a?(Array) ? key.first : key
-    find_by(id: single_key)
   end
 
   def admin_page_url
@@ -616,15 +600,6 @@ class User < ApplicationRecord
     symbol_for(currency_type)
   end
 
-  def self.find_for_database_authentication(warden_conditions)
-    conditions = warden_conditions.dup
-    login = conditions.delete(:login)
-    where(conditions).where([
-                              "email = :value OR username = :value",
-                              { value: login.strip.downcase }
-                            ]).first
-  end
-
   def self.find_by_hostname(hostname)
     Subdomain.find_seller_by_hostname(hostname) || CustomDomain.find_by_host(hostname)&.user
   end
@@ -668,10 +643,6 @@ class User < ApplicationRecord
 
   def active_ach_account
     bank_accounts.alive.where("type = ?", AchAccount.name).first
-  end
-
-  def dismissed_audience_callout?
-    Event.where(event_name: "audience_callout_dismissal", user_id: id).exists?
   end
 
   def has_workflows?
@@ -784,11 +755,6 @@ class User < ApplicationRecord
 
   def auto_transcode_videos?
     tier_pricing_enabled? ? tier >= TIER_3 : sales_cents_total >= TIER_3
-  end
-
-  def read_attribute_for_validation(attr)
-    return read_attribute(attr) if attr == :username
-    super
   end
 
   def compliance_info_resettable?

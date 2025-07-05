@@ -13,10 +13,7 @@ class VariantCategory < ApplicationRecord
   has_many :tiers, -> { alive }, class_name: "Variant"
   has_one :default_tier, -> { alive }, class_name: "Variant"
 
-  has_flags 1 => :DEPRECATED_variants_are_allowed_to_have_product_files,
-            :column => "flags",
-            :flag_query_mode => :bit_operator,
-            check_for_column: false
+
 
   after_commit :invalidate_product_cache
 

@@ -13,10 +13,6 @@ class License < ApplicationRecord
 
   before_validation :generate_serial, on: :create
 
-  has_flags 1 => :DEPRECATED_is_pregenerated,
-            :column => "flags",
-            :flag_query_mode => :bit_operator,
-            check_for_column: false
 
   def generate_serial
     return if serial.present?

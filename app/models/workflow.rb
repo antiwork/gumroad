@@ -28,10 +28,6 @@ class Workflow < ApplicationRecord
 
   scope :published, -> { where.not(published_at: nil) }
 
-  def recipient_type_audience?
-    audience_type?
-  end
-
   def applies_to_purchase?(purchase)
     return false if product_type? && link_id != purchase.link_id
     return false if variant_type? && !purchase.variant_attributes.include?(base_variant)
