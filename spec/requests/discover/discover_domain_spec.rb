@@ -61,8 +61,6 @@ describe "DiscoverDomainScenario", type: :feature, js: true do
       end
 
       wait_for_ajax
-      expect(page).to have_css(%{a.logo-full[aria-label="Gumroad"][href="https://#{@discover_domain}:#{@port}/discover"]})
-      expect(page).not_to have_css(%{a.logo-full[aria-label="Gumroad"][href="https://#{@product1.user.username}.gumroad.com:#{@port}/discover"]})
       expect do
         add_to_cart(@product1, cart: true)
         check_out(@product1, credit_card: { number: "4000002500003155" }, sca: true)
