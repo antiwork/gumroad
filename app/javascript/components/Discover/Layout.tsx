@@ -137,7 +137,7 @@ export const Layout: React.FC<{
 
   const logoLink = (
     <a
-      href={Routes.discover_path()}
+      href={Routes.discover_url({ host: discoverDomain })}
       className="logo-full flex aspect-[157/22] !w-[245px] flex-shrink-0 items-center"
       aria-label="Gumroad"
     />
