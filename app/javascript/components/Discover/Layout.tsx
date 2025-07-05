@@ -12,8 +12,6 @@ import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
-import logo from "$assets/images/logo.svg";
-
 const UserActionButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();
 
@@ -138,9 +136,11 @@ export const Layout: React.FC<{
   const userActionButtons = <UserActionButtons />;
 
   const logoLink = (
-    <a href={Routes.discover_path()} className="flex flex-shrink-0 items-center">
-      <img src={logo} alt="Gumroad" className="h-7 md:h-8 dark:invert" />
-    </a>
+    <a
+      href={Routes.discover_path()}
+      className="logo-full flex aspect-[157/22] !w-[245px] flex-shrink-0 items-center"
+      aria-label="Gumroad"
+    />
   );
   const searchBar = (
     <div className="min-w-0 flex-grow">
