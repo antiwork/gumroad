@@ -40,8 +40,9 @@ export const CommunityList = ({
         >
           <figure className="flex-shrink-0">
             <img
-              className="flex h-8 w-8 items-center justify-center rounded border border-gray-300 dark:border-gray-600 object-cover"
+              className="h-8 w-8 rounded border border-gray-300 dark:border-gray-600 object-cover"
               src={community.thumbnail_url}
+              alt={community.name}
             />
           </figure>
           <span className="flex-1 truncate">{community.name}</span>

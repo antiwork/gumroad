@@ -60,7 +60,7 @@ export const ChatMessageInput = React.forwardRef<
       />
       <button
         className={cx(
-          "hover:rgb(var(--primary)) flex items-center rounded-md border border-solid border-gray-300 dark:border-gray-600 bg-black px-2 py-1.5 text-white dark:bg-[rgb(var(--primary))] dark:text-black",
+          "flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-black px-2 py-1.5 text-white hover:bg-gray-800 hover:text-white dark:bg-gray-800 dark:text-white",
           {
             "cursor-default opacity-50": !draft?.content.trim(),
           },
