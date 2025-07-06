@@ -14,14 +14,12 @@ module StripeTransferInternallyToCreator
     description = message_why
     description += " Related Charge ID: #{related_charge_id}." if related_charge_id
 
-    transfer = Stripe::Transfer.create(
+    Stripe::Transfer.create(
       destination: stripe_account_id,
       currency:,
       description:,
       amount: amount_cents,
       metadata:,
       expand: %w[balance_transaction])
-
-    transfer
   end
 end

@@ -292,8 +292,7 @@ module Product::Prices
       number_of_months_in_default_price_recurrence = BasePrice::Recurrence.number_of_months_in_recurrence(default_price.recurrence)
       default_price_cents = default_price.price_cents
       number_of_months_in_recurrence = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
-      suggested_price_cents = (default_price_cents / number_of_months_in_default_price_recurrence.to_f) * number_of_months_in_recurrence
-      suggested_price_cents
+      (default_price_cents / number_of_months_in_default_price_recurrence.to_f) * number_of_months_in_recurrence
     end
 
     def show_customizable_price_indicator?

@@ -83,8 +83,7 @@ describe("Product Edit custom permalink edit", type: :feature, js: true) do
       base_url_with_subpath = subpath == "" ? base_url : "#{base_url}/#{js_style_encode_uri_component(subpath)}"
 
       query_params_string = URI.encode_www_form(query_params)
-      full_url = query_params_string == "" ? base_url_with_subpath : "#{base_url_with_subpath}?#{query_params_string}"
-      full_url
+      query_params_string == "" ? base_url_with_subpath : "#{base_url_with_subpath}?#{query_params_string}"
     end
 
     it "changes membership tier share url" do

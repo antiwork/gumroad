@@ -518,8 +518,7 @@ class Link < ApplicationRecord
     return "" if description.blank?
 
     escaped_description = sanitize(description, tags: [])
-    escaped_description = escaped_description.squish
-    escaped_description
+    escaped_description.squish
   end
 
   def html_safe_description

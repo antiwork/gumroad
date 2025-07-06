@@ -117,6 +117,9 @@ Style/InverseMethods:
 Style/RedundantArgument:
   Enabled: true
 
+Style/RedundantAssignment:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

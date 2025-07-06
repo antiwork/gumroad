@@ -1776,8 +1776,7 @@ describe Purchase, :vcr do
       product = build(:product, user: creator)
       product.discover_fee_per_thousand = discover_fee_per_thousand if discover_fee_per_thousand
       product.save
-      purchase = create(:purchase, link: product, was_product_recommended: charge_discover_fee, price_cents: 10_00)
-      purchase
+      create(:purchase, link: product, was_product_recommended: charge_discover_fee, price_cents: 10_00)
     end
 
     context "non-merchant account" do

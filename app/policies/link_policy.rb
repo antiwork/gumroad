@@ -57,7 +57,7 @@ class LinkPolicy < ApplicationPolicy
   end
 
   def product_permitted_attributes
-    attributes = [
+    [
       :name,
       :description,
       :custom_permalink,
@@ -149,8 +149,6 @@ class LinkPolicy < ApplicationPolicy
         :number_of_installments,
       ]
     ]
-
-    attributes
   end
 
   def bundle_permitted_attributes

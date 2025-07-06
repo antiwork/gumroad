@@ -78,7 +78,7 @@ class PostResendApi
         email_provider: MailerInfo::EMAIL_PROVIDER_RESEND,
       )
 
-      email = {
+      {
         from: "#{from_email_address_name(@post.seller.name)} <#{creators_from_email_address(@post.seller.username)}>",
         reply_to: @post.seller.support_or_form_email,
         to: [recipient[:email]],
@@ -87,8 +87,6 @@ class PostResendApi
         text: personalize_content(@cache[@post][:template][:plaintext], recipient),
         headers: headers
       }
-
-      email
     end
 
     def determine_mailer_method(recipient)

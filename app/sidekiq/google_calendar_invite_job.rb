@@ -56,8 +56,7 @@ class GoogleCalendarInviteJob
 
     def insert_event(gcal_api, integration, event, access_token = nil)
       access_token ||= integration.access_token
-      response = gcal_api.insert_event(integration.calendar_id, event, access_token:)
-      response
+      gcal_api.insert_event(integration.calendar_id, event, access_token:)
     end
 
     def refresh_token(gcal_api, integration)

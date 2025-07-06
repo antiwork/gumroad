@@ -166,9 +166,7 @@ class UpdateProductFilesArchiveWorker
       filename = ActiveStorage::Filename.new(filename).sanitized
 
       # Additional rules for Windows https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
-      filename = filename.gsub(/[<>:"\/\\|?*]/, "-").gsub(/[ .]*\z/, "")
-
-      filename
+      filename.gsub(/[<>:"\/\\|?*]/, "-").gsub(/[ .]*\z/, "")
     end
 
     def truncate_path(path_parts)

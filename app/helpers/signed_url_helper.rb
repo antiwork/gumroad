@@ -103,7 +103,7 @@ module SignedUrlHelper
       #    $redis.hset(RedisKey.cf_cache_invalidated_extensions_and_cache_keys, ".mp3", Digest::SHA1.hexdigest("2020-10-08"))
       # 2) Delete the Rails cache for the app to read from Redis again.
       #    Rails.cache.delete("set_cf_worker_cache_keys_from_redis")
-      cache_key_for_extensions = Rails.cache.fetch("set_cf_worker_cache_keys_from_redis") do
+      Rails.cache.fetch("set_cf_worker_cache_keys_from_redis") do
         cache_key_for_extensions.merge($redis.hgetall(RedisKey.cf_cache_invalidated_extensions_and_cache_keys))
       end
 
@@ -111,7 +111,5 @@ module SignedUrlHelper
       # its hexdigest to hide that info but we would know when it was changed.
       # Example:
       #   cache_key_for_extensions[".zip"] = Digest::SHA1.hexdigest("2020-10-08")
-
-      cache_key_for_extensions
     end
 end

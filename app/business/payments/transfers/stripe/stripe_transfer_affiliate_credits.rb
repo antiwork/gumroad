@@ -20,7 +20,7 @@ module StripeTransferAffiliateCredits
 
     Rails.logger.info(message)
 
-    transfer = Stripe::Transfer.create(
+    Stripe::Transfer.create(
       destination: stripe_account_id,
       currency: "usd",
       amount: amount_cents,
@@ -29,7 +29,5 @@ module StripeTransferAffiliateCredits
       transfer_group:,
       expand: %w[balance_transaction application_fee.balance_transaction]
     )
-
-    transfer
   end
 end

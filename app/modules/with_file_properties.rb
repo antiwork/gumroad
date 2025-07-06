@@ -10,14 +10,12 @@ module WithFileProperties
     # One-off for not showing image properties for a physical product.
     return {} if filegroup == "image" && require_shipping
 
-    attributes = {
+    {
       Size: size_displayable,
       Duration: duration_displayable(duration),
       Length: pagelength_displayable,
       Resolution: resolution_displayable
     }.delete_if { |_k, v| v.blank? }
-
-    attributes
   end
 
   def determine_and_set_filegroup(extension)
