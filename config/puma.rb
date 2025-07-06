@@ -7,7 +7,7 @@
 # and maximum, this matches the default thread size of Active Record.
 #
 # See unicorn migration guide: https://github.com/puma/puma/blob/master/docs/deployment.md#migrating-from-unicorn
-threads_count = ENV.fetch("RAILS_MAX_THREADS") { 2 }.to_i
+threads_count = ENV.fetch("RAILS_MAX_THREADS", 2).to_i
 threads threads_count, threads_count
 
 # Specifies the `worker_timeout` threshold that Puma will use to wait before
@@ -17,11 +17,11 @@ worker_timeout 3600 if ENV.fetch("RAILS_ENV", "development") == "development"
 
 # Specifies the `port` that Puma will listen on to receive requests, default is 3000.
 #
-port ENV.fetch("PORT") { 3000 }
+port ENV.fetch("PORT", 3000)
 
 # Specifies the `environment` that Puma will run in.
 #
-env = ENV.fetch("RAILS_ENV") { "development" }
+env = ENV.fetch("RAILS_ENV", "development")
 environment env
 
 if env != "development"
@@ -32,7 +32,7 @@ if env != "development"
   # processes).
   #
   # workers ENV.fetch("WEB_CONCURRENCY") { 2 }
-  workers ENV.fetch("PUMA_WORKER_PROCESSES") { 1 }
+  workers ENV.fetch("PUMA_WORKER_PROCESSES", 1)
 
   # Use the `preload_app!` method when specifying a `workers` number.
   # This directive tells Puma to first boot the application and load code

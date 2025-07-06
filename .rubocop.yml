@@ -120,6 +120,9 @@ Style/RedundantArgument:
 Style/RedundantAssignment:
   Enabled: true
 
+Style/RedundantFetchBlock:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql
