@@ -1,4 +1,4 @@
-<div class="rounded-lg border border-black bg-white overflow-hidden flex flex-col w-full mx-auto">
+<div class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white overflow-hidden flex flex-col w-full mx-auto">
   <%= tag.div class: ["relative w-full h-56 flex items-center justify-center", bg_color] do %>
     <%= image_tag image_url, alt: name, class: "w-full h-full object-cover" %>
   <% end %>
@@ -7,7 +7,7 @@
       <div class="text-2xl font-medium mb-4"><%= name %></div>
       <div class="flex flex-wrap gap-3 mb-6">
         <% Array(tags).each do |tag| %>
-          <span class="px-4 py-2 border border-black rounded-full text-base"><%= tag %></span>
+          <span class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-full text-base"><%= tag %></span>
         <% end %>
       </div>
     </div>

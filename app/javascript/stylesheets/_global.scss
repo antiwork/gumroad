@@ -49,8 +49,7 @@ body:not(.mac) * {
 }
 
 main {
-  display: flex;
-  flex-direction: column;
+  @apply flex flex-col;
 }
 
 @for $i from 1 through 5 {
@@ -243,9 +242,8 @@ a.stretched-link {
 }
 
 dl {
-  display: grid;
+  @apply grid gap-x-3;
   grid-template-columns: fit-content(40%);
-  column-gap: spacer(3);
 
   dt {
     grid-column: 1;

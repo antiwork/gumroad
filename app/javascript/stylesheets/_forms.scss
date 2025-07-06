@@ -10,13 +10,11 @@ $input-fields: "#{$text-inputs}, select, .input, .textarea";
 }
 
 #{$input-fields} {
-  font-family: inherit;
-  padding: $form-element-padding-y $form-element-padding-x;
+  @apply block w-full font-sans;
+  padding: $form-element-padding-y $form-element-padding-x; // Using reduced values from definitions
   @include font-size($form-element-font-size);
   border: $border;
   border-radius: $form-element-border-radius;
-  display: block;
-  width: 100%;
   @include bg-color(filled);
 
   &::placeholder {
@@ -33,10 +31,9 @@ $input-fields: "#{$text-inputs}, select, .input, .textarea";
 }
 
 label {
-  display: inline-flex;
-  gap: spacer(2);
+  @apply inline-flex cursor-pointer;
+  gap: spacer(1); // Reduced gap for more compact forms
   @include font-size($form-element-font-size);
-  cursor: pointer;
 
   &:has(input:disabled) {
     @extend %input-disabled;

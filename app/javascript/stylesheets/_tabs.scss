@@ -3,16 +3,16 @@
 }
 
 .tab-buttons[role="tablist"] {
-  display: grid;
+  @apply grid;
   grid-auto-columns: 1fr;
-  gap: spacer(3);
+  gap: spacer(2); // Reduced gap for more compact tabs
 
   &.scrollable {
     display: grid;
     grid-auto-columns: max-content;
     padding-left: $button-hover-transform-length;
     padding-top: $button-hover-transform-length;
-    padding-bottom: spacer(4);
+    padding-bottom: spacer(3); // Reduced bottom padding
     overflow-x: auto;
   }
 

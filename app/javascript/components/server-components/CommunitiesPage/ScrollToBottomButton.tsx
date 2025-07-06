@@ -22,7 +22,7 @@ export const ScrollToBottomButton = ({
       <button
         aria-label="Scroll to bottom"
         onClick={onClick}
-        className="flex items-center justify-center gap-1 overflow-hidden rounded-full border border-solid bg-black px-3 py-1.5 text-xs font-bold text-white hover:border-black hover:bg-pink hover:text-black hover:shadow-[4px_4px_#000] focus:outline-none dark:border-black dark:bg-pink dark:text-black dark:hover:bg-pink dark:hover:shadow-[4px_4px_#fff]"
+        className="flex items-center justify-center gap-1 overflow-hidden rounded-full border border-solid bg-black px-3 py-1.5 text-xs font-bold text-white hover:border-gray-300 hover:bg-pink hover:text-black hover:shadow-[4px_4px_#6b7280] focus:outline-none dark:border-gray-600 dark:bg-pink dark:text-black dark:hover:bg-pink dark:hover:shadow-[4px_4px_#9ca3af]"
       >
         <Icon name="arrow-down" />
         <span>{hasUnreadMessages ? "New messages" : "Latest messages"}</span>

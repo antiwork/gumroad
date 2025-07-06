@@ -2,17 +2,17 @@
   &,
   .ProseMirror {
     > * {
-      margin-bottom: spacer(4);
+      margin-bottom: spacer(3); // Reduced spacing for more compact text
     }
   }
 
   h1 {
-    margin-bottom: spacer(5);
+    margin-bottom: spacer(4); // Reduced h1 spacing
   }
 
   h2,
   h3 {
-    margin-top: spacer(6);
+    margin-top: spacer(4); // Reduced heading spacing
 
     &:first-child {
       margin-top: 0;
@@ -21,11 +21,11 @@
 
   ul:not(.inline),
   ol {
-    margin-left: spacer(4);
+    margin-left: spacer(3); // Reduced list indentation
   }
 
   li:not(:last-child) {
-    margin-bottom: spacer(4);
+    margin-bottom: spacer(2); // Reduced list item spacing
   }
 
   hr {

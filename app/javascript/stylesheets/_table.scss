@@ -1,8 +1,7 @@
 table {
+  @apply w-full grid;
   border-spacing: 0;
-  width: 100%;
-  display: grid;
-  gap: spacer(4);
+  gap: spacer(3); // Reduced gap for more compact tables
 
   & > * {
     display: block;
@@ -21,7 +20,7 @@ table {
   & > tbody,
   & > tfoot {
     & > * > * {
-      padding: spacer(4);
+      padding: spacer(3); // Reduced cell padding for more space
       text-align: left;
       vertical-align: middle;
     }

@@ -24,7 +24,7 @@ const Tag = ({ name, count, showCount = false, active = false, size = "sm" }: Ta
   };
 
   const commonClasses = `inline-block rounded px-2 py-2 leading-none mr-2 mb-2`;
-  const activeStateClass = active ? "bg-black text-white" : "bg-white text-black border border-black";
+  const activeStateClass = active ? "bg-black text-white" : "bg-white text-black border border-gray-300 dark:border-gray-600";
 
   return (
     <span className={cx(commonClasses, sizeClasses[size], activeStateClass)}>
@@ -93,12 +93,12 @@ const PostCard = ({
       <a
         href={post.url}
         className={cx(
-          "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]",
+          "override grid h-full overflow-hidden rounded-lg border border-gray-300 dark:border-gray-600 bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#6b7280] dark:hover:shadow-[3px_3px_#9ca3af]",
           { "grid-rows-[auto_1fr]": !!featureImageUrl },
         )}
       >
         {featureImageUrl ? (
-          <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
+          <figure className="aspect-[1800/1080] overflow-hidden border-b border-gray-300 dark:border-gray-600">
             <img src={featureImageUrl} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
           </figure>
         ) : null}
@@ -144,7 +144,7 @@ const CompactPostItem = ({ post }: { post: Post }) => (
         <h4 className="mb-0.5 text-2xl font-normal">{post.subject}</h4>
         <p className="text-gray-500 pb-0.5 text-base">{formatPostDate(post.published_at, "en-US")}</p>
       </div>
-      <div className="border-gray-400 ml-3 mr-1 flex h-10 w-10 flex-shrink-0 items-center justify-center self-end rounded-md border p-2 transition-all duration-200 ease-in-out group-hover:-translate-x-px group-hover:-translate-y-px group-hover:shadow-[2px_2px_0_0_#000]">
+      <div className="border-gray-400 ml-3 mr-1 flex h-10 w-10 flex-shrink-0 items-center justify-center self-end rounded-md border p-2 transition-all duration-200 ease-in-out group-hover:-translate-x-px group-hover:-translate-y-px group-hover:shadow-[2px_2px_0_0_#6b7280] dark:group-hover:shadow-[2px_2px_0_0_#9ca3af]">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
@@ -193,10 +193,10 @@ interface TabButtonProps {
 
 const TabButton = ({ children, isActive, onClick, count, showCount = false }: TabButtonProps) => {
   const baseClasses =
-    "block no-underline px-4 py-2 rounded-full border border-black transition-all duration-200 ease-in-out flex items-center justify-center cursor-pointer";
+    "block no-underline px-4 py-2 rounded-full border border-gray-300 dark:border-gray-600 transition-all duration-200 ease-in-out flex items-center justify-center cursor-pointer";
   const activeClasses = isActive
     ? "bg-black text-white"
-    : "bg-white text-black hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]";
+    : "bg-white text-black hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#6b7280] dark:hover:shadow-[3px_3px_#9ca3af]";
 
   return (
     <button role="tab" aria-selected={isActive} className={cx(baseClasses, activeClasses)} onClick={onClick}>

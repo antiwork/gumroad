@@ -69,14 +69,14 @@ header.hero {
 body > header,
 header.sticky-top,
 main > * {
-  padding: $body-padding-mobile;
+  padding: $body-padding-mobile; // Using reduced values from definitions
 
   @include breakpoint-up(lg) {
     padding: $body-padding-desktop $body-padding-desktop-center;
 
     &:where(.sidebar-nav *) {
       padding-left: $body-padding-desktop;
-      padding-right: max(100% - #{$body-max-width} - #{$body-padding-desktop}, #{$body-padding-desktop});
+      padding-right: $body-padding-desktop;
     }
   }
 }

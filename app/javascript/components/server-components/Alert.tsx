@@ -42,12 +42,11 @@ const Alert = ({ initial }: { initial: AlertPayload | null }) => {
   return (
     <div
       role="alert"
-      className={cx("bg-filled fixed right-1/2 top-4", alert?.status, isVisible ? "visible" : "invisible")}
-      style={{
-        transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
-        transition: "all 0.3s ease-out 0.5s",
-        zIndex: "var(--z-index-tooltip)",
-      }}
+      className={cx(
+        "bg-filled fixed right-1/2 top-4 transform translate-x-1/2 transition-all duration-300 ease-out delay-500 z-30 px-4 py-3 rounded-lg shadow-lg border",
+        alert?.status,
+        isVisible ? "visible translate-y-0" : "invisible -translate-y-full"
+      )}
       dangerouslySetInnerHTML={alert?.html ? { __html: alert.message } : undefined}
     >
       {!alert?.html ? alert?.message : null}

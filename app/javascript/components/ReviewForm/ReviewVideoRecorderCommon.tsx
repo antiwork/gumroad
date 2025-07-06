@@ -17,7 +17,7 @@ export type ReviewVideoRecorderProps = {
 };
 
 export const ReviewVideoRecorderContainer = ({ children }: { children?: React.ReactNode }) => (
-  <div className="relative aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-black bg-black">
+  <div className="relative aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-gray-300 dark:border-gray-600 bg-black">
     {children}
   </div>
 );

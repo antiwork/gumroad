@@ -234,7 +234,7 @@ $light-body-bg: #f4f4f0 !default;
   }
   --color: 0 0 0;
   --body-bg: #{$light-body-bg};
-  --border-alpha: 1;
+  --border-alpha: 0.2;
   --font-family: #{$font-family};
   --border-width: #{$border-width};
   --big-icon-size: #{$big-icon-size};
@@ -254,7 +254,7 @@ $light-body-bg: #f4f4f0 !default;
     --filled: 0 0 0;
     --contrast-filled: 221 221 221;
     --contrast-black: 221 221 221;
-    --border-alpha: 0.35;
+    --border-alpha: 0.25;
   }
 }
 
@@ -264,8 +264,8 @@ $backdrop-bg: rgba(0, 0, 0, 0.8);
 $border: solid $border-width $border-color;
 $outline: size(0.125) solid full-color(accent);
 $font-family: "ABC Favorit", Avenir, Montserrat, Corbel, "URW Gothic", source-sans-pro, sans-serif;
-$form-element-padding-x: spacer(4);
-$form-element-padding-y: spacer(3);
+$form-element-padding-x: spacer(3);
+$form-element-padding-y: spacer(2);
 $form-element-font-size: 2;
 $form-element-border-radius: border-radius(1);
 $big-icon-size: 1.25em;
@@ -274,8 +274,8 @@ $table-border-radius: border-radius(1);
 $table-image-thumb-height: size(5);
 $logo-aspect-ratio: 0.14;
 $body-max-width: size(71.25);
-$body-padding-desktop: spacer(8);
-$body-padding-mobile: spacer(4);
+$body-padding-desktop: spacer(6);
+$body-padding-mobile: spacer(3);
 $disabled-opacity: 0.3;
 $grid-wrap-breakpoint: size(31.25);
 $main-stack-width: size(28);
@@ -283,4 +283,4 @@ $form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heig
   $form-element-padding-y * 2 + $border-width * 2;
 $body-padding-desktop-center: max((100% - #{$body-max-width}) / 2, #{$body-padding-desktop});
 $button-hover-transform-length: spacer(1);
-$header-padding-y: spacer(6);
+$header-padding-y: spacer(4);
