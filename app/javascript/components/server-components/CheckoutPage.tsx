@@ -45,7 +45,6 @@ import {
   computeTipForPrice,
 } from "$app/components/Checkout/payment";
 import { Receipt } from "$app/components/Checkout/Receipt";
-import { SocialProofCard } from "$app/components/Checkout/SocialProofCard";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -72,19 +71,6 @@ const GUMROAD_PARAMS = [
   "pay_in_installments",
 ];
 
-// Define the interface for SocialProofWidgetProps
-interface SocialProofWidgetProps {
-  name?: string;
-  title?: string;
-  description?: string;
-  cta_text?: string;
-  cta_type?: "button" | "link" | "none";
-  image_type?: "product" | "custom" | "icon" | "none";
-  image_url?: string | null;
-  icon_name?: IconName | null;
-  icon_color?: string | null;
-}
-
 type Props = {
   discover_url: string;
   countries: Record<string, string>;
@@ -103,7 +89,6 @@ type Props = {
   max_allowed_cart_products: number;
   tip_options: number[];
   default_tip_option: number;
-  social_proof_widgets: SocialProofWidgetProps[]; // Add social_proof_widgets to props
 };
 
 export type Result = { item: CartItem; result: LineItemResult };
@@ -170,7 +155,6 @@ export const CheckoutPage = ({
   max_allowed_cart_products,
   tip_options,
   default_tip_option,
-  social_proof_widgets,
   ...props
 }: Props) => {
   const user = useLoggedInUser();
@@ -630,25 +614,6 @@ export const CheckoutPage = ({
 
   return (
     <StateContext.Provider value={contextValue}>
-      {/* Render Social Proof Section */}
-      {social_proof_widgets.length > 0 && (
-        <div className="fixed bottom-0 left-0 m-8 flex w-full flex-col">
-          {social_proof_widgets.map((widget, index) => (
-            <SocialProofCard
-              key={index}
-              title={widget.title ?? ""}
-              description={widget.description ?? ""}
-              imageType={widget.image_type ?? "none"}
-              ctaType={widget.cta_type ?? "none"}
-              ctaText={widget.cta_text ?? ""}
-              ctaUrl="#" // A default or dynamic URL should be added to the model
-              iconName={widget.icon_name ?? "heart-fill"}
-              iconColor={widget.icon_color ?? "#FFB800"}
-              imageUrl={widget.image_url ?? ""}
-            />
-          ))}
-        </div>
-      )}
       {redirecting ? null : results ? (
         (!user && results.every(({ result }) => result.success && result.content_url != null)) ||
         results.some(

@@ -8,5 +8,6 @@ FactoryBot.define do
     cta_text { "Buy Now" }
     cta_type { "button" }
     image_type { "none" }
+    icon_color { "#FFB800" }
   end
 end

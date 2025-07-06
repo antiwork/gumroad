@@ -1,4 +1,8 @@
+import { cast } from "ts-safe-cast";
+
 import { request } from "$app/utils/request";
+
+import type { PaginationProps } from "$app/components/Pagination";
 
 type SocialProofPlayload = {
   name: string;
@@ -11,6 +15,30 @@ type SocialProofPlayload = {
   iconColor: string;
   selectedProductIds: string[];
   universal: boolean;
+  status: string;
+};
+
+export type SocialProofWidget = {
+  id: number;
+  name: string;
+  title: string;
+  description: string;
+  cta_text: string;
+  cta_type: string;
+  image_type: string;
+  image_url: string | null;
+  icon_name: string;
+  icon_color: string | null;
+  can_update: boolean;
+  clicks: number;
+  conversion_rate: string;
+  revenue: string;
+  status: string;
+};
+
+export type Sort<T extends string> = {
+  key: T;
+  direction: "asc" | "desc";
 };
 
 export const createSocialProof = async (payload: SocialProofPlayload) => {
@@ -22,4 +50,82 @@ export const createSocialProof = async (payload: SocialProofPlayload) => {
   });
 
   return response;
+};
+
+export const updateSocialProof = async (id: number, payload: SocialProofPlayload) => {
+  const response = await request({
+    method: "PUT",
+    accept: "json",
+    url: `/checkout/social/${id}`,
+    data: payload,
+  });
+
+  return response;
+};
+
+export const deleteSocialProof = async (id: number) => {
+  const response = await request({
+    method: "DELETE",
+    accept: "json",
+    url: `/checkout/social/${id}`,
+  });
+
+  return response;
+};
+
+export const trackSocialProofEvent = async (
+  widgetId: number,
+  eventType: "impression" | "click" | "purchase",
+  options: {
+    sessionId?: string;
+    purchaseId?: number;
+    revenueCents?: number;
+  } = {},
+) => {
+  try {
+    const response = await request({
+      method: "POST",
+      accept: "json",
+      url: "/checkout/social/track_event",
+      data: {
+        widget_id: widgetId,
+        event_type: eventType,
+        session_id: options.sessionId,
+        purchase_id: options.purchaseId,
+        revenue_cents: options.revenueCents,
+      },
+    });
+
+    return response;
+  } catch (error) {
+    // Silently fail tracking to not disrupt user experience
+    return null;
+  }
+};
+
+export const getPagedSocialProofWidgets = (
+  page: number,
+  query: string | null,
+  sort: Sort<"name" | "clicks" | "conversion" | "revenue" | "status"> | null,
+) => {
+  const abort = new AbortController();
+  const params = new URLSearchParams();
+  params.append("page", page.toString());
+  if (query) params.append("query", query);
+  if (sort?.direction) params.append("sort", sort.direction);
+  if (sort?.key) params.append("column", sort.key);
+
+  const response = request({
+    method: "GET",
+    accept: "json",
+    url: `/checkout/social/paged?${params.toString()}`,
+    abortSignal: abort.signal,
+  })
+    .then((res) => res.json())
+    .then((json) => cast<{ social_proof_widgets: SocialProofWidget[]; pagination: PaginationProps }>(json));
+
+  return {
+    response,
+    cancel: () => abort.abort(),
+  };
 };

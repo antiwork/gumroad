@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_06_28_230058) do
+ActiveRecord::Schema[7.1].define(version: 2025_07_06_170649) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2080,6 +2080,40 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_28_230058) do
     t.index ["variant_id"], name: "index_skus_variants_on_variant_id"
   end
 
+  create_table "social_proof_widget_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "social_proof_widget_id", null: false
+    t.date "date", null: false
+    t.integer "impressions", default: 0, null: false
+    t.integer "clicks", default: 0, null: false
+    t.integer "purchases", default: 0, null: false
+    t.integer "revenue_cents", default: 0, null: false
+    t.decimal "conversion_rate", precision: 5, scale: 4, default: "0.0"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["date"], name: "index_social_proof_widget_analytics_on_date"
+    t.index ["social_proof_widget_id", "date"], name: "index_sp_widget_analytics_on_widget_date", unique: true
+    t.index ["social_proof_widget_id"], name: "index_social_proof_widget_analytics_on_social_proof_widget_id"
+  end
+
+  create_table "social_proof_widget_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "social_proof_widget_id", null: false
+    t.string "event_type", null: false
+    t.string "session_id"
+    t.integer "user_id"
+    t.integer "purchase_id"
+    t.integer "revenue_cents", default: 0
+    t.datetime "occurred_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["event_type"], name: "index_social_proof_widget_events_on_event_type"
+    t.index ["occurred_at"], name: "index_social_proof_widget_events_on_occurred_at"
+    t.index ["purchase_id"], name: "index_social_proof_widget_events_on_purchase_id"
+    t.index ["session_id"], name: "index_social_proof_widget_events_on_session_id"
+    t.index ["social_proof_widget_id", "event_type", "occurred_at"], name: "index_sp_widget_events_on_widget_type_date"
+    t.index ["social_proof_widget_id"], name: "index_social_proof_widget_events_on_social_proof_widget_id"
+    t.index ["user_id"], name: "index_social_proof_widget_events_on_user_id"
+  end
+
   create_table "social_proof_widgets", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name"
     t.boolean "universal"
@@ -2090,9 +2124,12 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_28_230058) do
     t.string "image_type"
     t.string "image_url"
     t.string "icon_name"
+    t.boolean "published", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.string "icon_color"
+    t.index ["published"], name: "index_social_proof_widgets_on_published"
     t.index ["user_id"], name: "index_social_proof_widgets_on_user_id"
   end
 
@@ -2738,5 +2775,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_28_230058) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "social_proof_widgets", "users"
+  add_foreign_key "social_proof_widget_analytics", "social_proof_widgets", name: "__fk_rails_5e8e950e86"
+  add_foreign_key "social_proof_widget_events", "social_proof_widgets"
+  add_foreign_key "social_proof_widgets", "users", name: "_fk_rails_c0ac5600f3"
 end

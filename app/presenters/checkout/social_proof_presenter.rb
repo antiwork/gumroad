@@ -3,6 +3,8 @@
 class Checkout::SocialProofPresenter
   include CheckoutDashboardHelper
 
+  PER_PAGE = 10
+
   attr_reader :pundit_user
 
   def initialize(pundit_user:)
@@ -21,6 +23,12 @@ class Checkout::SocialProofPresenter
         is_tiered_membership: product.is_tiered_membership?,
       }
     end
+
+    # Get the first page of social proof widgets (consistent with pagination)
+    total_widgets = seller.social_proof_widgets.count
+    first_page_widgets = seller.social_proof_widgets.limit(PER_PAGE).map { |widget| social_proof_widget_props(widget) }
+    total_pages = (total_widgets.to_f / PER_PAGE).ceil
+
     {
       pages:,
       user: {
@@ -30,11 +38,14 @@ class Checkout::SocialProofPresenter
       },
       custom_fields: seller.custom_fields.not_is_post_purchase.map(&:as_json),
       products:,
-      social_proof_widgets: seller.social_proof_widgets.map { |widget| social_proof_widget_props(widget) },
+      social_proof_widgets: first_page_widgets,
+      pagination: { page: 1, pages: total_pages, totalItems: total_widgets },
     }
   end
 
   def social_proof_widget_props(widget)
+    analytics = widget.analytics_summary
+
     widget.as_json(
       only: [
         :id,
@@ -49,6 +60,13 @@ class Checkout::SocialProofPresenter
         :icon_color,
         :universal
       ]
-    ).merge(product_ids: widget.links.map(&:external_id))
+    ).merge(
+      product_ids: widget.links.map(&:external_id),
+      can_update: Pundit.policy!(pundit_user, [:checkout, :social_proof]).update?,
+      clicks: analytics[:clicks],
+      conversion_rate: analytics[:conversion_rate],
+      revenue: analytics[:revenue],
+      status: analytics[:status]
+    )
   end
 end

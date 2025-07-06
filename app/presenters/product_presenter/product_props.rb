@@ -12,7 +12,7 @@ class ProductPresenter::ProductProps
     @seller = product.user
   end
 
-  def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil)
+  def props(seller_custom_domain_url:, request:, pundit_user:, recommended_by: nil, discount_code: nil, quantity: 1, layout: nil, social_proof_widgets: [])
     {
       product: {
         id: product.external_id,
@@ -73,6 +73,7 @@ class ProductPresenter::ProductProps
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
+      social_proof_widgets: social_proof_widgets.map(&:attributes),
     }
   end
 

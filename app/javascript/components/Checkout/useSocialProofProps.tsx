@@ -11,7 +11,7 @@ interface PreviewInput {
     id: "product" | "custom" | "icon" | "none";
     label: "Product image" | "Custom image" | "Icon" | "None";
   };
-  icon: IconName | null;
+  icon: string;
   iconColor: string;
 }
 

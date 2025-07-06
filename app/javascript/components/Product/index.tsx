@@ -25,6 +25,7 @@ import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
+import { SocialProofCard } from "$app/components/Checkout/SocialProofCard";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -168,6 +169,19 @@ export type WishlistForProduct = Wishlist & {
   selections_in_wishlist: { variant_id: string | null; recurrence: string | null; rent: boolean; quantity: number }[];
 };
 
+export type SocialProofWidgetProps = {
+  id: number;
+  name?: string;
+  title?: string;
+  description?: string;
+  cta_text?: string;
+  cta_type?: "button" | "link" | "none";
+  image_type?: "product" | "custom" | "icon" | "none";
+  image_url?: string | null;
+  icon_name?: string | null;
+  icon_color?: string | null;
+};
+
 export const getStandalonePrice = (product: Product) =>
   product.bundle_products.reduce(
     (totalStandalonePrice, bundleProduct) => totalStandalonePrice + bundleProduct.price,
@@ -216,6 +230,7 @@ export type Props = {
   purchase: Purchase | null;
   discount_code: ProductDiscount | null;
   wishlists: WishlistForProduct[];
+  social_proof_widgets: SocialProofWidgetProps[];
 };
 
 export const Product = ({
@@ -228,6 +243,7 @@ export const Product = ({
   ctaButtonRef,
   configurationSelectorRef,
   wishlists = [],
+  social_proof_widgets = [],
   disableAnalytics,
 }: {
   product: Product;
@@ -239,6 +255,7 @@ export const Product = ({
   ctaButtonRef?: React.MutableRefObject<HTMLAnchorElement | null>;
   configurationSelectorRef?: React.MutableRefObject<ConfigurationSelectorHandle | null>;
   wishlists?: WishlistForProduct[];
+  social_proof_widgets?: SocialProofWidgetProps[];
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
@@ -592,6 +609,27 @@ export const Product = ({
         </section>
         {product.ratings ? <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} /> : null}
       </section>
+
+      {/* Social Proof Widgets */}
+      {social_proof_widgets.length > 0 && (
+        <div className="fixed bottom-0 left-0 m-8 flex w-full flex-col">
+          {social_proof_widgets.map((widget) => (
+            <SocialProofCard
+              key={widget.id}
+              widgetId={widget.id}
+              title={widget.title ?? ""}
+              description={widget.description ?? ""}
+              imageType={widget.image_type ?? "none"}
+              ctaType={widget.cta_type ?? "none"}
+              ctaText={widget.cta_text ?? ""}
+              ctaUrl="#" // A default or dynamic URL should be added to the model
+              iconName={(widget.icon_name as any) ?? "heart-fill"}
+              iconColor={widget.icon_color ?? "#FFB800"}
+              imageUrl={widget.image_url ?? ""}
+            />
+          ))}
+        </div>
+      )}
     </article>
   );
 };

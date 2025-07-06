@@ -16,7 +16,6 @@ import AdminProductPurchases from "$app/components/server-components/Admin/Produ
 import AdminProductStats from "$app/components/server-components/Admin/ProductStats";
 import AdminResendReceiptForm from "$app/components/server-components/Admin/ResendReceiptForm";
 import AdminSearchPopover from "$app/components/server-components/Admin/SearchPopover";
-import SocialProofPage from "$app/components/server-components/CheckoutDashboard/SocialProofPage";
 import AdminSuspendForFraudForm from "$app/components/server-components/Admin/SuspendForFraudForm";
 import AdminSuspendForTosForm from "$app/components/server-components/Admin/SuspendForTosForm";
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
@@ -33,6 +32,7 @@ import BalancePage from "$app/components/server-components/BalancePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import DiscountsPage from "$app/components/server-components/CheckoutDashboard/DiscountsPage";
 import FormPage from "$app/components/server-components/CheckoutDashboard/FormPage";
+import SocialProofPage from "$app/components/server-components/CheckoutDashboard/SocialProofPage";
 import UpsellsPage from "$app/components/server-components/CheckoutDashboard/UpsellsPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CollaboratorsPage from "$app/components/server-components/CollaboratorsPage";

@@ -162,6 +162,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       purchase={null}
       discount_code={null}
       wishlists={[]}
+      social_proof_widgets={[]}
       selection={{
         optionId: null,
         price: {

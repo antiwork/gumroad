@@ -1,11 +1,14 @@
 import * as React from "react";
 
+import { trackSocialProofEvent } from "$app/data/social_proof";
+
 import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 
 interface BaseSocialProofCardProps {
   title: string;
   description: string;
+  widgetId?: number; // Optional for preview mode
 }
 
 interface ProductImageProps extends BaseSocialProofCardProps {
@@ -50,7 +53,21 @@ type CTATypeProps = ButtonCTAProps | LinkCTAProps | NoCTAProps;
 export type SocialProofCardProps = ImageTypeProps & CTATypeProps;
 
 export const SocialProofCard = (props: SocialProofCardProps) => {
-  const { title, description } = props;
+  const { title, description, widgetId } = props;
+
+  // Track impression when component mounts (only for real widgets, not preview)
+  React.useEffect(() => {
+    if (widgetId !== undefined) {
+      void trackSocialProofEvent(widgetId, "impression");
+    }
+  }, [widgetId]);
+
+  // Track click events (only for real widgets, not preview)
+  const handleClick = () => {
+    if (widgetId !== undefined) {
+      void trackSocialProofEvent(widgetId, "click");
+    }
+  };
 
   const renderImage = () => {
     switch (props.imageType) {
@@ -75,13 +92,13 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
     switch (props.ctaType) {
       case "button":
         return (
-          <NavigationButton href={props.ctaUrl} color="accent" className="w-full">
+          <NavigationButton href={props.ctaUrl} color="accent" className="w-full" onClick={handleClick}>
             {props.ctaText}
           </NavigationButton>
         );
       case "link":
         return (
-          <a href={props.ctaUrl} className="text-sm font-bold text-teal-400 no-underline">
+          <a href={props.ctaUrl} className="text-sm font-bold text-teal-400 no-underline" onClick={handleClick}>
             {props.ctaText}
           </a>
         );

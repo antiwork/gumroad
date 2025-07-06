@@ -2,27 +2,51 @@ import cx from "classnames";
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
-// import { PLACEHOLDER_CARD_PRODUCT, PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
-// import { asyncVoid } from "$app/utils/promise";
-import { createSocialProof } from "$app/data/social_proof";
+import {
+  createSocialProof,
+  updateSocialProof,
+  deleteSocialProof,
+  getPagedSocialProofWidgets,
+  SocialProofWidget as ImportedSocialProofWidget,
+} from "$app/data/social_proof";
 import { Thumbnail } from "$app/data/thumbnails";
-import { assertResponseError } from "$app/utils/request";
+import { asyncVoid } from "$app/utils/promise";
+import { AbortError, assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
+import { writeQueryParams } from "$app/utils/url";
 
-// import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { SocialProofCard } from "$app/components/Checkout/SocialProofCard";
 import { useSocialProofCardPropsFromPreview } from "$app/components/Checkout/useSocialProofProps";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-// import { coverUrlForThumbnail } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
+import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { Popover } from "$app/components/Popover";
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
-// const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
+
+// TODO: Get Correct Placeholder
+import placeholder from "$assets/images/placeholders/upsells.png";
+
+type SocialProofPlayload = {
+  name: string;
+  titleText: string;
+  description: string;
+  ctaText: string;
+  ctaType: { id: "button" | "link" | "none"; label: string };
+  image: { id: "product" | "custom" | "icon" | "none"; label: string };
+  icon: string;
+  iconColor: string;
+  selectedProductIds: string[];
+  universal: boolean;
+  status: string;
+};
 
 export type SortKey = "name" | "clicks" | "conversion" | "revenue" | "status";
 
@@ -38,98 +62,78 @@ type VisibilityType = {
   label: "All visitors" | "New visitors" | "Returning visitors";
 };
 
-type Widget = {
-  id: string;
-  name: string;
-  clicks: number;
-  conversion: string;
-  revenue: string;
-  status: "Active" | "Paused";
+export type QueryParams = {
+  sort: Sort<SortKey> | null;
+  query: string | null;
+  page: number | null;
 };
 
-const SocialProofPage = ({ pages = [], products }: { pages?: Page[]; products: Product[] }) => {
+const extractParams = (rawParams: URLSearchParams): QueryParams => {
+  const column = rawParams.get("column");
+  let sort: Sort<SortKey> | null = null;
+  switch (column) {
+    case "name":
+    case "clicks":
+    case "conversion":
+    case "revenue":
+    case "status":
+      sort = {
+        direction: rawParams.get("sort") === "desc" ? "desc" : "asc",
+        key: column,
+      };
+      break;
+    default:
+      break;
+  }
+  const query = rawParams.get("query");
+  const pageStr = rawParams.get("page");
+  const page = pageStr ? parseInt(pageStr, 10) : 1;
+  return {
+    query: query ? decodeURIComponent(query) : "",
+    sort,
+    page,
+  };
+};
+
+export type SocialProofWidget = ImportedSocialProofWidget;
+
+const SocialProofPage = ({
+  pages,
+  products,
+  social_proof_widgets,
+  pagination: initialPagination,
+}: {
+  pages: Page[];
+  products: Product[];
+  social_proof_widgets: SocialProofWidget[];
+  pagination?: PaginationProps | undefined | null;
+}) => {
   const loggedInUser = useLoggedInUser();
   const [view, setView] = React.useState<"list" | "create" | "edit">("list");
+  const originalLocation = useOriginalLocation();
+  const initialQueryParams = extractParams(new URL(originalLocation).searchParams);
+  const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
-  // Add dummy data for the table
-  const dummyWidgets: Widget[] = [
-    {
-      id: "1",
-      name: "Recent purchases",
-      clicks: 1245,
-      conversion: "12.5%",
-      revenue: "$1,245.00",
-      status: "Active",
-    },
-    {
-      id: "2",
-      name: "Popular items",
-      clicks: 876,
-      conversion: "8.2%",
-      revenue: "$876.00",
-      status: "Active",
-    },
-    {
-      id: "3",
-      name: "Community favorites",
-      clicks: 532,
-      conversion: "5.8%",
-      revenue: "$532.00",
-      status: "Paused",
-    },
-    {
-      id: "4",
-      name: "Trending now",
-      clicks: 2103,
-      conversion: "15.3%",
-      revenue: "$2,103.00",
-      status: "Active",
-    },
-  ];
-
-  const [name, setName] = React.useState("");
-  const [titleText, setTitleText] = React.useState("");
-  const [description, setDescription] = React.useState("");
-  const [ctaText, setCtaText] = React.useState("");
-  const [iconColor, setIconColor] = React.useState("#FFB800");
-  const [universal, setUniversal] = React.useState(false);
-
-  const [ctaType, setCtaType] = React.useState<CtaType>({
-    id: "button",
-    label: "Button",
-  });
-  const [image, setImage] = React.useState<ImageType>({ id: "product", label: "Product image" });
-  const [thumbnail, setThumbnail] = React.useState<Thumbnail | null>(null);
-  const [icon, setIcon] = React.useState<IconName>("heart-fill");
-  const [visibility, setVisibility] = React.useState<VisibilityType>({ id: "all", label: "All visitors" });
-  // const cartItem = PLACEHOLDER_CART_ITEM;
-  // const cardProduct = PLACEHOLDER_CARD_PRODUCT;
-  const tableRef = React.useRef<HTMLTableElement>(null);
-  const isLoading = false;
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
   const thProps = useSortingTableDriver<SortKey>(sort, setSort);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
-    value: [],
-  });
+  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState<string | null>(initialQueryParams.query);
+  const [selectedSocialProofWidgetId, setSelectedSocialProofWidgetId] = React.useState<number | null>(null);
+  const [editingSocialProofWidgetId, setEditingSocialProofWidgetId] = React.useState<number | null>(null);
+  const [popoverSocialProofWidgetId, setPopoverSocialProofWidgetId] = React.useState<number | null>(null);
 
-  const handleSave = async () => {
+  const handleSave = async (formData: SocialProofPlayload) => {
     try {
       setIsSaving(true);
-      const payload = {
-        name,
-        titleText,
-        description,
-        ctaText,
-        ctaType,
-        image,
-        icon,
-        iconColor,
-        selectedProductIds: universal ? [] : selectedProductIds.value,
-        universal,
-      };
-      await createSocialProof(payload);
-      showAlert("Changes saved!", "success");
+      await createSocialProof(formData);
+      showAlert("Successfully created widget!", "success");
+      // Refresh the widget list
+      loadSocialProofWidgets({ page: 1, query: searchQuery, sort });
+      setEditingSocialProofWidgetId(null);
+      setView("list");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -137,199 +141,357 @@ const SocialProofPage = ({ pages = [], products }: { pages?: Page[]; products: P
     setIsSaving(false);
   };
 
+  const handleUpdate = async (formData: SocialProofPlayload) => {
+    if (!editingSocialProofWidget) return;
+    try {
+      setIsSaving(true);
+      await updateSocialProof(editingSocialProofWidget.id, formData);
+      showAlert("Successfully updated widget!", "success");
+      // Refresh the widget list
+      loadSocialProofWidgets({ page: 1, query: searchQuery, sort });
+      setEditingSocialProofWidgetId(null);
+      setView("list");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsSaving(false);
+  };
+
+  const setUrlQueryParams = (params: QueryParams): void => {
+    const currentUrl = new URL(window.location.href);
+    const newUrl = writeQueryParams(currentUrl, {
+      page: params.page?.toString() || null,
+      query: params.query || null,
+      sort: params.sort?.direction || null,
+      column: params.sort?.key || null,
+    });
+    if (newUrl.toString() !== window.location.href) window.history.pushState(params, document.title, newUrl.toString());
+  };
+
+  const loadSocialProofWidgets = asyncVoid(
+    async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
+      try {
+        activeRequest.current?.cancel();
+        setIsLoading(true);
+
+        if (!keepUrl)
+          setUrlQueryParams({
+            query,
+            sort,
+            page: (pagination?.pages ?? 0) > 1 ? page : null,
+          });
+
+        const request = getPagedSocialProofWidgets(page || 1, query, sort);
+        activeRequest.current = request;
+
+        const { social_proof_widgets: socialProofWidgets, pagination: newPagination } = await request.response;
+        setState({ socialProofWidgets, pagination: newPagination });
+        setIsLoading(false);
+        activeRequest.current = null;
+      } catch (e) {
+        if (e instanceof AbortError) return;
+        assertResponseError(e);
+        showAlert(e.message, "error");
+      }
+    },
+  );
+
+  const debouncedLoadSocialProofWidgets = useDebouncedCallback(
+    () => loadSocialProofWidgets({ page: 1, query: searchQuery, sort }),
+    300,
+  );
+
+  const [{ socialProofWidgets, pagination }, setState] = React.useState<{
+    socialProofWidgets: SocialProofWidget[];
+    pagination: PaginationProps | null | undefined;
+  }>({
+    socialProofWidgets: social_proof_widgets,
+    pagination: initialPagination,
+  });
+
+  const selectedSocialProofWidget = socialProofWidgets.find(({ id }) => id === selectedSocialProofWidgetId);
+  const editingSocialProofWidget = socialProofWidgets.find(({ id }) => id === editingSocialProofWidgetId);
+
   return view === "list" ? (
     <Layout
-      currentPage="form"
-      pages={pages}
-      actions={
-        <Button
-          color="accent"
-          onClick={() => setView("create")}
-          disabled={!loggedInUser?.policies.checkout_form.update}
-        >
-          New social proof
-        </Button>
-      }
-      hasAside
-    >
-      <section className="paragraphs">
-        <table aria-live="polite" aria-busy={isLoading} ref={tableRef}>
-          <caption>Social Proof Widgets</caption>
-          <thead>
-            <tr>
-              <th />
-              <th {...thProps("name")} title="Sort by Name">
-                Name
-              </th>
-              <th {...thProps("clicks")} title="Sort by Clicks">
-                Clicks
-              </th>
-              <th {...thProps("conversion")} title="Sort by Conversion">
-                Conversion
-              </th>
-              <th {...thProps("revenue")} title="Sort by Revenue">
-                Revenue
-              </th>
-              <th {...thProps("status")} title="Sort by Status">
-                Status
-              </th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {dummyWidgets.map((widget) => (
-              <tr key={widget.id}>
-                <td className="icon-cell">
-                  <Icon name="circle-fill" />
-                </td>
-                <td>
-                  <div>
-                    <h4>{widget.name}</h4>
-                  </div>
-                </td>
-                <td data-label="Name">{widget.name}</td>
-                <td data-label="Clicks" style={{ whiteSpace: "nowrap" }}>
-                  {widget.clicks.toLocaleString()}
-                </td>
-                <td data-label="Conversion" style={{ whiteSpace: "nowrap" }}>
-                  {widget.conversion}
-                </td>
-                <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
-                  {widget.revenue}
-                </td>
-                <td data-label="Status" style={{ whiteSpace: "nowrap" }}>
-                  {widget.status === "Active" ? (
-                    <>
-                      <Icon name="circle-fill" /> Active
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="circle" /> Paused
-                    </>
-                  )}
-                </td>
-                <td data-label="Actions">
-                  <Button onClick={() => setView("edit")} disabled={!loggedInUser?.policies.checkout_form.update}>
-                    <Icon name="pencil" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-
-          <tfoot>
-            <tr>
-              <td colSpan={2}>Totals</td>
-              <td data-label="Total Clicks">
-                {dummyWidgets.reduce((sum, widget) => sum + widget.clicks, 0).toLocaleString()}
-              </td>
-              <td data-label="Average Conversion">
-                {(
-                  (dummyWidgets.reduce((sum, widget) => sum + parseFloat(widget.conversion), 0) / dummyWidgets.length) *
-                  100
-                ).toFixed(1)}
-                %
-              </td>
-              <td data-label="Total Revenue">
-                $
-                {dummyWidgets
-                  .reduce((sum, widget) => sum + parseFloat(widget.revenue.replace("$", "").replace(",", "")), 0)
-                  .toLocaleString()}
-              </td>
-              <td colSpan={2}></td>
-            </tr>
-          </tfoot>
-        </table>
-      </section>
-    </Layout>
-  ) : view === "edit" ? (
-    <Layout
-      currentPage="form"
+      currentPage="social"
       pages={pages}
       actions={
         <>
-          <Button onClick={() => setView("list")}>
-            <Icon name="x-square" />
-            Cancel
-          </Button>
-          <Button type="submit" color="black" onClick={() => void handleSave()} disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save"}
+          <Popover
+            open={isSearchPopoverOpen}
+            onToggle={setIsSearchPopoverOpen}
+            aria-label="Search"
+            trigger={
+              <div className="button">
+                <Icon name="solid-search" />
+              </div>
+            }
+          >
+            <div className="input">
+              <Icon name="solid-search" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search"
+                value={searchQuery ?? ""}
+                onChange={(evt) => {
+                  setSearchQuery(evt.target.value);
+                  debouncedLoadSocialProofWidgets();
+                }}
+              />
+            </div>
+          </Popover>
+          <Button
+            color="accent"
+            onClick={() => {
+              setEditingSocialProofWidgetId(null);
+              setView("create");
+            }}
+            disabled={!loggedInUser?.policies.checkout_form.update}
+          >
+            New widget
           </Button>
         </>
       }
     >
       <section className="paragraphs">
-        <h2 className="mb-4 text-lg font-medium">Edit social proof</h2>
-        <p className="text-gray-500 text-sm">Update your social proof settings.</p>
+        {socialProofWidgets.length > 0 ? (
+          <>
+            <table aria-live="polite" aria-busy={isLoading}>
+              <thead>
+                <tr>
+                  <th {...thProps("name")} title="Sort by Name" style={{ width: "30%" }}>
+                    Widget
+                  </th>
+                  <th {...thProps("clicks")} title="Sort by Clicks">
+                    Clicks
+                  </th>
+                  <th {...thProps("conversion")} title="Sort by Conversion">
+                    Conversion
+                  </th>
+                  <th {...thProps("revenue")} title="Sort by Revenue">
+                    Revenue
+                  </th>
+                  <th {...thProps("status")} title="Sort by Status">
+                    Status
+                  </th>
+                </tr>
+              </thead>
 
-        <form className="mt-6 space-y-4">
-          <fieldset>
-            <legend>
-              <label htmlFor="title">Title</label>
-            </legend>
-            <input type="text" id="title" placeholder="Recent purchases" defaultValue="Recent purchases" />
-          </fieldset>
+              <tbody>
+                {socialProofWidgets.map((socialProofWidget) => (
+                  <tr
+                    key={socialProofWidget.id}
+                    aria-selected={socialProofWidget.id === selectedSocialProofWidgetId}
+                    onClick={() => setSelectedSocialProofWidgetId(socialProofWidget.id)}
+                  >
+                    <td style={{ width: "30%" }}>
+                      <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+                        <b>{socialProofWidget.name}</b>
+                      </div>
+                    </td>
 
-          <fieldset>
-            <legend>
-              <label htmlFor="display">Display settings</label>
-            </legend>
-            <select id="display">
-              <option value="top">Top of page</option>
-              <option value="bottom">Bottom of page</option>
-              <option value="corner">Corner popup</option>
-            </select>
-          </fieldset>
+                    <td style={{ whiteSpace: "nowrap" }}>{socialProofWidget.clicks}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{socialProofWidget.conversion_rate}</td>
 
-          <fieldset>
-            <legend>Configuration</legend>
-            <label>
-              <input type="checkbox" defaultChecked />
-              Show customer name
-            </label>
-            <label>
-              <input type="checkbox" defaultChecked />
-              Show product name
-            </label>
-            <label>
-              <input type="checkbox" defaultChecked />
-              Show timestamp
-            </label>
-          </fieldset>
-        </form>
+                    <td>{socialProofWidget.revenue}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "min-content 1fr", gap: "var(--spacer-2)" }}>
+                        {socialProofWidget.status === "published" ? (
+                          <Icon name="circle-fill" />
+                        ) : (
+                          <Icon name="circle" />
+                        )}
+                        {socialProofWidget.status}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="actions">
+                        <Button
+                          aria-label="Edit"
+                          disabled={!socialProofWidget.can_update || isLoading}
+                          onClick={() => {
+                            setEditingSocialProofWidgetId(socialProofWidget.id);
+                            setView("edit");
+                          }}
+                        >
+                          <Icon name="pencil" />
+                        </Button>
+                        <Popover
+                          open={popoverSocialProofWidgetId === socialProofWidget.id}
+                          onToggle={(open) => setPopoverSocialProofWidgetId(open ? socialProofWidget.id : null)}
+                          aria-label="Open social proof widget action menu"
+                          trigger={
+                            <div className="button">
+                              <Icon name="three-dots" />
+                            </div>
+                          }
+                        >
+                          <div role="menu">
+                            <div
+                              role="menuitem"
+                              inert={!socialProofWidget.can_update || isLoading}
+                              onClick={() => {
+                                setEditingSocialProofWidgetId(socialProofWidget.id);
+                                setView("create");
+                              }}
+                            >
+                              <Icon name="outline-duplicate" />
+                              &ensp;Duplicate
+                            </div>
+                            <div
+                              role="menuitem"
+                              className="danger"
+                              inert={!socialProofWidget.can_update || isLoading}
+                              onClick={asyncVoid(async () => {
+                                try {
+                                  setIsLoading(true);
+                                  await deleteSocialProof(socialProofWidget.id);
+                                  showAlert("Widget deleted successfully!", "success");
+                                  // Refresh the widget list
+                                  loadSocialProofWidgets({ page: 1, query: searchQuery, sort });
+                                } catch (e) {
+                                  assertResponseError(e);
+                                  showAlert(e.message, "error");
+                                }
+                                setIsLoading(false);
+                              })}
+                            >
+                              <Icon name="trash2" />
+                              &ensp;Delete
+                            </div>
+                          </div>
+                        </Popover>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {pagination?.pages && pagination.pages > 1 ? (
+              <Pagination
+                onChangePage={(newPage) => loadSocialProofWidgets({ page: newPage, query: searchQuery, sort })}
+                pagination={pagination}
+              />
+            ) : null}
+          </>
+        ) : (
+          <div className="placeholder">
+            <figure>
+              <img src={placeholder} />
+            </figure>
+            <h2>Use social proof to build trust and boost conversions</h2>
+            Let your product page do the talking. Show off what's happening and get more people clicking.
+            <Button
+              color="accent"
+              onClick={() => {
+                setEditingSocialProofWidgetId(null);
+                setView("create");
+              }}
+            >
+              New widget
+            </Button>
+            <a
+              href="#"
+              data-helper-prompt="What are social proof widgets and how can I use them to increase my revenue?"
+            >
+              Learn more about social proof.
+            </a>
+          </div>
+        )}
+        {selectedSocialProofWidget ? (
+          <aside>
+            <header>
+              <h2>{selectedSocialProofWidget.name}</h2>
+              <button className="close" aria-label="Close" onClick={() => setSelectedSocialProofWidgetId(null)} />
+            </header>
+            <section className="stack">
+              <h3>Details</h3>
+              <div>
+                <h5>Clicks</h5>
+                {selectedSocialProofWidget.clicks}
+              </div>
+              <div>
+                <h5>Conversion</h5>
+                {selectedSocialProofWidget.conversion_rate}
+              </div>
+              <div>
+                <h5>Revenue</h5>
+                {selectedSocialProofWidget.revenue}
+              </div>
+              <div>
+                <h5>Status</h5>
+                {selectedSocialProofWidget.status}
+              </div>
+            </section>
+            <section
+              style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}
+            >
+              <Button
+                onClick={() => {
+                  setEditingSocialProofWidgetId(selectedSocialProofWidget.id);
+                  setView("create");
+                }}
+                disabled={!selectedSocialProofWidget.can_update || isLoading}
+              >
+                Duplicate
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditingSocialProofWidgetId(selectedSocialProofWidget.id);
+                  setView("edit");
+                }}
+                disabled={!selectedSocialProofWidget.can_update || isLoading}
+              >
+                Edit
+              </Button>
+              <Button
+                color="danger"
+                onClick={asyncVoid(async () => {
+                  try {
+                    setIsLoading(true);
+                    await deleteSocialProof(selectedSocialProofWidget.id);
+                    showAlert("Widget deleted successfully!", "success");
+                    loadSocialProofWidgets({ page: 1, query: searchQuery, sort });
+                    setSelectedSocialProofWidgetId(null);
+                  } catch (e) {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                  }
+                  setIsLoading(false);
+                })}
+                disabled={!selectedSocialProofWidget.can_update || isLoading}
+              >
+                {isLoading ? "Deleting..." : "Delete"}
+              </Button>
+            </section>
+          </aside>
+        ) : null}
       </section>
     </Layout>
+  ) : view === "edit" ? (
+    <Form
+      title="Edit widget"
+      submitLabel={isSaving ? "Saving changes..." : "Save changes"}
+      socialProofWidget={editingSocialProofWidget}
+      products={products}
+      setView={setView}
+      save={handleUpdate}
+      isLoading={isSaving}
+      onCancel={() => setEditingSocialProofWidgetId(null)}
+    />
   ) : (
     <Form
       title="Create widget"
+      submitLabel={isSaving ? "Adding widget..." : "Add widget"}
+      socialProofWidget={editingSocialProofWidget}
       products={products}
-      name={name}
-      titleText={titleText}
-      description={description}
-      ctaText={ctaText}
-      ctaType={ctaType}
-      image={image}
-      thumbnail={thumbnail}
-      icon={icon}
-      iconColor={iconColor}
-      universal={universal}
-      selectedProductIds={selectedProductIds}
-      visibility={visibility}
-      setThumbnail={setThumbnail}
-      setName={setName}
-      setTitleText={setTitleText}
-      setDescription={setDescription}
-      setCtaText={setCtaText}
-      setCtaType={setCtaType}
-      setImage={setImage}
-      setIcon={setIcon}
-      setIconColor={setIconColor}
-      setUniversal={setUniversal}
-      setSelectedProductIds={setSelectedProductIds}
-      setVisibility={setVisibility}
       setView={setView}
       save={handleSave}
+      isLoading={isSaving}
+      onCancel={() => setEditingSocialProofWidgetId(null)}
     />
   );
 };
@@ -342,70 +504,102 @@ type Product = {
   url: string;
   is_tiered_membership: boolean;
   archived: boolean;
+  //   title: string;
+  //   description: string;
 };
 
 const Form = ({
-  name,
   title,
+  submitLabel,
+  socialProofWidget,
   products,
-  titleText,
-  description,
-  ctaText,
-  ctaType,
-  image,
-  icon,
-  thumbnail,
-  iconColor,
-  universal,
-  selectedProductIds,
-  visibility,
-  setName,
-  setTitleText,
-  setDescription,
-  setCtaText,
-  setCtaType,
-  setImage,
-  setIcon,
-  setThumbnail,
-  setIconColor,
-  setUniversal,
-  setSelectedProductIds,
-  setVisibility,
   setView,
   save,
+  isLoading,
+  onCancel,
 }: {
   title: string;
+  submitLabel?: string;
+  socialProofWidget?: SocialProofWidget | undefined;
   products: Product[];
-  name: string;
-  titleText: string;
-  description: string;
-  ctaText: string;
-  ctaType: CtaType;
-  image: ImageType;
-  thumbnail: Thumbnail | null;
-  visibility: VisibilityType;
-  icon: IconName;
-  iconColor: string;
-  universal: boolean;
-  selectedProductIds: { value: string[]; error?: boolean };
-  setThumbnail: React.Dispatch<React.SetStateAction<Thumbnail | null>>;
-  setName: React.Dispatch<React.SetStateAction<string>>;
-  setTitleText: React.Dispatch<React.SetStateAction<string>>;
-  setDescription: React.Dispatch<React.SetStateAction<string>>;
-  setCtaText: React.Dispatch<React.SetStateAction<string>>;
-  setCtaType: React.Dispatch<React.SetStateAction<CtaType>>;
-  setImage: React.Dispatch<React.SetStateAction<ImageType>>;
-  setIcon: React.Dispatch<React.SetStateAction<IconName>>;
-  setIconColor: React.Dispatch<React.SetStateAction<string>>;
-  setVisibility: React.Dispatch<React.SetStateAction<VisibilityType>>;
   setView: React.Dispatch<React.SetStateAction<"list" | "create" | "edit">>;
-  setUniversal: React.Dispatch<React.SetStateAction<boolean>>;
-  setSelectedProductIds: React.Dispatch<React.SetStateAction<{ value: string[]; error?: boolean }>>;
-  save: () => Promise<void>;
+  save: (formData: SocialProofPlayload) => Promise<void>;
+  isLoading: boolean;
+  onCancel?: () => void;
 }) => {
+  const [name, setName] = React.useState(socialProofWidget?.name ?? "");
+  const [titleText, setTitleText] = React.useState(socialProofWidget?.title ?? "");
+  const [description, setDescription] = React.useState(socialProofWidget?.description ?? "");
+  const [ctaText, setCtaText] = React.useState(socialProofWidget?.cta_text ?? "");
+
+  const getCtaType = (): CtaType => {
+    const type = socialProofWidget?.cta_type;
+    if (type === "button") return { id: "button", label: "Button" };
+    if (type === "link") return { id: "link", label: "Link" };
+    if (type === "none") return { id: "none", label: "None" };
+    return { id: "button", label: "Button" };
+  };
+  const [ctaType, setCtaType] = React.useState<CtaType>(getCtaType());
+
+  const getImageType = (): ImageType => {
+    const type = socialProofWidget?.image_type;
+    if (type === "product") return { id: "product", label: "Product image" };
+    if (type === "custom") return { id: "custom", label: "Custom image" };
+    if (type === "icon") return { id: "icon", label: "Icon" };
+    if (type === "none") return { id: "none", label: "None" };
+    return { id: "product", label: "Product image" };
+  };
+  const [image, setImage] = React.useState<ImageType>(getImageType());
+
+  const [thumbnail, setThumbnail] = React.useState<Thumbnail | null>(null);
+  const [icon, setIcon] = React.useState<string>(socialProofWidget?.icon_name ?? "heart-fill");
+  const [iconColor, setIconColor] = React.useState(socialProofWidget?.icon_color ?? "#FFB800");
+  const [universal, setUniversal] = React.useState(false);
+  const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
+    value: [],
+  });
+  const [visibility, setVisibility] = React.useState<VisibilityType>({ id: "all", label: "All visitors" });
+  const [status, setStatus] = React.useState(socialProofWidget?.status ?? "unpublished");
+
   const selectedProducts = products.filter(({ id }) => selectedProductIds.value.includes(id));
 
   const uid = React.useId();
+
+  const handleSubmit = async () => {
+    const formData = {
+      name,
+      titleText,
+      description,
+      ctaText,
+      ctaType,
+      image,
+      icon,
+      iconColor,
+      selectedProductIds: universal ? [] : selectedProductIds.value,
+      universal,
+      status,
+    };
+    await save(formData);
+  };
+
+  const handleTogglePublish = async () => {
+    const newStatus = status === "published" ? "unpublished" : "published";
+    const formData = {
+      name,
+      titleText,
+      description,
+      ctaText,
+      ctaType,
+      image,
+      icon,
+      iconColor,
+      selectedProductIds: universal ? [] : selectedProductIds.value,
+      universal,
+      status: newStatus,
+    };
+    await save(formData);
+    setStatus(newStatus);
+  };
 
   return (
     <div className="fixed-aside" style={{ display: "contents" }}>
@@ -414,16 +608,19 @@ const Form = ({
         <div className="actions">
           <Button
             onClick={() => {
+              onCancel?.();
               setView("list");
             }}
           >
             <Icon name="x-square" />
             Cancel
           </Button>
-          <Button type="submit" color="black" onClick={() => void save()} disabled={false}>
-            Add
+          <Button type="submit" color="black" onClick={() => void handleSubmit()} disabled={isLoading}>
+            {status === "published" ? submitLabel || "Save changes" : submitLabel || "Save as draft"}
           </Button>
-          <Button color="accent">Publish</Button>
+          <Button color="accent" onClick={() => void handleTogglePublish()} disabled={isLoading}>
+            {status === "published" ? "Unpublish" : "Publish"}
+          </Button>
         </div>
       </header>
       <main className="squished">
@@ -500,7 +697,7 @@ const Form = ({
               <input
                 type="text"
                 id="title"
-                placeholder="TODO: add placeholder"
+                placeholder="Join the community"
                 value={titleText}
                 onChange={(evt) => setTitleText(evt.target.value)}
                 aria-invalid={false}
@@ -512,7 +709,7 @@ const Form = ({
               </legend>
               <textarea
                 id="description"
-                placeholder="TODO: add placeholder"
+                placeholder="Get limited-time access to our community"
                 value={description}
                 onChange={(evt) => setDescription(evt.target.value)}
                 aria-invalid={false}
@@ -525,7 +722,7 @@ const Form = ({
               <input
                 type="text"
                 id="cta"
-                placeholder="TODO: Purchase Now"
+                placeholder="Join now"
                 value={ctaText}
                 onChange={(evt) => setCtaText(evt.target.value)}
                 aria-invalid={false}
@@ -656,10 +853,9 @@ const Preview = ({
   titleText: string;
   description: string;
   ctaText: string;
-  // TODO: proper types here
   ctaType: CtaType;
   image: ImageType;
-  icon: IconName;
+  icon: string;
   iconColor: string;
 }) => {
   const socialProofCardProps = useSocialProofCardPropsFromPreview({

@@ -155,6 +155,7 @@ export const Layout = (
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         wishlists={wishlists}
+        social_proof_widgets={props.social_proof_widgets}
       />
     </>
   );

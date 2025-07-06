@@ -8,6 +8,10 @@ class SocialProofWidget < ApplicationRecord
   # Association with links/products
   has_and_belongs_to_many :links
 
+  # Analytics associations
+  has_many :social_proof_widget_events, dependent: :destroy
+  has_many :social_proof_widget_analytics, dependent: :destroy
+
   # Alias title_text to the `title` attribute to match the controller's transformation.
   alias_attribute :title_text, :title
 
@@ -26,21 +30,49 @@ class SocialProofWidget < ApplicationRecord
   }
   validates :icon_name, inclusion: {
     in: %w[
-      solid_fire
-      solid_heart
-      patch_check_fill
-      cart3-fill
-      solid-users
+      heart-fill
       star-fill
-      solid-sparkles
-      clock_fill
-      solid_gift
-      solid_lightning_bolt
+      gift-fill
+      solid-star
+      solid-bell
+      solid-user
+      cart3-fill
+      check-square
+      circle-fill
+      bookmark-heart-fill
     ],
     message: "%{value} is not a valid icon name"
   }, if: -> { image_type == 'icon' }
 
+    def status
+    published? ? 'published' : 'unpublished'
+  end
+
+  def status=(value)
+    self.published = (value == 'published')
+  end
+
+  scope :published, -> { where(published: true) }
+  scope :unpublished, -> { where(published: false) }
+
   def display_template
     "#{title} - #{description} - CTA: #{cta_text}"
+  end
+
+  # Analytics methods
+  def current_analytics(days = 30)
+    SocialProofWidgetAnalytic.totals_for_widget(id, days.days.ago, Date.current)
+  end
+
+
+
+  def analytics_summary
+    stats = current_analytics
+    {
+      clicks: stats[:clicks],
+      conversion_rate: "#{stats[:conversion_rate]}%",
+      revenue: "$#{(stats[:revenue_cents] / 100.0).round(2)}",
+      status: status
+    }
   end
 end

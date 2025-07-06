@@ -1,5 +1,5 @@
 class CreateSocialProofWidgets < ActiveRecord::Migration[7.1]
-  def change
+  def up
     create_table :social_proof_widgets do |t|
       t.string :name
       t.boolean :universal
@@ -10,8 +10,15 @@ class CreateSocialProofWidgets < ActiveRecord::Migration[7.1]
       t.string :image_type
       t.string :image_url
       t.string :icon_name
+      t.boolean :published, default: false, null: false
 
       t.timestamps
     end
+
+    add_index :social_proof_widgets, :published
+  end
+
+  def down
+    drop_table :social_proof_widgets
   end
 end
