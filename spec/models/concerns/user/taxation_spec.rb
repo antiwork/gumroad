@@ -103,7 +103,7 @@ describe User::Taxation do
     context "when sales amount is above threshold but non-Connect sales amount is not" do
       before do
         create(:user_compliance_info, user: @user)
-        @user.sales.each { _1.id % 2 == 0 ? _1.update!(paypal_order_id: SecureRandom.hex) : _1.update!(merchant_account_id: create(:merchant_account_stripe_connect, user: @user).id) }
+        @user.sales.each { _1.id.even? ? _1.update!(paypal_order_id: SecureRandom.hex) : _1.update!(merchant_account_id: create(:merchant_account_stripe_connect, user: @user).id) }
         stub_const("#{described_class}::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 1)
       end
 

@@ -99,6 +99,9 @@ Style/ConcatArrayLiterals:
 Style/ConditionalAssignment:
   Enabled: true
 
+Style/EvenOdd:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql
