@@ -39,7 +39,7 @@ class OfferCodeDiscountComputingService
 
       is_inactive = offer_code.inactive?
 
-      offer_code_insufficient_quantity[offer_code.id] = !(product_quantity >= (offer_code.minimum_quantity || 0))
+      offer_code_insufficient_quantity[offer_code.id] = product_quantity < (offer_code.minimum_quantity || 0)
 
       if (offer_code.max_purchase_count.nil? || offer_code_quantity_left[offer_code.id] >= product_quantity) && !is_inactive && !offer_code_insufficient_quantity[offer_code.id]
         products_data[uid] = {

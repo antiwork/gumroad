@@ -169,12 +169,12 @@ class CheckoutPresenter
       |variant| subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence) ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
     end : []
     tier = subscription.original_purchase.variant_attributes.first
-    if tier.present? && !options.any? { |option| option[:id] == tier.external_id }
+    if tier.present? && options.none? { |option| option[:id] == tier.external_id }
       options << tier.to_option(subscription_attrs: tier_attrs)
     end
     offer_code = subscription.discount_applies_to_next_charge? ? subscription.original_offer_code : nil
     prices = product.prices.alive.is_buy.to_a
-    if !prices.any? { |price| price.recurrence == subscription.recurrence }
+    if prices.none? { |price| price.recurrence == subscription.recurrence }
       prices << product.prices.is_buy.where(recurrence: subscription.recurrence).order(deleted_at: :desc).take
     end
 

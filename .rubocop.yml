@@ -111,6 +111,9 @@ Style/IdenticalConditionalBranches:
 Style/IfWithBooleanLiteralBranches:
   Enabled: true
 
+Style/InverseMethods:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

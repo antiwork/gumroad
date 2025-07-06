@@ -356,7 +356,7 @@ end
 def only_matching_vcr_request_from(hosts)
   VCR.configure do |c|
     c.ignore_request do |request|
-      !hosts.any? { |host| request.uri.match?(host) }
+      hosts.none? { |host| request.uri.match?(host) }
     end
   end
 
