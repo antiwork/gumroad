@@ -283,4 +283,4 @@ $form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heig
   $form-element-padding-y * 2 + $border-width * 2;
 $body-padding-desktop-center: max((100% - #{$body-max-width}) / 2, #{$body-padding-desktop});
 $button-hover-transform-length: spacer(1);
-$header-padding-y: spacer(4);
+$header-padding-y: spacer(3);

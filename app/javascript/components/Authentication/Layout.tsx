@@ -17,7 +17,7 @@ export const Layout = ({ children, header }: { children: React.ReactNode; header
         <div>{children}</div>
       </main>
       <aside>
-        <img src={background} />
+        <img src={background} alt="Authentication background" />
       </aside>
     </>
   );

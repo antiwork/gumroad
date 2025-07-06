@@ -29,12 +29,12 @@ header.hero {
   .hero-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: spacer(1) spacer(4);
+    gap: spacer(1) spacer(3);
     align-items: center;
 
     .separator {
       width: 100%;
-      height: spacer(4);
+      height: spacer(3);
     }
 
     .logo-full {

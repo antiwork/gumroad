@@ -602,12 +602,12 @@ export const CommunityView = () => {
               })}
               aria-label="Sidebar"
             >
-              <div className="flex items-center gap-2 border-b p-2 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+              <div className="flex items-center gap-2 border-b border-gray-300 p-2 dark:border-gray-600">
                 <div className="flex flex-1 items-center gap-2" aria-label="Community switcher area">
                   <UserAvatar
                     src={selectedCommunity.seller.avatar_url}
                     alt={selectedCommunity.seller.name}
-                    className="flex-shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+                    className="flex-shrink-0 dark:border-gray-600"
                   />
                   <div className="flex items-center font-medium">
                     <span className="flex-1 truncate">
@@ -825,7 +825,7 @@ const CommunityChatHeader = ({
   isAboveBreakpoint: boolean;
 }) => (
   <div
-    className="m-0 flex justify-between gap-2 border-b px-4 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+    className="m-0 flex justify-between gap-2 border-b border-gray-300 px-4 dark:border-gray-600"
     aria-label="Community chat header"
   >
     <button
@@ -849,7 +849,7 @@ const GoBackHeader = () => {
   };
 
   return (
-    <header className="flex h-12 items-center border-b px-4 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <header className="flex h-12 items-center border-b border-gray-300 px-4 dark:border-gray-600">
       <div className="flex items-center">
         <button
           onClick={handleGoBack}

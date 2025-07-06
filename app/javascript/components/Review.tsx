@@ -25,7 +25,7 @@ const ReviewUserAttribution = ({
   isBuyer?: boolean;
 }) => (
   <section style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
-    <img className="user-avatar" src={avatarUrl} />
+    <img className="user-avatar" src={avatarUrl} alt={name} />
     <h5>{name}</h5>
     {isBuyer ? (
       <WithTooltip tip="Verified Buyer">

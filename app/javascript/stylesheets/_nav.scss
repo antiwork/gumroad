@@ -38,7 +38,7 @@ nav {
 
   header {
     display: none;
-    padding: spacer(5) spacer(4);
+    padding: spacer(3) spacer(4);
   }
 
   section,
@@ -48,7 +48,7 @@ nav {
     > a,
     details > summary {
       @include text-singleline;
-      padding: spacer(4) spacer(5);
+      padding: spacer(3) spacer(4);
       border-top: $border-width solid gray(3);
       border-bottom: $border-width solid transparent;
       .icon {
@@ -67,7 +67,7 @@ nav {
   }
 
   section {
-    margin-bottom: spacer(5);
+    margin-bottom: spacer(3);
   }
 
   footer {

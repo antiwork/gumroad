@@ -118,7 +118,7 @@ export const ChatMessage = ({
       <UserAvatar
         src={message.user.avatar_url}
         alt={message.user.name}
-        className="flex-shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+        className="flex-shrink-0 dark:border-gray-600"
         size="large"
       />
       <div className="relative flex w-full flex-col gap-0.5">
@@ -175,7 +175,7 @@ export const ChatMessage = ({
                     <Icon name="pencil" />
                   </button>
                 </WithTooltip>
-                <div className="flex border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]" />
+                <div className="flex border-r dark:border-gray-600" />
               </>
             ) : null}
             <WithTooltip position="top" tip="Delete">
@@ -292,7 +292,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
   };
 
   return (
-    <div className="relative overflow-hidden rounded-md border focus-within:outline focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="relative overflow-hidden rounded-md border border-gray-300 focus-within:outline focus-within:outline-[0.125rem] focus-within:outline-blue-500 dark:border-gray-600">
       <textarea
         ref={textareaRef}
         placeholder="Edit message"

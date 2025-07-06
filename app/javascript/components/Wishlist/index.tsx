@@ -117,7 +117,7 @@ export const Wishlist = ({
         </div>
         {user ? (
           <a style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} href={user.profile_url}>
-            <img className="user-avatar" src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
+            <img className="user-avatar" src={user.avatar_url} alt={user.name} style={{ width: "var(--spacer-5)" }} />
             <h4>{user.name}</h4>
           </a>
         ) : null}
