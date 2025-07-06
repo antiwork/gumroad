@@ -68,13 +68,7 @@ module PayoutsHelper
       payout_period_data[:status] = "not_payable"
     end
 
-    last_payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
-    payout_period_data[:payout_note] = \
-      if last_payout_note.present? && last_payout_note.created_at.to_i > user.payments.completed_or_processing.last&.created_at.to_i
-        last_payout_note.content.gsub("via Stripe ", "")
-      else
-        nil
-      end
+    payout_period_data[:payout_note] = get_payout_note(user)
 
     payout_period_data
   end
@@ -185,6 +179,43 @@ module PayoutsHelper
           { payout_method_type: "none" }
         end
       end
+    end
+  end
+
+  private
+
+  def get_payout_note(user)
+    # First, check for recent failed payments (within last 30 days)
+    recent_failed_payment = user.payments.failed.displayable.where('created_at > ?', 30.days.ago).order(created_at: :desc).first
+    last_successful_payment = user.payments.completed_or_processing.last
+
+    if recent_failed_payment.present? &&
+       (last_successful_payment.nil? || recent_failed_payment.created_at > last_successful_payment.created_at)
+
+      # Get the failure reason
+      failure_reason = recent_failed_payment.humanized_failure_reason
+
+      if failure_reason.present?
+        # Format the reason text to be user-friendly
+        if recent_failed_payment.processor == PayoutProcessorType::PAYPAL
+          reason_text = failure_reason.split(': ').last || failure_reason
+        else
+          reason_text = failure_reason
+        end
+
+        return "A recent payment attempt failed due to #{reason_text.downcase}. The balance has been carried over and will be included in your next payout."
+      else
+        return "A recent payment attempt failed. The balance has been carried over and will be included in your next payout."
+      end
+    end
+
+    # If no recent failed payment, check for payout notes
+    last_payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
+
+    if last_payout_note.present? && last_payout_note.created_at.to_i > (last_successful_payment&.created_at.to_i || 0)
+      last_payout_note.content.gsub("via Stripe ", "")
+    else
+      nil
     end
   end
 end

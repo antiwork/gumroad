@@ -361,4 +361,71 @@ describe PayoutsHelper do
       end
     end
   end
+
+  describe "get_payout_note" do
+    let(:user) { create(:singaporean_user_with_compliance_info) }
+
+    it "returns failed payment message when recent payment failed" do
+      failed_payment = create(:payment_failed, user:, failure_reason: "insufficient_funds", created_at: 1.day.ago)
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to eq("A recent payment attempt failed due to insufficient_funds. The balance has been carried over and will be included in your next payout.")
+    end
+
+    it "returns failed payment message for PayPal with formatted reason" do
+      failed_payment = create(:payment_failed, user:, processor: PayoutProcessorType::PAYPAL, failure_reason: "PAYPAL 1002: Sender has insufficient funds", created_at: 1.day.ago)
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to eq("A recent payment attempt failed due to sender has insufficient funds. The balance has been carried over and will be included in your next payout.")
+    end
+
+    it "returns failed payment message for PayPal with malformed reason" do
+      failed_payment = create(:payment_failed, user:, processor: PayoutProcessorType::PAYPAL, failure_reason: "PAYPAL 1002", created_at: 1.day.ago)
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to eq("A recent payment attempt failed due to paypal 1002. The balance has been carried over and will be included in your next payout.")
+    end
+
+    it "returns generic failed payment message when no specific reason" do
+      failed_payment = create(:payment_failed, user:, failure_reason: nil, created_at: 1.day.ago)
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to eq("A recent payment attempt failed. The balance has been carried over and will be included in your next payout.")
+    end
+
+    it "returns payout note when no recent failed payment" do
+      user.add_payout_note(content: "Payout skipped because account balance was too low")
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to eq("Payout skipped because account balance was too low")
+    end
+
+    it "returns nil when failed payment is too old" do
+      failed_payment = create(:payment_failed, user:, failure_reason: "insufficient_funds", created_at: 31.days.ago)
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil when no failed payment and no payout note" do
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to be_nil
+    end
+
+    it "prefers failed payment message over payout note" do
+      user.add_payout_note(content: "Payout skipped because account balance was too low")
+      failed_payment = create(:payment_failed, user:, failure_reason: "insufficient_funds", created_at: 1.day.ago)
+
+      result = helper.send(:get_payout_note, user)
+
+      expect(result).to eq("A recent payment attempt failed due to insufficient_funds. The balance has been carried over and will be included in your next payout.")
+    end
+  end
 end
