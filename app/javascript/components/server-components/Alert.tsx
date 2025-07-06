@@ -43,9 +43,9 @@ const Alert = ({ initial }: { initial: AlertPayload | null }) => {
     <div
       role="alert"
       className={cx(
-        "bg-filled fixed right-1/2 top-4 transform translate-x-1/2 transition-all duration-300 ease-out delay-500 z-30 px-4 py-3 rounded-lg shadow-lg border",
+        "bg-filled fixed right-1/2 top-4 transform translate-x-1/2 transition-all duration-300 ease-out delay-500 z-30 px-4 py-3 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600",
         alert?.status,
-        isVisible ? "visible translate-y-0" : "invisible -translate-y-full"
+        isVisible ? "visible translate-y-0" : "invisible -translate-y-[calc(100%+1rem)]"
       )}
       dangerouslySetInnerHTML={alert?.html ? { __html: alert.message } : undefined}
     >
