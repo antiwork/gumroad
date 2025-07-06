@@ -81,6 +81,9 @@ Lint/DuplicateElsifCondition:
 Lint/ReturnInVoidContext:
   Enabled: true
 
+Lint/UnreachableCode:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

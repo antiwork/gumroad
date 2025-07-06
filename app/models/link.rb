@@ -1431,7 +1431,6 @@ class Link < ApplicationRecord
       if variant_categories.alive.size != 1
         errors.add(:base, "Memberships should only have one Tier version category.")
         raise LinkInvalid, "Memberships should only have one Tier version category."
-        return
       end
 
       if variant_categories.alive.first.variants.alive.size == 0
