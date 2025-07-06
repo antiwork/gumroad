@@ -151,8 +151,6 @@ class InvoicePresenter::OrderInfo
           "QST ID"
         elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NOR.alpha2
           "Norway VAT Registration"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
-          "MST ID"
         else
           "VAT ID"
         end
