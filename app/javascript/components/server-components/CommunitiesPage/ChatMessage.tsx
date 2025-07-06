@@ -311,7 +311,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
       />
       <div
         className={cx("absolute bottom-0 left-0 right-0 flex justify-end gap-2 bg-white p-2 dark:bg-black", {
-          "border-t": showMoreTextIndicator,
+          "border-t border-gray-300 dark:border-gray-600": showMoreTextIndicator,
         })}
         onClick={(e) => {
           e.stopPropagation();
