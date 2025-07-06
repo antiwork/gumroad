@@ -1695,6 +1695,8 @@ class Purchase < ApplicationRecord
       mark_test_successful!
     elsif is_free_trial_purchase?
       mark_not_charged!
+    elsif is_gift_receiver_purchase?
+      mark_gift_receiver_purchase_successful!
     else
       set_succeeded_at
       increment_sellers_balance!

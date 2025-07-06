@@ -52,5 +52,35 @@ describe Purchase::CreateBundleProductPurchaseService do
 
       expect(purchase.product_purchases).to eq([bundle_product_purchase])
     end
+
+    context "when the purchase is a gift sender purchase" do
+      before do
+        purchase.update!(is_gift_sender_purchase: true)
+      end
+
+      it "creates a bundle product purchase with the correct is_gift_sender_purchase flag" do
+        described_class.new(purchase, versioned_bundle_product).perform
+
+        bundle_product_purchase = Purchase.last
+
+        expect(bundle_product_purchase.is_gift_sender_purchase).to eq(true)
+        expect(bundle_product_purchase.is_gift_receiver_purchase).to eq(false)
+      end
+    end
+
+    context "when the purchase is a gift receiver purchase" do
+      before do
+        purchase.update!(is_gift_receiver_purchase: true)
+      end
+
+      it "creates a bundle product purchase with the correct is_gift_receiver_purchase flag" do
+        described_class.new(purchase, versioned_bundle_product).perform
+
+        bundle_product_purchase = Purchase.last
+
+        expect(bundle_product_purchase.is_gift_sender_purchase).to eq(false)
+        expect(bundle_product_purchase.is_gift_receiver_purchase).to eq(true)
+      end
+    end
   end
 end
