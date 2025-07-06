@@ -291,6 +291,8 @@ Rails.application.routes.draw do
     namespace :help_center, path: "help" do
       root to: "articles#index"
 
+      get "/article/284-jobs-at-gumroad.html", to: redirect("/about", status: 301)
+
       # Custom singular `path` name for backwards compatibility with old routes
       # for SEO.
       resources :articles, only: [:index, :show], param: :slug, path: "article"
