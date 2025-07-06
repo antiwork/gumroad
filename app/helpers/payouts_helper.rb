@@ -183,10 +183,9 @@ module PayoutsHelper
   end
 
   private
-
   def get_payout_note(user)
     # First, check for recent failed payments (within last 30 days)
-    recent_failed_payment = user.payments.failed.displayable.where('created_at > ?', 30.days.ago).order(created_at: :desc).first
+    recent_failed_payment = user.payments.failed.displayable.where("created_at > ?", 30.days.ago).order(created_at: :desc).first
     last_successful_payment = user.payments.completed_or_processing.last
 
     if recent_failed_payment.present? &&
@@ -198,7 +197,7 @@ module PayoutsHelper
       if failure_reason.present?
         # Format the reason text to be user-friendly
         if recent_failed_payment.processor == PayoutProcessorType::PAYPAL
-          reason_text = failure_reason.split(': ').last || failure_reason
+          reason_text = failure_reason.split(": ").last || failure_reason
         else
           reason_text = failure_reason
         end
