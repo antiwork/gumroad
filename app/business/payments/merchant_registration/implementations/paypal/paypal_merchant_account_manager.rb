@@ -88,7 +88,6 @@ class PaypalMerchantAccountManager
       if parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
           oauth_integration["integration_type"] == "OAUTH_THIRD_PARTY" &&
           oauth_integration["integration_method"] == "PAYPAL"
-        oauth_integration["oauth_third_party"][0]["partner_client_id"] == PAYPAL_PARTNER_CLIENT_ID
         merchant_account.charge_processor_alive_at = Time.current
         merchant_account.mark_charge_processor_verified!
         MerchantRegistrationMailer.paypal_account_updated(user.id).deliver_later(queue: "default")

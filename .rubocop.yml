@@ -90,6 +90,9 @@ Lint/UnusedBlockArgument:
 Lint/UnusedMethodArgument:
   Enabled: true
 
+Lint/Void:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql
