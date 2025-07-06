@@ -8,7 +8,7 @@ class Api::Internal::AffiliatesController < Api::Internal::BaseController
   def index
     authorize DirectAffiliate
 
-    should_get_affiliate_requests = params[:should_get_affiliate_requests] == "true" ? true : false
+    should_get_affiliate_requests = params[:should_get_affiliate_requests] == "true"
     render json: AffiliatesPresenter.new(pundit_user, query: params[:query], page: paged_params[:page], sort: paged_params[:sort], should_get_affiliate_requests:).index_props
   end
 

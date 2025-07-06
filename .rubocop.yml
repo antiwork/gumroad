@@ -108,6 +108,9 @@ Style/HashEachMethods:
 Style/IdenticalConditionalBranches:
   Enabled: true
 
+Style/IfWithBooleanLiteralBranches:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

@@ -192,6 +192,6 @@ class Admin::LinksController < Admin::BaseController
     end
 
     def parse_boolean(value)
-      value == "true" ? true : false
+      value == "true"
     end
 end
