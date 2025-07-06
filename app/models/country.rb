@@ -143,8 +143,6 @@ class Country
       Currency::HKD
     when Compliance::Countries::NZL.alpha2
       Currency::NZD
-    when Compliance::Countries::SGP.alpha2
-      Currency::SGD
     when Compliance::Countries::CHE.alpha2
       Currency::CHF
     when Compliance::Countries::POL.alpha2
