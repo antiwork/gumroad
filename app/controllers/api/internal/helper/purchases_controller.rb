@@ -365,13 +365,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       end
 
       if purchase.is_original_subscription_purchase? && purchase.subscription.present?
-        if target_user
-          purchase.subscription.user = target_user
-          purchase.subscription.save
-        else
-          purchase.subscription.user = nil
-          purchase.subscription.save
-        end
+        purchase.subscription.user = (target_user || nil)
+        purchase.subscription.save
       end
 
       count += 1 if purchase.save

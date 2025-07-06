@@ -105,6 +105,9 @@ Style/EvenOdd:
 Style/HashEachMethods:
   Enabled: true
 
+Style/IdenticalConditionalBranches:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

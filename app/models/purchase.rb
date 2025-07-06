@@ -1092,18 +1092,16 @@ class Purchase < ApplicationRecord
        Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
       label = "VAT"
       label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
-      label
     elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
       label = "GST"
       label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
-      label
     else
       label = "Sales tax"
       if include_tax_rate && !was_tax_excluded_from_price
         label += " (included)"
       end
-      label
     end
+    label
   end
 
   def tax_label_with_creator_tax_info
