@@ -626,7 +626,7 @@ class Installment < ApplicationRecord
     return true if product_type? && link_id == purchase.link_id
     return true if variant_type? && purchase.variant_attributes.pluck(:id).include?(base_variant_id)
     return true if bought_products.present? && bought_products.include?(purchase.link.unique_permalink)
-    return true if bought_variants.present? && (bought_variants & purchase.variant_attributes.map(&:external_id)).present?
+    return true if bought_variants.present? && bought_variants.intersects?(purchase.variant_attributes.map(&:external_id))
 
     false
   end

@@ -66,7 +66,7 @@ class Discover::AutocompletePresenter
       searches.select do |search|
         search_words = search.downcase.split
 
-        (search_words & query_words).any? ||
+        search_words.intersects?(query_words) ||
           search_words.any? { |word| word.start_with?(query) } ||
           query.start_with?(search.downcase)
       end

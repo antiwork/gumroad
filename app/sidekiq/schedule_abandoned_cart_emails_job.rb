@@ -31,7 +31,7 @@ class ScheduleAbandonedCartEmailsJob
         next unless cart_product_ids_with_cart_ids.key?(product_id)
 
         cart_product_ids_with_cart_ids[product_id].each do |cart_id, cart_variant_ids|
-          has_matching_variants = variant_ids.empty? || (variant_ids & cart_variant_ids).any?
+          has_matching_variants = variant_ids.empty? || variant_ids.intersects?(cart_variant_ids)
           next unless has_matching_variants
 
           cart_ids_with_matched_workflow_ids_and_product_ids[cart_id] ||= {}

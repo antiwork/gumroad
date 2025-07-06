@@ -260,7 +260,7 @@ class User < ApplicationRecord
   LINK_PROPERTIES = %w[username twitter_handle bio name google_analytics_id flags
                        facebook_pixel_id skip_free_sale_analytics disable_third_party_analytics].freeze
 
-  after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }
+  after_update :clear_products_cache, if: -> (user) { User::LINK_PROPERTIES.intersects?(user.saved_changes.keys) || %w[font background_color highlight_color].intersects?(user.seller_profile&.saved_changes&.keys) }
 
   after_save :create_updated_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
   after_save :delete_old_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }

@@ -3716,7 +3716,7 @@ class Purchase < ApplicationRecord
       return true if !country_code.in?(taxable_countries) && !card_and_ip_country_are_taxable
 
       # Reset taxes if we see an election of a taxable country and our basis locations aren't in those countries - final safety measure
-      return false if country_code.in?(taxable_countries) && (ip_and_card_locations & taxable_countries).empty?
+      return false if country_code.in?(taxable_countries) && !ip_and_card_locations.intersects?(taxable_countries)
 
       # Country matched
       return true if country_code.in?(ip_and_card_locations)

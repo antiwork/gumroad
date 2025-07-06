@@ -17,7 +17,7 @@ module Workflow::AbandonedCartProducts
     query.filter_map.filter_map do |product|
       next if not_bought_products&.include?(product.unique_permalink)
 
-      has_selected_product_variant = bought_variants.present? && (bought_variants & product.alive_variants.map(&:external_id)).any?
+      has_selected_product_variant = bought_variants.present? && bought_variants.intersects?(product.alive_variants)
 
 
       if include_all_products || has_selected_product_variant || bought_products&.include?(product.unique_permalink)

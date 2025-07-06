@@ -32,7 +32,7 @@ module User::AsJson
     end
 
     def valid_api_scope?(options)
-      (%w[edit_products view_sales revenue_share ifttt view_profile] & api_scopes_options(options)).present?
+      %w[edit_products view_sales revenue_share ifttt view_profile].intersects?(api_scopes_options(options))
     end
 
     def api_scopes_options(options)

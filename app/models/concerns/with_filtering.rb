@@ -98,7 +98,7 @@ module WithFiltering
   def affiliate_passes_filters(affiliate)
     return false if created_after.present? && affiliate.created_at < created_after
     return false if created_before.present? && affiliate.created_at > created_before
-    return false if affiliate_products.present? && (affiliate_products & affiliate.products.pluck(:unique_permalink)).empty?
+    return false if affiliate_products.present? && !affiliate_products.intersects?(affiliate.products.pluck(:unique_permalink))
     true
   end
 
@@ -123,8 +123,8 @@ module WithFiltering
   def seller_post_passes_filters(email: nil, min_created_at: nil, max_created_at: nil, min_price_cents: nil, max_price_cents: nil, country: nil, ip_country: nil, product_permalinks: [], variant_external_ids: [])
     return false if created_after.present? && (min_created_at.nil? || (min_created_at.present? && min_created_at < created_after))
     return false if created_before.present? && (max_created_at.nil? || (max_created_at.present? && max_created_at > created_before))
-    excludes_product = bought_products.present? && (product_permalinks.empty? || (bought_products & product_permalinks).empty?)
-    excludes_variants = bought_variants.present? && (variant_external_ids.empty? || (bought_variants & variant_external_ids).empty?)
+    excludes_product = bought_products.present? && (product_permalinks.empty? || !bought_products.intersects?(product_permalinks))
+    excludes_variants = bought_variants.present? && (variant_external_ids.empty? || !bought_variants.intersects?(variant_external_ids))
     if bought_products.present? && bought_variants.present?
       return false if excludes_product && excludes_variants
     elsif bought_products.present?
