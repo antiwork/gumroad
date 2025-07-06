@@ -5,7 +5,7 @@ module ButtonHelper
   def navigation_button(body, url, options = {})
     disabled = options.delete(:disabled)
     color = options.delete(:color) || "accent"
-    class_names = options.delete(:class)&.split(" ") || []
+    class_names = options.delete(:class)&.split || []
     class_names += ["button", color]
 
     link_to(body, url, **options.merge(class: class_names, inert: disabled))

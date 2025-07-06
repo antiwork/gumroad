@@ -154,7 +154,7 @@ describe("Discover", js: true, type: :feature) do
         @product.__elasticsearch__.index_document
         Link.__elasticsearch__.refresh_index!
 
-        visit discover_url(host: discover_host, tags: "action,book", query: @product.name.split(" ")[0])
+        visit discover_url(host: discover_host, tags: "action,book", query: @product.name.split[0])
         wait_for_ajax
 
         expect(page).to have_product_card(count: 1)

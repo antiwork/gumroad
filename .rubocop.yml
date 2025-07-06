@@ -114,6 +114,9 @@ Style/IfWithBooleanLiteralBranches:
 Style/InverseMethods:
   Enabled: true
 
+Style/RedundantArgument:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

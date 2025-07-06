@@ -29,7 +29,7 @@ describe Exports::TaxSummary::Payable, :vcr do
     it "generates total transactions amount" do
       csv = Exports::TaxSummary::Payable.new(user: @user, year:).perform
       parsed_csv = CSV.parse(csv)
-      total_amount = @payments.values.collect(&:amount_cents).sum(0) / 100.0
+      total_amount = @payments.values.collect(&:amount_cents).sum / 100.0
       expect(parsed_csv[1][21]).to eq(total_amount.to_s)
     end
 

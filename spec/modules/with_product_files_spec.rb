@@ -543,7 +543,7 @@ describe WithProductFiles do
 
         expect(installment.product_files_archives.size).to eq(1)
         expect(installment.product_files_archives.alive.size).to eq(1)
-        expect(installment.product_files_archives.alive.first.url.split("/").last).to include(installment.name.split(" ").first)
+        expect(installment.product_files_archives.alive.first.url.split("/").last).to include(installment.name.split.first)
       end
     end
   end

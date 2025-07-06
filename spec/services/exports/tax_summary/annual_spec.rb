@@ -66,7 +66,7 @@ describe Exports::TaxSummary::Annual, :vcr do
       csv_url = described_class.new(year:).perform
       URI.open(csv_url) do |f|
         parsed_csv = CSV.parse f.read
-        total_amount = @payments.values.collect(&:amount_cents).sum(0) / 100.0
+        total_amount = @payments.values.collect(&:amount_cents).sum / 100.0
         expect(parsed_csv[1][21]).to eq(total_amount.to_s)
       end
     end

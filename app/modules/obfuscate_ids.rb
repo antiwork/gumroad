@@ -72,7 +72,7 @@ module ObfuscateIds
   #
   # Returns string that is xor of inputs
   def self.xor(binary_string_a, binary_string_b, n)
-    ((0..n - 1).map { |index| (binary_string_a[index].to_i ^ binary_string_b[index].to_i) }).join("")
+    ((0..n - 1).map { |index| (binary_string_a[index].to_i ^ binary_string_b[index].to_i) }).join
   end
 
   private_class_method :xor

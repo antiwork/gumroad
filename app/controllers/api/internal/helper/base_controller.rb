@@ -18,7 +18,7 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
         return render json: { success: false, message: "bad timestamp" }, status: :unauthorized
       end
 
-      hmac_digest = Base64.decode64(request.authorization.split(" ").last)
+      hmac_digest = Base64.decode64(request.authorization.split.last)
       expected_digest = Helper::Client.new.create_hmac_digest(params: query_params, json:)
       unless ActiveSupport::SecurityUtils.secure_compare(hmac_digest, expected_digest)
         render json: { success: false, message: "authorization is invalid" }, status: :unauthorized
@@ -26,7 +26,7 @@ class Api::Internal::Helper::BaseController < Api::Internal::BaseController
     end
 
     def authorize_helper_token!
-      token = request.authorization.split(" ").last
+      token = request.authorization.split.last
       unless ActiveSupport::SecurityUtils.secure_compare(token, GlobalConfig.get("HELPER_TOOLS_TOKEN"))
         render json: { success: false, message: "authorization is invalid" }, status: :unauthorized
       end
