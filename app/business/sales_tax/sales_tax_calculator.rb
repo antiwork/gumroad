@@ -5,7 +5,7 @@ require_relative "../../../lib/utilities/geo_ip"
 class SalesTaxCalculator
   attr_accessor :tax_rate, :product, :price_cents, :shipping_cents, :quantity, :buyer_location, :buyer_vat_id, :state, :is_us_taxable_state, :is_ca_taxable, :is_quebec
 
-  def initialize(product:, price_cents:, shipping_cents: 0, quantity: 1, buyer_location:, buyer_vat_id: nil, from_discover: false)
+  def initialize(product:, price_cents:, shipping_cents: 0, quantity: 1, buyer_location:, buyer_vat_id: nil)
     @tax_rate = nil
     @product = product
     @price_cents = price_cents

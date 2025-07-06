@@ -93,7 +93,7 @@ module ManageSubscriptionHelpers
     @subscription = @original_purchase.subscription
   end
 
-  def setup_subscription(pwyw: false, with_product_files: false, originally_subscribed_at: nil, recurrence: BasePrice::Recurrence::QUARTERLY, free_trial: false, offer_code: nil, was_product_recommended: false, discover_fee_per_thousand: nil, is_multiseat_license: false, quantity: 1, gift: nil)
+  def setup_subscription(pwyw: false, with_product_files: false, recurrence: BasePrice::Recurrence::QUARTERLY, free_trial: false, offer_code: nil, was_product_recommended: false, discover_fee_per_thousand: nil, is_multiseat_license: false, quantity: 1, gift: nil)
     shared_setup(recommendable: was_product_recommended)
     @product.update!(free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: :week) if free_trial
     @product.update!(discover_fee_per_thousand:) if discover_fee_per_thousand
@@ -107,7 +107,6 @@ module ManageSubscriptionHelpers
       tier: @original_tier,
       tier_price: @original_tier.prices.alive.find_by(recurrence:),
       pwyw:,
-      with_product_files:,
       offer_code:,
       was_product_recommended:,
       quantity:,
@@ -123,7 +122,7 @@ module ManageSubscriptionHelpers
     end
   end
 
-  def create_subscription(product_price:, tier:, tier_price:, pwyw: false, with_product_files: false, offer_code: nil, was_product_recommended: false, quantity: 1, gift: nil)
+  def create_subscription(product_price:, tier:, tier_price:, pwyw: false, offer_code: nil, was_product_recommended: false, quantity: 1, gift: nil)
     subscription = create(:subscription,
                           user: gift ? nil : @user,
                           link: @product,

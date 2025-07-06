@@ -320,7 +320,7 @@ class PaypalChargeProcessor
   end
 
   def self.create_purchase_unit_info(permalink:, item_name:, currency:, merchant_id:, descriptor:, invoice_id: nil, price_cents_usd:,
-                                shipping_cents_usd:, fee_cents_usd:, tax_cents_usd:, total_cents_usd:, quantity:)
+                                shipping_cents_usd:, fee_cents_usd:, tax_cents_usd:, quantity:)
     purchase_unit_info = {}
     purchase_unit_info[:invoice_id] = invoice_id if invoice_id
     purchase_unit_info[:product_permalink] = permalink
@@ -460,7 +460,7 @@ class PaypalChargeProcessor
   def get_chargeable_for_data(reusable_token, _payment_method_id, _fingerprint,
                               _stripe_setup_intent_id, _stripe_payment_intent_id,
                               _last4, _number_length, visual, _expiry_month, _expiry_year, _card_type,
-                              country, _zip_code = nil, merchant_account: nil)
+                              country, _zip_code = nil)
     PaypalChargeable.new(reusable_token, visual, country)
   end
 

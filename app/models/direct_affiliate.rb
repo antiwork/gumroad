@@ -41,7 +41,7 @@ class DirectAffiliate < Affiliate
     end
   end
 
-  def as_json(options = {})
+  def as_json(_options = {})
     affiliated_products = enabled_products
 
     affiliate_info.merge(

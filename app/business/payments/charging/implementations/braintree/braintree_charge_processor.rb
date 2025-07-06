@@ -37,7 +37,7 @@ class BraintreeChargeProcessor
   def get_chargeable_for_data(reusable_token, _payment_method_id, fingerprint,
                               _stripe_setup_intent_id, _stripe_payment_intent_id,
                               last4, number_length, visual, expiry_month, expiry_year,
-                              card_type, country, zip_code = nil, merchant_account: nil)
+                              card_type, country, zip_code = nil)
     BraintreeChargeableCreditCard.new(reusable_token, fingerprint, last4, number_length, visual, expiry_month, expiry_year, card_type, country, zip_code)
   end
 
@@ -64,7 +64,7 @@ class BraintreeChargeProcessor
   end
 
   def create_payment_intent_or_charge!(merchant_account, chargeable, amount_cents, _amount_for_gumroad_cents, reference,
-                                       description, metadata: nil,
+                                       description,
                                        statement_description: nil, **_args)
     params = {
       merchant_account_id: merchant_account.charge_processor_merchant_id,

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module DiscoverCuratedProducts
-  def taxonomies_for_nav(recommended_products: nil)
+  def taxonomies_for_nav
     Discover::TaxonomyPresenter.new.taxonomies_for_nav(recommended_products: curated_products.map(&:product))
   end
 

@@ -117,7 +117,7 @@ module PdfStampingService::Stamp
       raise Error, "Error generating stamped PDF: #{error_message}"
     end
 
-    def parse_error_message(stdout, stderr)
+    def parse_error_message(_stdout, stderr)
       if stderr.include?("unknown.encryption.type")
         "PDF is encrypted."
       else

@@ -7,7 +7,7 @@
 # https://github.com/taskrabbit/makara/blob/dac6be2e01e0511db6715b2b4da65a5490e01cba/README.md#releasing-stuck-connections-clearing-context
 
 class SidekiqMakaraResetContextMiddleware
-  def call(worker, job, queue)
+  def call(_worker, _job, _queue)
     Makara::Context.release_all
     yield
   end

@@ -57,7 +57,7 @@ class Integration < ApplicationRecord
     true
   end
 
-  def same_connection?(integration)
+  def same_connection?(_integration)
     false
   end
 

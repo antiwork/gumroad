@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Events
-  def create_user_event(name, seller_id: nil, on_custom_domain: false)
+  def create_user_event(name, on_custom_domain: false)
     return if name.nil?
 
     create_event(

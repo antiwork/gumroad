@@ -27,7 +27,7 @@ class SentEmailInfo < ApplicationRecord
     key_exists?(digest)
   end
 
-  def self.ensure_mailer_uniqueness(mailer_class, mailer_method, *args, &block)
+  def self.ensure_mailer_uniqueness(mailer_class, mailer_method, *args)
     digest = mailer_key_digest(mailer_class, mailer_method, *args)
     if !key_exists?(digest) && set_key!(digest)
       yield

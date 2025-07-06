@@ -38,7 +38,7 @@ class Upsell < ApplicationRecord
   scope :upsell, -> { where(cross_sell: false) }
   scope :cross_sell, -> { where(cross_sell: true) }
 
-  def as_json(options = {})
+  def as_json(_options = {})
     {
       id: external_id,
       name:,

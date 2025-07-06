@@ -87,6 +87,9 @@ Lint/UnreachableCode:
 Lint/UnusedBlockArgument:
   Enabled: true
 
+Lint/UnusedMethodArgument:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

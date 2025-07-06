@@ -77,7 +77,7 @@ class Payouts
     self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: true, add_comment: true)
   end
 
-  def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, retrying: false, bank_account_type: nil, from_admin: false)
+  def self.create_payments_for_balances_up_to_date_for_users(date, processor_type, users, perform_async: false, from_admin: false)
     raise ArgumentError.new("Cannot payout for today or future balances.") if date >= Date.current
 
     user_ids_to_pay = []

@@ -87,7 +87,7 @@ class ServiceCharge < ApplicationRecord
   scope :created_after, ->(start_at = nil) { start_at ? where("service_charges.created_at > ?", start_at) : all }
   scope :created_before, ->(end_at = nil) { end_at ? where("service_charges.created_at < ?", end_at) : all }
 
-  def as_json(options = {})
+  def as_json(_options = {})
     {
       id: external_id,
       user_id: user.external_id,

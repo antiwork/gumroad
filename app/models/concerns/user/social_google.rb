@@ -45,7 +45,7 @@ module User::SocialGoogle
           user = User.new
           user.provider = :google_oauth2
           user.password = Devise.friendly_token[0, 20]
-          query_google(user, data, new_user: true)
+          query_google(user, data)
 
           if user.email.present?
             Purchase.where(email: user.email, purchaser_id: nil).each do |past_purchase|
@@ -66,7 +66,7 @@ module User::SocialGoogle
       nil
     end
 
-    def query_google(user, data, new_user: false)
+    def query_google(user, data)
       return if data.blank? || data.is_a?(String)
 
       email = data["info"]["email"] || data["extra"]["raw_info"]["email"]

@@ -64,7 +64,7 @@ class Admin::BaseController < ApplicationController
       MerchantAccount.stripe.find_by(charge_processor_merchant_id: identifier)&.user
     end
 
-    def user_not_authorized(exception)
+    def user_not_authorized(_exception)
       message = "You are not allowed to perform this action."
       if request.format.json? || request.format.js?
         render json: { success: false, error: message }, status: :unauthorized

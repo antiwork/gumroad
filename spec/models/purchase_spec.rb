@@ -1767,7 +1767,7 @@ describe Purchase, :vcr do
   end
 
   describe "tier fee" do
-    def create_purchase(is_merchant: false, charge_discover_fee: false, price_cents: 0, discover_fee_per_thousand: nil)
+    def create_purchase(is_merchant: false, charge_discover_fee: false, discover_fee_per_thousand: nil)
       creator = create(:user)
 
       allow_any_instance_of(User).to receive(:recommendations_enabled?).and_return(charge_discover_fee)
