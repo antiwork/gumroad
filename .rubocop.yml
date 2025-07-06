@@ -72,6 +72,12 @@ Layout/SpaceInsideArrayLiteralBrackets:
 Layout/SpaceInsideArrayPercentLiteral:
   Enabled: true
 
+Lint/DuplicateCaseCondition:
+  Enabled: true
+
+Lint/DuplicateElsifCondition:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql
