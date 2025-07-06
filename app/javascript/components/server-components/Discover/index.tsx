@@ -14,7 +14,6 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
-import { Footer } from "$app/components/Home/Footer";
 import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
@@ -309,7 +308,6 @@ const Discover = (props: Props) => {
           />
         ) : null}
       </div>
-      <Footer />
     </Layout>
   );
 };
