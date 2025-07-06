@@ -46,7 +46,7 @@ describe ProductRefundPolicy do
 
     context "max_refund_period_in_days validation" do
       it "is valid with allowed refund period values" do
-        RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.each do |days|
+        RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.each_key do |days|
           refund_policy.max_refund_period_in_days = days
           expect(refund_policy.valid?).to be true
         end

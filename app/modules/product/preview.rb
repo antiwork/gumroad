@@ -13,7 +13,7 @@ module Product::Preview
     scope :with_asset_preview, -> { joins(:asset_previews).where("asset_previews.deleted_at IS NULL") }
   end
 
-  FILE_REGEX.each do |type, _ext|
+  FILE_REGEX.each_key do |type|
     define_method("preview_#{type}_path?") do
       main_preview.present? && ((main_preview.file.attached? && main_preview.file.public_send(:"#{ type }?")) || (type == "image" && main_preview.unsplash_url.present?))
     end

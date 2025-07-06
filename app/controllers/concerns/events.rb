@@ -98,7 +98,7 @@ module Events
         view_url: params[:view_url] || request.env["PATH_INFO"],
         was_product_recommended: params[:was_product_recommended]
       }.merge(args)
-      event_params.keys.each do |param|
+      event_params.each_key do |param|
         event_params.delete(param) unless event.respond_to?("#{param}=")
       end
       event.attributes = event_params

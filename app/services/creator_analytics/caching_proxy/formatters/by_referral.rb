@@ -73,7 +73,7 @@ module CreatorAnalytics::CachingProxy::Formatters::ByReferral
     data[:dates_and_months].each.with_index do |date_data, index|
       %i[views sales totals].each do |type|
         permalinks.each do |permalink|
-          (data[:by_referral][type][permalink] || {}).keys.each do |referrer|
+          (data[:by_referral][type][permalink] || {}).each_key do |referrer|
             new_data[:by_referral][type][permalink][referrer][date_data[:month_index]] += data[:by_referral][type][permalink][referrer][index]
           end
         end

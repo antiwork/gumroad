@@ -34,7 +34,7 @@ class CreatorAnalytics::Web
     usa = "United States"
 
     %i[views sales totals].each do |type|
-      product_permalinks.each do |_product_id, product_permalink|
+      product_permalinks.each_value do |product_permalink|
         result[:by_state][type][product_permalink] = { usa => [0] * STATES_SUPPORTED_BY_ANALYTICS.size }
       end
     end

@@ -21,7 +21,7 @@ class SellerProfileSection < ApplicationRecord
         @__json_schema ||= JSON.parse(File.read(Rails.root.join("lib", "json_schemas", "#{subclass.name.underscore}.json").to_s))
       end
 
-      subclass.json_schema["properties"].keys.each do |key|
+      subclass.json_schema["properties"].each_key do |key|
         subclass.define_method key do
           json_data[key]
         end

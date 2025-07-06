@@ -47,7 +47,7 @@ class UtmLinkSaleAttributionJob
       qualified_purchases.each { purchase_attribution_map[_1.id] ||= { visit:, purchase: _1 } }
     end
 
-    purchase_attribution_map.each do |_purchase_id, info|
+    purchase_attribution_map.each_value do |info|
       purchase = info.fetch(:purchase)
       visit = info.fetch(:visit)
       utm_link = visit.utm_link

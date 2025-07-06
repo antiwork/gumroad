@@ -2,7 +2,7 @@
 
 class Mongoer
   def self.substitute_keys(hash)
-    hash.keys.each do |key|
+    hash.each_key do |key|
       if hash[key].is_a? Hash
         substitute_keys(hash[key])
       elsif hash[key].is_a? Array

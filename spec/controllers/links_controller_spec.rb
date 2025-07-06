@@ -4272,7 +4272,7 @@ describe LinksController, :vcr do
           2.times { create(:purchase, link: products[:meh]) }
           create(:purchase, link: products[:unpopular])
           index_model_records(Purchase)
-          products.each do |_key, product|
+          products.each_value do |product|
             allow(product).to receive(:reviews_count).and_return(1)
             product.__elasticsearch__.index_document
             allow(product).to receive(:reviews_count).and_call_original
@@ -4309,7 +4309,7 @@ describe LinksController, :vcr do
           }
           @products[:tagged].tag!("North American")
           @products[:tagged].tag!("common")
-          @products.each do |_key, product|
+          @products.each_value do |product|
             expect(product).to receive(:recommendable?).at_least(:once).and_return(true)
             allow(product).to receive(:reviews_count).and_return(1)
             product.__elasticsearch__.index_document

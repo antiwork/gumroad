@@ -3921,7 +3921,7 @@ describe Link, :vcr do
     # to prevent issues like https://github.com/gumroad/web/issues/15021
     # when ours and Money's subunit treatment are diverging
 
-    CURRENCY_CHOICES.keys.each do |currency_type|
+    CURRENCY_CHOICES.each_key do |currency_type|
       it "formats #{currency_type.to_s.upcase} currency properly" do
         link = create(:product, price_currency_type: currency_type, price_cents: CURRENCY_CHOICES[currency_type][:min_price] * 10)
 

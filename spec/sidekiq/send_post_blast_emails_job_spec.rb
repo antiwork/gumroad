@@ -270,7 +270,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
         end.not_to change { UrlRedirect.count }
 
         expect_sent_count 4
-        PostSendgridApi.mails.each do |email, _|
+        PostSendgridApi.mails.each_key do |email|
           expect_sent_email email, content_not_match: [
             /View content/,
           ]

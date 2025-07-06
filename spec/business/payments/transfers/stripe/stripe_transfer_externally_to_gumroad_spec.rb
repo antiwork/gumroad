@@ -18,7 +18,7 @@ describe StripeTransferExternallyToGumroad, :vcr do
       it "returns a hash of currencies to balances in cents" do
         expect(available_balances).to be_a(Hash)
         expect(available_balances.keys).to include("usd")
-        available_balances.each do |_currency, balance_cents|
+        available_balances.each_value do |balance_cents|
           expect(balance_cents).to be_a(Integer)
         end
       end

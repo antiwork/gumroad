@@ -82,7 +82,7 @@ class SendPostBlastEmailsJob
       return if purchase_ids.empty?
 
       purchases = Purchase.joins(:link).where(id: purchase_ids).select(:id, :link_id, :json_data, :subscription_id, "links.name as product_name").index_by(&:id)
-      members_with_specifics.each do |_member, specifics|
+      members_with_specifics.each_value do |specifics|
         purchase_id = specifics[:purchase]&.id
         next if purchase_id.nil?
         purchase = purchases[purchase_id]
@@ -100,7 +100,7 @@ class SendPostBlastEmailsJob
       # Fetch url_redirect for this post * non-purchases.
       # Because all followers and affiliates will end up seeing the same page, we only need to create one record.
       if post_has_files?
-        members_with_specifics.each do |_member, specifics|
+        members_with_specifics.each_value do |specifics|
           next if specifics.key?(:purchase)
           @url_redirect_for_non_purchasers ||= UrlRedirect.find_or_create_by!(installment_id: @post.id, purchase_id: nil, subscription_id: nil, link_id: nil)
           specifics[:url_redirect] = @url_redirect_for_non_purchasers

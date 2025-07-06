@@ -132,7 +132,7 @@ class Product::VariantCategoryUpdaterService
           end
 
           # error if "pay what you want" enabled but suggested price is too low
-          variant[:recurrence_price_values].each do |_recurrence, price_info|
+          variant[:recurrence_price_values].each_value do |price_info|
             if price_info[:suggested_price_cents].present? && (price_info[:price_cents].to_i > price_info[:suggested_price_cents].to_i)
               errors.add(:base, "The suggested price you entered was too low.")
               raise Link::LinkInvalid, "The suggested price you entered was too low."

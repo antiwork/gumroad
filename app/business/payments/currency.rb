@@ -3,7 +3,7 @@
 module Currency
   # These currencies can be used as account's default currency and to set product prices,
   # along with creating Stripe Connect accounts and making payouts.
-  CURRENCY_CHOICES.each do |currency_type, _currency_hash|
+  CURRENCY_CHOICES.each_key do |currency_type|
     const_set(currency_type.upcase, currency_type.downcase)
   end
 

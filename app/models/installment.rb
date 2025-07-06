@@ -659,7 +659,7 @@ class Installment < ApplicationRecord
     return {} if summary.blank?
 
     # Change urls back into human-readable format (Necessary because Mongo keys cannot contain ".") Also remove leading protocol & www
-    summary.urls.keys.each { |k| summary.urls[k.gsub(/&#46;/, ".").sub(%r{^https?://}, "").sub(/^www./, "")] = summary.urls.delete(k) }
+    summary.urls.each_key { |k| summary.urls[k.gsub(/&#46;/, ".").sub(%r{^https?://}, "").sub(/^www./, "")] = summary.urls.delete(k) }
     Hash[summary.urls.sort_by { |_, v| v }.reverse] # Sort by number of clicks.
   end
 

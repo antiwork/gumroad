@@ -37,7 +37,7 @@ class EmailEventInfo
       MailerInfo::EMAIL_PROVIDER_RESEND => "email.complained"
     }
   }.freeze
-  EVENTS.keys.each do |event_type|
+  EVENTS.each_key do |event_type|
     const_set("EVENT_#{event_type.upcase}", event_type)
   end
 

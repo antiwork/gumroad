@@ -27,7 +27,7 @@ class ProductReviewStat < ApplicationRecord
     # Increment ratings with the largest remainder so the total percentage is 100
     remainders = percentages.map { |rating, percentage| [percentage % 1, rating] }.sort.reverse
     threshold = remainders.sum(&:first).round
-    remainders[0...threshold].each { |_, rating| percentages[rating] += 1 }
+    remainders[0...threshold].each_value { |rating| percentages[rating] += 1 }
 
     percentages.transform_values(&:floor)
   end

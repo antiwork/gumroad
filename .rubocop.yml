@@ -102,6 +102,9 @@ Style/ConditionalAssignment:
 Style/EvenOdd:
   Enabled: true
 
+Style/HashEachMethods:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql
