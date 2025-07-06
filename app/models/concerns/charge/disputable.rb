@@ -30,7 +30,7 @@ module Charge::Disputable
 
         selected_purchases ||= disputed_purchases
 
-        selected_purchases.sort_by(&:total_transaction_cents).last
+        selected_purchases.max_by(&:total_transaction_cents)
       else
         disputed_purchases.first
       end

@@ -31,7 +31,7 @@ class PayoutUsersService
       payout_period_end_date = date
       if payout_type == Payouts::PAYOUT_TYPE_INSTANT
         instantly_payable_balances = user.instantly_payable_unpaid_balances_up_to_date(date)
-        payout_period_end_date = instantly_payable_balances.sort_by(&:date).last.date.to_s
+        payout_period_end_date = instantly_payable_balances.max_by(&:date).date.to_s
       end
 
       payment, payment_errors = Payouts.create_payment(payout_period_end_date, processor_type, user, payout_type:)
