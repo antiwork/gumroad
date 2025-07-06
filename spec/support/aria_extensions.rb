@@ -19,7 +19,7 @@ end
 # capybara_accessible_selectors does have an implementation for this, but it doesn't use XPath,
 # so combining it into :command would be very difficult
 Capybara.add_selector(:menuitem, locator_type: [String, Symbol]) do
-  xpath do |locator, **options|
+  xpath do |locator, **_options|
     xpath = XPath.descendant[XPath.attr(:role).equals("menuitem")]
 
     unless locator.nil?
@@ -123,7 +123,7 @@ Capybara.add_selector(:image, locator_type: [String, Symbol]) do
 end
 
 Capybara.add_selector(:tablist, locator_type: [String, Symbol]) do
-  xpath do |locator, **options|
+  xpath do |locator, **_options|
     xpath = XPath.descendant[XPath.attr(:role) == "tablist"]
     xpath = xpath[XPath.attr(:"aria-label").is(locator)] if locator
     xpath
@@ -278,7 +278,7 @@ RSpec::Matchers.define :have_table_rows_in_order do |expected_rows|
     all_table_rows = actual.all(:table_row)
     actual_row_positions = []
 
-    expected_rows.each_with_index do |row_data, index|
+    expected_rows.each_with_index do |row_data, _index|
       # `#find` fails the assertion if the row is not found, thus we do not
       # need to handle this error in our own `failure_message` implementation.
       found_row = actual.find(:table_row, row_data)
@@ -301,7 +301,7 @@ RSpec::Matchers.define :have_table_rows_in_order do |expected_rows|
     true
   end
 
-  failure_message do |actual|
+  failure_message do |_actual|
     first_index, second_index = @out_of_order_indices
     first_row = expected_rows[first_index]
     second_row = expected_rows[second_index]

@@ -40,7 +40,7 @@ describe "Admin::LinksController Scenario", type: :feature, js: true do
       let(:purchase_count) { 25 }
 
       before do
-        purchase_count.times.map do |n|
+        purchase_count.times.map do |_n|
           create(:purchase, price_cents: 299, link: product)
         end
       end

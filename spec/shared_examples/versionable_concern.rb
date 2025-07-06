@@ -25,7 +25,7 @@ RSpec.shared_examples_for "Versionable concern" do |factory_name, options|
       expect(version_one.class).to eq(Versionable::VersionInfoStruct)
       expect(version_one.created_at).to be_present
       expect(HashWithIndifferentAccess.new(version_one.changes)).to eq(
-        HashWithIndifferentAccess.new(options.select { |field, values| values.size == 2 })
+        HashWithIndifferentAccess.new(options.select { |_field, values| values.size == 2 })
       )
       expect(version_two.changes.keys).to eq(fields.map(&:to_s))
     end

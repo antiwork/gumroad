@@ -184,7 +184,7 @@ module StripeMerchantAccountManager
     # Always request the capabilities assigned at account creation, plus any additional capabilities that the account already has (such as tax reporting
     # capability that we request "manually" for some accounts during tax season).
     capabilities = capabilities.map(&:to_sym) | stripe_account.capabilities.keys
-    diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
+    diff_attributes[:capabilities] = capabilities.index_with { |_capability| { requested: true } }
 
     Stripe::Account.update(stripe_account.id, diff_attributes)
 

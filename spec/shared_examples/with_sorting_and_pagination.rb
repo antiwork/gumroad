@@ -124,7 +124,7 @@ RSpec.shared_context "with products and memberships" do |archived: false|
 
   before do
     membership3.tier_category.variants.each do |tier|
-      recurrence_values = BasePrice::Recurrence.all.index_with do |recurrence_key|
+      recurrence_values = BasePrice::Recurrence.all.index_with do |_recurrence_key|
         {
           enabled: true,
           price: "8",

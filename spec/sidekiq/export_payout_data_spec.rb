@@ -107,7 +107,7 @@ describe ExportPayoutData do
         mail_double = instance_double(ActionMailer::MessageDelivery)
         expect(mail_double).to receive(:deliver_now)
 
-        expect(ContactingCreatorMailer).to receive(:payout_data) do |filename, extension, tempfile, recipient_id|
+        expect(ContactingCreatorMailer).to receive(:payout_data) do |filename, extension, tempfile, _recipient_id|
           expect(filename).to eq("Payouts.zip")
           expect(extension).to eq("zip")
           expect(tempfile.size).not_to eq(0)

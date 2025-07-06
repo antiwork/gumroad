@@ -339,7 +339,7 @@ class User < ApplicationRecord
     state :tier_3, value: TIER_3
     state :tier_4, value: TIER_4
 
-    before_transition any => any, do: -> (user, transition) do
+    before_transition any => any, do: -> (_user, transition) do
       new_tier = transition.args.first
       return unless new_tier
       raise ArgumentError, "first transition argument must be a valid tier" unless User::TIER_RANGES.has_value?(new_tier)

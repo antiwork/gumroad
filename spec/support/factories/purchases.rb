@@ -155,7 +155,7 @@ FactoryBot.define do
         purchase.variant_attributes = evaluator.tier.present? ? [evaluator.tier] : purchase.tiers
       end
 
-      after(:create) do |purchase, evaluator|
+      after(:create) do |purchase, _evaluator|
         purchase.subscription ||= create(:subscription, link: purchase.link)
         purchase.save!
       end
@@ -169,11 +169,11 @@ FactoryBot.define do
       purchase_state { "not_charged" }
       succeeded_at { nil }
 
-      before(:create) do |purchase, evaluator|
+      before(:create) do |purchase, _evaluator|
         purchase.variant_attributes = purchase.tiers
       end
 
-      after(:create) do |purchase, evaluator|
+      after(:create) do |purchase, _evaluator|
         purchase.subscription ||= create(:subscription, link: purchase.link, user: purchase.purchaser, free_trial_ends_at: Time.current + purchase.link.free_trial_duration)
         purchase.variant_attributes = purchase.tiers
         purchase.save!
@@ -205,7 +205,7 @@ FactoryBot.define do
         purchase.set_price_and_rate
       end
 
-      after(:create) do |purchase, evaluator|
+      after(:create) do |purchase, _evaluator|
         purchase.subscription ||= create(:subscription, link: purchase.link, is_installment_plan: true, user: purchase.purchaser)
         purchase.save!
       end

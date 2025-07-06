@@ -102,7 +102,7 @@ describe DiscoverController do
       let(:total_products) { Link::RECOMMENDED_PRODUCTS_PER_PAGE + 2 }
 
       before do
-        total_products.times do |i|
+        total_products.times do |_i|
           product = create(:product, :recommendable)
           product.tag!("3d models")
         end

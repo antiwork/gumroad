@@ -38,7 +38,7 @@ describe("Followers", js: true, type: :feature) do
       create(:follower, user: create(:user), followed_id: seller.id, follower_user_id: create(:user).id, source: Follower::From::PROFILE_PAGE, created_at: Date.today, deleted_at: Date.today)
       @follower_without_source = create(:follower, user: create(:user), followed_id: seller.id, follower_user_id: create(:user).id, email: "test_nosource@example.com", created_at: Date.today, confirmed_at: Date.yesterday)
       @follower_without_source2 = create(:follower, user: create(:user), followed_id: seller.id, follower_user_id: create(:user).id, email: "test_nosource2@example.com", created_at: Date.today, confirmed_at: Date.yesterday)
-      @page_limit.times { |x| create(:follower, user: create(:user), followed_id: seller.id, follower_user_id: create(:user).id, source: Follower::From::PROFILE_PAGE, created_at: 1.week.ago, confirmed_at: Date.today) }
+      @page_limit.times { |_x| create(:follower, user: create(:user), followed_id: seller.id, follower_user_id: create(:user).id, source: Follower::From::PROFILE_PAGE, created_at: 1.week.ago, confirmed_at: Date.today) }
       visit followers_path
     end
 

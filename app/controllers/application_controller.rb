@@ -345,7 +345,7 @@ class ApplicationController < ActionController::Base
       end
 
       stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-      if (StripeMerchantAccountManager::REQUESTED_CAPABILITIES & stripe_account.capabilities.to_h.stringify_keys.select { |k, v| v == "active" }.keys).size == 2
+      if (StripeMerchantAccountManager::REQUESTED_CAPABILITIES & stripe_account.capabilities.to_h.stringify_keys.select { |_k, v| v == "active" }.keys).size == 2
         $redis.srem(RedisKey.user_ids_with_payment_requirements_key, current_seller.id)
       else
         redirect_to settings_payments_path, notice: "Urgent: We are required to collect more information from you to continue processing payments." and return

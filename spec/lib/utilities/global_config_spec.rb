@@ -23,7 +23,7 @@ RSpec.describe GlobalConfig do
       end
 
       it "falls back to Rails credentials" do
-        allow(ENV).to receive(:fetch).with("CREDENTIAL_KEY", anything) do |name, fallback|
+        allow(ENV).to receive(:fetch).with("CREDENTIAL_KEY", anything) do |_name, fallback|
           fallback
         end
         # Mock the private method that accesses Rails credentials
@@ -32,7 +32,7 @@ RSpec.describe GlobalConfig do
       end
 
       it "falls back to Rails credentials for multi-level keys with __ separator" do
-        allow(ENV).to receive(:fetch).with("HELLO_WORLD__FOO_BAR", anything) do |name, fallback|
+        allow(ENV).to receive(:fetch).with("HELLO_WORLD__FOO_BAR", anything) do |_name, fallback|
           fallback
         end
         # Mock the private method that accesses Rails credentials
@@ -94,7 +94,7 @@ RSpec.describe GlobalConfig do
       end
 
       it "falls back to Rails credentials for nested keys" do
-        allow(ENV).to receive(:fetch).with("PART1__PART2__PART3", anything) do |name, fallback|
+        allow(ENV).to receive(:fetch).with("PART1__PART2__PART3", anything) do |_name, fallback|
           fallback
         end
         # Mock the private method that accesses Rails credentials

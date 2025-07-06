@@ -32,7 +32,7 @@ module Product::Caching
 
   def self.scoped_cache_keys(products, displayed_switch_ids_for_products, locale, fragmented = false)
     scoped_keys = []
-    cache_key_prefixes(products).each_with_index do |(key, prefix), i|
+    cache_key_prefixes(products).each_with_index do |(_key, prefix), i|
       scoped_keys.push products[i].scoped_cache_key(locale, fragmented, displayed_switch_ids_for_products[i], prefix)
     end
     scoped_keys

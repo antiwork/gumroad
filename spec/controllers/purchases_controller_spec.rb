@@ -1601,7 +1601,7 @@ describe PurchasesController, :vcr do
         s3_obj_double = double
         allow(s3_obj_double).to receive(:presigned_url).and_return(@s3_obj_public_url)
 
-        allow_any_instance_of(Purchase).to receive(:upload_invoice_pdf) do |purchase, pdf|
+        allow_any_instance_of(Purchase).to receive(:upload_invoice_pdf) do |_purchase, pdf|
           @generated_pdf = pdf
           s3_obj_double
         end

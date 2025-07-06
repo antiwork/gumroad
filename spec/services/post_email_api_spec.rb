@@ -16,7 +16,7 @@ describe PostEmailApi do
         allow(Feature).to receive(:inactive?).with(:use_resend_for_post_emails, seller).and_return(false)
 
         # Email via Resend for the first 4 recipients, SendGrid for the rest
-        allow(MailerInfo::Router).to receive(:determine_email_provider) do |domain|
+        allow(MailerInfo::Router).to receive(:determine_email_provider) do |_domain|
           @call_count ||= 0
           @call_count += 1
           @call_count <= 4 ? MailerInfo::EMAIL_PROVIDER_RESEND : MailerInfo::EMAIL_PROVIDER_SENDGRID

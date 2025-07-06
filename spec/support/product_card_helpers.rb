@@ -12,7 +12,7 @@ module ProductCardHelpers
 
   def expect_product_cards_with_names(*product_names)
     expect(page).to have_product_card(count: product_names.length)
-    product_names.each_with_index { |product_name, index| expect(page).to have_selector(".product-card", text: product_name) }
+    product_names.each_with_index { |product_name, _index| expect(page).to have_selector(".product-card", text: product_name) }
   end
 end
 

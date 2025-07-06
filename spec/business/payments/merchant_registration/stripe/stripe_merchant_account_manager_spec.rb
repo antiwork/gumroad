@@ -8601,7 +8601,7 @@ describe StripeMerchantAccountManager, :vcr do
             tos_agreement_id: tos_agreement.external_id
           },
           tos_acceptance: { date: 1427846400, ip: "54.234.242.13" },
-          capabilities: StripeMerchantAccountManager::REQUESTED_CAPABILITIES.map(&:to_sym).index_with { |capability| { requested: true } }
+          capabilities: StripeMerchantAccountManager::REQUESTED_CAPABILITIES.map(&:to_sym).index_with { |_capability| { requested: true } }
         }
       end
 
@@ -8664,7 +8664,7 @@ describe StripeMerchantAccountManager, :vcr do
             tos_agreement_id: tos_agreement.external_id
           },
           tos_acceptance: { date: 1427846400, ip: "54.234.242.13", service_agreement: "recipient" },
-          capabilities: StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES.map(&:to_sym).index_with { |capability| { requested: true } }
+          capabilities: StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES.map(&:to_sym).index_with { |_capability| { requested: true } }
         }
       end
 

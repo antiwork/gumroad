@@ -123,7 +123,7 @@ class Product::VariantCategoryUpdaterService
     def validate_variant_recurrences!(variants)
       return unless is_tiered_membership && has_variant_recurrences?
 
-      variants.each_with_index do |variant, index|
+      variants.each_with_index do |variant, _index|
         if variant[:customizable_price]
           # error if "pay what you want" enabled but missing recurrence_price_values
           if !variant[:recurrence_price_values].present?
@@ -132,7 +132,7 @@ class Product::VariantCategoryUpdaterService
           end
 
           # error if "pay what you want" enabled but suggested price is too low
-          variant[:recurrence_price_values].each do |recurrence, price_info|
+          variant[:recurrence_price_values].each do |_recurrence, price_info|
             if price_info[:suggested_price_cents].present? && (price_info[:price_cents].to_i > price_info[:suggested_price_cents].to_i)
               errors.add(:base, "The suggested price you entered was too low.")
               raise Link::LinkInvalid, "The suggested price you entered was too low."
@@ -154,7 +154,7 @@ class Product::VariantCategoryUpdaterService
       # 1. Extract variant recurrence selections:
       # Ex. [["monthly", "yearly"], ["monthly"]]
       enabled_recurrences_for_variants = variants.map do |variant|
-        variant[:recurrence_price_values].select { |k, v| v[:enabled] }.keys.sort
+        variant[:recurrence_price_values].select { |_k, v| v[:enabled] }.keys.sort
       end
       # 2. Ensure that they match
       # Ex. ["monthly", "yearly"] != ["monthly"] raises error

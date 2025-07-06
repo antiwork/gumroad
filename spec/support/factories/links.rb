@@ -272,7 +272,7 @@ My email is test@gmail.com <i>Reach out and say hi!</i>
           first_tier = tier_category.variants.first
           first_tier.update!(name: "First Tier", customizable_price: true)
           second_tier = create(:variant, variant_category: tier_category, name: "Second Tier")
-          recurrence_values = BasePrice::Recurrence.all.index_with do |recurrence_key|
+          recurrence_values = BasePrice::Recurrence.all.index_with do |_recurrence_key|
             {
               enabled: true,
               price: "500",

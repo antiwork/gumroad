@@ -416,7 +416,7 @@ describe Purchase::Blockable do
 
       context "when number of failed purchases exceeds the threshold" do
         before do
-          9.times do |n|
+          9.times do |_n|
             create(:failed_purchase, link: @product)
           end
           @purchase = create(:purchase, link: @product, purchase_state: "in_progress")
@@ -487,7 +487,7 @@ describe Purchase::Blockable do
 
         context "when all recent purchases were failed" do
           before do
-            2.times do |n|
+            2.times do |_n|
               create(:purchase, link: @product, purchase_state: "in_progress").mark_failed!
             end
 
@@ -508,7 +508,7 @@ describe Purchase::Blockable do
 
         context "when recent purchases fail with an error code from IGNORED_ERROR_CODES list" do
           before do
-            2.times do |n|
+            2.times do |_n|
               create(:purchase, link: @product, purchase_state: "in_progress", error_code: PurchaseErrorCode::PERCEIVED_PRICE_CENTS_NOT_MATCHING).mark_failed!
             end
 

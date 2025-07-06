@@ -83,7 +83,7 @@ class ShippingDestination < ApplicationRecord
       end
     else
       Destinations.shipping_countries.slice(country_code)
-    end.reject { |code, country| Compliance::Countries.blocked?(code) }
+    end.reject { |code, _country| Compliance::Countries.blocked?(code) }
   end
 
   private

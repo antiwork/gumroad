@@ -114,12 +114,12 @@ Rpush.reflect do |on|
 
   # Called when an SSL certificate will expire within 1 month.
   # Implement on.error to catch errors raised when the certificate expires.
-  on.ssl_certificate_will_expire do |app, expiration_time|
+  on.ssl_certificate_will_expire do |_app, expiration_time|
     Bugsnag.notify(StandardError.new("App Certificate is about to expire soon #{expiration_time}"))
   end
 
   # Called when an SSL certificate has been revoked.
-  on.ssl_certificate_revoked do |app, error|
+  on.ssl_certificate_revoked do |_app, error|
     Bugsnag.notify(StandardError.new("App Certificate has been revoked #{error}"))
   end
 

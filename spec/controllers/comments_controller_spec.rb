@@ -56,14 +56,14 @@ describe CommentsController do
     end
   end
 
-  shared_examples_for "not_found update request" do |http_status, error|
+  shared_examples_for "not_found update request" do |_http_status, _error|
     it_behaves_like "erroneous update request" do
       let(:http_status) { :not_found }
       let(:error_message) { "Not found" }
     end
   end
 
-  shared_examples_for "unauthorized update request" do |http_status, error|
+  shared_examples_for "unauthorized update request" do |_http_status, _error|
     it_behaves_like "erroneous update request" do
       let(:http_status) { :unauthorized }
     end
