@@ -94,7 +94,7 @@ module S3Retrievable
       define_method(:s3_display_name) do
         return unless s3?
 
-        if s3_extension.length > 0
+        if !s3_extension.empty?
           s3_filename[0...-s3_extension.length]
         else
           s3_filename

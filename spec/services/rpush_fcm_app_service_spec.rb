@@ -16,7 +16,7 @@ describe RpushFcmAppService do
     context "when the record exists" do
       it "returns the record" do
         app = described_class.new(name: app_name).first_or_create!
-        expect(Rpush::Fcm::App.where(name: app_name).size > 0).to be(true)
+        expect(!Rpush::Fcm::App.where(name: app_name).empty?).to be(true)
 
         expect do
           fetched_app = described_class.new(name: app_name).first_or_create!

@@ -27,7 +27,7 @@ module Variant::Prices
 
   def set_customizable_price
     return unless link && link.is_tiered_membership
-    return if prices.alive.length == 0 || prices.alive.where("price_cents > 0").exists?
+    return if prices.alive.empty? || prices.alive.where("price_cents > 0").exists?
     update_column(:customizable_price, true)
   end
 

@@ -271,7 +271,7 @@ class ProductPresenter
     def rich_content_pages
       variants = @product.alive_variants.includes(:alive_rich_contents, variant_category: { link: :user })
 
-      if refer_to_product_level_rich_content?(has_variants: variants.size > 0)
+      if refer_to_product_level_rich_content?(has_variants: !variants.empty?)
         product.rich_content_json
       else
         variants.flat_map(&:rich_content_json)

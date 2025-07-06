@@ -25,7 +25,7 @@ class RecommendedProductsService
   )
     case model
     when MODEL_SALES
-      return Link.none if user_ids&.length == 0
+      return Link.none if user_ids&.empty?
       recommended_products = SalesRelatedProductsInfo.related_products(ids, limit: number_of_results)
       recommended_products = recommended_products.where(user_id: user_ids) unless user_ids.nil?
       recommended_products.alive.where.not(id: exclude_ids)

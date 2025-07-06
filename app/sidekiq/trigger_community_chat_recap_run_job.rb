@@ -16,7 +16,7 @@ class TriggerCommunityChatRecapRunJob
       return if recap_run.persisted?
       community_ids = CommunityChatMessage.alive.where(created_at: from_date..to_date).pluck(:community_id).uniq
       recap_run.recaps_count = community_ids.size
-      recap_run.finished_at = DateTime.current if community_ids.size == 0
+      recap_run.finished_at = DateTime.current if community_ids.empty?
       recap_run.save!
 
       community_ids.each do |community_id|

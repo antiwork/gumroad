@@ -19,7 +19,7 @@ describe JSErrorReporter do
   end
 
   after(:each) do
-    @html_tempfiles.shift.close(true) while @html_tempfiles.size > 0
+    @html_tempfiles.shift.close(true) while !@html_tempfiles.empty?
   end
 
   def create_html_file(content)

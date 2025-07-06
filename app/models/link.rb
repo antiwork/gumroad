@@ -1432,7 +1432,7 @@ class Link < ApplicationRecord
         raise LinkInvalid, "Memberships should only have one Tier version category."
       end
 
-      if variant_categories.alive.first.variants.alive.size == 0
+      if variant_categories.alive.first.variants.alive.empty?
         errors.add(:base, "Memberships should have at least one tier.")
         raise LinkInvalid, "Memberships should have at least one tier."
       end

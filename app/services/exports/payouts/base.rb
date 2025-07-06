@@ -27,7 +27,7 @@ class Exports::Payouts::Base
         bal.refunded_sales.joins(:link).find_each do |purchase|
           balance_transactions_related_to_purchase_refunds = bal.balance_transactions.joins(:refund).where("balance_transactions.refund_id in (?)", purchase.refunds.pluck(:id))
 
-          if balance_transactions_related_to_purchase_refunds.size == 0 && purchase.refunds.size == 1
+          if balance_transactions_related_to_purchase_refunds.empty? && purchase.refunds.size == 1
             # Refunds made a while ago don't seem to have a balance_transaction associated with them.
             # If that's the case, and if there is only one refund in the full amount, we can format that refund properly
             # even with the missing balance transaction.

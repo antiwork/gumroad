@@ -478,7 +478,7 @@ class StripeChargeProcessor
 
     owed_amount_cents_usd = credit.amount_cents.abs
     # Adjust the amount owed if only a partial amount of reversals completed (due to some Stripe failure)
-    owed_amount_cents_usd -= backtax_agreement.backtax_collections.sum(:amount_cents_usd) if backtax_agreement.backtax_collections.size > 0
+    owed_amount_cents_usd -= backtax_agreement.backtax_collections.sum(:amount_cents_usd) if !backtax_agreement.backtax_collections.empty?
 
     unless owed_amount_cents_usd > 0
       backtax_agreement.update!(collected: true)

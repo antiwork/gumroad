@@ -189,7 +189,7 @@ class PurchasesController < ApplicationController
 
     result = purchases_records + imported_customers_records
 
-    can_ping = current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0
+    can_ping = !current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).empty?
 
     render json: result.as_json(include_receipt_url: true, include_ping: { value: can_ping }, version: 2, include_variant_details: true, query:, pundit_user:)
   end

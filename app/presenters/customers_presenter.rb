@@ -28,7 +28,7 @@ class CustomersPresenter
       end,
       currency_type: pundit_user.seller.currency_type.to_s,
       countries: Compliance::Countries.for_select.map(&:last),
-      can_ping: pundit_user.seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
+      can_ping: !pundit_user.seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).empty?,
       show_refund_fee_notice: pundit_user.seller.show_refund_fee_notice?,
     }
   end

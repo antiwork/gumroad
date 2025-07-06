@@ -29,7 +29,7 @@ class MigratePreviewImagesOnLinks < ActiveRecord::Migration
         all_links = l_query.limit(batch_size)
 
         # Exit condition
-        break if all_links.size == 0
+        break if all_links.empty?
 
         all_links.each do |a_link|
           thread_array << Thread.new { update_preview_for_link(a_link) }

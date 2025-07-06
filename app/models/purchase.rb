@@ -744,7 +744,7 @@ class Purchase < ApplicationRecord
 
     if options[:include_ping]
       cached_value = options[:include_ping][:value] if options[:include_ping].is_a? Hash
-      json[:can_ping] = cached_value != nil ? cached_value : seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0
+      json[:can_ping] = cached_value != nil ? cached_value : !seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).empty?
     end
 
     json.merge!(license_json)

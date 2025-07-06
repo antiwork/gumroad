@@ -241,7 +241,7 @@ class Purchase::CreateService < Purchase::BaseService
       purchase.seller = product.user
       purchase.is_gift_sender_purchase = is_gift? unless params_for_purchase.has_key?(:is_gift_receiver_purchase)
       purchase.offer_code = product.find_offer_code(code: purchase.discount_code.downcase.strip) if purchase.discount_code.present?
-      purchase.business_vat_id = (params_for_purchase[:business_vat_id] && params_for_purchase[:business_vat_id].size > 0 ? params_for_purchase[:business_vat_id] : nil)
+      purchase.business_vat_id = (params_for_purchase[:business_vat_id] && !params_for_purchase[:business_vat_id].empty? ? params_for_purchase[:business_vat_id] : nil)
       purchase.is_original_subscription_purchase = (product.is_recurring_billing && !params_for_purchase[:is_gift_receiver_purchase]) || purchase.is_installment_payment
       purchase.is_free_trial_purchase = product.free_trial_enabled? && !is_gift?
       purchase.should_exclude_product_review = product.free_trial_enabled? && !is_gift?
