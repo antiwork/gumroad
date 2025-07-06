@@ -5,8 +5,8 @@
 IRAS_API_ID = GlobalConfig.get("IRAS_API_ID")
 IRAS_API_SECRET = GlobalConfig.get("IRAS_API_SECRET")
 
-if Rails.env.production?
-  IRAS_ENDPOINT = "https://apiservices.iras.gov.sg/iras/prod/GSTListing/SearchGSTRegistered"
+IRAS_ENDPOINT = if Rails.env.production?
+  "https://apiservices.iras.gov.sg/iras/prod/GSTListing/SearchGSTRegistered"
 else
-  IRAS_ENDPOINT = "https://apisandbox.iras.gov.sg/iras/sb/GSTListing/SearchGSTRegistered"
+  "https://apisandbox.iras.gov.sg/iras/sb/GSTListing/SearchGSTRegistered"
 end

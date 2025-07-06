@@ -62,10 +62,10 @@ module Product::ReviewStat
     rating_counts = valid_reviews.group(:rating).count
     reviews_count = rating_counts.values.sum
     data[:reviews_count] = reviews_count
-    if reviews_count > 0
-      average_rating = (rating_counts.map { |rating, rating_count| rating * rating_count }.sum.to_f / reviews_count).round(1)
+    average_rating = if reviews_count > 0
+      (rating_counts.map { |rating, rating_count| rating * rating_count }.sum.to_f / reviews_count).round(1)
     else
-      average_rating = 0
+      0
     end
     data[:average_rating] = average_rating
     ProductReviewStat::RATING_COLUMN_MAP.each do |rating, column_name|

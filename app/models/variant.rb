@@ -124,10 +124,10 @@ class Variant < BaseVariant
       return if self.position_in_category.present?
       return unless variant_category
       previous = variant_category.variants.alive.in_order.last
-      if previous
-        self.position_in_category = previous.position_in_category.present? ? previous.position_in_category + 1 : variant_category.variants.alive.in_order.count
+      self.position_in_category = if previous
+        previous.position_in_category.present? ? previous.position_in_category + 1 : variant_category.variants.alive.in_order.count
       else
-        self.position_in_category = 0
+        0
       end
     end
 end

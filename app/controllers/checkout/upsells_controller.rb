@@ -133,10 +133,10 @@ class Checkout::UpsellsController < Sellers::BaseController
     end
 
     def set_variant
-      if params[:variant_id].present?
-        @upsell.variant = BaseVariant.find_by_external_id!(upsell_params[:variant_id])
+      @upsell.variant = if params[:variant_id].present?
+        BaseVariant.find_by_external_id!(upsell_params[:variant_id])
       else
-        @upsell.variant = nil
+        nil
       end
     end
 

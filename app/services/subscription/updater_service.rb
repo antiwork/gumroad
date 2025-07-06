@@ -148,10 +148,10 @@ class Subscription::UpdaterService
           end
 
           # Charge user if necessary
-          if should_charge_user?
-            result = charge_user!
+          result = if should_charge_user?
+            charge_user!
           else
-            result = { success: true, success_message: }
+            { success: true, success_message: }
           end
         end
       end

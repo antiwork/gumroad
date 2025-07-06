@@ -204,10 +204,10 @@ class Admin::UsersController < Admin::BaseController
 
   private
     def fetch_user
-      if params[:id].include?("@")
-        @user = User.find_by(email: params[:id])
+      @user = if params[:id].include?("@")
+        User.find_by(email: params[:id])
       else
-        @user = User.find_by(username: params[:id]) ||
+        User.find_by(username: params[:id]) ||
                 User.find_by(id: params[:id])
       end
 

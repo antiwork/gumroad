@@ -245,11 +245,11 @@ class Purchase
         self.stripe_partially_refunded = true
       end
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account?
-      if partially_refunded_previously && stripe_refunded
-        refund = build_partial_full_refund(refunding_user_id:)
+      refund = if partially_refunded_previously && stripe_refunded
+        build_partial_full_refund(refunding_user_id:)
       else
-        refund = build_refund(gross_refund_amount: gross_refund_amount_cents,
-                              refunding_user_id:)
+        build_refund(gross_refund_amount: gross_refund_amount_cents,
+                     refunding_user_id:)
       end
 
       if refund.present?

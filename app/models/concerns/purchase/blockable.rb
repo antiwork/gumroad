@@ -301,12 +301,12 @@ module Purchase::Blockable
       comment_params = { content: comment_content, comment_type: "note", author_id: blocking_user&.id || GUMROAD_ADMIN_ID }
 
       if comment_params[:content].blank?
-        if blocking_user&.is_team_member?
-          comment_params[:content] = "Buyer blocked by Admin (#{blocking_user.email})"
+        comment_params[:content] = if blocking_user&.is_team_member?
+          "Buyer blocked by Admin (#{blocking_user.email})"
         elsif blocking_user.present?
-          comment_params[:content] = "Buyer blocked by #{blocking_user.email}"
+          "Buyer blocked by #{blocking_user.email}"
         else
-          comment_params[:content] = "Buyer blocked"
+          "Buyer blocked"
         end
       end
 

@@ -46,10 +46,10 @@ class PaypalMerchantAccountManager
                                    .where(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
                                    .where(charge_processor_merchant_id: paypal_merchant_id)
 
-    if create_new
-      merchant_account = paypal_merchant_accounts.first_or_initialize
+    merchant_account = if create_new
+      paypal_merchant_accounts.first_or_initialize
     else
-      merchant_account = paypal_merchant_accounts.alive.first
+      paypal_merchant_accounts.alive.first
     end
 
     return unless merchant_account.present?

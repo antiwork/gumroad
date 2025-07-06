@@ -231,10 +231,10 @@ class CustomerLowPriorityMailer < ApplicationMailer
     return unless purchase.email.present? && purchase.email.match(User::EMAIL_REGEX)
 
     url_redirect = purchase.url_redirect
-    if time_till_rental_expiration_in_seconds > 1.day
-      expires_in = pluralize(time_till_rental_expiration_in_seconds / 1.day, "day")
+    expires_in = if time_till_rental_expiration_in_seconds > 1.day
+      pluralize(time_till_rental_expiration_in_seconds / 1.day, "day")
     else
-      expires_in = pluralize(time_till_rental_expiration_in_seconds / 1.hour, "hour")
+      pluralize(time_till_rental_expiration_in_seconds / 1.hour, "hour")
     end
 
     @subject = "Your rental will expire in #{expires_in}"

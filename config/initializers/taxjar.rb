@@ -4,8 +4,8 @@
 # We're using the Live key in production, and the Sandbox key everywhere else.
 TAXJAR_API_KEY = GlobalConfig.get("TAXJAR_API_KEY")
 
-if Rails.env.production?
-  TAXJAR_ENDPOINT = "https://api.taxjar.com"
+TAXJAR_ENDPOINT = if Rails.env.production?
+  "https://api.taxjar.com"
 else
-  TAXJAR_ENDPOINT = "https://api.sandbox.taxjar.com"
+  "https://api.sandbox.taxjar.com"
 end

@@ -40,10 +40,10 @@ class Exports::Payouts::Base
               # This should always be in USD cents.
               gross_amount = -btxn.refund.amount_cents / 100.0
 
-              if gross_amount == -purchase.price_dollars
-                data << summarize_full_refund(btxn.refund, purchase)
+              data << if gross_amount == -purchase.price_dollars
+                summarize_full_refund(btxn.refund, purchase)
               else
-                data << summarize_partial_refund(btxn, purchase)
+                summarize_partial_refund(btxn, purchase)
               end
             end
           end

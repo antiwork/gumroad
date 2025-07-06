@@ -207,10 +207,10 @@ class AssetPreview < ApplicationRecord
   private
     def set_position
       previous = link.asset_previews.in_order.last
-      if previous
-        self.position = previous.position.present? ? previous.position + 1 : link.asset_previews.in_order.count
+      self.position = if previous
+        previous.position.present? ? previous.position + 1 : link.asset_previews.in_order.count
       else
-        self.position = 0
+        0
       end
     end
 

@@ -350,10 +350,10 @@ class StripeChargeProcessor
         destination_payment_refund = stripe_destination_payment.refunds.first
         if destination_payment_refund
           balance_transaction_id = destination_payment_refund.balance_transaction
-          if balance_transaction_id.is_a?(String)
-            destination_payment_refund_balance_transaction = Stripe::BalanceTransaction.retrieve(id: balance_transaction_id)
+          destination_payment_refund_balance_transaction = if balance_transaction_id.is_a?(String)
+            Stripe::BalanceTransaction.retrieve(id: balance_transaction_id)
           else
-            destination_payment_refund_balance_transaction = balance_transaction_id
+            balance_transaction_id
           end
         end
         destination_payment_application_fee_refund = stripe_destination_payment.application_fee.refunds.first if stripe_destination_payment.application_fee

@@ -617,12 +617,12 @@ class Purchase < ApplicationRecord
 
     return json.merge!(additional_fields_for_creator_app_api) if options[:creator_app_api]
 
-    if options[:include_variant_details]
-      variants_for_json = variant_details_hash
+    variants_for_json = if options[:include_variant_details]
+      variant_details_hash
     elsif version == 1
-      variants_for_json = variants_list
+      variants_list
     else
-      variants_for_json = variant_names_hash
+      variant_names_hash
     end
 
     json.merge!(

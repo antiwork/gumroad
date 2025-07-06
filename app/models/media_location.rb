@@ -34,12 +34,12 @@ class MediaLocation < ApplicationRecord
 
   private
     def add_unit
-      if product_file.streamable? || product_file.listenable?
-        self.unit = Unit::SECONDS
+      self.unit = if product_file.streamable? || product_file.listenable?
+        Unit::SECONDS
       elsif product_file.readable?
-        self.unit = Unit::PAGE_NUMBER
+        Unit::PAGE_NUMBER
       else
-        self.unit = Unit::PERCENTAGE
+        Unit::PERCENTAGE
       end
     end
 

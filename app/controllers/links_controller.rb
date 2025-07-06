@@ -415,10 +415,10 @@ class LinksController < ApplicationController
         @product.generate_product_files_archives!
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
-      if @product.errors.details[:custom_fields].present?
-        error_message = "You must add titles to all of your inputs"
+      error_message = if @product.errors.details[:custom_fields].present?
+        "You must add titles to all of your inputs"
       else
-        error_message = @product.errors.full_messages.first || e.message
+        @product.errors.full_messages.first || e.message
       end
       return render json: { error_message: }, status: :unprocessable_entity
     end

@@ -8,10 +8,10 @@ RSpec.describe ApplicationCable::Connection, type: :channel do
   let!(:impersonated_user) { create(:user) }
 
   def connect_with_user(user)
-    if user
-      session = { "warden.user.user.key" => [[user.id], nil] }
+    session = if user
+      { "warden.user.user.key" => [[user.id], nil] }
     else
-      session = {}
+      {}
     end
 
     connect session: session

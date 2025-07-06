@@ -11,16 +11,16 @@ module CheckoutHelpers
 
     fill_in "Name a fair price", with: pwyw_price if pwyw_price.present?
 
-    if product.purchase_info_for_product_page(logged_in_user, Capybara.current_session.driver.browser.manage.all_cookies.find { |cookie| cookie[:name] == "_gumroad_guid" }&.[](:value)).present?
-      buy_text = "Purchase again"
+    buy_text = if product.purchase_info_for_product_page(logged_in_user, Capybara.current_session.driver.browser.manage.all_cookies.find { |cookie| cookie[:name] == "_gumroad_guid" }&.[](:value)).present?
+      "Purchase again"
     elsif cart
-      buy_text = "Add to cart"
+      "Add to cart"
     elsif product.is_recurring_billing
-      buy_text = "Subscribe"
+      "Subscribe"
     elsif product.purchase_type == "rent_only" || rent
-      buy_text = "Rent"
+      "Rent"
     else
-      buy_text = "I want this!"
+      "I want this!"
     end
 
     within find(:article) do

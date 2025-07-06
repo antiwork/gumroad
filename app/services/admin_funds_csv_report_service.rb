@@ -15,10 +15,10 @@ class AdminFundsCsvReportService
           row_title = payment_method["Processor"] == "PayPal" ? type : ""
 
           payment_method[transaction_type_key].each do |(key, value)|
-            if key == :total_transaction_count
-              csv << [row_title, payment_method["Processor"], key, value]
+            csv << if key == :total_transaction_count
+              [row_title, payment_method["Processor"], key, value]
             else
-              csv << ["", "", key, value]
+              ["", "", key, value]
             end
           end
         end

@@ -54,10 +54,10 @@ class OfferCodeDiscountComputingService
     elsif is_inactive
       error_code = :inactive
     elsif products_data.blank?
-      if offer_code_insufficient_quantity.all? { |_id, invalid| invalid }
-        error_code = :insufficient_quantity
+      error_code = if offer_code_insufficient_quantity.all? { |_id, invalid| invalid }
+        :insufficient_quantity
       else
-        error_code = offer_code_quantity_left.any? { |_key, quantity| quantity > 0 } ? :exceeding_quantity : :sold_out
+        offer_code_quantity_left.any? { |_key, quantity| quantity > 0 } ? :exceeding_quantity : :sold_out
       end
     end
 

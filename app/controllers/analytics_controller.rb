@@ -17,10 +17,10 @@ class AnalyticsController < Sellers::BaseController
   def data_by_date
     authorize :analytics, :index?
 
-    if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_date
+    data = if Feature.active?(:use_creator_analytics_web_in_controller)
+      creator_analytics_web.by_date
     else
-      data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :date)
+      CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :date)
     end
     render json: data
   end
@@ -28,10 +28,10 @@ class AnalyticsController < Sellers::BaseController
   def data_by_state
     authorize :analytics, :index?
 
-    if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_state
+    data = if Feature.active?(:use_creator_analytics_web_in_controller)
+      creator_analytics_web.by_state
     else
-      data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :state)
+      CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :state)
     end
     render json: data
   end
@@ -39,10 +39,10 @@ class AnalyticsController < Sellers::BaseController
   def data_by_referral
     authorize :analytics, :index?
 
-    if Feature.active?(:use_creator_analytics_web_in_controller)
-      data = creator_analytics_web.by_referral
+    data = if Feature.active?(:use_creator_analytics_web_in_controller)
+      creator_analytics_web.by_referral
     else
-      data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :referral)
+      CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :referral)
     end
     render json: data
   end

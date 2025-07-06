@@ -34,10 +34,10 @@ module CreatorAnalytics::CachingProxy::Formatters::ByDate
       days_data.each do |day_data|
         %i[views sales totals].each do |type|
           data[:by_date][type][permalink] ||= []
-          if day_data[:by_date][type].key?(permalink)
-            data[:by_date][type][permalink] += day_data[:by_date][type][permalink]
+          data[:by_date][type][permalink] += if day_data[:by_date][type].key?(permalink)
+            day_data[:by_date][type][permalink]
           else
-            data[:by_date][type][permalink] += [0] * day_data[:dates_and_months].size
+            [0] * day_data[:dates_and_months].size
           end
         end
       end

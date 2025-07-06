@@ -358,10 +358,10 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     count = 0
     purchases.each do |purchase|
       purchase.email = to_email
-      if target_user && purchase.purchaser_id.present?
-        purchase.purchaser_id = target_user.id
+      purchase.purchaser_id = if target_user && purchase.purchaser_id.present?
+        target_user.id
       else
-        purchase.purchaser_id = nil
+        nil
       end
 
       if purchase.is_original_subscription_purchase? && purchase.subscription.present?

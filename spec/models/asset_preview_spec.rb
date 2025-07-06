@@ -310,10 +310,10 @@ describe AssetPreview, :vcr do
 
     it "returns nil for dangerous URLs" do
       dangerous_urls.each do |url|
-        if method == :oembed_thumbnail_url
-          asset_preview.oembed = { "info" => { url_key => url } }
+        asset_preview.oembed = if method == :oembed_thumbnail_url
+          { "info" => { url_key => url } }
         else
-          asset_preview.oembed = { "html" => "<iframe src=\"#{url}\"></iframe>" }
+          { "html" => "<iframe src=\"#{url}\"></iframe>" }
         end
         expect(asset_preview.public_send(method)).to be_nil, "Expected #{url} to be rejected"
       end
