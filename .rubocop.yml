@@ -78,6 +78,9 @@ Lint/DuplicateCaseCondition:
 Lint/DuplicateElsifCondition:
   Enabled: true
 
+Lint/ReturnInVoidContext:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

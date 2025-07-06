@@ -29,7 +29,10 @@ module Product::Preview
   end
 
   def preview=(preview)
-    return main_preview&.mark_deleted! if preview.blank?
+    if preview.blank?
+      main_preview&.mark_deleted!
+      return
+    end
 
     asset_preview = asset_previews.build
     if preview.is_a?(String) && preview.present?

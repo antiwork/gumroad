@@ -42,13 +42,19 @@ module Product::Prices
   # create and associated the proper Price(s) object. If the product is a tiered membership product, it does not create or update a new price since
   # these prices are set on the variant.
   def price_cents=(price_cents)
-    return super(price_cents) if !persisted? || is_tiered_membership
+    if !persisted? || is_tiered_membership?
+      super(price_cents)
+      return
+    end
 
     create_or_update_new_price!(price_cents:, recurrence: subscription_duration.try(:to_s), is_rental: false)
   end
 
   def rental_price_cents=(rental_price_cents)
-    return super(rental_price_cents) unless persisted?
+    unless persisted?
+      super(rental_price_cents)
+      return
+    end
 
     create_or_update_new_price!(price_cents: rental_price_cents, recurrence: subscription_duration.try(:to_s), is_rental: true)
   end
