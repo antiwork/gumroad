@@ -197,7 +197,7 @@ module PayoutsHelper
       if failure_reason.present?
         # Format the reason text to be user-friendly
         if recent_failed_payment.processor == PayoutProcessorType::PAYPAL
-          reason_text = failure_reason.split(": ").last || failure_reason
+          reason_text = failure_reason.split(": ").last
         else
           reason_text = failure_reason
         end
