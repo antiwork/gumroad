@@ -68,7 +68,7 @@ class UpdateProductFilesArchiveWorker
           file_info = rich_content_files_and_folders_mapping[product_file.id]
           next if file_info.nil?
           directory_info = product_files_archive.folder_archive? ? [] : [file_info[:page_title], file_info[:folder_name]]
-          file_path_parts = directory_info.concat([file_info[:file_name]])
+          file_path_parts = directory_info.push(file_info[:file_name])
         end
         file_path = compose_file_path(file_path_parts, product_file.s3_extension)
         zip_file.get_output_stream(file_path) do |output_stream|

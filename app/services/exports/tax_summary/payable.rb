@@ -86,7 +86,7 @@ class Exports::TaxSummary::Payable < Exports::TaxSummary::Base
 
       row.concat(monthly_summary_for(data))
 
-      row.concat([ # "Box 6 - State Abbreviation",
+      row.push( # "Box 6 - State Abbreviation",
                    compliance_info.legal_entity_state_code,
                    # "Box 6 (Other State) - Other State Abbreviation"
                    nil,
@@ -97,7 +97,7 @@ class Exports::TaxSummary::Payable < Exports::TaxSummary::Base
                    # "Box 8 - State Tax Withheld", this, its zero on payable.
                    nil,
                    # "Box 8 (Other State) - Other State Tax Withheld"
-                   nil])
+                   nil)
       row
     end
 

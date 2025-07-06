@@ -287,12 +287,12 @@ describe("Download Page – Rich Text Editor Content", type: :feature, js: true)
     it "displays embedded code blocks and allows copying them" do
       product_rich_content = @product.alive_rich_contents.first
       product_rich_content.update!(
-        description: product_rich_content.description.concat(
-          [
+        description: product_rich_content.description.push(
+
             { "type" => "codeBlock", "attrs" => { "language" => nil }, "content" => [{ "type" => "text", "text" => "const hello = \"world\";" }] },
             { "type" => "codeBlock", "attrs" => { "language" => "ruby" }, "content" => [{ "type" => "text", "text" => "puts 'Hello, world!'" }] },
             { "type" => "codeBlock", "attrs" => { "language" => "typescript" }, "content" => [{ "type" => "text", "text" => "let greeting: string = 'Hello, world!';" }] }
-          ]
+
         )
       )
 

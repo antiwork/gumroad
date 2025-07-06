@@ -1479,12 +1479,12 @@ describe LinksController, :vcr do
           files_data = files_data_from_urls(urls)
           rich_content = create(:product_rich_content, entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }])
           old_rich_content = rich_content.description
-          product_rich_content = [{ id: rich_content.external_id, title: "Page title", description: { type: "doc", content: old_rich_content.dup.concat([{ "type" => "fileEmbed", "attrs" => { "id" => files_data[0][:id], "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => files_data[1][:id], "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]) } }]
+          product_rich_content = [{ id: rich_content.external_id, title: "Page title", description: { type: "doc", content: old_rich_content.dup.push({ "type" => "fileEmbed", "attrs" => { "id" => files_data[0][:id], "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => files_data[1][:id], "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }) } }]
 
           post :update, params: @params.merge!(rich_content: product_rich_content, files: files_data), format: :json
 
           new_external_id_1, new_external_id_2 = @product.product_files.alive.map(&:external_id)
-          expect(@product.reload.rich_content_json).to eq([{ id: rich_content.external_id, page_id: rich_content.external_id, variant_id: nil, title: "Page title", description: { type: "doc", content: old_rich_content.dup.concat([{ "type" => "fileEmbed", "attrs" => { "id" => new_external_id_1, "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => new_external_id_2, "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]) }, updated_at: rich_content.reload.updated_at }])
+          expect(@product.reload.rich_content_json).to eq([{ id: rich_content.external_id, page_id: rich_content.external_id, variant_id: nil, title: "Page title", description: { type: "doc", content: old_rich_content.dup.push({ "type" => "fileEmbed", "attrs" => { "id" => new_external_id_1, "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => new_external_id_2, "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }) }, updated_at: rich_content.reload.updated_at }])
         end
 
         it "saves variant-level rich content containing file embeds with the persisted IDs" do

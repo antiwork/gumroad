@@ -209,12 +209,12 @@ module PurchaseErrorCode
 
   PAYMENT_ERROR_CODES = PAYPAL_ERROR_CODES.keys
                                           .concat(STRIPE_ERROR_CODES.keys)
-                                          .concat([
+                                          .push(
                                                     STRIPE_UNAVAILABLE,
                                                     PAYPAL_UNAVAILABLE,
                                                     PROCESSING_ERROR,
                                                     CREDIT_CARD_NOT_PROVIDED,
-                                                  ])
+                                                  )
 
   UNBLOCK_BUYER_ERROR_CODES = FRAUD_RELATED_ERROR_CODES + [TEMPORARILY_BLOCKED_EMAIL_ADDRESS]
 

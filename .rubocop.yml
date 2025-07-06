@@ -93,6 +93,9 @@ Lint/UnusedMethodArgument:
 Lint/Void:
   Enabled: true
 
+Style/ConcatArrayLiterals:
+  Enabled: true
+
 Rails/BulkChangeTable:
   Enabled: true
   Database: mysql

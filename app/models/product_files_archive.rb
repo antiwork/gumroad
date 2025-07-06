@@ -103,7 +103,7 @@ class ProductFilesArchive < ApplicationRecord
         rich_content_files = rich_content_files.select { |_key, value| value[:folder_id] == folder_id } if folder_archive?
         rich_content_files.values.map do |info|
           page_info = folder_archive? ? [] : [info[:page_id], info[:page_title]]
-          page_info.concat([info[:folder_id], info[:folder_name], info[:file_id], info[:file_name]]).flatten.compact.join("/")
+          page_info.push(info[:folder_id], info[:folder_name], info[:file_id], info[:file_name]).flatten.compact.join("/")
         end.sort
       end
 

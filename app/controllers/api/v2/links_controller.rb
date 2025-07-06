@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::LinksController < Api::V2::BaseController
-  before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
+  before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.push(:view_public)) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
   before_action :check_types_of_file_objects, only: [:update, :create]
   before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
