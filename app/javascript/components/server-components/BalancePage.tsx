@@ -181,12 +181,12 @@ type CurrentPayoutsDataWithUserNotPayable = {
   has_stripe_connect: boolean;
 };
 
-type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed";
+type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed" | "failed";
 type PayoutType = "standard" | "instant";
 
 type CurrentPeriodPayoutData = (
   | { status: "processing"; payment_external_id: string; arrival_date: string | null; type: PayoutType }
-  | { status: Exclude<CurrentPayoutStatus, "processing" | "completed"> }
+  | { status: Exclude<CurrentPayoutStatus, "processing" | "completed" | "failed"> }
 ) & {
   has_stripe_connect: boolean;
   should_be_shown_currencies_always: boolean;
@@ -214,7 +214,7 @@ type CurrentPeriodPayoutData = (
 };
 
 type PastPeriodPayoutsData = {
-  status: "completed";
+  status: "completed" | "failed";
   should_be_shown_currencies_always: boolean;
   displayable_payout_period_range: string;
   payout_currency: string;
@@ -289,6 +289,8 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         return `Next payout: ${payoutDateFormatted}`;
       case "paused":
         return "Next payout: paused";
+      case "failed":
+        return "Failed";
       case "completed":
         return payoutDateFormatted;
     }
@@ -305,7 +307,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           gap: "var(--spacer-4)",
         }}
       >
-        {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h2>{heading}</h2>}
+        {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h3>{heading}</h3>}
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
           <div className="pill small">Instant</div>
         ) : null}
@@ -323,6 +325,11 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           </WithTooltip>
         ) : null}
       </div>
+      {payoutPeriodData.status === "failed" ? (
+        <div className="text-gray-500 italic">
+          This failed payout's balance is being carried over to your next payout.
+        </div>
+      ) : null}
       <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
         <div>
           <h4>Sales</h4>

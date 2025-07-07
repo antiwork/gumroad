@@ -234,6 +234,50 @@ describe "Balance Pages Scenario", js: true, type: :feature do
         expect(page).not_to have_text("Expected deposit on")
       end
 
+      it "shows failed payments for creator-owned Stripe Connect payouts" do
+        merchant_account = create(:merchant_account_stripe_connect, user: seller)
+        create(:payment, user: seller)
+
+        data = {
+          should_be_shown_currencies_always: true,
+          displayable_payout_period_range: "Activity up to May 6th, 2022",
+          payout_date_formatted: "May 14th, 2022",
+          payout_currency: "USD",
+          payout_cents: 3293600,
+          payout_displayed_amount: "$90.70 USD",
+          is_processing: true,
+          arrival_date: nil,
+          status: "failed",
+          payment_external_id: "l5C1XQfr2TG3WXcGY7YrUg==",
+          sales_cents: 10000,
+          refunds_cents: 0,
+          chargebacks_cents: 0,
+          credits_cents: 0,
+          loan_repayment_cents: 0,
+          fees_cents: 930,
+          taxes_cents: 0,
+          discover_fees_cents: 0,
+          direct_fees_cents: 0,
+          discover_sales_count: 0,
+          direct_sales_count: 0,
+          affiliate_credits_cents: 0,
+          affiliate_fees_cents: 0,
+          paypal_payout_cents: 0,
+          stripe_connect_payout_cents: 0,
+          stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
+          payout_method_type: "stripe_connect",
+          payout_note: "Payout via Stripe on May 14th, 2022 failed because the bank account has been closed. Solution: Use another bank account.",
+          type: Payouts::PAYOUT_TYPE_STANDARD,
+          has_stripe_connect: true
+        }
+        allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
+
+        visit balance_path
+        expect(page).to have_text("Stripe account: #{merchant_account.charge_processor_merchant_id}")
+        expect(page).not_to have_text("Expected deposit on")
+        expect(page).to have_text("Failed")
+      end
+
       it "shows completed payments for creator-owned Stripe Connect payouts" do
         merchant_account = create(:merchant_account_stripe_connect, user: seller)
         create(:payment_completed, user: seller)

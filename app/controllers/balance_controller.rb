@@ -43,7 +43,7 @@ class BalanceController < Sellers::BaseController
 
     def fetch_payouts
       payouts = current_seller.payments
-        .completed
+        .completed_or_failed
         .displayable
         .order(created_at: :desc)
 
