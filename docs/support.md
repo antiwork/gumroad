@@ -228,7 +228,9 @@ else
   puts "No user found with email: customer@example.com"
 end
 ```
-### Resend all receipts 
+
+### Resend all receipts
+
 ```ruby
 email = "customer@example.com"
 
@@ -241,6 +243,7 @@ purchases.find_each do |purchase|
   purchase.resend_receipt
 end
 ```
+
 ## Subscription management
 
 ### Check subscription cancellation date
