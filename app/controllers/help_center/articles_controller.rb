@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class HelpCenter::ArticlesController < HelpCenter::BaseController
+  before_action :redirect_legacy_articles, only: :show
+
   def index
     @props = {
       categories: HelpCenter::Category.all.map do |category|
@@ -29,4 +31,15 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
     @title = "#{@article.title} - Gumroad Help Center"
     @canonical_url = help_center_article_url(@article)
   end
+
+  private
+    LEGACY_ARTICLE_REDIRECTS = {
+      "284-jobs-at-gumroad" => "/about#jobs"
+    }
+
+    def redirect_legacy_articles
+      return unless LEGACY_ARTICLE_REDIRECTS.key?(params[:slug])
+
+      redirect_to LEGACY_ARTICLE_REDIRECTS[params[:slug]], status: :moved_permanently
+    end
 end
