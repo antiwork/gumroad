@@ -3,7 +3,7 @@
 class PaginatedInstallmentsPresenter
   include Pagy::Backend
 
-  PER_PAGE = 100
+  PER_PAGE = 25
   private_constant :PER_PAGE
 
   def initialize(seller:, type:, page: nil, query: nil)
