@@ -2236,8 +2236,8 @@ const AccountDetailsSection = ({
                     <input
                       id={`${uid}-guardian-tos-accepted`}
                       type="checkbox"
-                      checked={complianceInfo.guardian_stripe_tos_accepted || false}
-                      disabled={isFormDisabled || complianceInfo.guardian_stripe_tos_accepted}
+                      checked={complianceInfo.guardian_stripe_tos_accepted ?? false}
+                      disabled={isFormDisabled || (complianceInfo.guardian_stripe_tos_accepted ?? false)}
                       required
                       onChange={(e) => updateComplianceInfo({ guardian_stripe_tos_accepted: e.target.checked })}
                     />
@@ -2258,8 +2258,8 @@ const AccountDetailsSection = ({
                     <input
                       id={`${uid}-guardian-additional-tos-accepted`}
                       type="checkbox"
-                      checked={complianceInfo.guardian_stripe_processing_tos_accepted || false}
-                      disabled={isFormDisabled || complianceInfo.guardian_stripe_processing_tos_accepted}
+                      checked={complianceInfo.guardian_stripe_processing_tos_accepted ?? false}
+                      disabled={isFormDisabled || (complianceInfo.guardian_stripe_processing_tos_accepted ?? false)}
                       required
                       onChange={(e) =>
                         updateComplianceInfo({ guardian_stripe_processing_tos_accepted: e.target.checked })
