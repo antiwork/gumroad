@@ -43,14 +43,11 @@ module HelperWidget
   end
 
   def helper_widget_email_hmac(timestamp)
-    secret = GlobalConfig.get("HELPER_WIDGET_SECRET")
-    return nil if secret.blank?
-
     message = "#{current_seller.email}:#{timestamp}"
 
     OpenSSL::HMAC.hexdigest(
       "sha256",
-      secret,
+      GlobalConfig.get("HELPER_WIDGET_SECRET"),
       message
     )
   end
