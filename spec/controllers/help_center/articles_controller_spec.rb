@@ -45,9 +45,11 @@ describe HelpCenter::ArticlesController do
     end
 
     context "when article is not found" do
-      it "raises ActiveHash::RecordNotFound" do
-        expect { get :show, params: { slug: "nonexistent-slug" } }
-          .to raise_error(ActiveHash::RecordNotFound)
+      it "redirects to the help center root path" do
+        get :show, params: { slug: "nonexistent-slug" }
+
+        expect(response).to redirect_to(help_center_root_path)
+        expect(response).to have_http_status(:found)
       end
     end
   end
