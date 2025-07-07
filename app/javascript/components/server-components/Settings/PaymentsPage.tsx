@@ -113,8 +113,8 @@ export type ComplianceInfo = {
   guardian_dob_day?: number | null;
   guardian_dob_year?: number | null;
   guardian_individual_tax_id?: string | null;
-  guardian_stripe_tos_accepted?: boolean;
-  guardian_stripe_processing_tos_accepted?: boolean;
+  guardian_stripe_tos_accepted?: boolean | null;
+  guardian_stripe_processing_tos_accepted?: boolean | null;
 };
 
 type Props = {
@@ -125,6 +125,7 @@ type Props = {
     show_au_backtax_prompt: boolean;
   };
   show_verification_section: boolean;
+  show_legal_guardian_verification_section: boolean;
   countries: Record<string, string>;
   ip_country_code: string | null;
   bank_account_details: BankAccountDetails;
@@ -906,9 +907,16 @@ const PaymentsPage = (props: Props) => {
             </p>
           </div>
         ) : null}
-
-        <LegalGuardianInformationRequiredBanner />
         <section>
+          {props.show_legal_guardian_verification_section ? (
+            <LegalGuardianInformationRequiredBanner />
+          ) : (
+            <div className="flex flex-col">
+              <div role="status" className="success">
+                Your legal guardian's account details have been verified!
+              </div>
+            </div>
+          )}
           <header>
             <h2>Verification</h2>
           </header>
@@ -1164,6 +1172,7 @@ const PaymentsPage = (props: Props) => {
                 states={props.states}
                 errorFieldNames={errorFieldNames}
                 payoutMethod={selectedPayoutMethod}
+                isLegalGuardianInformationRequired={props.show_legal_guardian_verification_section}
               />
             ) : (
               <StripeConnectSection
