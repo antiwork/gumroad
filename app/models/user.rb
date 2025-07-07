@@ -1020,8 +1020,8 @@ class User < ApplicationRecord
       .exists?
   end
 
-  def guardian_verification_status
-    return nil unless stripe_account.present?
+  def stripe_requires_legal_guardian_info?
+    return false unless stripe_account.present?
 
     begin
       stripe_persons = Stripe::Account.list_persons(stripe_account.charge_processor_merchant_id)["data"]
@@ -1029,12 +1029,30 @@ class User < ApplicationRecord
         person["relationship"]&.fetch("legal_guardian", false)
       end
 
-      return nil unless guardian_person
+      return false unless guardian_person
 
-      guardian_person["verification"]["status"]
+      stripe_account_data = Stripe::Account.retrieve(stripe_account.charge_processor_merchant_id)
+
+      requirements = stripe_account_data["requirements"] || {}
+      future_requirements = stripe_account_data["future_requirements"] || {}
+
+      all_required_fields = [
+        requirements["currently_due"],
+        requirements["eventually_due"],
+        requirements["past_due"],
+        future_requirements["currently_due"],
+        future_requirements["past_due"]
+      ].compact.flatten.uniq
+
+      alternative_requirements = requirements["alternatives"]&.map { _1["alternative_fields_due"] } || []
+      alternative_future_requirements = future_requirements["alternatives"]&.map { _1["alternative_fields_due"] } || []
+      all_required_fields += (alternative_requirements + alternative_future_requirements).compact.flatten
+
+      guardian_person_id = guardian_person["id"]
+      all_required_fields.any? { |field| field.start_with?("person_#{guardian_person_id}.") }
     rescue => e
-      Rails.logger.error "Error fetching guardian verification status for user #{id}: #{e.message}"
-      nil
+      Rails.logger.warn("User#stripe_requires_legal_guardian_info? error (#{id}): #{e.class} => #{e.message}")
+      StripeMerchantAccountManager.user_under_18?(alive_user_compliance_info)
     end
   end
 
