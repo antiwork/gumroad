@@ -52,5 +52,14 @@ describe HelpCenter::ArticlesController do
         expect(response).to have_http_status(:found)
       end
     end
+
+    context "when accessing the old jobs article URL" do
+      it "redirects to the about page jobs section with 301 status" do
+        get :show, params: { slug: "284-jobs-at-gumroad" }
+
+        expect(response).to redirect_to("/about#jobs")
+        expect(response).to have_http_status(:moved_permanently)
+      end
+    end
   end
 end
