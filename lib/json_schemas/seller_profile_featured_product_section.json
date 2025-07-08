@@ -1,0 +1,10 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema",
+  "type": "object",
+  "properties": {
+    "featured_product_id": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}
