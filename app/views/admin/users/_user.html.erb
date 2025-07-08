@@ -94,6 +94,8 @@
 
   <hr>
   <dl>
+    <dt>Created</dt>
+    <dd><%= format_datetime_with_relative_tooltip(user.created_at) %></dd>
     <dt>Updated</dt>
     <dd><%= format_datetime_with_relative_tooltip(user.updated_at) %></dd>
     <dt>Deleted</dt>
