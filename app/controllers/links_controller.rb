@@ -422,11 +422,28 @@ class LinksController < ApplicationController
       end
       return render json: { error_message: }, status: :unprocessable_entity
     end
-    invalid_offer_codes = @product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(@product) }.map(&:code)
-    if invalid_offer_codes.any?
-      plural = invalid_offer_codes.length > 1
+    invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
+      offer_code.is_currency_valid?(@product)
+    end.map(&:code)
+    invalid_amount_offer_codes = @product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(@product) }.map(&:code)
+
+    all_invalid_offer_codes = (invalid_currency_offer_codes + invalid_amount_offer_codes).uniq
+
+    if all_invalid_offer_codes.any?
+      # Determine the main issue type for the message
+      has_currency_issues = invalid_currency_offer_codes.any?
+      has_amount_issues = invalid_amount_offer_codes.any?
+
+      if has_currency_issues && has_amount_issues
+        issue_description = "#{"has".pluralize(all_invalid_offer_codes.count)} currency mismatches or would discount this product below #{@product.min_price_formatted}"
+      elsif has_currency_issues
+        issue_description = "#{"has".pluralize(all_invalid_offer_codes.count)} currency #{"mismatch".pluralize(all_invalid_offer_codes.count)} with this product"
+      else
+        issue_description = "#{all_invalid_offer_codes.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}"
+      end
+
       return render json: {
-        warning_message: "The following offer #{plural ? "codes discount" : "code discounts"} this product below #{@product.min_price_formatted}, but not to #{MoneyFormatter.format(0, @product.price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)}: #{invalid_offer_codes.join(", ")}. Please update #{plural ? "their amounts or they" : "its amount or it"} will not work at checkout."
+        warning_message: "The following offer #{"code".pluralize(all_invalid_offer_codes.count)} #{issue_description}: #{all_invalid_offer_codes.join(", ")}. Please update #{all_invalid_offer_codes.length > 1 ? "them or they" : "it or it"} will not work at checkout."
       }
     end
 

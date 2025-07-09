@@ -164,6 +164,7 @@ export const ProductEditContext = React.createContext<{
   thumbnail: Thumbnail | null;
   refundPolicies: OtherRefundPolicy[];
   currencyType: CurrencyCode;
+  setCurrencyType: (newCurrencyCode: CurrencyCode) => void;
   isListedOnDiscover: boolean;
   isPhysical: boolean;
   profileSections: ProfileSection[];

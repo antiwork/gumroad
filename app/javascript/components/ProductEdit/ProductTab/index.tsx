@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { COFFEE_CUSTOM_BUTTON_TEXT_OPTIONS, CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
+import { currencyCodeList } from "$app/utils/currency";
 import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -49,6 +50,7 @@ export const ProductTab = () => {
     thumbnail: initialThumbnail,
     refundPolicies,
     currencyType,
+    setCurrencyType,
     isPhysical,
     customDomainVerificationStatus,
     googleCalendarEnabled,
@@ -247,6 +249,12 @@ export const ProductTab = () => {
                       setSuggestedPriceCents={(suggestedPriceCents) =>
                         updateProduct({ suggested_price_cents: suggestedPriceCents })
                       }
+                      currencyCodeSelector={{
+                        options: currencyCodeList,
+                        onChange: (currencyCode) => {
+                          setCurrencyType(currencyCode);
+                        },
+                      }}
                       setIsPWYW={(isPWYW) => updateProduct({ customizable_price: isPWYW })}
                       currencyType={currencyType}
                       eligibleForInstallmentPlans={product.eligible_for_installment_plans}
