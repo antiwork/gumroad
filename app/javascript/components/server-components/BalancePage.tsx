@@ -272,7 +272,9 @@ const PayoutPeriodHeading = ({ payoutPeriodData }: { payoutPeriodData: PayoutPer
   return (
     <div className="flex gap-1">
       <h3>{payoutPeriodData.payout_date_formatted}</h3>
-      <div className="rounded border border-black bg-white p-1 text-[12px] font-normal leading-[120%]">{message}</div>
+      <div className="self-center rounded border border-black bg-white p-1 text-[12px] font-normal leading-[120%] text-black">
+        {message}
+      </div>
     </div>
   );
 };
