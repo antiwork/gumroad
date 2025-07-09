@@ -15,6 +15,8 @@ class PayoutsPresenter
   end
 
   def props
+    instant_payouts_supported = seller.instant_payouts_supported?
+
     {
       next_payout_period_data: next_payout_period_data&.merge(
         has_stripe_connect: seller.stripe_connect_account.present?
@@ -24,7 +26,7 @@ class PayoutsPresenter
       end,
       payouts_status: seller.payouts_status,
       past_payout_period_data: past_payouts.map { payout_period_data(seller, _1) },
-      instant_payout: seller.instant_payouts_supported? ? {
+      instant_payout: instant_payouts_supported ? {
         payable_amount_cents: seller.instantly_payable_unpaid_balance_cents,
         payable_balances: seller.instantly_payable_unpaid_balances.sort_by(&:date).reverse.map do |balance|
           {
@@ -38,7 +40,7 @@ class PayoutsPresenter
         routing_number: seller.active_bank_account.routing_number,
         account_number: seller.active_bank_account.account_number_visual,
       } : nil,
-      show_instant_payouts_notice: seller.eligible_for_instant_payouts? && !seller.active_bank_account&.supports_instant_payouts?,
+      show_instant_payouts_notice: seller.eligible_for_instant_payouts? && !instant_payouts_supported,
       pagination:,
     }
   end
