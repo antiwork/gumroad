@@ -2,8 +2,8 @@ name: Tests
 
 on:
   push:
-    branches:
-      - "**"
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
