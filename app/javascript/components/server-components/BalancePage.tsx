@@ -240,6 +240,7 @@ type PastPeriodPayoutsData = {
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
   type: PayoutType;
+  displayable_failure_reason: string | null;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -251,6 +252,30 @@ export type PastPayoutsDataAndPaymentMethod = PastPeriodPayoutsData &
   (LegacyNotAvailableAccount | BankAccount | PaypalAccount | StripeConnectAccount);
 
 type PayoutPeriodData = CurrentPayoutsDataAndPaymentMethodWithUserPayable | PastPayoutsDataAndPaymentMethod;
+
+const PayoutPeriodHeading = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) => {
+  const message = React.useMemo(() => {
+    switch (payoutPeriodData.status) {
+      case "processing":
+        return `Processing`;
+      case "payable":
+        return `Scheduled`;
+      case "paused":
+        return "Paused";
+      case "failed":
+        return "Failed";
+      case "completed":
+        return `Paid on ${payoutPeriodData.arrival_date}`;
+    }
+  }, [payoutPeriodData]);
+
+  return (
+    <div className="flex gap-1">
+      <h3>{payoutPeriodData.payout_date_formatted}</h3>
+      <div className="rounded border border-black bg-white p-1 text-[12px] font-normal leading-[120%]">{message}</div>
+    </div>
+  );
+};
 const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) => {
   const { should_be_shown_currencies_always: showUSDSuffix } = payoutPeriodData;
   const [isCSVDownloadInProgress, setIsCSVDownloadInProgress] = React.useState(false);
@@ -281,23 +306,6 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
     setIsCSVDownloadInProgress(false);
   });
 
-  function currentPayoutHeading(payoutStatus: CurrentPayoutStatus, payoutDateFormatted: string) {
-    switch (payoutStatus) {
-      case "processing":
-        return `Payout initiated on ${payoutDateFormatted}`;
-      case "payable":
-        return `Next payout: ${payoutDateFormatted}`;
-      case "paused":
-        return "Next payout: paused";
-      case "failed":
-        return "Failed";
-      case "completed":
-        return payoutDateFormatted;
-    }
-  }
-
-  const heading = currentPayoutHeading(payoutPeriodData.status, payoutPeriodData.payout_date_formatted);
-
   return (
     <section aria-label="Payout period">
       <div
@@ -307,7 +315,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           gap: "var(--spacer-4)",
         }}
       >
-        {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h3>{heading}</h3>}
+        <PayoutPeriodHeading payoutPeriodData={payoutPeriodData} />
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
           <div className="pill small">Instant</div>
         ) : null}
@@ -326,8 +334,14 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         ) : null}
       </div>
       {payoutPeriodData.status === "failed" ? (
-        <div className="text-gray-500 italic">
-          This failed payout's balance is being carried over to your next payout.
+        <div role="status" className="warning my-4">
+          <div>
+            This payout failed due to{" "}
+            <span className="font-semibold underline">
+              {payoutPeriodData.displayable_failure_reason ?? "unknown error"}
+            </span>
+            . It will be included in your next payout automatically once verification is complete.
+          </div>
         </div>
       ) : null}
       <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>

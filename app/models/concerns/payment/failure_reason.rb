@@ -137,6 +137,16 @@ module Payment::FailureReason
   }
   private_constant :STRIPE_FAILURE_SOLUTIONS
 
+  def displayable_failure_reason
+    return nil unless failure_reason.present?
+
+    if processor == PayoutProcessorType::PAYPAL
+      PAYPAL_MASS_PAY[failure_reason] || failure_reason
+    elsif processor == PayoutProcessorType::STRIPE
+      STRIPE_FAILURE_SOLUTIONS[failure_reason] || failure_reason
+    end
+  end
+
   private
     def add_payment_failure_reason_comment
       return unless failure_reason.present?

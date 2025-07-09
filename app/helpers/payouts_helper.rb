@@ -109,7 +109,7 @@ module PayoutsHelper
     payout_period_data[:status] = payment.state
     payout_period_data[:payment_external_id] = payment.external_id
     payout_period_data[:type] = payment.payout_type || Payouts::PAYOUT_TYPE_STANDARD
-
+    payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
     payout_period_data[:payout_note] = nil
 
     balance_ids = payment.balances.map(&:id)
