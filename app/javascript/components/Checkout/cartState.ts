@@ -6,6 +6,7 @@ import { CurrencyCode } from "$app/utils/currency";
 import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 import { ResponseError, request } from "$app/utils/request";
+import { SocialProofWidgetData } from "$app/components/SocialProofWidget/types";
 
 import {
   Rental,
@@ -54,6 +55,7 @@ export type Product = {
   cross_sells: CrossSell[];
   archived: boolean;
   can_gift: boolean;
+  social_proof_widgets?: SocialProofWidgetData[] | null;
   bundle_products: {
     product_id: string;
     name: string;

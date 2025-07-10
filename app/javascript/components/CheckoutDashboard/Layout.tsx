@@ -5,6 +5,7 @@ const pageNames = {
   discounts: "Discounts",
   form: "Checkout form",
   upsells: "Upsells",
+  social_proof_widgets: "Social Proof"
 };
 export type Page = keyof typeof pageNames;
 
