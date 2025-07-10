@@ -17,7 +17,7 @@ export type Widget = {
   icon_color: string | null;
 };
 
-export type SortKey = "name" | "updated_at";
+export type SortKey = "name" | "updated_at" | "status";
 
 export type SocialProofWidgetPayload = {
   name: string;
