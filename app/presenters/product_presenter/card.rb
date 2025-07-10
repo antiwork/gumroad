@@ -8,7 +8,7 @@ class ProductPresenter::Card
     :alive_prices, :product_review_stat, :tiers, :variant_categories_alive,
     {
       user: [:avatar_attachment, :avatar_blob],
-      thumbnail_alive: [:file_attachment, :file_blob],
+      thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
       display_asset_previews: [:file_attachment, :file_blob],
     }
   ]
