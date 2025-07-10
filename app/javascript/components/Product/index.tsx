@@ -316,7 +316,7 @@ export const Product = ({
 
   return (
     <article className="product">
-      <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
+      <Covers covers={product.covers} mainCoverId={product.main_cover_id} alt={product.name} />
       {product.quantity_remaining !== null ? (
         <div className="ribbon">{`${product.quantity_remaining} left`}</div>
       ) : null}
@@ -597,12 +597,13 @@ export const Product = ({
   );
 };
 
-const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: string | null }) => {
+const Covers = ({ covers, mainCoverId, alt }: { covers: AssetPreview[]; mainCoverId: string | null; alt: string }) => {
   const [activeCoverId, setActiveCoverId] = React.useState(mainCoverId);
   useOnChange(() => setActiveCoverId(mainCoverId), [mainCoverId]);
 
   return (
     <CoversComponent
+      alt={alt}
       covers={covers}
       activeCoverId={activeCoverId}
       setActiveCoverId={setActiveCoverId}

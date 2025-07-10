@@ -21,6 +21,7 @@ export const Covers = ({
   closeButton,
   className,
   isThumbnail,
+  alt,
   style,
 }: {
   covers: AssetPreview[];
@@ -30,6 +31,7 @@ export const Covers = ({
   className?: string;
   isThumbnail?: boolean;
   style?: CSSProperties;
+  alt?: string | undefined;
 }) => {
   useOnChange(() => {
     if (!covers.some((cover) => cover.id === activeCoverId)) setActiveCoverId(covers[0]?.id ?? null);
@@ -62,8 +64,8 @@ export const Covers = ({
         }}
         onScroll={handleScroll}
       >
-        {covers.map((cover) => (
-          <CoverItem cover={cover} key={cover.id} />
+        {covers.map((cover, idx) => (
+          <CoverItem cover={cover} key={cover.id} isFirstItem={idx === 0} alt={alt} />
         ))}
       </div>
       {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
@@ -98,7 +100,15 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
   />
 );
 
-const CoverItem = ({ cover }: { cover: AssetPreview }) => {
+const CoverItem = ({
+  cover,
+  isFirstItem,
+  alt,
+}: {
+  cover: AssetPreview;
+  isFirstItem: boolean;
+  alt?: string | undefined;
+}) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dimensions = useElementDimensions(containerRef);
   const width = dimensions?.width;
@@ -125,7 +135,17 @@ const CoverItem = ({ cover }: { cover: AssetPreview }) => {
             height: cover.native_height * ratio,
           };
     if (cover.type === "image") {
-      coverComponent = <Image cover={cover} dimensions={dimensions} />;
+      // Eager load (with high fetch priority) the first image in the carousel and lazy
+      // load the other images for better LCP
+      coverComponent = (
+        <Image
+          alt={alt}
+          cover={cover}
+          dimensions={dimensions}
+          fetchPriority={isFirstItem ? "high" : "low"}
+          loading={isFirstItem ? "eager" : "lazy"}
+        />
+      );
     } else if (cover.type === "oembed") {
       coverComponent = <Embed cover={cover} dimensions={dimensions} />;
     } else {
