@@ -57,6 +57,7 @@ class ProductPresenter::ProductProps
             amount: product.free_trial_duration_amount
           }
         } : nil,
+        social_proof_widgets: social_proof_widgets_for_product,
         recurrences: product.recurrences,
         options: product.options,
         analytics: product.analytics_data,
@@ -170,5 +171,12 @@ class ProductPresenter::ProductProps
       else
         nil
       end
+    end
+
+    def social_proof_widgets_for_product
+      Checkout::SocialProofWidgetPresenter.widgets_for_product(
+        product: product,
+        current_user: seller
+      )
     end
 end
