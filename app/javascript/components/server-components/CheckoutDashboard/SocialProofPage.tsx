@@ -344,7 +344,13 @@ const SocialProofPage = ({
                           <div role="menu">
                             <div 
                               role="menuitem" 
-                              onClick={() => void handleDuplicate(widget.id)}
+                              onClick={async () => {
+                                try {
+                                  await handleDuplicate(widget.id);
+                                } catch (error) {
+                                  // error handled in handleDuplicate
+                                }
+                              }}
                             >
                               <Icon name="outline-duplicate" />
                               &ensp;Duplicate
