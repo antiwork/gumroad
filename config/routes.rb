@@ -676,14 +676,18 @@ Rails.application.routes.draw do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
       end
-    end
 
-    # TODO: move these within resources :products block above
-    get "/products/paged", to: "links#products_paged", as: :products_paged
-    get "/products/:id/edit", to: "links#edit", as: :edit_link
-    get "/products/:id/edit/*other", to: "links#edit"
-    get "/products/:id/card", to: "links#card", as: :product_card
-    get "/products/search", to: "links#search"
+      collection do
+        get :paged, to: "links#products_paged", as: :products_paged
+        get :search, to: "links#search"
+      end
+
+      member do
+        get :edit, to: "links#edit", as: :edit_link
+        get "edit/*other", to: "links#edit"
+        get :card, to: "links#card", as: :product_card
+      end
+    end
 
     namespace :integrations do
       resources :circle, only: [], format: :json do
