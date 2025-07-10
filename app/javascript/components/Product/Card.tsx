@@ -14,29 +14,71 @@ export const Card = ({
   product,
   badge,
   footerAction,
+  eager = false,
 }: {
   product: CardProduct;
   badge?: React.ReactNode;
   footerAction?: React.ReactNode;
-}) => {
-  const cardRef = React.useRef<HTMLElement | null>(null);
-  const isVisible = useIsVisibleOnMount(cardRef);
-
-  return (
-    <article ref={cardRef} className="product-card">
-      <figure>
-        <Thumbnail
-          url={product.thumbnail_url}
-          nativeType={product.native_type}
-          loading={isVisible ? "eager" : "lazy"}
-          fetchPriority={isVisible ? "high" : "auto"}
+  eager?: boolean;
+}) => (
+  <article className="product-card">
+    <figure>
+      <Thumbnail
+        url={product.thumbnail_url}
+        nativeType={product.native_type}
+        loading={eager ? "eager" : "lazy"}
+        fetchPriority={eager ? "high" : "auto"}
+      />
+    </figure>
+    {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
+    <header>
+      <a href={product.url} className="stretched-link">
+        <h4 itemProp="name">{product.name}</h4>
+      </a>
+      {product.seller ? (
+        <AuthorByline
+          name={product.seller.name}
+          profileUrl={product.seller.profile_url}
+          avatarUrl={product.seller.avatar_url ?? undefined}
         />
-      </figure>
-      {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
+      ) : null}
+      {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
+    </header>
+    <footer>
+      <PriceTag
+        url={product.url}
+        currencyCode={product.currency_code}
+        price={product.price_cents}
+        isPayWhatYouWant={product.is_pay_what_you_want}
+        isSalesLimited={product.is_sales_limited}
+        recurrence={
+          product.recurrence ? { id: product.recurrence, duration_in_months: product.duration_in_months } : undefined
+        }
+        creatorName={product.seller?.name}
+      />
+      {footerAction}
+    </footer>
+    {badge}
+  </article>
+);
+
+export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
+  <article className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
+    <figure>
+      <Thumbnail
+        url={product.thumbnail_url}
+        nativeType={product.native_type}
+        loading={eager ? "eager" : "lazy"}
+        fetchPriority={eager ? "high" : "auto"}
+      />
+    </figure>
+    {product.quantity_remaining != null ? <div className="ribbon">{product.quantity_remaining} left</div> : null}
+    <section>
       <header>
-        <a href={product.url} className="stretched-link">
-          <h4 itemProp="name">{product.name}</h4>
+        <a href={product.url} className="stretched-link" draggable="false">
+          {big ? <h2 itemProp="name">{product.name}</h2> : <h3 itemProp="name">{product.name}</h3>}
         </a>
+        <small>{product.description}</small>
         {product.seller ? (
           <AuthorByline
             name={product.seller.name}
@@ -44,7 +86,6 @@ export const Card = ({
             avatarUrl={product.seller.avatar_url ?? undefined}
           />
         ) : null}
-        {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
       </header>
       <footer>
         <PriceTag
@@ -58,62 +99,11 @@ export const Card = ({
           }
           creatorName={product.seller?.name}
         />
-        {footerAction}
+        {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
       </footer>
-      {badge}
-    </article>
-  );
-};
-
-export const HorizontalCard = ({ product, big }: { product: CardProduct; big?: boolean }) => {
-  const cardRef = React.useRef<HTMLElement | null>(null);
-  const isVisible = useIsVisibleOnMount(cardRef);
-
-  return (
-    <article ref={cardRef} className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
-      <figure>
-        <Thumbnail
-          url={product.thumbnail_url}
-          nativeType={product.native_type}
-          loading={isVisible ? "eager" : "lazy"}
-          fetchPriority={isVisible ? "high" : "auto"}
-        />
-      </figure>
-      {product.quantity_remaining != null ? <div className="ribbon">{product.quantity_remaining} left</div> : null}
-      <section>
-        <header>
-          <a href={product.url} className="stretched-link" draggable="false">
-            {big ? <h2 itemProp="name">{product.name}</h2> : <h3 itemProp="name">{product.name}</h3>}
-          </a>
-          <small>{product.description}</small>
-          {product.seller ? (
-            <AuthorByline
-              name={product.seller.name}
-              profileUrl={product.seller.profile_url}
-              avatarUrl={product.seller.avatar_url ?? undefined}
-            />
-          ) : null}
-        </header>
-        <footer>
-          <PriceTag
-            url={product.url}
-            currencyCode={product.currency_code}
-            price={product.price_cents}
-            isPayWhatYouWant={product.is_pay_what_you_want}
-            isSalesLimited={product.is_sales_limited}
-            recurrence={
-              product.recurrence
-                ? { id: product.recurrence, duration_in_months: product.duration_in_months }
-                : undefined
-            }
-            creatorName={product.seller?.name}
-          />
-          {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
-        </footer>
-      </section>
-    </article>
-  );
-};
+    </section>
+  </article>
+);
 
 const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSProperties }) => (
   <div className="rating" aria-label="Rating" style={style}>

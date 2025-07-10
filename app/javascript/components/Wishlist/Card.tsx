@@ -24,7 +24,15 @@ export type CardWishlist = {
   can_follow: boolean;
 };
 
-export const Card = ({ wishlist, hideSeller }: { wishlist: CardWishlist; hideSeller?: boolean }) => {
+export const Card = ({
+  wishlist,
+  hideSeller,
+  eager,
+}: {
+  wishlist: CardWishlist;
+  hideSeller?: boolean;
+  eager?: boolean;
+}) => {
   const { isFollowing, isLoading, toggleFollowing } = useFollowWishlist({
     wishlistId: wishlist.id,
     wishlistName: wishlist.name,
@@ -70,6 +78,8 @@ export const Card = ({ wishlist, hideSeller }: { wishlist: CardWishlist; hideSel
             src={url ?? cast(nativeTypeThumbnails(`./${native_type}.svg`))}
             role="presentation"
             crossOrigin="anonymous"
+            loading={eager ? "eager" : "lazy"}
+            fetchPriority={eager ? "high" : "auto"}
           />
         ))}
         {wishlist.thumbnails.length === 0 ? <img role="presentation" /> : null}

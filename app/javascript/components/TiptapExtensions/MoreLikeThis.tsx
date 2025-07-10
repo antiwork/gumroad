@@ -137,9 +137,9 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
           </div>
         ) : recommendedProducts && recommendedProducts.length > 0 ? (
           <div className="product-card-grid narrow" inert={editor.isEditable}>
-            {recommendedProducts.map((product) => (
+            {recommendedProducts.map((product, idx) => (
               <div key={product.id}>
-                <Card product={product} />
+                <Card product={product} eager={idx === 0} />
               </div>
             ))}
           </div>

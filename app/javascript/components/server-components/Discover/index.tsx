@@ -73,8 +73,8 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
           }}
           onMouseOut={() => setDragStart(null)}
         >
-          {products.map((product) => (
-            <HorizontalCard key={product.id} product={product} big />
+          {products.map((product, idx) => (
+            <HorizontalCard key={product.id} product={product} big eager={idx < 2} />
           ))}
         </div>
       </div>

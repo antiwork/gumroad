@@ -74,8 +74,8 @@ export const ContentTab = () => {
           </header>
           <section>
             <div className="product-card-grid">
-              {bundle.products.map((bundleProduct) => (
-                <Card key={bundleProduct.id} product={bundleProduct} />
+              {bundle.products.map((bundleProduct, idx) => (
+                <Card key={bundleProduct.id} product={bundleProduct} eager={idx === 0} />
               ))}
             </div>
           </section>
