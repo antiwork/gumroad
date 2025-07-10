@@ -1,7 +1,6 @@
 import cx from "classnames";
 import * as React from "react";
 
-import useIsVisibleOnMount from "$app/hooks/useIsVisibleOnMount";
 import { CardProduct, Ratings } from "$app/parsers/product";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
