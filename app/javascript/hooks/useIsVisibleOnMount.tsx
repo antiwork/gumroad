@@ -1,31 +1,20 @@
 import React from "react";
 
-const useIsVisibleOnMount = (
-  targetRef: React.RefObject<Element | null>,
-  { threshold = 0, root = null, rootMargin = "0%" }: IntersectionObserverInit | undefined = {},
-) => {
-  const [entry, setEntry] = React.useState<IntersectionObserverEntry>();
+const useIsVisibleOnMount = (targetRef: React.RefObject<Element | null>) => {
+  const [isVisible, setIsVisible] = React.useState(false);
 
   React.useEffect(() => {
     const element = targetRef.current;
+    if (!element) return;
 
-    if (!element || entry) return;
+    const rect = element.getBoundingClientRect();
 
-    const ob = new IntersectionObserver(
-      ([entry]: IntersectionObserverEntry[]) => {
-        setEntry(entry);
-      },
-      { threshold, root, rootMargin },
-    );
+    const isInViewport =
+      rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth;
 
-    ob.observe(element);
+    setIsVisible(isInViewport);
+  }, [targetRef]);
 
-    return () => {
-      ob.disconnect();
-    };
-  }, [entry, root, rootMargin, targetRef, threshold]);
-
-  return entry?.isIntersecting ?? false;
+  return isVisible;
 };
-
 export default useIsVisibleOnMount;
