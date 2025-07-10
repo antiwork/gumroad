@@ -42,10 +42,11 @@ import {
   getMaxQuantity,
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
-import { CtaButton } from "$app/components/Product/CtaButton";
+import { CtaButton, buildCheckoutUrl } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { ShareSection } from "$app/components/Product/ShareSection";
+import { SocialProofWidgets } from "$app/components/Product/SocialProofWidgets";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
@@ -54,10 +55,12 @@ import { Review as ReviewComponent } from "$app/components/Review";
 import { ReviewForm, Review as FormReview } from "$app/components/ReviewForm";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { SocialProofWidgetData } from "$app/components/SocialProofWidget/types";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -136,6 +139,7 @@ export type Product = {
   }[];
   public_files: PublicFile[];
   audio_previews_enabled: boolean;
+  social_proof_widgets?: SocialProofWidgetData[];
 };
 export type Purchase = {
   id: string;
@@ -248,6 +252,7 @@ export const Product = ({
     extensions: [UpsellCard, PublicFileEmbed, ReviewCard],
     editable: false,
   });
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   const notForSaleMessage = getNotForSaleMessage(product);
   const [discountCode, setDiscountCode] = React.useState(initialDiscountCode);
@@ -268,9 +273,12 @@ export const Product = ({
 
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
 
+  const [referrer, setReferrer] = React.useState("");
   const { searchParams } = new URL(useOriginalLocation());
+
   useRunOnce(() => {
     setPageLoaded(true);
+    setReferrer(document.referrer);
 
     if (disableAnalytics) return;
     if (product.seller) {
@@ -304,6 +312,21 @@ export const Product = ({
     }
     return true;
   };
+
+  const checkoutUrl = React.useMemo(() => {
+    if (getNotForSaleMessage(product)) return null;
+    return buildCheckoutUrl({
+      product,
+      discountCode: discountCode ?? null,
+      selection,
+      searchParams,
+      referrer,
+    });
+  }, [product, discountCode, selection, searchParams, referrer]);
+
+  const publishedWidgets = product.social_proof_widgets?.filter(widget => 
+    widget.status === undefined || widget.status === "published"
+  ) || [];
 
   const sellerByline = product.seller ? (
     <AuthorByline
@@ -423,6 +446,19 @@ export const Product = ({
             <div className="rich-text" dangerouslySetInnerHTML={{ __html: product.description_html ?? "" }} />
           )}
         </section>
+        {/* Desktop social proof widgets - show below description */}
+        {isDesktop && publishedWidgets.length > 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <SocialProofWidgets
+              widgets={publishedWidgets}
+              className="desktop-social-proof-widgets"
+              displayMode="desktop"
+              validate={validate}
+              checkoutUrl={checkoutUrl}
+              product={product}
+            />
+          </div>
+        ) : null}
       </section>
       <section>
         <section>
@@ -592,6 +628,18 @@ export const Product = ({
         </section>
         {product.ratings ? <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} /> : null}
       </section>
+
+      {/* Mobile social proof widgets - floating at bottom */}
+      {!isDesktop && publishedWidgets.length > 0 ? (
+        <SocialProofWidgets
+          widgets={publishedWidgets}
+          className="mobile-social-proof-widgets"
+          displayMode="mobile"
+          validate={validate}
+          checkoutUrl={checkoutUrl}
+          product={product}
+        />
+      ) : null}
     </article>
   );
 };

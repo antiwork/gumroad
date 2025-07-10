@@ -77,6 +77,61 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
   "utm_term",
 ]);
 
+// Extracting URL building logic into a shared function
+export const buildCheckoutUrl = ({
+  product,
+  discountCode,
+  selection,
+  searchParams,
+  referrer,
+}: {
+  product: Product;
+  discountCode: ProductDiscount | null;
+  selection: PriceSelection;
+  searchParams: URLSearchParams;
+  referrer: string;
+}): string => {
+  const { selectedOption, pppDiscounted } = applySelection(
+    product,
+    discountCode?.valid ? discountCode.discount : null,
+    selection,
+  );
+
+  const url = new URL(Routes.checkout_index_url());
+
+  const transformations: Record<string, string> = { a: "affiliate_id" };
+
+  for (const [key, value] of searchParams.entries()) {
+    if (PARAMETERS_NOT_INHERITED_FROM_URL.has(key)) continue;
+    url.searchParams.set(transformations[key] ?? key, value);
+  }
+
+  url.searchParams.set("product", product.permalink);
+  if (selection.optionId) url.searchParams.set("option", selection.optionId);
+  if (selection.recurrence) url.searchParams.set("recurrence", selection.recurrence);
+  if (selection.callStartTime) url.searchParams.set("call_start_time", selection.callStartTime);
+  url.searchParams.set("quantity", selection.quantity.toString());
+  if (selection.rent) url.searchParams.set("rent", "true");
+  let price = selection.price.value ?? product.price_cents + (selectedOption?.price_difference_cents ?? 0);
+  if ((product.pwyw || selectedOption?.is_pwyw) && selection.price.value != null) {
+    if (pppDiscounted && product.ppp_details) {
+      price /= product.ppp_details.factor;
+    } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
+      if (discountCode.discount.type === "percent") price /= (100 - discountCode.discount.percents) / 100.0;
+      else price += discountCode.discount.cents;
+    }
+
+    url.searchParams.set("price", Math.round(price).toString());
+  }
+  if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity) && !pppDiscounted)
+    url.searchParams.set("code", discountCode.code);
+
+  const referrerValue = searchParams.get("referrer") || referrer || null;
+  if (referrerValue) url.searchParams.set("referrer", referrerValue);
+
+  return url.toString();
+};
+
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
   ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
     const { searchParams } = new URL(useOriginalLocation());
@@ -84,47 +139,23 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
 
-    const { selectedOption, pppDiscounted, discountedPriceCents } = applySelection(
+    const { discountedPriceCents } = applySelection(
       product,
       discountCode?.valid ? discountCode.discount : null,
       selection,
     );
 
-    const url = new URL(Routes.checkout_index_url());
-
-    const transformations: Record<string, string> = { a: "affiliate_id" };
-
-    for (const [key, value] of searchParams.entries()) {
-      if (PARAMETERS_NOT_INHERITED_FROM_URL.has(key)) continue;
-      url.searchParams.set(transformations[key] ?? key, value);
-    }
-
-    url.searchParams.set("product", product.permalink);
-    if (selection.optionId) url.searchParams.set("option", selection.optionId);
-    if (selection.recurrence) url.searchParams.set("recurrence", selection.recurrence);
-    if (selection.callStartTime) url.searchParams.set("call_start_time", selection.callStartTime);
-    url.searchParams.set("quantity", selection.quantity.toString());
-    if (selection.rent) url.searchParams.set("rent", "true");
-    let price = selection.price.value ?? product.price_cents + (selectedOption?.price_difference_cents ?? 0);
-    if ((product.pwyw || selectedOption?.is_pwyw) && selection.price.value != null) {
-      if (pppDiscounted && product.ppp_details) {
-        price /= product.ppp_details.factor;
-      } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
-        if (discountCode.discount.type === "percent") price /= (100 - discountCode.discount.percents) / 100.0;
-        else price += discountCode.discount.cents;
-      }
-
-      url.searchParams.set("price", Math.round(price).toString());
-    }
-    if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity) && !pppDiscounted)
-      url.searchParams.set("code", discountCode.code);
-
-    const referrerValue = searchParams.get("referrer") || referrer || null;
-    if (referrerValue) url.searchParams.set("referrer", referrerValue);
-
     if (getNotForSaleMessage(product)) return null;
 
-    const urlWithInstallments = new URL(url);
+    const checkoutUrl = buildCheckoutUrl({
+      product,
+      discountCode,
+      selection,
+      searchParams,
+      referrer,
+    });
+
+    const urlWithInstallments = new URL(checkoutUrl);
     urlWithInstallments.searchParams.set("pay_in_installments", "true");
 
     const buttonCommonProps = {
@@ -144,7 +175,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     return (
       <>
-        <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
+        <NavigationButton ref={ref} href={checkoutUrl} color="accent" {...buttonCommonProps}>
           {label ??
             (purchase
               ? "Purchase again"
