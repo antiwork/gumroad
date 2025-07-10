@@ -19,8 +19,9 @@ export const Card = ({
   badge?: React.ReactNode;
   footerAction?: React.ReactNode;
 }) => {
-  const cardRef = React.useRef<HTMLImageElement | null>(null);
-  const visible = useIntersectionObserver(cardRef, { freezeOnceVisible: true });
+  const cardRef = React.useRef<HTMLElement | null>(null);
+  const observerEntry = useIntersectionObserver(cardRef, { freezeOnceVisible: true });
+  const isVisible = observerEntry?.isIntersecting;
 
   return (
     <article ref={cardRef} className="product-card">
@@ -28,8 +29,8 @@ export const Card = ({
         <Thumbnail
           url={product.thumbnail_url}
           nativeType={product.native_type}
-          loading={visible ? "eager" : "lazy"}
-          fetchPriority={visible ? "high" : "auto"}
+          loading={isVisible ? "eager" : "lazy"}
+          fetchPriority={isVisible ? "high" : "auto"}
         />
       </figure>
       {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
@@ -66,8 +67,9 @@ export const Card = ({
 };
 
 export const HorizontalCard = ({ product, big }: { product: CardProduct; big?: boolean }) => {
-  const cardRef = React.useRef<HTMLImageElement | null>(null);
-  const visible = useIntersectionObserver(cardRef, { freezeOnceVisible: true });
+  const cardRef = React.useRef<HTMLElement | null>(null);
+  const observerEntry = useIntersectionObserver(cardRef, { freezeOnceVisible: true });
+  const isVisible = observerEntry?.isIntersecting;
 
   return (
     <article ref={cardRef} className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
@@ -75,8 +77,8 @@ export const HorizontalCard = ({ product, big }: { product: CardProduct; big?: b
         <Thumbnail
           url={product.thumbnail_url}
           nativeType={product.native_type}
-          loading={visible ? "eager" : "lazy"}
-          fetchPriority={visible ? "high" : "auto"}
+          loading={isVisible ? "eager" : "lazy"}
+          fetchPriority={isVisible ? "high" : "auto"}
         />
       </figure>
       {product.quantity_remaining != null ? <div className="ribbon">{product.quantity_remaining} left</div> : null}
