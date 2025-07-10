@@ -21,7 +21,8 @@ class Checkout::SocialProofWidgetPresenter
       product_count: widget.universal? ? 0 : widget.products.alive.count,
       status: widget.status,
       created_at: widget.created_at.iso8601,
-      updated_at: widget.updated_at.iso8601
+      updated_at: widget.updated_at.iso8601,
+      icon_color: widget.icon_color
     }
   end
 
@@ -41,7 +42,8 @@ class Checkout::SocialProofWidgetPresenter
       available_products: available_products_for_selection,
       image_type_options: self.image_type_options,
       cta_type_options: self.cta_type_options,
-      icon_options: self.icon_options
+      icon_options: self.icon_options,
+      icon_color: widget.icon_color
     }
   end
 

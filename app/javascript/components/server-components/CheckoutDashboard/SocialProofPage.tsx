@@ -663,14 +663,14 @@ const WidgetForm = ({
       status: targetStatus,
       product_ids: universal ? [] : selectedProductIds,
       custom_image_signed_blob_id: customImageBlobId,
-      icon_color: imageType === "icon" ? iconColor : null
+      icon_color: (imageType === "icon" || imageType.startsWith("icon_")) ? iconColor : null
     };
 
     await onSave(payload);
   };
 
-   // load widget data when editing
-   React.useEffect(() => {
+  // load widget data when editing
+  React.useEffect(() => {
     if (widget) {
       const loadWidgetData = async () => {
         try {
@@ -679,12 +679,19 @@ const WidgetForm = ({
           setDescription(editProps.description || "");
           setCtaText(editProps.cta_text || "");
           setCtaType(editProps.cta_type);
-          setImageType(editProps.image_type || "product_thumbnail");
+          
+          // Fix the icon handling
+          if (editProps.image_type?.startsWith("icon_")) {
+            setImageType("icon");
+            setSelectedIcon(editProps.image_type.replace("icon_", ""));
+            // Load the icon color from the widget data
+            setIconColor(widget.icon_color || "#000000");
+          } else {
+            setImageType(editProps.image_type || "product_thumbnail");
+          }
+          
           setSelectedProductIds(editProps.product_ids || []);
           setCustomImageUrl(editProps.custom_image_url ? editProps.custom_image_url : null);
-          if (editProps.image_type?.startsWith("icon_")) {
-            setSelectedIcon(editProps.image_type.replace("icon_", ""));
-          }
         } catch (error) {
           console.error("Failed to load widget data:", error);
         }
