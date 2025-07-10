@@ -49,12 +49,13 @@ bundle exec rspec spec
 2. Add or update tests for your changes
 3. Provide before & after screenshots/videos for UI changes
 4. Include screenshots of your test suite passing locally
-5. Make sure all tests pass
-6. Request a review from maintainers
-7. After reviews begin, avoid force-pushing to your branch
+5. Use professional English in all communication with no excessive capitalization, question marks, or informal language - we have a zero tolerance policy as it makes async communication difficult
+6. Make sure all tests pass
+7. Request a review from maintainers
+8. After reviews begin, avoid force-pushing to your branch
    - Force-pushing rewrites history and makes review threads hard to follow
    - Don't worry about messy commits - we squash everything when merging to main
-8. The PR will be merged once you have the sign-off of at least one other developer
+9. The PR will be merged once you have the sign-off of at least one other developer
 
 ## Style Guide
 
