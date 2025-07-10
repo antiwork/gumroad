@@ -55,4 +55,5 @@ img {
 @font-face {
   font-family: "ABC Favorit";
   src: url("ABCFavorit-Regular.woff2");
+  font-display: swap;
 }

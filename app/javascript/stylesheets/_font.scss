@@ -1,18 +1,21 @@
 @font-face {
   font-family: "ABC Favorit";
   src: url("~fonts/ABCFavorit-Regular.woff2");
+  font-display: swap;
 }
 
 @font-face {
   font-family: "ABC Favorit";
   src: url("~fonts/ABCFavorit-RegularItalic.woff2");
   font-style: italic;
+  font-display: swap;
 }
 
 @font-face {
   font-family: "ABC Favorit";
   src: url("~fonts/ABCFavorit-Bold.woff2");
   font-weight: 700;
+  font-display: swap;
 }
 
 @font-face {
@@ -20,4 +23,5 @@
   src: url("~fonts/ABCFavorit-BoldItalic.woff2");
   font-weight: 700;
   font-style: italic;
+  font-display: swap;
 }
