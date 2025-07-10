@@ -477,6 +477,10 @@ Rails.application.routes.draw do
         get :cart_item, on: :collection
         get :statistics, on: :member
       end
+      resources :social_proof_widgets, only: %i[index create show update destroy] do
+        get :paged, on: :collection
+        patch :duplicate, on: :member
+      end
       namespace :upsells do
         resources :products, only: [:index, :show]
       end

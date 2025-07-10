@@ -44,6 +44,9 @@ class User < ApplicationRecord
   has_many :resource_subscriptions
   has_many :devices
 
+  # Associate with Social Proof Widgets
+  has_many :social_proof_widgets, dependent: :destroy
+
   belongs_to :credit_card, optional: true
 
   # Associate with CustomDomain.alive objects

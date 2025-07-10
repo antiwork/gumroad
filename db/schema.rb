@@ -2075,6 +2075,33 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
     t.index ["variant_id"], name: "index_skus_variants_on_variant_id"
   end
 
+  create_table "social_proof_widgets", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "name", null: false
+    t.boolean "universal", default: false, null: false
+    t.string "title"
+    t.text "description"
+    t.string "cta_text"
+    t.integer "cta_type", default: 0, null: false
+    t.string "image_type"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.datetime "deleted_at", precision: nil
+    t.integer "status", default: 1, null: false
+    t.index ["deleted_at"], name: "index_social_proof_widgets_on_deleted_at"
+    t.index ["status"], name: "index_social_proof_widgets_on_status"
+    t.index ["user_id"], name: "fk_rails_social_proof_widgets_user"
+  end
+
+  create_table "social_proof_widgets_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "social_proof_widget_id", null: false
+    t.bigint "product_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_id"], name: "index_spw_products_on_product_id"
+    t.index ["social_proof_widget_id"], name: "index_spw_products_on_spw_id"
+  end
+
   create_table "staff_picked_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "product_id", null: false
     t.datetime "deleted_at"
