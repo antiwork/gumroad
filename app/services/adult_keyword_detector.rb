@@ -4,16 +4,13 @@ class AdultKeywordDetector
   # TODO: Add "pin-up" and "AB/DL". We may have to revisit our approach so we can include non-alphabet characters in the
   # list of adult keywords
 
-  ADULT_KEYWORD_REGEX = Regexp.new(
-    "\\b(" +
-      ["futa", "pussy", "bondage", "bdsm", "lewd", "ahegao", "nude", "milking", "topless", "lolita", "lewds",
-       "creampie", "dildo", "gape", "semen", "cuckold", "hairjob", "tickling", "hogtied", "uncensored", "thong",
-       "pinup", "impregnation", "gagged", "hentai", "squirt", "orgasm", "virginkiller", "abdl", "crotch",
-       "breast inflation", "ahri", "granblue", "lingerie",
-       "boudoir", "kink", "shibari", "gutpunch", "gutpunching", "abs punch", "necro",
-       "vibrator", "fetish", "nsfw", "saucy", "footjob", "joi"].join("|") +
-    ")\\b"
-  ).freeze
+  ADULT_KEYWORDS = Set.new([
+    "futa", "pussy", "bondage", "bdsm", "lewd", "ahegao", "nude", "milking", "topless", "lolita", "lewds",
+    "creampie", "dildo", "gape", "semen", "cuckold", "hairjob", "tickling", "hogtied", "uncensored", "thong",
+    "pinup", "impregnation", "gagged", "hentai", "squirt", "orgasm", "virginkiller", "abdl", "crotch",
+    "breast inflation", "ahri", "granblue", "lingerie", "boudoir", "kink", "shibari", "gutpunch", "gutpunching",
+    "abs punch", "necro", "vibrator", "fetish", "nsfw", "saucy", "footjob", "joi"
+  ]).freeze
 
   # From https://stackoverflow.com/a/4052294/3315873
   # There are three cases in Unicode, not two. Furthermore, you also have non-cased letters.
@@ -38,17 +35,10 @@ class AdultKeywordDetector
   NOT_LETTER_OR_SPACE_REGEX = /[^\p{Lu}\p{Lt}\p{Ll}\p{Lm}\p{Lo} ]/
 
   def self.adult?(text)
-    tokens = if text.present?
-      # 1. Change all non-letters characters to a blank space
-      # 2. Split the text into words
-      # 3. Make all the words lower-case
-      text.gsub(NOT_LETTER_OR_SPACE_REGEX, " ").scan(TOKENIZATION_REGEX).flatten.map(&:downcase)
-    else
-      []
-    end
+    return false if text.blank?
 
-    tokens_as_string = tokens.join(" ")
-
-    ADULT_KEYWORD_REGEX.match?(tokens_as_string)
+    sanitized = text.gsub(NOT_LETTER_OR_SPACE_REGEX, " ")
+    tokens = sanitized.scan(TOKENIZATION_REGEX).flatten.map(&:downcase)
+    tokens.any? { |token| ADULT_KEYWORDS.include?(token) }
   end
 end
