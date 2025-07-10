@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class SocialProofWidget < ApplicationRecord
+  attribute :icon_color, :string
   include ExternalId
   include Deletable
   include ActionView::Helpers::DateHelper
