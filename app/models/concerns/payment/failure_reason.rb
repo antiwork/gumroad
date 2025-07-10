@@ -143,7 +143,9 @@ module Payment::FailureReason
     if processor == PayoutProcessorType::PAYPAL
       PAYPAL_MASS_PAY[failure_reason] || failure_reason
     elsif processor == PayoutProcessorType::STRIPE
-      STRIPE_FAILURE_SOLUTIONS[failure_reason] || failure_reason
+      STRIPE_FAILURE_SOLUTIONS[failure_reason]&.dig(:reason) || failure_reason
+    else
+      failure_reason
     end
   end
 

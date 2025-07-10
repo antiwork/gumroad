@@ -264,8 +264,12 @@ const PayoutPeriodHeading = ({ payoutPeriodData }: { payoutPeriodData: PayoutPer
         return "Paused";
       case "failed":
         return "Failed";
-      case "completed":
-        return `Paid on ${payoutPeriodData.arrival_date}`;
+      case "completed": {
+        if ("arrival_date" in payoutPeriodData && payoutPeriodData.arrival_date) {
+          return `Paid on ${payoutPeriodData.arrival_date}`;
+        }
+        return "Paid";
+      }
     }
   }, [payoutPeriodData]);
 
