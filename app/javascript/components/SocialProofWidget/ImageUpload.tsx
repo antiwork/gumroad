@@ -33,11 +33,17 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 
   const validateImageDimensions = (file: File): Promise<boolean> => {
     return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
         resolve(img.width >= MIN_DIMENSIONS && img.height >= MIN_DIMENSIONS);
+        URL.revokeObjectURL(url);
       };
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => {
+        resolve(false);
+        URL.revokeObjectURL(url);
+      }
+      img.src = url;
     });
   };
 
