@@ -50,7 +50,7 @@ class SocialProofWidget < ApplicationRecord
   # scopes
   scope :universal, -> { where(universal: true) }
   scope :for_product, -> (product) {
-    published.left_joins(:products).where(
+    published.alive.left_joins(:products).where(
       "social_proof_widgets.universal = ? OR links.id = ?", 
       true, 
       product.id
