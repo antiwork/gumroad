@@ -1,7 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
 
-import useIntersectionObserver from "$app/hooks/useIntersectionObserver";
+import useIsVisibleOnMount from "$app/hooks/useIsVisibleOnMount";
 import { CardProduct, Ratings } from "$app/parsers/product";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
@@ -20,8 +20,7 @@ export const Card = ({
   footerAction?: React.ReactNode;
 }) => {
   const cardRef = React.useRef<HTMLElement | null>(null);
-  const observerEntry = useIntersectionObserver(cardRef, { freezeOnceVisible: true });
-  const isVisible = observerEntry?.isIntersecting;
+  const isVisible = useIsVisibleOnMount(cardRef);
 
   return (
     <article ref={cardRef} className="product-card">
@@ -68,8 +67,7 @@ export const Card = ({
 
 export const HorizontalCard = ({ product, big }: { product: CardProduct; big?: boolean }) => {
   const cardRef = React.useRef<HTMLElement | null>(null);
-  const observerEntry = useIntersectionObserver(cardRef, { freezeOnceVisible: true });
-  const isVisible = observerEntry?.isIntersecting;
+  const isVisible = useIsVisibleOnMount(cardRef);
 
   return (
     <article ref={cardRef} className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
