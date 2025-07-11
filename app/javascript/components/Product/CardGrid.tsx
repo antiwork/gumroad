@@ -351,7 +351,7 @@ export const CardGrid = ({
       ) : (
         <div>
           <div className="product-card-grid" ref={gridRef}>
-            {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 3} />) ??
+            {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)
                 .map((_, i) => <div key={i} className="dummy" />)}
