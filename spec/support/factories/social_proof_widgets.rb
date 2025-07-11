@@ -9,5 +9,10 @@ FactoryBot.define do
     cta_type { "button" }
     image_type { "none" }
     icon_color { "#FFB800" }
+
+    trait :with_icon do
+      image_type { "icon" }
+      icon_name { "heart-fill" }
+    end
   end
 end

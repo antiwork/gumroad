@@ -15,6 +15,19 @@ class SocialProofWidget < ApplicationRecord
   # Alias title_text to the `title` attribute to match the controller's transformation.
   alias_attribute :title_text, :title
 
+  # Dynamically load available icons from the assets directory
+  def self.available_icons
+    @available_icons ||= begin
+      icons_path = Rails.root.join('app', 'assets', 'images', 'icons')
+      return [] unless Dir.exist?(icons_path)
+
+      Dir.entries(icons_path)
+         .select { |file| file.end_with?('.svg') }
+         .map { |file| file.chomp('.svg') }
+         .sort
+    end
+  end
+
   validates :name, presence: true
   validates :title, presence: true
   validates :cta_type, inclusion: { in: %w[button link none],
@@ -29,22 +42,11 @@ class SocialProofWidget < ApplicationRecord
     message: "%{value} is not a valid image type"
   }
   validates :icon_name, inclusion: {
-    in: %w[
-      heart-fill
-      star-fill
-      gift-fill
-      solid-star
-      solid-bell
-      solid-user
-      cart3-fill
-      check-square
-      circle-fill
-      bookmark-heart-fill
-    ],
+    in: -> { SocialProofWidget.available_icons },
     message: "%{value} is not a valid icon name"
   }, if: -> { image_type == 'icon' }
 
-    def status
+  def status
     published? ? 'published' : 'unpublished'
   end
 
@@ -63,8 +65,6 @@ class SocialProofWidget < ApplicationRecord
   def current_analytics(days = 30)
     SocialProofWidgetAnalytic.totals_for_widget(id, days.days.ago, Date.current)
   end
-
-
 
   def analytics_summary
     stats = current_analytics

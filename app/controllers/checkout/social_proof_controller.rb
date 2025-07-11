@@ -44,7 +44,7 @@ class Checkout::SocialProofController < Sellers::BaseController
         icon_color: permitted_params[:icon_color]
       }.compact
 
-            social_proof_widget = current_user.social_proof_widgets.new(widget_attributes)
+      social_proof_widget = current_user.social_proof_widgets.new(widget_attributes)
 
       # Set the status
       social_proof_widget.status = permitted_params[:status] || 'unpublished'

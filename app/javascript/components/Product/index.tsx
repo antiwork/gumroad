@@ -178,7 +178,7 @@ export type SocialProofWidgetProps = {
   cta_type?: "button" | "link" | "none";
   image_type?: "product" | "custom" | "icon" | "none";
   image_url?: string | null;
-  icon_name?: string | null;
+  icon_name?: IconName | null;
   icon_color?: string | null;
 };
 
@@ -610,24 +610,35 @@ export const Product = ({
         {product.ratings ? <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} /> : null}
       </section>
 
-      {/* Social Proof Widgets */}
       {social_proof_widgets.length > 0 && (
-        <div className="fixed bottom-0 left-0 m-8 flex w-full flex-col">
-          {social_proof_widgets.map((widget) => (
-            <SocialProofCard
-              key={widget.id}
-              widgetId={widget.id}
-              title={widget.title ?? ""}
-              description={widget.description ?? ""}
-              imageType={widget.image_type ?? "none"}
-              ctaType={widget.cta_type ?? "none"}
-              ctaText={widget.cta_text ?? ""}
-              ctaUrl="#" // A default or dynamic URL should be added to the model
-              iconName={(widget.icon_name as any) ?? "heart-fill"}
-              iconColor={widget.icon_color ?? "#FFB800"}
-              imageUrl={widget.image_url ?? ""}
-            />
-          ))}
+        <div
+          className="fixed bottom-0 left-0 m-8 flex w-full flex-col"
+          style={{
+            zIndex: "var(--z-index-overlay)",
+            pointerEvents: "none",
+          }}
+        >
+          {social_proof_widgets.map((widget) => {
+            const checkoutUrl = new URL(Routes.checkout_index_url());
+            checkoutUrl.searchParams.set("product", product.permalink);
+
+            return (
+              <div key={widget.id} style={{ pointerEvents: "auto" }}>
+                <SocialProofCard
+                  widgetId={widget.id}
+                  title={widget.title ?? ""}
+                  description={widget.description ?? ""}
+                  imageType={widget.image_type ?? "none"}
+                  ctaType={widget.cta_type ?? "none"}
+                  ctaText={widget.cta_text ?? ""}
+                  ctaUrl={checkoutUrl.toString()}
+                  iconName={widget.icon_name ?? "heart-fill"}
+                  iconColor={widget.icon_color ?? "#FFB800"}
+                  imageUrl={widget.image_url ?? ""}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </article>

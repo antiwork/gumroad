@@ -41,7 +41,7 @@ type SocialProofPlayload = {
   ctaText: string;
   ctaType: { id: "button" | "link" | "none"; label: string };
   image: { id: "product" | "custom" | "icon" | "none"; label: string };
-  icon: string;
+  icon: IconName;
   iconColor: string;
   selectedProductIds: string[];
   universal: boolean;
@@ -504,8 +504,6 @@ type Product = {
   url: string;
   is_tiered_membership: boolean;
   archived: boolean;
-  //   title: string;
-  //   description: string;
 };
 
 const Form = ({
@@ -552,11 +550,11 @@ const Form = ({
   const [image, setImage] = React.useState<ImageType>(getImageType());
 
   const [thumbnail, setThumbnail] = React.useState<Thumbnail | null>(null);
-  const [icon, setIcon] = React.useState<string>(socialProofWidget?.icon_name ?? "heart-fill");
+  const [icon, setIcon] = React.useState<IconName>(socialProofWidget?.icon_name ?? "bullseye");
   const [iconColor, setIconColor] = React.useState(socialProofWidget?.icon_color ?? "#FFB800");
-  const [universal, setUniversal] = React.useState(false);
+  const [universal, setUniversal] = React.useState(socialProofWidget?.universal ?? false);
   const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
-    value: [],
+    value: socialProofWidget?.product_ids ?? [],
   });
   const [visibility, setVisibility] = React.useState<VisibilityType>({ id: "all", label: "All visitors" });
   const [status, setStatus] = React.useState(socialProofWidget?.status ?? "unpublished");
@@ -690,6 +688,7 @@ const Form = ({
                 Learn more
               </a>
             </p>
+
             <fieldset className={cx({ danger: false })}>
               <legend>
                 <label htmlFor="title">Title</label>
@@ -697,12 +696,35 @@ const Form = ({
               <input
                 type="text"
                 id="title"
-                placeholder="Join the community"
+                placeholder="Join {total_sales}"
                 value={titleText}
                 onChange={(evt) => setTitleText(evt.target.value)}
                 aria-invalid={false}
               />
             </fieldset>
+            <div
+              className="variable-buttons"
+              style={{ display: "flex", gap: "var(--spacer-2)", marginBottom: "var(--spacer-3)", flexWrap: "wrap" }}
+            >
+              <Button small onClick={() => setTitleText((prev) => `${prev}{total_sales}`)}>
+                Total sales
+              </Button>
+              <Button small onClick={() => setTitleText((prev) => `${prev}{recent_sales}`)}>
+                Recent sales
+              </Button>
+              <Button small onClick={() => setTitleText((prev) => `${prev}{customer}`)}>
+                Customer
+              </Button>
+              <Button small onClick={() => setTitleText((prev) => `${prev}{product}`)}>
+                Product
+              </Button>
+              <Button small onClick={() => setTitleText((prev) => `${prev}{price}`)}>
+                Price
+              </Button>
+              <Button small onClick={() => setTitleText((prev) => `${prev}{country}`)}>
+                Country
+              </Button>
+            </div>
             <fieldset className={cx({ danger: false })}>
               <legend>
                 <label htmlFor="description">Description</label>
@@ -715,6 +737,7 @@ const Form = ({
                 aria-invalid={false}
               />
             </fieldset>
+
             <fieldset className={cx({ danger: false })}>
               <legend>
                 <label htmlFor="cta">Call to action</label>
@@ -752,7 +775,7 @@ const Form = ({
             <h2>Image</h2>
             <fieldset>
               <legend>
-                <label htmlFor="image">Image</label>
+                <label htmlFor="image">Image source</label>
               </legend>
               <Select
                 inputId="image"
@@ -780,9 +803,111 @@ const Form = ({
               )}
               {image.id === "icon" && (
                 <>
-                  <div>
-                    <Button onClick={() => setIcon("heart-fill")}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "var(--spacer-3)",
+                    }}
+                  >
+                    <Button
+                      onClick={() => setIcon("bullseye")}
+                      aria-pressed={icon === "bullseye"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="bullseye" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("heart-fill")}
+                      aria-pressed={icon === "heart-fill"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
                       <Icon name="heart-fill" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("check-square")}
+                      aria-pressed={icon === "check-square"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="check-square" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("cart3-fill")}
+                      aria-pressed={icon === "cart3-fill"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="cart3-fill" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("solid-user")}
+                      aria-pressed={icon === "solid-user"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="solid-user" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("solid-star")}
+                      aria-pressed={icon === "solid-star"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="solid-star" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("gift-fill")}
+                      aria-pressed={icon === "gift-fill"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="gift-fill" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("circle-fill")}
+                      aria-pressed={icon === "circle-fill"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="circle-fill" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("solid-bell")}
+                      aria-pressed={icon === "solid-bell"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="solid-bell" />
+                    </Button>
+                    <Button
+                      onClick={() => setIcon("lighting-fill")}
+                      aria-pressed={icon === "lighting-fill"}
+                      style={{
+                        aspectRatio: "1",
+                        flex: 1,
+                      }}
+                    >
+                      <Icon name="lighting-fill" />
                     </Button>
                   </div>
                   <fieldset>
@@ -827,7 +952,6 @@ const Form = ({
         </form>
       </main>
       <Preview
-        name={name}
         titleText={titleText}
         description={description}
         ctaText={ctaText}
@@ -835,6 +959,9 @@ const Form = ({
         image={image}
         icon={icon}
         iconColor={iconColor}
+        selectedProducts={selectedProducts}
+        universal={universal}
+        allProducts={products}
       />
     </div>
   );
@@ -848,8 +975,10 @@ const Preview = ({
   image,
   icon,
   iconColor,
+  selectedProducts,
+  universal,
+  allProducts,
 }: {
-  name: string;
   titleText: string;
   description: string;
   ctaText: string;
@@ -857,6 +986,9 @@ const Preview = ({
   image: ImageType;
   icon: string;
   iconColor: string;
+  selectedProducts: Product[];
+  universal: boolean;
+  allProducts: Product[];
 }) => {
   const socialProofCardProps = useSocialProofCardPropsFromPreview({
     titleText,
@@ -868,13 +1000,35 @@ const Preview = ({
     iconColor,
   });
 
+  const getPreviewUrl = () => {
+    if (universal) {
+      // For universal widgets, use any available product
+      const availableProducts = allProducts.filter((p) => !p.archived);
+      if (availableProducts.length > 0) {
+        return availableProducts[0]?.url;
+      }
+    } else if (selectedProducts.length > 0) {
+      // For specific widgets, use selected products
+      return selectedProducts[0]?.url;
+    }
+    return null;
+  };
+
+  const previewUrl = getPreviewUrl();
+
   return (
     <aside aria-label="Preview">
       <header>
         <h2>Preview</h2>
-        <WithTooltip tip="Preview">
-          {/* TODO: add link */}
-          <Button onClick={() => {}}>
+        <WithTooltip tip={previewUrl ? "Preview on product page" : "Select a product to preview"}>
+          <Button
+            onClick={() => {
+              if (previewUrl) {
+                window.open(previewUrl, "_blank");
+              }
+            }}
+            disabled={!previewUrl}
+          >
             <Icon name="arrow-diagonal-up-right" />
           </Button>
         </WithTooltip>

@@ -50,7 +50,10 @@ interface NoCTAProps {
 type ImageTypeProps = ProductImageProps | CustomImageProps | IconImageProps | NoImageProps;
 type CTATypeProps = ButtonCTAProps | LinkCTAProps | NoCTAProps;
 
-export type SocialProofCardProps = ImageTypeProps & CTATypeProps;
+export type SocialProofCardProps = ImageTypeProps &
+  CTATypeProps & {
+    ctaColor?: "primary" | "accent" | "black" | "success" | "danger" | "warning" | "info" | "filled";
+  };
 
 export const SocialProofCard = (props: SocialProofCardProps) => {
   const { title, description, widgetId } = props;
@@ -77,7 +80,7 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
       case "icon":
         return (
           <div
-            className="grid h-[72px] w-[72px] place-items-center rounded border border-black"
+            className="grid h-[72px] w-[72px] place-items-center rounded border"
             style={{ backgroundColor: `${props.iconColor}4D` }}
           >
             <Icon name={props.iconName} style={{ color: props.iconColor }} />
@@ -92,7 +95,12 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
     switch (props.ctaType) {
       case "button":
         return (
-          <NavigationButton href={props.ctaUrl} color="accent" className="w-full" onClick={handleClick}>
+          <NavigationButton
+            href={props.ctaUrl}
+            color={props.ctaColor ?? "accent"}
+            className="w-full"
+            onClick={handleClick}
+          >
             {props.ctaText}
           </NavigationButton>
         );
@@ -109,8 +117,8 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
 
   return (
     <div
-      className="relative flex w-full max-w-sm flex-col gap-4 rounded-lg border border-[#1D1E17] p-4"
-      style={{ boxShadow: "4px 4px 16px 0px #00000029" }}
+      className="bg-filled relative flex w-full max-w-sm flex-col gap-4 rounded-lg border p-4"
+      style={{ boxShadow: "var(--box-shadow-1, 4px 4px 16px 0px #00000029)" }}
     >
       <div className="">
         <div className="flex gap-3">
@@ -121,7 +129,7 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
             {props.ctaType === "link" && renderCTA()}
           </div>
         </div>
-        <Icon name="x" className="absolute right-2 top-1 text-black" />
+        <Icon name="x" className="absolute right-2 top-1 text-current" />
       </div>
       {props.ctaType === "button" && renderCTA()}
     </div>

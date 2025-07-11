@@ -27,8 +27,10 @@ export type SocialProofWidget = {
   cta_type: string;
   image_type: string;
   image_url: string | null;
-  icon_name: string;
+  icon_name: IconName;
   icon_color: string | null;
+  universal: boolean;
+  product_ids: string[];
   can_update: boolean;
   clicks: number;
   conversion_rate: string;

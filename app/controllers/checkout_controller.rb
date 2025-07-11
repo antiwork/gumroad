@@ -3,7 +3,7 @@
 class CheckoutController < ApplicationController
   before_action :process_cart_id_param, only: %i[index]
 
-    def index
+  def index
     @hide_layouts = true
     @on_checkout_page = true
     @checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip, social_proof_widgets: [])

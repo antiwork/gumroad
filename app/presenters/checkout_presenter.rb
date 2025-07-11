@@ -24,6 +24,9 @@ class CheckoutPresenter
     detected_state = geo.try(:region_name) if [Compliance::Countries::USA, Compliance::Countries::CAN].any? { |country| country.common_name == detected_country }
     credit_card = logged_in_user&.credit_card
     user = params[:username] && User.find_by_username(params[:username])
+
+    checkout_product = params[:product] && (user ? Link.fetch_leniently(params[:product], user:) : Link.find_by_unique_permalink(params[:product]))
+
     {
       **checkout_common,
       country: Compliance::Countries.find_by_name(country)&.alpha2,
@@ -43,7 +46,12 @@ class CheckoutPresenter
       max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
       tip_options: TipOptionsService.get_tip_options,
       default_tip_option: TipOptionsService.get_default_tip_option,
-      social_proof_widgets: @social_proof_widgets.map(&:attributes),
+      social_proof_widgets: @social_proof_widgets.map { |widget|
+        process_social_proof_widget(widget, checkout_context: {
+          product: checkout_product,
+          browser_guid: browser_guid
+        })
+      },
     }
   end
 
@@ -219,7 +227,9 @@ class CheckoutPresenter
         is_gift: subscription.gift?,
         is_installment_plan: subscription.is_installment_plan,
       },
-      social_proof_widgets: @social_proof_widgets.map(&:attributes),
+      social_proof_widgets: @social_proof_widgets.map { |widget|
+        process_social_proof_widget(widget, checkout_context: { product: product })
+      },
     }
   end
 
@@ -328,5 +338,39 @@ class CheckoutPresenter
 
     def purchases
       @_purchases ||= logged_in_user&.purchases&.map { |purchase| { product: purchase.link, variant: purchase.variant_attributes.first } } || []
+    end
+
+    def process_social_proof_widget(widget, checkout_context: {})
+      product = determine_checkout_product(widget, checkout_context)
+
+      context = {
+        product: product,
+        customer_country: logged_in_user&.country || GeoIp.lookup(@ip)&.country_name,
+        customer_name: logged_in_user&.name
+      }
+
+      substitution_service = SocialProofVariableSubstitutionService.new(widget: widget, context: context)
+      processed_data = substitution_service.processed_widget_data
+
+      widget.attributes.merge(processed_data.stringify_keys)
+    end
+
+    def determine_checkout_product(widget, checkout_context)
+      return nil if widget.universal?
+
+      if checkout_context[:product]
+        return checkout_context[:product]
+      end
+
+      cart = Cart.fetch_by(user: logged_in_user, browser_guid: checkout_context[:browser_guid])
+      if cart&.cart_products&.any?
+        return cart.cart_products.first&.product
+      end
+
+      if widget.links.any?
+        return widget.links.first
+      end
+
+      nil
     end
 end

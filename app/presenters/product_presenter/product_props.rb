@@ -73,7 +73,7 @@ class ProductPresenter::ProductProps
       wishlists: pundit_user&.seller.present? ? (
         pundit_user.seller.wishlists.alive.includes(:alive_wishlist_products).map { |wishlist| WishlistPresenter.new(wishlist:).listing_props(product:) }
       ) : [],
-      social_proof_widgets: social_proof_widgets.map(&:attributes),
+      social_proof_widgets: social_proof_widgets.map { |widget| process_social_proof_widget(widget, request:, pundit_user:) },
     }
   end
 
@@ -171,5 +171,23 @@ class ProductPresenter::ProductProps
       else
         nil
       end
+    end
+
+    def process_social_proof_widget(widget, request:, pundit_user:)
+      geo = GeoIp.lookup(request.remote_ip)
+      customer_country = geo&.country_name
+
+      customer_name = pundit_user&.user&.name
+
+      context = {
+        product: product,
+        customer_country: customer_country,
+        customer_name: customer_name
+      }
+
+      substitution_service = SocialProofVariableSubstitutionService.new(widget: widget, context: context)
+      processed_data = substitution_service.processed_widget_data
+
+      widget.attributes.merge(processed_data.stringify_keys)
     end
 end
