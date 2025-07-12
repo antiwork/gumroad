@@ -916,6 +916,25 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
     t.index ["gifter_purchase_id"], name: "index_gifts_on_gifter_purchase_id"
   end
 
+  create_table "guardian_compliance_info_requests", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "field_needed", null: false
+    t.datetime "due_at", precision: nil
+    t.string "state", default: "requested", null: false
+    t.datetime "provided_at", precision: nil
+    t.text "json_data"
+    t.integer "flags", default: 0, null: false
+    t.string "guardian_person_id"
+    t.string "external_id"
+    t.datetime "created_at", precision: nil, null: false
+    t.datetime "updated_at", precision: nil, null: false
+    t.index ["external_id"], name: "index_guardian_compliance_requests_on_external_id", unique: true
+    t.index ["field_needed"], name: "index_guardian_compliance_requests_on_field_needed"
+    t.index ["guardian_person_id"], name: "index_guardian_compliance_requests_on_person_id"
+    t.index ["user_id", "state"], name: "index_guardian_compliance_requests_on_user_id_and_state"
+    t.index ["user_id"], name: "index_guardian_compliance_info_requests_on_user_id"
+  end
+
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.datetime "period_ended_at", null: false
     t.integer "gumroad_price_cents", null: false
@@ -2731,4 +2750,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "guardian_compliance_info_requests", "users", name: "__fk_rails_dd1bbe82b0"
 end
