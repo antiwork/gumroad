@@ -855,15 +855,7 @@ const PaymentsPage = (props: Props) => {
       ) : null}
       <form ref={formRef}>
         <section>
-          {props.show_legal_guardian_verification_section ? (
-            <LegalGuardianInformationRequiredBanner />
-          ) : (
-            <div className="flex flex-col">
-              <div role="status" className="success">
-                Your legal guardian's account details have been verified!
-              </div>
-            </div>
-          )}
+          {props.show_legal_guardian_verification_section ? <LegalGuardianInformationRequiredBanner /> : null}
           <header>
             <h2>Verification</h2>
           </header>
