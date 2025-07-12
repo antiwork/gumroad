@@ -756,6 +756,15 @@ module StripeMerchantAccountManager
       end
     end
 
+    # Handle legal_guardian.* fields separately for guardian compliance info requests
+    legal_guardian_fields_needed = [requirements["currently_due"], requirements["eventually_due"], requirements["past_due"],
+                                    future_requirements["currently_due"], future_requirements["past_due"]].compact.reduce([], :+).uniq
+    legal_guardian_fields_needed = legal_guardian_fields_needed.select { |field| field.start_with?("legal_guardian.") }
+
+    unless legal_guardian_fields_needed.empty?
+      handle_legal_guardian_requirements(stripe_event_id, legal_guardian_fields_needed, user, requirements_due_at)
+    end
+
     user.user_compliance_info_requests.requested.find_each do |user_compliance_info|
       still_needed = fields_needed.map { |name_and_options| name_and_options[0] }.include?(user_compliance_info.field_needed)
       still_needed ||= stripe_risk_fields_needed.include?(user_compliance_info.field_needed)
@@ -900,6 +909,16 @@ module StripeMerchantAccountManager
       }
     }
 
+    # Add additional TOS acceptances if guardian has accepted
+    if user_compliance_info.guardian_stripe_tos_accepted
+      hash[:additional_tos_acceptances] = {
+        account: {
+          date: Time.current.to_i,
+          ip: "0.0.0.0"
+        }
+      }
+    end
+
     guardian_country = user_compliance_info.guardian_country_code || user_compliance_info.country_code
 
     if guardian_country == Compliance::Countries::CAN.alpha2
@@ -962,5 +981,111 @@ module StripeMerchantAccountManager
     return false unless user_compliance_info&.birthday
 
     user_compliance_info.birthday > 18.years.ago.to_date
+  end
+
+  def self.handle_guardian_stripe_info_requirements(stripe_event_id, stripe_account, user)
+    stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
+    guardian_person = stripe_persons.find { |person| person["relationship"]["legal_guardian"] }
+
+    return unless guardian_person
+
+    requirements = stripe_account["requirements"] || {}
+    future_requirements = stripe_account["future_requirements"] || {}
+
+    all_required_fields = [
+      requirements["currently_due"],
+      requirements["eventually_due"],
+      requirements["past_due"],
+      future_requirements["currently_due"],
+      future_requirements["past_due"]
+    ].compact.flatten.uniq
+
+    guardian_person_id = guardian_person["id"]
+    guardian_fields_needed = all_required_fields.select { |field| field.start_with?("person_#{guardian_person_id}.") }
+
+    guardian_fields_needed.each do |stripe_field|
+      mapped_field = map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
+      next unless mapped_field
+
+      unless user.guardian_compliance_info_requests.requested.where(field_needed: mapped_field).exists?
+        user.guardian_compliance_info_requests.create!(
+          field_needed: mapped_field,
+          guardian_person_id: guardian_person_id,
+          stripe_event_id: stripe_event_id,
+          due_at: (Time.zone.at(requirements["current_deadline"]) if requirements["current_deadline"])
+        )
+      end
+    end
+
+    # Send email if new guardian requests were created
+    if user.guardian_compliance_info_requests.requested.present?
+      ContactingCreatorMailer.guardian_kyc_needed(user.id).deliver_later(queue: "critical")
+    end
+  end
+
+  def self.handle_legal_guardian_requirements(stripe_event_id, legal_guardian_fields_needed, user, requirements_due_at)
+    # Map Stripe legal_guardian fields to internal guardian fields
+    guardian_field_mappings = {
+      "legal_guardian.first_name" => "guardian_first_name",
+      "legal_guardian.last_name" => "guardian_last_name",
+      "legal_guardian.address.line1" => "guardian_street_address",
+      "legal_guardian.address.city" => "guardian_city",
+      "legal_guardian.address.state" => "guardian_state",
+      "legal_guardian.address.postal_code" => "guardian_zip_code",
+      "legal_guardian.dob.day" => "guardian_dob_day",
+      "legal_guardian.dob.month" => "guardian_dob_month",
+      "legal_guardian.dob.year" => "guardian_dob_year",
+      "legal_guardian.ssn_last_4" => "guardian_individual_tax_id",
+      "legal_guardian.additional_tos_acceptances.account.date" => "guardian_stripe_tos_accepted",
+      "legal_guardian.additional_tos_acceptances.account.ip" => "guardian_stripe_tos_accepted"
+    }
+
+    new_guardian_requests = []
+
+    legal_guardian_fields_needed.each do |stripe_field|
+      internal_field = guardian_field_mappings[stripe_field]
+      next unless internal_field
+
+      # Check if request already exists
+      unless user.guardian_compliance_info_requests.requested.where(field_needed: internal_field).exists?
+        guardian_request = user.guardian_compliance_info_requests.create!(
+          field_needed: internal_field,
+          stripe_event_id: stripe_event_id,
+          due_at: requirements_due_at
+        )
+        new_guardian_requests << guardian_request
+      end
+    end
+
+    # Send email if new guardian requests were created
+    if new_guardian_requests.any?
+      ContactingCreatorMailer.guardian_kyc_needed(user.id).deliver_later(queue: "critical")
+    end
+  end
+
+  def self.map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
+    # Convert person_XXXX.first_name to guardian_first_name
+    internal_field = stripe_field.gsub(/^person_#{guardian_person_id}\./, "guardian_")
+
+    # Map common Stripe fields to internal fields
+    field_mapping = {
+      "guardian_first_name" => GuardianComplianceInfoFields::Guardian::FIRST_NAME,
+      "guardian_last_name" => GuardianComplianceInfoFields::Guardian::LAST_NAME,
+      "guardian_email" => GuardianComplianceInfoFields::Guardian::EMAIL,
+      "guardian_phone" => GuardianComplianceInfoFields::Guardian::PHONE,
+      "guardian_dob.day" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.month" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.year" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_id_number" => GuardianComplianceInfoFields::Guardian::TAX_ID,
+      "guardian_address.line1" => GuardianComplianceInfoFields::Guardian::Address::STREET,
+      "guardian_address.city" => GuardianComplianceInfoFields::Guardian::Address::CITY,
+      "guardian_address.state" => GuardianComplianceInfoFields::Guardian::Address::STATE,
+      "guardian_address.postal_code" => GuardianComplianceInfoFields::Guardian::Address::ZIP_CODE,
+      "guardian_address.country" => GuardianComplianceInfoFields::Guardian::Address::COUNTRY,
+      "guardian_verification.document" => GuardianComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
+      "guardian_verification.additional_document" => GuardianComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
+    }
+
+    field_mapping[internal_field]
   end
 end

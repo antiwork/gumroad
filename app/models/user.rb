@@ -122,6 +122,7 @@ class User < ApplicationRecord
   has_many :last_read_community_chat_messages, dependent: :destroy
   has_many :community_notification_settings, dependent: :destroy
   has_many :seller_community_chat_recaps, class_name: "CommunityChatRecap", foreign_key: :seller_id, dependent: :destroy
+  has_many :guardian_compliance_info_requests, dependent: :destroy
 
   has_one_attached :avatar
   attr_accessor :avatar_changed
@@ -988,19 +989,18 @@ class User < ApplicationRecord
       .exists?
   end
 
-  def stripe_requires_legal_guardian_info?
+  def stripe_requires_legal_guardian_compliance_info?
     return false unless stripe_account.present?
 
     begin
       stripe_persons = Stripe::Account.list_persons(stripe_account.charge_processor_merchant_id)["data"]
       guardian_person = stripe_persons.find do |person|
-        person["relationship"]&.fetch("legal_guardian", false)
+        person["relationship"]&.[]("legal_guardian") == true
       end
 
       return false unless guardian_person
 
       stripe_account_data = Stripe::Account.retrieve(stripe_account.charge_processor_merchant_id)
-
       requirements = stripe_account_data["requirements"] || {}
       future_requirements = stripe_account_data["future_requirements"] || {}
 
@@ -1012,15 +1012,29 @@ class User < ApplicationRecord
         future_requirements["past_due"]
       ].compact.flatten.uniq
 
-      alternative_requirements = requirements["alternatives"]&.map { _1["alternative_fields_due"] } || []
-      alternative_future_requirements = future_requirements["alternatives"]&.map { _1["alternative_fields_due"] } || []
-      all_required_fields += (alternative_requirements + alternative_future_requirements).compact.flatten
-
       guardian_person_id = guardian_person["id"]
-      all_required_fields.any? { |field| field.start_with?("person_#{guardian_person_id}.") }
+      guardian_fields_needed = all_required_fields.select { |field| field.start_with?("person_#{guardian_person_id}.") }
+
+      return false if guardian_fields_needed.empty?
+
+      # Create guardian compliance info requests if they don't exist
+      guardian_fields_needed.each do |stripe_field|
+        mapped_field = map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
+        next unless mapped_field
+
+        unless guardian_compliance_info_requests.requested.where(field_needed: mapped_field).exists?
+          guardian_compliance_info_requests.create!(
+            field_needed: mapped_field,
+            guardian_person_id: guardian_person_id,
+            stripe_event_id: "guardian_verification_check"
+          )
+        end
+      end
+
+      true
     rescue => e
-      Rails.logger.warn("User#stripe_requires_legal_guardian_info? error (#{id}): #{e.class} => #{e.message}")
-      StripeMerchantAccountManager.user_under_18?(alive_user_compliance_info)
+      Rails.logger.warn("User#stripe_requires_legal_guardian_compliance_info? error (#{id}): #{e.class} => #{e.message}")
+      false
     end
   end
 
@@ -1213,4 +1227,32 @@ class User < ApplicationRecord
     def reset_avatar_changed
       self.avatar_changed = false
     end
+
+  private
+
+  def map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
+    # Convert person_XXXX.first_name to guardian_first_name
+    internal_field = stripe_field.gsub(/^person_#{guardian_person_id}\./, "guardian_")
+
+    # Map common Stripe fields to internal fields
+    field_mapping = {
+      "guardian_first_name" => GuardianComplianceInfoFields::Guardian::FIRST_NAME,
+      "guardian_last_name" => GuardianComplianceInfoFields::Guardian::LAST_NAME,
+      "guardian_email" => GuardianComplianceInfoFields::Guardian::EMAIL,
+      "guardian_phone" => GuardianComplianceInfoFields::Guardian::PHONE,
+      "guardian_dob.day" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.month" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.year" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_id_number" => GuardianComplianceInfoFields::Guardian::TAX_ID,
+      "guardian_address.line1" => GuardianComplianceInfoFields::Guardian::Address::STREET,
+      "guardian_address.city" => GuardianComplianceInfoFields::Guardian::Address::CITY,
+      "guardian_address.state" => GuardianComplianceInfoFields::Guardian::Address::STATE,
+      "guardian_address.postal_code" => GuardianComplianceInfoFields::Guardian::Address::ZIP_CODE,
+      "guardian_address.country" => GuardianComplianceInfoFields::Guardian::Address::COUNTRY,
+      "guardian_verification.document" => GuardianComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
+      "guardian_verification.additional_document" => GuardianComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
+    }
+
+    field_mapping[internal_field]
+  end
 end
