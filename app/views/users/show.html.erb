@@ -1,4 +1,24 @@
 <%= load_pack("user") %>
 <%= render("layouts/custom_styles/style") %>
 
+
+<%
+person_data = {
+  "@context" => "https://schema.org",
+  "@type" => "Person",
+  "name" => @profile_props[:creator_profile][:name],
+  "image" => @profile_props[:creator_profile][:avatar_url],
+  "url" => @profile_props[:creator_profile][:subdomain] ? "https://#{@profile_props[:creator_profile][:subdomain]}" : nil,
+  "description" => @profile_props[:bio]
+}.compact
+
+if @profile_props[:creator_profile][:twitter_handle].present?
+  person_data["sameAs"] = ["https://twitter.com/#{@profile_props[:creator_profile][:twitter_handle]}"]
+end
+%>
+
+<script type="application/ld+json">
+<%= person_data.to_json.html_safe %>
+</script>
+
 <%= react_component "Profile", props: @profile_props, prerender: true %>
