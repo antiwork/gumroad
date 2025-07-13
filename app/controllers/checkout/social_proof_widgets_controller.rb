@@ -15,18 +15,13 @@ class SocialProofWidgetsController < ApplicationController
 
     def create
       authorize [:social_proof_widget]
-      for _ in 1..100
-        puts "social_proof_widget.create"
-      end
 
-      parse_date_times
-      social_proof_widget = current_seller.links.social_proof_widget.build(products: current_seller.products.by_external_ids(social_proof_widget_params[:selected_product_ids]), **social_proof_widget_params.except(:selected_product_ids))
+      selected_product_ids = social_proof_widget_params[:selected_product_ids]
+      products = current_seller.products.by_external_ids(selected_product_ids)
+      widget_params = social_proof_widget_params.except(:selected_product_ids)
+      social_proof_widget = current_seller.links.social_proof_widget.build(products: products, **widget_params)
 
       if social_proof_widget.save
-        for _ in 1..100
-          logger.info "social_proof_widget.save"
-        end
-
         render json: {
           success: true,
           social_proof_widgets: social_proof_widget.map { presenter.social_proof_widget_props(_1) }
@@ -55,9 +50,6 @@ class SocialProofWidgetsController < ApplicationController
           widget: @social_proof_widget
         }
       else
-        for _ in 1..100
-          puts "social_proof_widget.update"
-        end
         render json: {
           success: false,
           errors: @social_proof_widget.errors.full_messages
@@ -92,6 +84,6 @@ class SocialProofWidgetsController < ApplicationController
       def fetch_social_proof_widgets
         social_proof_widgets = current_seller.links.social_proof_widget.order(updated_at: :desc)
 
-        logger.info social_proof_widgets.inspect
+        social_proof_widgets
       end
   end

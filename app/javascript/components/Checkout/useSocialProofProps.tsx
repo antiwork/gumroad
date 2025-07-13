@@ -57,31 +57,22 @@ export const useSocialProofCardPropsFromPreview = ({
 
   const productForThumbnail = getProductForThumbnail();
 
-  const imageProps =
-    image.id === "icon"
-      ? {
-          imageType: "icon",
-          iconName: icon,
-          iconColor,
-        }
-      : image.id === "product_thumbnail"
-        ? productForThumbnail?.thumbnail_url
-          ? {
-              imageType: "product_thumbnail",
-              imageUrl: productForThumbnail.thumbnail_url,
-            }
-          : {
-              imageType: "none",
-            }
-        : image.id === "custom_image"
-          ? {
-              imageType: "custom_image",
-              imageUrl: "/images/custom_image.jpg",
-            }
-          : {
-              imageType: "none",
-            };
+  const getImageProps = () => {
+    switch (image.id) {
+      case "icon":
+        return { imageType: "icon", iconName: icon, iconColor };
+      case "product_thumbnail":
+        return productForThumbnail?.thumbnail_url
+          ? { imageType: "product_thumbnail", imageUrl: productForThumbnail.thumbnail_url }
+          : { imageType: "none" };
+      case "custom_image":
+        return { imageType: "custom_image", imageUrl: "/images/custom_image.jpg" };
+      default:
+        return { imageType: "none" };
+    }
+  };
 
+  const imageProps = getImageProps();
   const ctaProps =
     ctaType === "button"
       ? {

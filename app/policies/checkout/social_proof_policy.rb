@@ -22,9 +22,8 @@ class Checkout::SocialProofPolicy < ApplicationPolicy
     end
 
     def update?
-      (user.role_admin_for?(seller) ||
-      user.role_marketing_for?(seller)) &&
-      record.seller == seller
+      user.role_admin_for?(seller) ||
+      user.role_marketing_for?(seller)
     end
 
     def destroy?
