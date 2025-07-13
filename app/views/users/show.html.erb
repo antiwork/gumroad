@@ -8,7 +8,7 @@ person_data = {
   "@type" => "Person",
   "name" => @profile_props[:creator_profile][:name],
   "image" => @profile_props[:creator_profile][:avatar_url],
-  "url" => @profile_props[:creator_profile][:subdomain] ? "https://#{@profile_props[:creator_profile][:subdomain]}" : nil,
+  "url" => @profile_props[:creator_profile][:subdomain],
   "description" => @profile_props[:bio]
 }.compact
 
