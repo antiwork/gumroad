@@ -42,11 +42,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       if social_proof_widget.universal
         social_proof_widget.links = current_user.links.alive
       elsif permitted_params[:selected_product_ids].present?
-        found_links = permitted_params[:selected_product_ids].filter_map do |link_id|
-          link = Link.find_by_external_id(link_id)
-          link if link&.user_id == current_user.id
-        end
-        social_proof_widget.links = found_links
+        social_proof_widget.links = find_user_links(permitted_params[:selected_product_ids])
       end
 
       if social_proof_widget.save
@@ -75,15 +71,12 @@ class Checkout::SocialProofController < Sellers::BaseController
       social_proof_widget.status = permitted_params[:status] if permitted_params[:status].present?
 
       if social_proof_widget.update(widget_attributes)
+        presenter = Checkout::SocialProofPresenter.new(pundit_user:)
         # Update product associations
         if social_proof_widget.universal
           social_proof_widget.links = current_user.links.alive
         elsif permitted_params[:selected_product_ids].present?
-          found_links = permitted_params[:selected_product_ids].filter_map do |link_id|
-            link = Link.find_by_external_id(link_id)
-            link if link&.user_id == current_user.id
-          end
-          social_proof_widget.links = found_links
+          social_proof_widget.links = find_user_links(permitted_params[:selected_product_ids])
         end
 
         render json: {
@@ -126,6 +119,13 @@ class Checkout::SocialProofController < Sellers::BaseController
 
 
     private
+      def find_user_links(link_ids)
+        link_ids.filter_map do |link_id|
+          link = Link.find_by_external_id(link_id)
+          link if link&.user_id == current_user.id
+        end
+      end
+
       def build_widget_attributes(permitted_params)
         {
           name: permitted_params[:name],
