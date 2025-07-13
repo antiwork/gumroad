@@ -13,22 +13,24 @@ class SocialProofWidgetAnalytic < ApplicationRecord
 
   # Calculate and store analytics for a specific widget and date
   def self.calculate_for_widget_and_date(widget_id, date)
-    events = SocialProofWidgetEvent.for_widget(widget_id).on_date(date)
+    ActiveRecord::Base.transaction do
+      events = SocialProofWidgetEvent.for_widget(widget_id).on_date(date)
 
-    impressions_count = events.impressions.count
-    clicks_count = events.clicks.count
-    purchases_count = events.purchases.count
-    revenue_total = events.purchases.sum(:revenue_cents)
+      impressions_count = events.impressions.count
+      clicks_count = events.clicks.count
+      purchases_count = events.purchases.count
+      revenue_total = events.purchases.sum(:revenue_cents)
 
-    conversion_rate = clicks_count > 0 ? (purchases_count.to_f / clicks_count * 100).round(4) : 0.0
+      conversion_rate = clicks_count > 0 ? (purchases_count.to_f / clicks_count * 100).round(4) : 0.0
 
-    find_or_initialize_by(social_proof_widget_id: widget_id, date: date).tap do |analytic|
-      analytic.impressions = impressions_count
-      analytic.clicks = clicks_count
-      analytic.purchases = purchases_count
-      analytic.revenue_cents = revenue_total
-      analytic.conversion_rate = conversion_rate
-      analytic.save!
+      find_or_initialize_by(social_proof_widget_id: widget_id, date: date).tap do |analytic|
+        analytic.impressions = impressions_count
+        analytic.clicks = clicks_count
+        analytic.purchases = purchases_count
+        analytic.revenue_cents = revenue_total
+        analytic.conversion_rate = conversion_rate
+        analytic.save!
+      end
     end
   end
 

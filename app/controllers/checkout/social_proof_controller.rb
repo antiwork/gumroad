@@ -32,18 +32,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       authorize [:checkout, :social_proof]
 
       permitted_params = social_proof_widget_params
-      widget_attributes = {
-        name: permitted_params[:name],
-        universal: permitted_params[:universal],
-        title: permitted_params[:title_text],
-        description: permitted_params[:description],
-        cta_text: permitted_params[:cta_text],
-        cta_type: permitted_params.dig(:cta_type, :id),
-        image_type: permitted_params.dig(:image, :id),
-        icon_name: permitted_params[:icon],
-        icon_color: permitted_params[:icon_color],
-        visibility: permitted_params[:visibility]
-      }.compact
+      widget_attributes = build_widget_attributes(permitted_params)
 
       social_proof_widget = current_user.social_proof_widgets.new(widget_attributes)
 
@@ -80,18 +69,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       social_proof_widget = current_user.social_proof_widgets.find(params[:id])
       permitted_params = social_proof_widget_params
 
-      widget_attributes = {
-        name: permitted_params[:name],
-        universal: permitted_params[:universal],
-        title: permitted_params[:title_text],
-        description: permitted_params[:description],
-        cta_text: permitted_params[:cta_text],
-        cta_type: permitted_params.dig(:cta_type, :id),
-        image_type: permitted_params.dig(:image, :id),
-        icon_name: permitted_params[:icon],
-        icon_color: permitted_params[:icon_color],
-        visibility: permitted_params[:visibility]
-      }.compact
+      widget_attributes = build_widget_attributes(permitted_params)
 
       # Set the status
       social_proof_widget.status = permitted_params[:status] if permitted_params[:status].present?
@@ -148,6 +126,21 @@ class Checkout::SocialProofController < Sellers::BaseController
 
 
     private
+      def build_widget_attributes(permitted_params)
+        {
+          name: permitted_params[:name],
+          universal: permitted_params[:universal],
+          title: permitted_params[:title_text],
+          description: permitted_params[:description],
+          cta_text: permitted_params[:cta_text],
+          cta_type: permitted_params.dig(:cta_type, :id),
+          image_type: permitted_params.dig(:image, :id),
+          icon_name: permitted_params[:icon],
+          icon_color: permitted_params[:icon_color],
+          visibility: permitted_params[:visibility]
+        }.compact
+      end
+
       def parse_date_times
         # social_proof_widget_params[:valid_at] = Date.parse(social_proof_widget_params[:valid_at]) if social_proof_widget_params[:valid_at].present?
         # social_proof_widget_params[:expires_at] = Date.parse(social_proof_widget_params[:expires_at]) if social_proof_widget_params[:expires_at].present?
