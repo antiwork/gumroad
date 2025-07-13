@@ -176,7 +176,7 @@ export type SocialProofWidgetProps = {
   description?: string;
   cta_text?: string;
   cta_type?: "button" | "link" | "none";
-  image_type?: "product" | "custom" | "icon" | "none";
+  image_type?: "product_thumbnail" | "custom_image" | "icon" | "none";
   image_url?: string | null;
   icon_name?: IconName | null;
   icon_color?: string | null;
@@ -329,6 +329,10 @@ export const Product = ({
       avatarUrl={product.seller.avatar_url}
     />
   ) : null;
+
+  const [visibleSocialProofIds, setVisibleSocialProofIds] = React.useState<Set<number>>(
+    () => new Set(social_proof_widgets.map((w) => w.id)),
+  );
 
   return (
     <article className="product">
@@ -618,11 +622,8 @@ export const Product = ({
             pointerEvents: "none",
           }}
         >
-          {social_proof_widgets.map((widget) => {
-            const checkoutUrl = new URL(Routes.checkout_index_url());
-            checkoutUrl.searchParams.set("product", product.permalink);
-
-            return (
+          {social_proof_widgets.map((widget) =>
+            visibleSocialProofIds.has(widget.id) ? (
               <div key={widget.id} style={{ pointerEvents: "auto" }}>
                 <SocialProofCard
                   widgetId={widget.id}
@@ -631,14 +632,25 @@ export const Product = ({
                   imageType={widget.image_type ?? "none"}
                   ctaType={widget.cta_type ?? "none"}
                   ctaText={widget.cta_text ?? ""}
-                  ctaUrl={checkoutUrl.toString()}
+                  ctaUrl={(() => {
+                    const url = new URL(Routes.checkout_index_url());
+                    url.searchParams.set("product", product.permalink);
+                    return url.toString();
+                  })()}
                   iconName={widget.icon_name ?? "heart-fill"}
                   iconColor={widget.icon_color ?? "#FFB800"}
                   imageUrl={widget.image_url ?? ""}
+                  onClose={() => {
+                    setVisibleSocialProofIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(widget.id);
+                      return next;
+                    });
+                  }}
                 />
               </div>
-            );
-          })}
+            ) : null,
+          )}
         </div>
       )}
     </article>

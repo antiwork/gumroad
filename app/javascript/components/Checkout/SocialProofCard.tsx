@@ -12,12 +12,12 @@ interface BaseSocialProofCardProps {
 }
 
 interface ProductImageProps extends BaseSocialProofCardProps {
-  imageType: "product";
+  imageType: "product_thumbnail";
   imageUrl: string;
 }
 
 interface CustomImageProps extends BaseSocialProofCardProps {
-  imageType: "custom";
+  imageType: "custom_image";
   imageUrl: string;
 }
 
@@ -53,6 +53,7 @@ type CTATypeProps = ButtonCTAProps | LinkCTAProps | NoCTAProps;
 export type SocialProofCardProps = ImageTypeProps &
   CTATypeProps & {
     ctaColor?: "primary" | "accent" | "black" | "success" | "danger" | "warning" | "info" | "filled";
+    onClose?: () => void;
   };
 
 export const SocialProofCard = (props: SocialProofCardProps) => {
@@ -65,18 +66,28 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
     }
   }, [widgetId]);
 
+  // Clean up sessionStorage when component unmounts
+  React.useEffect(
+    () => () => {
+      sessionStorage.removeItem("social_proof_widget_clicked");
+    },
+    [],
+  );
+
   // Track click events (only for real widgets, not preview)
   const handleClick = () => {
     if (widgetId !== undefined) {
       void trackSocialProofEvent(widgetId, "click");
+      // Store widget ID in sessionStorage for purchase tracking
+      sessionStorage.setItem("social_proof_widget_clicked", widgetId.toString());
     }
   };
 
   const renderImage = () => {
     switch (props.imageType) {
-      case "product":
-      case "custom":
-        return <img src={props.imageUrl} />;
+      case "product_thumbnail":
+      case "custom_image":
+        return props.imageUrl ? <img src={props.imageUrl} /> : null;
       case "icon":
         return (
           <div
@@ -129,7 +140,7 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
             {props.ctaType === "link" && renderCTA()}
           </div>
         </div>
-        <Icon name="x" className="absolute right-2 top-1 text-current" />
+        <Icon name="x" className="absolute right-2 top-1 cursor-pointer text-current" onClick={props.onClose} />
       </div>
       {props.ctaType === "button" && renderCTA()}
     </div>
