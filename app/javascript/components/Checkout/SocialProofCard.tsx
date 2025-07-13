@@ -60,6 +60,7 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
   const { title, description, widgetId } = props;
 
   // Track impression when component mounts (only for real widgets, not preview)
+  // When widgetId is undefined, this is a preview widget and no tracking occurs
   React.useEffect(() => {
     if (widgetId !== undefined) {
       void trackSocialProofEvent(widgetId, "impression");
@@ -75,6 +76,7 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
   );
 
   // Track click events (only for real widgets, not preview)
+  // When widgetId is undefined, this is a preview widget and no tracking occurs
   const handleClick = () => {
     if (widgetId !== undefined) {
       void trackSocialProofEvent(widgetId, "click");

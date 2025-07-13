@@ -40,12 +40,13 @@ type SocialProofPlayload = {
   description: string;
   ctaText: string;
   ctaType: { id: "button" | "link" | "none"; label: string };
-  image: { id: "product" | "custom" | "icon" | "none"; label: string };
+  image: { id: "product_thumbnail" | "custom_image" | "icon" | "none"; label: string };
   icon: IconName;
   iconColor: string;
   selectedProductIds: string[];
   universal: boolean;
   status: string;
+  visibility: "all" | "new" | "returning";
 };
 
 export type SortKey = "name" | "clicks" | "conversion" | "revenue" | "status";
@@ -54,7 +55,7 @@ export type SortKey = "name" | "clicks" | "conversion" | "revenue" | "status";
 // make this union discriminative
 type CtaType = { id: "button" | "link" | "none"; label: "Button" | "Link" | "None" };
 type ImageType = {
-  id: "product" | "custom" | "icon" | "none";
+  id: "product_thumbnail" | "custom_image" | "icon" | "none";
   label: "Product image" | "Custom image" | "Icon" | "None";
 };
 type VisibilityType = {
@@ -504,6 +505,7 @@ type Product = {
   url: string;
   is_tiered_membership: boolean;
   archived: boolean;
+  thumbnail_url?: string | null;
 };
 
 const Form = ({
@@ -541,22 +543,32 @@ const Form = ({
 
   const getImageType = (): ImageType => {
     const type = socialProofWidget?.image_type;
-    if (type === "product") return { id: "product", label: "Product image" };
-    if (type === "custom") return { id: "custom", label: "Custom image" };
+    if (type === "product_thumbnail") return { id: "product_thumbnail", label: "Product image" };
+    if (type === "custom_image") return { id: "custom_image", label: "Custom image" };
     if (type === "icon") return { id: "icon", label: "Icon" };
     if (type === "none") return { id: "none", label: "None" };
-    return { id: "product", label: "Product image" };
+    return { id: "product_thumbnail", label: "Product image" };
   };
   const [image, setImage] = React.useState<ImageType>(getImageType());
 
   const [thumbnail, setThumbnail] = React.useState<Thumbnail | null>(null);
-  const [icon, setIcon] = React.useState<IconName>(socialProofWidget?.icon_name ?? "bullseye");
+  const [icon, setIcon] = React.useState<IconName>(socialProofWidget?.icon_name || "bullseye");
   const [iconColor, setIconColor] = React.useState(socialProofWidget?.icon_color ?? "#FFB800");
   const [universal, setUniversal] = React.useState(socialProofWidget?.universal ?? false);
   const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
     value: socialProofWidget?.product_ids ?? [],
   });
-  const [visibility, setVisibility] = React.useState<VisibilityType>({ id: "all", label: "All visitors" });
+  const [visibility, setVisibility] = React.useState<VisibilityType>(() => {
+    if (socialProofWidget?.visibility) {
+      const visibilityMap = {
+        all: { id: "all" as const, label: "All visitors" as const },
+        new: { id: "new" as const, label: "New visitors" as const },
+        returning: { id: "returning" as const, label: "Returning visitors" as const },
+      };
+      return visibilityMap[socialProofWidget.visibility];
+    }
+    return { id: "all", label: "All visitors" };
+  });
   const [status, setStatus] = React.useState(socialProofWidget?.status ?? "unpublished");
 
   const selectedProducts = products.filter(({ id }) => selectedProductIds.value.includes(id));
@@ -576,6 +588,7 @@ const Form = ({
       selectedProductIds: universal ? [] : selectedProductIds.value,
       universal,
       status,
+      visibility: visibility.id,
     };
     await save(formData);
   };
@@ -594,6 +607,7 @@ const Form = ({
       selectedProductIds: universal ? [] : selectedProductIds.value,
       universal,
       status: newStatus,
+      visibility: visibility.id,
     };
     await save(formData);
     setStatus(newStatus);
@@ -623,7 +637,7 @@ const Form = ({
       </header>
       <main className="squished">
         <form>
-          <section className="paragraphs">
+          <section className="paragraphs" style={{ paddingBottom: "2rem" }}>
             <fieldset className={cx({ danger: false })}>
               <legend>
                 <label htmlFor="name">Widget name</label>
@@ -674,7 +688,7 @@ const Form = ({
               </label>
             </fieldset>
           </section>
-          <section className="paragraphs">
+          <section className="paragraphs" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
             <h2>Message</h2>
             <p>
               Click on the buttons below to quickly add them to your title, description, or call to action. This will
@@ -771,7 +785,7 @@ const Form = ({
               />
             </fieldset>
           </section>
-          <section className="paragraphs">
+          <section className="paragraphs" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
             <h2>Image</h2>
             <fieldset>
               <legend>
@@ -782,8 +796,8 @@ const Form = ({
                 instanceId="image"
                 isMulti={false}
                 options={[
-                  { id: "product", label: "Product image" },
-                  { id: "custom", label: "Custom image" },
+                  { id: "product_thumbnail", label: "Product image" },
+                  { id: "custom_image", label: "Custom image" },
                   { id: "none", label: "None" },
                   { id: "icon", label: "Icon" },
                 ]}
@@ -792,7 +806,7 @@ const Form = ({
                   setImage(cast(selected));
                 }}
               />
-              {image.id === "custom" && (
+              {image.id === "custom_image" && (
                 <ThumbnailEditor
                   covers={[]}
                   thumbnail={thumbnail}
@@ -807,6 +821,7 @@ const Form = ({
                     style={{
                       display: "flex",
                       gap: "var(--spacer-3)",
+                      flexWrap: "wrap",
                     }}
                   >
                     <Button
@@ -814,7 +829,8 @@ const Form = ({
                       aria-pressed={icon === "bullseye"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="bullseye" />
@@ -824,7 +840,8 @@ const Form = ({
                       aria-pressed={icon === "heart-fill"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="heart-fill" />
@@ -834,7 +851,8 @@ const Form = ({
                       aria-pressed={icon === "check-square"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="check-square" />
@@ -844,7 +862,8 @@ const Form = ({
                       aria-pressed={icon === "cart3-fill"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="cart3-fill" />
@@ -854,7 +873,8 @@ const Form = ({
                       aria-pressed={icon === "solid-user"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="solid-user" />
@@ -864,7 +884,8 @@ const Form = ({
                       aria-pressed={icon === "solid-star"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="solid-star" />
@@ -874,7 +895,8 @@ const Form = ({
                       aria-pressed={icon === "gift-fill"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="gift-fill" />
@@ -884,7 +906,8 @@ const Form = ({
                       aria-pressed={icon === "circle-fill"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="circle-fill" />
@@ -894,7 +917,8 @@ const Form = ({
                       aria-pressed={icon === "solid-bell"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="solid-bell" />
@@ -904,7 +928,8 @@ const Form = ({
                       aria-pressed={icon === "lighting-fill"}
                       style={{
                         aspectRatio: "1",
-                        flex: 1,
+                        height: "1.5rem",
+                        width: "1.5rem",
                       }}
                     >
                       <Icon name="lighting-fill" />
@@ -928,7 +953,7 @@ const Form = ({
             </fieldset>
           </section>
 
-          <section className="paragraphs">
+          <section className="paragraphs" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
             <h2>Settings</h2>
             <fieldset>
               <legend>
@@ -998,18 +1023,25 @@ const Preview = ({
     image,
     icon,
     iconColor,
+    selectedProducts,
+    universal,
+    allProducts,
   });
 
   const getPreviewUrl = () => {
     if (universal) {
       // For universal widgets, use any available product
       const availableProducts = allProducts.filter((p) => !p.archived);
-      if (availableProducts.length > 0) {
-        return availableProducts[0]?.url;
+      if (availableProducts.length > 0 && availableProducts[0]?.url) {
+        const url = new URL(availableProducts[0].url);
+        url.searchParams.set("preview", "true");
+        return url.toString();
       }
-    } else if (selectedProducts.length > 0) {
+    } else if (selectedProducts.length > 0 && selectedProducts[0]?.url) {
       // For specific widgets, use selected products
-      return selectedProducts[0]?.url;
+      const url = new URL(selectedProducts[0].url);
+      url.searchParams.set("preview", "true");
+      return url.toString();
     }
     return null;
   };

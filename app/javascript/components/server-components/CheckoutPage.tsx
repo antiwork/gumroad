@@ -5,6 +5,7 @@ import { createCast, cast } from "ts-safe-cast";
 import { SurchargesResponse } from "$app/data/customer_surcharge";
 import { startOrderCreation } from "$app/data/order";
 import { LineItemResult } from "$app/data/purchase";
+import { trackSocialProofEvent } from "$app/data/social_proof";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION, CustomFieldDescriptor } from "$app/parsers/product";
@@ -498,6 +499,17 @@ export const CheckoutPage = ({
           quantity: result.quantity,
           tax: result.non_formatted_seller_tax_amount,
         });
+
+        // Track social proof purchase if widget was clicked
+        const clickedWidgetId = sessionStorage.getItem("social_proof_widget_clicked");
+        if (clickedWidgetId) {
+          void trackSocialProofEvent(parseInt(clickedWidgetId, 10), "purchase", {
+            purchaseId: parseInt(result.id, 10),
+            revenueCents: Math.round(result.non_formatted_price * 100), // Convert to cents
+          });
+          sessionStorage.removeItem("social_proof_widget_clicked");
+        }
+
         if (result.has_third_party_analytics && !redirectTo)
           addThirdPartyAnalytics({ permalink: result.permalink, location: "receipt", purchaseId: result.id });
       }

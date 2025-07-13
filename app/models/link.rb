@@ -156,6 +156,7 @@ class Link < ApplicationRecord
   has_many :communities, as: :resource, dependent: :destroy
   has_one :active_community, -> { alive }, class_name: "Community", as: :resource
   has_and_belongs_to_many :social_proof_widgets
+  has_and_belongs_to_many :published_social_proof_widgets, -> { published }, class_name: "SocialProofWidget"
 
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
