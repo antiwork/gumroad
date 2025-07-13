@@ -29,7 +29,7 @@
 <% if @product.user %>
   <% structured_data["seller"] = {
     "@type" => "Person",
-    "creatorName" => @product.user.display_name
+    "name" => @product.user.display_name
   } %>
 <% end %>
 
@@ -40,7 +40,7 @@
     "ratingValue" => rating_stats[:average].to_s,
     "reviewCount" => rating_stats[:count].to_s,
     "bestRating" => "5",
-    "worstRating" => "0"
+    "worstRating" => "1"
   } %>
 <% end %>
 
