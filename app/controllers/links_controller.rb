@@ -184,7 +184,9 @@ class LinksController < ApplicationController
     if params[:preview] == 'true'
       @social_proof_widgets = @product.social_proof_widgets || []
     else
-      @social_proof_widgets = @product.published_social_proof_widgets || []
+      # Filter widgets based on visitor type (new vs returning)
+      browser_guid = cookies[:_gumroad_guid]
+      @social_proof_widgets = @product.social_proof_widgets_for_visitor(browser_guid) || []
     end
 
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)

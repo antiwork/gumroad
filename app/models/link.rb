@@ -158,6 +158,41 @@ class Link < ApplicationRecord
   has_and_belongs_to_many :social_proof_widgets
   has_and_belongs_to_many :published_social_proof_widgets, -> { published }, class_name: "SocialProofWidget"
 
+  def visitor_type_for_browser_guid(browser_guid)
+    return 'new' if browser_guid.blank?
+
+    # Use Rails cache to avoid repeated Elasticsearch queries
+    cache_key = "visitor_type:#{id}:#{browser_guid}"
+
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      # Check if this browser_guid has visited this product before
+      # Note: This check happens before the current visit is recorded
+      previous_visits = EsClient.count(
+        index: ProductPageView.index_name,
+        body: {
+          query: {
+            bool: {
+              must: [
+                { term: { product_id: id } },
+                { term: { browser_guid: browser_guid } }
+              ]
+            }
+          }
+        }
+      )["count"]
+
+      previous_visits > 0 ? 'returning' : 'new'
+    end
+  end
+
+  def social_proof_widgets_for_visitor(browser_guid)
+    visitor_type = visitor_type_for_browser_guid(browser_guid)
+
+    published_social_proof_widgets.select do |widget|
+      widget.visible_for_visitor_type?(visitor_type)
+    end
+  end
+
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
