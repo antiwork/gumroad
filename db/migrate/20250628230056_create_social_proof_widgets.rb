@@ -1,7 +1,6 @@
 class CreateSocialProofWidgets < ActiveRecord::Migration[7.1]
   def up
     create_table :social_proof_widgets do |t|
-      t.references :user, null: false, foreign_key: true, index: true
       t.string :name
       t.boolean :universal
       t.string :title
