@@ -258,9 +258,9 @@ module Product::Prices
         get_usd_cents(currency_type, price_cents)
       rescue => e
         Rails.logger.warn("Currency conversion failed for product #{id}, currency #{currency_type}: #{e.message}")
-        price_cents
+        nil
       end
-    end.uniq
+    end.compact.uniq
   end
 
   private
