@@ -240,6 +240,29 @@ module Product::Prices
     available_prices.uniq
   end
 
+  def available_price_usd_cents
+    available_prices = available_price_cents
+    return [] if available_prices.empty?
+
+    available_prices.map do |price_cents|
+      get_usd_cents(currency_type, price_cents)
+    end.uniq
+  end
+
+  def available_price_usd_cents_with_fallback
+    available_prices = available_price_cents
+    return [] if available_prices.empty?
+
+    available_prices.map do |price_cents|
+      begin
+        get_usd_cents(currency_type, price_cents)
+      rescue => e
+        Rails.logger.warn("Currency conversion failed for product #{id}, currency #{currency_type}: #{e.message}")
+        price_cents
+      end
+    end.uniq
+  end
+
   private
     # Private: Called only on create to instantiate Price object(s) and associate it to the newly created product.
     def associate_price

@@ -11,5 +11,7 @@ class UpdateCurrenciesWorker
     rates.each do |currency, rate|
       currency_namespace.set(currency.to_s, rate)
     end
+
+    UpdateProductUsdPricesWorker.perform_async
   end
 end
