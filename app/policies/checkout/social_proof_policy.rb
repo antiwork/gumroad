@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Checkout::SocialProofPolicy < ApplicationPolicy
-    def show?
+   def show?
       user.role_accountant_for?(seller) ||
       user.role_admin_for?(seller) ||
       user.role_marketing_for?(seller) ||
@@ -9,11 +9,11 @@ class Checkout::SocialProofPolicy < ApplicationPolicy
     end
 
     def index?
-    show?
-  end
+      show?
+    end
 
-  def paged?
-    show?
+    def paged?
+      show?
     end
 
     def create?
@@ -22,11 +22,12 @@ class Checkout::SocialProofPolicy < ApplicationPolicy
     end
 
     def update?
-      user.role_admin_for?(seller) ||
-      user.role_marketing_for?(seller)
+      (user.role_admin_for?(seller) ||
+      user.role_marketing_for?(seller)) &&
+      record.seller == seller
     end
 
-  def destroy?
-    update?
-  end
+    def destroy?
+      update?
+    end
   end
