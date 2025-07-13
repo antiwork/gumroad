@@ -4,17 +4,21 @@
 <% end %>
 <% end %>
 
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "url": "<%= request.base_url %>/",
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "<%= request.base_url %>/discover?query={search_term_string}",
-    "query-input": "required name=search_term_string"
+<%
+search_action_data = {
+  "@context" => "https://schema.org",
+  "@type" => "WebSite",
+  "url" => root_url,
+  "potentialAction" => {
+    "@type" => "SearchAction",
+    "target" => "#{discover_url}?query={search_term_string}",
+    "query-input" => "required name=search_term_string"
   }
 }
+%>
+
+<script type="application/ld+json">
+<%= search_action_data.to_json.html_safe %>
 </script>
 
 <%= load_pack("discover") %>
