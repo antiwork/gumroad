@@ -19,7 +19,7 @@ class SocialProofWidgetsController < ApplicationController
       selected_product_ids = social_proof_widget_params[:selected_product_ids]
       products = current_seller.products.by_external_ids(selected_product_ids)
       widget_params = social_proof_widget_params.except(:selected_product_ids)
-      social_proof_widget = current_seller.links.social_proof_widget.build(products: products, **widget_params)
+      social_proof_widget = current_seller.social_proof_widgets.build(products: products, **widget_params)
 
       if social_proof_widget.save
         render json: {
@@ -82,7 +82,7 @@ class SocialProofWidgetsController < ApplicationController
       end
 
       def fetch_social_proof_widgets
-        social_proof_widgets = current_seller.links.social_proof_widget.order(updated_at: :desc)
+        social_proof_widgets = current_seller.social_proof_widgets.order(updated_at: :desc)
 
         social_proof_widgets
       end

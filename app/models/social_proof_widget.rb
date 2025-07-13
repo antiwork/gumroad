@@ -42,6 +42,7 @@ class SocialProofWidget < ApplicationRecord
     ],
     message: "%{value} is not a valid image type"
   }
+  validates :icon_name, presence: true, if: -> { image_type == 'icon' }
   validates :icon_name, inclusion: {
     in: -> { SocialProofWidget.available_icons },
     message: "%{value} is not a valid icon name"

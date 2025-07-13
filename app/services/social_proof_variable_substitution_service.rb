@@ -67,7 +67,7 @@ class SocialProofVariableSubstitutionService
     elsif product
       search_options[:product] = product
     else
-      return "0"
+      return 0
     end
 
     PurchaseSearchService.search(

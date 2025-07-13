@@ -158,11 +158,15 @@ class Link < ApplicationRecord
   has_and_belongs_to_many :social_proof_widgets
   has_and_belongs_to_many :published_social_proof_widgets, -> { published }, class_name: "SocialProofWidget"
 
+  def visitor_type_cache_key(browser_guid)
+    "visitor_type:#{id}:#{browser_guid}"
+  end
+
   def visitor_type_for_browser_guid(browser_guid)
     return 'new' if browser_guid.blank?
 
     # Use Rails cache to avoid repeated Elasticsearch queries
-    cache_key = "visitor_type:#{cache_key_with_version}:#{browser_guid}"
+    cache_key = visitor_type_cache_key(browser_guid)
 
     Rails.cache.fetch(cache_key, expires_in: 1.hour) do
       # Check if this browser_guid has visited this product before

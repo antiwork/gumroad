@@ -93,7 +93,7 @@ module ProductsHelper
 
     # Clear visitor type cache for this product and browser_guid
     # This ensures the visitor type is updated for subsequent visits
-    cache_key = "visitor_type:#{@product.id}:#{cookies[:_gumroad_guid]}"
+    cache_key = @product.visitor_type_cache_key(cookies[:_gumroad_guid])
     Rails.cache.delete(cache_key)
   end
 
