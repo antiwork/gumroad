@@ -59,15 +59,12 @@ export type SocialProofCardProps = ImageTypeProps &
 export const SocialProofCard = (props: SocialProofCardProps) => {
   const { title, description, widgetId } = props;
 
-  // Track impression when component mounts (only for real widgets, not preview)
-  // When widgetId is undefined, this is a preview widget and no tracking occurs
   React.useEffect(() => {
     if (widgetId !== undefined) {
       void trackSocialProofEvent(widgetId, "impression");
     }
   }, [widgetId]);
 
-  // Clean up sessionStorage when component unmounts
   React.useEffect(
     () => () => {
       sessionStorage.removeItem("social_proof_widget_clicked");
@@ -75,12 +72,9 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
     [],
   );
 
-  // Track click events (only for real widgets, not preview)
-  // When widgetId is undefined, this is a preview widget and no tracking occurs
   const handleClick = () => {
     if (widgetId !== undefined) {
       void trackSocialProofEvent(widgetId, "click");
-      // Store widget ID in sessionStorage for purchase tracking
       sessionStorage.setItem("social_proof_widget_clicked", widgetId.toString());
     }
   };
@@ -89,11 +83,17 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
     switch (props.imageType) {
       case "product_thumbnail":
       case "custom_image":
-        return props.imageUrl ? <img src={props.imageUrl} /> : null;
+        return props.imageUrl ? (
+          <img
+            src={props.imageUrl}
+            className="h-16 w-16 flex-shrink-0 rounded object-cover"
+            alt="product thumbnail image"
+          />
+        ) : null;
       case "icon":
         return (
           <div
-            className="grid h-[72px] w-[72px] place-items-center rounded border"
+            className="grid h-16 w-16 flex-shrink-0 place-items-center rounded border"
             style={{ backgroundColor: `${props.iconColor}4D` }}
           >
             <Icon name={props.iconName} style={{ color: props.iconColor }} />
@@ -129,20 +129,22 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
   };
 
   return (
-    <div
-      className="bg-filled relative flex w-full max-w-sm flex-col gap-4 rounded-lg border p-4"
-      style={{ boxShadow: "var(--box-shadow-1, 4px 4px 16px 0px #00000029)" }}
-    >
-      <div className="">
-        <div className="flex gap-3">
-          {renderImage()}
-          <div className="flex-1">
-            <div className="text-sm font-bold">{title}</div>
-            <p className="text-sm">{description}</p>
-            {props.ctaType === "link" && renderCTA()}
-          </div>
+    <div className="bg-filled text-default fixed bottom-0 left-0 z-50 flex w-full max-w-none flex-col gap-3 rounded-none border-t p-4 shadow-lg sm:static sm:max-w-sm sm:rounded-lg sm:border sm:p-4 sm:shadow-md">
+      <button
+        type="button"
+        className="absolute right-2 top-2 z-10 p-1 sm:right-2 sm:top-2"
+        onClick={props.onClose}
+        aria-label="Close"
+      >
+        <Icon name="x" className="text-current" />
+      </button>
+      <div className="flex items-center gap-3">
+        {renderImage()}
+        <div className="min-w-0 flex-1">
+          <div className="text-base font-bold leading-tight sm:text-sm">{title}</div>
+          <p className="text-sm leading-tight">{description}</p>
+          {props.ctaType === "link" && renderCTA()}
         </div>
-        <Icon name="x" className="absolute right-2 top-1 cursor-pointer text-current" onClick={props.onClose} />
       </div>
       {props.ctaType === "button" && renderCTA()}
     </div>
