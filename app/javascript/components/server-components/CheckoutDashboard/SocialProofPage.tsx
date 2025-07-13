@@ -34,7 +34,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 // TODO: Get Correct Placeholder
 import placeholder from "$assets/images/placeholders/upsells.png";
 
-type SocialProofPlayload = {
+type SocialProofPayload = {
   name: string;
   titleText: string;
   description: string;
@@ -128,7 +128,7 @@ const SocialProofPage = ({
   const [editingSocialProofWidgetId, setEditingSocialProofWidgetId] = React.useState<number | null>(null);
   const [popoverSocialProofWidgetId, setPopoverSocialProofWidgetId] = React.useState<number | null>(null);
 
-  const handleSave = async (formData: SocialProofPlayload) => {
+  const handleSave = async (formData: SocialProofPayload) => {
     try {
       setIsSaving(true);
       await createSocialProof(formData);
@@ -144,7 +144,7 @@ const SocialProofPage = ({
     setIsSaving(false);
   };
 
-  const handleUpdate = async (formData: SocialProofPlayload) => {
+  const handleUpdate = async (formData: SocialProofPayload) => {
     if (!editingSocialProofWidget) return;
     try {
       setIsSaving(true);
@@ -539,7 +539,7 @@ const Form = ({
   socialProofWidget?: SocialProofWidget | undefined;
   products: Product[];
   setView: React.Dispatch<React.SetStateAction<"list" | "create" | "edit">>;
-  save: (formData: SocialProofPlayload) => Promise<void>;
+  save: (formData: SocialProofPayload) => Promise<void>;
   isLoading: boolean;
   onCancel?: () => void;
 }) => {
@@ -683,7 +683,7 @@ const Form = ({
                 }))}
                 isMulti
                 isClearable
-                placeholder="Products to which this discount will apply"
+                placeholder="Products to display this widget on"
                 onChange={(selectedIds) => {
                   setSelectedProductIds({ value: selectedIds.map(({ id }) => id) });
                 }}

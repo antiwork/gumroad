@@ -477,12 +477,6 @@ Rails.application.routes.draw do
         get :cart_item, on: :collection
         get :statistics, on: :member
       end
-      resource :social, only: %i[show create], controller: :social_proof do
-        get :paged, on: :collection
-        patch '/:id', action: :update, on: :collection
-        put '/:id', action: :update, on: :collection
-        delete '/:id', action: :destroy, on: :collection
-      end
       namespace :upsells do
         resources :products, only: [:index, :show]
       end
@@ -1142,6 +1136,12 @@ Rails.application.routes.draw do
   namespace :checkout do
     namespace :upsells do
       resources :products, only: [:index, :show]
+    end
+
+    resources :social, only: [:index, :create, :update, :destroy], controller: "social_proof" do
+      collection do
+        get :paged
+      end
     end
   end
 

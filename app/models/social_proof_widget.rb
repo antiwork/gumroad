@@ -63,10 +63,6 @@ class SocialProofWidget < ApplicationRecord
   scope :visible_for_new_visitors, -> { where(visibility: 'new') }
   scope :visible_for_returning_visitors, -> { where(visibility: 'returning') }
 
-  def display_template
-    "#{title} - #{description} - CTA: #{cta_text}"
-  end
-
   # Analytics methods
   def current_analytics(days = 30)
     {
@@ -83,7 +79,7 @@ class SocialProofWidget < ApplicationRecord
     {
       clicks: stats[:clicks],
       conversion_rate: "#{stats[:conversion_rate]}%",
-      revenue: "$#{(stats[:revenue_cents] / 100.0).round(2)}",
+      revenue: Money.new(stats[:revenue_cents], "USD").format,
       status: status
     }
   end

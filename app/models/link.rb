@@ -162,24 +162,30 @@ class Link < ApplicationRecord
     return 'new' if browser_guid.blank?
 
     # Use Rails cache to avoid repeated Elasticsearch queries
-    cache_key = "visitor_type:#{id}:#{browser_guid}"
+    cache_key = "visitor_type:#{cache_key_with_version}:#{browser_guid}"
 
     Rails.cache.fetch(cache_key, expires_in: 1.hour) do
       # Check if this browser_guid has visited this product before
       # Note: This check happens before the current visit is recorded
-      previous_visits = EsClient.count(
-        index: ProductPageView.index_name,
-        body: {
-          query: {
-            bool: {
-              must: [
-                { term: { product_id: id } },
-                { term: { browser_guid: browser_guid } }
-              ]
+      begin
+        previous_visits = EsClient.count(
+          index: ProductPageView.index_name,
+          body: {
+            query: {
+              bool: {
+                must: [
+                  { term: { product_id: id } },
+                  { term: { browser_guid: browser_guid } }
+                ]
+              }
             }
           }
-        }
-      )["count"]
+        )["count"]
+      rescue => e
+        Rails.logger.error "Failed to query Elasticsearch for visitor type: #{e.message}"
+        # Default to 'returning' for safety in case of ES failure
+        return 'returning'
+      end
 
       previous_visits > 0 ? 'returning' : 'new'
     end

@@ -4,7 +4,7 @@ import { request } from "$app/utils/request";
 
 import type { PaginationProps } from "$app/components/Pagination";
 
-type SocialProofPlayload = {
+type SocialProofPayload = {
   name: string;
   titleText: string;
   description: string;
@@ -46,7 +46,7 @@ export type Sort<T extends string> = {
   direction: "asc" | "desc";
 };
 
-export const createSocialProof = async (payload: SocialProofPlayload) => {
+export const createSocialProof = async (payload: SocialProofPayload) => {
   const response = await request({
     method: "POST",
     accept: "json",
@@ -57,7 +57,7 @@ export const createSocialProof = async (payload: SocialProofPlayload) => {
   return response;
 };
 
-export const updateSocialProof = async (id: number, payload: SocialProofPlayload) => {
+export const updateSocialProof = async (id: number, payload: SocialProofPayload) => {
   const response = await request({
     method: "PUT",
     accept: "json",

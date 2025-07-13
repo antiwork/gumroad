@@ -47,7 +47,7 @@ class SocialProofVariableSubstitutionService
       product.successful_sales_count
     else
       # No product context available
-      "0"
+      0
     end
   end
 
@@ -124,7 +124,7 @@ class SocialProofVariableSubstitutionService
     recent_purchase&.country_or_from_ip_address
   end
 
-    def recent_purchases
+  def recent_purchases
     @recent_purchases ||= begin
       if @widget.universal?
         products = @widget.user.links.visible

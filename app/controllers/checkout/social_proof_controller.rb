@@ -5,7 +5,7 @@ class Checkout::SocialProofController < Sellers::BaseController
 
     PER_PAGE = 10
 
-    def show
+    def index
       authorize [:checkout, :social_proof]
 
       @title = "Social proof"
@@ -61,6 +61,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       end
 
       if social_proof_widget.save
+        presenter = Checkout::SocialProofPresenter.new(pundit_user:)
         render json: {
           success: true,
           social_proof_widgets: [social_proof_widget].map { |widget| presenter.social_proof_widget_props(widget) }
@@ -124,7 +125,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       }, status: :not_found
     end
 
-        def destroy
+    def destroy
       authorize [:checkout, :social_proof]
 
       social_proof_widget = current_user.social_proof_widgets.find(params[:id])
