@@ -6,14 +6,13 @@ class SocialProofWidgetEvent < ApplicationRecord
   belongs_to :purchase, optional: true
 
   validates :event_type, presence: true, inclusion: { in: %w[impression click purchase] }
-  validates :occurred_at, presence: true
 
   scope :impressions, -> { where(event_type: 'impression') }
   scope :clicks, -> { where(event_type: 'click') }
   scope :purchases, -> { where(event_type: 'purchase') }
   scope :for_widget, ->(widget_id) { where(social_proof_widget_id: widget_id) }
-  scope :on_date, ->(date) { where(occurred_at: date.beginning_of_day..date.end_of_day) }
-  scope :between_dates, ->(start_date, end_date) { where(occurred_at: start_date.beginning_of_day..end_date.end_of_day) }
+  scope :on_date, ->(date) { where(created_at: date.beginning_of_day..date.end_of_day) }
+  scope :between_dates, ->(start_date, end_date) { where(created_at: start_date.beginning_of_day..end_date.end_of_day) }
 
   # Track an impression when the widget is shown
   def self.track_impression(widget_id, session_id, user_id = nil)
@@ -21,8 +20,7 @@ class SocialProofWidgetEvent < ApplicationRecord
       social_proof_widget_id: widget_id,
       event_type: 'impression',
       session_id: session_id,
-      user_id: user_id,
-      occurred_at: Time.current
+      user_id: user_id
     )
   end
 
@@ -32,8 +30,7 @@ class SocialProofWidgetEvent < ApplicationRecord
       social_proof_widget_id: widget_id,
       event_type: 'click',
       session_id: session_id,
-      user_id: user_id,
-      occurred_at: Time.current
+      user_id: user_id
     )
   end
 
@@ -45,8 +42,7 @@ class SocialProofWidgetEvent < ApplicationRecord
       session_id: session_id,
       user_id: user_id,
       purchase_id: purchase_id,
-      revenue_cents: revenue_cents,
-      occurred_at: Time.current
+      revenue_cents: revenue_cents
     )
   end
 end

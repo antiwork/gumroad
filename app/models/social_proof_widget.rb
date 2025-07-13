@@ -65,12 +65,27 @@ class SocialProofWidget < ApplicationRecord
 
   # Analytics methods
   def current_analytics(days = 30)
+    start_date = days.days.ago
+    end_date = Date.current
+
+    # Get events within the date range
+    events_in_range = social_proof_widget_events.between_dates(start_date, end_date)
+    purchases_in_range = social_proof_widget_purchases.between_dates(start_date, end_date)
+
+    # Calculate metrics within the same date range
+    clicks_in_range = events_in_range.clicks.count
+    purchases_count = purchases_in_range.count
+    revenue_cents = purchases_in_range.sum(:revenue_cents)
+
+    # Calculate conversion rate using clicks within the same range
+    conversion_rate = clicks_in_range > 0 ? (purchases_count.to_f / clicks_in_range * 100).round(4) : 0.0
+
     {
       impressions: impressions_count,
       clicks: clicks_count,
-      purchases: social_proof_widget_purchases.between_dates(days.days.ago, Date.current).count,
-      revenue_cents: social_proof_widget_purchases.between_dates(days.days.ago, Date.current).sum(:revenue_cents),
-      conversion_rate: clicks_count > 0 ? (social_proof_widget_purchases.between_dates(days.days.ago, Date.current).count.to_f / clicks_count * 100).round(4) : 0.0
+      purchases: purchases_count,
+      revenue_cents: revenue_cents,
+      conversion_rate: conversion_rate
     }
   end
 
