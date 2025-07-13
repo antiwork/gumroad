@@ -64,6 +64,7 @@ class Checkout::SocialProofPresenter
       ]
     ).merge(
       product_ids: widget.links.map(&:external_id),
+      products: widget.links.map { |link| { id: link.external_id, name: link.name } },
       can_update: Pundit.policy!(pundit_user, [:checkout, :social_proof]).update?,
       clicks: analytics[:clicks],
       conversion_rate: analytics[:conversion_rate],
