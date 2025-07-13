@@ -129,15 +129,7 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
   };
 
   return (
-    <div className="bg-filled text-default fixed bottom-0 left-0 z-50 flex w-full max-w-none flex-col gap-3 rounded-none border-t p-4 shadow-lg sm:static sm:max-w-sm sm:rounded-lg sm:border sm:p-4 sm:shadow-md">
-      <button
-        type="button"
-        className="absolute right-2 top-2 z-10 p-1 sm:right-2 sm:top-2"
-        onClick={props.onClose}
-        aria-label="Close"
-      >
-        <Icon name="x" className="text-current" />
-      </button>
+    <div className="bg-filled text-default fixed bottom-0 left-0 z-50 flex w-full max-w-none flex-col gap-3 rounded-none border-t p-4 shadow-lg sm:relative sm:max-w-sm sm:rounded-lg sm:border sm:p-4 sm:shadow-md">
       <div className="flex items-center gap-3">
         {renderImage()}
         <div className="min-w-0 flex-1">
@@ -146,6 +138,14 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
           {props.ctaType === "link" && renderCTA()}
         </div>
       </div>
+      <button
+        type="button"
+        className="absolute right-2 top-2 cursor-pointer"
+        onClick={props.onClose}
+        aria-label="Close"
+      >
+        <Icon name="x" className="text-current" />
+      </button>
       {props.ctaType === "button" && renderCTA()}
     </div>
   );

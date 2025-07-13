@@ -96,7 +96,9 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
   };
 };
 
-export type SocialProofWidget = ImportedSocialProofWidget;
+export type SocialProofWidget = ImportedSocialProofWidget & {
+  products?: { id: string; name: string }[];
+};
 
 const SocialProofPage = ({
   pages,
@@ -289,8 +291,15 @@ const SocialProofPage = ({
                     onClick={() => setSelectedSocialProofWidgetId(socialProofWidget.id)}
                   >
                     <td style={{ width: "30%" }}>
-                      <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
-                        <b>{socialProofWidget.name}</b>
+                      <div style={{ display: "grid", gap: "var(--spacer-1)" }}>
+                        <b className="text-md">{socialProofWidget.name}</b>
+                        <span className="text-sm">
+                          {socialProofWidget.universal
+                            ? "All products"
+                            : socialProofWidget.products && socialProofWidget.products.length > 0
+                              ? socialProofWidget.products.map((p) => p.name).join(", ")
+                              : null}
+                        </span>
                       </div>
                     </td>
 
@@ -299,7 +308,14 @@ const SocialProofPage = ({
 
                     <td>{socialProofWidget.revenue}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "min-content 1fr", gap: "var(--spacer-2)" }}>
+                      <div
+                        className="capitalize"
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "min-content 1fr",
+                          gap: "var(--spacer-2)",
+                        }}
+                      >
                         {socialProofWidget.status === "published" ? (
                           <Icon name="circle-fill" />
                         ) : (
@@ -403,7 +419,7 @@ const SocialProofPage = ({
           </div>
         )}
         {selectedSocialProofWidget ? (
-          <aside>
+          <aside style={{ position: "fixed" }}>
             <header>
               <h2>{selectedSocialProofWidget.name}</h2>
               <button className="close" aria-label="Close" onClick={() => setSelectedSocialProofWidgetId(null)} />
