@@ -11,7 +11,8 @@ class User < ApplicationRecord
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
           Email, AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
-          TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId
+          TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
+          ActionView::Helpers::SanitizeHelper
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
@@ -406,7 +407,7 @@ class User < ApplicationRecord
   end
 
   def display_name(prefer_email_over_default_username: false)
-    return ActionView::Base.new.sanitize(name) if name.present?
+    return sanitize(name) if name.present?
     return form_email || username.presence if prefer_email_over_default_username && username == external_id
     username.presence || form_email
   end
