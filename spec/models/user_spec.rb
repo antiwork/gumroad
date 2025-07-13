@@ -334,6 +334,24 @@ describe User, :vcr do
       end
     end
 
+    context "when name contains HTML tags" do
+      it "sanitizes HTML tags from name" do
+        user = create(:user, name: "<script>alert('xss')</script>Test name")
+        expect(user.display_name).to eq "Test name"
+      end
+
+      it "prevents saving names with dangerous HTML tags" do
+        user = build(:user, name: "<a href='https://malicious.com'>Click me</a>")
+        expect(user.valid?).to eq(false)
+        expect(user.errors[:name]).to include("cannot contain HTML tags")
+      end
+
+      it "allows names with non-dangerous content" do
+        user = build(:user, name: "John Doe <3")
+        expect(user.valid?).to eq(true)
+      end
+    end
+
     context "when name is blank" do
       before do
         @user = create(:user, name: "", username: nil)
