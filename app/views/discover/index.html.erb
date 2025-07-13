@@ -4,6 +4,19 @@
 <% end %>
 <% end %>
 
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "url": "<%= request.base_url %>/",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "<%= request.base_url %>/discover?query={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+
 <%= load_pack("discover") %>
 <div>
   <%= react_component "Discover", props: @react_discover_props, prerender: true %>
