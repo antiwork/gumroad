@@ -11,6 +11,7 @@ class SocialProofWidget < ApplicationRecord
   # Analytics associations
   has_many :social_proof_widget_events, dependent: :destroy
   has_many :social_proof_widget_analytics, dependent: :destroy
+  has_many :social_proof_widget_purchases, dependent: :destroy
 
   # Alias title_text to the `title` attribute to match the controller's transformation.
   alias_attribute :title_text, :title
@@ -45,6 +46,8 @@ class SocialProofWidget < ApplicationRecord
     in: -> { SocialProofWidget.available_icons },
     message: "%{value} is not a valid icon name"
   }, if: -> { image_type == 'icon' }
+  validates :visibility, inclusion: { in: %w[all new returning],
+                                     message: "%{value} is not a valid visibility type" }
 
   def status
     published? ? 'published' : 'unpublished'
@@ -56,6 +59,9 @@ class SocialProofWidget < ApplicationRecord
 
   scope :published, -> { where(published: true) }
   scope :unpublished, -> { where(published: false) }
+  scope :visible_for_all, -> { where(visibility: 'all') }
+  scope :visible_for_new_visitors, -> { where(visibility: 'new') }
+  scope :visible_for_returning_visitors, -> { where(visibility: 'returning') }
 
   def display_template
     "#{title} - #{description} - CTA: #{cta_text}"
@@ -63,7 +69,13 @@ class SocialProofWidget < ApplicationRecord
 
   # Analytics methods
   def current_analytics(days = 30)
-    SocialProofWidgetAnalytic.totals_for_widget(id, days.days.ago, Date.current)
+    {
+      impressions: impressions_count,
+      clicks: clicks_count,
+      purchases: social_proof_widget_purchases.between_dates(days.days.ago, Date.current).count,
+      revenue_cents: social_proof_widget_purchases.between_dates(days.days.ago, Date.current).sum(:revenue_cents),
+      conversion_rate: clicks_count > 0 ? (social_proof_widget_purchases.between_dates(days.days.ago, Date.current).count.to_f / clicks_count * 100).round(4) : 0.0
+    }
   end
 
   def analytics_summary
@@ -74,5 +86,33 @@ class SocialProofWidget < ApplicationRecord
       revenue: "$#{(stats[:revenue_cents] / 100.0).round(2)}",
       status: status
     }
+  end
+
+  # Increment counters
+  def increment_impression!
+    increment!(:impressions_count)
+  end
+
+  def increment_click!
+    increment!(:clicks_count)
+  end
+
+  def track_purchase!(purchase_id, revenue_cents)
+    SocialProofWidgetPurchase.track_purchase(id, purchase_id, revenue_cents)
+    # Update the widget's revenue counter
+    increment!(:revenue_cents, revenue_cents)
+  end
+
+  def visible_for_visitor_type?(visitor_type)
+    case visibility
+    when 'all'
+      true
+    when 'new'
+      visitor_type == 'new'
+    when 'returning'
+      visitor_type == 'returning'
+    else
+      false
+    end
   end
 end

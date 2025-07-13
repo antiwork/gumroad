@@ -479,7 +479,6 @@ Rails.application.routes.draw do
       end
       resource :social, only: %i[show create], controller: :social_proof do
         get :paged, on: :collection
-        post :track_event, on: :collection
         patch '/:id', action: :update, on: :collection
         put '/:id', action: :update, on: :collection
         delete '/:id', action: :destroy, on: :collection
@@ -1145,6 +1144,9 @@ Rails.application.routes.draw do
       resources :products, only: [:index, :show]
     end
   end
+
+  # Social proof tracking - accessible from any domain
+  post "/social_proof/track_event", to: "social_proof_tracking#track_event"
 
   resources :social_proof_widgets do
     member do

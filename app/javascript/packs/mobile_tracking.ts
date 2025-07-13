@@ -1,6 +1,7 @@
 import { cast } from "ts-safe-cast";
 
 import { ConfirmedPurchaseResponse } from "$app/data/purchase";
+import { trackSocialProofEvent } from "$app/data/social_proof";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { AnalyticsData } from "$app/parsers/product";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
@@ -66,6 +67,16 @@ if (enabled) {
         quantity: result.quantity,
         tax: result.non_formatted_seller_tax_amount,
       });
+
+      const clickedWidgetId = sessionStorage.getItem("social_proof_widget_clicked");
+      if (clickedWidgetId) {
+        void trackSocialProofEvent(parseInt(clickedWidgetId, 10), "purchase", {
+          purchaseId: parseInt(result.id, 10),
+          revenueCents: Math.round(result.non_formatted_price * 100), // Convert to cents
+        });
+        sessionStorage.removeItem("social_proof_widget_clicked");
+      }
+
       if (has_receipt_third_party_analytics)
         addThirdPartyAnalytics({
           domain: third_party_analytics_domain,

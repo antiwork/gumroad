@@ -58,7 +58,9 @@ class Checkout::SocialProofPresenter
         :image_url,
         :icon_name,
         :icon_color,
-        :universal
+        :universal,
+        :visibility,
+        :published
       ]
     ).merge(
       product_ids: widget.links.map(&:external_id),

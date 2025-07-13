@@ -41,7 +41,8 @@ class Checkout::SocialProofController < Sellers::BaseController
         cta_type: permitted_params.dig(:cta_type, :id),
         image_type: permitted_params.dig(:image, :id),
         icon_name: permitted_params[:icon],
-        icon_color: permitted_params[:icon_color]
+        icon_color: permitted_params[:icon_color],
+        visibility: permitted_params[:visibility]
       }.compact
 
       social_proof_widget = current_user.social_proof_widgets.new(widget_attributes)
@@ -87,7 +88,8 @@ class Checkout::SocialProofController < Sellers::BaseController
         cta_type: permitted_params.dig(:cta_type, :id),
         image_type: permitted_params.dig(:image, :id),
         icon_name: permitted_params[:icon],
-        icon_color: permitted_params[:icon_color]
+        icon_color: permitted_params[:icon_color],
+        visibility: permitted_params[:visibility]
       }.compact
 
       # Set the status
@@ -142,34 +144,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       }, status: :not_found
     end
 
-    def track_event
-      # Public endpoint - no authorization needed for customer tracking
 
-      widget = SocialProofWidget.find(params[:widget_id])
-      event_type = params[:event_type]
-      session_id = params[:session_id] || session.id
-      user_id = current_user&.id
-
-      case event_type
-      when 'impression'
-        SocialProofWidgetEvent.track_impression(widget.id, session_id, user_id)
-      when 'click'
-        SocialProofWidgetEvent.track_click(widget.id, session_id, user_id)
-      when 'purchase'
-        purchase_id = params[:purchase_id]
-        revenue_cents = params[:revenue_cents]
-        SocialProofWidgetEvent.track_purchase(widget.id, session_id, purchase_id, revenue_cents, user_id)
-      else
-        return render json: { success: false, error_message: "Invalid event type" }, status: :bad_request
-      end
-
-      render json: { success: true }
-    rescue ActiveRecord::RecordNotFound
-      render json: { success: false, error_message: "Widget not found" }, status: :not_found
-    rescue => e
-      Rails.logger.error "Social proof tracking error: #{e.message}"
-      render json: { success: false, error_message: "Tracking failed" }, status: :internal_server_error
-    end
 
     private
       def parse_date_times
@@ -188,6 +163,7 @@ class Checkout::SocialProofController < Sellers::BaseController
             :icon,
             :iconColor,
             :status,
+            :visibility,
             { ctaType: [:id, :label] },
             { image: [:id, :label] },
             selectedProductIds: []

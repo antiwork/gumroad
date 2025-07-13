@@ -10,17 +10,19 @@ type SocialProofPlayload = {
   description: string;
   ctaText: string;
   ctaType: { id: "button" | "link" | "none"; label: string };
-  image: { id: "product" | "custom" | "icon" | "none"; label: string };
+  image: { id: "product_thumbnail" | "custom_image" | "icon" | "none"; label: string };
   icon: string;
   iconColor: string;
   selectedProductIds: string[];
   universal: boolean;
   status: string;
+  visibility: "all" | "new" | "returning";
 };
 
 export type SocialProofWidget = {
   id: number;
   name: string;
+  universal: boolean;
   title: string;
   description: string;
   cta_text: string;
@@ -28,8 +30,9 @@ export type SocialProofWidget = {
   image_type: string;
   image_url: string | null;
   icon_name: IconName;
-  icon_color: string | null;
-  universal: boolean;
+  icon_color: string;
+  published: boolean;
+  visibility: "all" | "new" | "returning";
   product_ids: string[];
   can_update: boolean;
   clicks: number;
@@ -79,7 +82,6 @@ export const trackSocialProofEvent = async (
   widgetId: number,
   eventType: "impression" | "click" | "purchase",
   options: {
-    sessionId?: string;
     purchaseId?: number;
     revenueCents?: number;
   } = {},
@@ -88,11 +90,10 @@ export const trackSocialProofEvent = async (
     const response = await request({
       method: "POST",
       accept: "json",
-      url: "/checkout/social/track_event",
+      url: "/social_proof/track_event",
       data: {
         widget_id: widgetId,
         event_type: eventType,
-        session_id: options.sessionId,
         purchase_id: options.purchaseId,
         revenue_cents: options.revenueCents,
       },
@@ -100,7 +101,6 @@ export const trackSocialProofEvent = async (
 
     return response;
   } catch (error) {
-    // Silently fail tracking to not disrupt user experience
     return null;
   }
 };
