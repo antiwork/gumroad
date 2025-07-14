@@ -16,7 +16,8 @@ class Checkout::SocialProofPresenter
       seller = pundit_user.seller
 
       products = seller.products.visible
-        .select(:external_id, :name, :archived, :price_currency_type, :long_url, :is_tiered_membership)
+        .select(:id, :name, :flags, :price_currency_type, :custom_permalink, :unique_permalink, :user_id)
+        .includes(:user)
         .map do |product|
           {
             id: product.external_id,
@@ -40,7 +41,7 @@ class Checkout::SocialProofPresenter
           recommendation_type: seller.recommendation_type,
           tipping_enabled: seller.tipping_enabled?,
         },
-        custom_fields: seller.custom_fields.not_is_post_purchase.select(:id, :name, :type, :required, :options, :order).map(&:as_json),
+        custom_fields: seller.custom_fields.not_is_post_purchase.select(:id, :name, :field_type, :required, :global, :flags).map(&:as_json),
         products:,
         social_proof_widgets: first_page_widgets,
         pagination: { page: 1, pages: total_pages, totalItems: total_widgets },
