@@ -245,7 +245,7 @@ module Product::Prices
     return [] if available_prices.empty?
 
     available_prices.map do |price_cents|
-      get_usd_cents(currency_type, price_cents)
+      get_usd_cents(price_currency_type, price_cents)
     end.uniq
   end
 
@@ -255,9 +255,9 @@ module Product::Prices
 
     available_prices.map do |price_cents|
       begin
-        get_usd_cents(currency_type, price_cents)
+        get_usd_cents(price_currency_type, price_cents)
       rescue => e
-        Rails.logger.warn("Currency conversion failed for product #{id}, currency #{currency_type}: #{e.message}")
+        Rails.logger.warn("Currency conversion failed for product #{id}, currency #{price_currency_type}: #{e.message}")
         nil
       end
     end.compact.uniq
