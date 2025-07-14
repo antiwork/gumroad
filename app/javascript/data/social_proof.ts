@@ -50,7 +50,7 @@ export const createSocialProof = async (payload: SocialProofPayload) => {
   const response = await request({
     method: "POST",
     accept: "json",
-    url: Routes.checkout_social_path(),
+    url: "/checkout/social",
     data: payload,
   });
 

@@ -112,7 +112,7 @@ const SocialProofPage = ({
   pagination?: PaginationProps | undefined | null;
 }) => {
   const loggedInUser = useLoggedInUser();
-  const [view, setView] = React.useState<"list" | "create" | "edit">("list");
+  const [view, setView] = React.useState<"list" | "create" | "edit" | "duplicate">("list");
   const originalLocation = useOriginalLocation();
   const initialQueryParams = extractParams(new URL(originalLocation).searchParams);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -352,7 +352,7 @@ const SocialProofPage = ({
                               inert={!socialProofWidget.can_update || isLoading}
                               onClick={() => {
                                 setEditingSocialProofWidgetId(socialProofWidget.id);
-                                setView("create");
+                                setView("duplicate");
                               }}
                             >
                               <Icon name="outline-duplicate" />
@@ -449,7 +449,7 @@ const SocialProofPage = ({
               <Button
                 onClick={() => {
                   setEditingSocialProofWidgetId(selectedSocialProofWidget.id);
-                  setView("create");
+                  setView("duplicate");
                 }}
                 disabled={!selectedSocialProofWidget.can_update || isLoading}
               >
@@ -499,6 +499,17 @@ const SocialProofPage = ({
       isLoading={isSaving}
       onCancel={() => setEditingSocialProofWidgetId(null)}
     />
+  ) : view === "duplicate" ? (
+    <Form
+      title="Duplicate widget"
+      submitLabel={isSaving ? "Adding widget..." : "Add widget"}
+      socialProofWidget={editingSocialProofWidget}
+      products={products}
+      setView={setView}
+      save={handleSave}
+      isLoading={isSaving}
+      onCancel={() => setEditingSocialProofWidgetId(null)}
+    />
   ) : (
     <Form
       title="Create widget"
@@ -538,7 +549,7 @@ const Form = ({
   submitLabel?: string;
   socialProofWidget?: SocialProofWidget | undefined;
   products: Product[];
-  setView: React.Dispatch<React.SetStateAction<"list" | "create" | "edit">>;
+  setView: React.Dispatch<React.SetStateAction<"list" | "create" | "edit" | "duplicate">>;
   save: (formData: SocialProofPayload) => Promise<void>;
   isLoading: boolean;
   onCancel?: () => void;

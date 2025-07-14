@@ -32,7 +32,7 @@ class Checkout::SocialProofPresenter
       total_pages = (total_widgets.to_f / PER_PAGE).ceil
 
       {
-        pages: [],
+        pages: pages,
         user: {
           display_offer_code_field: seller.display_offer_code_field?,
           recommendation_type: seller.recommendation_type,
@@ -48,7 +48,7 @@ class Checkout::SocialProofPresenter
       Rails.logger.error e.backtrace.join("\n")
 
       {
-        pages: [],
+        pages: pages,
         user: {
           display_offer_code_field: false,
           recommendation_type: nil,

@@ -9,6 +9,15 @@ const pageNames = {
 };
 export type Page = keyof typeof pageNames;
 
+const getRoutePath = (page: Page): string => {
+  switch (page) {
+    case "social":
+      return "/checkout/social";
+    default:
+      return Routes[`checkout_${page}_path`]();
+  }
+};
+
 export const Layout = ({
   currentPage,
   children,
@@ -50,7 +59,7 @@ const Header = ({
     {actions ? <div className="actions">{actions}</div> : null}
     <div role="tablist">
       {pages.map((page) => (
-        <a key={page} role="tab" href={Routes[`checkout_${page}_path`]()} aria-selected={page === currentPage}>
+        <a key={page} role="tab" href={getRoutePath(page)} aria-selected={page === currentPage}>
           {pageNames[page]}
         </a>
       ))}
