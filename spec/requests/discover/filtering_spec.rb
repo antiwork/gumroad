@@ -181,6 +181,41 @@ describe("Discover - Filtering scenarios", js: true, type: :feature) do
     expect_product_cards_in_order([@similar_product_3, @product, @similar_product_4, @similar_product_2, @similar_product_1])
   end
 
+  it "sorts products by USD price across different currencies" do
+    # Stub currency rates for deterministic conversion
+    allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with("usd").and_return("1.0")
+    allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with("eur").and_return("1.1")
+    allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with("gbp").and_return("1.3")
+
+    # Create products in different currencies
+    usd_product = create(:product, name: "Currency Test Product USD", price_cents: 1000, price_currency_type: "usd")
+    eur_product = create(:product, name: "Currency Test Product EUR", price_cents: 900, price_currency_type: "eur")
+    gbp_product = create(:product, name: "Currency Test Product GBP", price_cents: 800, price_currency_type: "gbp")
+
+    index_model_records(Link)
+
+    visit discover_url(host: discover_host)
+    fill_in("Search products", with: "Currency Test Product\n")
+    wait_for_ajax
+
+    # USD: 1000, EUR: 900*1.1=990, GBP: 800*1.3=1040
+    choose "Price (Low to High)"
+    wait_for_ajax
+    expect_product_cards_in_order([
+      eur_product,
+      usd_product,
+      gbp_product
+    ])
+
+    choose "Price (High to Low)"
+    wait_for_ajax
+    expect_product_cards_in_order([
+      gbp_product,
+      usd_product,
+      eur_product
+    ])
+  end
+
   it "filters products by price" do
     visit discover_url(host: discover_host)
     fill_in("Search products", with: "product\n")
