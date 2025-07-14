@@ -67,6 +67,7 @@ describe("Discover - Filtering scenarios", js: true, type: :feature) do
 
     index_model_records(Purchase)
     index_model_records(Link)
+    expect(UpdateProductUsdPricesWorker.jobs.size).to eq(1)
   end
 
   it "filters products by filetype" do
