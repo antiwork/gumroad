@@ -33,9 +33,9 @@ module Purchase::Risk
     def vague_error_message
       record = is_gift_receiver_purchase ? gift_received.gifter_purchase : self
       if record.free_purchase?
-        I18n.t(:vague_purchase_error_notice_for_free_products)
+        "The transaction could not complete."
       else
-        I18n.t(:vague_purchase_error_notice)
+        "Your card was not charged."
       end
     end
 
@@ -57,7 +57,7 @@ module Purchase::Risk
       return unless past_blocked_object(browser_guid)
 
       self.error_code = PurchaseErrorCode::BLOCKED_BROWSER_GUID
-      errors.add :base, I18n.t(:fraudulent_connection_check_failed)
+      errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
     end
 
     def check_for_past_chargebacks
@@ -66,7 +66,7 @@ module Purchase::Risk
       return if !past_email_purchases.exists? && !past_guid_purchases.exists?
 
       self.error_code = PurchaseErrorCode::BUYER_CHARGED_BACK
-      errors.add :base, I18n.t(:chargebacks_check_failed)
+      errors.add :base, "There's an active chargeback on one of your past Gumroad purchases. Please withdraw it by contacting your charge processor and try again later."
     end
 
     def check_for_past_fraudulent_buyers
@@ -74,7 +74,7 @@ module Purchase::Risk
       return unless buyer_user.try(:suspended_for_fraud?)
 
       self.error_code = PurchaseErrorCode::SUSPENDED_BUYER
-      errors.add :base, I18n.t(:vague_purchase_error_notice)
+      errors.add :base, "Your card was not charged."
     end
 
     def check_for_past_fraudulent_ips
@@ -87,7 +87,7 @@ module Purchase::Risk
       return if BlockedObject.find_active_objects(ip_addresses_to_check[0..2]).present? && seller.compliant?
 
       self.error_code = PurchaseErrorCode::BLOCKED_IP_ADDRESS
-      errors.add :base, I18n.t(:fraudulent_connection_check_failed)
+      errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
     end
 
     def past_blocked_object(object)
