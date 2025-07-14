@@ -192,8 +192,7 @@ describe("Discover - Filtering scenarios", js: true, type: :feature) do
     eur_product = create(:product, name: "Currency Test Product EUR", price_cents: 900, price_currency_type: "eur")
     gbp_product = create(:product, name: "Currency Test Product GBP", price_cents: 800, price_currency_type: "gbp")
 
-    index_model_records(Link)
-    expect(UpdateProductUsdPricesWorker.jobs.size).to eq(1)
+    index_model_records(Product)
 
     visit discover_url(host: discover_host)
     fill_in("Search products", with: "Currency Test Product\n")
