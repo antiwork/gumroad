@@ -37,10 +37,16 @@ describe CreateIndiaSalesReportJob do
       allow(SlackMessageWorker).to receive(:perform_async)
 
       # Mock database queries to prevent actual data access
-      allow(Purchase).to receive_message_chain(:joins, :where, :find_each).and_return([])
+      purchase_double = double
+      allow(Purchase).to receive(:joins).and_return(purchase_double)
+      allow(purchase_double).to receive(:where).and_return(purchase_double)
+      allow(purchase_double).to receive_message_chain(:where, :not).and_return(purchase_double)
+      allow(purchase_double).to receive(:find_each).and_return([])
 
       # Mock ZipTaxRate lookup
-      allow(ZipTaxRate).to receive_message_chain(:where, :alive, :last, :combined_rate).and_return(0.18)
+      zip_tax_rate_double = double
+      allow(ZipTaxRate).to receive_message_chain(:where, :alive, :last).and_return(zip_tax_rate_double)
+      allow(zip_tax_rate_double).to receive(:combined_rate).and_return(0.18)
 
       # Test that it defaults to previous month (May 2023)
       described_class.new.perform
@@ -164,38 +170,38 @@ describe CreateIndiaSalesReportJob do
     end
 
     it "handles invalid Indian states" do
-      travel_to(Time.zone.local(2023, 6, 15)) do
-        invalid_product = create(:product, price_cents: 500)
-        invalid_state_purchase = create(:purchase,
-                                        link: invalid_product,
-                                        purchaser: invalid_product.user,
-                                        purchase_state: "in_progress",
-                                        quantity: 1,
-                                        perceived_price_cents: 500,
-                                        country: "India",
-                                        ip_country: "India",
-                                        ip_state: "123",
-                                        stripe_transaction_id: "txn_invalid_state"
-        )
-        invalid_state_purchase.mark_test_successful!
+      # Create test data without time travel to avoid S3 time skew
+      invalid_product = create(:product, price_cents: 500)
+      invalid_state_purchase = create(:purchase,
+                                      link: invalid_product,
+                                      purchaser: invalid_product.user,
+                                      purchase_state: "in_progress",
+                                      quantity: 1,
+                                      perceived_price_cents: 500,
+                                      country: "India",
+                                      ip_country: "India",
+                                      ip_state: "123",
+                                      stripe_transaction_id: "txn_invalid_state",
+                                      created_at: Time.zone.local(2023, 6, 15)
+      )
+      invalid_state_purchase.mark_test_successful!
 
-        # Use a separate S3 object to avoid time skew issues
-        s3_object_invalid = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-invalid-#{SecureRandom.hex(18)}.csv")
-        expect(s3_bucket_double).to receive(:object).and_return(s3_object_invalid)
+      # Use a separate S3 object to avoid time skew issues
+      s3_object_invalid = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-invalid-#{SecureRandom.hex(18)}.csv")
+      expect(s3_bucket_double).to receive(:object).and_return(s3_object_invalid)
 
-        described_class.new.perform(6, 2023)
+      described_class.new.perform(6, 2023)
 
-        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
-        s3_object_invalid.get(response_target: temp_file)
-        temp_file.rewind
-        actual_payload = CSV.read(temp_file)
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      s3_object_invalid.get(response_target: temp_file)
+      temp_file.rewind
+      actual_payload = CSV.read(temp_file)
 
-        invalid_state_row = actual_payload.find { |row| row[0] == invalid_state_purchase.external_id }
-        expect(invalid_state_row).to be_present
-        expect(invalid_state_row[2]).to eq("")
+      invalid_state_row = actual_payload.find { |row| row[0] == invalid_state_purchase.external_id }
+      expect(invalid_state_row).to be_present
+      expect(invalid_state_row[2]).to eq("")
 
-        temp_file.close(true)
-      end
+      temp_file.close(true)
     end
   end
 end
