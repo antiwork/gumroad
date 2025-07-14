@@ -4,6 +4,9 @@ class CreateIndiaSalesReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  INDIA_GST_RATE = 18
+  INDIA_GST_RATE_DECIMAL = 0.18
+
   VALID_INDIAN_STATES = %w[
     AP AR AS BR CG GA GJ HR HP JK JH KA
     KL MP MH MN ML MZ NL OR PB RJ SK TN
@@ -55,8 +58,8 @@ class CreateIndiaSalesReportJob
             raw_state
           end
 
-          expected_tax_rounded = (price_cents * 0.18).round
-          expected_tax_floored = (price_cents * 0.18).floor
+          expected_tax_rounded = (price_cents * INDIA_GST_RATE_DECIMAL).round
+          expected_tax_floored = (price_cents * INDIA_GST_RATE_DECIMAL).floor
           diff_rounded = expected_tax_rounded - tax_amount_cents
           diff_floored = expected_tax_floored - tax_amount_cents
 
@@ -70,7 +73,7 @@ class CreateIndiaSalesReportJob
             purchase.external_id,
             purchase.created_at.strftime("%Y-%m-%d"),
             display_state,
-            18,
+            INDIA_GST_RATE,
             price_cents,
             tax_amount_cents,
             calc_tax_rate,
