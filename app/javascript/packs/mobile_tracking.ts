@@ -70,10 +70,15 @@ if (enabled) {
 
       const clickedWidgetId = sessionStorage.getItem("social_proof_widget_clicked");
       if (clickedWidgetId) {
-        void trackSocialProofEvent(parseInt(clickedWidgetId, 10), "purchase", {
-          purchaseId: parseInt(result.id, 10),
-          revenueCents: Math.round(result.non_formatted_price),
-        });
+        const widgetId = parseInt(clickedWidgetId, 10);
+        const purchaseId = parseInt(result.id, 10);
+
+        if (!isNaN(widgetId) && !isNaN(purchaseId)) {
+          void trackSocialProofEvent(widgetId, "purchase", {
+            purchaseId,
+            revenueCents: Math.round(result.non_formatted_price),
+          });
+        }
         sessionStorage.removeItem("social_proof_widget_clicked");
       }
 

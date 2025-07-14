@@ -58,9 +58,11 @@ export type SocialProofCardProps = ImageTypeProps &
 
 export const SocialProofCard = (props: SocialProofCardProps) => {
   const { title, description, widgetId } = props;
+  const hasTrackedImpression = React.useRef(false);
 
   React.useEffect(() => {
-    if (widgetId !== undefined) {
+    if (widgetId !== undefined && !hasTrackedImpression.current) {
+      hasTrackedImpression.current = true;
       void trackSocialProofEvent(widgetId, "impression");
     }
   }, [widgetId]);

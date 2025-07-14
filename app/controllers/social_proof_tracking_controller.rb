@@ -23,12 +23,18 @@ class SocialProofTrackingController < ApplicationController
     case event_type
     when 'impression'
       widget.increment_impression!
+      # Also create an event record for analytics
+      SocialProofWidgetEvent.track_impression(widget.id, session.id.to_s)
     when 'click'
       widget.increment_click!
+      # Also create an event record for analytics
+      SocialProofWidgetEvent.track_click(widget.id, session.id.to_s)
     when 'purchase'
       purchase_id = params[:purchase_id]
       revenue_cents = params[:revenue_cents]
       widget.track_purchase!(purchase_id, revenue_cents)
+      # Also create an event record for analytics
+      SocialProofWidgetEvent.track_purchase(widget.id, session.id.to_s, purchase_id, revenue_cents)
     else
       return render json: { success: false, error_message: "Invalid event type" }, status: :bad_request
     end

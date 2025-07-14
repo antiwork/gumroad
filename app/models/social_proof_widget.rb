@@ -64,7 +64,7 @@ class SocialProofWidget < ApplicationRecord
   scope :visible_for_new_visitors, -> { where(visibility: 'new') }
   scope :visible_for_returning_visitors, -> { where(visibility: 'returning') }
 
-  # Analytics methods
+    # Analytics methods
   def current_analytics(days = 30)
     start_date = days.days.ago
     end_date = Date.current

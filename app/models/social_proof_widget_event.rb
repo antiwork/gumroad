@@ -19,8 +19,7 @@ class SocialProofWidgetEvent < ApplicationRecord
     create!(
       social_proof_widget_id: widget_id,
       event_type: 'impression',
-      session_id: session_id,
-      user_id: user_id
+      session_id: session_id
     )
   end
 
@@ -29,8 +28,7 @@ class SocialProofWidgetEvent < ApplicationRecord
     create!(
       social_proof_widget_id: widget_id,
       event_type: 'click',
-      session_id: session_id,
-      user_id: user_id
+      session_id: session_id
     )
   end
 
@@ -40,7 +38,6 @@ class SocialProofWidgetEvent < ApplicationRecord
       social_proof_widget_id: widget_id,
       event_type: 'purchase',
       session_id: session_id,
-      user_id: user_id,
       purchase_id: purchase_id,
       revenue_cents: revenue_cents
     )

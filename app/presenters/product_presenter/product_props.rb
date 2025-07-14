@@ -188,6 +188,21 @@ class ProductPresenter::ProductProps
       substitution_service = SocialProofVariableSubstitutionService.new(widget: widget, context: context)
       processed_data = substitution_service.processed_widget_data
 
-      widget.attributes.merge(processed_data.stringify_keys)
+      # Preserve the widget object with its id and other attributes, then merge processed data
+      {
+        id: widget.id,
+        name: widget.name,
+        title: processed_data[:title],
+        description: processed_data[:description],
+        cta_text: processed_data[:cta_text],
+        cta_type: widget.cta_type,
+        image_type: widget.image_type,
+        image_url: widget.image_url,
+        icon_name: widget.icon_name,
+        icon_color: widget.icon_color,
+        universal: widget.universal,
+        visibility: widget.visibility,
+        published: widget.published
+      }
     end
 end
