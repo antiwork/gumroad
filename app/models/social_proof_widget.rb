@@ -46,7 +46,7 @@ class SocialProofWidget < ApplicationRecord
   validates :icon_name, inclusion: {
     in: -> { SocialProofWidget.available_icons },
     message: "%{value} is not a valid icon name"
-  }, if: -> { image_type == 'icon' }
+  }, if: -> { image_type == 'icon' && SocialProofWidget.available_icons.any? }
   validates :visibility, inclusion: { in: %w[all new returning],
                                      message: "%{value} is not a valid visibility type" }
 

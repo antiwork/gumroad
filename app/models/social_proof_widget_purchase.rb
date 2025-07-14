@@ -4,7 +4,7 @@ class SocialProofWidgetPurchase < ApplicationRecord
   belongs_to :social_proof_widget
   belongs_to :purchase
 
-  validates :purchase_id, uniqueness: true
+  validates :purchase_id, uniqueness: { scope: :social_proof_widget_id }
   validates :revenue_cents, presence: true, numericality: { greater_than: 0 }
   validates :occurred_at, presence: true
 

@@ -93,6 +93,7 @@ class SocialProofVariableSubstitutionService
   def product_price
     target_product = product || @widget.links.first
     return "$0" unless target_product
+    return "$0" unless target_product.price_currency_type.present?
 
     Money.new(target_product.price_cents, target_product.price_currency_type).format
   end

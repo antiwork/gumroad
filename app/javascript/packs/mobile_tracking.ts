@@ -76,7 +76,7 @@ if (enabled) {
         if (!isNaN(widgetId) && !isNaN(purchaseId)) {
           void trackSocialProofEvent(widgetId, "purchase", {
             purchaseId,
-            revenueCents: Math.round(result.non_formatted_price),
+            revenueCents: result.non_formatted_price,
           });
         }
         sessionStorage.removeItem("social_proof_widget_clicked");
