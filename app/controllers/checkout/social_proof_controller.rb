@@ -34,7 +34,7 @@ class Checkout::SocialProofController < Sellers::BaseController
       permitted_params = social_proof_widget_params
       widget_attributes = build_widget_attributes(permitted_params)
 
-      social_proof_widget = current_user.social_proof_widgets.new(widget_attributes)
+      social_proof_widget = current_seller.social_proof_widgets.new(widget_attributes)
 
       # Set the status
       social_proof_widget.status = permitted_params[:status] || 'unpublished'
@@ -62,7 +62,7 @@ class Checkout::SocialProofController < Sellers::BaseController
     def update
       authorize [:checkout, :social_proof]
 
-      social_proof_widget = current_user.social_proof_widgets.find(params[:id])
+      social_proof_widget = current_seller.social_proof_widgets.find(params[:id])
       permitted_params = social_proof_widget_params
 
       widget_attributes = build_widget_attributes(permitted_params)
@@ -105,7 +105,7 @@ class Checkout::SocialProofController < Sellers::BaseController
     def destroy
       authorize [:checkout, :social_proof]
 
-      social_proof_widget = current_user.social_proof_widgets.find(params[:id])
+      social_proof_widget = current_seller.social_proof_widgets.find(params[:id])
 
       if social_proof_widget.destroy
         render json: { success: true }
