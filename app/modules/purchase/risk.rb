@@ -29,41 +29,6 @@ module Purchase::Risk
     nil
   end
 
-  def safe_mode_check
-    return if RiskState.get_ip_proxy_score(ip_address, timeout: 1) <= IP_PROXY_THRESHOLD
-
-    self.error_code = PurchaseErrorCode::SAFE_MODE_HIGH_PROXY_SCORE
-    errors.add :base, I18n.t(:check_card_information_prompt)
-  end
-
-  def fake_credit_card_balance_from_distribution
-    # Simulating stolen credit card starting balance. Half the time, charges of over 1 dollar don't go through,
-    # other times the balance is somewhere in the vicinity of 1000, 5000. so we are taking those base amounts (1000, 5000)
-    # and adding noise to them and then sampling from (1 * 3, (1000 + noise) * 2, (5000 + noise) * 1)
-    if Rails.env.production?
-      ([1, 1, 1000 + SecureRandom.random_number(500) * [1, -1].sample, 1000 + SecureRandom.random_number(500) * [1, -1].sample,
-        5000 + SecureRandom.random_number(2500) * [1, -1].sample].sample * 100).round(0)
-    else
-      100_000
-    end
-  end
-
-  def perform_risk_validations
-    perform_risk_analysis
-    return if errors.present?
-
-    validate_purchasing_power_parity
-    return if errors.present?
-
-    pre_charge_fraud_check(randomize_results: true)
-    return if errors.present?
-
-    check_for_past_blocked_charge_processor_fingerprints
-    return if errors.present?
-
-    check_for_blocked_customer_emails
-  end
-
   private
     def vague_error_message
       record = is_gift_receiver_purchase ? gift_received.gifter_purchase : self
@@ -74,46 +39,11 @@ module Purchase::Risk
       end
     end
 
-    def check_for_blocked_customer_emails
-      blocked_email = blockable_emails_if_fraudulent_transaction.find do |email|
-        BlockedCustomerObject.email_blocked?(email:, seller_id:)
-      end
-
-      return if blocked_email.blank?
-
-      if charge_processor_fingerprint.present?
-        BlockedCustomerObject.block_charge_processor_fingerprint!(fingerprint: charge_processor_fingerprint, email: blocked_email, seller_id:)
-      end
-
-      self.error_code = PurchaseErrorCode::BLOCKED_CUSTOMER_EMAIL_ADDRESS
-      errors.add :base, I18n.t(:seller_has_blocked_buyer_error_notice)
-    end
-
     def check_for_past_blocked_emails
       return unless BlockedObject.find_active_objects(blockable_emails_if_fraudulent_transaction).exists?
 
       self.error_code = PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS
       errors.add :base, vague_error_message
-    end
-
-    def check_for_past_blocked_charge_processor_fingerprints
-      return if charge_processor_fingerprint.blank?
-
-      if BlockedCustomerObject.charge_processor_fingerprint_blocked?(fingerprint: charge_processor_fingerprint, seller_id:)
-        self.error_code = PurchaseErrorCode::BLOCKED_CUSTOMER_CHARGE_PROCESSOR_FINGERPRINT
-        errors.add :base, I18n.t(:seller_has_blocked_buyer_error_notice)
-        return
-      end
-
-      Timeout.timeout(CHECK_FOR_FRAUD_TIMEOUT_SECONDS) do
-        return if BlockedObject.charge_processor_fingerprint.find_active_object(charge_processor_fingerprint).blank?
-
-        self.error_code = PurchaseErrorCode::BLOCKED_CHARGE_PROCESSOR_FINGERPRINT
-        errors.add :base, I18n.t(:vague_purchase_error_notice)
-      rescue Timeout::Error => e
-        logger.info("Could not check for blocked stripe fingerprints for purchase #{id}. Exception: #{e.message}")
-        nil
-      end
     end
 
     def check_for_past_blocked_email_domains
@@ -147,17 +77,6 @@ module Purchase::Risk
       errors.add :base, I18n.t(:vague_purchase_error_notice)
     end
 
-    def check_for_blocked_physical_countries
-      buyer_country = GeoIp.lookup(ip_address).try(:country_code)
-      country_code = Compliance::Countries.find_by_name(country)&.alpha2 if country
-      is_buyer_country_blocked = Compliance::Countries.risk_physical_blocked?(buyer_country)
-      is_shipping_country_blocked = country.present? && Compliance::Countries.risk_physical_blocked?(country_code)
-      return unless is_buyer_country_blocked || is_shipping_country_blocked
-
-      self.error_code = PurchaseErrorCode::HIGH_RISK_COUNTRY
-      errors.add :base, I18n.t(:territory_blocked)
-    end
-
     def check_for_past_fraudulent_ips
       return if is_recurring_subscription_charge
       return if free_purchase?
@@ -171,28 +90,7 @@ module Purchase::Risk
       errors.add :base, I18n.t(:fraudulent_connection_check_failed)
     end
 
-    def check_for_canadian_paypal_scammers
-      return if Feature.inactive?(:block_canadian_paypal_scammers)
-
-      return unless charge_processor_id == PaypalChargeProcessor.charge_processor_id
-      return unless price_cents == 100
-      return unless ip_country == "Canada"
-      return unless recommended_by == "search"
-      return unless email.length >= 19
-      return unless email.ends_with?("@hotmail.com")
-      return unless link.price_cents == 0
-
-      self.error_code = PurchaseErrorCode::CANADIAN_PAYPAL_SCAMMER
-      errors.add :base, I18n.t(:vague_purchase_error_notice)
-    end
-
     def past_blocked_object(object)
       object.present? && BlockedObject.find_active_object(object).present?
-    end
-
-    def log_risk_level_to_mongo(risk_level)
-      return if risk_level.blank?
-
-      Mongoer.async_write(MongoCollections::PURCHASE_RISK_LEVELS, "purchase_id" => id, "risk_level" => risk_level, "created_at" => Time.current.iso8601)
     end
 end
