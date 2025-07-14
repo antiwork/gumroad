@@ -310,8 +310,8 @@ module Product::Searchable
           when ProductSortKey::HOT_AND_NEW
             by :sales_volume, order: "desc"
           when ProductSortKey::NEWEST           then by :created_at,     order: "desc"
-          when ProductSortKey::AVAILABLE_PRICE_DESCENDING, ProductSortKey::PRICE_DESCENDING then by :available_price_usd_cents, order: "desc", mode: "min"
-          when ProductSortKey::AVAILABLE_PRICE_ASCENDING, ProductSortKey::PRICE_ASCENDING  then by :available_price_usd_cents, order: "asc", mode: "min"
+          when ProductSortKey::AVAILABLE_PRICE_DESCENDING, ProductSortKey::PRICE_DESCENDING then by :available_price_usd_cents_with_fallback, order: "desc", mode: "min"
+          when ProductSortKey::AVAILABLE_PRICE_ASCENDING, ProductSortKey::PRICE_ASCENDING  then by :available_price_usd_cents_with_fallback, order: "asc", mode: "min"
           when ProductSortKey::IS_RECOMMENDABLE_DESCENDING then by :is_recommendable,    order: "desc"
           when ProductSortKey::IS_RECOMMENDABLE_ASCENDING  then by :is_recommendable,    order: "asc"
           when ProductSortKey::REVENUE_ASCENDING   then by :sales_volume,    order: "asc"
