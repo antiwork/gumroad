@@ -6,14 +6,14 @@ import { Icon } from "$app/components/Icons";
 
 export function LegalGuardianInformationRequiredBanner() {
   return (
-    <div className="mb-6 rounded-lg border-2 border-[#ff90e8] bg-white p-4 shadow-lg">
+    <div role="status" className="danger">
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex-shrink-0 rounded-full bg-[#ff90e8] p-1">
-          <Icon name="shield-exclamation" className="h-4 w-4 text-black" />
+        <div className="mt-0.5 flex-shrink-0">
+          <Icon name="shield-exclamation" className="h-4 w-4" />
         </div>
         <div className="flex-1">
-          <h3 className="text-gray-900 mb-2 text-lg font-bold">Important notice for users under 18</h3>
-          <div className="text-gray-700 space-y-3 text-sm leading-relaxed">
+          <h3 className="mb-2 text-lg font-bold">Important notice for users under 18</h3>
+          <div className="space-y-3 text-sm leading-relaxed">
             <p>
               <strong>Since you are under 18, your legal guardian must be verified to enable card payments.</strong>
             </p>
@@ -27,15 +27,15 @@ export function LegalGuardianInformationRequiredBanner() {
               </ul>
             </div>
 
-            <div className="bg-gray-50 rounded border-l-4 border-[#ff90e8] p-3">
-              <p className="text-xs">
+            <div className="rounded border-l-4 border-current bg-black/40 p-3">
+              <p className="text-xs text-white">
                 <strong>Additional verification may be required:</strong> If initial verification fails, your guardian
                 may need to provide their full SSN or upload ID documents (front and back).
               </p>
             </div>
             <a
               href="#legal-guardian-section"
-              className="mt-3 inline-flex items-center gap-2 rounded bg-[#ff90e8] px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-[#ff7ee0]"
+              className="mt-3 inline-flex items-center gap-2 rounded bg-black px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
               Provide my legal guardian information
             </a>
