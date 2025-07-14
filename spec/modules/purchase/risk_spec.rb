@@ -33,6 +33,13 @@ describe Purchase::Risk do
       expect(new_purchase.errors.empty?).to be(false)
     end
 
+    it "doesn't return error when buyer user doesn't exist" do
+      product = create(:product)
+      purchase = build(:purchase, link: product, email: "nonexistent@example.com")
+      purchase.send(:check_for_past_fraudulent_buyers)
+      expect(purchase.errors).to be_empty
+    end
+
     it "doesn't return error if the chargeback has been won" do
       product = create(:product)
       product_2 = create(:product)
@@ -50,6 +57,27 @@ describe Purchase::Risk do
       @user = create(:user, account_created_ip: "123.121.11.1")
       @product = create(:product, user: @user)
       BlockedObject.block!(BLOCKED_OBJECT_TYPES[:ip_address], "192.378.12.1", nil, expires_in: 1.hour)
+    end
+
+    it "handles timeout and returns nil" do
+      purchase = build(:purchase, link: @product)
+
+      allow(purchase).to receive(:check_for_past_blocked_emails).and_raise(Timeout::Error.new("timeout"))
+      allow(purchase).to receive(:logger).and_return(double(info: nil))
+
+      result = purchase.send(:check_for_fraud)
+      expect(result).to be_nil
+    end
+
+    it "returns early when errors are present" do
+      purchase = build(:purchase, link: @product, email: "blocked@example.com")
+      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "blocked@example.com", nil, expires_in: 1.hour)
+
+      expect(purchase).to receive(:check_for_past_blocked_emails).and_call_original
+      expect(purchase).not_to receive(:check_for_past_blocked_email_domains)
+
+      purchase.send(:check_for_fraud)
+      expect(purchase.errors).not_to be_empty
     end
 
     it "returns errors if the buyer ip_address has been blocked" do
