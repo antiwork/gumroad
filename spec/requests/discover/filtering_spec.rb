@@ -67,7 +67,6 @@ describe("Discover - Filtering scenarios", js: true, type: :feature) do
 
     index_model_records(Purchase)
     index_model_records(Link)
-    expect(UpdateProductUsdPricesWorker.jobs.size).to eq(1)
   end
 
   it "filters products by filetype" do
@@ -194,6 +193,7 @@ describe("Discover - Filtering scenarios", js: true, type: :feature) do
     gbp_product = create(:product, name: "Currency Test Product GBP", price_cents: 800, price_currency_type: "gbp")
 
     index_model_records(Link)
+    expect(UpdateProductUsdPricesWorker.jobs.size).to eq(1)
 
     visit discover_url(host: discover_host)
     fill_in("Search products", with: "Currency Test Product\n")
