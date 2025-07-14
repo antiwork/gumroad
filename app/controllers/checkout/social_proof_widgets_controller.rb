@@ -46,8 +46,8 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
 
       if @social_proof_widget.update(social_proof_widget_params)
         # Update link associations
-        if params[:link_ids].present?
-          @social_proof_widget.link_ids = params[:link_ids]
+        if social_proof_widget_params[:link_ids].present?
+          @social_proof_widget.link_ids = social_proof_widget_params[:link_ids]
         end
 
         render json: {
@@ -77,10 +77,7 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
       def find_user_links(link_ids)
         return [] unless link_ids.present?
 
-        link_ids.filter_map do |link_id|
-          link = Link.find_by_external_id(link_id)
-          link if link&.user_id == current_user.id
-        end
+        Link.where(external_id: link_ids, user_id: current_user.id)
       end
 
       def social_proof_widget_params
@@ -94,7 +91,8 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
           :image_type,
           :image_url,
           :icon_name,
-          selected_product_ids: []
+          selected_product_ids: [],
+          link_ids: []
         )
       end
 
