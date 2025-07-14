@@ -8,11 +8,16 @@ class SocialProofTrackingController < ApplicationController
       return render json: { success: false, error_message: "Missing widget_id or event_type" }, status: :bad_request
     end
 
-    if params[:event_type] == 'purchase' && (!params[:purchase_id].present? || !params[:revenue_cents].present?)
+    if params[:event_type] == 'purchase' && (!params[:purchase_id].present? || params[:revenue_cents].nil?)
       return render json: { success: false, error_message: "Missing purchase_id or revenue_cents for purchase event" }, status: :bad_request
     end
 
     widget = SocialProofWidget.find(params[:widget_id])
+
+    unless widget.published?
+      return render json: { success: false, error_message: "Widget not available" }, status: :not_found
+    end
+
     event_type = params[:event_type]
 
     case event_type
