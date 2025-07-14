@@ -3,7 +3,7 @@
 class StripeEventHandler
   attr_accessor :params
   # See full list of events at https://stripe.com/docs/api/events/types
-  ALL_HANDLED_EVENTS = %w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed}.freeze
+  ALL_HANDLED_EVENTS = %w{account.application.deauthorized account.updated capability.updated person. payout. charge. capital. radar. payment_intent.payment_failed}.freeze
 
   # Handle's a Stripe event. Calls out to the necessary modules
   # that handle different types of Stripe events.
@@ -57,7 +57,7 @@ class StripeEventHandler
     def handle_event_for_connected_account(stripe_connect_account_id:)
       if stripe_event["type"].start_with?("charge.", "radar.", "payment_intent.payment_failed")
         StripeChargeProcessor.handle_stripe_event(stripe_event)
-      elsif stripe_event["type"].start_with?("account.", "capability.")
+      elsif stripe_event["type"].start_with?("account.", "capability.", "person.")
         StripeMerchantAccountManager.handle_stripe_event(stripe_event)
       elsif stripe_event["type"].start_with?("payout.")
         StripePayoutProcessor.handle_stripe_event(stripe_event, stripe_connect_account_id:)

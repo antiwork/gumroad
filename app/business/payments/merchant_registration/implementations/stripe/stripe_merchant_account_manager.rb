@@ -623,6 +623,8 @@ module StripeMerchantAccountManager
       handle_stripe_event_account_deauthorized(stripe_event)
     when "capability.updated"
       handle_stripe_event_capability_updated(stripe_event)
+    when "person.updated"
+      handle_stripe_event_person_updated(stripe_event)
     end
   end
 
@@ -1087,5 +1089,59 @@ module StripeMerchantAccountManager
     }
 
     field_mapping[internal_field]
+  end
+
+  def self.handle_stripe_event_person_updated(stripe_event)
+    stripe_event_id = stripe_event["id"]
+    stripe_person = stripe_event["data"]["object"]
+    raise "Stripe Event #{stripe_event_id} does not contain a 'person' object." if stripe_person["object"] != "person"
+
+    # Only handle legal guardian persons
+    return unless stripe_person["relationship"]["legal_guardian"] == true
+
+    stripe_account_id = stripe_person["account"]
+    merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             charge_processor_merchant_id: stripe_account_id).last
+    return unless merchant_account&.alive?
+
+    user = merchant_account.user
+    return unless user.account_active?
+
+    # Check if guardian verification status changed to verified
+    verification_status = stripe_person["verification"]["status"]
+    if verification_status == "verified"
+      handle_guardian_verification_success(stripe_event_id, stripe_person, user)
+    end
+  end
+
+  def self.handle_guardian_verification_success(stripe_event_id, stripe_person, user)
+    guardian_person_id = stripe_person["id"]
+
+    # Mark all guardian compliance info requests as provided for this guardian person
+    user.guardian_compliance_info_requests.requested.where(guardian_person_id: guardian_person_id).find_each do |request|
+      request.mark_provided!
+    end
+
+    # Also mark requests that don't have a specific guardian_person_id (from legal_guardian.* requirements)
+    # These are created by handle_legal_guardian_requirements method
+    requirements = stripe_person["requirements"] || {}
+    future_requirements = stripe_person["future_requirements"] || {}
+
+    all_required_fields = [
+      requirements["currently_due"],
+      requirements["eventually_due"],
+      requirements["past_due"],
+      future_requirements["currently_due"],
+      future_requirements["past_due"]
+    ].compact.flatten.uniq
+
+    # If no fields are required anymore, mark all guardian requests as provided
+    guardian_fields_still_needed = all_required_fields.select do |field|
+      field.start_with?("person_#{guardian_person_id}.") || field.start_with?("legal_guardian.")
+    end
+
+    if guardian_fields_still_needed.empty?
+      user.guardian_compliance_info_requests.requested.find_each(&:mark_provided!)
+    end
   end
 end
