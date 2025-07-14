@@ -505,7 +505,7 @@ export const CheckoutPage = ({
         if (clickedWidgetId) {
           void trackSocialProofEvent(parseInt(clickedWidgetId, 10), "purchase", {
             purchaseId: parseInt(result.id, 10),
-            revenueCents: Math.round(result.non_formatted_price * 100), // Convert to cents
+            revenueCents: Math.round(result.non_formatted_price),
           });
           sessionStorage.removeItem("social_proof_widget_clicked");
         }

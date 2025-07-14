@@ -11,7 +11,7 @@ class CheckoutPresenter
 
   attr_reader :logged_in_user, :ip, :social_proof_widgets
 
-  def initialize(logged_in_user:, ip:, social_proof_widgets:)
+  def initialize(logged_in_user:, ip:, social_proof_widgets: [])
     @logged_in_user = logged_in_user
     @ip = ip
     @social_proof_widgets = social_proof_widgets || []
@@ -167,7 +167,7 @@ class CheckoutPresenter
     value
   end
 
-  def subscription_manager_props(subscription:)
+  def subscription_manager_props(subscription:, browser_guid: nil)
     return nil unless subscription.present? && subscription.original_purchase.present?
     product = subscription.link
     tier_attrs = {
@@ -228,7 +228,7 @@ class CheckoutPresenter
         is_installment_plan: subscription.is_installment_plan,
       },
       social_proof_widgets: @social_proof_widgets.map { |widget|
-        process_social_proof_widget(widget, checkout_context: { product: product })
+        process_social_proof_widget(widget, checkout_context: { product: product, browser_guid: browser_guid })
       },
     }
   end
