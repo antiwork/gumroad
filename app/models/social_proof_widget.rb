@@ -74,6 +74,7 @@ class SocialProofWidget < ApplicationRecord
     purchases_in_range = social_proof_widget_purchases.between_dates(start_date, end_date)
 
     # Calculate metrics within the same date range
+    impressions_in_range = events_in_range.impressions.count
     clicks_in_range = events_in_range.clicks.count
     purchases_count = purchases_in_range.count
     revenue_cents = purchases_in_range.sum(:revenue_cents)
@@ -82,8 +83,8 @@ class SocialProofWidget < ApplicationRecord
     conversion_rate = clicks_in_range > 0 ? (purchases_count.to_f / clicks_in_range * 100).round(4) : 0.0
 
     {
-      impressions: impressions_count,
-      clicks: clicks_count,
+      impressions: impressions_in_range,
+      clicks: clicks_in_range,
       purchases: purchases_count,
       revenue_cents: revenue_cents,
       conversion_rate: conversion_rate

@@ -44,12 +44,18 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
     def update
       authorize [:checkout, :social_proof]
 
-      if @social_proof_widget.update(social_proof_widget_params)
-        # Update link associations
-        if social_proof_widget_params[:link_ids].present?
-          @social_proof_widget.link_ids = social_proof_widget_params[:link_ids]
+      ActiveRecord::Base.transaction do
+        if @social_proof_widget.update(social_proof_widget_params)
+          # Update link associations within the same transaction
+          if social_proof_widget_params[:link_ids].present?
+            @social_proof_widget.link_ids = social_proof_widget_params[:link_ids]
+          end
+        else
+          raise ActiveRecord::Rollback
         end
+      end
 
+      if @social_proof_widget.errors.empty?
         render json: {
           success: true,
           message: "Social proof widget updated successfully",

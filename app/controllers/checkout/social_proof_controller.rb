@@ -70,15 +70,21 @@ class Checkout::SocialProofController < Sellers::BaseController
       # Set the status
       social_proof_widget.status = permitted_params[:status] if permitted_params[:status].present?
 
-      if social_proof_widget.update(widget_attributes)
-        presenter = Checkout::SocialProofPresenter.new(pundit_user:)
-        # Update product associations
-        if social_proof_widget.universal
-          social_proof_widget.links = current_user.links.alive
-        elsif permitted_params[:selected_product_ids].present?
-          social_proof_widget.links = find_user_links(permitted_params[:selected_product_ids])
+      ActiveRecord::Base.transaction do
+        if social_proof_widget.update(widget_attributes)
+          # Update product associations within the same transaction
+          if social_proof_widget.universal
+            social_proof_widget.links = current_user.links.alive
+          elsif permitted_params[:selected_product_ids].present?
+            social_proof_widget.links = find_user_links(permitted_params[:selected_product_ids])
+          end
+        else
+          raise ActiveRecord::Rollback
         end
+      end
 
+      if social_proof_widget.errors.empty?
+        presenter = Checkout::SocialProofPresenter.new(pundit_user:)
         render json: {
           success: true,
           social_proof_widgets: [social_proof_widget].map { |widget| presenter.social_proof_widget_props(widget) }
