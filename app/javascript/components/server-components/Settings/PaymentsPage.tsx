@@ -169,6 +169,7 @@ type Props = {
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  both_user_and_guardian_verified: boolean;
 };
 
 export type PayoutMethod = "bank" | "card" | "paypal" | "stripe";
@@ -883,6 +884,23 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
+          ) : props.both_user_and_guardian_verified ? (
+            <div className="flex flex-col">
+              <div role="status" className="success">
+                Both the minor's and legal guardian's information has been verified.
+              </div>
+              <div className="mt-4 flex items-center">
+                <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
+                <span className="text-muted text-sm">
+                  Creator since{" "}
+                  {new Date(props.user.joined_at).toLocaleDateString(userAgentInfo.locale, {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+            </div>
           ) : (
             <div className="flex flex-col">
               <div role="status" className="success">
