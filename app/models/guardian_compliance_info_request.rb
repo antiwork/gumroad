@@ -6,7 +6,7 @@ class GuardianComplianceInfoRequest < ApplicationRecord
   include JsonData
   include FlagShihTzu
 
-  belongs_to :user, optional: true
+  belongs_to :user
   validates :user, presence: true
 
   has_flags 1 => :only_needs_field_to_be_partially_provided,
