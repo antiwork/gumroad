@@ -343,6 +343,7 @@ class Purchase < ApplicationRecord
   before_create :validate_shipping
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
+  before_create :check_for_fraud
 
   before_save :assign_default_rental_expired
   before_save :to_mongo
