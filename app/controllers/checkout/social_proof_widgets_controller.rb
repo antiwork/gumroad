@@ -1,4 +1,4 @@
-class SocialProofWidgetsController < Sellers::BaseController
+class Checkout::SocialProofWidgetsController < Sellers::BaseController
     before_action :set_social_proof_widget, only: [:show, :edit, :update, :destroy]
 
     def index

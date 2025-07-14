@@ -65,13 +65,6 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
     }
   }, [widgetId]);
 
-  React.useEffect(
-    () => () => {
-      sessionStorage.removeItem("social_proof_widget_clicked");
-    },
-    [],
-  );
-
   const handleClick = () => {
     if (widgetId !== undefined) {
       void trackSocialProofEvent(widgetId, "click");

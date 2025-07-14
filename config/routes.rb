@@ -1143,17 +1143,17 @@ Rails.application.routes.draw do
         get :paged
       end
     end
+
+    resources :social_proof_widgets do
+      member do
+        post :link_products
+        delete :unlink_products
+      end
+    end
   end
 
   # Social proof tracking - accessible from any domain
   post "/social_proof/track_event", to: "social_proof_tracking#track_event"
-
-  resources :social_proof_widgets do
-    member do
-      post :link_products
-      delete :unlink_products
-    end
-  end
 
   get "/(*path)", to: "application#e404_page" unless Rails.env.development?
 end
