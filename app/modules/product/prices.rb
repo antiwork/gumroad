@@ -241,6 +241,7 @@ module Product::Prices
   end
 
   def available_price_usd_cents
+    puts "HIT available_price_usd_cents"
     available_prices = available_price_cents
     return [] if available_prices.empty?
 
