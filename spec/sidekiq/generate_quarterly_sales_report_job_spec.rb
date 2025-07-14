@@ -150,7 +150,8 @@ describe GenerateQuarterlySalesReportJob do
                                        "BS", nil, nil])
     end
 
-    it "does not send slack notification when send_notification is false" do
+    it "creates a CSV file for sales into the United Kingdom and does not send slack notification when send_notification is false",
+       vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
       described_class.new.perform(country_code, quarter, year, false)
@@ -158,7 +159,8 @@ describe GenerateQuarterlySalesReportJob do
       expect(SlackMessageWorker.jobs.size).to eq(0)
     end
 
-    it "sends slack notification when send_notification is true" do
+    it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is true",
+       vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
       described_class.new.perform(country_code, quarter, year, true)
@@ -166,7 +168,8 @@ describe GenerateQuarterlySalesReportJob do
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
     end
 
-    it "sends slack notification when send_notification is not provided (default behavior)" do
+    it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is not provided (default behavior)",
+       vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
       described_class.new.perform(country_code, quarter, year)
