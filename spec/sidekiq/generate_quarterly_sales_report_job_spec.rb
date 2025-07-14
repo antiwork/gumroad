@@ -149,5 +149,29 @@ describe GenerateQuarterlySalesReportJob do
                                        "0", "10000",
                                        "BS", nil, nil])
     end
+
+    it "does not send slack notification when send_notification is false" do
+      expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
+
+      described_class.new.perform(country_code, quarter, year, false)
+
+      expect(SlackMessageWorker.jobs.size).to eq(0)
+    end
+
+    it "sends slack notification when send_notification is true" do
+      expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
+
+      described_class.new.perform(country_code, quarter, year, true)
+
+      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+    end
+
+    it "sends slack notification when send_notification is not provided (default behavior)" do
+      expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
+
+      described_class.new.perform(country_code, quarter, year)
+
+      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+    end
   end
 end
