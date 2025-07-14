@@ -6,7 +6,7 @@ class Purchase < ApplicationRecord
   include Rails.application.routes.url_helpers
   include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
-          Refundable, Reviews, PingNotification, Searchable,
+          Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
           Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns, SecureExternalId
