@@ -4,9 +4,6 @@ class CreateIndiaSalesReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
-  INDIA_GST_RATE = 18
-  INDIA_GST_RATE_DECIMAL = 0.18
-
   VALID_INDIAN_STATES = %w[
     AP AR AS BR CG GA GJ HR HP JK JH KA
     KL MP MH MN ML MZ NL OR PB RJ SK TN
@@ -34,6 +31,9 @@ class CreateIndiaSalesReportJob
       start_date = Date.new(year, month).beginning_of_month.beginning_of_day
       end_date = Date.new(year, month).end_of_month.end_of_day
 
+      india_tax_rate = ZipTaxRate.where(country: "IN", state: nil, user_id: nil).alive.last.combined_rate
+      india_tax_rate_percentage = (india_tax_rate * 100).to_i
+
       timeout_seconds = ($redis.get("create_india_sales_report_job_max_execution_time_seconds") || 1.hour).to_i
       WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
         Purchase.joins("LEFT JOIN purchase_sales_tax_infos ON purchases.id = purchase_sales_tax_infos.purchase_id")
@@ -44,7 +44,6 @@ class CreateIndiaSalesReportJob
                 .where("price_cents > 0")
                 .where("purchase_sales_tax_infos.business_vat_id IS NULL OR purchase_sales_tax_infos.business_vat_id = ''")
                 .find_each do |purchase|
-          next if purchase.purchase_state == "failed"
           next if purchase.chargeback_date.present? && !purchase.chargeback_reversed?
           next if purchase.stripe_refunded == true
 
@@ -58,8 +57,8 @@ class CreateIndiaSalesReportJob
             raw_state
           end
 
-          expected_tax_rounded = (price_cents * INDIA_GST_RATE_DECIMAL).round
-          expected_tax_floored = (price_cents * INDIA_GST_RATE_DECIMAL).floor
+          expected_tax_rounded = (price_cents * india_tax_rate).round
+          expected_tax_floored = (price_cents * india_tax_rate).floor
           diff_rounded = expected_tax_rounded - tax_amount_cents
           diff_floored = expected_tax_floored - tax_amount_cents
 
@@ -73,7 +72,7 @@ class CreateIndiaSalesReportJob
             purchase.external_id,
             purchase.created_at.strftime("%Y-%m-%d"),
             display_state,
-            INDIA_GST_RATE,
+            india_tax_rate_percentage,
             price_cents,
             tax_amount_cents,
             calc_tax_rate,
