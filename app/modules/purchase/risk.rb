@@ -4,59 +4,6 @@ module Purchase::Risk
   IP_PROXY_THRESHOLD = 2
   CHECK_FOR_FRAUD_TIMEOUT_SECONDS = 4
 
-  def pre_charge_fraud_check(randomize_results: false)
-    return unless charged_using_gumroad_merchant_account?
-
-    # For "Science of Dogs" we are auto-failing all purchases and based on the logic below, are making the purchases appear successful.
-    # If all purchases were successful, it would be obvious to the fraudulent buyer what was happening. For this reason, we are simulating
-    # limits and activity based on recent fraudulent behavior.
-    #
-    # Steps for choosing whether to allow purchase as going through or not:
-    #   1. Store stripe_fingerprint in mongo and set card limit based on fake_credit_card_balance_from_distribution method below
-    #   2. If stripe_fingerprint starts in A-U and the price is less than the remaining balance, the purchase will appear to be
-    #      successful 50% of the time. If it appears to be successful, the price the buyer thinks it has paid will be deducted from
-    #      the balance in mongo
-    #   3. If the stripe_fingerprint doesn't start in A-U or the card balance has been exceeded, the buyer will be told to verify
-    #      their information (same messaging as card declined)
-
-    return unless link.unique_permalink == "lnCj" || email.include?("@example.com")
-
-    if randomize_results
-      # check if card fingerprint has been used before and get remaining balance if it has. if it has not been used before,
-      # set balance based on fake_credit_card_balance_from_distribution method
-      mongo_card_collection = MONGO_DATABASE[MongoCollections::SCIENCE_OF_DOGS_CARDS]
-      stripe_fingerprint_card_limits_and_balance = mongo_card_collection.find(stripe_fingerprint:).limit(1).first
-      if stripe_fingerprint_card_limits_and_balance.nil?
-        remaining_balance = fake_credit_card_balance_from_distribution
-        mongo_card_collection.insert_one(stripe_fingerprint:, remaining_card_balance: remaining_balance)
-      else
-        remaining_balance = stripe_fingerprint_card_limits_and_balance["remaining_card_balance"]
-      end
-
-      chance_of_next_purchase_being_successful = $redis.get("chance_of_next_purchase_being_successful") || 0.5
-
-      # check first digit of the card fingerprint (match against A-u), remaining balance, and 1/2 times make the purchase appear
-      # successful. decrease the remaining balance in mongo. in all other cases, give general verify yor information prompt
-      if /[A-Z]/.match(stripe_fingerprint[0]).present? && price_cents <= remaining_balance &&
-         SecureRandom.random_number >= (1 - chance_of_next_purchase_being_successful.to_f)
-        mongo_card_collection.find("stripe_fingerprint" => stripe_fingerprint).update_one("$inc" => { "remaining_card_balance" => -price_cents })
-        self.error_code = PurchaseErrorCode::FORCED_APPEARANCE_AS_SUCCESSFUL_CHARGE
-        errors.add :base
-      else
-        errors.add :base, I18n.t(:check_card_information_prompt)
-        self.error_code = PurchaseErrorCode::FORCED_APPERANCE_AS_FAILED_CHARGE
-      end
-    else
-      self.error_code = PurchaseErrorCode::FORCED_APPEARANCE_AS_SUCCESSFUL_CHARGE
-      errors.add :base
-    end
-  end
-
-  def is_fake_successful_purchase?
-    # checks if purchase was faked based on stored error code
-    error_code == PurchaseErrorCode::FORCED_APPEARANCE_AS_SUCCESSFUL_CHARGE
-  end
-
   def check_for_fraud
     Timeout.timeout(CHECK_FOR_FRAUD_TIMEOUT_SECONDS) do
       check_for_past_blocked_emails
@@ -72,9 +19,6 @@ module Purchase::Risk
       return if errors.present?
 
       check_for_past_fraudulent_buyers
-      return if errors.present?
-
-      check_for_blocked_physical_countries if link.is_physical
       return if errors.present?
 
       check_for_past_fraudulent_ips
