@@ -32,16 +32,21 @@ describe CreateIndiaSalesReportJob do
       allow(s3_bucket_double).to receive(:object).and_return(s3_object_double)
       allow(s3_object_double).to receive(:upload_file)
       allow(s3_object_double).to receive(:presigned_url).and_return("https://example.com/test-url")
-
+      
       # Mock Slack notification
       allow(SlackMessageWorker).to receive(:perform_async)
-
+      
       # Mock database queries to prevent actual data access
       allow(Purchase).to receive_message_chain(:joins, :where, :find_each).and_return([])
-
-      # Test that it calls perform with previous month parameters
-      expect_any_instance_of(described_class).to receive(:perform).with(5, 2023).and_call_original
+      
+      # Mock ZipTaxRate lookup
+      allow(ZipTaxRate).to receive_message_chain(:where, :alive, :last, :combined_rate).and_return(0.18)
+      
+      # Test that it defaults to previous month (May 2023)
       described_class.new.perform
+      
+      # Verify it processed the correct month by checking the S3 filename pattern
+      expect(s3_bucket_double).to have_received(:object).with(/india-sales-report-2023-05-/)
     end
   end
 
@@ -174,12 +179,14 @@ describe CreateIndiaSalesReportJob do
         )
         invalid_state_purchase.mark_test_successful!
 
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+        # Use a separate S3 object to avoid time skew issues
+        s3_object_invalid = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-invalid-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_invalid)
 
         described_class.new.perform(6, 2023)
 
         temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
-        @s3_object.get(response_target: temp_file)
+        s3_object_invalid.get(response_target: temp_file)
         temp_file.rewind
         actual_payload = CSV.read(temp_file)
 
