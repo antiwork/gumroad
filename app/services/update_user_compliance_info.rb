@@ -71,7 +71,11 @@ class UpdateUserComplianceInfo
 
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
 
-      StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
+      begin
+        StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
+      rescue Stripe::InvalidRequestError => e
+        return { success: false, error_message: "Compliance info update failed with this error: #{e.message.split("Please contact us").first.strip}", error_code: "stripe_error" }
+      end
     end
 
     { success: true }
