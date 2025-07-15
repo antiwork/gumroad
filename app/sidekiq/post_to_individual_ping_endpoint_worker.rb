@@ -43,10 +43,10 @@ class PostToIndividualPingEndpointWorker
 
     def send_ping_failure_notification(post_url, response_code, user_id = nil)
       return unless user_id.present?
-      
+
       seller = User.find_by(id: user_id)
       return unless seller
-      
+
       if seller.last_ping_failure_notification_at.present?
         last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
         return if last_notification >= 1.week.ago
