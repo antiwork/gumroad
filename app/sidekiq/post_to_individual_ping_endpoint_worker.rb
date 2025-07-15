@@ -25,6 +25,8 @@ class PostToIndividualPingEndpointWorker
     unless response.success?
       if ERROR_CODES_TO_RETRY.include?(response.code) && retry_count < (BACKOFF_STRATEGY.length - 1)
         PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type)
+      else
+        send_ping_failure_notification(post_url, response.code)
       end
     end
 
@@ -37,5 +39,22 @@ class PostToIndividualPingEndpointWorker
   private
     def encode_brackets(key)
       key.to_s.gsub(/[\[\]]/) { |char| URI.encode_www_form_component(char) }
+    end
+
+    def send_ping_failure_notification(post_url, response_code)
+      resource_subscription = ResourceSubscription.find_by(post_url: post_url)
+      return unless resource_subscription&.user
+
+      seller = resource_subscription.user
+      
+      if seller.last_ping_failure_notification_at.present?
+        last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
+        return if last_notification >= 1.week.ago
+      end
+
+      ContactingCreatorMailer.ping_endpoint_failure(seller.id, post_url, response_code).deliver_later(queue: "critical")
+      
+      seller.last_ping_failure_notification_at = Time.current.to_s
+      seller.save!
     end
 end

@@ -1,0 +1,9 @@
+<%= header_section("Webhook ping endpoint delivery failed") %>
+<div>
+  <p>Hi there. We were unable to deliver webhook notifications to your ping endpoint after multiple attempts.</p>
+  <p><strong>Ping URL:</strong> <%= @ping_url %></p>
+  <p><strong>Response Code:</strong> <%= @response_code %></p>
+  <p>
+    Please <a href='<%= settings_advanced_url %>'>check your ping endpoint settings</a> and ensure your server is responding correctly to webhook requests.
+  </p>
+</div>
