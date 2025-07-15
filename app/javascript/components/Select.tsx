@@ -129,7 +129,10 @@ const filterRegex = (query: string) => new RegExp(`(.*?)(${escapeRegExp(query)})
 
 const filterOptionFn: ReactSelectProps["filterOption"] = (option, query) => filterRegex(query).test(option.label);
 
-const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = ({ label, isSubOption }, { inputValue }) => {
+const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = (
+  { label, isSubOption },
+  { inputValue },
+) => {
   const result = filterRegex(inputValue).exec(label);
 
   if (result) {

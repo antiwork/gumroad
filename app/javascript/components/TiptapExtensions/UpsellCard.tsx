@@ -18,7 +18,11 @@ import { useRunOnce } from "$app/components/useRunOnce";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     upsellCard: {
-      insertUpsellCard: (options: { productId: string; variantId: string | null; discount: OfferCode | null }) => ReturnType;
+      insertUpsellCard: (options: {
+        productId: string;
+        variantId: string | null;
+        discount: OfferCode | null;
+      }) => ReturnType;
     };
   }
 }
@@ -100,7 +104,6 @@ const getUpsellUrl = (id: string, permalink: string) => {
 };
 
 const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
-  console.log("node", node, "selected", selected, "editor", editor);
   const id = cast<string | null>(node.attrs.id);
   const productId = cast<string>(node.attrs.productId);
   const variantId = cast<string | null>(node.attrs.variantId);
@@ -136,7 +139,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
     <header>
       <h3>
         {product?.name}
-        {variant && <span className="text-muted ml-2">({variant.name})</span>}
+        {variant ? <span className="text-muted ml-2">({variant.name})</span> : null}
       </h3>
     </header>
   );

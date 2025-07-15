@@ -9,10 +9,10 @@ import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Details } from "$app/components/Details";
 import { Modal } from "$app/components/Modal";
+import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
 
 export type ProductOption = {
   id: string;
@@ -82,18 +82,21 @@ export const UpsellSelectModal = ({
     disabled?: boolean;
   };
 
-  const productOptions: ProductSelectOption[] = products.reduce((selectOptions, { id, name, options }) => {
-    const disabled = options.length > 0;
-    selectOptions.push({ id, label: name, disabled });
+  const productOptions: ProductSelectOption[] = products.reduce<ProductSelectOption[]>(
+    (selectOptions, { id, name, options }) => {
+      const disabled = options.length > 0;
+      selectOptions.push({ id, label: name, disabled });
 
-    if (disabled) {
-      options.forEach(({ id: optionId, name: optionName }) => {
-        selectOptions.push({ id: `${id}---${optionId}`, label: `${name} (${optionName})`, isSubOption: true });
-      });
-    }
+      if (disabled) {
+        options.forEach(({ id: optionId, name: optionName }) => {
+          selectOptions.push({ id: `${id}---${optionId}`, label: `${name} (${optionName})`, isSubOption: true });
+        });
+      }
 
-    return selectOptions;
-  }, [] as ProductSelectOption[]);
+      return selectOptions;
+    },
+    [],
+  );
 
   const selectProductOption = (newProductOption: { id: string; label: string; isSubOption?: boolean } | null) => {
     if (newProductOption?.isSubOption) {
@@ -111,7 +114,10 @@ export const UpsellSelectModal = ({
   };
 
   const selectedProductOption = selectedProduct
-    ? { id: selectedProduct.id, label: selectedVariant ? `${selectedProduct.name} (${selectedVariant.name})` : selectedProduct.name }
+    ? {
+        id: selectedProduct.id,
+        label: selectedVariant ? `${selectedProduct.name} (${selectedVariant.name})` : selectedProduct.name,
+      }
     : null;
 
   return (
