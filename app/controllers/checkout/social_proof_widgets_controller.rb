@@ -3,6 +3,11 @@
 class Checkout::SocialProofWidgetsController < Sellers::BaseController
   include Pagy::Backend
   include CheckoutDashboardHelper
+  include CustomDomainConfig
+
+  PUBLIC_ACTIONS = %i[impression click dismiss].freeze
+  before_action :authenticate_user!, except: PUBLIC_ACTIONS
+  after_action :verify_authorized, except: PUBLIC_ACTIONS
 
   PER_PAGE = 10
 
@@ -112,6 +117,18 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
     end
   end
 
+  def impression
+    track_widget_analytics('impression')
+  end
+
+  def click
+    track_widget_analytics('click')
+  end
+
+  def dismiss
+    track_widget_analytics('dismiss')
+  end
+
   private 
 
   def widget_params
@@ -155,7 +172,7 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
   def fetch_widgets
     widgets = current_seller.social_proof_widgets
                             .alive
-                            .includes(:products, custom_image_attachment: :blob)
+                            .includes(:products, :attributed_purchases)
                             .order(updated_at: :desc)
 
     widgets = widgets.where("name ILIKE ?", "%#{params[:query]}%") if params[:query].present?
@@ -167,6 +184,28 @@ class Checkout::SocialProofWidgetsController < Sellers::BaseController
 
     pagination, widgets = pagy(widgets, page: page_num, limit: PER_PAGE)
     [PagyPresenter.new(pagination).props, widgets]
+  end
+
+  def track_widget_analytics(event_type)
+    seller = user_by_domain(request.host)
+    widget = seller.social_proof_widgets.find_by_external_id!(params[:widget_id])
+
+    case event_type
+    when 'impression'
+      widget.increment!(:impressions_count)
+    when 'click'
+      widget.increment!(:clicks_count)
+    when 'dismiss'
+      widget.increment!(:dismissals_count)
+    end
+
+    render json: { success: true }
+
+    rescue ActiveRecord::RecordNotFound => e
+    render json: { success: false, error: "Widget not found" }, status: 404
+
+    rescue StandardError => e
+    render json: { success: false, error: "Analytics tracking failed" }, status: 500
   end
 
 end

@@ -69,6 +69,7 @@ const GUMROAD_PARAMS = [
   "recommender_model_name",
   "call_start_time",
   "pay_in_installments",
+  "widget_id",
 ];
 
 type Props = {
@@ -123,6 +124,7 @@ const addProduct = ({
   const urlParameters: Record<string, string> = {};
   for (const [key, value] of url.searchParams.entries()) if (!GUMROAD_PARAMS.includes(key)) urlParameters[key] = value;
 
+  const widgetId = url.searchParams.get("widget_id")
   const option = product.product.options.find(({ id }) => id === product.option_id);
   const newItem = {
     ...product,
@@ -133,6 +135,7 @@ const addProduct = ({
     url_parameters: urlParameters,
     referrer: referrer || "direct",
     recommender_model_name: url.searchParams.get("recommender_model_name"),
+    ...(widgetId ? { widget_id: widgetId } : {}),
   };
   if (existing) Object.assign(existing, newItem);
   else cart.items.unshift(newItem);
@@ -440,6 +443,7 @@ export const CheckoutPage = ({
             // TODO: Pass item.url_parameters (Record<string, string>) here after new checkout experience is rolled out
             urlParameters: JSON.stringify(item.url_parameters),
             referrer: item.referrer,
+            widgetId: item.widget_id || null,
           };
         }),
       };

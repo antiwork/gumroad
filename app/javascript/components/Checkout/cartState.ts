@@ -95,6 +95,7 @@ export type CartItem = {
   } | null;
   call_start_time: string | null;
   pay_in_installments: boolean;
+  widget_id?: string;
 };
 
 export type CrossSell = {

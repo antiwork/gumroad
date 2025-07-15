@@ -455,7 +455,6 @@ export const Product = ({
               displayMode="desktop"
               validate={validate}
               checkoutUrl={checkoutUrl}
-              product={product}
             />
           </div>
         ) : null}
@@ -637,7 +636,6 @@ export const Product = ({
           displayMode="mobile"
           validate={validate}
           checkoutUrl={checkoutUrl}
-          product={product}
         />
       ) : null}
     </article>

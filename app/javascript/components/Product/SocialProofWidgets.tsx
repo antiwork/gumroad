@@ -1,7 +1,8 @@
 import * as React from "react";
 import { SocialProofWidgetData } from "$app/components/SocialProofWidget/types";
 import { WidgetDisplay } from "$app/components/SocialProofWidget/WidgetDisplay";
-import { Product } from "$app/components/Product";
+import { trackWidgetImpression, trackWidgetClick, trackWidgetDismiss } from "$app/data/social_proof_widgets";
+import { trackElementInViewport } from "$app/utils/viewport_tracking";
 
 type SocialProofWidgetsProps = {
   widgets: SocialProofWidgetData[];
@@ -9,7 +10,6 @@ type SocialProofWidgetsProps = {
   displayMode?: "desktop" | "mobile";
   validate: () => boolean;
   checkoutUrl: string | null;
-  product: Product;
 };
 
 export const SocialProofWidgets: React.FC<SocialProofWidgetsProps> = ({ 
@@ -18,13 +18,51 @@ export const SocialProofWidgets: React.FC<SocialProofWidgetsProps> = ({
   displayMode = "desktop",
   validate,
   checkoutUrl,
-  product
 }) => {
   const [dismissedWidgets, setDismissedWidgets] = React.useState<Set<string>>(new Set());
   const [currentMobileIndex, setCurrentMobileIndex] = React.useState(0);
+  const trackedImpressionsRef = React.useRef<Set<string>>(new Set());
+  const observersRef = React.useRef<{ [key: string]: IntersectionObserver }>({});
 
-  console.log('Widgets received:', widgets);
-  console.log('Product:', product);
+  const handleWidgetImpression = (widgetId: string) => {
+    if (!trackedImpressionsRef.current.has(widgetId)) {
+      trackedImpressionsRef.current.add(widgetId);
+      trackWidgetImpression(widgetId);
+    }
+  };
+
+  React.useEffect(() => {
+    if (displayMode === "desktop") {
+      Object.values(observersRef.current).forEach(observer => observer.disconnect());
+      observersRef.current = {};
+
+      widgets.forEach(widget => {
+        const element = document.querySelector(`[data-widget-id="${widget.id}"]`);
+        if (element) {
+          const newObserver = trackElementInViewport(element as HTMLElement, () => {
+            handleWidgetImpression(widget.id);
+          });
+          
+          if (newObserver) {
+            observersRef.current[widget.id] = newObserver;
+          }
+        }
+      });
+    }
+    return () => {
+      Object.values(observersRef.current).forEach(observer => observer.disconnect());
+      observersRef.current = {}
+    }
+  }, [widgets, displayMode])
+
+  React.useEffect(() => {
+    if (displayMode === "mobile" && widgets[currentMobileIndex]) {
+      const currentWidget = widgets[currentMobileIndex];
+      if (!trackedImpressionsRef.current.has(currentWidget.id)) {
+        handleWidgetImpression(currentWidget.id);
+      }
+    }
+  }, [displayMode, currentMobileIndex, widgets]);
 
   if (!widgets || widgets.length === 0) {
     return null;
@@ -37,17 +75,13 @@ export const SocialProofWidgets: React.FC<SocialProofWidgetsProps> = ({
   }
 
   const handleCtaClick = (widget: SocialProofWidgetData) => {
-    console.log('click social proof widget')
-    
-    if (!checkoutUrl) {
-      console.log('No checkout URL available');
-      return;
-    }
+    if (!checkoutUrl) return;
+    if (!validate()) return;
 
-    if (!validate()) {
-      console.log('not passing validation')
-      return;
-    }
+    trackWidgetClick(widget.id);
+
+    const url = new URL(checkoutUrl);
+    url.searchParams.set('widget_id', widget.id);
 
     if (typeof window !== "undefined" && "gtag" in window) {
       const gtag = (window as { gtag: (...args: unknown[]) => void }).gtag;
@@ -59,11 +93,12 @@ export const SocialProofWidgets: React.FC<SocialProofWidgetsProps> = ({
       });
     }
 
-    window.location.href = checkoutUrl;
+    window.location.href = url.toString();
   };
 
   const handleDismiss = (widgetId: string) => {
     setDismissedWidgets(prev => new Set([...prev, widgetId]));
+    trackWidgetDismiss(widgetId);
     if (displayMode === "mobile") {
       const nextVisibleWidgets = visibleWidgets.filter(w => w.id !== widgetId);
       
@@ -83,6 +118,7 @@ export const SocialProofWidgets: React.FC<SocialProofWidgetsProps> = ({
     return (
       <div className={className} style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000 }}>
         <WidgetDisplay
+          key={currentWidget.id}
           widget={currentWidget}
           displayMode="mobile"
           onCtaClick={() => handleCtaClick(currentWidget)}

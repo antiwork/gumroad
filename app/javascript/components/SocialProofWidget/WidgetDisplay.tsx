@@ -105,6 +105,7 @@ export const WidgetDisplay: React.FC<WidgetDisplayProps> = ({
   return (
     <div 
       className={cx("card", className)}
+      data-widget-id={widget.id}
       style={{
         ...(isMobile && {
           borderRadius: 0,

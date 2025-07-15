@@ -27,6 +27,10 @@ class OrdersController < ApplicationController
       UtmLinkSaleAttributionJob.perform_async(order.id, order_params[:browser_guid])
     end
 
+    if order.persisted? && order.purchases.successful.any?
+      attribute_social_proof_widgets(order)
+    end
+
     purchase_responses.merge!(charge_responses)
 
     order.purchases.each { create_purchase_event_and_recommendation_info(_1) }
@@ -55,6 +59,20 @@ class OrdersController < ApplicationController
   end
 
   private
+    def attribute_social_proof_widgets(order)
+      order.purchases.successful.each do |purchase|
+        widget_id = purchase.widget_id
+        next unless widget_id.present?
+        
+        widget = SocialProofWidget.find_by_external_id(widget_id)
+        next unless widget
+        
+        widget.increment_conversion!(purchase.price_cents)
+      end
+    rescue StandardError => e
+      # Don't fail the order if attribution failed
+    end
+
     def validate_order_request
       # Don't allow the order to go through if the buyer is a bot. Pretend that the order succeeded instead.
       return render json: { success: true } if is_bot?
@@ -100,7 +118,7 @@ class OrdersController < ApplicationController
         line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :offer_code_name, :discount_code, :is_preorder, :quantity, :call_start_time,
                      :was_product_recommended, :recommended_by, :referrer, :is_rental, :is_multi_buy,
                      :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted,
-                     :recommender_model_name, :tip_cents, :pay_in_installments,
+                     :recommender_model_name, :tip_cents, :pay_in_installments, :widget_id,
                      custom_fields: [:id, :value], variants: [], perceived_free_trial_duration: [:unit, :amount], accepted_offer: [:id, :original_variant_id, :original_product_id],
                      bundle_products: [:product_id, :variant_id, :quantity, custom_fields: [:id, :value]]])
     end

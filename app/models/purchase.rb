@@ -109,6 +109,8 @@ class Purchase < ApplicationRecord
   has_many :affiliate_partial_refunds
   belongs_to :affiliate, optional: true
 
+  belongs_to :social_proof_widget, optional: true, foreign_key: :widget_id, primary_key: :external_id
+
   has_one :purchase_sales_tax_info
   has_one :purchase_taxjar_info
   has_one :recommended_purchase_info, dependent: :destroy
@@ -575,6 +577,8 @@ class Purchase < ApplicationRecord
       .not_chargedback_or_chargedback_reversed
       .where(purchaser_id:)
   }
+  
+  scope :with_widget_attribution, -> { where.not(widget_id: nil) }
 
   scope :paypal, -> { where(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
   scope :stripe, -> { where(charge_processor_id: StripeChargeProcessor.charge_processor_id) }

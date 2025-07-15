@@ -1075,6 +1075,11 @@ Rails.application.routes.draw do
     patch "/library/purchase/:id/archive", to: "library#archive"
     patch "/library/purchase/:id/unarchive", to: "library#unarchive"
 
+    # Social proof widget analytics (public)
+    post "/products/social_proof_widgets/impression", to: "checkout/social_proof_widgets#impression"
+    post "/products/social_proof_widgets/click", to: "checkout/social_proof_widgets#click"
+    post "/products/social_proof_widgets/dismiss", to: "checkout/social_proof_widgets#dismiss"
+
     resources :products, only: [] do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :remaining_call_availabilities

@@ -1737,6 +1737,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
     t.bigint "price_id"
     t.string "recommended_by"
     t.datetime "deleted_at", precision: nil
+    t.string "widget_id"
     t.index ["affiliate_id", "created_at"], name: "index_purchases_on_affiliate_id_and_created_at"
     t.index ["browser_guid"], name: "index_purchases_on_browser_guid"
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"
@@ -1763,6 +1764,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
     t.index ["stripe_fingerprint"], name: "index_purchases_on_stripe_fingerprint"
     t.index ["stripe_transaction_id"], name: "index_purchases_on_stripe_transaction_id"
     t.index ["subscription_id"], name: "index_purchases_on_subscription_id"
+    t.index ["widget_id"], name: "index_purchases_on_widget_id"
   end
 
   create_table "purchasing_power_parity_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2088,9 +2090,16 @@ ActiveRecord::Schema[7.1].define(version: 2025_04_25_212934) do
     t.bigint "user_id"
     t.datetime "deleted_at", precision: nil
     t.integer "status", default: 1, null: false
+    t.integer "impressions_count", default: 0, null: false
+    t.integer "clicks_count", default: 0, null: false
+    t.integer "dismissals_count", default: 0, null: false
+    t.integer "conversions_count", default: 0, null: false
+    t.bigint "revenue_cents", default: 0, null: false
+    t.string "icon_color",
     t.index ["deleted_at"], name: "index_social_proof_widgets_on_deleted_at"
+    t.index ["status", "universal"], name: "index_social_proof_widgets_on_status_and_universal"
     t.index ["status"], name: "index_social_proof_widgets_on_status"
-    t.index ["user_id"], name: "fk_rails_social_proof_widgets_user"
+    t.index ["user_id", "updated_at"], name: "index_social_proof_widgets_on_user_id_and_updated_at"
   end
 
   create_table "social_proof_widgets_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

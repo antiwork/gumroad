@@ -15,6 +15,12 @@ export type Widget = {
   created_at: string;
   updated_at: string;
   icon_color: string | null;
+  impressions_count: number;
+  clicks_count: number;
+  dismissals_count: number;
+  conversions_count: number;
+  conversion_rate: number;
+  revenue_cents: number;
 };
 
 export type SortKey = "name" | "updated_at" | "status";
@@ -106,4 +112,28 @@ export const getSocialProofWidget = async (id: string) => {
     url: Routes.checkout_social_proof_widget_path(id),
   });
   return cast<SocialWidgetEditProps>(await response.json());
+};
+
+export const trackWidgetImpression = async (widgetId: string) => {
+  await request({
+    method: 'POST',
+    url: `/products/social_proof_widgets/impression?widget_id=${widgetId}`,
+    accept: 'json'
+  });
+};
+
+export const trackWidgetClick = async (widgetId: string) => {
+  await request({
+    method: "POST", 
+    url: `/products/social_proof_widgets/click?widget_id=${widgetId}`,
+    accept: "json",
+  });
+};
+
+export const trackWidgetDismiss = async (widgetId: string) => {
+  await request({
+    method: "POST",
+    url: `/products/social_proof_widgets/dismiss?widget_id=${widgetId}`,
+    accept: "json",
+  });
 };

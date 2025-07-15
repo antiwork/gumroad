@@ -13,6 +13,8 @@ class SocialProofWidget < ApplicationRecord
                           join_table: "social_proof_widgets_products",
                           association_foreign_key: "product_id"
 
+  has_many :attributed_purchases, foreign_key: :widget_id, primary_key: :external_id, class_name: 'Purchase'
+
   belongs_to :user
 
   enum cta_type: {
@@ -149,6 +151,34 @@ class SocialProofWidget < ApplicationRecord
 
   def rendered_description(product:)
     render_content(:description, product: product)
+  end
+
+  # increment counters
+  def increment_conversion!(amount_cents)
+    SocialProofWidget.where(id: id).update_all([
+      "conversions_count = conversions_count + 1, revenue_cents = revenue_cents + ?", amount_cents
+    ])
+  end
+
+  # analytics methods
+  def conversion_rate
+    return 0.0 if clicks_count.zero?
+    (conversions_count.to_f / clicks_count).round(4)
+  end
+  
+  def attributed_revenue_cents
+    revenue_cents
+  end
+  
+  def analytics_summary
+    {
+      impressions: impressions_count,
+      clicks: clicks_count,
+      dismissals: dismissals_count,
+      conversions: conversions_count,
+      conversion_rate: conversion_rate,
+      revenue_cents: revenue_cents,
+    }
   end
 
   PLACEHOLDER_COUNT = 17

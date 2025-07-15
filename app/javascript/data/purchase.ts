@@ -61,6 +61,7 @@ export type PurchaseLineItemPayload = {
   customFields: CustomFields;
   urlParameters: string | null;
   referrer: string;
+  widgetId: string | null;
   isPppDiscounted: boolean;
   acceptedOffer: { id: string; original_product_id?: string | null; original_variant_id?: string | null } | null;
   bundleProducts: { productId: string; quantity: number; variantId: string | null; customFields: CustomFields }[];
@@ -243,6 +244,7 @@ export const createPurchasesRequestData = (
       referrer: lineItem.referrer,
       is_purchasing_power_parity_discounted: lineItem.isPppDiscounted,
       custom_fields: lineItem.customFields,
+      widget_id: lineItem.widgetId,
     })),
   };
   if (payload.shippingInfo) {
