@@ -1918,7 +1918,7 @@ describe ContactingCreatorMailer do
 
       expect(mail.to).to eq [seller.email]
       expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
-      expect(mail.body.encoded).to include ping_url
+      expect(mail.body.encoded).to include "https://example.com/****hook"
       expect(mail.body.encoded).to include response_code.to_s
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
     end
@@ -1938,18 +1938,30 @@ describe ContactingCreatorMailer do
       end
     end
 
-    it "handles different ping URLs correctly" do
-      test_urls = [
-        "https://api.example.com/webhook",
-        "http://localhost:3000/gumroad",
-        "https://mystore.com/notifications"
+    it "handles different ping URLs correctly with redaction" do
+      test_cases = [
+        { url: "https://api.example.com/webhook", expected: "https://api.example.com/****hook" },
+        { url: "http://localhost:3000/gumroad", expected: "http://localhost:3000/****road" },
+        { url: "https://mystore.com/notifications", expected: "https://mystore.com/****ions" },
+        { url: "https://example.com/a/b/c/webhook?token=secret", expected: "https://example.com/****ret" },
+        { url: "https://example.com/short", expected: "https://example.com/short" }
       ]
 
-      test_urls.each do |url|
-        mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, url, response_code)
+      test_cases.each do |test_case|
+        mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, test_case[:url], response_code)
 
-        expect(mail.body.encoded).to include url
+        expect(mail.body.encoded).to include test_case[:expected]
+        expect(mail.body.encoded).not_to include test_case[:url] unless test_case[:url] == test_case[:expected]
       end
+    end
+
+    it "redacts URL path while preserving protocol and domain" do
+      long_url = "https://api.example.com/v1/webhooks/12345/notifications?auth=secret123"
+      mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, long_url, response_code)
+
+      expect(mail.body.encoded).to include "https://api.example.com/****123"
+      expect(mail.body.encoded).not_to include "secret123"
+      expect(mail.body.encoded).not_to include "webhooks"
     end
   end
 end

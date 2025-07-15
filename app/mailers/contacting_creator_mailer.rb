@@ -515,9 +515,11 @@ class ContactingCreatorMailer < ApplicationMailer
 
   def ping_endpoint_failure(user_id, ping_url, response_code)
     @seller = User.find(user_id)
-    @ping_url = ping_url
+    @ping_url = redact_ping_url(ping_url)
     @response_code = response_code
     @subject = "Webhook ping endpoint delivery failed"
+
+    deliver_email
   end
 
   private
@@ -572,5 +574,27 @@ class ContactingCreatorMailer < ApplicationMailer
       if Feature.active?(:send_sales_notifications_to_consumer_app)
         PushNotificationWorker.perform_async(@seller.id, Device::APP_TYPES[:consumer], @subject, nil, {}, Device::NOTIFICATION_SOUNDS[:sale])
       end
+    end
+
+    def redact_ping_url(url)
+      return url unless url.present?
+      
+      uri = URI.parse(url)
+      path = uri.path.to_s
+      query = uri.query.present? ? "?#{uri.query}" : ""
+      fragment = uri.fragment.present? ? "##{uri.fragment}" : ""
+      
+      full_path = "#{path}#{query}#{fragment}"
+      
+      if full_path.length > 4
+        last_four = full_path[-4..-1]
+        redacted_path = "#{'*' * (full_path.length - 4)}#{last_four}"
+      else
+        redacted_path = full_path
+      end
+      
+      "#{uri.scheme}://#{uri.host}#{uri.port && uri.port != uri.default_port ? ":#{uri.port}" : ""}#{redacted_path}"
+    rescue URI::InvalidURIError
+      url
     end
 end
