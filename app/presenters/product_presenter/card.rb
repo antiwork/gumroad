@@ -19,9 +19,9 @@ class ProductPresenter::Card
     @product = product
   end
 
-  def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil)
+  def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: true)
     default_recurrence = product.default_price_recurrence
-    {
+    props = {
       id: product.external_id,
       permalink: product.unique_permalink,
       name: product.name,
@@ -40,8 +40,13 @@ class ProductPresenter::Card
       url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:),
       duration_in_months: product.duration_in_months,
       recurrence: default_recurrence&.recurrence,
-      description: product.plaintext_description.truncate(100)
     }
+
+    if compute_description
+      props[:description] = product.plaintext_description.truncate(100)
+    end
+
+    props
   end
 
   def for_email
