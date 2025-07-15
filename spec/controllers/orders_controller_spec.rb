@@ -2347,4 +2347,72 @@ describe OrdersController, :vcr do
       end
     end
   end
+
+  describe "POST create with upsell" do
+    context "when maintaining discount during upsell from product to bundle" do
+      let(:product) { create(:product, price_cents: 5000) }
+      let(:bundle) { create(:bundle, price_cents: 15000, products: [product]) }
+      let(:discount) { create(:discount_code, code: "HALF50", discount_amount: 50, discount_type: "percentage") }
+      let(:upsell) { create(:upsell, product: bundle, seller: bundle.user, cross_sell: true) }
+
+      before do
+        # Ensure the discount code is applicable to both product and bundle
+        discount.products << product
+        discount.products << bundle
+      end
+
+      it "maintains discount when upselling from product to bundle" do
+        # Initial order params with product and discount
+        initial_params = {
+          email: "buyer@gumroad.com",
+          line_items: [{
+            uid: "unique-id-0",
+            permalink: product.unique_permalink,
+            perceived_price_cents: 2500, # $25 after 50% discount
+            discount_code: "HALF50",
+            quantity: 1
+          }]
+        }.merge(common_purchase_params)
+
+        # Create initial order
+        expect do
+          post :create, params: initial_params
+          expect(response.parsed_body["success"]).to be(true)
+        end.to change(Purchase.successful, :count).by(1)
+
+        initial_purchase = Purchase.successful.last
+        expect(initial_purchase.offer_code).to eq(discount)
+        expect(initial_purchase.total_transaction_cents).to eq(2500) # $25 after 50% discount
+
+        # Now perform upsell to bundle
+        upsell_params = {
+          email: "buyer@gumroad.com",
+          line_items: [{
+            uid: "unique-id-1",
+            permalink: bundle.unique_permalink,
+            perceived_price_cents: 7500, # $75 after 50% discount on $150
+            discount_code: "HALF50",
+            quantity: 1,
+            accepted_offer: {
+              id: upsell.external_id,
+              original_product_id: product.external_id,
+              original_variant_id: nil
+            }
+          }]
+        }.merge(common_purchase_params)
+
+        # Perform upsell
+        expect do
+          post :create, params: upsell_params
+          expect(response.parsed_body["success"]).to be(true)
+        end.to change(Purchase.successful, :count).by(1)
+
+        upsell_purchase = Purchase.successful.last
+        expect(upsell_purchase.offer_code).to eq(discount)
+        expect(upsell_purchase.total_transaction_cents).to eq(7500) # $75 after 50% discount on $150
+        expect(upsell_purchase.upsell_purchase).to be_present
+        expect(upsell_purchase.upsell_purchase.upsell).to eq(upsell)
+      end
+    end
+  end
 end

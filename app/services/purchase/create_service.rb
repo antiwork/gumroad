@@ -113,6 +113,25 @@ class Purchase::CreateService < Purchase::BaseService
             nil
         )
         raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message unless purchase.upsell_purchase.valid?
+        
+        # Reapply the original discount code if present and not a cross-sell with its own offer
+        if purchase_params[:discount_code].present? && (!upsell.cross_sell? || purchase.offer_code.nil?)
+          begin
+            original_discount_code = purchase_params[:discount_code].downcase.strip
+            original_offer_code = product.find_offer_code(code: original_discount_code)
+            
+            if original_offer_code.present?
+              # Only apply if the offer code is valid for this product
+              if original_offer_code.universal || original_offer_code.products.include?(product)
+                purchase.discount_code = original_discount_code
+                purchase.offer_code = original_offer_code
+              end
+            end
+          rescue => e
+            # Log the error but don't fail the purchase if discount reapplication fails
+            Rails.logger.warn("Failed to reapply discount code after upsell: #{e.message}")
+          end
+        end
       end
 
       if params[:tip_cents].present? && params[:tip_cents] > 0
