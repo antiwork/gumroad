@@ -50,7 +50,7 @@ class PostToIndividualPingEndpointWorker
         return unless resource_subscription&.user
         seller = resource_subscription.user
       end
-      
+
       if seller.last_ping_failure_notification_at.present?
         last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
         return if last_notification >= 1.week.ago
