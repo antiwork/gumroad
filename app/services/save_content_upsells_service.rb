@@ -40,8 +40,9 @@ class SaveContentUpsellsService
       next if node.dig("attrs", "id").present?
 
       product_id = ObfuscateIds.decrypt(node.dig("attrs", "productId"))
+      variant_id = ObfuscateIds.decrypt(node.dig("attrs", "variantId")) if node.dig("attrs", "variantId")
       discount = node.dig("attrs", "discount")
-      node["attrs"]["id"] = create_upsell!(product_id, discount).external_id
+      node["attrs"]["id"] = create_upsell!(product_id, variant_id, discount).external_id
     end
 
     content
