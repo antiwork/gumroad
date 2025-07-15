@@ -518,8 +518,6 @@ class ContactingCreatorMailer < ApplicationMailer
     @ping_url = ping_url
     @response_code = response_code
     @subject = "Webhook ping endpoint delivery failed"
-
-    deliver_email
   end
 
   private
