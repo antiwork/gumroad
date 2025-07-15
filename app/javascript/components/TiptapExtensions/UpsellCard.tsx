@@ -134,9 +134,10 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
 
   const header = (
     <header>
-      <h3>{product?.name}</h3>
-
-      {variant && <p>{variant.name}</p>}
+      <h3>
+        {product?.name}
+        {variant && <span className="text-muted ml-2">({variant.name})</span>}
+      </h3>
     </header>
   );
 
