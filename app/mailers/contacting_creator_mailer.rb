@@ -518,8 +518,6 @@ class ContactingCreatorMailer < ApplicationMailer
     @ping_url = ping_url
     @response_code = response_code
     @subject = "Webhook ping endpoint delivery failed"
-
-    deliver_email
   end
 
   private
@@ -563,7 +561,6 @@ class ContactingCreatorMailer < ApplicationMailer
       mailer_args[:from] = @from if @from.present?
       mail(mailer_args)
     end
-
 
     def send_push_notification!
       return unless push_notification_enabled?
