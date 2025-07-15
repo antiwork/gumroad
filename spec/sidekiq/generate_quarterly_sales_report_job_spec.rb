@@ -177,4 +177,65 @@ describe GenerateQuarterlySalesReportJob do
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
     end
   end
+
+  describe "s3_prefix functionality", :vcr do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/international-sales-reporting-spec-#{SecureRandom.hex(18)}.zip")
+    end
+
+    before do
+      travel_to(Time.zone.local(2015, 1, 1)) do
+        product = create(:product, price_cents: 100_00, native_type: "digital")
+        @purchase = create(:purchase_in_progress, link: product, country: "United Kingdom")
+        @purchase.chargeable = create(:chargeable)
+        @purchase.process!
+        @purchase.update_balance_and_mark_successful!
+      end
+    end
+
+    it "uses custom s3_prefix when provided" do
+      custom_prefix = "custom/reports"
+      expect(s3_bucket_double).to receive(:object) do |key|
+        expect(key).to start_with("#{custom_prefix}/sales-tax/gb-sales-quarterly/")
+        @s3_object
+      end
+
+      described_class.new.perform(country_code, quarter, year, true, custom_prefix)
+    end
+
+    it "handles s3_prefix with trailing slash" do
+      custom_prefix = "custom/reports/"
+      expect(s3_bucket_double).to receive(:object) do |key|
+        expect(key).to start_with("custom/reports/sales-tax/gb-sales-quarterly/")
+        expect(key).not_to include("//")
+        @s3_object
+      end
+
+      described_class.new.perform(country_code, quarter, year, true, custom_prefix)
+    end
+
+    it "uses default path when s3_prefix is nil" do
+      expect(s3_bucket_double).to receive(:object) do |key|
+        expect(key).to start_with("sales-tax/gb-sales-quarterly/")
+        @s3_object
+      end
+
+      described_class.new.perform(country_code, quarter, year, true, nil)
+    end
+
+    it "uses default path when s3_prefix is empty string" do
+      expect(s3_bucket_double).to receive(:object) do |key|
+        expect(key).to start_with("sales-tax/gb-sales-quarterly/")
+        @s3_object
+      end
+
+      described_class.new.perform(country_code, quarter, year, true, "")
+    end
+  end
 end
