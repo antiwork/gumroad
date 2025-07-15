@@ -115,7 +115,7 @@ class Purchase::CreateService < Purchase::BaseService
         raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message unless purchase.upsell_purchase.valid?
         
         # Reapply the original discount code if present and not a cross-sell with its own offer
-        if purchase_params[:discount_code].present? && (!upsell.cross_sell? || purchase.offer_code.nil?)
+        if purchase_params[:discount_code].present? && (!upsell.cross_sell? || upsell.offer_code.nil?)
           begin
             original_discount_code = purchase_params[:discount_code].downcase.strip
             original_offer_code = product.find_offer_code(code: original_discount_code)
