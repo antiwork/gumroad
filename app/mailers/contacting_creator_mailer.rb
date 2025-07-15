@@ -513,6 +513,15 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Important: Upcoming refund policy changes effective January 1, 2025"
   end
 
+  def ping_endpoint_failure(user_id, ping_url, response_code)
+    @seller = User.find(user_id)
+    @ping_url = ping_url
+    @response_code = response_code
+    @subject = "Webhook ping endpoint delivery failed"
+
+    deliver_email
+  end
+
   private
     def do_not_send
       @do_not_send = true
@@ -555,14 +564,6 @@ class ContactingCreatorMailer < ApplicationMailer
       mail(mailer_args)
     end
 
-    def ping_endpoint_failure(user_id, ping_url, response_code)
-      @seller = User.find(user_id)
-      @ping_url = ping_url
-      @response_code = response_code
-      @subject = "Webhook ping endpoint delivery failed"
-
-      deliver_email
-    end
 
     def send_push_notification!
       return unless push_notification_enabled?
