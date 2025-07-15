@@ -562,7 +562,6 @@ class ContactingCreatorMailer < ApplicationMailer
       mail(mailer_args)
     end
 
-
     def send_push_notification!
       return unless push_notification_enabled?
 
