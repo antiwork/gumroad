@@ -1932,7 +1932,7 @@ describe ContactingCreatorMailer do
     it "handles different response codes correctly" do
       [404, 500, 502, 503, 504].each do |code|
         mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, code)
-        
+
         expect(mail.body.encoded).to include code.to_s
         expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
       end
@@ -1947,7 +1947,7 @@ describe ContactingCreatorMailer do
 
       test_urls.each do |url|
         mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, url, response_code)
-        
+
         expect(mail.body.encoded).to include url
       end
     end
