@@ -6,6 +6,7 @@ class PostToIndividualPingEndpointWorker
 
   ERROR_CODES_TO_RETRY = [499, 500, 502, 503, 504].freeze
   BACKOFF_STRATEGY = [60, 180, 600, 3600].freeze
+  NOTIFICATION_THROTTLE_PERIOD = 1.week.freeze
 
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
     retry_count = params["retry_count"] || 0
@@ -49,7 +50,7 @@ class PostToIndividualPingEndpointWorker
       
       if seller.last_ping_failure_notification_at.present?
         last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
-        return if last_notification >= 1.week.ago
+        return if last_notification >= NOTIFICATION_THROTTLE_PERIOD.ago
       end
 
       ContactingCreatorMailer.ping_endpoint_failure(seller.id, post_url, response_code).deliver_later(queue: "critical")
