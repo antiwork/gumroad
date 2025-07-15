@@ -1907,4 +1907,49 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "Hey #{seller.name_or_username},"
     end
   end
+
+  describe "ping_endpoint_failure" do
+    let(:seller) { create(:user, email: "seller@example.com") }
+    let(:ping_url) { "https://example.com/webhook" }
+    let(:response_code) { 500 }
+
+    it "sends notification to the seller about failed ping endpoint" do
+      mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, response_code)
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
+      expect(mail.body.encoded).to include ping_url
+      expect(mail.body.encoded).to include response_code.to_s
+      expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
+    end
+
+    it "includes seller information in the email" do
+      mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, response_code)
+
+      expect(mail.body.encoded).to include seller.name_or_username
+    end
+
+    it "handles different response codes correctly" do
+      [404, 500, 502, 503, 504].each do |code|
+        mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, ping_url, code)
+        
+        expect(mail.body.encoded).to include code.to_s
+        expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
+      end
+    end
+
+    it "handles different ping URLs correctly" do
+      test_urls = [
+        "https://api.example.com/webhook",
+        "http://localhost:3000/gumroad",
+        "https://mystore.com/notifications"
+      ]
+
+      test_urls.each do |url|
+        mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, url, response_code)
+        
+        expect(mail.body.encoded).to include url
+      end
+    end
+  end
 end
