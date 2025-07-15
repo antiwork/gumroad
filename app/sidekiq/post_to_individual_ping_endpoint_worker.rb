@@ -46,14 +46,14 @@ class PostToIndividualPingEndpointWorker
       return unless resource_subscription&.user
 
       seller = resource_subscription.user
-      
+
       if seller.last_ping_failure_notification_at.present?
         last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
         return if last_notification >= 1.week.ago
       end
 
       ContactingCreatorMailer.ping_endpoint_failure(seller.id, post_url, response_code).deliver_later(queue: "critical")
-      
+
       seller.last_ping_failure_notification_at = Time.current.to_s
       seller.save!
     end
