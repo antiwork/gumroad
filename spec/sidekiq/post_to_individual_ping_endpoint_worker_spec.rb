@@ -132,10 +132,10 @@ describe PostToIndividualPingEndpointWorker do
 
       it "updates user's last_ping_failure_notification_at timestamp", :sidekiq_inline do
         allow(ContactingCreatorMailer).to receive(:ping_endpoint_failure).and_return(double(deliver_later: true))
-        
-        expect {
+
+        expect do
           PostToIndividualPingEndpointWorker.new.perform(ping_url, params, Mime[:url_encoded_form].to_s, user.id)
-        }.to change { user.reload.last_ping_failure_notification_at }.from(nil)
+        end.to change { user.reload.last_ping_failure_notification_at }.from(nil)
       end
     end
 
@@ -152,11 +152,9 @@ describe PostToIndividualPingEndpointWorker do
       end
 
       it "does not update last_ping_failure_notification_at when throttled", :sidekiq_inline do
-        original_timestamp = user.last_ping_failure_notification_at
-
-        expect {
+        expect do
           PostToIndividualPingEndpointWorker.new.perform(ping_url, params, Mime[:url_encoded_form].to_s, user.id)
-        }.not_to change { user.reload.last_ping_failure_notification_at }
+        end.not_to change { user.reload.last_ping_failure_notification_at }
       end
     end
 
@@ -177,9 +175,9 @@ describe PostToIndividualPingEndpointWorker do
         allow(ContactingCreatorMailer).to receive(:ping_endpoint_failure).and_return(double(deliver_later: true))
         old_timestamp = user.last_ping_failure_notification_at
 
-        expect {
+        expect do
           PostToIndividualPingEndpointWorker.new.perform(ping_url, params, Mime[:url_encoded_form].to_s, user.id)
-        }.to change { user.reload.last_ping_failure_notification_at }.from(old_timestamp)
+        end.to change { user.reload.last_ping_failure_notification_at }.from(old_timestamp)
       end
     end
 
