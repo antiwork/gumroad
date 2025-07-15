@@ -585,7 +585,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
       # --- collect the part we want to redact ------------------------------
       path = uri.path.to_s           # always starts with "/" (may be "")
-      query_frag = ""
+      query_frag = +""  # Use unary plus to create unfrozen string
       query_frag << "?#{uri.query}"   if uri.query
       query_frag << "##{uri.fragment}" if uri.fragment
 

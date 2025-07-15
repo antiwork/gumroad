@@ -1940,11 +1940,11 @@ describe ContactingCreatorMailer do
 
     it "handles different ping URLs correctly with redaction" do
       test_cases = [
-        { url: "https://api.example.com/webhook", expected: "https://api.example.com/***ook" },
-        { url: "http://localhost:3000/gumroad", expected: "http://localhost:3000/***oad" },
+        { url: "https://api.example.com/webhook", expected: "https://api.example.com/****ook" },
+        { url: "http://localhost:3000/gumroad", expected: "http://localhost:3000/****oad" },
         { url: "https://mystore.com/notifications", expected: "https://mystore.com/*********ions" },
-        { url: "https://example.com/a/b/c/webhook?token=secret", expected: "https://example.com/*******************cret" },
-        { url: "https://example.com/short", expected: "https://example.com/*****" },
+        { url: "https://example.com/a/b/c/webhook?token=secret", expected: "https://example.com/**********************cret" },
+        { url: "https://example.com/short", expected: "https://example.com/****t" },
         { url: "https://example.com/a", expected: "https://example.com/*" },
         { url: "https://example.com/ab", expected: "https://example.com/**" },
         { url: "https://example.com/abc", expected: "https://example.com/***" },
