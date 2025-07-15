@@ -1918,7 +1918,7 @@ describe ContactingCreatorMailer do
 
       expect(mail.to).to eq [seller.email]
       expect(mail.subject).to eq "Webhook ping endpoint delivery failed"
-      expect(mail.body.encoded).to include "https://example.com/****hook"
+      expect(mail.body.encoded).to include "https://example.com/***ook"
       expect(mail.body.encoded).to include response_code.to_s
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
     end
@@ -1940,11 +1940,16 @@ describe ContactingCreatorMailer do
 
     it "handles different ping URLs correctly with redaction" do
       test_cases = [
-        { url: "https://api.example.com/webhook", expected: "https://api.example.com/****hook" },
-        { url: "http://localhost:3000/gumroad", expected: "http://localhost:3000/****road" },
-        { url: "https://mystore.com/notifications", expected: "https://mystore.com/****ions" },
-        { url: "https://example.com/a/b/c/webhook?token=secret", expected: "https://example.com/****ret" },
-        { url: "https://example.com/short", expected: "https://example.com/short" }
+        { url: "https://api.example.com/webhook", expected: "https://api.example.com/***ook" },
+        { url: "http://localhost:3000/gumroad", expected: "http://localhost:3000/***oad" },
+        { url: "https://mystore.com/notifications", expected: "https://mystore.com/*********ions" },
+        { url: "https://example.com/a/b/c/webhook?token=secret", expected: "https://example.com/*******************cret" },
+        { url: "https://example.com/short", expected: "https://example.com/*****" },
+        { url: "https://example.com/a", expected: "https://example.com/*" },
+        { url: "https://example.com/ab", expected: "https://example.com/**" },
+        { url: "https://example.com/abc", expected: "https://example.com/***" },
+        { url: "https://example.com/abcd", expected: "https://example.com/****" },
+        { url: "https://example.com/abcde", expected: "https://example.com/****e" }
       ]
 
       test_cases.each do |test_case|
@@ -1959,7 +1964,7 @@ describe ContactingCreatorMailer do
       long_url = "https://api.example.com/v1/webhooks/12345/notifications?auth=secret123"
       mail = ContactingCreatorMailer.ping_endpoint_failure(seller.id, long_url, response_code)
 
-      expect(mail.body.encoded).to include "https://api.example.com/****123"
+      expect(mail.body.encoded).to include "https://api.example.com/***************************************t123"
       expect(mail.body.encoded).not_to include "secret123"
       expect(mail.body.encoded).not_to include "webhooks"
     end

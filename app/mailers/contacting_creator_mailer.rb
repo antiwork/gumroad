@@ -577,23 +577,33 @@ class ContactingCreatorMailer < ApplicationMailer
     end
 
     def redact_ping_url(url)
-      return url unless url.present?
-      
       uri = URI.parse(url)
-      path = uri.path.to_s
-      query = uri.query.present? ? "?#{uri.query}" : ""
-      fragment = uri.fragment.present? ? "##{uri.fragment}" : ""
-      
-      full_path = "#{path}#{query}#{fragment}"
-      
-      if full_path.length > 4
-        last_four = full_path[-4..-1]
-        redacted_path = "#{'*' * (full_path.length - 4)}#{last_four}"
-      else
-        redacted_path = full_path
-      end
-      
-      "#{uri.scheme}://#{uri.host}#{uri.port && uri.port != uri.default_port ? ":#{uri.port}" : ""}#{redacted_path}"
+
+      # --- build the host portion (scheme + host + optional port) ----------
+      host_part  = "#{uri.scheme}://#{uri.host}"
+      host_part += ":#{uri.port}" if uri.port && uri.port != uri.default_port
+
+      # --- collect the part we want to redact ------------------------------
+      path      = uri.path.to_s           # always starts with "/" (may be "")
+      query_frag = ""
+      query_frag << "?#{uri.query}"   if uri.query
+      query_frag << "##{uri.fragment}" if uri.fragment
+
+      body = path.sub(/\A\//, "") + query_frag  # strip leading "/" before counting
+      return host_part + "/" if body.empty?     # nothing to redact
+
+      n = body.length
+
+      redacted =
+        if n <= 4                            # 1-4 → replace completely with stars
+          "*" * n
+        elsif n <= 8                         # 5-8 → exactly 4 stars + tail (n-4)
+          "****" + body[-(n - 4)..]
+        else                                 # ≥9 → (n-4) stars + last 4 chars
+          "*" * (n - 4) + body[-4..]
+        end
+
+      "#{host_part}/#{redacted}"
     rescue URI::InvalidURIError
       url
     end
