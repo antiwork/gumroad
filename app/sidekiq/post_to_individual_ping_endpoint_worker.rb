@@ -7,7 +7,7 @@ class PostToIndividualPingEndpointWorker
   ERROR_CODES_TO_RETRY = [499, 500, 502, 503, 504].freeze
   BACKOFF_STRATEGY = [60, 180, 600, 3600].freeze
 
-  def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s)
+  def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
     retry_count = params["retry_count"] || 0
 
     body = if content_type == Mime[:json]
@@ -24,9 +24,9 @@ class PostToIndividualPingEndpointWorker
 
     unless response.success?
       if ERROR_CODES_TO_RETRY.include?(response.code) && retry_count < (BACKOFF_STRATEGY.length - 1)
-        PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type)
+        PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type, user_id)
       else
-        send_ping_failure_notification(post_url, response.code)
+        send_ping_failure_notification(post_url, response.code, user_id)
       end
     end
 
@@ -41,11 +41,15 @@ class PostToIndividualPingEndpointWorker
       key.to_s.gsub(/[\[\]]/) { |char| URI.encode_www_form_component(char) }
     end
 
-    def send_ping_failure_notification(post_url, response_code)
-      resource_subscription = ResourceSubscription.find_by(post_url: post_url)
-      return unless resource_subscription&.user
-
-      seller = resource_subscription.user
+    def send_ping_failure_notification(post_url, response_code, user_id = nil)
+      if user_id.present?
+        seller = User.find_by(id: user_id)
+        return unless seller
+      else
+        resource_subscription = ResourceSubscription.find_by(post_url: post_url)
+        return unless resource_subscription&.user
+        seller = resource_subscription.user
+      end
       
       if seller.last_ping_failure_notification_at.present?
         last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
