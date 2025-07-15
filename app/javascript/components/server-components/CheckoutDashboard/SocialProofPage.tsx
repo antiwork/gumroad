@@ -144,12 +144,13 @@ const SocialProofPage = ({
     }
   };
 
-  const handleDelete = async () => {
-    if (!selectedWidgetId) return;
+  const handleDelete = async (widgetId: string) => {
     try {
       setIsLoading(true);
-      await deleteSocialProofWidget(selectedWidgetId);
-      setSelectedWidgetId(null);
+      await deleteSocialProofWidget(widgetId);
+      if (selectedWidgetId === widgetId) {
+        setSelectedWidgetId(null);
+      }
       showAlert("Widget deleted successfully!", "success");
       void refreshWidgets();
     } catch (error) {
@@ -204,6 +205,50 @@ const SocialProofPage = ({
     setSelectedWidgetId(null);
   };
 
+  const handleDuplicateAndEdit = async (widgetId: string) => {
+    const widget = widgets.find(w => w.id === widgetId);
+    if (!widget) return;
+    try {
+      setIsLoading(true);
+      
+      const duplicateData: SocialProofWidgetPayload = {
+        name: `${widget.name} (Copy)`,
+        universal: widget.universal,
+        title: "",
+        description: "",
+        cta_text: "",
+        cta_type: widget.cta_type as "button" | "link" | "none",
+        status: "unpublished",
+        image_type: widget.image_type,
+        product_ids: widget.universal ? [] : [],
+        custom_image_signed_blob_id: null,
+        icon_color: widget.image_type.startsWith("icon_") ? widget.icon_color : null
+      };
+  
+      const editProps = await getSocialProofWidget(widget.id);
+      duplicateData.title = editProps.title || "";
+      duplicateData.description = editProps.description || "";
+      duplicateData.cta_text = editProps.cta_text || "";
+      duplicateData.product_ids = editProps.product_ids || [];
+  
+      const response = await createSocialProofWidget(duplicateData);
+      const newWidget = response.widget;
+      
+      showAlert("Widget duplicated successfully!", "success");
+      
+      await refreshWidgets();
+      setSelectedWidgetId(newWidget.id);
+      setDrawerOpen(false);
+      setView("edit");
+      
+    } catch (error) {
+      assertResponseError(error);
+      showAlert(error.message, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   React.useEffect(() => {
     if (isSearchPopoverOpen) searchInputRef.current?.focus();
   }, [isSearchPopoverOpen]);
@@ -211,7 +256,7 @@ const SocialProofPage = ({
   if (view === "create") {
     return (
       <WidgetForm
-        title="Create Widget"
+        title="Create widget"
         widget={null}
         onSave={handleCreate}
         onCancel={handleCancel}
@@ -358,10 +403,7 @@ const SocialProofPage = ({
                             <div
                               className="danger"
                               role="menuitem"
-                              onClick={() => {
-                                setSelectedWidgetId(widget.id);
-                                void handleDelete();
-                              }}
+                              onClick={() => void handleDelete(widget.id)}
                             >
                               <Icon name="trash2" />
                               &ensp;Delete
@@ -388,9 +430,9 @@ const SocialProofPage = ({
         {drawerOpen && selectedWidget && (
           <WidgetDrawer
             selectedWidget={selectedWidget}
-            onCreate={() => setView("create")}
+            onDuplicate={() => handleDuplicateAndEdit(selectedWidget.id)}
             onEdit={() => setView("edit")}
-            onDelete={handleDelete}
+            onDelete={() => handleDelete(selectedWidget.id)}
             onClose={() => {
               setDrawerOpen(false);
               setSelectedWidgetId(null);
@@ -405,14 +447,14 @@ const SocialProofPage = ({
 
 const WidgetDrawer = ({
   selectedWidget,
-  onCreate,
+  onDuplicate,
   onEdit,
   onDelete,
   onClose,
   isLoading,
 }: {
   selectedWidget: Widget;
-  onCreate: () => void;
+  onDuplicate: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -451,7 +493,7 @@ const WidgetDrawer = ({
         </div>
       </section>
       <section className="grid grid-cols-3 gap-4">
-        <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
+        <Button onClick={onDuplicate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
         <Button onClick={onEdit} disabled={isLoading || isReadOnly}>
@@ -715,7 +757,7 @@ const WidgetForm = ({
             <Icon name="x" />
             Cancel
           </Button>
-          <Button color="primary" onClick={() => handleSubmit("unpublished")}>
+          <Button color="primary" onClick={() => handleSubmit(widget?.status || "unpublished")}>
             Save
           </Button>
           {widget?.status === "published" ? (
