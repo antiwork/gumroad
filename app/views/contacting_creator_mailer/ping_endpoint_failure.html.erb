@@ -1,6 +1,7 @@
-<%= header_section("Webhook ping endpoint delivery failed") %>
+<%= header_section("We couldn’t deliver pings to your endpoint") %>
 <div>
-  <p>Hi there. We were unable to deliver webhook notifications to your ping endpoint after multiple attempts.</p>
+  <p>Hi there,</p>
+  <p>We were unable to deliver ping notifications to your configured ping URL after multiple attempts.</p>
   <p><strong>Ping URL:</strong> <%= @ping_url %></p>
   <p><strong>Response Code:</strong> <%= @response_code %></p>
   <p>
