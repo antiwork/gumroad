@@ -16,7 +16,7 @@ import { escapeRegExp } from "$app/utils";
 
 import { Icon } from "$app/components/Icons";
 
-export type Option = { id: string; label: string; isSubOption?: boolean };
+export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
 
 export type CustomOption = (option: Option) => React.ReactNode;
 type CustomProps = {
@@ -79,6 +79,7 @@ export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.R
     <CustomPropsContext.Provider value={customProps}>
       <ReactSelect
         {...props}
+        isOptionDisabled={(option) => option.disabled ?? false}
         instanceId={props.inputId ?? menuListId}
         className={cx("combobox", props.className)}
         components={{

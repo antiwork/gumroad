@@ -75,17 +75,25 @@ export const UpsellSelectModal = ({
     }
   };
 
-  const productOptions = products.reduce((selectOptions, { id, name, options }) => {
-    selectOptions.push({ id, label: name });
+  type ProductSelectOption = {
+    id: string;
+    label: string;
+    isSubOption?: boolean;
+    disabled?: boolean;
+  };
 
-    if (options.length > 0) {
+  const productOptions: ProductSelectOption[] = products.reduce((selectOptions, { id, name, options }) => {
+    const disabled = options.length > 0;
+    selectOptions.push({ id, label: name, disabled });
+
+    if (disabled) {
       options.forEach(({ id: optionId, name: optionName }) => {
         selectOptions.push({ id: `${id}---${optionId}`, label: `${name} (${optionName})`, isSubOption: true });
       });
     }
 
     return selectOptions;
-  }, [] as { id: string; label: string; isSubOption?: boolean }[]);
+  }, [] as ProductSelectOption[]);
 
   const selectProductOption = (newProductOption: { id: string; label: string; isSubOption?: boolean } | null) => {
     if (newProductOption?.isSubOption) {
