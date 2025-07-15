@@ -241,7 +241,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
         top_period_data = {
           status: "not_payable",
           should_be_shown_currencies_always: true,
-          minimum_payout_amount_cents: 350000,
+          minimum_payout_amount_cents: 1000,
         }
 
         data = {
@@ -587,7 +587,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
           payout_note: nil,
           type: "standard",
           has_stripe_connect: false,
-          minimum_payout_amount_cents: 350000,
+          minimum_payout_amount_cents: 1000,
           is_payable: true
         }
         allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
@@ -615,22 +615,22 @@ describe "Balance Pages Scenario", js: true, type: :feature do
                  )
           create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_1Qplf7S17V0i16U7")
 
-          Credit.create_for_credit!(user: seller, amount_cents: 350000, crediting_user: seller)
+          Credit.create_for_credit!(user: seller, amount_cents: 1000, crediting_user: seller)
           allow_any_instance_of(User).to receive(:compliant?).and_return(true)
         end
 
         it "allows the user to trigger an instant payout" do
           visit balance_path
 
-          expect(page).to have_status(text: "You have $3,500.00 available for instant payout: No need to wait—get paid now!")
+          expect(page).to have_status(text: "You have $10.00 available for instant payout: No need to wait—get paid now!")
           click_on "Get paid!"
           within_modal "Instant payout" do
             expect(page).to have_text("You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your bank account within 30 minutes, though some payouts may take longer to be credited.")
             expect(page).to have_select("Pay out balance up to", selected: Date.current.strftime("%B %-d, %Y"))
             expect(page).to have_text("Sent to Bank of America", normalize_ws: true)
-            expect(page).to have_text("Amount $3,500", normalize_ws: true)
-            expect(page).to have_text("Instant payout fee (3%) -$101.95", normalize_ws: true)
-            expect(page).to have_text("You'll receive $3,398.05", normalize_ws: true)
+            expect(page).to have_text("Amount $10", normalize_ws: true)
+            expect(page).to have_text("Instant payout fee (3%) -$0.30", normalize_ws: true)
+            expect(page).to have_text("You'll receive $9.70", normalize_ws: true)
             click_on "Cancel"
           end
           expect(page).to_not have_modal("Instant payout")
@@ -886,6 +886,11 @@ describe "Balance Pages Scenario", js: true, type: :feature do
 
         visit balance_path
 
+        expect(page).to_not have_content("$7.00")
+        expect(page).to_not have_content("$17.56")
+        click_on "Show older payouts"
+
+        expect(page).to have_content("$7.00")
         expect(page).to_not have_content("$17.56")
         click_on "Show older payouts"
 
