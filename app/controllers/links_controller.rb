@@ -168,11 +168,11 @@ class LinksController < ApplicationController
           unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
                 (params[:price].blank? || params[:price] < cart_item[:price])
             redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
-                                                            rent: cart_item[:rental], recurrence: cart_item[:recurrence],
-                                                            price: cart_item[:price],
-                                                            code: params[:offer_code] || params[:code],
-                                                            affiliate_id: params[:affiliate_id] || params[:a],
-                                                            referrer: params[:referrer] || request.referrer),
+                                                             rent: cart_item[:rental], recurrence: cart_item[:recurrence],
+                                                             price: cart_item[:price],
+                                                             code: params[:offer_code] || params[:code],
+                                                             affiliate_id: params[:affiliate_id] || params[:a],
+                                                             referrer: params[:referrer] || request.referrer),
                         allow_other_host: true
           end
         end
