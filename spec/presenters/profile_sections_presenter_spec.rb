@@ -73,7 +73,7 @@ describe ProfileSectionsPresenter do
     def common_sections_props
       sections = cached_sections_props
       sections[0][:search_results][:products] = products.map do |product|
-        ProductPresenter.card_for_web(product:, request:, target: Product::Layout::PROFILE, show_seller: false)
+        ProductPresenter.card_for_web(product:, request:, target: Product::Layout::PROFILE, show_seller: false, compute_description: false)
       end
       sections
     end
@@ -119,6 +119,32 @@ describe ProfileSectionsPresenter do
                                                                                               creator_profile: ProfilePresenter.new(seller:, pundit_user:).creator_profile,
                                                                                               sections:
                                                                                             })
+    end
+  end
+
+  describe "compute_description parameter" do
+    it "passes compute_description: false to ProductPresenter.card_for_web for search results" do
+      request.query_parameters[:sort] = "recent"
+
+      expect(ProductPresenter).to receive(:card_for_web).with(
+        product: products.first,
+        request: request,
+        recommended_by: nil,
+        target: Product::Layout::PROFILE,
+        show_seller: false,
+        compute_description: false
+      ).and_call_original
+
+      expect(ProductPresenter).to receive(:card_for_web).with(
+        product: products.second,
+        request: request,
+        recommended_by: nil,
+        target: Product::Layout::PROFILE,
+        show_seller: false,
+        compute_description: false
+      ).and_call_original
+
+      subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
     end
   end
 end
