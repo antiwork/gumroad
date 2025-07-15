@@ -15,14 +15,28 @@ class Checkout::SocialProofWidgetPresenter
     {
       id: widget.external_id,
       name: widget.name,
+      title: widget.title,
+      description: widget.description,
       universal: widget.universal?,
       cta_type: widget.cta_type,
       image_type: widget.image_type,
       product_count: widget.universal? ? 0 : widget.products.alive.count,
+      products: widget.universal ? [] : widget.products.alive.map { |product|
+        {
+          id: product.external_id,
+          name: product.name
+        }
+      },
       status: widget.status,
       created_at: widget.created_at.iso8601,
       updated_at: widget.updated_at.iso8601,
-      icon_color: widget.icon_color
+      icon_color: widget.icon_color,
+      impressions_count: widget.impressions_count || 0,
+      clicks_count: widget.clicks_count || 0,
+      dismissals_count: widget.dismissals_count || 0,
+      conversions_count: widget.conversions_count || 0,
+      conversion_rate: widget.conversion_rate,
+      revenue_cents: widget.attributed_revenue_cents
     }
   end
 
@@ -40,9 +54,9 @@ class Checkout::SocialProofWidgetPresenter
       product_ids: widget.universal? ? [] : widget.products.alive.map(&:external_id),
       status: widget.status,
       available_products: available_products_for_selection,
-      image_type_options: self.image_type_options,
-      cta_type_options: self.cta_type_options,
-      icon_options: self.icon_options,
+      image_type_options: self.class.image_type_options,
+      cta_type_options: self.class.cta_type_options,
+      icon_options: self.class.icon_options,
       icon_color: widget.icon_color
     }
   end

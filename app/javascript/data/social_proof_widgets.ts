@@ -7,11 +7,17 @@ import { PaginationProps } from "$app/components/Pagination";
 export type Widget = {
   id: string;
   name: string;
+  title: string;
+  description: string;
   universal: boolean;
   cta_type: string;
   image_type: string;
   status: "published" | "unpublished";
   product_count: number;
+  products: Array<{
+    id: string;
+    name: string;
+  }>;
   created_at: string;
   updated_at: string;
   icon_color: string | null;

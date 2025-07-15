@@ -335,9 +335,10 @@ const SocialProofPage = ({
               <thead>
                 <tr>
                   <th {...thProps("name")}>Widget</th>
-                  <th {...thProps("status")}>Status</th>
-                  <th {...thProps("updated_at")}>Last Updated</th>
-                  <th>Actions</th>
+                  <th>Clicks</th>
+                  <th>Conversion</th>
+                  <th>Revenue</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,21 +352,22 @@ const SocialProofPage = ({
                         <small>{widget.universal ? "All products" : `${widget.product_count} products`}</small>
                       </div>
                     </td>
-                    <td data-label="Status" style={{ whiteSpace: "nowrap" }}>
-                      {(() => {
-                        const isPublished = widget.status === "published";
-                        return isPublished ? (
+                    <td>{widget.clicks_count}</td>
+                    <td>{`${(widget.conversion_rate * 100).toFixed(0)}%`}</td>
+                    <td>${(widget.revenue_cents / 100).toFixed(0)}</td>
+                    <td>
+                      <div className="status-indicator">
+                        {widget.status === "published" ? (
                           <>
-                            <Icon name="circle-fill" /> Published
+                            <Icon name="circle-fill" className="published" /> Published
                           </>
                         ) : (
                           <>
-                            <Icon name="circle" /> Unpublished
+                            <Icon name="circle" className="unpublished" /> Unpublished
                           </>
-                        );
-                      })()}
+                        )}
+                      </div>
                     </td>
-                    <td>{new Date(widget.updated_at).toLocaleDateString()}</td>
                     <td>
                       <div className="actions">
                         <Button
@@ -469,29 +471,52 @@ const WidgetDrawer = ({
         <h2>{selectedWidget.name}</h2>
         <button className="close" aria-label="Close" onClick={onClose} />
       </header>
-      <section className="stack">
-        <h3>Details</h3>
-        <div>
-          <h5>Status</h5>
-          {selectedWidget.status === "published" ? "Published" : "Unpublished"}
+      <div className="border rounded-lg">
+        <div className="p-4 border-b">
+          <h3 className="text-xl">Details</h3>
         </div>
         <div>
-          <h5>Type</h5>
-          {selectedWidget.cta_type}
+          <div className="flex justify-between p-4 border-b">
+            <span>Impressions</span>
+            <span>{selectedWidget.impressions_count}</span>
+          </div>
+          <div className="flex justify-between p-4 border-b">
+            <span>Clicks</span>
+            <span>{selectedWidget.clicks_count}</span>
+          </div>
+          <div className="flex justify-between p-4 border-b">
+            <span>Close</span>
+            <span>{selectedWidget.dismissals_count}</span>
+          </div>
+          <div className="flex justify-between p-4 border-b">
+            <span>Conversion</span>
+            <span>{`${(selectedWidget.conversion_rate * 100).toFixed(0)}%`}</span>
+          </div>
+          <div className="flex justify-between p-4">
+            <span>Revenue</span>
+            <span>${(selectedWidget.revenue_cents / 100).toFixed(0)}</span>
+          </div>
         </div>
-        <div>
-          <h5>Image Type</h5>
-          {selectedWidget.image_type}
+      </div>
+
+      <div className="border rounded-lg mt-4">
+        <div className="p-4 border-b">
+          <h3 className="text-xl">Products</h3>
+          {selectedWidget.universal && (
+            <p className="text-sm text-gray-600 mt-1">*Widget is universal and listed on all products</p>
+          )}
         </div>
-        <div>
-          <h5>Products</h5>
-          {selectedWidget.product_count} products
-        </div>
-        <div>
-          <h5>Last Updated</h5>
-          {new Date(selectedWidget.updated_at).toLocaleDateString()}
-        </div>
-      </section>
+        {!selectedWidget.universal && (
+          <div className="p-4">
+            {selectedWidget.products.map(product => (
+              <div key={product.id} className="py-2">
+                {product.name}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <section className="grid grid-cols-3 gap-4">
         <Button onClick={onDuplicate} disabled={isLoading || isReadOnly}>
           Duplicate
