@@ -18,7 +18,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     upsellCard: {
-      insertUpsellCard: (options: { productId: string; discount: OfferCode | null }) => ReturnType;
+      insertUpsellCard: (options: { productId: string; variantId: string | null; discount: OfferCode | null }) => ReturnType;
     };
   }
 }
@@ -32,6 +32,15 @@ type Product = {
   average_rating: number;
   native_type: ProductNativeType;
   permalink: string;
+  options: ProductOption[];
+};
+
+type ProductOption = {
+  id: string;
+  name: string;
+  description: string;
+  duration_in_minutes: number | null;
+  is_pwyw: boolean;
 };
 
 export const UpsellCard = TiptapNode.create({
@@ -44,6 +53,7 @@ export const UpsellCard = TiptapNode.create({
   addAttributes() {
     return {
       productId: { default: null },
+      variantId: { default: null },
       discount: {
         default: null,
         parseHTML: (element) => {
@@ -90,10 +100,13 @@ const getUpsellUrl = (id: string, permalink: string) => {
 };
 
 const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
+  console.log("node", node, "selected", selected, "editor", editor);
   const id = cast<string | null>(node.attrs.id);
   const productId = cast<string>(node.attrs.productId);
+  const variantId = cast<string | null>(node.attrs.variantId);
   const discount = cast<OfferCode | null>(node.attrs.discount);
   const [product, setProduct] = React.useState<Product | null>(null);
+  const [variant, setVariant] = React.useState<ProductOption | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const nodeRef = React.useRef<HTMLDivElement>(null);
   const isEditable = editor.isEditable;
@@ -108,6 +121,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         });
         const productData = cast<Product>(await response.json());
         setProduct(productData);
+        setVariant(productData.options.find(({ id }) => id === variantId) || null);
       } catch (error) {
         assertResponseError(error);
       } finally {
@@ -121,6 +135,8 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
   const header = (
     <header>
       <h3>{product?.name}</h3>
+
+      {variant && <p>{variant.name}</p>}
     </header>
   );
 
@@ -145,6 +161,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
             <figure>
               <Thumbnail url={null} nativeType={product.native_type} />
             </figure>
+
             <section>
               {isEditable ? (
                 header

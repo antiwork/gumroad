@@ -14,9 +14,9 @@ import ReactSelect, {
 
 import { escapeRegExp } from "$app/utils";
 
-import { Icon } from "./Icons";
+import { Icon } from "$app/components/Icons";
 
-export type Option = { id: string; label: string };
+export type Option = { id: string; label: string; isSubOption?: boolean };
 
 export type CustomOption = (option: Option) => React.ReactNode;
 type CustomProps = {
@@ -128,20 +128,26 @@ const filterRegex = (query: string) => new RegExp(`(.*?)(${escapeRegExp(query)})
 
 const filterOptionFn: ReactSelectProps["filterOption"] = (option, query) => filterRegex(query).test(option.label);
 
-const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = ({ label }, { inputValue }) => {
+const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = ({ label, isSubOption }, { inputValue }) => {
   const result = filterRegex(inputValue).exec(label);
 
   if (result) {
     const [_, before, matchingInput, after] = result;
     return (
       <span>
+        {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
         {before}
         <em>{matchingInput}</em>
         {after}
       </span>
     );
   }
-  return label;
+  return (
+    <span>
+      {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
+      {label}
+    </span>
+  );
 };
 
 const LoadingIndicator = () => null;
