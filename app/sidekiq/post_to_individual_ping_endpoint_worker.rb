@@ -57,7 +57,7 @@ class PostToIndividualPingEndpointWorker
       end
 
       ContactingCreatorMailer.ping_endpoint_failure(seller.id, post_url, response_code).deliver_later(queue: "critical")
-      
+
       seller.last_ping_failure_notification_at = Time.current.to_s
       seller.save!
     end
