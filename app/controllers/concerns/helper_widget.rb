@@ -65,8 +65,7 @@ module HelperWidget
 
     if current_seller.present?
       data[:email] = current_seller.email
-      email_hash = helper_widget_email_hmac(timestamp)
-      data[:emailHash] = email_hash if email_hash.present?
+      data[:emailHash] = helper_widget_email_hmac(timestamp)
       data[:customerMetadata] = helper_customer_metadata
     end
 
