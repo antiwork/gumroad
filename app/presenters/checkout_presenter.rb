@@ -50,8 +50,7 @@ class CheckoutPresenter
     upsell_variants = product.upsell_variants.alive.includes(:selected_variant, :offered_variant)
     bundle_products = product.bundle_products.in_order.includes(:product, :variant).alive.load
     accepted_offer = params[:accepted_offer_id] ? Upsell.alive.where(product:).find_by_external_id!(params[:accepted_offer_id]) : nil
-    accepted_offer&.variant&.external_id
-
+    option_id = accepted_offer&.variant&.external_id || cart_item[:option]&.fetch(:id)
 
     value = {
       product: {
@@ -114,7 +113,7 @@ class CheckoutPresenter
         end,
       },
       price: cart_item[:price],
-      option_id: accepted_offer&.variant&.external_id || cart_item[:option]&.fetch(:id),
+      option_id:,
       rent: cart_item[:rental],
       recurrence: cart_item[:recurrence],
       quantity: cart_item[:quantity],
@@ -123,7 +122,7 @@ class CheckoutPresenter
       affiliate_id: params[:affiliate_id],
       recommended_by: params[:recommended_by],
       recommender_model_name: params[:recommender_model_name],
-      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer.variant&.external_id, discount: accepted_offer.offer_code&.discount } : nil,
+      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: option_id, discount: accepted_offer.offer_code&.discount } : nil,
     }
     if include_cross_sells
       value[:product][:cross_sells] = product.cross_sells.filter_map do |cross_sell|
