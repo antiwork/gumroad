@@ -1,0 +1,51 @@
+<%= load_pack("admin") %>
+
+<%= form_for :quarterly_sales_report, url: admin_quarterly_sales_reports_path, method: :post do |f| %>
+  <section>
+    <header>
+      Enqueue quarterly sales report jobs with custom date ranges
+    </header>
+
+    <%= f.label "Country" %>
+    <%= f.select :country_code, options_for_select(@countries), { prompt: "Select country" } %>
+
+    <%= f.label "Start date" %>
+    <%= f.text_field :start_date, placeholder: "YYYY-MM-DD", class: "w-full rounded-md" %>
+
+    <%= f.label "End date" %>
+    <%= f.text_field :end_date, placeholder: "YYYY-MM-DD", class: "w-full rounded-md" %>
+
+    <%= button_tag "Enqueue report job", type: :submit, class: "button primary" %>
+  </section>
+<% end %>
+
+<section>
+  <header>
+    Job history (last 20)
+  </header>
+  
+  <% if @job_history.any? %>
+    <table>
+      <thead>
+        <tr>
+          <th>Country</th>
+          <th>Date range</th>
+          <th>Enqueued at</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @job_history.each do |job| %>
+          <tr>
+            <td><%= job["country_code"] %></td>
+            <td><%= job["start_date"] %> to <%= job["end_date"] %></td>
+            <td><%= Time.parse(job["enqueued_at"]).strftime("%Y-%m-%d %H:%M") %></td>
+            <td><%= job["status"] %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% else %>
+    <p>No jobs enqueued yet.</p>
+  <% end %>
+</section>

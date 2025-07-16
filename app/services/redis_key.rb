@@ -43,5 +43,6 @@ class RedisKey
     def failed_seller_purchases_watch_minutes = "failed_seller_purchases_watch_minutes"
     def max_seller_failed_purchases_price_cents = "max_seller_failed_purchases_price_cents"
     def seller_age_threshold_days = "seller_age_threshold_days"
+    def quarterly_sales_report_jobs = "quarterly_sales_report_jobs"
   end
 end
