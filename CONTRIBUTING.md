@@ -49,7 +49,7 @@ bundle exec rspec spec
 2. Add or update tests for your changes
 3. Provide before & after screenshots/videos for UI changes
 4. Include screenshots of your test suite passing locally
-5. Use professional English in all communication with no excessive capitalization, question marks, or informal language - we have a zero tolerance policy as it makes async communication difficult
+5. Use native-sounding English in all communication with no excessive capitalization (e.g HOW IS THIS GOING), multiple question marks (how's this going???), grammatical errors (how's dis going), or typos (thnx fr update).
    - ❌ Before: "is this still open ?? I am happy to work on it ??"
    - ✅ After: "Is this actively being worked on? I've started work on it here…"
 6. Make sure all tests pass
