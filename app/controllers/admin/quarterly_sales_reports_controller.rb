@@ -19,12 +19,10 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
 
     job_id = GenerateQuarterlySalesReportJob.perform_async(
       country_code,
-      nil,
-      nil,
-      true,
-      nil,
       start_date,
-      end_date
+      end_date,
+      true,
+      nil
     )
 
     store_job_details(job_id, country_code, start_date, end_date)
