@@ -17,7 +17,9 @@ export const Thumbnail = ({
   fetchPriority?: "high" | "low" | "auto";
 }) =>
   url ? (
-    <img src={url} loading={loading} fetchPriority={fetchPriority} />
+    // eslint-disable-next-line react/no-unknown-property
+    <img src={url} loading={loading} fetchpriority={fetchPriority} />
   ) : (
-    <img src={cast(nativeTypeThumbnails(`./${nativeType}.svg`))} loading={loading} fetchPriority={fetchPriority} />
+    // eslint-disable-next-line react/no-unknown-property
+    <img src={cast(nativeTypeThumbnails(`./${nativeType}.svg`))} loading={loading} fetchpriority={fetchPriority} />
   );

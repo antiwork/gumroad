@@ -79,7 +79,8 @@ export const Card = ({
             role="presentation"
             crossOrigin="anonymous"
             loading={eager ? "eager" : "lazy"}
-            fetchPriority={eager ? "high" : "auto"}
+            // eslint-disable-next-line react/no-unknown-property
+            fetchpriority={eager ? "high" : "auto"}
           />
         ))}
         {wishlist.thumbnails.length === 0 ? <img role="presentation" /> : null}
