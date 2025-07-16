@@ -43,7 +43,7 @@ class GenerateQuarterlySalesReportJob
 
       temp_file.rewind
 
-      s3_filename = "#{country.common_name.downcase.gsub(' ', '-')}-sales-report-#{start_time_of_quarter.to_date}-to-#{end_time_of_quarter.to_date}-#{SecureRandom.hex(4)}.csv"
+      s3_filename = "#{country.common_name.downcase.tr(' ', '-')}-sales-report-#{start_time_of_quarter.to_date}-to-#{end_time_of_quarter.to_date}-#{SecureRandom.hex(4)}.csv"
       base_path = "sales-tax/#{country.alpha2.downcase}-sales-quarterly/#{s3_filename}"
       s3_report_key = s3_prefix.present? ? "#{s3_prefix.chomp('/')}/#{base_path}" : base_path
       s3_object = Aws::S3::Resource.new.bucket(REPORTING_S3_BUCKET).object(s3_report_key)
