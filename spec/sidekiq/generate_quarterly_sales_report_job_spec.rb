@@ -4,19 +4,11 @@ require "spec_helper"
 
 describe GenerateQuarterlySalesReportJob do
   let (:country_code) { "GB" }
-  let(:quarter) { 1 }
-  let (:year) { 2015 }
-
-  it "raises an argument error if the year is out of bounds" do
-    expect { described_class.new.perform(country_code, quarter, 2013) }.to raise_error(ArgumentError)
-  end
-
-  it "raises an argument error if the month is out of bounds" do
-    expect { described_class.new.perform(country_code, 13, year) }.to raise_error(ArgumentError)
-  end
+  let(:start_date) { Date.new(2015, 1, 1) }
+  let (:end_date) { Date.new(2015, 3, 31) }
 
   it "raises an argument error if the country code is not valid" do
-    expect { described_class.new.perform("AUS", quarter, year) }.to raise_error(ArgumentError)
+    expect { described_class.new.perform("AUS", start_date, end_date) }.to raise_error(ArgumentError)
   end
 
   describe "happy case", :vcr do
@@ -51,7 +43,7 @@ describe GenerateQuarterlySalesReportJob do
     it "creates a CSV file for sales into the United Kingdom" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
-      described_class.new.perform(country_code, quarter, year)
+      described_class.new.perform(country_code, start_date, end_date)
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
 
@@ -93,7 +85,7 @@ describe GenerateQuarterlySalesReportJob do
     it "creates a CSV file for sales into Australia" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
-      described_class.new.perform("AU", quarter, year)
+      described_class.new.perform("AU", start_date, end_date)
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
 
@@ -123,7 +115,7 @@ describe GenerateQuarterlySalesReportJob do
     it "creates a CSV file for sales into Singapore" do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
-      described_class.new.perform("SG", quarter, year)
+      described_class.new.perform("SG", start_date, end_date)
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "GST Reporting", anything, "green")
 
@@ -154,7 +146,7 @@ describe GenerateQuarterlySalesReportJob do
        vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
-      described_class.new.perform(country_code, quarter, year, false)
+      described_class.new.perform(country_code, start_date, end_date, false)
 
       expect(SlackMessageWorker.jobs.size).to eq(0)
     end
@@ -163,7 +155,7 @@ describe GenerateQuarterlySalesReportJob do
        vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
-      described_class.new.perform(country_code, quarter, year, true)
+      described_class.new.perform(country_code, start_date, end_date, true)
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
     end
@@ -172,7 +164,7 @@ describe GenerateQuarterlySalesReportJob do
        vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
-      described_class.new.perform(country_code, quarter, year)
+      described_class.new.perform(country_code, start_date, end_date)
 
       expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
     end
@@ -203,10 +195,11 @@ describe GenerateQuarterlySalesReportJob do
       custom_prefix = "custom/reports"
       expect(s3_bucket_double).to receive(:object) do |key|
         expect(key).to start_with("#{custom_prefix}/sales-tax/gb-sales-quarterly/")
+        expect(key).to include("united-kingdom-sales-report-2015-01-01-to-2015-03-31")
         @s3_object
       end
 
-      described_class.new.perform(country_code, quarter, year, true, custom_prefix)
+      described_class.new.perform(country_code, start_date, end_date, true, custom_prefix)
     end
 
     it "handles s3_prefix with trailing slash" do
@@ -214,28 +207,31 @@ describe GenerateQuarterlySalesReportJob do
       expect(s3_bucket_double).to receive(:object) do |key|
         expect(key).to start_with("custom/reports/sales-tax/gb-sales-quarterly/")
         expect(key).not_to include("//")
+        expect(key).to include("united-kingdom-sales-report-2015-01-01-to-2015-03-31")
         @s3_object
       end
 
-      described_class.new.perform(country_code, quarter, year, true, custom_prefix)
+      described_class.new.perform(country_code, start_date, end_date, true, custom_prefix)
     end
 
     it "uses default path when s3_prefix is nil" do
       expect(s3_bucket_double).to receive(:object) do |key|
         expect(key).to start_with("sales-tax/gb-sales-quarterly/")
+        expect(key).to include("united-kingdom-sales-report-2015-01-01-to-2015-03-31")
         @s3_object
       end
 
-      described_class.new.perform(country_code, quarter, year, true, nil)
+      described_class.new.perform(country_code, start_date, end_date, true, nil)
     end
 
     it "uses default path when s3_prefix is empty string" do
       expect(s3_bucket_double).to receive(:object) do |key|
         expect(key).to start_with("sales-tax/gb-sales-quarterly/")
+        expect(key).to include("united-kingdom-sales-report-2015-01-01-to-2015-03-31")
         @s3_object
       end
 
-      described_class.new.perform(country_code, quarter, year, true, "")
+      described_class.new.perform(country_code, start_date, end_date, true, "")
     end
   end
 end

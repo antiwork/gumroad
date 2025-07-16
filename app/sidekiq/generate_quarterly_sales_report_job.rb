@@ -4,18 +4,11 @@ class GenerateQuarterlySalesReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
-  def perform(country_code, quarter, year, send_notification = true, s3_prefix = nil, start_date = nil, end_date = nil)
+  def perform(country_code, start_date, end_date, send_notification = true, s3_prefix = nil)
     country = ISO3166::Country[country_code].tap { |value| raise ArgumentError, "Invalid country code" unless value }
-
-    if start_date && end_date
-      start_time_of_quarter = Date.parse(start_date.to_s).beginning_of_day
-      end_time_of_quarter = Date.parse(end_date.to_s).end_of_day
-    else
-      raise ArgumentError, "Invalid quarter" unless quarter.in?(1..4)
-      raise ArgumentError, "Invalid year" unless year.in?(2014..3200)
-      start_time_of_quarter = Date.new(year, (1 + 3 * (quarter - 1)).to_i).beginning_of_month.beginning_of_day
-      end_time_of_quarter = Date.new(year, (3 + 3 * (quarter - 1)).to_i).end_of_month.end_of_day
-    end
+    
+    start_time_of_quarter = Date.parse(start_date.to_s).beginning_of_day
+    end_time_of_quarter = Date.parse(end_date.to_s).end_of_day
 
     begin
       temp_file = Tempfile.new
@@ -50,7 +43,7 @@ class GenerateQuarterlySalesReportJob
 
       temp_file.rewind
 
-      s3_filename = "#{country.common_name.downcase}-sales-report-Q#{quarter}-#{year}-#{SecureRandom.hex(4)}.csv"
+      s3_filename = "#{country.common_name.downcase}-sales-report-#{start_time_of_quarter.to_date}-to-#{end_time_of_quarter.to_date}-#{SecureRandom.hex(4)}.csv"
       base_path = "sales-tax/#{country.alpha2.downcase}-sales-quarterly/#{s3_filename}"
       s3_report_key = s3_prefix.present? ? "#{s3_prefix.chomp('/')}/#{base_path}" : base_path
       s3_object = Aws::S3::Resource.new.bucket(REPORTING_S3_BUCKET).object(s3_report_key)
@@ -58,11 +51,7 @@ class GenerateQuarterlySalesReportJob
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
       if send_notification
-        message = if quarter && year
-          "#{country.common_name} Q#{quarter} #{year} sales report is ready - #{s3_signed_url}"
-        else
-          "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
-        end
+        message = "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
         SlackMessageWorker.perform_async("payments", slack_sender(country_code), message, "green")
         update_job_status_to_completed(country_code, start_time_of_quarter, end_time_of_quarter)
       end
