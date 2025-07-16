@@ -6,7 +6,7 @@ class GenerateQuarterlySalesReportJob
 
   def perform(country_code, quarter, year, send_notification = true, s3_prefix = nil, start_date = nil, end_date = nil)
     country = ISO3166::Country[country_code].tap { |value| raise ArgumentError, "Invalid country code" unless value }
-    
+
     if start_date && end_date
       start_time_of_quarter = Date.parse(start_date.to_s).beginning_of_day
       end_time_of_quarter = Date.parse(end_date.to_s).end_of_day
@@ -101,8 +101,8 @@ class GenerateQuarterlySalesReportJob
       job_data = $redis.lrange(RedisKey.quarterly_sales_report_jobs, 0, 19)
       job_data.each_with_index do |data, index|
         job = JSON.parse(data)
-        if job["country_code"] == country_code && 
-           job["start_date"] == start_time.to_date.to_s && 
+        if job["country_code"] == country_code &&
+           job["start_date"] == start_time.to_date.to_s &&
            job["end_date"] == end_time.to_date.to_s &&
            job["status"] == "processing"
           job["status"] = "completed"
