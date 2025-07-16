@@ -5,12 +5,9 @@
       helper_widget_init_data: helper_widget_init_data,
     } do %>
     (function(d) {
-      var initData=JSON.parse(d.currentScript.dataset.helperWidgetInitData);
+      window.helperWidgetConfig=JSON.parse(d.currentScript.dataset.helperWidgetInitData);
       var g=d.createElement("script");
       g.src="<%= helper_widget_host %>"+"/widget/sdk.js";
-      g.onload=function(){
-        window.HelperWidget.init(initData);
-      }
       d.body.appendChild(g);
     })(document);
   <% end %>
