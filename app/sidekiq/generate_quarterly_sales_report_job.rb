@@ -6,7 +6,7 @@ class GenerateQuarterlySalesReportJob
 
   def perform(country_code, start_date, end_date, send_notification = true, s3_prefix = nil)
     country = ISO3166::Country[country_code].tap { |value| raise ArgumentError, "Invalid country code" unless value }
-    
+
     start_time_of_quarter = Date.parse(start_date.to_s).beginning_of_day
     end_time_of_quarter = Date.parse(end_date.to_s).end_of_day
 
