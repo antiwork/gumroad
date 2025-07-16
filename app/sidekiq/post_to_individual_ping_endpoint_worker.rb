@@ -48,7 +48,10 @@ class PostToIndividualPingEndpointWorker
       seller = User.find_by(id: user_id)
       return unless seller
 
-      # There could be failures on multiple ping URLs for the same user. Let's send notification only for the first failure for now.
+      # Only send notifications for seller.notification_endpoint failures, not resource subscriptions
+      # TODO: We can configure notifications for resource subscription URLs too when we have a UI to edit/delete resource subscription URLs
+      return unless post_url == seller.notification_endpoint
+
       if seller.last_ping_failure_notification_at.present?
         last_notification = Time.zone.parse(seller.last_ping_failure_notification_at)
         return if last_notification >= NOTIFICATION_THROTTLE_PERIOD.ago

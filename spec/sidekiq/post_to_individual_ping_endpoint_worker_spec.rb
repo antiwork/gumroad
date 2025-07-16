@@ -105,6 +105,7 @@ describe PostToIndividualPingEndpointWorker do
     let(:params) { { "test" => "data" } }
 
     before do
+      user.update!(notification_endpoint: ping_url)
       allow(@http_double).to receive(:success?).and_return(false)
       allow(@http_double).to receive(:code).and_return(500)
       allow(HTTParty).to receive(:post).and_return(@http_double)
@@ -205,6 +206,28 @@ describe PostToIndividualPingEndpointWorker do
         expect_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).with(queue: "critical")
 
         PostToIndividualPingEndpointWorker.new.perform(ping_url, params, Mime[:url_encoded_form].to_s, user.id)
+      end
+    end
+
+    context "when ping URL is not seller's notification_endpoint" do
+      let(:resource_subscription_url) { "https://different-app.com/webhook" }
+      before do
+        user.update!(notification_endpoint: "https://seller-endpoint.com/notifications")
+        allow(@http_double).to receive(:success?).and_return(false)
+        allow(@http_double).to receive(:code).and_return(500)
+        allow(HTTParty).to receive(:post).and_return(@http_double)
+      end
+
+      it "does not send email notification for resource subscription URL failures", :sidekiq_inline do
+        expect(ContactingCreatorMailer).not_to receive(:ping_endpoint_failure)
+
+        PostToIndividualPingEndpointWorker.new.perform(resource_subscription_url, params, Mime[:url_encoded_form].to_s, user.id)
+      end
+
+      it "does not update last_ping_failure_notification_at for resource subscription failures", :sidekiq_inline do
+        expect do
+          PostToIndividualPingEndpointWorker.new.perform(resource_subscription_url, params, Mime[:url_encoded_form].to_s, user.id)
+        end.not_to change { user.reload.last_ping_failure_notification_at }
       end
     end
   end
