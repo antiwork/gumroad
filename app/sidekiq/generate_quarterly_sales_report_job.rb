@@ -4,7 +4,7 @@ class GenerateQuarterlySalesReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
-  def perform(country_code, quarter, year)
+  def perform(country_code, quarter, year, send_notification = true, s3_prefix = nil)
     country = ISO3166::Country[country_code].tap { |value| raise ArgumentError, "Invalid country code" unless value }
     raise ArgumentError, "Invalid quarter" unless quarter.in?(1..4)
     raise ArgumentError, "Invalid year" unless year.in?(2014..3200)
@@ -46,12 +46,15 @@ class GenerateQuarterlySalesReportJob
       temp_file.rewind
 
       s3_filename = "#{country.common_name.downcase}-sales-report-Q#{quarter}-#{year}-#{SecureRandom.hex(4)}.csv"
-      s3_report_key = "sales-tax/#{country.alpha2.downcase}-sales-quarterly/#{s3_filename}"
+      base_path = "sales-tax/#{country.alpha2.downcase}-sales-quarterly/#{s3_filename}"
+      s3_report_key = s3_prefix.present? ? "#{s3_prefix.chomp('/')}/#{base_path}" : base_path
       s3_object = Aws::S3::Resource.new.bucket(REPORTING_S3_BUCKET).object(s3_report_key)
       s3_object.upload_file(temp_file)
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
-      SlackMessageWorker.perform_async("payments", slack_sender(country_code), "#{country.common_name} Q#{quarter} #{year} sales report is ready - #{s3_signed_url}", "green")
+      if send_notification
+        SlackMessageWorker.perform_async("payments", slack_sender(country_code), "#{country.common_name} Q#{quarter} #{year} sales report is ready - #{s3_signed_url}", "green")
+      end
     ensure
       temp_file.close
     end
