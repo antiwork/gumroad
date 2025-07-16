@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class AudienceMember < ApplicationRecord
+  VALID_FILTER_TYPES = %w[customer follower affiliate].freeze
+
   belongs_to :seller, class_name: "User"
   after_initialize :assign_default_details_value
   before_validation :compact_details
@@ -21,6 +23,7 @@ class AudienceMember < ApplicationRecord
     ).compact_blank
 
     if params[:type]
+      raise ArgumentError, "Invalid type: #{params[:type]}. Must be one of: #{VALID_FILTER_TYPES.join(', ')}" unless params[:type].in?(VALID_FILTER_TYPES)
       types_sql = where(:seller_id => seller_id, params[:type] => true).to_sql
     end
 

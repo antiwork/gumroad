@@ -51,6 +51,24 @@ describe ProductPresenter::Card do
         result = described_class.new(product:).for_web
         expect(result[:thumbnail_url]).to eq(nil)
       end
+
+      it "includes description when compute_description is true by default" do
+        result = described_class.new(product:).for_web
+
+        expect(result[:description]).to eq(product.plaintext_description.truncate(100))
+      end
+
+      it "includes description when compute_description is explicitly true" do
+        result = described_class.new(product:).for_web(compute_description: true)
+
+        expect(result[:description]).to eq(product.plaintext_description.truncate(100))
+      end
+
+      it "excludes description when compute_description is false" do
+        result = described_class.new(product:).for_web(compute_description: false)
+
+        expect(result).not_to have_key(:description)
+      end
     end
 
     context "membership product" do
