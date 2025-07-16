@@ -883,6 +883,20 @@ describe ProductPresenter do
     it "returns properties from the card presenter" do
       expect(described_class.card_for_web(product:, request:, recommended_by: "discover")).to eq(ProductPresenter::Card.new(product:).for_web(request:, recommended_by: "discover"))
     end
+
+    it "passes compute_description parameter to the card presenter" do
+      expect(ProductPresenter::Card).to receive(:new).with(product:).and_call_original
+      expect_any_instance_of(ProductPresenter::Card).to receive(:for_web).with(request:, recommended_by: "discover", recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: false)
+
+      described_class.card_for_web(product:, request:, recommended_by: "discover", compute_description: false)
+    end
+
+    it "defaults compute_description to true when not provided" do
+      expect(ProductPresenter::Card).to receive(:new).with(product:).and_call_original
+      expect_any_instance_of(ProductPresenter::Card).to receive(:for_web).with(request:, recommended_by: "discover", recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: true)
+
+      described_class.card_for_web(product:, request:, recommended_by: "discover")
+    end
   end
 
   describe ".card_for_email" do
