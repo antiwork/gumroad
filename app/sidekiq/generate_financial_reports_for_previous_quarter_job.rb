@@ -14,7 +14,7 @@ class GenerateFinancialReportsForPreviousQuarterJob
     CreateVatReportJob.perform_async(quarter, quarter_start_date.year)
 
     [Compliance::Countries::GBR, Compliance::Countries::AUS, Compliance::Countries::SGP, Compliance::Countries::NOR].each do |country|
-      GenerateQuarterlySalesReportJob.perform_async(country.alpha2, quarter_start_date, quarter_end_date)
+      GenerateQuarterlySalesReportJob.perform_async(country.alpha2, quarter_start_date.to_s, quarter_end_date.to_s)
     end
   end
 end
