@@ -47,6 +47,9 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         "/purchases/resend_last_receipt": {
           post: Api::Internal::Helper::PurchasesController::RESEND_LAST_RECEIPT_OPENAPI,
         },
+        "/purchases/resend_all_receipts": {
+          post: Api::Internal::Helper::PurchasesController::RESEND_ALL_RECEIPTS_OPENAPI,
+        },
         "/purchases/resend_receipt_by_number": {
           post: Api::Internal::Helper::PurchasesController::RESEND_RECEIPT_BY_NUMBER_OPENAPI,
         },
