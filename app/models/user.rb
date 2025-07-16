@@ -407,7 +407,7 @@ class User < ApplicationRecord
   end
 
   def display_name(prefer_email_over_default_username: false)
-    return sanitize(name) if name.present?
+    return name if name.present?
     return form_email || username.presence if prefer_email_over_default_username && username == external_id
     username.presence || form_email
   end
