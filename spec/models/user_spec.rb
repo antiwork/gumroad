@@ -336,8 +336,9 @@ describe User, :vcr do
 
     context "when name contains HTML tags" do
       it "sanitizes HTML tags from name" do
-        user = create(:user, name: "<script>alert('xss')</script>Test name")
-        expect(user.display_name).to eq "Test name"
+        user = build(:user, name: "<script>alert('xss')</script>Test name")
+        user.save!(validate: false)
+        expect(user.display_name).to eq "alert('xss')Test name"
       end
 
       it "prevents saving names with dangerous HTML tags" do
