@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
-class Admin::QuarterlySalesReportsController < Admin::BaseController
+class Admin::SalesReportsController < Admin::BaseController
   before_action :set_react_component_props, only: [:index]
 
   def index
   end
 
   def create
-    country_code = params[:quarterly_sales_report][:country_code]
-    start_date_str = params[:quarterly_sales_report][:start_date]
-    end_date_str = params[:quarterly_sales_report][:end_date]
+    country_code = params[:sales_report][:country_code]
+    start_date_str = params[:sales_report][:start_date]
+    end_date_str = params[:sales_report][:end_date]
 
     # Validate country code
     if country_code.blank?
@@ -37,7 +37,7 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
       return render json: { message: "Start date cannot be in the future" }, status: :unprocessable_entity
     end
 
-    job_id = GenerateQuarterlySalesReportJob.perform_async(
+    job_id = GenerateSalesReportJob.perform_async(
       country_code,
       start_date.to_s,
       end_date.to_s,
@@ -56,13 +56,13 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
         title: "Sales reports",
         countries: Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] },
         job_history: fetch_job_history,
-        form_action: admin_quarterly_sales_reports_path,
+        form_action: admin_sales_reports_path,
         authenticity_token: form_authenticity_token
       }
     end
 
     def fetch_job_history
-      job_data = $redis.lrange(RedisKey.quarterly_sales_report_jobs, 0, 19)
+      job_data = $redis.lrange(RedisKey.sales_report_jobs, 0, 19)
       job_data.map { |data| JSON.parse(data) }
     rescue JSON::ParserError
       []
@@ -78,7 +78,7 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
         status: "processing"
       }
 
-      $redis.lpush(RedisKey.quarterly_sales_report_jobs, job_details.to_json)
-      $redis.ltrim(RedisKey.quarterly_sales_report_jobs, 0, 19)
+      $redis.lpush(RedisKey.sales_report_jobs, job_details.to_json)
+      $redis.ltrim(RedisKey.sales_report_jobs, 0, 19)
     end
 end

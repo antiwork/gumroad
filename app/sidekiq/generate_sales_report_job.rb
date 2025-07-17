@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class GenerateQuarterlySalesReportJob
+class GenerateSalesReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
@@ -87,7 +87,7 @@ class GenerateQuarterlySalesReportJob
     end
 
     def update_job_status_to_completed(country_code, start_time, end_time, download_url)
-      job_data = $redis.lrange(RedisKey.quarterly_sales_report_jobs, 0, 19)
+      job_data = $redis.lrange(RedisKey.sales_report_jobs, 0, 19)
       job_data.each_with_index do |data, index|
         job = JSON.parse(data)
         if job["country_code"] == country_code &&
@@ -96,7 +96,7 @@ class GenerateQuarterlySalesReportJob
            job["status"] == "processing"
           job["status"] = "completed"
           job["download_url"] = download_url
-          $redis.lset(RedisKey.quarterly_sales_report_jobs, index, job.to_json)
+          $redis.lset(RedisKey.sales_report_jobs, index, job.to_json)
           break
         end
       end

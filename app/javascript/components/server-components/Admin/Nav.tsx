@@ -68,7 +68,7 @@ export const Nav = ({ title, current_user }: Props) => {
         <NavLink
           text="Sales reports"
           icon="bar-chart-fill"
-          href={Routes.admin_quarterly_sales_reports_url(routeParams)}
+          href={Routes.admin_sales_reports_url(routeParams)}
         />
       </section>
     </NavFramework>

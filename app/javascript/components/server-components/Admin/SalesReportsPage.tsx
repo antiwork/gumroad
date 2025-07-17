@@ -24,7 +24,7 @@ type Props = {
   authenticity_token: string;
 };
 
-const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_action, authenticity_token }: Props) => {
+const AdminSalesReportsPage = ({ title, countries, job_history, form_action, authenticity_token }: Props) => {
   const countryCodeToName = React.useMemo(() => {
     const map: Record<string, string> = {};
     countries.forEach(([name, code]) => {
@@ -58,7 +58,7 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
                 <legend>
                   <label htmlFor="country_code">Country</label>
                 </legend>
-                <select name="quarterly_sales_report[country_code]" id="country_code" required>
+                <select name="sales_report[country_code]" id="country_code" required>
                   <option value="">Select country</option>
                   {countries.map(([name, code]) => (
                     <option key={code} value={code}>
@@ -72,14 +72,14 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
                 <legend>
                   <label htmlFor="start_date">Start date</label>
                 </legend>
-                <input name="quarterly_sales_report[start_date]" id="start_date" type="date" required />
+                <input name="sales_report[start_date]" id="start_date" type="date" required />
               </fieldset>
 
               <fieldset>
                 <legend>
                   <label htmlFor="end_date">End date</label>
                 </legend>
-                <input name="quarterly_sales_report[end_date]" id="end_date" type="date" required />
+                <input name="sales_report[end_date]" id="end_date" type="date" required />
               </fieldset>
 
               <button type="submit" className="button primary" disabled={isLoading}>
@@ -140,4 +140,4 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
   );
 };
 
-export default register({ component: AdminQuarterlySalesReportsPage, propParser: createCast() });
+export default register({ component: AdminSalesReportsPage, propParser: createCast() });

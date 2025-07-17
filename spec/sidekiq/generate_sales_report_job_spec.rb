@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe GenerateQuarterlySalesReportJob do
+describe GenerateSalesReportJob do
   let (:country_code) { "GB" }
   let(:start_date) { Date.new(2015, 1, 1) }
   let (:end_date) { Date.new(2015, 3, 31) }
@@ -143,7 +143,7 @@ describe GenerateQuarterlySalesReportJob do
     end
 
     it "creates a CSV file for sales into the United Kingdom and does not send slack notification when send_notification is false",
-       vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
+       vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
       described_class.new.perform(country_code, start_date, end_date, false)
@@ -152,7 +152,7 @@ describe GenerateQuarterlySalesReportJob do
     end
 
     it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is true",
-       vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
+       vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
       described_class.new.perform(country_code, start_date, end_date, true)
@@ -161,7 +161,7 @@ describe GenerateQuarterlySalesReportJob do
     end
 
     it "creates a CSV file for sales into the United Kingdom and sends slack notification when send_notification is not provided (default behavior)",
-       vcr: { cassette_name: "GenerateQuarterlySalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
+       vcr: { cassette_name: "GenerateSalesReportJob/happy_case/creates_a_CSV_file_for_sales_into_the_United_Kingdom" } do
       expect(s3_bucket_double).to receive(:object).ordered.and_return(@s3_object)
 
       described_class.new.perform(country_code, start_date, end_date)
