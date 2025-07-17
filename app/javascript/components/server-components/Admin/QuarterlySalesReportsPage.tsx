@@ -46,33 +46,45 @@ const AdminQuarterlySalesReportsPage = ({
           <section>
             <header>Enqueue sales report jobs with custom date ranges</header>
             
-            <label htmlFor="country_code">Country</label>
-            <select name="quarterly_sales_report[country_code]" id="country_code" required>
-              <option value="">Select country</option>
-              {countries.map(([name, code]) => (
-                <option key={code} value={code}>{name}</option>
-              ))}
-            </select>
+            <fieldset>
+              <legend>
+                <label htmlFor="country_code">Country</label>
+              </legend>
+              <select 
+                name="quarterly_sales_report[country_code]" 
+                id="country_code" 
+                required
+              >
+                <option value="">Select country</option>
+                {countries.map(([name, code]) => (
+                  <option key={code} value={code}>{name}</option>
+                ))}
+              </select>
+            </fieldset>
             
-            <label htmlFor="start_date">Start date</label>
-            <input 
-              name="quarterly_sales_report[start_date]" 
-              id="start_date"
-              type="text" 
-              placeholder="YYYY-MM-DD" 
-              className="w-full rounded-md"
-              required 
-            />
+            <fieldset>
+              <legend>
+                <label htmlFor="start_date">Start date</label>
+              </legend>
+              <input 
+                name="quarterly_sales_report[start_date]" 
+                id="start_date"
+                type="date" 
+                required
+              />
+            </fieldset>
             
-            <label htmlFor="end_date">End date</label>
-            <input 
-              name="quarterly_sales_report[end_date]" 
-              id="end_date"
-              type="text" 
-              placeholder="YYYY-MM-DD" 
-              className="w-full rounded-md"
-              required 
-            />
+            <fieldset>
+              <legend>
+                <label htmlFor="end_date">End date</label>
+              </legend>
+              <input 
+                name="quarterly_sales_report[end_date]" 
+                id="end_date"
+                type="date" 
+                required
+              />
+            </fieldset>
             
             <button type="submit" className="button primary" disabled={isLoading}>
               {isLoading ? "Enqueueing..." : "Enqueue report job"}
