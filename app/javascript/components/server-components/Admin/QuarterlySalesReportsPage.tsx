@@ -45,7 +45,10 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
           url={form_action}
           method="POST"
           confirmMessage={false}
-          onSuccess={() => showAlert("Sales report job enqueued successfully!", "success")}
+          onSuccess={() => {
+            showAlert("Sales report job enqueued successfully!", "success");
+            window.location.reload();
+          }}
         >
           {(isLoading) => (
             <section>

@@ -13,11 +13,11 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
 
     # Validate country code
     if country_code.blank?
-      return render json: { error: "Please select a country" }, status: :unprocessable_entity
+      return render json: { message: "Please select a country" }, status: :unprocessable_entity
     end
 
     unless ISO3166::Country[country_code]
-      return render json: { error: "Invalid country code" }, status: :unprocessable_entity
+      return render json: { message: "Invalid country code" }, status: :unprocessable_entity
     end
 
     # Validate and parse dates
@@ -25,16 +25,16 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
       start_date = Date.parse(start_date_str)
       end_date = Date.parse(end_date_str)
     rescue Date::Error, ArgumentError
-      return render json: { error: "Invalid date format. Please use YYYY-MM-DD format" }, status: :unprocessable_entity
+      return render json: { message: "Invalid date format. Please use YYYY-MM-DD format" }, status: :unprocessable_entity
     end
 
     # Validate date range
     if start_date > end_date
-      return render json: { error: "Start date must be before end date" }, status: :unprocessable_entity
+      return render json: { message: "Start date must be before end date" }, status: :unprocessable_entity
     end
 
     if start_date > Date.current
-      return render json: { error: "Start date cannot be in the future" }, status: :unprocessable_entity
+      return render json: { message: "Start date cannot be in the future" }, status: :unprocessable_entity
     end
 
     job_id = GenerateQuarterlySalesReportJob.perform_async(
@@ -47,7 +47,7 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
 
     store_job_details(job_id, country_code, start_date, end_date)
 
-    redirect_to admin_quarterly_sales_reports_path, notice: "Sales report job enqueued successfully!"
+    render json: { success: true, message: "Sales report job enqueued successfully!" }
   end
 
   private
