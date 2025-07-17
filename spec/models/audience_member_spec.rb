@@ -106,6 +106,11 @@ RSpec.describe AudienceMember, :freeze_time do
       expect(filtered(type: "affiliate")).to eq([affiliate, all_types])
     end
 
+    it "raises error for invalid type" do
+      expect { filtered(type: "invalid_type") }.to raise_error(ArgumentError, /Invalid type: invalid_type/)
+      expect { filtered(type: "'; DROP TABLE audience_members; --") }.to raise_error(ArgumentError, /Invalid type/)
+    end
+
     it "filters by purchased and not-purchased products and variants" do
       member1 = create_member(purchases: [{ "product_id" => 1 }])
       member2 = create_member(purchases: [{ "product_id" => 2 }])
