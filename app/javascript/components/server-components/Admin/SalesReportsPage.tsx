@@ -46,7 +46,7 @@ const AdminSalesReportsPage = ({ countries, job_history, form_action, authentici
         {(isLoading) => (
           <section>
             <header>
-              Enqueue sales report jobs with custom date ranges
+              Generate sales report with custom date ranges
             </header>
 
             <label htmlFor="country_code">Country</label>
