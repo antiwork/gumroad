@@ -33,7 +33,7 @@ const AdminSalesReportsPage = ({ countries, job_history, form_action, authentici
   }, [countries]);
 
   return (
-    <main>
+    <>
       <Form
         url={form_action}
         method="POST"
@@ -114,7 +114,7 @@ const AdminSalesReportsPage = ({ countries, job_history, form_action, authentici
           </div>
         )}
       </section>
-    </main>
+    </>
   );
 };
 
