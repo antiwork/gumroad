@@ -2,13 +2,8 @@
 
 class Admin::QuarterlySalesReportsController < Admin::BaseController
   def index
-    @title = "Quarterly sales reports"
-    @countries = [
-      ["GB", "United Kingdom"],
-      ["AU", "Australia"],
-      ["SG", "Singapore"],
-      ["NO", "Norway"]
-    ]
+    @title = "Sales reports"
+    @countries = Compliance::Countries.for_select
     @job_history = fetch_job_history
   end
 
@@ -27,7 +22,7 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
 
     store_job_details(job_id, country_code, start_date, end_date)
 
-    redirect_to admin_quarterly_sales_reports_path, notice: "Quarterly sales report job enqueued successfully!"
+    redirect_to admin_quarterly_sales_reports_path, notice: "Sales report job enqueued successfully!"
   end
 
   private
