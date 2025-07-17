@@ -88,6 +88,7 @@ export const LoginPage = ({
                 required
                 // We override the tabIndex to prevent the forgot password link interrupting the email -> password tab order
                 tabIndex={1}
+                autoComplete="email"
               />
             </fieldset>
             <fieldset>
@@ -104,6 +105,7 @@ export const LoginPage = ({
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 tabIndex={1}
+                autoComplete="current-password"
               />
             </fieldset>
             <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>

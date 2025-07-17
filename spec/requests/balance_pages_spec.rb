@@ -886,6 +886,11 @@ describe "Balance Pages Scenario", js: true, type: :feature do
 
         visit balance_path
 
+        expect(page).to_not have_content("$7.00")
+        expect(page).to_not have_content("$17.56")
+        click_on "Show older payouts"
+
+        expect(page).to have_content("$7.00")
         expect(page).to_not have_content("$17.56")
         click_on "Show older payouts"
 
