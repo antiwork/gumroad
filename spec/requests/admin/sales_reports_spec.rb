@@ -26,8 +26,8 @@ describe "Admin::SalesReportsController", type: :feature, js: true do
     it "shows date input fields" do
       visit admin_sales_reports_path
 
-      expect(page).to have_field("sales_report[start_date]", placeholder: "YYYY-MM-DD")
-      expect(page).to have_field("sales_report[end_date]", placeholder: "YYYY-MM-DD")
+      expect(page).to have_field("sales_report[start_date]", type: "date")
+      expect(page).to have_field("sales_report[end_date]", type: "date")
     end
 
     it "shows job history section" do

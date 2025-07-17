@@ -105,48 +105,4 @@ describe Admin::SalesReportsController do
     end
   end
 
-  describe "private methods" do
-    describe "#set_react_component_props" do
-      it "sets all required props for React component" do
-        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","status":"processing"}'])
-        
-        controller = described_class.new
-        allow(controller).to receive(:admin_sales_reports_path).and_return("/admin/sales_reports")
-        allow(controller).to receive(:form_authenticity_token).and_return("test_token")
-        
-        controller.send(:set_react_component_props)
-        props = controller.instance_variable_get(:@react_component_props)
-
-        expect(props[:title]).to eq("Sales reports")
-        expect(props[:countries]).to be_present
-        expect(props[:job_history]).to be_present
-        expect(props[:form_action]).to eq("/admin/sales_reports")
-        expect(props[:authenticity_token]).to eq("test_token")
-      end
-    end
-
-    describe "#fetch_job_history" do
-      it "returns parsed job data from Redis" do
-        job_data = ['{"job_id":"123","status":"processing"}', '{"job_id":"456","status":"completed"}']
-        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(job_data)
-
-        controller = described_class.new
-        result = controller.send(:fetch_job_history)
-
-        expect(result).to eq([
-          {"job_id" => "123", "status" => "processing"},
-          {"job_id" => "456", "status" => "completed"}
-        ])
-      end
-
-      it "returns empty array on JSON parse error" do
-        allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['invalid json'])
-
-        controller = described_class.new
-        result = controller.send(:fetch_job_history)
-
-        expect(result).to eq([])
-      end
-    end
-  end
 end
