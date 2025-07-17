@@ -53,7 +53,7 @@ class GenerateQuarterlySalesReportJob
       if send_notification
         message = "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
         SlackMessageWorker.perform_async("payments", slack_sender(country_code), message, "green")
-        update_job_status_to_completed(country_code, start_time_of_quarter, end_time_of_quarter)
+        update_job_status_to_completed(country_code, start_time_of_quarter, end_time_of_quarter, s3_signed_url)
       end
     ensure
       temp_file.close
@@ -86,7 +86,7 @@ class GenerateQuarterlySalesReportJob
       end
     end
 
-    def update_job_status_to_completed(country_code, start_time, end_time)
+    def update_job_status_to_completed(country_code, start_time, end_time, download_url = nil)
       job_data = $redis.lrange(RedisKey.quarterly_sales_report_jobs, 0, 19)
       job_data.each_with_index do |data, index|
         job = JSON.parse(data)
@@ -95,6 +95,7 @@ class GenerateQuarterlySalesReportJob
            job["end_date"] == end_time.to_date.to_s &&
            job["status"] == "processing"
           job["status"] = "completed"
+          job["download_url"] = download_url if download_url
           $redis.lset(RedisKey.quarterly_sales_report_jobs, index, job.to_json)
           break
         end
