@@ -34,7 +34,7 @@ describe Admin::SalesReportsController do
       expect(assigns(:react_component_props)[:authenticity_token]).to be_present
     end
 
-        it "loads job history from Redis" do
+    it "loads job history from Redis" do
       allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
 
       get :index
@@ -108,5 +108,4 @@ describe Admin::SalesReportsController do
       )
     end
   end
-
 end
