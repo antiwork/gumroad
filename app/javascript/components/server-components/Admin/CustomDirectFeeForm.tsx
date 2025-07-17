@@ -31,7 +31,7 @@ export const AdminCustomDirectFeeForm = ({
             defaultValue={current_percentage || ""}
             placeholder="Enter a custom direct fee percentage (0–100). Leave blank to remove."
           />
-          <button type="submit" className="button" disabled={isLoading}>
+          <button type="submit" className="button" disabled={isLoading} id="update-custom-direct-fee">
             {isLoading ? "Submitting..." : "Submit"}
           </button>
         </div>

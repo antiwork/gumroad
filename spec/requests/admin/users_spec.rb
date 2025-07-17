@@ -70,4 +70,62 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       end
     end
   end
+
+  describe "custom fees" do
+    context "when the user has a custom direct fee percentage" do
+      before do
+        user.update(custom_direct_fee_percentage: 5.00)
+      end
+
+      it "shows the custom direct fee percentage" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_text("Custom direct fee: 5.00%")
+      end
+    end
+
+    context "when the user does not have a custom direct fee percentage" do
+      it "does not show the custom direct fee percentage" do
+        visit admin_user_path(user.id)
+
+        expect(page).not_to have_text("Custom direct fee:")
+      end
+    end
+
+    it "allows updating the custom direct fee percentage" do
+      visit admin_user_path(user.id)
+
+      find_and_click "h3", text: "Custom direct fee"
+      fill_in "custom_direct_fee[percentage]", with: "10.00"
+      click_button(id: "update-custom-direct-fee")
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_direct_fee_percentage).to eq(10.00)
+    end
+
+    it "allows removing the custom direct fee percentage" do
+      user.update(custom_direct_fee_percentage: 15.00)
+      visit admin_user_path(user.id)
+
+      find_and_click "h3", text: "Custom direct fee"
+      fill_in "custom_direct_fee[percentage]", with: ""
+      click_button(id: "update-custom-direct-fee")
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_direct_fee_percentage).to be_nil
+    end
+  end
+
+  def accept_browser_dialog
+    wait = Selenium::WebDriver::Wait.new(timeout: 30)
+    wait.until do
+      page.driver.browser.switch_to.alert
+      true
+    rescue Selenium::WebDriver::Error::NoAlertPresentError
+      false
+    end
+    page.driver.browser.switch_to.alert.accept
+  end
 end
