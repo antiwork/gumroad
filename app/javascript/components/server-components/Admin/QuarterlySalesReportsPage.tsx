@@ -1,0 +1,117 @@
+import * as React from "react";
+import { createCast } from "ts-safe-cast";
+
+import { register } from "$app/utils/serverComponentUtil";
+
+import { Form } from "$app/components/Admin/Form";
+import { showAlert } from "$app/components/server-components/Alert";
+
+type JobHistoryItem = {
+  job_id: string;
+  country_code: string;
+  start_date: string;
+  end_date: string;
+  enqueued_at: string;
+  status: string;
+};
+
+type Props = {
+  title: string;
+  countries: [string, string][];
+  job_history: JobHistoryItem[];
+  form_action: string;
+  authenticity_token: string;
+};
+
+const AdminQuarterlySalesReportsPage = ({ 
+  title, 
+  countries, 
+  job_history, 
+  form_action, 
+  authenticity_token 
+}: Props) => {
+  return (
+    <main className="stack">
+      <header>
+        <h2>{title}</h2>
+      </header>
+      
+      <Form
+        url={form_action}
+        method="POST"
+        confirmMessage={false}
+        onSuccess={() => showAlert("Sales report job enqueued successfully!", "success")}
+      >
+        {(isLoading) => (
+          <section>
+            <header>Enqueue sales report jobs with custom date ranges</header>
+            
+            <label htmlFor="country_code">Country</label>
+            <select name="quarterly_sales_report[country_code]" id="country_code" required>
+              <option value="">Select country</option>
+              {countries.map(([name, code]) => (
+                <option key={code} value={code}>{name}</option>
+              ))}
+            </select>
+            
+            <label htmlFor="start_date">Start date</label>
+            <input 
+              name="quarterly_sales_report[start_date]" 
+              id="start_date"
+              type="text" 
+              placeholder="YYYY-MM-DD" 
+              className="w-full rounded-md"
+              required 
+            />
+            
+            <label htmlFor="end_date">End date</label>
+            <input 
+              name="quarterly_sales_report[end_date]" 
+              id="end_date"
+              type="text" 
+              placeholder="YYYY-MM-DD" 
+              className="w-full rounded-md"
+              required 
+            />
+            
+            <button type="submit" className="button primary" disabled={isLoading}>
+              {isLoading ? "Enqueueing..." : "Enqueue report job"}
+            </button>
+            
+            <input type="hidden" name="authenticity_token" value={authenticity_token} />
+          </section>
+        )}
+      </Form>
+      
+      <section>
+        <header>Job history (last 20)</header>
+        {job_history.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Country</th>
+                <th>Date range</th>
+                <th>Enqueued at</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {job_history.map((job, index) => (
+                <tr key={index}>
+                  <td>{job.country_code}</td>
+                  <td>{job.start_date} to {job.end_date}</td>
+                  <td>{new Date(job.enqueued_at).toLocaleString()}</td>
+                  <td>{job.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>No jobs enqueued yet.</p>
+        )}
+      </section>
+    </main>
+  );
+};
+
+export default register({ component: AdminQuarterlySalesReportsPage, propParser: createCast() });

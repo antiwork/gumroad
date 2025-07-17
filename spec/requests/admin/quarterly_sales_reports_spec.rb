@@ -10,7 +10,7 @@ describe "Admin::QuarterlySalesReportsController", type: :feature, js: true do
   end
 
   describe "GET /admin/quarterly_sales_reports" do
-    it "displays the sales reports page" do
+    it "displays the React sales reports page" do
       visit admin_quarterly_sales_reports_path
 
       expect(page).to have_text("Sales reports")
@@ -20,14 +20,14 @@ describe "Admin::QuarterlySalesReportsController", type: :feature, js: true do
     it "shows country dropdown with full country names" do
       visit admin_quarterly_sales_reports_path
 
-      expect(page).to have_select("Country", with_options: ["United Kingdom", "United States", "Canada"])
+      expect(page).to have_select("quarterly_sales_report[country_code]", with_options: ["United Kingdom", "United States", "Canada"])
     end
 
     it "shows date input fields" do
       visit admin_quarterly_sales_reports_path
 
-      expect(page).to have_field("Start date", placeholder: "YYYY-MM-DD")
-      expect(page).to have_field("End date", placeholder: "YYYY-MM-DD")
+      expect(page).to have_field("quarterly_sales_report[start_date]", placeholder: "YYYY-MM-DD")
+      expect(page).to have_field("quarterly_sales_report[end_date]", placeholder: "YYYY-MM-DD")
     end
 
     it "shows job history section" do
@@ -78,18 +78,18 @@ describe "Admin::QuarterlySalesReportsController", type: :feature, js: true do
       allow($redis).to receive(:ltrim)
     end
 
-    it "enqueues a job when form is submitted" do
+    it "enqueues a job when React form is submitted" do
       visit admin_quarterly_sales_reports_path
 
-      select "United Kingdom", from: "Country"
-      fill_in "Start date", with: "2023-01-01"
-      fill_in "End date", with: "2023-03-31"
+      select "United Kingdom", from: "quarterly_sales_report[country_code]"
+      fill_in "quarterly_sales_report[start_date]", with: "2023-01-01"
+      fill_in "quarterly_sales_report[end_date]", with: "2023-03-31"
       click_button "Enqueue report job"
 
       expect(GenerateQuarterlySalesReportJob).to have_enqueued_sidekiq_job(
         "GB",
-        Date.new(2023, 1, 1),
-        Date.new(2023, 3, 31),
+        "2023-01-01",
+        "2023-03-31",
         true,
         nil
       )
@@ -99,15 +99,15 @@ describe "Admin::QuarterlySalesReportsController", type: :feature, js: true do
     it "submits alpha2 country code even when full name is displayed" do
       visit admin_quarterly_sales_reports_path
 
-      select "Australia", from: "Country"
-      fill_in "Start date", with: "2023-04-01"
-      fill_in "End date", with: "2023-06-30"
+      select "Australia", from: "quarterly_sales_report[country_code]"
+      fill_in "quarterly_sales_report[start_date]", with: "2023-04-01"
+      fill_in "quarterly_sales_report[end_date]", with: "2023-06-30"
       click_button "Enqueue report job"
 
       expect(GenerateQuarterlySalesReportJob).to have_enqueued_sidekiq_job(
         "AU",
-        Date.new(2023, 4, 1),
-        Date.new(2023, 6, 30),
+        "2023-04-01",
+        "2023-06-30",
         true,
         nil
       )

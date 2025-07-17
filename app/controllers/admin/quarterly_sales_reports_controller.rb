@@ -1,21 +1,46 @@
 # frozen_string_literal: true
 
 class Admin::QuarterlySalesReportsController < Admin::BaseController
+  before_action :set_react_component_props, only: [:index]
+
   def index
-    @title = "Sales reports"
-    @countries = Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
-    @job_history = fetch_job_history
   end
 
   def create
     country_code = params[:quarterly_sales_report][:country_code]
-    start_date = Date.parse(params[:quarterly_sales_report][:start_date])
-    end_date = Date.parse(params[:quarterly_sales_report][:end_date])
+    start_date_str = params[:quarterly_sales_report][:start_date]
+    end_date_str = params[:quarterly_sales_report][:end_date]
+
+    # Validate country code
+    if country_code.blank?
+      return render json: { error: "Please select a country" }, status: :unprocessable_entity
+    end
+
+    unless ISO3166::Country[country_code]
+      return render json: { error: "Invalid country code" }, status: :unprocessable_entity
+    end
+
+    # Validate and parse dates
+    begin
+      start_date = Date.parse(start_date_str)
+      end_date = Date.parse(end_date_str)
+    rescue Date::Error, ArgumentError
+      return render json: { error: "Invalid date format. Please use YYYY-MM-DD format" }, status: :unprocessable_entity
+    end
+
+    # Validate date range
+    if start_date > end_date
+      return render json: { error: "Start date must be before end date" }, status: :unprocessable_entity
+    end
+
+    if start_date > Date.current
+      return render json: { error: "Start date cannot be in the future" }, status: :unprocessable_entity
+    end
 
     job_id = GenerateQuarterlySalesReportJob.perform_async(
       country_code,
-      start_date,
-      end_date,
+      start_date.to_s,
+      end_date.to_s,
       true,
       nil
     )
@@ -26,6 +51,16 @@ class Admin::QuarterlySalesReportsController < Admin::BaseController
   end
 
   private
+    def set_react_component_props
+      @react_component_props = {
+        title: "Sales reports",
+        countries: Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] },
+        job_history: fetch_job_history,
+        form_action: admin_quarterly_sales_reports_path,
+        authenticity_token: form_authenticity_token
+      }
+    end
+
     def fetch_job_history
       job_data = $redis.lrange(RedisKey.quarterly_sales_report_jobs, 0, 19)
       job_data.map { |data| JSON.parse(data) }

@@ -21,18 +21,17 @@ describe Admin::QuarterlySalesReportsController do
       expect(response).to render_template(:index)
     end
 
-    it "sets the page title" do
+    it "sets React component props" do
+      allow($redis).to receive(:lrange).with(RedisKey.quarterly_sales_report_jobs, 0, 19).and_return(['{"job_id":"123","status":"processing"}'])
+      
       get :index
 
-      expect(assigns(:title)).to eq("Sales reports")
-    end
-
-    it "loads countries for dropdown" do
-      get :index
-
-      expect(assigns(:countries)).to be_present
-      expect(assigns(:countries).first).to be_an(Array)
-      expect(assigns(:countries).first.size).to eq(2)
+      expect(assigns(:react_component_props)).to be_present
+      expect(assigns(:react_component_props)[:title]).to eq("Sales reports")
+      expect(assigns(:react_component_props)[:countries]).to be_present
+      expect(assigns(:react_component_props)[:job_history]).to be_present
+      expect(assigns(:react_component_props)[:form_action]).to eq(admin_quarterly_sales_reports_path)
+      expect(assigns(:react_component_props)[:authenticity_token]).to be_present
     end
 
     it "loads job history from Redis" do
@@ -40,8 +39,9 @@ describe Admin::QuarterlySalesReportsController do
       
       get :index
 
-      expect(assigns(:job_history)).to be_present
-      expect(assigns(:job_history).first["job_id"]).to eq("123")
+      job_history = assigns(:react_component_props)[:job_history]
+      expect(job_history).to be_present
+      expect(job_history.first["job_id"]).to eq("123")
     end
   end
 
@@ -64,13 +64,13 @@ describe Admin::QuarterlySalesReportsController do
       allow($redis).to receive(:ltrim)
     end
 
-    it "enqueues a GenerateQuarterlySalesReportJob" do
+    it "enqueues a GenerateQuarterlySalesReportJob with string dates" do
       post :create, params: params
 
       expect(GenerateQuarterlySalesReportJob).to have_enqueued_sidekiq_job(
         country_code,
-        Date.parse(start_date),
-        Date.parse(end_date),
+        start_date,
+        end_date,
         true,
         nil
       )
@@ -90,15 +90,15 @@ describe Admin::QuarterlySalesReportsController do
       expect(flash[:notice]).to eq("Sales report job enqueued successfully!")
     end
 
-    it "parses dates correctly" do
+    it "converts dates to strings before passing to job" do
       allow(GenerateQuarterlySalesReportJob).to receive(:perform_async).and_return("job_id_123")
 
       post :create, params: params
 
       expect(GenerateQuarterlySalesReportJob).to have_received(:perform_async).with(
         country_code,
-        Date.new(2023, 1, 1),
-        Date.new(2023, 3, 31),
+        start_date,
+        end_date,
         true,
         nil
       )
@@ -106,6 +106,25 @@ describe Admin::QuarterlySalesReportsController do
   end
 
   describe "private methods" do
+    describe "#set_react_component_props" do
+      it "sets all required props for React component" do
+        allow($redis).to receive(:lrange).with(RedisKey.quarterly_sales_report_jobs, 0, 19).and_return(['{"job_id":"123","status":"processing"}'])
+        
+        controller = described_class.new
+        allow(controller).to receive(:admin_quarterly_sales_reports_path).and_return("/admin/quarterly_sales_reports")
+        allow(controller).to receive(:form_authenticity_token).and_return("test_token")
+        
+        controller.send(:set_react_component_props)
+        props = controller.instance_variable_get(:@react_component_props)
+
+        expect(props[:title]).to eq("Sales reports")
+        expect(props[:countries]).to be_present
+        expect(props[:job_history]).to be_present
+        expect(props[:form_action]).to eq("/admin/quarterly_sales_reports")
+        expect(props[:authenticity_token]).to eq("test_token")
+      end
+    end
+
     describe "#fetch_job_history" do
       it "returns parsed job data from Redis" do
         job_data = ['{"job_id":"123","status":"processing"}', '{"job_id":"456","status":"completed"}']
