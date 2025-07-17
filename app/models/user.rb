@@ -11,8 +11,7 @@ class User < ApplicationRecord
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
           Email, AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
-          TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          ActionView::Helpers::SanitizeHelper
+          TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
@@ -163,7 +162,7 @@ class User < ApplicationRecord
                        if: :username_changed? # validate only when seller changes their username
 
   validates :name, length: { maximum: MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." }
-  validate :name_contains_no_html_tags
+
   validates :facebook_meta_tag, length: { maximum: MAX_LENGTH_FACEBOOK_META_TAG }
   validates :purchasing_power_parity_limit, allow_nil: true, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
 
@@ -407,7 +406,7 @@ class User < ApplicationRecord
   end
 
   def display_name(prefer_email_over_default_username: false)
-    return sanitize(name) if name.present?
+    return name if name.present?
     return form_email || username.presence if prefer_email_over_default_username && username == external_id
     username.presence || form_email
   end
@@ -1152,17 +1151,5 @@ class User < ApplicationRecord
       self.avatar_changed = false
     end
 
-    def name_contains_no_html_tags
-      return if name.blank?
 
-      # Check for common HTML tags that could be used for XSS
-      dangerous_tags = %w[script style iframe object embed form input textarea select button a img link meta]
-
-      dangerous_tags.each do |tag|
-        if name.match?(/<\/?#{tag}[^>]*>/i)
-          errors.add(:name, "cannot contain HTML tags")
-          break
-        end
-      end
-    end
 end

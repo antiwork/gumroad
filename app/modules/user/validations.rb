@@ -78,4 +78,19 @@ module User::Validations
     def json_data_must_be_hash
       raise "json_data must be a hash" unless json_data.is_a?(Hash)
     end
+
+  private
+    def name_contains_no_html_tags
+      return if name.blank?
+
+      # Check for common HTML tags that could be used for XSS
+      dangerous_tags = %w[script style iframe object embed form input textarea select button a img link meta]
+
+      dangerous_tags.each do |tag|
+        if name.match?(/<\/?#{tag}[^>]*>/i)
+          errors.add(:name, "cannot contain HTML tags")
+          break
+        end
+      end
+    end
 end
