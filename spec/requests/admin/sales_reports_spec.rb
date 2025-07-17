@@ -42,7 +42,7 @@ describe "Admin::SalesReportsController", type: :feature, js: true do
 
         visit admin_sales_reports_path
 
-        expect(page).to have_text("No jobs enqueued yet.")
+        expect(page).to have_text("No sales reports generated yet.")
       end
     end
 

@@ -110,7 +110,7 @@ const AdminSalesReportsPage = ({ countries, job_history, form_action, authentici
           </table>
         ) : (
           <div className="placeholder">
-            <h2>No jobs enqueued yet.</h2>
+            <h2>No sales reports generated yet.</h2>
           </div>
         )}
       </section>
