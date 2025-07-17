@@ -7,10 +7,6 @@ ruby file: ".ruby-version"
 gem "rails", "7.1.3.4"
 gem "rake", "13.2.1"
 
-group :development do
-  gem "derailed_benchmarks", "~> 2.1"
-end
-
 group :staging, :production do
   source "https://gems.contribsys.com/" do
     gem "sidekiq-pro", "~> 7.2"
@@ -200,3 +196,8 @@ gem "ruby-openai", "~> 7.0"
 gem "anycable-rails", "~> 1.5"
 gem "react_on_rails", "~> 14.0"
 gem "psych", "~> 5.2.3"
+
+group :development do
+  gem "derailed_benchmarks", "~> 2.1"
+  gem 'bullet'
+end
