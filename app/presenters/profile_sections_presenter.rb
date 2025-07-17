@@ -93,7 +93,7 @@ class ProfileSectionsPresenter
         end
         cached_props[:search_results] = section_search_results(section, params:) if params.present?
         cached_props[:search_results][:products] = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).find(cached_props[:search_results][:products]).map do |product|
-          ProductPresenter.card_for_web(product:, request:, recommended_by: params[:recommended_by], target: Product::Layout::PROFILE, show_seller: false)
+          ProductPresenter.card_for_web(product:, request:, recommended_by: params[:recommended_by], target: Product::Layout::PROFILE, show_seller: false, compute_description: false)
         end
       when "SellerProfilePostsSection"
         if is_owner
