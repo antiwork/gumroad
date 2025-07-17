@@ -34,7 +34,7 @@ class RedisKey
     def tip_options = "tip_options"
     def default_tip_option = "default_tip_option"
     def create_canada_monthly_sales_report_job_max_execution_time_seconds = "create_canada_monthly_sales_report_job:max_execution_time_seconds"
-    def generate_quarterly_sales_report_job_max_execution_time_seconds = "generate_quarterly_sales_report_job:max_execution_time_seconds"
+    def generate_sales_report_job_max_execution_time_seconds = "generate_sales_report_job:max_execution_time_seconds"
     def generate_canada_sales_report_job_max_execution_time_seconds = "generate_canada_sales_report_job:max_execution_time_seconds"
     def create_vat_report_job_max_execution_time_seconds = "create_vat_report_job:max_execution_time_seconds"
     def transcoded_videos_recentness_limit_in_months = "transcoded_videos_recentness_limit_in_months"

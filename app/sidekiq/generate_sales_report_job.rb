@@ -14,7 +14,7 @@ class GenerateSalesReportJob
       temp_file = Tempfile.new
       temp_file.write(row_headers(country_code).to_csv)
 
-      timeout_seconds = ($redis.get(RedisKey.generate_quarterly_sales_report_job_max_execution_time_seconds) || 1.hour).to_i
+      timeout_seconds = ($redis.get(RedisKey.generate_sales_report_job_max_execution_time_seconds) || 1.hour).to_i
       WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
         Purchase.successful
           .not_fully_refunded
