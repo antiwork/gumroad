@@ -515,9 +515,9 @@ describe Exports::PurchaseExportService do
     it "includes license key activation count" do
       @product.update!(is_licensed: true)
       @purchase.create_license!
-      
+
       expect(field_value(last_data_row, "License Key Activation Count")).to eq("0")
-      
+
       @purchase.license.update!(uses: 5)
       expect(field_value(last_data_row, "License Key Activation Count")).to eq("5")
     end
