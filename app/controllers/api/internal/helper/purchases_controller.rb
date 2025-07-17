@@ -331,7 +331,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
 
   def refresh_library
     email = params[:email]
-    
+
     return render json: { success: false, message: "Email address is required" }, status: :bad_request unless email.present?
 
     user = User.find_by(email: email)
