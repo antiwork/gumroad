@@ -4,6 +4,7 @@ class Admin::SalesReportsController < Admin::BaseController
   before_action :set_react_component_props, only: [:index]
 
   def index
+    @title = "Sales reports"
   end
 
   def create

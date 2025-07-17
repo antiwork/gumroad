@@ -84,7 +84,7 @@ describe "Admin::SalesReportsController", type: :feature, js: true do
       select "United Kingdom", from: "sales_report[country_code]"
       fill_in "sales_report[start_date]", with: "2023-01-01"
       fill_in "sales_report[end_date]", with: "2023-03-31"
-      click_button "Enqueue report job"
+      click_button "Generate report"
 
       expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job(
         "GB",
@@ -102,7 +102,7 @@ describe "Admin::SalesReportsController", type: :feature, js: true do
       select "Australia", from: "sales_report[country_code]"
       fill_in "sales_report[start_date]", with: "2023-04-01"
       fill_in "sales_report[end_date]", with: "2023-06-30"
-      click_button "Enqueue report job"
+      click_button "Generate report"
 
       expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job(
         "AU",

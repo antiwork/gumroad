@@ -17,14 +17,13 @@ type JobHistoryItem = {
 };
 
 type Props = {
-  title: string;
   countries: [string, string][];
   job_history: JobHistoryItem[];
   form_action: string;
   authenticity_token: string;
 };
 
-const AdminSalesReportsPage = ({ title, countries, job_history, form_action, authenticity_token }: Props) => {
+const AdminSalesReportsPage = ({ countries, job_history, form_action, authenticity_token }: Props) => {
   const countryCodeToName = React.useMemo(() => {
     const map: Record<string, string> = {};
     countries.forEach(([name, code]) => {
@@ -34,111 +33,88 @@ const AdminSalesReportsPage = ({ title, countries, job_history, form_action, aut
   }, [countries]);
 
   return (
-    <div className="paragraphs">
-      <div className="card">
-        <div className="paragraphs">
-          <header>
-            <h2>{title}</h2>
-          </header>
+    <main>
+      <Form
+        url={form_action}
+        method="POST"
+        confirmMessage={false}
+        onSuccess={() => {
+          showAlert("Sales report job enqueued successfully!", "success");
+          window.location.reload();
+        }}
+      >
+        {(isLoading) => (
+          <section>
+            <header>
+              Enqueue sales report jobs with custom date ranges
+            </header>
 
-          <Form
-            url={form_action}
-            method="POST"
-            confirmMessage={false}
-            onSuccess={() => {
-              showAlert("Sales report job enqueued successfully!", "success");
-              window.location.reload();
-            }}
-          >
-            {(isLoading) => (
-              <section>
-                <header>Enqueue sales report jobs with custom date ranges</header>
+            <label htmlFor="country_code">Country</label>
+            <select name="sales_report[country_code]" id="country_code" required>
+              <option value="">Select country</option>
+              {countries.map(([name, code]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
 
-                <fieldset>
-                  <legend>
-                    <label htmlFor="country_code">Country</label>
-                  </legend>
-                  <select name="sales_report[country_code]" id="country_code" required>
-                    <option value="">Select country</option>
-                    {countries.map(([name, code]) => (
-                      <option key={code} value={code}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </fieldset>
+            <label htmlFor="start_date">Start date</label>
+            <input name="sales_report[start_date]" id="start_date" type="date" required />
 
-                <fieldset>
-                  <legend>
-                    <label htmlFor="start_date">Start date</label>
-                  </legend>
-                  <input name="sales_report[start_date]" id="start_date" type="date" required />
-                </fieldset>
+            <label htmlFor="end_date">End date</label>
+            <input name="sales_report[end_date]" id="end_date" type="date" required />
 
-                <fieldset>
-                  <legend>
-                    <label htmlFor="end_date">End date</label>
-                  </legend>
-                  <input name="sales_report[end_date]" id="end_date" type="date" required />
-                </fieldset>
+            <button type="submit" className="button primary" disabled={isLoading}>
+              {isLoading ? "Generating..." : "Generate report"}
+            </button>
 
-                <button type="submit" className="button primary" disabled={isLoading}>
-                  {isLoading ? "Enqueueing..." : "Enqueue report job"}
-                </button>
+            <input type="hidden" name="authenticity_token" value={authenticity_token} />
+          </section>
+        )}
+      </Form>
 
-                <input type="hidden" name="authenticity_token" value={authenticity_token} />
-              </section>
-            )}
-          </Form>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="paragraphs">
-          <header>
-            <h3>History</h3>
-          </header>
-          {job_history.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>Country</th>
-                  <th>Date range</th>
-                  <th>Enqueued at</th>
-                  <th>Status</th>
-                  <th>Download</th>
+      <section>
+        {job_history.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Country</th>
+                <th>Date range</th>
+                <th>Enqueued at</th>
+                <th>Status</th>
+                <th>Download</th>
+              </tr>
+            </thead>
+            <tbody>
+              {job_history.map((job, index) => (
+                <tr key={index}>
+                  <td>{countryCodeToName[job.country_code] || job.country_code}</td>
+                  <td>
+                    {job.start_date} to {job.end_date}
+                  </td>
+                  <td>{new Date(job.enqueued_at).toLocaleString()}</td>
+                  <td>{job.status}</td>
+                  <td>
+                    {job.status === "completed" && job.download_url ? (
+                      <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
+                        Download CSV
+                      </a>
+                    ) : (
+                      <span>-</span>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {job_history.map((job, index) => (
-                  <tr key={index}>
-                    <td>{countryCodeToName[job.country_code] || job.country_code}</td>
-                    <td>
-                      {job.start_date} to {job.end_date}
-                    </td>
-                    <td>{new Date(job.enqueued_at).toLocaleString()}</td>
-                    <td>{job.status}</td>
-                    <td>
-                      {job.status === "completed" && job.download_url ? (
-                        <a href={job.download_url} className="button small" target="_blank" rel="noopener noreferrer">
-                          Download CSV
-                        </a>
-                      ) : (
-                        <span>-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="placeholder">
-              <h2>No jobs enqueued yet.</h2>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="placeholder">
+            <h2>No jobs enqueued yet.</h2>
+          </div>
+        )}
+      </section>
+    </main>
   );
 };
 
