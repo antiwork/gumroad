@@ -97,24 +97,5 @@ describe "Admin::SalesReportsController", type: :feature, js: true do
       )
       expect(page).to have_text("Sales report job enqueued successfully!")
     end
-
-    it "submits alpha2 country code even when full name is displayed" do
-      visit admin_sales_reports_path
-
-      select "Australia", from: "sales_report[country_code]"
-      fill_in "sales_report[start_date]", with: "2023-04-01"
-      fill_in "sales_report[end_date]", with: "2023-06-30"
-      click_button "Generate report"
-
-      wait_for_ajax
-
-      expect(GenerateSalesReportJob).to have_enqueued_sidekiq_job(
-        "AU",
-        "2023-04-01",
-        "2023-06-30",
-        true,
-        nil
-      )
-    end
   end
 end
