@@ -95,7 +95,7 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
 
     <div className="card">
       <div className="paragraphs">
-        <header>Job history (last 20)</header>
+        <header>Job history</header>
         {job_history.length > 0 ? (
           <table>
             <thead>
