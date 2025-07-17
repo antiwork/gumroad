@@ -3,7 +3,7 @@
 class Admin::QuarterlySalesReportsController < Admin::BaseController
   def index
     @title = "Sales reports"
-    @countries = Compliance::Countries.for_select
+    @countries = Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
     @job_history = fetch_job_history
   end
 
