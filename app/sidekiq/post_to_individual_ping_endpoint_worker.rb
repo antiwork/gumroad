@@ -43,6 +43,7 @@ class PostToIndividualPingEndpointWorker
     end
 
     def send_ping_failure_notification(post_url, response_code, user_id = nil)
+      return unless Feature.active?(:alert_on_ping_endpoint_failure)
       return unless user_id.present?
 
       seller = User.find_by(id: user_id)

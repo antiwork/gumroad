@@ -109,6 +109,7 @@ describe PostToIndividualPingEndpointWorker do
       allow(@http_double).to receive(:success?).and_return(false)
       allow(@http_double).to receive(:code).and_return(500)
       allow(HTTParty).to receive(:post).and_return(@http_double)
+      Feature.activate(:alert_on_ping_endpoint_failure)
     end
 
     context "when retries are exhausted" do
