@@ -24,8 +24,17 @@ type Props = {
   authenticity_token: string;
 };
 
-const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_action, authenticity_token }: Props) => (
-  <div className="paragraphs">
+const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_action, authenticity_token }: Props) => {
+  const countryCodeToName = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    countries.forEach(([name, code]) => {
+      map[code] = name;
+    });
+    return map;
+  }, [countries]);
+
+  return (
+    <div className="paragraphs">
     <div className="card">
       <div className="paragraphs">
         <header>
@@ -98,7 +107,7 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
             <tbody>
               {job_history.map((job, index) => (
                 <tr key={index}>
-                  <td>{job.country_code}</td>
+                  <td>{countryCodeToName[job.country_code] || job.country_code}</td>
                   <td>
                     {job.start_date} to {job.end_date}
                   </td>
@@ -125,6 +134,7 @@ const AdminQuarterlySalesReportsPage = ({ title, countries, job_history, form_ac
       </div>
     </div>
   </div>
-);
+  );
+};
 
 export default register({ component: AdminQuarterlySalesReportsPage, propParser: createCast() });
