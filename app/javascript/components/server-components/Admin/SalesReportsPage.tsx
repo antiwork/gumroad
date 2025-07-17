@@ -66,7 +66,7 @@ const AdminSalesReportsPage = ({ countries, job_history, form_action, authentici
             <input name="sales_report[end_date]" id="end_date" type="date" required />
 
             <button type="submit" className="button primary" disabled={isLoading}>
-              {isLoading ? "Enqueueing..." : "Enqueue report job"}
+              {isLoading ? "Generating..." : "Generate report"}
             </button>
 
             <input type="hidden" name="authenticity_token" value={authenticity_token} />
