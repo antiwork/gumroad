@@ -22,8 +22,8 @@ describe Admin::SalesReportsController do
     end
 
     it "sets React component props" do
-      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","status":"processing"}'])
-      
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
+
       get :index
 
       expect(assigns(:react_component_props)).to be_present
@@ -34,9 +34,9 @@ describe Admin::SalesReportsController do
       expect(assigns(:react_component_props)[:authenticity_token]).to be_present
     end
 
-    it "loads job history from Redis" do
-      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","status":"processing"}'])
-      
+        it "loads job history from Redis" do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
+
       get :index
 
       job_history = assigns(:react_component_props)[:job_history]
@@ -83,11 +83,15 @@ describe Admin::SalesReportsController do
       post :create, params: params
     end
 
-    it "redirects with success notice" do
+    it "returns success JSON response" do
       post :create, params: params
 
-      expect(response).to redirect_to(admin_sales_reports_path)
-      expect(flash[:notice]).to eq("Sales report job enqueued successfully!")
+      expect(response).to be_successful
+      expect(response.content_type).to include("application/json")
+
+      json_response = JSON.parse(response.body)
+      expect(json_response["success"]).to be true
+      expect(json_response["message"]).to eq("Sales report job enqueued successfully!")
     end
 
     it "converts dates to strings before passing to job" do
