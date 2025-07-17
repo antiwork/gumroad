@@ -33,7 +33,7 @@ describe "Admin::SalesReportsController", type: :feature, js: true do
     it "shows job history section" do
       visit admin_sales_reports_path
 
-      expect(page).to have_text("Job history (last 20)")
+      expect(page).to have_text("History")
     end
 
     context "when there are no jobs in history" do
