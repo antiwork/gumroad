@@ -86,7 +86,7 @@ class GenerateQuarterlySalesReportJob
       end
     end
 
-    def update_job_status_to_completed(country_code, start_time, end_time, download_url = nil)
+    def update_job_status_to_completed(country_code, start_time, end_time, download_url)
       job_data = $redis.lrange(RedisKey.quarterly_sales_report_jobs, 0, 19)
       job_data.each_with_index do |data, index|
         job = JSON.parse(data)
@@ -95,7 +95,7 @@ class GenerateQuarterlySalesReportJob
            job["end_date"] == end_time.to_date.to_s &&
            job["status"] == "processing"
           job["status"] = "completed"
-          job["download_url"] = download_url if download_url
+          job["download_url"] = download_url
           $redis.lset(RedisKey.quarterly_sales_report_jobs, index, job.to_json)
           break
         end
