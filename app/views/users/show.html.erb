@@ -6,14 +6,14 @@
 person_data = {
   "@context" => "https://schema.org",
   "@type" => "Person",
-  "name" => @profile_props[:creator_profile][:name],
-  "image" => @profile_props[:creator_profile][:avatar_url],
-  "url" => @profile_props[:creator_profile][:subdomain],
-  "description" => @profile_props[:bio]
+  "name" => @profile_props.dig(:creator_profile, :name),
+  "image" => @profile_props.dig(:creator_profile, :avatar_url),
+  "url" => @profile_props.dig(:creator_profile, :subdomain),
+  "description" => @profile_props.dig(:bio)
 }.compact
 
-if @profile_props[:creator_profile][:twitter_handle].present?
-  person_data["sameAs"] = ["https://twitter.com/#{@profile_props[:creator_profile][:twitter_handle]}"]
+if (twitter_handle = @profile_props.dig(:creator_profile, :twitter_handle)).present?
+  person_data["sameAs"] = ["https://twitter.com/#{twitter_handle}"]
 end
 %>
 
