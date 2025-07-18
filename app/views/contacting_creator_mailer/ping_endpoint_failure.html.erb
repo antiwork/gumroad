@@ -1,0 +1,10 @@
+<%= header_section("We couldn’t deliver pings to your endpoint") %>
+<div>
+  <p>Hi <%= @seller.name_or_username %>,</p>
+  <p>We were unable to deliver ping notifications to your configured ping URL after multiple attempts.</p>
+  <p><strong>Ping URL:</strong> <%= @ping_url %></p>
+  <p><strong>Response Code:</strong> <%= @response_code %></p>
+  <p>
+    Please <a href='<%= settings_advanced_url %>'>check your ping endpoint settings</a> and ensure your server is responding correctly to webhook requests.
+  </p>
+</div>
