@@ -18,7 +18,7 @@ module ShippingDestination::Destinations
       ELSEWHERE => ELSEWHERE.titleize
     }
 
-    first_countries.merge!(Compliance::Countries.for_select.to_h)
+    first_countries.merge!(Compliance::Countries.for_select.reject { |country| Compliance::Countries.blocked?(country[0]) }.to_h)
   end
 
   def self.europe_shipping_countries
