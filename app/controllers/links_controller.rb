@@ -616,8 +616,12 @@ class LinksController < ApplicationController
     end
 
     def paginated_products(page:, query: nil)
-      products = current_seller.products.non_membership.visible_and_not_archived
-      products = products.where("name like ?", "%#{query}%") if query.present?
+      products = current_seller
+        .products
+        .includes(thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
+        .non_membership
+        .visible_and_not_archived
+      products = products.where("links.name like ?", "%#{query}%") if query.present?
 
       sort_and_paginate_products(**paged_params[:sort].to_h.symbolize_keys, page:, collection: products, per_page: PER_PAGE, user_id: current_seller.id)
     end
