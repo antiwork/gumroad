@@ -8,6 +8,7 @@ import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 
@@ -64,9 +65,8 @@ const PasswordPage = (props: Props) => {
               <legend>
                 <label htmlFor={`${uid}-old-password`}>Old password</label>
               </legend>
-              <input
+              <PasswordInput
                 id={`${uid}-old-password`}
-                type="password"
                 value={password.old}
                 onChange={(e) => setPassword((prev) => ({ ...prev, old: e.target.value }))}
                 required
@@ -77,9 +77,8 @@ const PasswordPage = (props: Props) => {
             <legend>
               <label htmlFor={`${uid}-new-password`}>{requireOldPassword ? "New password" : "Add password"}</label>
             </legend>
-            <input
+            <PasswordInput
               id={`${uid}-new-password`}
-              type="password"
               value={password.new}
               onChange={(e) => setPassword((prev) => ({ ...prev, new: e.target.value }))}
               required

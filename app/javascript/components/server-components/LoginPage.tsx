@@ -9,6 +9,7 @@ import { ForgotPasswordForm } from "$app/components/Authentication/ForgotPasswor
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
+import { PasswordInput } from "$app/components/PasswordInput";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -98,9 +99,8 @@ export const LoginPage = ({
                   Forgot your password?
                 </button>
               </legend>
-              <input
+              <PasswordInput
                 id={`${uid}-password`}
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
