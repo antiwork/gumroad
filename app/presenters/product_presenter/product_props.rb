@@ -119,9 +119,9 @@ class ProductPresenter::ProductProps
     end
 
     def attributes_props
-      product.custom_attributes.filter_map { |attr|
+      product.custom_attributes.filter_map do |attr|
         { name: attr["name"], value: attr["value"] } if attr["name"].present? || attr["value"].present?
-      } + product.file_info_for_product_page.map { |k, v| { name: k.to_s, value: v } }
+      end + product.file_info_for_product_page.map { |k, v| { name: k.to_s, value: v } }
     end
 
     def collaborator

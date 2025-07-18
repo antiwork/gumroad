@@ -102,6 +102,8 @@ namespace :admin do
     end
   end
 
+  resources :sales_reports, only: [:index, :create]
+
   resources :merchant_accounts, only: [:show] do
     member do
       get :live_attributes

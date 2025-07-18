@@ -135,7 +135,7 @@ class InstallmentPresenter
         aws_access_key_id: AWS_ACCESS_KEY,
         s3_url: s3_bucket_url,
         user_id: seller.external_id,
-        allow_comments_by_default: allow_comments_by_default.nil? ? true : allow_comments_by_default,
+        allow_comments_by_default: allow_comments_by_default.nil? || allow_comments_by_default,
       }
     end
 end
