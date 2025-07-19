@@ -557,14 +557,15 @@ export const CheckoutPage = ({
     }
   }, [state.email]);
 
+
   /**
    * Creates a new cart state when an offer (upsell or cross-sell) is accepted.
    * 
    * For cross-sells: Adds the new product to the cart (or replaces selected products if configured)
    * For upsells: Replaces the original product with the upgraded version
    * 
-   * IMPORTANT: This function preserves discount codes from the original cart items
-   * to ensure customers don't lose their discounts when accepting offers.
+   * IMPORTANT: This function preserves valid discount codes from the original cart items
+   * and validates they can be applied to the new variant.
    */
   const getCartIfAccepted = () => {
     if (currentOffer?.type === "cross-sell") {
@@ -602,13 +603,20 @@ export const CheckoutPage = ({
       }
     } else if (currentOffer?.type === "upsell") {
       // For upsells, replace the original item with the upgraded version
+      // Validate which discount codes can transfer to the new variant
+      const validDiscountCodes = validateDiscountForVariant(
+        cart.discountCodes,
+        currentOffer.item.product.permalink,
+        currentOffer.offeredOption.id
+      );
+      
       return {
         ...cart,
         items: [
           // Remove the original item being upgraded
           ...cart.items.filter((item) => item !== currentOffer.item),
           {
-            // Keep all properties from the original item (including discount_codes)
+            // Keep all properties from the original item
             ...currentOffer.item,
             // Update to the new variant/option
             option_id: currentOffer.offeredOption.id,
@@ -622,6 +630,8 @@ export const CheckoutPage = ({
             },
           },
         ],
+        // Update cart with only valid discount codes for the new variant
+        discountCodes: validDiscountCodes,
       };
     }
     return cart;

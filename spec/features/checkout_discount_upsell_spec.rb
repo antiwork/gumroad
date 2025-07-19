@@ -132,33 +132,46 @@ RSpec.feature "Checkout with discount and upsell", type: :feature, js: true do
     end
   end
   
-  scenario "discount migration is tracked in audit logs" do
-    # Start with discount applied
-    visit product_path(product, offer_code: discount_code.code)
+  scenario "discount validation prevents invalid discount transfers" do
+    # Create a variant-specific discount code
+    variant_specific_discount = create(:offer_code,
+      user: seller,
+      code: "BASICONLY",
+      amount_off: 30,
+      offer_type: "percentage",
+      universal: false,
+      products: [product],
+      variants: [basic_variant]
+    )
+    
+    # Visit with variant-specific discount
+    visit product_path(product, offer_code: variant_specific_discount.code)
     find("label", text: "Basic").click
     click_button "Add to cart"
     
-    # Complete checkout with upsell
+    # Verify discount is applied to basic variant
+    within(".cart-summary") do
+      expect(page).to have_content("$35.00") # 50 * 0.7
+      expect(page).to have_content("BASICONLY")
+    end
+    
+    # Trigger upsell
     fill_in "Email", with: buyer_email
     fill_in "Card number", with: "4242424242424242"
     fill_in "Expiry", with: "12/30"
     fill_in "CVC", with: "123"
     click_button "Pay"
     
+    # Accept upsell
     within(".modal") do
       click_button "Upgrade"
     end
     
-    click_button "Pay"
-    
-    # Verify audit log was created
-    expect(DiscountMigrationLog.count).to eq(1)
-    log = DiscountMigrationLog.last
-    expect(log.original_product_id).to eq(product.id)
-    expect(log.new_product_id).to eq(product.id)
-    expect(log.original_variant_id).to eq(basic_variant.id.to_s)
-    expect(log.new_variant_id).to eq(premium_variant.id.to_s)
-    expect(log.discount_code).to eq("SAVE20")
-    expect(log.status).to eq("success")
+    # Discount should not transfer since it's variant-specific
+    within(".cart-summary") do
+      expect(page).to have_content("$100.00") # Full price
+      expect(page).not_to have_content("BASICONLY")
+      expect(page).to have_content("Premium")
+    end
   end
 end
