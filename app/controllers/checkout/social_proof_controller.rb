@@ -141,15 +141,11 @@ class Checkout::SocialProofController < Sellers::BaseController
           cta_text: permitted_params[:cta_text],
           cta_type: permitted_params.dig(:cta_type, :id),
           image_type: permitted_params.dig(:image, :id),
+          image_url: permitted_params[:custom_image_url],
           icon_name: permitted_params[:icon],
           icon_color: permitted_params[:icon_color],
           visibility: permitted_params[:visibility]
         }.compact
-      end
-
-      def parse_date_times
-        # social_proof_widget_params[:valid_at] = Date.parse(social_proof_widget_params[:valid_at]) if social_proof_widget_params[:valid_at].present?
-        # social_proof_widget_params[:expires_at] = Date.parse(social_proof_widget_params[:expires_at]) if social_proof_widget_params[:expires_at].present?
       end
 
       def social_proof_widget_params
@@ -164,6 +160,7 @@ class Checkout::SocialProofController < Sellers::BaseController
             :iconColor,
             :status,
             :visibility,
+            :customImageUrl,
             { ctaType: [:id, :label] },
             { image: [:id, :label] },
             selectedProductIds: []

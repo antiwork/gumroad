@@ -9,6 +9,7 @@ interface BaseSocialProofCardProps {
   title: string;
   description: string;
   widgetId?: number; // Optional for preview mode
+  currentProductThumbnailUrl?: string | null; // For product_thumbnail image type
 }
 
 interface ProductImageProps extends BaseSocialProofCardProps {
@@ -76,7 +77,16 @@ export const SocialProofCard = (props: SocialProofCardProps) => {
 
   const renderImage = () => {
     switch (props.imageType) {
-      case "product_thumbnail":
+      case "product_thumbnail": {
+        const productThumbnailUrl = props.currentProductThumbnailUrl || props.imageUrl;
+        return productThumbnailUrl ? (
+          <img
+            src={productThumbnailUrl}
+            className="h-16 w-16 flex-shrink-0 rounded object-cover"
+            alt="product thumbnail image"
+          />
+        ) : null;
+      }
       case "custom_image":
         return props.imageUrl ? (
           <img

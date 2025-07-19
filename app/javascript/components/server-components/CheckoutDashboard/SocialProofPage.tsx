@@ -1,3 +1,4 @@
+import { DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
@@ -9,9 +10,8 @@ import {
   getPagedSocialProofWidgets,
   SocialProofWidget as ImportedSocialProofWidget,
 } from "$app/data/social_proof";
-import { Thumbnail } from "$app/data/thumbnails";
 import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError } from "$app/utils/request";
+import { AbortError, assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 import { writeQueryParams } from "$app/utils/url";
 
@@ -20,10 +20,10 @@ import { SocialProofCard } from "$app/components/Checkout/SocialProofCard";
 import { useSocialProofCardPropsFromPreview } from "$app/components/Checkout/useSocialProofProps";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { Icon } from "$app/components/Icons";
+import { ImageUploader } from "$app/components/ImageUploader";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
-import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -47,6 +47,7 @@ type SocialProofPayload = {
   universal: boolean;
   status: string;
   visibility: "all" | "new" | "returning";
+  customImageUrl?: string | null;
 };
 
 export type SortKey = "name" | "clicks" | "conversion" | "revenue" | "status";
@@ -578,7 +579,7 @@ const Form = ({
   };
   const [image, setImage] = React.useState<ImageType>(getImageType());
 
-  const [thumbnail, setThumbnail] = React.useState<Thumbnail | null>(null);
+  const [customImageUrl, setCustomImageUrl] = React.useState<string | null>(socialProofWidget?.image_url ?? null);
   const [icon, setIcon] = React.useState<IconName>(socialProofWidget?.icon_name || "bullseye");
   const [iconColor, setIconColor] = React.useState(socialProofWidget?.icon_color ?? "#FFB800");
   const [universal, setUniversal] = React.useState(socialProofWidget?.universal ?? false);
@@ -616,6 +617,7 @@ const Form = ({
       universal,
       status,
       visibility: visibility.id,
+      customImageUrl: image.id === "custom_image" ? customImageUrl : null,
     };
     await save(formData);
   };
@@ -635,6 +637,7 @@ const Form = ({
       universal,
       status: newStatus,
       visibility: visibility.id,
+      customImageUrl: image.id === "custom_image" ? customImageUrl : null,
     };
     await save(formData);
     setStatus(newStatus);
@@ -834,12 +837,35 @@ const Form = ({
                 }}
               />
               {image.id === "custom_image" && (
-                <ThumbnailEditor
-                  covers={[]}
-                  thumbnail={thumbnail}
-                  setThumbnail={setThumbnail}
-                  permalink=""
-                  nativeType="bundle"
+                <ImageUploader
+                  imageUrl={customImageUrl}
+                  allowedExtensions={["jpeg", "jpg", "png", "gif"]}
+                  onSelectFile={(file) =>
+                    new Promise((resolve, reject) => {
+                      new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
+                        if (error) return resolve(showAlert(error.message, "error"));
+                        request({
+                          method: "GET",
+                          accept: "json",
+                          url: `/s3_utility/cdn_url_for_blob?key=${encodeURIComponent(blob.key)}`,
+                        })
+                          .then((response: Response) => response.json())
+                          .then((data: unknown) => {
+                            const imageUrl = cast<{ url: string }>(data).url;
+                            setCustomImageUrl(imageUrl);
+                            resolve();
+                          })
+                          .catch((e: unknown) => {
+                            assertResponseError(e);
+                            showAlert("Failed to get image URL. Please try again.", "error");
+                            reject(e);
+                          });
+                      });
+                    })
+                  }
+                  onRemove={() => setCustomImageUrl("")}
+                  imageAlt="Custom image"
+                  helpText="This image will appear in your social proof widget. Your image should be square, at least 600x600px, and in JPG, PNG, or GIF format."
                 />
               )}
               {image.id === "icon" && (
@@ -1014,6 +1040,7 @@ const Form = ({
         selectedProducts={selectedProducts}
         universal={universal}
         allProducts={products}
+        customImageUrl={customImageUrl}
       />
     </div>
   );
@@ -1030,6 +1057,7 @@ const Preview = ({
   selectedProducts,
   universal,
   allProducts,
+  customImageUrl,
 }: {
   titleText: string;
   description: string;
@@ -1041,6 +1069,7 @@ const Preview = ({
   selectedProducts: Product[];
   universal: boolean;
   allProducts: Product[];
+  customImageUrl: string | null;
 }) => {
   const socialProofCardProps = useSocialProofCardPropsFromPreview({
     titleText,
@@ -1053,6 +1082,9 @@ const Preview = ({
     selectedProducts,
     universal,
     allProducts,
+    customImageUrl,
+    currentProductThumbnailUrl:
+      selectedProducts.length > 0 && selectedProducts[0] ? (selectedProducts[0].thumbnail_url ?? null) : null,
   });
 
   const getPreviewUrl = () => {

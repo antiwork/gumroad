@@ -17,6 +17,7 @@ type SocialProofPayload = {
   universal: boolean;
   status: string;
   visibility: "all" | "new" | "returning";
+  customImageUrl?: string | null;
 };
 
 export type SocialProofWidget = {

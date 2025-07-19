@@ -44,12 +44,14 @@ export const ThumbnailEditor = ({
   setThumbnail,
   permalink,
   nativeType,
+  helpText,
 }: {
   covers: AssetPreview[];
   thumbnail: Thumbnail | null;
   setThumbnail: (thumbnail: Thumbnail | null) => void;
   permalink: string;
   nativeType: ProductNativeType;
+  helpText?: string;
 }) => {
   const saveThumbnail = async (thumbnailPayload: ThumbnailPayload) => {
     try {
@@ -84,7 +86,10 @@ export const ThumbnailEditor = ({
         imageAlt="Thumbnail image"
         imageUrl={thumbnail?.url ?? null}
         allowedExtensions={ALLOWED_EXTENSIONS}
-        helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG or GIF format."
+        helpText={
+          helpText ??
+          "This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG or GIF format."
+        }
         onRemove={() => void removeThumbnail(thumbnail?.guid ?? "")}
         defaultImageUrl={coverUrlForThumbnail(covers) ?? cast<string>(nativeTypeThumbnails(`./${nativeType}.svg`))}
         onSelectFile={(file) =>

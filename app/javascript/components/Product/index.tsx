@@ -49,6 +49,7 @@ import { PriceTag } from "$app/components/Product/PriceTag";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
+import { coverUrlForThumbnail } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
 import { RatingStars } from "$app/components/RatingStars";
 import { Review as ReviewComponent } from "$app/components/Review";
@@ -625,29 +626,99 @@ export const Product = ({
           {social_proof_widgets.map((widget) =>
             visibleSocialProofIds.has(widget.id) ? (
               <div key={widget.id} style={{ pointerEvents: "auto" }}>
-                <SocialProofCard
-                  widgetId={widget.id}
-                  title={widget.title ?? ""}
-                  description={widget.description ?? ""}
-                  imageType={widget.image_type ?? "none"}
-                  ctaType={widget.cta_type ?? "none"}
-                  ctaText={widget.cta_text ?? ""}
-                  ctaUrl={(() => {
-                    const url = new URL(Routes.checkout_index_url());
-                    url.searchParams.set("product", product.permalink);
-                    return url.toString();
-                  })()}
-                  iconName={widget.icon_name ?? "heart-fill"}
-                  iconColor={widget.icon_color ?? "#FFB800"}
-                  imageUrl={widget.image_url ?? ""}
-                  onClose={() => {
-                    setVisibleSocialProofIds((prev) => {
-                      const next = new Set(prev);
-                      next.delete(widget.id);
-                      return next;
-                    });
-                  }}
-                />
+                {widget.image_type === "icon" ? (
+                  <SocialProofCard
+                    widgetId={widget.id}
+                    title={widget.title ?? ""}
+                    description={widget.description ?? ""}
+                    imageType="icon"
+                    ctaType={widget.cta_type ?? "none"}
+                    ctaText={widget.cta_text ?? ""}
+                    ctaUrl={(() => {
+                      const url = new URL(Routes.checkout_index_url());
+                      url.searchParams.set("product", product.permalink);
+                      return url.toString();
+                    })()}
+                    iconName={widget.icon_name ?? "heart-fill"}
+                    iconColor={widget.icon_color ?? "#FFB800"}
+                    currentProductThumbnailUrl={coverUrlForThumbnail(product.covers)}
+                    onClose={() => {
+                      setVisibleSocialProofIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(widget.id);
+                        return next;
+                      });
+                    }}
+                  />
+                ) : widget.image_type === "product_thumbnail" ? (
+                  <SocialProofCard
+                    widgetId={widget.id}
+                    title={widget.title ?? ""}
+                    description={widget.description ?? ""}
+                    imageType="product_thumbnail"
+                    ctaType={widget.cta_type ?? "none"}
+                    ctaText={widget.cta_text ?? ""}
+                    ctaUrl={(() => {
+                      const url = new URL(Routes.checkout_index_url());
+                      url.searchParams.set("product", product.permalink);
+                      return url.toString();
+                    })()}
+                    imageUrl={widget.image_url ?? ""}
+                    currentProductThumbnailUrl={coverUrlForThumbnail(product.covers)}
+                    onClose={() => {
+                      setVisibleSocialProofIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(widget.id);
+                        return next;
+                      });
+                    }}
+                  />
+                ) : widget.image_type === "custom_image" ? (
+                  <SocialProofCard
+                    widgetId={widget.id}
+                    title={widget.title ?? ""}
+                    description={widget.description ?? ""}
+                    imageType="custom_image"
+                    ctaType={widget.cta_type ?? "none"}
+                    ctaText={widget.cta_text ?? ""}
+                    ctaUrl={(() => {
+                      const url = new URL(Routes.checkout_index_url());
+                      url.searchParams.set("product", product.permalink);
+                      return url.toString();
+                    })()}
+                    imageUrl={widget.image_url ?? ""}
+                    currentProductThumbnailUrl={coverUrlForThumbnail(product.covers)}
+                    onClose={() => {
+                      setVisibleSocialProofIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(widget.id);
+                        return next;
+                      });
+                    }}
+                  />
+                ) : (
+                  <SocialProofCard
+                    widgetId={widget.id}
+                    title={widget.title ?? ""}
+                    description={widget.description ?? ""}
+                    imageType="none"
+                    ctaType={widget.cta_type ?? "none"}
+                    ctaText={widget.cta_text ?? ""}
+                    ctaUrl={(() => {
+                      const url = new URL(Routes.checkout_index_url());
+                      url.searchParams.set("product", product.permalink);
+                      return url.toString();
+                    })()}
+                    currentProductThumbnailUrl={coverUrlForThumbnail(product.covers)}
+                    onClose={() => {
+                      setVisibleSocialProofIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(widget.id);
+                        return next;
+                      });
+                    }}
+                  />
+                )}
               </div>
             ) : null,
           )}
