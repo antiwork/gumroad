@@ -557,8 +557,18 @@ export const CheckoutPage = ({
     }
   }, [state.email]);
 
+  /**
+   * Creates a new cart state when an offer (upsell or cross-sell) is accepted.
+   * 
+   * For cross-sells: Adds the new product to the cart (or replaces selected products if configured)
+   * For upsells: Replaces the original product with the upgraded version
+   * 
+   * IMPORTANT: This function preserves discount codes from the original cart items
+   * to ensure customers don't lose their discounts when accepting offers.
+   */
   const getCartIfAccepted = () => {
     if (currentOffer?.type === "cross-sell") {
+      // Find the original cart items that triggered this cross-sell offer
       const originalCartItems = cart.items.filter(({ product }) =>
         product.cross_sells.some(({ id }) => id === currentOffer.id),
       );
@@ -567,41 +577,48 @@ export const CheckoutPage = ({
         return {
           ...cart,
           items: [
+            // Either keep all existing items or remove the ones being replaced
             ...(currentOffer.replace_selected_products
               ? cart.items.filter((item) => !originalCartItems.includes(item))
               : cart.items),
             {
+              // Copy all properties from the offered product
               ...currentOffer.offered_product,
+              // Ensure no circular cross-sell references
               product: { ...currentOffer.offered_product.product, cross_sells: [] },
               quantity: 1,
+              // Preserve tracking data from the original item
               url_parameters: originalCartItem.url_parameters,
               referrer: originalCartItem.referrer,
               recommender_model_name: null,
               pay_in_installments: originalCartItem.pay_in_installments,
+              // Track which offer was accepted for analytics
               accepted_offer: {
                 id: currentOffer.id,
-                original_product_id: originalCartItem.product.id,
-                discount: currentOffer.discount,
               },
             },
           ],
         };
       }
     } else if (currentOffer?.type === "upsell") {
+      // For upsells, replace the original item with the upgraded version
       return {
         ...cart,
         items: [
+          // Remove the original item being upgraded
           ...cart.items.filter((item) => item !== currentOffer.item),
           {
+            // Keep all properties from the original item (including discount_codes)
             ...currentOffer.item,
+            // Update to the new variant/option
             option_id: currentOffer.offeredOption.id,
+            // Calculate the new price based on the upgraded option
             price:
               currentOffer.item.product.price_cents +
               computeOptionPrice(currentOffer.offeredOption, currentOffer.item.recurrence),
+            // Track which offer was accepted for analytics
             accepted_offer: {
               id: currentOffer.id,
-              original_product_id: currentOffer.item.product.id,
-              original_variant_id: currentOffer.item.option_id,
             },
           },
         ],
