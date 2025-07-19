@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_07_13_155443) do
+ActiveRecord::Schema[7.1].define(version: 2025_07_14_122653) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2119,6 +2119,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_155443) do
     t.index ["occurred_at"], name: "index_social_proof_widget_purchases_on_occurred_at"
     t.index ["purchase_id"], name: "index_social_proof_widget_purchases_on_purchase_id"
     t.index ["social_proof_widget_id", "occurred_at"], name: "idx_on_social_proof_widget_id_occurred_at_598d263ef1"
+    t.index ["social_proof_widget_id", "purchase_id"], name: "index_social_proof_widget_purchases_on_widget_and_purchase", unique: true
     t.index ["social_proof_widget_id"], name: "index_social_proof_widget_purchases_on_social_proof_widget_id"
   end
 
@@ -2794,7 +2795,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_07_13_155443) do
   add_foreign_key "social_proof_widget_analytics", "social_proof_widgets", name: "__fk_rails_5e8e950e86"
   add_foreign_key "social_proof_widget_events", "purchases", name: "__fk_rails_69b961f146"
   add_foreign_key "social_proof_widget_events", "social_proof_widgets", name: "__fk_rails_18c5a475f0"
-  add_foreign_key "social_proof_widget_purchases", "purchases", name: "__fk_rails_41d4ab53ee"
-  add_foreign_key "social_proof_widget_purchases", "social_proof_widgets", name: "__fk_rails_7ef4674e8b"
+  add_foreign_key "social_proof_widget_purchases", "purchases"
+  add_foreign_key "social_proof_widget_purchases", "social_proof_widgets"
   add_foreign_key "social_proof_widgets", "users"
 end
