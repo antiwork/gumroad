@@ -56,7 +56,7 @@ describe PostToPingEndpointsWorker, :vcr do
       url_params: "{\"first_param\":\"test\",\"second_param\":\"flkdjaf\"}"
     )
 
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   it "includes a license key if the purchase has one" do
@@ -70,7 +70,7 @@ describe PostToPingEndpointsWorker, :vcr do
       product_permalink: link.long_url,
       license_key: purchase.license.serial
     )
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   it "includes gift related information if the purchase is a gift" do
@@ -93,7 +93,7 @@ describe PostToPingEndpointsWorker, :vcr do
       is_gift_receiver_purchase: true,
       gifter_email: gifter_purchase.email
     )
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   it "includes a purchaser id if there is one for the purchase" do
@@ -104,7 +104,7 @@ describe PostToPingEndpointsWorker, :vcr do
       purchaser_id: purchaser.external_id,
       url_params: "{\"first_param\":\"test\",\"second_param\":\"flkdjaf\"}"
     )
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   it "includes the sku id in the post if there's a sku" do
@@ -137,7 +137,7 @@ describe PostToPingEndpointsWorker, :vcr do
       variants: { "Version" => "Large" },
       shipping_rate: 0
     )
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   it "includes the custom sku in the post if there's a sku" do
@@ -172,7 +172,7 @@ describe PostToPingEndpointsWorker, :vcr do
       variants: { "Version" => "Large" },
       shipping_rate: 0
     )
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   it "includes the sku id in the post if the product is sku-enabled and doesn't have a sku" do
@@ -203,7 +203,7 @@ describe PostToPingEndpointsWorker, :vcr do
       sku_id: purchase.sku_custom_name_or_external_id,
       shipping_rate: 0
     )
-    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
   describe "shipping information" do
@@ -232,7 +232,7 @@ describe PostToPingEndpointsWorker, :vcr do
         country: "United States",
         zip_code: "12345"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
   end
 
@@ -265,7 +265,7 @@ describe PostToPingEndpointsWorker, :vcr do
         shipping_rate: 0,
         sku_id: "pid_#{link.external_id}"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
   end
 
@@ -281,7 +281,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "Klm",
         ip_country: "United States"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
   end
 
@@ -306,7 +306,7 @@ describe PostToPingEndpointsWorker, :vcr do
           "species" => "dog"
         }
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
   end
 
@@ -321,7 +321,7 @@ describe PostToPingEndpointsWorker, :vcr do
       params = @default_params.call(purchase).merge(
         offer_code: "thanks9"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
   end
 
@@ -338,7 +338,7 @@ describe PostToPingEndpointsWorker, :vcr do
         recurrence: subscription.recurrence,
         subscription_id: subscription.external_id
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
   end
 
@@ -400,7 +400,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "abc",
         email: "ibuy@gumroad.com"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type, @user.id)
     end
 
     it "posts affiliate_credit information to the app's post url" do
@@ -421,7 +421,7 @@ describe PostToPingEndpointsWorker, :vcr do
         affiliate_credit_amount_cents: 53,
         affiliate: @affiliate_user.form_email
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type, @user.id)
     end
 
     it "posts to all apps' post urls and to the user's notification endpoint" do
@@ -439,7 +439,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "abc",
         email: "ibuy@gumroad.com"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type, @user.id)
 
       params = @default_params.call(purchase).merge(
         product_name: @product.name,
@@ -447,7 +447,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "abc",
         email: "ibuy@gumroad.com"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(another_resource_subscription.post_url, params, another_resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(another_resource_subscription.post_url, params, another_resource_subscription.content_type, @user.id)
 
       params = @default_params.call(purchase).merge(
         product_name: @product.name,
@@ -455,7 +455,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "abc",
         email: "ibuy@gumroad.com"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
     end
 
     it "does not post to the app's post url if the token is revoked" do
@@ -475,7 +475,7 @@ describe PostToPingEndpointsWorker, :vcr do
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil)
 
-      expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type, anything)
     end
 
     it "does not post to the app's post url if the user hasn't given view_sales permissions to the app" do
@@ -508,7 +508,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "abc",
         email: "ibuy@gumroad.com"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(another_resource_subscription.post_url, params, another_resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(another_resource_subscription.post_url, params, another_resource_subscription.content_type, @user.id)
     end
 
     it "posts to the app's post url even if the token is expired" do
@@ -524,7 +524,7 @@ describe PostToPingEndpointsWorker, :vcr do
         permalink: "abc",
         email: "ibuy@gumroad.com"
       )
-      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, params, @resource_subscription.content_type, @user.id)
     end
 
     it "posts sale refunded ping to the 'refunded' resource's post_url", :sidekiq_inline do

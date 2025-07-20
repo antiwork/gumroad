@@ -18,7 +18,6 @@ class StripeChargeRefund < ChargeRefund
                  application_fee_refund_balance_transaction,
                  destination_payment_refund_balance_transaction,
                  destination_payment_application_fee_refund)
-
     @charge = charge
     @refund = refund
     @destination_payment_refund = destination_payment_refund

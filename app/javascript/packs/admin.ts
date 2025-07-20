@@ -4,10 +4,11 @@ import ReactOnRails from "react-on-rails";
 import BasePage from "$app/utils/base_page";
 
 import AdminNav from "$app/components/server-components/Admin/Nav";
+import AdminSalesReportsPage from "$app/components/server-components/Admin/SalesReportsPage";
 import AdminSearchPopover from "$app/components/server-components/Admin/SearchPopover";
 
 BasePage.initialize();
-ReactOnRails.register({ AdminNav, AdminSearchPopover });
+ReactOnRails.register({ AdminNav, AdminSearchPopover, AdminSalesReportsPage });
 
 let clipboard: Clipboard | null = null;
 

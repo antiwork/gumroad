@@ -475,4 +475,67 @@ describe Country do
       expect(Country.new("CI").payout_currency).to eq Currency::XOF
     end
   end
+
+  describe "#min_cross_border_payout_amount_local_cents" do
+    it "returns the correct minimum payout amount in local currency cents for supported cross-border countries" do
+      expect(Country.new("TH").min_cross_border_payout_amount_local_cents).to eq 600_00
+      expect(Country.new("KR").min_cross_border_payout_amount_local_cents).to eq 40_000_00
+      expect(Country.new("NA").min_cross_border_payout_amount_local_cents).to eq 550_00
+      expect(Country.new("PH").min_cross_border_payout_amount_local_cents).to eq 20_00
+      expect(Country.new("MX").min_cross_border_payout_amount_local_cents).to eq 10_00
+      expect(Country.new("BO").min_cross_border_payout_amount_local_cents).to eq 200_00
+      expect(Country.new("UZ").min_cross_border_payout_amount_local_cents).to eq 343_000_00
+      expect(Country.new("GY").min_cross_border_payout_amount_local_cents).to eq 6_300_00
+      expect(Country.new("KH").min_cross_border_payout_amount_local_cents).to eq 123_000_00
+      expect(Country.new("MN").min_cross_border_payout_amount_local_cents).to eq 105_000_00
+      expect(Country.new("AO").min_cross_border_payout_amount_local_cents).to eq 23_000_00
+      expect(Country.new("AR").min_cross_border_payout_amount_local_cents).to eq 4_600_00
+      expect(Country.new("RW").min_cross_border_payout_amount_local_cents).to eq 100_00
+      expect(Country.new("TW").min_cross_border_payout_amount_local_cents).to eq 800_00
+      expect(Country.new("AM").min_cross_border_payout_amount_local_cents).to eq 12_100_00
+      expect(Country.new("BT").min_cross_border_payout_amount_local_cents).to eq 2_500_00
+      expect(Country.new("LA").min_cross_border_payout_amount_local_cents).to eq 516_000_00
+      expect(Country.new("MZ").min_cross_border_payout_amount_local_cents).to eq 1_700_00
+      expect(Country.new("CL").min_cross_border_payout_amount_local_cents).to eq 23_000_00
+      expect(Country.new("OM").min_cross_border_payout_amount_local_cents).to eq 1_00
+      expect(Country.new("AL").min_cross_border_payout_amount_local_cents).to eq 3_000_00
+      expect(Country.new("AZ").min_cross_border_payout_amount_local_cents).to eq 50_00
+      expect(Country.new("PY").min_cross_border_payout_amount_local_cents).to eq 210_000_00
+      expect(Country.new("GA").min_cross_border_payout_amount_local_cents).to eq 100_00
+      expect(Country.new("DZ").min_cross_border_payout_amount_local_cents).to eq 1_00
+    end
+
+    it "returns 0 for unsupported or default countries" do
+      expect(Country.new("US").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("GB").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("AU").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("FR").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("IL").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("TT").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("IN").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("VN").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("ID").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("CR").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("PK").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("NE").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("SM").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("BA").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("TR").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("MA").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("RS").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("ZA").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("KE").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("EG").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("CO").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("SA").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("BW").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("KZ").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("EC").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("MY").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("UY").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("MU").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("JM").min_cross_border_payout_amount_local_cents).to eq 0
+      expect(Country.new("DO").min_cross_border_payout_amount_local_cents).to eq 0
+    end
+  end
 end
