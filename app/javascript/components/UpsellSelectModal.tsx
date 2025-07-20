@@ -78,18 +78,19 @@ export const UpsellSelectModal = ({
   type ProductSelectOption = {
     id: string;
     label: string;
+    variantId?: string;
     isSubOption?: boolean;
     disabled?: boolean;
   };
 
   const productOptions: ProductSelectOption[] = products.reduce<ProductSelectOption[]>(
     (selectOptions, { id, name, options }) => {
-      const disabled = options.length > 0;
-      selectOptions.push({ id, label: name, disabled });
+      const hasVariants = options.length > 0;
+      selectOptions.push({ id, label: name, disabled: hasVariants });
 
-      if (disabled) {
-        options.forEach(({ id: optionId, name: optionName }) => {
-          selectOptions.push({ id: `${id}---${optionId}`, label: `${name} (${optionName})`, isSubOption: true });
+      if (hasVariants) {
+        options.forEach(({ id: variantId, name: variantName }) => {
+          selectOptions.push({ id, label: variantName, variantId, isSubOption: true });
         });
       }
 
@@ -98,19 +99,12 @@ export const UpsellSelectModal = ({
     [],
   );
 
-  const selectProductOption = (newProductOption: { id: string; label: string; isSubOption?: boolean } | null) => {
-    if (newProductOption?.isSubOption) {
-      const [productId, variantId] = newProductOption.id.split("---");
-      const product = products.find((p) => p.id === productId) || null;
-      setSelectedProduct(product);
+  const selectProductOption = (newProductOption: { id: string; label: string; variantId?: string } | null) => {
+    const product = products.find((p) => p.id === newProductOption?.id) || null;
+    setSelectedProduct(product);
 
-      const variant = product?.options.find((o) => o.id === variantId) || null;
-      setSelectedVariant(variant);
-    } else {
-      const product = products.find((p) => p.id === newProductOption?.id) || null;
-      setSelectedProduct(product);
-      setSelectedVariant(null);
-    }
+    const variant = product?.options.find((o) => o.id === newProductOption?.variantId) || null;
+    setSelectedVariant(variant);
   };
 
   const selectedProductOption = selectedProduct
