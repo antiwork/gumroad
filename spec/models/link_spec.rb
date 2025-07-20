@@ -5217,7 +5217,7 @@ describe Link, :vcr do
     let!(:product_with_variants) { create(:product_with_digital_versions) }
     let!(:archived_product) { create(:product, archived: true) }
 
-    it "returns visible non-membership products without variants" do
+    it "returns visible non-membership products including those with variants" do
       expect(Link.eligible_for_content_upsells).to match_array([regular_product, product_with_variants])
     end
   end
