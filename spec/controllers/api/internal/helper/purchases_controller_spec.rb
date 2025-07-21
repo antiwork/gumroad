@@ -217,6 +217,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       purchase_json[:id] = @purchase.external_id_numeric
       purchase_json[:seller_email] = @purchase.seller_email
       purchase_json[:receipt_url] = receipt_purchase_url(@purchase.external_id, host: UrlService.domain_with_protocol, email: @purchase.email)
+      purchase_json[:refund_status] = @purchase.refunded?
+      purchase_json[:refund_date] = nil
 
       post :search, params: @params
 
@@ -239,6 +241,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:id] = purchase.external_id_numeric
         purchase_json[:seller_email] = purchase.seller_email
         purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
+        purchase_json[:refund_status] = purchase.refunded?
+        purchase_json[:refund_date] = nil
         params = @params.merge(email: "user@example.com")
         post :search, params: params
 
@@ -253,6 +257,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:id] = purchase.external_id_numeric
         purchase_json[:seller_email] = purchase.seller_email
         purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
+        purchase_json[:refund_status] = purchase.refunded?
+        purchase_json[:refund_date] = nil
         params = { card_last4: "4242", timestamp: Time.now.to_i }
         post :search, params: params
 
@@ -276,6 +282,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:id] = purchase.external_id_numeric
         purchase_json[:seller_email] = purchase.seller_email
         purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
+        purchase_json[:refund_status] = purchase.refunded?
+        purchase_json[:refund_date] = nil
         params = { charge_amount: "10.00", timestamp: Time.now.to_i }
         post :search, params: params
 
