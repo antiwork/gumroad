@@ -48,7 +48,7 @@ class GenerateSalesReportJob
       s3_report_key = s3_prefix.present? ? "#{s3_prefix.chomp('/')}/#{base_path}" : base_path
       s3_object = Aws::S3::Resource.new.bucket(REPORTING_S3_BUCKET).object(s3_report_key)
       s3_object.upload_file(temp_file)
-      s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.year.to_i).to_s
+      s3_signed_url = s3_object.presigned_url(:get).to_s
 
       if send_notification
         message = "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
