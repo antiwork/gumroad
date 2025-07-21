@@ -127,7 +127,7 @@ export const Layout = ({
   isLoading?: boolean;
   headerActions?: React.ReactNode;
 }) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save } = useProductEditContext();
+  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
   const rootPath = `/products/${uniquePermalink}/edit`;
 
   const url = useProductUrl();
@@ -142,7 +142,7 @@ export const Layout = ({
   const setPublished = async (published: boolean) => {
     try {
       setIsPublishing(true);
-      await saveProduct(uniquePermalink, id, product);
+      await saveProduct(uniquePermalink, id, product, currencyType);
       await setProductPublished(uniquePermalink, published);
       updateProduct({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");

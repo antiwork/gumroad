@@ -121,6 +121,11 @@ class User < ApplicationRecord
   has_many :community_notification_settings, dependent: :destroy
   has_many :seller_community_chat_recaps, class_name: "CommunityChatRecap", foreign_key: :seller_id, dependent: :destroy
 
+  has_one_attached :avatar
+  attr_accessor :avatar_changed
+  before_save :set_avatar_changed
+  after_commit :reset_avatar_changed
+
   scope :by_email, ->(email) { where(email:) }
   scope :compliant, -> { where(user_risk_state: "compliant") }
   scope :payment_reminder_risk_state, -> { where("user_risk_state in (?)", PAYMENT_REMINDER_RISK_STATES) }
@@ -140,6 +145,7 @@ class User < ApplicationRecord
 
   attr_json_data_accessor :background_opacity_percent, default: 100
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
+  attr_json_data_accessor :last_ping_failure_notification_at
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -357,7 +363,6 @@ class User < ApplicationRecord
     end
   end
 
-  has_one_attached :avatar
   has_one_attached :subscribe_preview
   has_many_attached :annual_reports
 
@@ -1117,8 +1122,9 @@ class User < ApplicationRecord
 
     def should_subscribe_preview_be_regenerated?
       previously_new_record? ||
-      %w[name username].intersect?(saved_changes.keys) ||
-      %w[font background_color highlight_color].intersect?(seller_profile.saved_changes.keys)
+        %w[name username].intersect?(saved_changes.keys) ||
+        %w[font background_color highlight_color].intersect?(seller_profile.saved_changes.keys) ||
+        avatar_changed
     end
 
     def cancel_active_subscriptions!
@@ -1136,5 +1142,13 @@ class User < ApplicationRecord
     def has_completed_payouts?
       payments.completed.exists? ||
         made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
+    end
+
+    def set_avatar_changed
+      self.avatar_changed = attachment_changes["avatar"].present?
+    end
+
+    def reset_avatar_changed
+      self.avatar_changed = false
     end
 end

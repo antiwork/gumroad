@@ -362,6 +362,10 @@ generate_ytd_sales_report:
   class: Reports::GenerateYtdSalesReportJob
   queue: low
   description: Generates a YTD sales report by country and state and emails it.
+create_india_sales_report:
+  cron: "0 3 1 * *" # UTC 03:00 on 1st of every month
+  class: CreateIndiaSalesReportJob
+  description: Generates India GST sales report for the previous month
 
 # Quarterly
 generate_financial_reports:

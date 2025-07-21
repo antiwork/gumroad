@@ -1,6 +1,7 @@
 import { Editor, findChildren } from "@tiptap/core";
 import { cast } from "ts-safe-cast";
 
+import { CurrencyCode } from "$app/utils/currency";
 import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
@@ -8,7 +9,7 @@ import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Product } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
-export const saveProduct = async (permalink: string, id: string, product: Product) => {
+export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
   const richContents =
@@ -32,6 +33,7 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
     url: Routes.link_path(permalink),
     data: {
       ...product,
+      price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),
       variants: product.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>

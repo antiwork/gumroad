@@ -2616,6 +2616,33 @@ describe User, :vcr do
       @user.save!
       expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(@user.id)
     end
+
+    it "schedules GenerateSubscribePreviewJob when avatar changes" do
+      # Avatar updates regenerate the preview.
+      @user.avatar.attach(
+        io: fixture_file_upload("smilie.png"),
+        filename: "smilie.png",
+      )
+      expect(GenerateSubscribePreviewJob.jobs.size).to eq(1)
+      expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(@user.id)
+
+      GenerateSubscribePreviewJob.jobs.clear
+
+      # Updates to other attached fields do not regenerate the preview.
+      @user.subscribe_preview.attach(
+        io: fixture_file_upload("smilie.png"),
+        filename: "new_subscribe_preview.png",
+      )
+      expect(GenerateSubscribePreviewJob.jobs.size).to eq(0)
+
+      # Avatar removal regenerates the preview.
+      # Should ideally use `#purge` but the test environment AWS S3 credentials
+      # do not have access to remove items.
+      @user.avatar = nil
+      @user.save!
+      expect(GenerateSubscribePreviewJob.jobs.size).to eq(1)
+      expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(@user.id)
+    end
   end
 
   describe "after_save callback to enqueue StripeApplePayDomain jobs" do

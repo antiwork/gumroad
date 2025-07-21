@@ -3256,21 +3256,21 @@ describe Link, :vcr do
     end
 
     it "can create an offer code that lowers the price to 0" do
-      offer_code = build(:offer_code, products: [@product_for_code], amount_cents: 240)
+      offer_code = build(:offer_code, products: [@product_for_code], currency_type: "eur", amount_cents: 240)
       expect do
         offer_code.save!
       end.to change { OfferCode.count }.by(1)
     end
 
     it "can create an offer code that keeps the price above the minimum" do
-      offer_code = build(:offer_code, products: [@product_for_code], amount_cents: 100)
+      offer_code = build(:offer_code, products: [@product_for_code], currency_type: "eur", amount_cents: 100)
       expect do
         offer_code.save!
       end.to change { OfferCode.count }.by(1)
     end
 
     it "cannot create an offer code that brings the price to below the minimum" do
-      offer_code = build(:offer_code, products: [@product_for_code], amount_cents: 239)
+      offer_code = build(:offer_code, products: [@product_for_code], currency_type: "eur", amount_cents: 239)
       expect do
         expect do
           offer_code.save!

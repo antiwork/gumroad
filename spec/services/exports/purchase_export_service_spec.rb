@@ -512,6 +512,31 @@ describe Exports::PurchaseExportService do
       expect(field_value(last_data_row, "License Key")).to eq(giftee_purchase.license_key)
     end
 
+    it "includes license key activation count" do
+      @product.update!(is_licensed: true)
+      @purchase.create_license!
+
+      expect(field_value(last_data_row, "License Key Activation Count")).to eq("0")
+
+      @purchase.license.update!(uses: 5)
+      expect(field_value(last_data_row, "License Key Activation Count")).to eq("5")
+    end
+
+    it "includes license key activation count for giftee" do
+      @product.update!(is_licensed: true)
+      @purchase.update!(is_gift_sender_purchase: true)
+      giftee_purchase = create(:purchase, :gift_receiver, link: @product)
+      create(:gift, link: @product, gifter_purchase: @purchase, giftee_purchase:)
+      giftee_purchase.create_license!
+      giftee_purchase.license.update!(uses: 3)
+
+      expect(field_value(last_data_row, "License Key Activation Count")).to eq("3")
+    end
+
+    it "shows nil for license key activation count when no license exists" do
+      expect(field_value(last_data_row, "License Key Activation Count")).to be_nil
+    end
+
     it "shows whether the purchase is associated to a sent abandoned cart email" do
       expect(field_value(last_data_row, "Sent Abandoned Cart Email?")).to eq("0")
       cart = create(:cart, order: create(:order, purchases: [@purchase]))

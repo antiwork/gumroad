@@ -46,7 +46,7 @@ class SendPostBlastEmailsJob
 
   private
     def prepare_recipients(members)
-      members_with_specifics = members.to_h { [_1, { email: _1.email }] }
+      members_with_specifics = members.index_with { { email: _1.email } }
       enrich_with_gathered_records(members_with_specifics)
       enrich_with_purchases_specifics(members_with_specifics)
       enrich_with_url_redirects(members_with_specifics)

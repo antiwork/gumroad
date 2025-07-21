@@ -527,6 +527,12 @@ describe("Product Edit Scenario", type: :feature, js: true) do
       wait_for_ajax
       expect(page).not_to have_text("Publicly show the number of sales on your product page")
     end
+
+    it "doesn't show the option to change currency code for membership products" do
+      visit "/products/#{@membership_product.unique_permalink}/edit"
+      wait_for_ajax
+      expect(page).not_to have_select("Currency", visible: :all)
+    end
   end
 
   describe "discover notices" do
@@ -737,17 +743,49 @@ describe("Product Edit Scenario", type: :feature, js: true) do
 
   describe "offer code validation" do
     context "when the price invalidates an offer code" do
-      before do
-        create(:offer_code, user: seller, products: [product], code: "bad", amount_cents: 100)
+      context "amount validations" do
+        before do
+          create(:offer_code, user: seller, products: [product], code: "bad", amount_cents: 100)
+        end
+
+        it "displays a warning message" do
+          visit edit_link_path(product.unique_permalink)
+
+          fill_in "Amount", with: "1.50"
+          click_on "Save changes"
+          expect(page).to have_alert(text: "The following offer code discounts this product below $0.99, but not to $0: bad. Please update it or it will not work at checkout.")
+        end
       end
 
-      it "displays a warning message" do
-        visit edit_link_path(product.unique_permalink)
+      context "currency validations" do
+        before do
+          create(:offer_code, user: seller, products: [product], code: "usd", amount_cents: 100)
+        end
 
-        fill_in "Amount", with: "1.50"
-        click_on "Save changes"
-        expect(page).to have_alert(text: "The following offer code discounts this product below $0.99, but not to $0: bad. Please update its amount or it will not work at checkout.")
+        it "displays a warning message" do
+          visit edit_link_path(product.unique_permalink)
+
+          select "£", from: "Currency", visible: false
+          expect(page).to have_select("Currency", selected: "£", visible: false)
+
+          click_on "Save changes"
+          expect(page).to have_alert(text: "The following offer code has currency mismatch with this product: usd. Please update it or it will not work at checkout.")
+          expect(product.reload.price_currency_type).to eq "gbp"
+        end
       end
+    end
+  end
+
+  context "product currency" do
+    it "allows updating currency" do
+      visit edit_link_path(product.unique_permalink)
+
+      select "£", from: "Currency", visible: false
+      expect(page).to have_select("Currency", selected: "£", visible: false)
+
+      click_on "Save changes"
+      wait_for_ajax
+      expect(product.reload.price_currency_type).to eq "gbp"
     end
   end
 

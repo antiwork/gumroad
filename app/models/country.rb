@@ -346,14 +346,10 @@ class Country
       600_00
     when Compliance::Countries::KOR.alpha2
       # ~30.33 USD as-of this comment
-      40000_00
+      40_000_00
     when Compliance::Countries::NAM.alpha2
       # ~31 USD as-of this comment
-      550
-    when Compliance::Countries::ISR.alpha2
-      0
-    when Compliance::Countries::TTO.alpha2
-      0
+      550_00
     when Compliance::Countries::PHL.alpha2
       # ~0.36 USD as-of this comment
       20_00
@@ -362,84 +358,64 @@ class Country
       10_00
     when Compliance::Countries::BOL.alpha2
       # ~29 USD as-of this comment
-      200
+      200_00
     when Compliance::Countries::UZB.alpha2
       # ~27 USD as-of this comment
-      343000
+      343_000_00
     when Compliance::Countries::GUY.alpha2
       # ~$30 USD as-of this comment
-      6300_00
+      6_300_00
     when Compliance::Countries::KHM.alpha2
       # $30 USD as-of this comment
-      123000
+      123_000_00
     when Compliance::Countries::MNG.alpha2
       # $30 USD as-of this comment
-      105000
+      105_000_00
     when Compliance::Countries::AGO.alpha2
-      # 16.50 USD as-of this comment
-      15000
+      # 25 USD as-of this comment
+      23_000_00
     when Compliance::Countries::ARG.alpha2
       # ~12.60 USD as-of this comment
-      4600
-    when Compliance::Countries::PER.alpha2
-      0
-    when Compliance::Countries::IND.alpha2
-      # 0 USD as-of this comment
-      0
-    when Compliance::Countries::VNM.alpha2
-      # 0 USD as-of this comment
-      0
+      4_600_00
     when Compliance::Countries::RWA.alpha2
       # 0.074 USD as-of this comment
-      100
+      100_00
     when Compliance::Countries::TWN.alpha2
       # ~24.50 USD as-of this comment
-      800
-    when Compliance::Countries::IDN.alpha2
-      # 0 USD as-of this comment
-      0
+      800_00
     when Compliance::Countries::ARM.alpha2
       # 31.25 USD as-of this comment
-      12100
+      12_100_00
     when Compliance::Countries::BTN.alpha2
       # $29 USD as-of this comment
-      2500
+      2_500_00
     when Compliance::Countries::LAO.alpha2
       # 23.50 USD as-of this comment
-      516000
+      516_000_00
     when Compliance::Countries::MOZ.alpha2
       # 26.60 USD as-of this comment
-      1700
-    when Compliance::Countries::CRI.alpha2
-      # 0 USD as-of this comment
-      0
+      1_700_00
     when Compliance::Countries::CHL.alpha2
       # ~24.58 USD as-of this comment
-      230_00
-    when Compliance::Countries::ECU.alpha2
-      # 0 USD as-of this comment
-      0
+      23_000_00
     when Compliance::Countries::OMN.alpha2
       # ~2.60 USD as-of this comment
-      1
+      1_00
     when Compliance::Countries::ALB.alpha2
       # 33 USD as-of this comment
-      3000
+      3_000_00
     when Compliance::Countries::AZE.alpha2
       # 30 USD as-of this comment
-      50
+      50_00
     when Compliance::Countries::PRY.alpha2
       # $26.43 USD as-of this comment
-      210000
-    when Compliance::Countries::LCA.alpha2
-      # 0 USD as-of this comment
-      0
+      210_000_00
     when Compliance::Countries::GAB.alpha2
       # ~0.16 USD as-of this comment
-      100
+      100_00
     when Compliance::Countries::DZA.alpha2
       # .0075 USD as-of this comment
-      1
+      1_00
     else
       # NOTE: if more countries are added to CROSS_BORDER_PAYOUTS_COUNTRIES,
       # this needs to be updated as well. Reference for country minimums:
