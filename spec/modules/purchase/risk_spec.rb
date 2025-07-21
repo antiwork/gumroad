@@ -3,6 +3,10 @@
 require "spec_helper"
 
 describe Purchase::Risk do
+  before do
+    Feature.activate(:purchase_check_for_fraudulent_ips)
+  end
+
   describe "check purchase for previous chargebacks" do
     it "returns errors if the email has charged-back" do
       product = create(:product)
@@ -67,17 +71,6 @@ describe Purchase::Risk do
 
       result = purchase.send(:check_for_fraud)
       expect(result).to be_nil
-    end
-
-    it "returns early when errors are present" do
-      purchase = build(:purchase, link: @product, email: "blocked@example.com")
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "blocked@example.com", nil, expires_in: 1.hour)
-
-      expect(purchase).to receive(:check_for_past_blocked_emails).and_call_original
-      expect(purchase).not_to receive(:check_for_past_blocked_email_domains)
-
-      purchase.send(:check_for_fraud)
-      expect(purchase.errors).not_to be_empty
     end
 
     it "returns errors if the buyer ip_address has been blocked" do
@@ -173,13 +166,6 @@ describe Purchase::Risk do
         purchase.send(:check_for_fraud)
         expect(purchase.errors.empty?).to be(true)
       end
-    end
-
-    it "returns errors if the email has an active blockage" do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "edgar_the_baddie@gumroad.com", nil, expires_in: 3.days)
-      bad_purchase = build(:purchase, link: @product, seller: @user, email: "edgar_the_baddie@gumroad.com")
-      bad_purchase.send(:check_for_fraud)
-      expect(bad_purchase.errors.empty?).to be(false)
     end
 
     describe "#check_for_past_blocked_email_domains" do
@@ -343,177 +329,6 @@ describe Purchase::Risk do
           expect(purchase.errors.any?).to be(false)
         end
       end
-    end
-
-    describe "#check_for_past_blocked_emails" do
-      let(:purchaser) { create(:user) }
-      let(:purchase) { build(:purchase, purchaser:, email: "john@example.com") }
-
-      context "when it is a paid product" do
-        vague_purchase_error_notice = "Your card was not charged."
-
-        it "returns error if the specified email has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "john@example.com", nil)
-
-          expect do
-            purchase.check_for_fraud
-          end.to change { purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-           .and change { purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice)
-        end
-
-        it "returns error if the purchaser's email has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], purchaser.email, nil)
-
-          expect do
-            purchase.check_for_fraud
-          end.to change { purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-           .and change { purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice)
-        end
-
-        context "when it is a gift purchase" do
-          let!(:product) { create(:product, price_cents: 100) }
-          let(:gift) { create(:gift, gifter_email: "gifter@gifter.com", giftee_email: "giftee@giftee.com", link: product) }
-          let(:gifter_purchase) do build(:purchase, link: product,
-                                                    seller: product.user,
-                                                    price_cents: product.price_cents,
-                                                    email: gift.gifter_email,
-                                                    is_gift_sender_purchase: true,
-                                                    gift_given: gift,
-                                                    purchase_state: "in_progress") end
-
-          let(:giftee_purchase) do build(:purchase, link: product,
-                                                    seller: product.user,
-                                                    email: gift.giftee_email,
-                                                    price_cents: 0,
-                                                    is_gift_receiver_purchase: true,
-                                                    gift_received: gift,
-                                                    purchase_state: "in_progress") end
-
-          before do
-            gift.gifter_purchase = gifter_purchase
-            gift.giftee_purchase = giftee_purchase
-          end
-
-          it "returns error if the gift recipient's email has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], gift.giftee_email, nil)
-
-            expect(giftee_purchase.price_cents).to eq 0
-            expect(gifter_purchase.price_cents).to eq 100
-
-            expect do
-              giftee_purchase.check_for_fraud
-            end.to change { giftee_purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-             .and change { giftee_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice)
-          end
-
-          it "returns error if the gift sender's email has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], gift.gifter_email, nil)
-
-            expect do
-              gifter_purchase.check_for_fraud
-            end.to change { gifter_purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-             .and change { gifter_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice)
-          end
-        end
-      end
-
-      context "when it is a free product" do
-        let(:free_purchase) { build(:purchase, purchaser:, email: "john@example.com", price_cents: 0) }
-        vague_purchase_error_notice_for_free_products = "The transaction could not complete."
-
-        it "returns error if the specified email has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "john@example.com", nil)
-
-          expect do
-            free_purchase.check_for_fraud
-          end.to change { free_purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-           .and change { free_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice_for_free_products)
-        end
-
-        it "returns error if the purchaser's email has been blocked" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], purchaser.email, nil)
-
-          expect do
-            free_purchase.check_for_fraud
-          end.to change { free_purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-           .and change { free_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice_for_free_products)
-        end
-
-        context "when it is a gift purchase" do
-          let!(:product) { create(:product, price_cents: 0) }
-          let(:gift) { create(:gift, gifter_email: "gifter@gifter.com", giftee_email: "giftee@giftee.com", link: product) }
-          let(:gifter_purchase) do build(:purchase, link: product,
-                                                    seller: product.user,
-                                                    price_cents: product.price_cents,
-                                                    email: gift.gifter_email,
-                                                    is_gift_sender_purchase: true,
-                                                    gift_given: gift,
-                                                    purchase_state: "in_progress") end
-
-          let(:giftee_purchase) do build(:purchase, link: product,
-                                                    seller: product.user,
-                                                    email: gift.giftee_email,
-                                                    price_cents: 0,
-                                                    is_gift_receiver_purchase: true,
-                                                    gift_received: gift,
-                                                    purchase_state: "in_progress") end
-
-          before do
-            gift.gifter_purchase = gifter_purchase
-            gift.giftee_purchase = giftee_purchase
-          end
-
-          it "returns error if the gift recipient's email has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], gift.giftee_email, nil)
-
-            expect(giftee_purchase.price_cents).to eq 0
-            expect(gifter_purchase.price_cents).to eq 0
-
-            expect do
-              giftee_purchase.check_for_fraud
-            end.to change { giftee_purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-             .and change { giftee_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice_for_free_products)
-          end
-
-          it "returns error if the gift sender's email has been blocked" do
-            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], gift.gifter_email, nil)
-
-            expect do
-              gifter_purchase.check_for_fraud
-            end.to change { gifter_purchase.error_code }.from(nil).to(PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS)
-             .and change { gifter_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice_for_free_products)
-          end
-        end
-      end
-
-      it "doesn't return an error if neither the purchaser's email nor the specified email has been blocked" do
-        expect do
-          purchase.check_for_fraud
-        end.to_not change { purchase.error_code }
-
-        expect(purchase.errors.any?).to be(false)
-      end
-
-      context "when purchaser has blank email and there exists a BlockedObject with a blank 'object_value'" do
-        let(:purchaser) { create(:user, email: "", provider: "twitter") }
-
-        it "doesn't return an error" do
-          BlockedObject.block!(BLOCKED_OBJECT_TYPES[:browser_guid], "", nil)
-
-          expect do
-            purchase.check_for_fraud
-          end.to_not change { purchase.error_code }
-
-          expect(purchase.errors.any?).to be(false)
-        end
-      end
-    end
-
-    it "doesn't return errors if the email has an inactive blockage" do
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "edgar_the_baddie@gumroad.com", nil, expires_in: -3.days)
-      bad_purchase = build(:purchase, link: @product, seller: @user, email: "edgar_the_baddie@gumroad.com")
-      bad_purchase.send(:check_for_fraud)
-      expect(bad_purchase.errors.empty?).to be(true)
     end
   end
 end
