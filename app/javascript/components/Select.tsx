@@ -16,7 +16,7 @@ import { escapeRegExp } from "$app/utils";
 
 import { Icon } from "$app/components/Icons";
 
-export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
+export type Option = { id: string; label: string };
 
 export type CustomOption = (option: Option) => React.ReactNode;
 type CustomProps = {
@@ -79,7 +79,6 @@ export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.R
     <CustomPropsContext.Provider value={customProps}>
       <ReactSelect
         {...props}
-        isOptionDisabled={(option) => option.disabled ?? false}
         instanceId={props.inputId ?? menuListId}
         className={cx("combobox", props.className)}
         components={{
@@ -130,7 +129,7 @@ const filterRegex = (query: string) => new RegExp(`(.*?)(${escapeRegExp(query)})
 const filterOptionFn: ReactSelectProps["filterOption"] = (option, query) => filterRegex(query).test(option.label);
 
 const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = (
-  { label, isSubOption },
+  { label },
   { inputValue },
 ) => {
   const result = filterRegex(inputValue).exec(label);
@@ -139,19 +138,13 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
     const [_, before, matchingInput, after] = result;
     return (
       <span>
-        {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
         {before}
         <em>{matchingInput}</em>
         {after}
       </span>
     );
   }
-  return (
-    <span>
-      {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
-      {label}
-    </span>
-  );
+  return label;
 };
 
 const LoadingIndicator = () => null;
