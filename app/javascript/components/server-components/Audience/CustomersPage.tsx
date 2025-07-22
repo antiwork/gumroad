@@ -3,7 +3,7 @@ import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { createCast, cast } from "ts-safe-cast";
 
 import {
   Address,
@@ -221,6 +221,8 @@ const CustomersPage = ({
 
   const [from, setFrom] = React.useState(subMonths(new Date(), 1));
   const [to, setTo] = React.useState(new Date());
+  const [csrfToken, setCsrfToken] = React.useState("");
+  useRunOnce(() => setCsrfToken(cast(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"))));
 
   const exportNames = React.useMemo(
     () =>
@@ -405,18 +407,24 @@ const CustomersPage = ({
                   : "This will download a CSV with each purchase on its own row."}
               </div>
               <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-              <NavigationButton
-                color="primary"
-                href={Routes.export_purchases_path({
-                  format: "csv",
-                  start_time: lightFormat(from, "yyyy-MM-dd"),
-                  end_time: lightFormat(to, "yyyy-MM-dd"),
-                  product_ids: includedProductIds,
-                  variant_ids: includedVariantIds,
-                })}
+              <form
+                action={Routes.export_purchases_path({ format: "csv" })}
+                method="post"
+                style={{ display: "contents" }}
               >
-                Download
-              </NavigationButton>
+                <input type="hidden" name="authenticity_token" value={csrfToken} />
+                <input type="hidden" name="start_time" value={lightFormat(from, "yyyy-MM-dd")} />
+                <input type="hidden" name="end_time" value={lightFormat(to, "yyyy-MM-dd")} />
+                {includedProductIds.map((id) => (
+                  <input key={`product_${id}`} type="hidden" name="product_ids[]" value={id} />
+                ))}
+                {includedVariantIds.map((id) => (
+                  <input key={`variant_${id}`} type="hidden" name="variant_ids[]" value={id} />
+                ))}
+                <Button type="submit" color="primary">
+                  Download
+                </Button>
+              </form>
             </div>
           </Popover>
         </div>
