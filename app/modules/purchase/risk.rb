@@ -6,9 +6,6 @@ module Purchase::Risk
 
   def check_for_fraud
     Timeout.timeout(CHECK_FOR_FRAUD_TIMEOUT_SECONDS) do
-      check_for_past_blocked_emails
-      return if errors.present?
-
       check_for_past_blocked_email_domains
       return if errors.present?
 
@@ -37,13 +34,6 @@ module Purchase::Risk
       else
         "Your card was not charged."
       end
-    end
-
-    def check_for_past_blocked_emails
-      return unless BlockedObject.find_active_objects(blockable_emails_if_fraudulent_transaction).exists?
-
-      self.error_code = PurchaseErrorCode::TEMPORARILY_BLOCKED_EMAIL_ADDRESS
-      errors.add :base, vague_error_message
     end
 
     def check_for_past_blocked_email_domains
@@ -80,6 +70,7 @@ module Purchase::Risk
     def check_for_past_fraudulent_ips
       return if is_recurring_subscription_charge
       return if free_purchase?
+      return if Feature.inactive?(:purchase_check_for_fraudulent_ips)
 
       buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(:current_sign_in_ip, :last_sign_in_ip, :account_created_ip).flatten.compact.uniq
       ip_addresses_to_check = [seller.current_sign_in_ip, seller.last_sign_in_ip, seller.account_created_ip, ip_address].compact.concat(buyer_ip_addresses)

@@ -64,7 +64,10 @@ module Compliance
     end
 
     def self.for_select
-      ISO3166::Country.all.reject { |country| blocked?(country.alpha2) }.map { |country| [country.alpha2, country.common_name] }.sort_by { |pair| pair.last }
+      ISO3166::Country.all.map do |country|
+        name = blocked?(country.alpha2) ? "#{country.common_name} (not supported)" : country.common_name
+        [country.alpha2, name]
+      end.sort_by { |pair| pair.last }
     end
     GLOBE_SHOWING_AMERICAS_EMOJI = [127758].pack("U*")
     private_constant :GLOBE_SHOWING_AMERICAS_EMOJI

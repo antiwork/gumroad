@@ -470,7 +470,7 @@ const AccountDetailsSection = ({
               onChange={(evt) => updateComplianceInfo({ updated_country_code: evt.target.value })}
             >
               {Object.entries(countries).map(([code, name]) => (
-                <option key={code} value={code}>
+                <option key={code} value={code} disabled={name.includes("(not supported)")}>
                   {name}
                 </option>
               ))}
@@ -1018,7 +1018,7 @@ const AccountDetailsSection = ({
           }
         >
           {Object.entries(countries).map(([code, name]) => (
-            <option key={code} value={code}>
+            <option key={code} value={code} disabled={name.includes("(not supported)")}>
               {name}
             </option>
           ))}
@@ -1124,7 +1124,7 @@ const AccountDetailsSection = ({
             >
               <option disabled>Nationality</option>
               {Object.entries(countries).map(([code, name]) => (
-                <option key={code} value={code}>
+                <option key={code} value={code} disabled={name.includes("(not supported)")}>
                   {name}
                 </option>
               ))}
