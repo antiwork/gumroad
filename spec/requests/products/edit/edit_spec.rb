@@ -226,7 +226,7 @@ describe("Product Edit Scenario", type: :feature, js: true) do
       [
         [
           { "type" => "paragraph", "content" => [{ "text" => "Hi there!", "type" => "text" }] },
-          { "type" => "upsellCard", "attrs" => { "id" => upsell.external_id, "discount" => { "type" => "fixed", "cents" => 100 }, "productId" => product.external_id } }
+          { "type" => "upsellCard", "attrs" => { "id" => upsell.external_id, "discount" => { "type" => "fixed", "cents" => 100 }, "productId" => product.external_id, "variantId" => nil } }
         ]
       ]
     )
