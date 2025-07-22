@@ -241,7 +241,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
         visit balance_path
 
         expect(page).to have_text("Failed")
-        expect(page).to have_text("This payout failed due to the bank account has been closed. It will be included in your next payout automatically once verification is complete.")
+        expect(page).to have_text("This payout failed due to the bank account has been closed. The amount will be included in your next payout automatically once verification is complete.")
       end
 
       it "shows completed payments for creator-owned Stripe Connect payouts" do

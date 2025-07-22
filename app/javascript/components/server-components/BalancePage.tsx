@@ -346,7 +346,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <span className="font-semibold underline">
               {payoutPeriodData.displayable_failure_reason ?? "unknown error"}
             </span>
-            . It will be included in your next payout automatically once verification is complete.
+            . The amount will be included in your next payout automatically once verification is complete.
           </div>
         </div>
       ) : null}
