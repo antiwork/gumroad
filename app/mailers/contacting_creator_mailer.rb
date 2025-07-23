@@ -531,7 +531,7 @@ class ContactingCreatorMailer < ApplicationMailer
       if @purchase.price_cents == 0
         @seller.enable_free_downloads_email?
       elsif @purchase.is_recurring_subscription_charge && !@purchase.is_upgrade_purchase?
-        @seller.enable_recurring_subscription_charge_email?
+        @seller.enable_recurring_subscription_charge_email? && @purchase.subscription_duration != "monthly"
       else
         @seller.enable_payment_email?
       end
@@ -543,7 +543,7 @@ class ContactingCreatorMailer < ApplicationMailer
       if @purchase.price_cents == 0
         @seller.enable_free_downloads_push_notification?
       elsif @purchase.is_recurring_subscription_charge && !@purchase.is_upgrade_purchase?
-        @seller.enable_recurring_subscription_charge_push_notification?
+        @seller.enable_recurring_subscription_charge_push_notification? && @purchase.subscription_duration != "monthly"
       else
         @seller.enable_payment_push_notification?
       end

@@ -314,6 +314,28 @@ describe "PurchaseSubscription", :vcr do
                 expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(subscription.id).at(1.month.from_now)
               end
             end
+
+            it "does not send email notifications for monthly recurring charges even when enabled" do
+              seller.update!(enable_recurring_subscription_charge_email: true)
+              recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:)
+
+              expect(ContactingCreatorMailer).to_not receive(:notify)
+
+              Sidekiq::Testing.inline! do
+                recurring_purchase.update_balance_and_mark_successful!
+              end
+            end
+
+            it "does not send push notifications for monthly recurring charges even when enabled" do
+              seller.update!(enable_recurring_subscription_charge_push_notification: true)
+              recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:)
+
+              Sidekiq::Testing.inline! do
+                recurring_purchase.update_balance_and_mark_successful!
+              end
+
+              expect(PushNotificationWorker.jobs.size).to eq(0)
+            end
           end
 
           describe "yearly charges" do
@@ -324,6 +346,28 @@ describe "PurchaseSubscription", :vcr do
                 purchase.update_balance_and_mark_successful!
 
                 expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(subscription.id).at(1.year.from_now)
+              end
+            end
+
+            it "still sends email notifications for yearly recurring charges when enabled" do
+              seller.update!(enable_recurring_subscription_charge_email: true)
+              recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:)
+
+              expect(ContactingCreatorMailer).to receive(:notify).and_call_original
+
+              Sidekiq::Testing.inline! do
+                recurring_purchase.update_balance_and_mark_successful!
+              end
+            end
+
+            it "does not send email notifications for yearly recurring charges when disabled" do
+              seller.update!(enable_recurring_subscription_charge_email: false)
+              recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:)
+
+              expect(ContactingCreatorMailer).to_not receive(:notify)
+
+              Sidekiq::Testing.inline! do
+                recurring_purchase.update_balance_and_mark_successful!
               end
             end
           end
