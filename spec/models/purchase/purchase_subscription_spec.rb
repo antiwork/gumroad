@@ -258,10 +258,8 @@ describe "PurchaseSubscription", :vcr do
             expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("critical")
           end
 
-          it "sends an email to the creator" do
-            mail_double = double
-            allow(mail_double).to receive(:deliver_later)
-            expect(ContactingCreatorMailer).to receive(:notify).and_return(mail_double)
+          it "does not send an email to the creator for monthly recurring charges" do
+            expect(ContactingCreatorMailer).to_not receive(:notify)
 
             purchase.update_balance_and_mark_successful!
           end
@@ -321,6 +319,8 @@ describe "PurchaseSubscription", :vcr do
                                          credit_card: create(:credit_card), purchaser: create(:user), 
                                          price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
+              recurring_purchase.save!
+              index_model_records(Purchase)
 
               expect(ContactingCreatorMailer).to_not receive(:notify)
 
@@ -335,6 +335,8 @@ describe "PurchaseSubscription", :vcr do
                                          credit_card: create(:credit_card), purchaser: create(:user),
                                          price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
+              recurring_purchase.save!
+              index_model_records(Purchase)
 
               Sidekiq::Testing.inline! do
                 recurring_purchase.update_balance_and_mark_successful!
@@ -361,6 +363,8 @@ describe "PurchaseSubscription", :vcr do
                                          credit_card: create(:credit_card), purchaser: create(:user),
                                          price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
+              recurring_purchase.save!
+              index_model_records(Purchase)
 
               expect(ContactingCreatorMailer).to receive(:notify).and_call_original
 
@@ -375,6 +379,8 @@ describe "PurchaseSubscription", :vcr do
                                          credit_card: create(:credit_card), purchaser: create(:user),
                                          price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
+              recurring_purchase.save!
+              index_model_records(Purchase)
 
               expect(ContactingCreatorMailer).to_not receive(:notify)
 

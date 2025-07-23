@@ -1386,6 +1386,12 @@ class Purchase < ApplicationRecord
     # once all preorders have been charged once.
     return if preorder.present? && preorder.purchases.count == 2
 
+    # Don't send email notifications for monthly recurring charges
+    return if is_recurring_subscription_charge && !is_upgrade_purchase? && subscription_duration == "monthly"
+    
+    # Don't send email notifications for any recurring charges when user has disabled them
+    return if is_recurring_subscription_charge && !is_upgrade_purchase? && !seller.enable_recurring_subscription_charge_email?
+
     after_commit do
       next if destroyed?
       ContactingCreatorMailer.notify(id).deliver_later(queue: "critical", wait: 3.seconds)
