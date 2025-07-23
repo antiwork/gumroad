@@ -135,7 +135,7 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
-
+  const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
@@ -153,7 +153,7 @@ const ProductEditPage = (props: Props) => {
   const save = async () => {
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product);
+      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
         const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
@@ -185,6 +185,8 @@ const ProductEditPage = (props: Props) => {
   const contextValue = React.useMemo(
     () => ({
       ...createContextValue(props),
+      setCurrencyType,
+      currencyType,
       existingFiles,
       setExistingFiles,
       product,
@@ -244,7 +246,12 @@ const ProductEditPage = (props: Props) => {
 const ProductEditRouter = async (global: GlobalProps) => {
   const { router, context } = await buildStaticRouter(global, routes);
   const component = (props: Props) => (
-    <ProductEditContext.Provider value={createContextValue(props)}>
+    <ProductEditContext.Provider
+      value={{
+        ...createContextValue(props),
+        setCurrencyType: (_currency) => {}, // no-op
+      }}
+    >
       <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
     </ProductEditContext.Provider>
   );

@@ -4,12 +4,12 @@ class Purchase < ApplicationRecord
   has_paper_trail
 
   include Rails.application.routes.url_helpers
-  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, RiskState, PurchaseErrorCode,
+  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
-          Refundable, Reviews, PingNotification, Searchable,
+          Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
-          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns
+          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns, SecureExternalId
 
   extend PreorderHelper
   extend ProductsHelper
@@ -343,6 +343,7 @@ class Purchase < ApplicationRecord
   before_create :validate_shipping
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
+  before_create :check_for_fraud
 
   before_save :assign_default_rental_expired
   before_save :to_mongo
@@ -1695,6 +1696,8 @@ class Purchase < ApplicationRecord
       mark_test_successful!
     elsif is_free_trial_purchase?
       mark_not_charged!
+    elsif is_gift_receiver_purchase?
+      mark_gift_receiver_purchase_successful!
     else
       set_succeeded_at
       increment_sellers_balance!

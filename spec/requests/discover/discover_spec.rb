@@ -372,6 +372,10 @@ describe("Discover", js: true, type: :feature) do
     find_product_card(product).click
     expect(page).to have_current_path(/^\/l\/#{product.unique_permalink}\?layout=discover&recommended_by=search/)
     expect(page).to have_link("Sam Smith", href: "http://sam.test.gumroad.com:31337/?recommended_by=search")
+
+    # Clicking the logo should take you back to Discover home page.
+    click_on "Gumroad"
+    expect(page).to have_text("On the market")
   end
 
   it "displays thumbnail in preview if available" do

@@ -1,0 +1,6 @@
+<%= load_pack("admin") %>
+
+<div>
+  <%= react_component "Alert", props: { initial: nil }, prerender: true %>
+  <%= react_component "AdminSalesReportsPage", props: @react_component_props, prerender: true %>
+</div>

@@ -73,7 +73,10 @@ export const AnalyticsCountriesTable = ({
 
     return [...tableData.values()];
   }, [locationData, selectedProducts]);
-  const { items, thProps } = useClientSortingTableDriver(countriesData);
+  const { items, thProps } = useClientSortingTableDriver(countriesData, {
+    key: "totals",
+    direction: "desc",
+  });
 
   return (
     <>
@@ -137,7 +140,10 @@ export const AnalyticsStatesTable = ({ locationData, selectedProducts, locations
     }
     return [...tableStatesData.values()];
   }, [locationData, selectedProducts]);
-  const { items, thProps } = useClientSortingTableDriver(statesData);
+  const { items, thProps } = useClientSortingTableDriver(statesData, {
+    key: "totals",
+    direction: "desc",
+  });
 
   return (
     <>

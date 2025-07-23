@@ -595,26 +595,7 @@ describe "Purchase Process", :vcr do
       end
     end
 
-    describe "safe mode" do
-      before do
-        @product = create(:product, price_cents: 100)
-        @purchase = build(:purchase, link: @product, chargeable: build(:chargeable), ip_address: "54.234.242.13")
-      end
 
-      it "lets restricted organization purchases through with safe mode off" do
-        WebMock.stub_request(:get, "https://minfraud.maxmind.com/app/ipauth_http?i=#{@purchase.ip_address}&l=B3Ti8SeX3v6Z").to_return(body: "proxyScore=0.0")
-        $redis.set("safe_mode", false)
-        @purchase.process!
-        expect(@purchase.error_code).to be(nil)
-      end
-
-      it "lets not restricted organization purchases through with safe mode on" do
-        WebMock.stub_request(:get, "https://minfraud.maxmind.com/app/ipauth_http?i=#{@purchase.ip_address}&l=B3Ti8SeX3v6Z").to_return(body: "proxyScore=0.0")
-        $redis.set("safe_mode", true)
-        @purchase.process!
-        @purchase.error_code == "safe_mode_restricted_organization"
-      end
-    end
 
     describe "multi-quantity purchase" do
       before do

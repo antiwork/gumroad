@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { COFFEE_CUSTOM_BUTTON_TEXT_OPTIONS, CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
+import { currencyCodeList } from "$app/utils/currency";
 import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -49,6 +50,7 @@ export const ProductTab = () => {
     thumbnail: initialThumbnail,
     refundPolicies,
     currencyType,
+    setCurrencyType,
     isPhysical,
     customDomainVerificationStatus,
     googleCalendarEnabled,
@@ -247,6 +249,12 @@ export const ProductTab = () => {
                       setSuggestedPriceCents={(suggestedPriceCents) =>
                         updateProduct({ suggested_price_cents: suggestedPriceCents })
                       }
+                      currencyCodeSelector={{
+                        options: currencyCodeList,
+                        onChange: (currencyCode) => {
+                          setCurrencyType(currencyCode);
+                        },
+                      }}
                       setIsPWYW={(isPWYW) => updateProduct({ customizable_price: isPWYW })}
                       currencyType={currencyType}
                       eligibleForInstallmentPlans={product.eligible_for_installment_plans}
@@ -374,6 +382,14 @@ export const ProductTab = () => {
                         Allow customers to choose a quantity
                       </Toggle>
                     </>
+                  ) : null}
+                  {product.variants.length > 0 ? (
+                    <Toggle
+                      value={product.hide_sold_out_variants}
+                      onChange={(newValue) => updateProduct({ hide_sold_out_variants: newValue })}
+                    >
+                      Hide sold out versions
+                    </Toggle>
                   ) : null}
                   <Toggle
                     value={product.should_show_sales_count}

@@ -626,6 +626,9 @@ const PaymentsPage = (props: Props) => {
       if (!complianceInfo.business_type) {
         markFieldInvalid("business_type");
       }
+      if (!complianceInfo.business_name) {
+        markFieldInvalid("business_name");
+      }
       if (complianceInfo.business_country === "CA") {
         if (!complianceInfo.job_title) {
           markFieldInvalid("job_title");
@@ -647,20 +650,15 @@ const PaymentsPage = (props: Props) => {
         if (!complianceInfo.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
         }
-      } else {
-        if (!complianceInfo.business_name) {
-          markFieldInvalid("business_name");
-        }
-        if (
-          !complianceInfo.business_street_address ||
-          (complianceInfo.business_country === "US" && isStreetAddressPOBox(complianceInfo.business_street_address))
-        ) {
-          markFieldInvalid("business_street_address");
-          if (complianceInfo.business_street_address) {
-            setErrorMessage({
-              message: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
-            });
-          }
+      } else if (
+        !complianceInfo.business_street_address ||
+        (complianceInfo.business_country === "US" && isStreetAddressPOBox(complianceInfo.business_street_address))
+      ) {
+        markFieldInvalid("business_street_address");
+        if (complianceInfo.business_street_address) {
+          setErrorMessage({
+            message: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
+          });
         }
       }
       if (!complianceInfo.business_city) {

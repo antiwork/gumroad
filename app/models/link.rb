@@ -39,6 +39,7 @@ class Link < ApplicationRecord
             30 => :community_chat_enabled,
             31 => :DEPRECATED_excluded_from_mobile_app_discover,
             32 => :moderated_by_iffy,
+            33 => :hide_sold_out_variants,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -47,7 +48,7 @@ class Link < ApplicationRecord
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
           Product::ReviewStat, Product::Utils, ActionView::Helpers::SanitizeHelper,
-          ActionView::Helpers::NumberHelper, Mongoable, RiskState, TimestampScopes, ExternalId,
+          ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
           Integrations, Product::StaffPicked, RichContents, Product::Sorting
 
@@ -572,6 +573,7 @@ class Link < ApplicationRecord
         "formatted_price" => price_formatted_verbose,
         "recommendable" => recommendable?,
         "rated_as_adult" => rated_as_adult?,
+        "hide_sold_out_variants" => hide_sold_out_variants?,
       )
       json["custom_delivery_url"] = nil # Deprecated
       if preorder_link.present?

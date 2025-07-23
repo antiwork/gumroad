@@ -9,6 +9,7 @@ import { ForgotPasswordForm } from "$app/components/Authentication/ForgotPasswor
 import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
+import { PasswordInput } from "$app/components/PasswordInput";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -88,6 +89,7 @@ export const LoginPage = ({
                 required
                 // We override the tabIndex to prevent the forgot password link interrupting the email -> password tab order
                 tabIndex={1}
+                autoComplete="email"
               />
             </fieldset>
             <fieldset>
@@ -97,13 +99,13 @@ export const LoginPage = ({
                   Forgot your password?
                 </button>
               </legend>
-              <input
+              <PasswordInput
                 id={`${uid}-password`}
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 tabIndex={1}
+                autoComplete="current-password"
               />
             </fieldset>
             <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>

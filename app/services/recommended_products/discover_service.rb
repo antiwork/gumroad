@@ -13,7 +13,7 @@ class RecommendedProducts::DiscoverService < RecommendedProducts::BaseService
   end
 
   def product_infos
-    recommended_products = fetch_recommended_products(for_seller_ids: nil).alive.not_archived.reject(&:rated_as_adult?)
+    recommended_products = fetch_recommended_products(for_seller_ids: nil).alive.not_archived.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).reject(&:rated_as_adult?)
     product_infos = recommended_products.map do
       RecommendedProducts::ProductInfo.new(_1)
     end.take(limit)

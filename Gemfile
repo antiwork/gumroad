@@ -7,10 +7,6 @@ ruby file: ".ruby-version"
 gem "rails", "7.1.3.4"
 gem "rake", "13.2.1"
 
-group :development do
-  gem "derailed_benchmarks", "~> 2.1"
-end
-
 group :staging, :production do
   source "https://gems.contribsys.com/" do
     gem "sidekiq-pro", "~> 7.2"
@@ -113,7 +109,7 @@ gem "google-apis-androidpublisher_v3", "~> 0.64"
 gem "htmlentities", "~> 4.3"
 gem "http_accept_language", "~> 2.1"
 gem "httparty", "~> 0.21"
-gem "ibandit", "~> 1.12"
+gem "ibandit", "~> 1.26"
 gem "image_sorcery", "~> 1.1"
 gem "image_processing", "~> 1.12"
 gem "mini_magick", "~> 4.12"
@@ -200,3 +196,8 @@ gem "ruby-openai", "~> 7.0"
 gem "anycable-rails", "~> 1.5"
 gem "react_on_rails", "~> 14.0"
 gem "psych", "~> 5.2.3"
+
+group :development do
+  gem "derailed_benchmarks", "~> 2.1"
+  gem "bullet"
+end
