@@ -34,7 +34,7 @@ class Admin::PurchasesController < Admin::BaseController
     
     note = params[:note]
     business_vat_id = params[:business_vat_id]
-    
+
     if @purchase.refund_gumroad_taxes!(refunding_user_id: current_user.id, note: note, business_vat_id: business_vat_id)
       render json: { success: true }
     else
