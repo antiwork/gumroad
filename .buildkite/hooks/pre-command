@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -eu
 
 GREEN="\033[0;32m"
@@ -15,4 +14,8 @@ export RBENV_VERSION="3.1.4"
 eval "$(rbenv init -)"
 
 logger "Logging into ECR"
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin https://${ECR_REGISTRY}
+if ! aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin "https://${ECR_REGISTRY}"; then
+  logger "ECR login failed"
+  exit 1
+fi
