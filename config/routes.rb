@@ -248,6 +248,7 @@ Rails.application.routes.draw do
               post :search
               post :reassign_purchases
               post :auto_refund_purchase
+              post :refund_taxes_only
             end
           end
 
