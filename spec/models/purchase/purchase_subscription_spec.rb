@@ -315,9 +315,9 @@ describe "PurchaseSubscription", :vcr do
 
             it "does not send email notifications for monthly recurring charges even when enabled" do
               seller.update!(enable_recurring_subscription_charge_email: true)
-              recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:, 
-                                         credit_card: create(:credit_card), purchaser: create(:user), 
-                                         price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
+              recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
+                                                    credit_card: create(:credit_card), purchaser: create(:user),
+                                                    price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
               recurring_purchase.save!
               index_model_records(Purchase)
@@ -332,8 +332,8 @@ describe "PurchaseSubscription", :vcr do
             it "does not send push notifications for monthly recurring charges even when enabled" do
               seller.update!(enable_recurring_subscription_charge_push_notification: true)
               recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
-                                         credit_card: create(:credit_card), purchaser: create(:user),
-                                         price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
+                                                    credit_card: create(:credit_card), purchaser: create(:user),
+                                                    price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
               recurring_purchase.save!
               index_model_records(Purchase)
@@ -360,8 +360,8 @@ describe "PurchaseSubscription", :vcr do
             it "still sends email notifications for yearly recurring charges when enabled" do
               seller.update!(enable_recurring_subscription_charge_email: true)
               recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
-                                         credit_card: create(:credit_card), purchaser: create(:user),
-                                         price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
+                                                    credit_card: create(:credit_card), purchaser: create(:user),
+                                                    price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
               recurring_purchase.save!
               index_model_records(Purchase)
@@ -376,8 +376,8 @@ describe "PurchaseSubscription", :vcr do
             it "does not send email notifications for yearly recurring charges when disabled" do
               seller.update!(enable_recurring_subscription_charge_email: false)
               recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
-                                         credit_card: create(:credit_card), purchaser: create(:user),
-                                         price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
+                                                    credit_card: create(:credit_card), purchaser: create(:user),
+                                                    price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
               recurring_purchase.process!
               recurring_purchase.save!
               index_model_records(Purchase)
