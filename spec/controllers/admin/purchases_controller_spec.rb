@@ -95,10 +95,10 @@ describe Admin::PurchasesController, :vcr do
     it "includes note and business_vat_id when provided" do
       allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).and_return(true)
 
-      post :refund_taxes_only, params: { 
-        id: @purchase.id, 
-        note: "Tax exemption request", 
-        business_vat_id: "VAT123456" 
+      post :refund_taxes_only, params: {
+        id: @purchase.id,
+        note: "Tax exemption request",
+        business_vat_id: "VAT123456"
       }
 
       expect(response).to be_successful

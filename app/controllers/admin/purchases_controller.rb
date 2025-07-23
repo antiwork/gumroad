@@ -31,7 +31,7 @@ class Admin::PurchasesController < Admin::BaseController
 
   def refund_taxes_only
     e404 if @purchase.nil?
-    
+
     note = params[:note]
     business_vat_id = params[:business_vat_id]
 
