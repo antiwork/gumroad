@@ -122,7 +122,7 @@ class CheckoutPresenter
       affiliate_id: params[:affiliate_id],
       recommended_by: params[:recommended_by],
       recommender_model_name: params[:recommender_model_name],
-      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: option_id, discount: accepted_offer.offer_code&.discount } : nil,
+      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount } : nil,
     }
     if include_cross_sells
       value[:product][:cross_sells] = product.cross_sells.filter_map do |cross_sell|
