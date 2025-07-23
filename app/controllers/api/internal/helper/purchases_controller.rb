@@ -542,8 +542,12 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
 
   def refund_taxes_only
-    purchase_id = params[:purchase_id].to_i
+    purchase_id = params[:purchase_id]
     email = params[:email]
+    
+    return render json: { success: false, message: "Both 'purchase_id' and 'email' parameters are required" }, status: :bad_request unless purchase_id.present? && email.present?
+    
+    purchase_id = purchase_id.to_i
     note = params[:note]
     business_vat_id = params[:business_vat_id]
 
