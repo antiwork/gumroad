@@ -628,8 +628,10 @@ class Link < ApplicationRecord
   def options
     if skus_enabled
       skus.not_is_default_sku.alive.map(&:to_option_for_product)
+    elsif variant_categories_alive.any?
+      variants.where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
     else
-      variants.where.not(variant_category: nil).where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
+      []
     end
   end
 
