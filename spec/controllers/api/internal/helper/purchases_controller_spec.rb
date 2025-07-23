@@ -378,8 +378,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
     context "when the purchase exists and email matches" do
       it "successfully refunds taxes when refundable taxes are available" do
         allow(purchase).to receive(:refund_gumroad_taxes!).with(
-          refunding_user_id: admin_user.id, 
-          note: nil, 
+          refunding_user_id: admin_user.id,
+          note: nil,
           business_vat_id: nil
         ).and_return(true)
 
@@ -392,7 +392,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
       it "includes note and business_vat_id when provided" do
         params_with_extras = params.merge(note: "Tax exemption", business_vat_id: "VAT123456")
-        
+
         allow(purchase).to receive(:refund_gumroad_taxes!).with(
           refunding_user_id: admin_user.id,
           note: "Tax exemption",
@@ -412,7 +412,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
           note: nil,
           business_vat_id: nil
         ).and_return(false)
-        
+
         allow(purchase).to receive(:errors).and_return(double(full_messages: double(presence: nil)))
 
         post :refund_taxes_only, params: params
