@@ -27,6 +27,7 @@
   - [Push Notifications](#push-notifications)
   - [Common Development Tasks](#common-development-tasks)
   - [Linting](#linting)
+  - [Troubleshooting](#troubleshooting)
 
 ## Getting Started
 
@@ -116,6 +117,7 @@ npm install
 Run the helper script to generate local SSL certificates and add the to the root CA (these are necessary so that the browsers trust the development website):
 
 ```
+mkcert -install
 bin/generate_ssl_certificates
 ```
 
@@ -199,3 +201,20 @@ bin/rake task_name
 We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
 
 If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
+
+
+### Troubleshooting
+
+If your browser is complaining about an HSTS error ("connection is not private", "thisisunsafe", "browser might be trying to impersonate you"), try :
+  - Go to `chrome://net-internals/#hsts`
+  - Under **Delete domain security policies**, enter `gumroad.dev`
+
+---
+
+If port `:8080` is occupied, kill the process:
+
+```bash
+sudo lsof -i :8080
+kill -9 <PID>
+```
+
