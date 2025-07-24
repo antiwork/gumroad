@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installation script for Ubuntu (and WSL)
+# Installation script for MacOS
 # - Installs the correct version of Ruby and Node
 # - Installs and sets up bundler and corepack
 # - Installs other system dependencies via the package manager
@@ -20,21 +20,13 @@ header() { echo -e "${green}==> $1${reset}"; }
 info() { echo -e "${yellow}==>    $1${reset}"; }
 error() { echo -e "${red}==> $1${reset}"; }
 
-# Make sure package manager is up to date
-header "Updating system package info..."
-sudo apt-get update
-
 # INSTALL RUBY
 # We'll use rbenv (with the ruby-build plugin) to install
 # the version of ruby specified in .ruby-version
 # https://github.com/rbenv/rbenv
 # https://github.com/rbenv/ruby-build
 header "Install Ruby..."
-sudo apt install -y \
-  rbenv ruby-build git \
-  build-essential autoconf bison libssl-dev zlib1g-dev \
-  libreadline-dev libyaml-dev libffi-dev libgmp-dev
-  # Note: not sure if we need libgmp-dev
+brew install ruby ruby-build
 
 RUBY_VERSION=$(cat .ruby-version)
 if ! rbenv versions --bare | grep -qx "$RUBY_VERSION"; then
@@ -52,7 +44,7 @@ header "Install Node..."
 export NVM_DIR="$HOME/.nvm"
 if [ ! -d "$NVM_DIR" ]; then
   info "Installing nvm..."
-  sudo apt-get install -y curl
+  brew install curl
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 else
   info "nvm already installed."
@@ -83,14 +75,20 @@ corepack enable
 
 # INSTALL DB DEPS
 header "Installing DB packages..."
-sudo apt-get install -y libmysqlclient-dev percona-toolkit mysql-client libxslt-dev libxml2-dev
+brew install mysql@8.0 percona-toolkit
+brew link --force mysql@8.0
+brew install openssl
+bundle config --global build.mysql2 --with-opt-dir="$(brew --prefix openssl)"
+brew services stop mysql@8.0
+
 
 # INSTALL IMAGE PROCESSING LIBRARIES
 header "Installing image processing libraries..."
-sudo apt-get install -y imagemagick libvips-dev ffmpeg pdftk
+brew install imagemagick libvips ffmpeg
+
 
 # INSTALL CERT UTILS
 header "Installing cert utils..."
-sudo apt install -y mkcert libnss3-tools
+brew install mkcert
 
 header "Setup complete!"

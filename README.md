@@ -70,10 +70,13 @@ bin/install_deps_macos.sh
 
 The scripts will also install various other system packages for the DB, image processing, and other utilities.
 
+##### MacOS only
+[pdftk](https://www.pdflabs.com/tools/pdftk-server/) for mac is available as a GUI installer, so is not installed by the script, and needs to be installed manually. [Download from here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg). The domain may be blocked by Apple's firewall - if this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
+
 
 #### Docker
 
-We use Docker to setup the services for development environment.
+We use Docker to setup the services for the development environment.
 
 [Download and install docker desktop](https://www.docker.com/products/docker-desktop/) for your if you are using Windows or MacOS.
 
