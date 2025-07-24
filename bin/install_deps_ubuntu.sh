@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Installation script for Ubuntu (and WSL)
-# - Installs the correct version of Ruby, Node & other dependencies
-# - Installs the app's Ruby gems and Node packages
-# - Generates SSL Certificates for local development
+# - Installs the correct version of Ruby, Node
+# - Installs and sets up bundler and corepack
+# - Installs other system dependencies via the package manager
 
 # Helper functions
 command_exists() { command -v "$1" >/dev/null 2>&1; }
@@ -67,6 +67,18 @@ else
 fi
 nvm use "$NODE_VERSION"
 
+# INSTALL BUNDLER & COREPACK
+header "Setting up Ruby bundler gem..."
+if ! command_exists bundle; then
+  gem install bundler
+fi
+bundle config --local without production staging
+if ! command_exists dotenv; then
+  gem install dotenv # NOTE: should we just add this to the gemfile?
+fi
+
+header "Setting up corepack..."
+corepack enable
 
 # INSTALL DB DEPS
 header "Installing DB packages..."
@@ -76,27 +88,10 @@ sudo apt-get install -y libmysqlclient-dev percona-toolkit mysql-client libxslt-
 header "Installing image processing libraries..."
 sudo apt-get install -y imagemagick libvips ffmpeg pdftk
 
-# INSTALL APP GEMS AND NODE PACKAGES
-header "Installing App Ruby gems..."
-if ! command_exists bundle; then
-  gem install bundler
-fi
-bundle config --local without production staging
-bundle install
-gem install dotenv # NOTE: should we just add this to the bundle?
-
-header "Installing App Node packages..."
-corepack enable
-npm install
-
-# INSTALL & SET UP DEV CERTIFICATES
-header "Installing root CA and generating certs..."
+# INSTALL CERT UTILS
+header "Installing cert utils..."
 sudo apt install -y mkcert libnss3-tools
-if [ ! -d "$(mkcert -CAROOT 2>/dev/null)" ]; then
-  mkcert -install
-  bin/generate_ssl_certificates
-else
-  info "mkcert root CA already exists..."
-fi
+
+
 
 header "Setup complete!"

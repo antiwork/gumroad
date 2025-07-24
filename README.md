@@ -20,7 +20,7 @@
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Configuration](#configuration)
-  - [Running Locally](#running-locally)
+  - [Running Locally](#running)
 - [Development](#development)
   - [Logging in](#logging-in)
   - [Resetting Elasticsearch indices](#resetting-elasticsearch-indices)
@@ -32,187 +32,125 @@
 
 ### Prerequisites
 
-> 💡 If you're on Windows, follow our [Windows setup guide](docs/development/windows.md) instead.
+#### WSL (windows only)
 
-Before you begin, ensure you have the following installed:
+In windows, you'll need to run ubuntu under [WSL](https://github.com/microsoft/WSL).
 
-#### Ruby
+1. Open **PowerShell as Administrator** and run:
 
-- https://www.ruby-lang.org/en/documentation/installation/
-- Install the version listed in [the .ruby-version file](./.ruby-version)
+```bash
+# One-time setup to avoid long file path issues in git
+git config --system core.longpaths true
 
-#### Node.js
+# install wsl
+wsl --install
+```
 
-- https://nodejs.org/en/download
-- Install the version listed in [the .node-version file](./.node-version)
+2. Restart if prompted.
+
+3. Choose a non-root username and password in the Ubuntu setup.
+
+4. Always launch **Ubuntu** for development work (not PowerShell or CMD).
+
+
+#### Ruby, Node, and other system dependencies
+
+The app requires Ruby, Node, and various other system packages. Ruby and Node need to be the specific versions listed in the `.ruby-version` and `.node-version`files. You can use the helper scripts to install them in local environments via `rbenv` and `nvm`.
+
+For Ubuntu (and Windows, via WSL):
+
+```
+bin/install_deps_ubuntu.sh
+```
+
+For MacOS:
+```
+bin/install_deps_macos.sh
+```
+
+The scripts will also install various other system packages for the DB, image processing, and other utilities.
+
 
 #### Docker
 
 We use Docker to setup the services for development environment.
 
-- For MacOS: Download the Docker app from the [Docker website](https://www.docker.com/products/docker-desktop)
-- For Linux:
+[Download and install docker desktop](https://www.docker.com/products/docker-desktop/) for your if you are using Windows or MacOS.
 
-```bash
-sudo wget -qO- https://get.docker.com/ | sh
+##### Windows only
+On windows, you'll need to activate the WSL integration afterwards:
+1. Download Docker Desktop: [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+2. Open Docker → ⚙️ → **Resources > WSL Integration**
+3. Enable Ubuntu.
+4. Ensure Docker Desktop shows **"Engine Running"**.
+
+##### Ubuntu only
+
+For ubuntu, it's more efficient to install just the docker engine. Follow [the official guide](https://docs.docker.com/engine/install/ubuntu/) for installing.
+
+It's recommended that afterwards you add your user to the docker group, so that you don't need sudo to run docker commands:
+
+```
 sudo usermod -aG docker $(whoami)
 ```
 
-#### MySQL & Percona Toolkit
+You'll need to restart the shell after this step.
 
-Install a local version of MySQL 8.0.x to match the version running in production.
-
-The local version of MySQL is a dependency of the Ruby `mysql2` gem. You do not need to start an instance of the MySQL service locally. The app will connect to a MySQL instance running in the Docker container.
-
-- For MacOS:
-
-```bash
-brew install mysql@8.0 percona-toolkit
-brew link --force mysql@8.0
-
-# to use Homebrew's `openssl`:
-brew install openssl
-bundle config --global build.mysql2 --with-opt-dir="$(brew --prefix openssl)"
-
-# ensure MySQL is not running as a service
-brew services stop mysql@8.0
-```
-
-- For Linux:
-  - MySQL:
-    - https://dev.mysql.com/doc/refman/8.0/en/linux-installation.html
-    - `apt install libmysqlclient-dev`
-  - Percona Toolkit: https://www.percona.com/doc/percona-toolkit/LATEST/installation.html
-
-#### Image Processing Libraries
-
-##### ImageMagick
-
-We use `imagemagick` for preview editing.
-
-- For MacOS: `brew install imagemagick`
-- For Linux: `sudo apt-get install imagemagick`
-
-##### libvips
-
-For newer image formats we use `libvips` for image processing with ActiveStorage.
-
-- For MacOS: `brew install libvips`
-- For Linux: `sudo apt-get install libvips-dev`
-
-#### FFmpeg
-
-We use `ffprobe` that comes with `FFmpeg` package to fetch metadata from video files.
-
-- For MacOS: `brew install ffmpeg`
-- For Linux: `sudo apt-get install ffmpeg`
-
-#### PDFtk
-
-We use [pdftk](https://www.pdflabs.com/tools/pdftk-server/) to stamp PDF files with the Gumroad logo and the buyers' emails.
-
-- For MacOS: Download from [here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg)
-  - **Note:** pdftk may be blocked by Apple's firewall. If this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
-- For Linux: `sudo apt-get install pdftk`
 
 ### Installation
 
-#### Bundler and gems
+If all the prerequisites are in place, you should have the correct version of Ruby, the bundler gem, npm and corepack. So simply run:
 
-We use Bundler to install Ruby gems.
-
-```shell
-gem install bundler
 ```
-
-Configure Bundler to install gems without production or staging dependencies by default:
-
-```shell
-bundle config --local without production staging
-```
-
-Install gems:
-
-```shell
 bundle install
-```
-
-Also make sure to install `dotenv` as it is required for some console commands:
-
-```shell
-gem install dotenv
-```
-
-#### npm and Node.js dependencies
-
-Make sure the correct version of `npm` is enabled:
-
-```shell
-corepack enable
-```
-
-Install dependencies:
-
-```shell
 npm install
 ```
 
 ### Configuration
 
-#### Set up Custom credentials
+#### Generate local SSL certificates
 
-App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
+Run the helper script to generate local SSL certificates and add the to the root CA (these are necessary so that the browsers trust the development website):
 
-#### Local SSL Certificates
-
-1. Install mkcert on macOS:
-
-```shell
-brew install mkcert
 ```
-
-For other operating systems, see [mkcert installation instructions](https://github.com/FiloSottile/mkcert?tab=readme-ov-file#installation).
-
-2. Generate certificates by running:
-
-```shell
 bin/generate_ssl_certificates
 ```
 
-### Running Locally
+#### Initialize the database
 
-#### Start Docker services
-
-If you installed Docker Desktop (on a Mac or Windows machine), you can run the following command to start the Docker services:
-
-```shell
-make local
 ```
-
-If you are on Linux, or installed Docker via a package manager on a mac, you may have to manually give docker superuser access to open ports 80 and 443. To do that, use `sudo make local` instead.
-
-This command will not terminate. You run this in one tab and start the application in another tab.
-If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
-
-#### Set up the database
-
-```shell
 bin/rails db:prepare
 ```
 
-For Linux (Debian / Ubuntu) you might need the following:
+#### Set up custom credentials (optional)
 
-- `apt install libxslt-dev libxml2-dev`
+App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the .env.example file to .env and fill in the values.
 
-#### Start the application
 
-```shell
+### Running
+
+You need to run the app and the docker services in parallel.
+
+Start docker services in on terminal:
+
+```
+make local
+```
+
+And the app in another (this starts the Rails server, Webpack, and a Sidekiq worker):
+
+```
 bin/dev
 ```
 
-This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
+You can alternatively also run the docker services in the background, so it all runs on the same terminal:
+```
+LOCAL_DETACHED=true make local
+bin/dev
+```
 
-You can now access the application at `https://gumroad.dev`.
+You can now access the application at https://gumroad.dev.
+
 
 ## Development
 
