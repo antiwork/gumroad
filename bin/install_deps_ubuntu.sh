@@ -22,7 +22,7 @@ error() { echo -e "${red}==> $1${reset}"; }
 
 # Make sure package manager is up to date
 header "Updating system package info..."
-sudo apt-get update
+sudo apt update
 
 # INSTALL RUBY
 # We'll use rbenv (with the ruby-build plugin) to install
@@ -52,7 +52,7 @@ header "Install Node..."
 export NVM_DIR="$HOME/.nvm"
 if [ ! -d "$NVM_DIR" ]; then
   info "Installing nvm..."
-  sudo apt-get install -y curl
+  sudo apt install -y curl
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 else
   info "nvm already installed."
@@ -83,11 +83,11 @@ corepack enable
 
 # INSTALL DB DEPS
 header "Installing DB packages..."
-sudo apt-get install -y libmysqlclient-dev percona-toolkit mysql-client libxslt-dev libxml2-dev
+sudo apt install -y libmysqlclient-dev percona-toolkit mysql-client libxslt-dev libxml2-dev
 
 # INSTALL IMAGE PROCESSING LIBRARIES
 header "Installing image processing libraries..."
-sudo apt-get install -y imagemagick libvips-dev ffmpeg pdftk
+sudo apt install -y imagemagick libvips-dev ffmpeg pdftk
 
 # INSTALL CERT UTILS
 header "Installing cert utils..."
