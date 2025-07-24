@@ -340,6 +340,74 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     render json: { success: true, message: "Successfully resent receipt for purchase ID #{purchase.id} to #{purchase.email}" }
   end
 
+  REFRESH_LIBRARY_OPENAPI = {
+    summary: "Refresh purchases in user's library",
+    description: "Link purchases with missing purchaser_id to the user account for the given email address",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the customer" }
+            },
+            required: ["email"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully refreshed library",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                message: { type: "string" },
+                count: { type: "integer" }
+              }
+            }
+          }
+        }
+      },
+      '404': {
+        description: "User not found",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+
+  def refresh_library
+    email = params[:email]
+
+    return render json: { success: false, message: "Email address is required" }, status: :bad_request unless email.present?
+
+    user = User.find_by(email: email)
+    return render json: { success: false, message: "No user found with email: #{email}" }, status: :not_found unless user.present?
+
+    count = Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
+
+    render json: {
+      success: true,
+      message: "Successfully refreshed library for #{email}. Updated #{count} purchases.",
+      count: count
+    }
+  end
+
   REASSIGN_PURCHASES_OPENAPI = {
     summary: "Reassign purchases",
     description: "Update the email on all purchases belonging to the 'from' email address to the 'to' email address",

@@ -56,6 +56,9 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         "/purchases/search": {
           post: Api::Internal::Helper::PurchasesController::SEARCH_PURCHASE_OPENAPI,
         },
+        "/purchases/refresh_library": {
+          post: Api::Internal::Helper::PurchasesController::REFRESH_LIBRARY_OPENAPI,
+        },
         "/purchases/reassign_purchases": {
           post: Api::Internal::Helper::PurchasesController::REASSIGN_PURCHASES_OPENAPI,
         },
