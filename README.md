@@ -56,20 +56,20 @@ wsl --install
 
 #### Ruby, Node, and other system dependencies
 
-The app requires Ruby, Node, and various other system packages. Ruby and Node need to be the specific versions listed in the `.ruby-version` and `.node-version`files. You can use the helper scripts to install them in local environments via `rbenv` and `nvm`.
-
-For Ubuntu (and Windows, via WSL):
+The app requires Ruby, Node, and various other system packages. Ruby and Node need to be the specific versions listed in the `.ruby-version` and `.node-version`files. You can use the helper script to install them in local environments via `rbenv` and `nvm`, and various other system packages for the DB, image processing, and other utilities.
 
 ```
-bin/install_deps_ubuntu.sh
+bin/install_deps.sh
 ```
 
-For MacOS:
+The script works for ubuntu-like distros (with apt) and macOS. It will try to detect your OS, but if it fails you can force it:
+
 ```
-bin/install_deps_macos.sh
+bin/install_deps.sh --ubuntu
+bin/install_deps.sh --macos
 ```
 
-The scripts will also install various other system packages for the DB, image processing, and other utilities.
+If on windows, run it under the WSL ubuntu shell. On ubuntu, it will prompt for the sudo password at the beginning.
 
 ##### MacOS only
 [pdftk](https://www.pdflabs.com/tools/pdftk-server/) for mac is available as a GUI installer, so is not installed by the script, and needs to be installed manually. [Download from here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg). The domain may be blocked by Apple's firewall - if this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
