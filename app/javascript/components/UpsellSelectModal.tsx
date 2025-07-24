@@ -79,17 +79,19 @@ export const UpsellSelectModal = ({
     id: string;
     label: string;
     variantId?: string;
+    isSubOption?: boolean;
+    disabled?: boolean;
   };
 
   const productOptions: ProductSelectOption[] = products.reduce<ProductSelectOption[]>(
     (selectOptions, { id, name, options }) => {
       const hasVariants = options.length > 0;
+      selectOptions.push({ id, label: name, disabled: hasVariants });
+
       if (hasVariants) {
         options.forEach(({ id: variantId, name: variantName }) => {
-          selectOptions.push({ id, label: `${name} (${variantName})`, variantId });
+          selectOptions.push({ id, label: `${name} (${variantName})`, variantId, isSubOption: true });
         });
-      } else {
-        selectOptions.push({ id, label: name });
       }
 
       return selectOptions;
