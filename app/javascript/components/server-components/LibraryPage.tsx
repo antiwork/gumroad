@@ -345,7 +345,17 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           </div>
         ) : null}
         {hasArchivedProducts && !state.search.showArchivedOnly ? (
-          <div className="archived-banner" style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: "4px", textAlign: "center" }}>
+          <div
+            className="archived-banner"
+            style={{
+              marginBottom: "20px",
+              padding: "12px",
+              backgroundColor: "#f8f9fa",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              textAlign: "center",
+            }}
+          >
             You have archived purchases-{" "}
             <button
               className="link"
@@ -359,7 +369,17 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           </div>
         ) : null}
         {hasArchivedProducts && !state.search.showArchivedOnly ? (
-          <div className="archived-banner" style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f8f9fa", border: "1px solid #dee2e6", borderRadius: "4px", textAlign: "center" }}>
+          <div
+            className="archived-banner"
+            style={{
+              marginBottom: "20px",
+              padding: "12px",
+              backgroundColor: "#f8f9fa",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              textAlign: "center",
+            }}
+          >
             You have archived purchases-{" "}
             <button
               className="link"
