@@ -115,6 +115,68 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     render json: { success: true, message: "Successfully resent receipt for purchase ID #{@purchase.id}" }
   end
 
+  RESEND_ALL_RECEIPTS_OPENAPI = {
+    summary: "Resend all receipts",
+    description: "Resend all receipt emails to customer for all their purchases",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the customer" }
+            },
+            required: ["email"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully resent all receipts",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                message: { type: "string" },
+                count: { type: "integer" }
+              }
+            }
+          }
+        },
+      },
+      '404': {
+        description: "No purchases found for email",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+    }
+  }.freeze
+  def resend_all_receipts
+    purchases = Purchase.where(email: params[:email]).successful
+    return render json: { success: false, message: "No purchases found for email: #{params[:email]}" }, status: :not_found if purchases.empty?
+
+    CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+    render json: {
+      success: true,
+      message: "Successfully resent all receipts to #{params[:email]}",
+      count: purchases.count
+    }
+  end
+
   SEARCH_PURCHASE_OPENAPI = {
     summary: "Search purchase",
     description: "Search purchase by email, seller, license key, or card details. At least one of the parameters is required.",
