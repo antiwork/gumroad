@@ -67,10 +67,10 @@ detect_os() {
 MANUAL_OS=$(parse_args "$@")
 if [[ -n "$MANUAL_OS" ]]; then
   OS="$MANUAL_OS"
-  info "Using manually specified OS: $OS"
+  header "Using manually specified OS: $OS"
 else
   OS=$(detect_os)
-  info "Detected OS: $OS"
+  header "Detected OS: $OS"
 fi
 
 # INSTALL RUBY
@@ -81,7 +81,7 @@ fi
 header "Install Ruby..."
 
 if [[ "$OS" == "macos" ]]; then
-  brew install ruby ruby-build
+  brew install ruby ruby-build rbenv
 elif [[ "$OS" == "ubuntu" ]]; then
   sudo apt update
   sudo apt install -y \
@@ -89,6 +89,24 @@ elif [[ "$OS" == "ubuntu" ]]; then
     build-essential autoconf bison libssl-dev zlib1g-dev \
     libreadline-dev libyaml-dev libffi-dev libgmp-dev
 fi
+
+rbenv init
+
+if [[ "$OS" == "macos" ]]; then
+  # The rbenv init command adds the config to ~/.zshenv,
+  # which has a source order issue. So we add it manually to
+  # ~/.zshrc instead if not present.
+  # See: https://github.com/rbenv/rbenv?tab=readme-ov-file#how-rbenv-hooks-into-your-shell
+  if ! grep -q "rbenv init" ~/.zshrc; then
+    echo 'eval "$(rbenv init -)"' >> ~/.zshrc
+  fi
+  source ~/.zshrc
+elif [[ "$OS" == "ubuntu" ]]; then
+  # On ubuntu, rbenv init works correctly
+  rbenv init --no-rehash
+  source ~/.bashrc
+fi
+
 
 RUBY_VERSION=$(cat .ruby-version)
 if ! rbenv versions --bare | grep -qx "$RUBY_VERSION"; then
@@ -129,13 +147,10 @@ nvm use "$NODE_VERSION"
 
 # INSTALL BUNDLER & COREPACK
 header "Setting up Ruby bundler gem..."
-if ! command_exists bundle; then
-  gem install bundler
-fi
+gem install bundler
 bundle config --local without production staging
-if ! command_exists dotenv; then
-  gem install dotenv # NOTE: should we just add this to the gemfile?
-fi
+# Dotenv is required for some console commands
+gem install dotenv # NOTE: should we just add this to the gemfile?
 
 header "Setting up corepack..."
 corepack enable
