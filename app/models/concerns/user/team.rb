@@ -39,9 +39,11 @@ module User::Team
   end
 
   def user_memberships_not_deleted_and_ordered
+    # Returns an array to ensure this is only queried once per request
     @_user_memberships_not_deleted_and_ordered ||= user_memberships
       .not_deleted
       .order(last_accessed_at: :desc, created_at: :desc)
+      .to_a
   end
 
   def find_user_membership_for_seller!(seller)
