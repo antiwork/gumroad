@@ -14,9 +14,9 @@ import ReactSelect, {
 
 import { escapeRegExp } from "$app/utils";
 
-import { Icon } from "./Icons";
+import { Icon } from "$app/components/Icons";
 
-export type Option = { id: string; label: string };
+export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
 
 export type CustomOption = (option: Option) => React.ReactNode;
 type CustomProps = {
@@ -79,6 +79,7 @@ export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.R
     <CustomPropsContext.Provider value={customProps}>
       <ReactSelect
         {...props}
+        isOptionDisabled={(option) => option.disabled ?? false}
         instanceId={props.inputId ?? menuListId}
         className={cx("combobox", props.className)}
         components={{
@@ -126,10 +127,17 @@ export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.R
 // Regex groupings are important to be kept in sync with `formatOptionLabel` method
 const filterRegex = (query: string) => new RegExp(`(.*?)(${escapeRegExp(query)})(.*)`, "iu");
 
-const filterOptionFn: ReactSelectProps["filterOption"] = (option, query) => filterRegex(query).test(option.label);
+const filterOptionFn: ReactSelectProps<Option>["filterOption"] = ({ data: { disabled }, label }, query) => {
+  if (query.length === 0) return true;
+  if (disabled) return false;
+  return filterRegex(query).test(label);
+};
 
-const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = ({ label }, { inputValue }) => {
-  const result = filterRegex(inputValue).exec(label);
+const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel"]> = (
+  { label, isSubOption },
+  { inputValue },
+) => {
+  const result = inputValue.length > 0 ? filterRegex(inputValue).exec(label) : null;
 
   if (result) {
     const [_, before, matchingInput, after] = result;
@@ -141,7 +149,12 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
       </span>
     );
   }
-  return label;
+  return (
+    <span>
+      {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
+      {label}
+    </span>
+  );
 };
 
 const LoadingIndicator = () => null;

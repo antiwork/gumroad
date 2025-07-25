@@ -183,6 +183,89 @@ describe("Product Edit Scenario", type: :feature, js: true) do
     expect(product.description).to eq("<p><br></p>")
   end
 
+  it "allows creating and deleting an upsell with variants in the product description" do
+    product = create(:product_with_digital_versions, user: seller, name: "Sample product", price_cents: 1000)
+    variant1 = product.alive_variants.first
+    variant2 = product.alive_variants.last
+    create(:purchase, :with_review, link: product)
+
+    visit edit_link_path(product.unique_permalink)
+
+    set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "Hi there!")
+
+    select_disclosure "Insert" do
+      click_on "Upsell"
+    end
+
+    # The product itself should be listed but disabled, variants listed with icon
+    within "dialog" do
+      find(:combo_box, "Product").click
+      product_option = find("[role='option']", text: "Sample product", exact_text: true)
+      expect(product_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+
+      variant1_option = find("[role='option']", text: "Sample product (#{variant1.name})")
+      expect(variant1_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+
+      variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
+      expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+    end
+
+    # When searching, only variants should appear, not the product itself, and no icon
+    within "dialog" do
+      fill_in "Product", with: "Sample product"
+      expect(page).not_to have_selector("[role='option']", text: "Sample product", exact_text: true)
+
+      variant1_option = find("[role='option']", text: "Sample product (#{variant1.name})")
+      expect(variant1_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+
+      variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
+      expect(variant2_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+    end
+
+    # Select the first variant
+    select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
+    check "Add a discount to the offered product"
+    choose "Fixed amount"
+    fill_in "Fixed amount", with: "1"
+    click_on "Insert"
+
+    within_section "Sample product", section_element: :article do
+      expect(page).to have_selector("span", text: "(#{variant1.name})")
+      expect(page).to have_text("5.0 (1)", normalize_ws: true)
+      expect(page).to have_text("$10 $9")
+    end
+
+    click_on "Save"
+    expect(page).to have_alert(text: "Changes saved!")
+
+    upsell = Upsell.last
+    expect(upsell.product_id).to eq(product.id)
+    expect(upsell.variant_id).to eq(variant1.id)
+    expect(upsell.is_content_upsell).to be(true)
+    expect(upsell.cross_sell).to be(true)
+    expect(upsell.name).to eq(nil)
+    expect(upsell.description).to eq(nil)
+    expect(upsell.offer_code.amount_cents).to eq(100)
+    expect(upsell.offer_code.amount_percentage).to be_nil
+    expect(upsell.offer_code.universal).to be(false)
+    expect(upsell.offer_code.product_ids).to eq([product.id])
+
+    product.reload
+    expect(product.description).to eq("<p>Hi there!</p><upsell-card productid=\"#{product.external_id}\" variantid=\"#{variant1.external_id}\" discount='{\"type\":\"fixed\",\"cents\":100}' id=\"#{upsell.external_id}\"></upsell-card>")
+
+    set_rich_text_editor_input(find("[aria-label='Description']"), to_text: "")
+    click_on "Save"
+    wait_for_ajax
+    expect(page).to have_alert(text: "Changes saved!")
+
+    upsell.reload
+    expect(upsell.deleted?).to be(true)
+    expect(upsell.offer_code.deleted?).to be(true)
+
+    product.reload
+    expect(product.description).to eq("<p><br></p>")
+  end
+
   it "allows creating and deleting an upsell in the product rich content" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
     create(:purchase, :with_review, link: product)
@@ -226,7 +309,7 @@ describe("Product Edit Scenario", type: :feature, js: true) do
       [
         [
           { "type" => "paragraph", "content" => [{ "text" => "Hi there!", "type" => "text" }] },
-          { "type" => "upsellCard", "attrs" => { "id" => upsell.external_id, "discount" => { "type" => "fixed", "cents" => 100 }, "productId" => product.external_id } }
+          { "type" => "upsellCard", "attrs" => { "id" => upsell.external_id, "discount" => { "type" => "fixed", "cents" => 100 }, "productId" => product.external_id, "variantId" => nil } }
         ]
       ]
     )
