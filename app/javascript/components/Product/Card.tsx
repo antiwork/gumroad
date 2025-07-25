@@ -13,12 +13,12 @@ export const Card = ({
   product,
   badge,
   footerAction,
-  eager = false,
+  eager,
 }: {
   product: CardProduct;
   badge?: React.ReactNode;
   footerAction?: React.ReactNode;
-  eager?: boolean;
+  eager?: boolean | undefined;
 }) => (
   <article className="product-card">
     <figure>
