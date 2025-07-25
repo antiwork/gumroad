@@ -556,7 +556,7 @@ class LinksController < ApplicationController
       @product = Link.includes(
         :variant_categories_alive,
         :alive_prices,
-        { display_asset_previews: [:file_attachment, :file_blob] },
+        { display_asset_previews: [:file_attachment] },
       ).find(@product.id)
     end
 

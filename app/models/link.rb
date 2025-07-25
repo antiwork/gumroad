@@ -790,8 +790,10 @@ class Link < ApplicationRecord
   def variant_list(seller = nil)
     return { categories: [], skus: [], skus_enabled: } if variant_categories_alive.empty?
 
+    categories_with_preloaded_variants = variant_categories_alive.includes(variants: :product_files)
+
     variants = { categories:
-      variant_categories_alive.each_with_index.map do |category, i|
+      categories_with_preloaded_variants.each_with_index.map do |category, i|
         {
           id: category.external_id,
           i:,
