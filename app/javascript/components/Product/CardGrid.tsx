@@ -351,6 +351,7 @@ export const CardGrid = ({
       ) : (
         <div>
           <div className="product-card-grid" ref={gridRef}>
+            {/* The first 4 images are above the fold, so we eager-load them */}
             {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)

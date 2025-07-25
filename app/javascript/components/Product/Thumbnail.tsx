@@ -8,18 +8,23 @@ const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbn
 export const Thumbnail = ({
   url,
   nativeType,
-  loading,
-  fetchPriority = "auto",
+  eager,
 }: {
   url: string | null;
   nativeType: ProductNativeType;
-  loading?: "eager" | "lazy";
-  fetchPriority?: "high" | "low" | "auto";
-}) =>
-  url ? (
-    // eslint-disable-next-line react/no-unknown-property
-    <img src={url} loading={loading} fetchpriority={fetchPriority} />
+  eager?: boolean | undefined;
+}) => {
+  const commonProps: React.ImgHTMLAttributes<HTMLImageElement> = {
+    ...(eager == null
+      ? {}
+      : {
+          fetchpriority: eager ? "high" : "auto",
+          loading: eager ? ("eager" as const) : ("lazy" as const),
+        }),
+  };
+  return url ? (
+    <img src={url} {...commonProps} />
   ) : (
-    // eslint-disable-next-line react/no-unknown-property
-    <img src={cast(nativeTypeThumbnails(`./${nativeType}.svg`))} loading={loading} fetchpriority={fetchPriority} />
+    <img src={cast(nativeTypeThumbnails(`./${nativeType}.svg`))} {...commonProps} />
   );
+};

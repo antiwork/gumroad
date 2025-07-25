@@ -22,12 +22,7 @@ export const Card = ({
 }) => (
   <article className="product-card">
     <figure>
-      <Thumbnail
-        url={product.thumbnail_url}
-        nativeType={product.native_type}
-        loading={eager ? "eager" : "lazy"}
-        fetchPriority={eager ? "high" : "auto"}
-      />
+      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </figure>
     {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
     <header>
@@ -64,12 +59,7 @@ export const Card = ({
 export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
   <article className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
     <figure>
-      <Thumbnail
-        url={product.thumbnail_url}
-        nativeType={product.native_type}
-        loading={eager ? "eager" : "lazy"}
-        fetchPriority={eager ? "high" : "auto"}
-      />
+      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </figure>
     {product.quantity_remaining != null ? <div className="ribbon">{product.quantity_remaining} left</div> : null}
     <section>
