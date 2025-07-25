@@ -80,7 +80,7 @@ export const Card = ({
             src={url ?? cast(nativeTypeThumbnails(`./${native_type}.svg`))}
             role="presentation"
             crossOrigin="anonymous"
-            {...(eager == null || !loggedInUser?.enableLazyLoading
+            {...(eager == null || !loggedInUser?.lazyLoadOffscreenDiscoverImages
               ? {}
               : {
                   loading: eager ? ("eager" as const) : ("lazy" as const),

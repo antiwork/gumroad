@@ -43,7 +43,7 @@ module RenderingExtension
         policies: policies_props(pundit_user),
         is_gumroad_admin: user.is_team_member?,
         is_impersonating:,
-        enable_lazy_loading: user.enable_lazy_loading?,
+        lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),
       }
     end
 

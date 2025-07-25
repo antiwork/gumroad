@@ -18,7 +18,7 @@ export const Thumbnail = ({
 }) => {
   const loggedInUser = useLoggedInUser();
   const commonProps: React.ImgHTMLAttributes<HTMLImageElement> = {
-    ...(eager == null || !loggedInUser?.enableLazyLoading
+    ...(eager == null || !loggedInUser?.lazyLoadOffscreenDiscoverImages
       ? {}
       : {
           fetchpriority: eager ? "high" : "auto",

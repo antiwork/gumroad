@@ -253,7 +253,6 @@ class User < ApplicationRecord
             48 => :upcoming_refund_policy_change_email_sent,
             49 => :can_create_physical_products,
             50 => :paypal_payout_fee_waived,
-            51 => :enable_lazy_loading,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

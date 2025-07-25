@@ -78,10 +78,10 @@ export type LoggedInUser = {
   isGumroadAdmin: boolean;
   isImpersonating: boolean;
   /**
-   * This is a temporary flag to enable lazy loading of the logged-in user.
+   * This is a temporary feature flag to enable lazy loading of the logged-in user.
    * It should be removed once lazy loading is fully rolled out.
    */
-  enableLazyLoading: boolean;
+  lazyLoadOffscreenDiscoverImages: boolean;
 };
 
 const Context = React.createContext<LoggedInUser | null | undefined>(undefined);
@@ -97,7 +97,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     confirmed: boolean;
     is_gumroad_admin: boolean;
     is_impersonating: boolean;
-    enable_lazy_loading: boolean;
+    lazy_load_offscreen_discover_images: boolean;
   } | null>(data);
   if (parsed == null) return null;
   return {
@@ -111,7 +111,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     isGumroadAdmin: parsed.is_gumroad_admin,
     isImpersonating: parsed.is_impersonating,
     // TODO: Remove this once lazy loading is fully rolled out
-    enableLazyLoading: parsed.enable_lazy_loading,
+    lazyLoadOffscreenDiscoverImages: parsed.lazy_load_offscreen_discover_images,
   };
 };
 
