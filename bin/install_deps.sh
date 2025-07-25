@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # Installation script for MacOS and Ubuntu
 # - Detects the OS and installs the correct dependencies
@@ -90,8 +90,7 @@ elif [[ "$OS" == "ubuntu" ]]; then
     libreadline-dev libyaml-dev libffi-dev libgmp-dev
 fi
 
-rbenv init
-
+# Initialize rbenv
 if [[ "$OS" == "macos" ]]; then
   # The rbenv init command adds the config to ~/.zshenv,
   # which has a source order issue. So we add it manually to
