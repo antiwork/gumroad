@@ -10,7 +10,7 @@ class UserMembershipsPresenter
   end
 
   def props
-    user_memberships = pundit_user.user.user_memberships_not_deleted_and_ordered.includes(:seller)
+    user_memberships = pundit_user.user.user_memberships_not_deleted_and_ordered.includes(seller: { avatar_attachment: :blob })
 
     validate_user_memberships!(user_memberships)
     build_user_memberships_props(user_memberships, pundit_user.seller)
