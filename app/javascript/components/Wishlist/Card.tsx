@@ -80,12 +80,12 @@ export const Card = ({
             src={url ?? cast(nativeTypeThumbnails(`./${native_type}.svg`))}
             role="presentation"
             crossOrigin="anonymous"
-            {...(loggedInUser?.enableLazyLoading
-              ? {
+            {...(eager == null || !loggedInUser?.enableLazyLoading
+              ? {}
+              : {
                   loading: eager ? ("eager" as const) : ("lazy" as const),
                   fetchpriority: eager ? "high" : "auto",
-                }
-              : {})}
+                })}
           />
         ))}
         {wishlist.thumbnails.length === 0 ? <img role="presentation" /> : null}
