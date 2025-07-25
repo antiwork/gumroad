@@ -150,58 +150,55 @@ class LinksController < ApplicationController
   def show
     return redirect_to custom_domain_coffee_path if @product.native_type == Link::NATIVE_TYPE_COFFEE
     ActiveRecord::Base.connection.stick_to_primary!
+    # Force a preload of all association data used in rendering
+    preload_product
+    @show_user_favicon = true
 
-    respond_to do |format|
-      format.html do
-        # Force a preload of all association data used in rendering
-        preload_product
-        @show_user_favicon = true
-
-        if params[:wanted] == "true"
-          params[:option] ||= params[:variant] && @product.options.find { |o| o[:name] == params[:variant] }&.[](:id)
-          BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
-            params[:recurrence] ||= r if params[r] == "true"
-          end
-          params[:price] = (params[:price].to_f * 100).to_i if params[:price].present?
-          cart_item = @product.cart_item(params)
-
-          unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
-                (params[:price].blank? || params[:price] < cart_item[:price])
-            redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
-                                                             rent: cart_item[:rental], recurrence: cart_item[:recurrence],
-                                                             price: cart_item[:price],
-                                                             code: params[:offer_code] || params[:code],
-                                                             affiliate_id: params[:affiliate_id] || params[:a],
-                                                             referrer: params[:referrer] || request.referrer),
-                        allow_other_host: true
-          end
-        end
-
-        @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@product.user)
-        @paypal_merchant_currency = @product.user.native_paypal_payment_enabled? ?
-                                      @product.user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
-                                      ChargeProcessor::DEFAULT_CURRENCY_CODE
-        @pay_with_card_enabled = @product.user.pay_with_card_enabled?
-        presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
-        presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
-        @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
-        @body_class = "iframe" if params[:overlay] || params[:embed]
-
-        if ["search", "discover"].include?(params[:recommended_by])
-          create_discover_search!(
-            clicked_resource: @product,
-            query: params[:query],
-            autocomplete: params[:autocomplete] == "true"
-          )
-        end
-
-        if params[:layout] == Product::Layout::DISCOVER
-          @discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
-        end
-
-        set_noindex_header unless @product.alive?
+    if params[:wanted] == "true"
+      params[:option] ||= params[:variant] && @product.options.find { |o| o[:name] == params[:variant] }&.[](:id)
+      BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
+        params[:recurrence] ||= r if params[r] == "true"
       end
+      params[:price] = (params[:price].to_f * 100).to_i if params[:price].present?
+      cart_item = @product.cart_item(params)
 
+      unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
+             (params[:price].blank? || params[:price] < cart_item[:price])
+        redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
+                                                         rent: cart_item[:rental], recurrence: cart_item[:recurrence],
+                                                         price: cart_item[:price],
+                                                         code: params[:offer_code] || params[:code],
+                                                         affiliate_id: params[:affiliate_id] || params[:a],
+                                                         referrer: params[:referrer] || request.referrer),
+                    allow_other_host: true
+      end
+    end
+
+    @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@product.user)
+    @paypal_merchant_currency = @product.user.native_paypal_payment_enabled? ?
+                                  @product.user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
+                                  ChargeProcessor::DEFAULT_CURRENCY_CODE
+    @pay_with_card_enabled = @product.user.pay_with_card_enabled?
+    presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
+    presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
+    @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
+    @body_class = "iframe" if params[:overlay] || params[:embed]
+
+    if ["search", "discover"].include?(params[:recommended_by])
+      create_discover_search!(
+        clicked_resource: @product,
+        query: params[:query],
+        autocomplete: params[:autocomplete] == "true"
+      )
+    end
+
+    if params[:layout] == Product::Layout::DISCOVER
+      @discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
+    end
+
+    set_noindex_header if !@product.alive?
+    respond_to do |format|
+      format.html
       format.json { render json: @product.as_json }
       format.any { e404 }
     end
