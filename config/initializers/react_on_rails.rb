@@ -42,7 +42,8 @@ module RenderingExtension
         team_memberships: UserMembershipsPresenter.new(pundit_user:).props,
         policies: policies_props(pundit_user),
         is_gumroad_admin: user.is_team_member?,
-        is_impersonating:
+        is_impersonating:,
+        enable_lazy_loading: user.enable_lazy_loading?,
       }
     end
 

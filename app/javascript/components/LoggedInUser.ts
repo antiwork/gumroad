@@ -77,6 +77,11 @@ export type LoggedInUser = {
   policies: Policies;
   isGumroadAdmin: boolean;
   isImpersonating: boolean;
+  /**
+   * This is a temporary flag to enable lazy loading of the logged-in user.
+   * It should be removed once lazy loading is fully rolled out.
+   */
+  enableLazyLoading: boolean;
 };
 
 const Context = React.createContext<LoggedInUser | null | undefined>(undefined);
@@ -92,6 +97,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     confirmed: boolean;
     is_gumroad_admin: boolean;
     is_impersonating: boolean;
+    enable_lazy_loading: boolean;
   } | null>(data);
   if (parsed == null) return null;
   return {
@@ -104,6 +110,8 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     policies: parsed.policies,
     isGumroadAdmin: parsed.is_gumroad_admin,
     isImpersonating: parsed.is_impersonating,
+    // TODO: Remove this once lazy loading is fully rolled out
+    enableLazyLoading: parsed.enable_lazy_loading,
   };
 };
 
