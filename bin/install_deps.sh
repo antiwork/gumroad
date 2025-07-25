@@ -46,7 +46,6 @@ parse_args() {
   esac
 }
 
-# Detect OS
 detect_os() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "macos"
@@ -64,7 +63,7 @@ detect_os() {
   fi
 }
 
-# Determine OS - either from command line or auto-detection
+# Select OS: from CL argument, or auto-detection
 MANUAL_OS=$(parse_args "$@")
 if [[ -n "$MANUAL_OS" ]]; then
   OS="$MANUAL_OS"
@@ -103,6 +102,7 @@ rbenv local "$RUBY_VERSION"
 # INSTALL NODE
 # We're using the official install script from nvm-sh/nvm
 # See: https://github.com/nvm-sh/nvm?tab=readme-ov-file#install--update-script
+# Then use nvm to install the version of node specified in .node-version
 header "Install Node..."
 export NVM_DIR="$HOME/.nvm"
 if [ ! -d "$NVM_DIR" ]; then
@@ -141,6 +141,9 @@ header "Setting up corepack..."
 corepack enable
 
 # INSTALL DB DEPS
+# Install a local version of MySQL 8.0.x to match the version running in production.
+# The local version of MySQL is a dependency of the Ruby mysql2 gem.
+# The app will connect to a MySQL instance running in the Docker container.
 header "Installing DB packages..."
 if [[ "$OS" == "macos" ]]; then
   brew install mysql@8.0 percona-toolkit
@@ -153,14 +156,20 @@ elif [[ "$OS" == "ubuntu" ]]; then
 fi
 
 # INSTALL IMAGE PROCESSING LIBRARIES
+# We use imagemagick for preview editing.
+# For newer image formats we use libvips for image processing with ActiveStorage.
+# We use ffprobe that comes with FFmpeg package to fetch metadata from video files.
+# We use pdftk to stamp PDF files with the Gumroad logo and the buyers' emails.
+# Note: on MacOS pdftk needs to be installed manually, see README file.
 header "Installing image processing libraries..."
 if [[ "$OS" == "macos" ]]; then
-  brew install imagemagick libvips ffmpeg
+  brew install imagemagick libvips ffmpeg # No pdftk
 elif [[ "$OS" == "ubuntu" ]]; then
   sudo apt install -y imagemagick libvips-dev ffmpeg pdftk
 fi
 
 # INSTALL CERT UTILS
+# We use mkcert to generate a local certificate for the development server.
 header "Installing cert utils..."
 if [[ "$OS" == "macos" ]]; then
   brew install mkcert
