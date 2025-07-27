@@ -310,7 +310,11 @@ export const ProductTab = () => {
                       <section>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
-                          <a href="https://gumroad.com/help/article/70-can-i-sell-services.html#call" target="_blank" rel="noreferrer">
+                          <a
+                            href="https://gumroad.com/help/article/70-can-i-sell-services.html#call"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Learn more
                           </a>
                         </div>
