@@ -21,13 +21,13 @@ describe Throttling do
   end
 
   let(:controller) { dummy_class.new }
-  let(:redis) { Redis.new }
+  let(:redis) { $redis }
 
   before do
     allow(controller.response).to receive(:set_header) do |header, value|
       controller.headers[header] = value
     end
-    redis.flushdb
+    redis.del("test_key")
   end
 
   describe "#throttle!" do

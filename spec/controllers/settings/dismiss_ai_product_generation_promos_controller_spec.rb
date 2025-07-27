@@ -19,7 +19,10 @@ describe Settings::DismissAiProductGenerationPromosController do
 
     context "when user is authenticated and authorized" do
       before do
-        Feature.activate_user(:ai_product_generation, seller)
+        Feature.activate(:ai_product_generation)
+        seller.confirm
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(15_000)
+        create(:payment_completed, user: seller)
       end
 
       it "dismisses the AI product generation promo alert" do
