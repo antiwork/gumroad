@@ -23,7 +23,7 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
 
     begin
       service = ::Ai::ProductDetailsGeneratorService.new(current_seller: current_seller)
-      result = service.generate_product_details(prompt: prompt)
+      result = service.generate_product_details(prompt: sanitize_prompt(prompt))
 
       render json: {
         success: true,
@@ -55,5 +55,10 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
 
       key = RedisKey.ai_request_throttle(current_seller.id)
       throttle!(key:, limit: AI_REQUESTS_PER_PERIOD, period: AI_REQUESTS_PERIOD_WINDOW)
+    end
+
+    def sanitize_prompt(prompt)
+      sanitized = prompt.gsub(/\b(ignore|forget|system|assistant|user|delete|remove|clear|impersonate)\s+(previous|above|all)\b/i, '[FILTERED]')
+      sanitized.gsub(/[^\w\s\.,\!\?\-\[\]]/, '').strip
     end
 end
