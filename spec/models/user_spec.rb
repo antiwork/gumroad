@@ -3507,5 +3507,14 @@ describe User, :vcr do
       create(:payment_completed, user:)
       expect(user.eligible_for_ai_product_generation?).to eq(false)
     end
+
+    it "returns true regardless of other conditions in development environment" do
+      allow(Rails.env).to receive(:development?).and_return(true)
+      user.update!(confirmed_at: nil)
+      user.update!(user_risk_state: :suspended_for_fraud)
+      allow(user).to receive(:sales_cents_total).and_return(0)
+
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
   end
 end
