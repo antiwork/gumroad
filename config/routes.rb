@@ -244,6 +244,7 @@ Rails.application.routes.draw do
             collection do
               post :refund_last_purchase
               post :resend_last_receipt
+              post :resend_all_receipts
               post :resend_receipt_by_number
               post :search
               post :reassign_purchases

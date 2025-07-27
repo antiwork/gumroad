@@ -80,7 +80,7 @@ export const CoffeeProduct = ({
     <section style={{ display: "grid", gap: "var(--spacer-7)", alignContent: "center", flexGrow: 1 }}>
       <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
         <h1>{product.name}</h1>
-        <h3>{product.description_html}</h3>
+        {product.description_html ? <h3 dangerouslySetInnerHTML={{ __html: product.description_html }} /> : null}
       </section>
       <section
         style={{
