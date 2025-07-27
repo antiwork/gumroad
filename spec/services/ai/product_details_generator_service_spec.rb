@@ -112,7 +112,7 @@ describe Ai::ProductDetailsGeneratorService, :vcr do
 
     context "with valid product info" do
       it "generates rich content pages successfully" do
-        result = service.generate_rich_content_pages(product_info, current_seller:)
+        result = service.generate_rich_content_pages(product_info)
 
         expect(result[:pages].size).to eq(2)
         expect(result[:pages].first["title"]).to eq("Introduction to Ruby")
@@ -204,7 +204,7 @@ describe Ai::ProductDetailsGeneratorService, :vcr do
       end
 
       it "cleans up the JSON and parses successfully" do
-        result = service.generate_rich_content_pages(product_info, current_seller:)
+        result = service.generate_rich_content_pages(product_info)
 
         expect(result[:pages]).to be_an(Array)
         expect(result[:pages].first["content"].first["type"]).to eq("paragraph")

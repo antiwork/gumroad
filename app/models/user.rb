@@ -31,6 +31,8 @@ class User < ApplicationRecord
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
+  MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
+
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
   has_many :affiliate_requests, foreign_key: :seller_id
@@ -978,6 +980,15 @@ class User < ApplicationRecord
     purchases.all_success_states_including_test
       .where(link_id: small_bets_product_id)
       .exists?
+  end
+
+  def eligible_for_ai_product_generation?
+    return false unless Feature.active?(:ai_product_generation, self)
+    return false unless confirmed?
+    return false if suspended?
+    return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
+
+    has_completed_payouts?
   end
 
   protected

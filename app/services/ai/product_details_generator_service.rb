@@ -124,7 +124,7 @@ class Ai::ProductDetailsGeneratorService
   # @return [Hash] with the following keys:
   #   - pages: [Array<Hash>] The rich content pages
   #   - duration_in_seconds: [Integer] The duration of the operation in seconds
-  def generate_rich_content_pages(product_info, current_seller:)
+  def generate_rich_content_pages(product_info)
     number_of_content_pages = product_info[:number_of_content_pages] || DEFAULT_NUMBER_OF_CONTENT_PAGES_TO_GENERATE
 
     pages, duration = with_retries(operation: "Generate rich content pages", context: product_info[:name]) do

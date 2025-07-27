@@ -27,6 +27,8 @@ const nativeTypeIcons = require.context("$assets/images/native_types/");
 
 const defaultRecurrence: RecurrenceId = "monthly";
 
+const MIN_AI_PROMPT_LENGTH = 10;
+
 const NewProductPage = ({
   current_seller_currency_code,
   native_product_types,
@@ -86,8 +88,11 @@ const NewProductPage = ({
   };
 
   const generateWithAi = async () => {
-    if (aiPrompt.trim().length < 10) {
-      showAlert("Please enter a detailed prompt for your product idea with a price in mind", "error");
+    if (aiPrompt.trim().length < MIN_AI_PROMPT_LENGTH) {
+      showAlert(
+        `Please enter a detailed prompt for your product idea with a price in mind (minimum ${MIN_AI_PROMPT_LENGTH} characters)`,
+        "error",
+      );
       return;
     }
 

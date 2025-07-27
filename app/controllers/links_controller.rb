@@ -765,7 +765,7 @@ class LinksController < ApplicationController
           number_of_content_pages:
         }
         service = Ai::ProductDetailsGeneratorService.new(current_seller:)
-        response = service.generate_rich_content_pages(product_info, current_seller:)
+        response = service.generate_rich_content_pages(product_info)
 
         response[:pages].each.with_index do |page_data, index|
           rich_content = @product.alive_rich_contents.build

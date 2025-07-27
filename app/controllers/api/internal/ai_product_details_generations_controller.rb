@@ -1,11 +1,18 @@
 # frozen_string_literal: true
 
 class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::BaseController
+  include Throttling
+
   before_action :authenticate_user!
+  before_action :throttle_ai_requests
   after_action :verify_authorized
 
+  AI_REQUESTS_PER_PERIOD = 10
+  AI_REQUESTS_PERIOD_WINDOW = 1.hour
+  private_constant :AI_REQUESTS_PER_PERIOD, :AI_REQUESTS_PERIOD_WINDOW
+
   def create
-    authorize current_user, :generate_product_details_with_ai?
+    authorize current_seller, :generate_product_details_with_ai?
 
     prompt = params[:prompt]
 
@@ -33,7 +40,7 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
         }
       }
     rescue => e
-      Rails.logger.error "Product details generation using AI failed: #{e.message}"
+      Rails.logger.error "Product details generation using AI failed: #{e.full_message}"
       Bugsnag.notify(e)
       render json: {
         success: false,
@@ -41,4 +48,12 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
       }, status: :internal_server_error
     end
   end
+
+  private
+    def throttle_ai_requests
+      return unless current_user
+
+      key = RedisKey.ai_request_throttle(current_seller.id)
+      throttle!(key:, limit: AI_REQUESTS_PER_PERIOD, period: AI_REQUESTS_PERIOD_WINDOW)
+    end
 end
