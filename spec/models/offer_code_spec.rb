@@ -15,7 +15,7 @@ describe OfferCode do
       describe "universal offer codes" do
         it "does not allow 2 live universal offer codes with same code" do
           create(:universal_offer_code, code: "off", user: @product.user)
-          duplicate_offer_code = OfferCode.new(code: "off", universal: true, user: @product.user, amount_cents: 100, currency_type: "USD")
+          duplicate_offer_code = OfferCode.new(code: "off", universal: true, user: @product.user, amount_cents: 100, currency_type: "usd")
 
           expect(duplicate_offer_code).to_not be_valid
           expect(duplicate_offer_code.errors.full_messages).to eq(["Discount code must be unique."])
@@ -23,7 +23,7 @@ describe OfferCode do
 
         it "does not allow a universal offer code to have the same name as any product's offer code" do
           create(:offer_code, code: "off", user: @product.user, products: [@product])
-          duplicate_offer_code = OfferCode.new(code: "off", universal: true, user: @product.user, amount_cents: 100, currency_type: "USD")
+          duplicate_offer_code = OfferCode.new(code: "off", universal: true, user: @product.user, amount_cents: 100, currency_type: "usd")
 
           expect(duplicate_offer_code).to_not be_valid
           expect(duplicate_offer_code.errors.full_messages).to eq(["Discount code must be unique."])
@@ -32,7 +32,7 @@ describe OfferCode do
         it "allows offer codes with same code if one of them is deleted" do
           old_code = create(:universal_offer_code, code: "off", user: @product.user)
           old_code.mark_deleted!
-          live_offer_code = OfferCode.new(code: "off", universal: true, user: old_code.user, amount_cents: 100, currency_type: "USD")
+          live_offer_code = OfferCode.new(code: "off", universal: true, user: old_code.user, amount_cents: 100, currency_type: "usd")
 
           expect(live_offer_code).to be_valid
           expect { live_offer_code.save! }.to change { OfferCode.count }.by(1)
@@ -45,7 +45,7 @@ describe OfferCode do
       describe "product-specific offer codes" do
         it "does not allow 2 live offer codes with same code" do
           create(:offer_code, code: "off", user: @product.user, products: [@product])
-          duplicate_offer_code = OfferCode.new(code: "off", user: @product.user, products: [@product], amount_cents: 100, currency_type: "USD")
+          duplicate_offer_code = OfferCode.new(code: "off", user: @product.user, products: [@product], amount_cents: 100, currency_type: "usd")
 
           expect(duplicate_offer_code).to_not be_valid
           expect(duplicate_offer_code.errors.full_messages).to eq(["Discount code must be unique."])
@@ -53,7 +53,7 @@ describe OfferCode do
 
         it "does not allow a product-specific offer code with the same code as the universal offer code" do
           create(:universal_offer_code, code: "off", user: @product.user)
-          duplicate_offer_code = OfferCode.new(code: "off", user: @product.user, products: [@product], amount_cents: 100, currency_type: "USD")
+          duplicate_offer_code = OfferCode.new(code: "off", user: @product.user, products: [@product], amount_cents: 100, currency_type: "usd")
 
           expect(duplicate_offer_code).to_not be_valid
           expect(duplicate_offer_code.errors.full_messages).to eq(["Discount code must be unique."])
@@ -62,7 +62,7 @@ describe OfferCode do
         it "allows offer codes with same code if one of them is deleted" do
           old_code = create(:offer_code, code: "off", products: [@product])
           old_code.mark_deleted!
-          offer_code = OfferCode.new(code: "off", user: old_code.user, products: [@product], amount_cents: 100, currency_type: "USD")
+          offer_code = OfferCode.new(code: "off", user: old_code.user, products: [@product], amount_cents: 100, currency_type: "usd")
 
           expect(offer_code).to be_valid
           expect { offer_code.save! }.to change { OfferCode.count }.by(1)
@@ -80,7 +80,7 @@ describe OfferCode do
 
     it "rejects offer codes with forbidden characters" do
       %w[100% #100OFF 100.OFF OFF@100].each do |code|
-        offer_code = OfferCode.new(code:, products: [@product], amount_cents: 100, currency_type: "USD")
+        offer_code = OfferCode.new(code:, products: [@product], amount_cents: 100, currency_type: "usd")
 
         expect(offer_code).to be_invalid
         expect(offer_code.errors.full_messages).to include("Discount code can only contain numbers, letters, dashes, and underscores.")
@@ -89,7 +89,7 @@ describe OfferCode do
 
     it "strips lagging and leading whitespace from code" do
       [" foo", "bar ", "  baz  "].each do |code|
-        offer_code = build(:offer_code, code:, products: [@product], amount_cents: 100, currency_type: "USD")
+        offer_code = build(:offer_code, code:, products: [@product], amount_cents: 100, currency_type: "usd")
 
         expect(offer_code).to be_valid
         expect(offer_code.code).to eq code.strip
@@ -248,6 +248,81 @@ describe OfferCode do
       it "adds an error" do
         expect(offer_code.valid?).to eq(false)
         expect(offer_code.errors.full_messages.first).to eq("The discount code's start date must be earlier than its end date.")
+      end
+    end
+  end
+
+  describe "currency type validation" do
+    context "percentage offer codes" do
+      let(:usd_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd") }
+      let(:eur_product) { create(:product, user: @product.user, price_cents: 800, price_currency_type: "eur") }
+
+      context "when the offer code is a percentage discount" do
+        it "doesn't validate currency type for percentage discounts" do
+          offer_code = build(:percentage_offer_code, products: [usd_product], amount_percentage: 50)
+          expect(offer_code).to be_valid
+        end
+
+        it "allows percentage discounts on products with different currencies" do
+          offer_code = build(:percentage_offer_code, products: [usd_product, eur_product], amount_percentage: 25)
+          expect(offer_code).to be_valid
+        end
+      end
+    end
+
+    context "cents offer codes" do
+      let(:usd_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd") }
+      let(:eur_product) { create(:product, user: @product.user, price_cents: 800, price_currency_type: "eur") }
+      let(:gbp_product) { create(:product, user: @product.user, price_cents: 900, price_currency_type: "gbp") }
+
+      context "when the currency types match" do
+        it "is valid for USD products with USD offer code" do
+          offer_code = build(:offer_code, products: [usd_product], amount_cents: 200, currency_type: "usd")
+          expect(offer_code).to be_valid
+        end
+
+        it "is valid for EUR products with EUR offer code" do
+          offer_code = build(:offer_code, products: [eur_product], amount_cents: 150, currency_type: "eur")
+          expect(offer_code).to be_valid
+        end
+
+        it "is valid for multiple products with same currency type" do
+          usd_product2 = create(:product, user: @product.user, price_cents: 1500, price_currency_type: "usd")
+          offer_code = build(:offer_code, products: [usd_product, usd_product2], amount_cents: 300, currency_type: "usd")
+          expect(offer_code).to be_valid
+        end
+      end
+
+      context "when the currency types don't match" do
+        it "adds an error for USD product with EUR offer code" do
+          offer_code = build(:offer_code, products: [usd_product], amount_cents: 200, currency_type: "eur")
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("This discount code uses EUR but the product uses USD. Please change the discount code to use the same currency as the product.")
+        end
+
+        it "adds an error for EUR product with GBP offer code" do
+          offer_code = build(:offer_code, products: [eur_product], amount_cents: 150, currency_type: "gbp")
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("This discount code uses GBP but the product uses EUR. Please change the discount code to use the same currency as the product.")
+        end
+
+        it "adds an error when products have mixed currencies" do
+          offer_code = build(:offer_code, products: [usd_product, eur_product], amount_cents: 200, currency_type: "usd")
+          expect(offer_code).to_not be_valid
+          expect(offer_code.errors.full_messages).to include("This discount code uses USD but the product uses EUR. Please change the discount code to use the same currency as the product.")
+        end
+      end
+
+      context "universal offer codes" do
+        it "is valid for universal offer codes with currency type specified" do
+          offer_code = build(:universal_offer_code, user: @product.user, amount_cents: 500, currency_type: "usd", universal: true)
+          expect(offer_code).to be_valid
+        end
+
+        it "is valid for universal percentage offer codes without currency type" do
+          offer_code = build(:universal_offer_code, user: @product.user, amount_percentage: 25, universal: true)
+          expect(offer_code).to be_valid
+        end
       end
     end
   end

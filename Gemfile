@@ -7,10 +7,6 @@ ruby file: ".ruby-version"
 gem "rails", "7.1.3.4"
 gem "rake", "13.2.1"
 
-group :development do
-  gem "derailed_benchmarks", "~> 2.1"
-end
-
 group :staging, :production do
   source "https://gems.contribsys.com/" do
     gem "sidekiq-pro", "~> 7.2"
@@ -113,7 +109,7 @@ gem "google-apis-androidpublisher_v3", "~> 0.64"
 gem "htmlentities", "~> 4.3"
 gem "http_accept_language", "~> 2.1"
 gem "httparty", "~> 0.21"
-gem "ibandit", "~> 1.12"
+gem "ibandit", "~> 1.26"
 gem "image_sorcery", "~> 1.1"
 gem "image_processing", "~> 1.12"
 gem "mini_magick", "~> 4.12"
@@ -163,8 +159,7 @@ gem "redis", "~> 5.0"
 gem "redis-namespace", "~> 1.10"
 gem "resend", "~> 0.16"
 gem "rinku", "~> 2.0", require: "rails_rinku"
-# TODO(ershad): Update to a normal release once https://github.com/rpush/rpush/pull/675 is released (support for Rails 7.1)
-gem "rpush", github: "rpush/rpush", ref: "12d92519cb090f3b37d654ea206a3f107eab319d"
+gem "rpush", "~> 9.1"
 gem "rpush-redis", "~> 1.2"
 gem "ruby-limiter", "~> 2.2"
 gem "ruby-oembed", "~> 0.16", require: "oembed"
@@ -201,3 +196,8 @@ gem "ruby-openai", "~> 7.0"
 gem "anycable-rails", "~> 1.5"
 gem "react_on_rails", "~> 14.0"
 gem "psych", "~> 5.2.3"
+
+group :development do
+  gem "derailed_benchmarks", "~> 2.1"
+  gem "bullet"
+end

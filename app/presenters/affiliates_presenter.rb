@@ -85,7 +85,7 @@ class AffiliatesPresenter
     def fetch_direct_affiliates
       affiliates = seller.direct_affiliates
                             .alive
-                            .includes(:affiliate_user)
+                            .includes(:affiliate_user, :seller)
                             .sorted_by(**sort.to_h.symbolize_keys)
 
       affiliates = affiliates.joins(:affiliate_user).where("users.username LIKE :query OR users.email LIKE :query OR users.name LIKE :query", query: "%#{query.strip}%") if query

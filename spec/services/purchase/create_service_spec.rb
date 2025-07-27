@@ -2492,7 +2492,7 @@ describe Purchase::CreateService, :vcr do
     it "allows purchases with offer codes in different currencies" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
         product.update!(price_cents: 15_000, price_currency_type: currency)
-        offer_code = create(:offer_code, code: currency, products: [product], amount_cents: 3_000)
+        offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
           offer_code_name: offer_code.name,
           discount_code: offer_code.code,
@@ -2567,7 +2567,7 @@ describe Purchase::CreateService, :vcr do
     it "fails if the amount paid is less than it should be in any currency" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
         product.update!(price_cents: 15_000, price_currency_type: currency)
-        offer_code = create(:offer_code, code: currency, products: [product], amount_cents: 3_000)
+        offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
           offer_code_name: offer_code.name,
           discount_code: offer_code.code,

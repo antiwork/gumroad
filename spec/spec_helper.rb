@@ -148,6 +148,18 @@ RSpec.configure do |config|
     ].each(&:join)
   end
 
+  config.before(:suite) do
+    examples = RSpec.world.filtered_examples.values.flatten
+
+    if examples.any? { |ex| ex.metadata[:type] == :feature }
+      begin
+        StripeBalanceEnforcer.ensure_sufficient_balance
+      rescue StandardError => e
+        warn "Stripe balance check failed: #{e.class} #{e.message}"
+      end
+    end
+  end
+
   config.before(:all) do |example|
     $spec_example_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     print "#{example.class.description}: "

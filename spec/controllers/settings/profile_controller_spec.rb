@@ -98,5 +98,22 @@ describe Settings::ProfileController, :vcr do
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["error_message"]).to eq("The logo is already removed. Please refresh the page and try again.")
     end
+
+    it "regenerates the subscribe preview when the avatar changes" do
+      allow_any_instance_of(User).to receive(:generate_subscribe_preview).and_call_original
+
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: fixture_file_upload("smilie.png"),
+        filename: "smilie.png",
+      )
+
+      expect do
+        put :update, params: {
+          profile_picture_blob_id: blob.signed_id
+        }
+      end.to change { GenerateSubscribePreviewJob.jobs.size }.by(1)
+
+      expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(seller.id)
+    end
   end
 end

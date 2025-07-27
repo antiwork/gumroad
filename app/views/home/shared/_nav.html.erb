@@ -2,7 +2,7 @@
   def nav_link(text, path, options = {})
     is_current = current_page?(path) || options[:current_page_predicate]&.call
     if options[:category] == "button"
-      link_to text, path, class: "flex w-full items-center justify-center h-full px-6 #{
+      link_to text, path, class: "flex w-full items-center justify-center h-full #{
         if text == 'Dashboard'
           'lg:bg-black lg:text-white lg:hover:bg-pink dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white'
         elsif options[:context] != 'primary'
@@ -10,7 +10,7 @@
         else
           'lg:bg-black lg:text-white lg:hover:bg-pink'
         end
-      } border-black bg-black text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:px-6 #{
+      } border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:py-2 lg:px-6 #{
         if options[:context] == 'primary' && text != 'Dashboard'
           'dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white'
         else

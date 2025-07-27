@@ -65,6 +65,8 @@ class CreatorHomePresenter
       end
     end
 
+    previous_year = Time.current.prev_year.year
+
     {
       name: seller.alive_user_compliance_info&.first_name || "",
       has_sale:,
@@ -78,7 +80,7 @@ class CreatorHomePresenter
       sales:,
       activity_items:,
       stripe_verification_message:,
-      show_1099_download_notice: seller.tax_form_1099_download_url(year: Time.current.prev_year.year).present?,
+      show_1099_download_notice: seller.eligible_for_1099?(previous_year) && seller.tax_form_1099_download_url(year: previous_year).present?,
     }
   end
 

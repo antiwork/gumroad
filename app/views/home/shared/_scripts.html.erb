@@ -9,6 +9,7 @@
     const line2 = document.querySelector('[data-menu-line="2"]');
 
     mobileMenuToggle.addEventListener('click', function() {
+      mobileMenu.classList.toggle('lg:hidden');
       mobileMenu.classList.toggle('hidden');
 
       if (!mobileMenu.classList.contains('hidden')) {

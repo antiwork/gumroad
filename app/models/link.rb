@@ -39,6 +39,7 @@ class Link < ApplicationRecord
             30 => :community_chat_enabled,
             31 => :DEPRECATED_excluded_from_mobile_app_discover,
             32 => :moderated_by_iffy,
+            33 => :hide_sold_out_variants,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -47,7 +48,7 @@ class Link < ApplicationRecord
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
           Product::ReviewStat, Product::Utils, ActionView::Helpers::SanitizeHelper,
-          ActionView::Helpers::NumberHelper, Mongoable, RiskState, TimestampScopes, ExternalId,
+          ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
           Integrations, Product::StaffPicked, RichContents, Product::Sorting
 
@@ -194,6 +195,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :validate_daily_product_creation_limit, on: :create
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
   before_save :downcase_filetype
@@ -571,6 +573,7 @@ class Link < ApplicationRecord
         "formatted_price" => price_formatted_verbose,
         "recommendable" => recommendable?,
         "rated_as_adult" => rated_as_adult?,
+        "hide_sold_out_variants" => hide_sold_out_variants?,
       )
       json["custom_delivery_url"] = nil # Deprecated
       if preorder_link.present?
@@ -1440,6 +1443,15 @@ class Link < ApplicationRecord
     def quantity_enabled_state_is_allowed
       if quantity_enabled && !can_enable_quantity?
         errors.add(:base, "Customers cannot be allowed to choose a quantity for this product.")
+      end
+    end
+
+    def validate_daily_product_creation_limit
+      return unless user.present?
+
+      last_24h_links_count = user.links.where(created_at: 24.hours.ago..Time.current).count
+      if last_24h_links_count >= 100
+        errors.add(:base, "Sorry, you can only create 100 products per day.")
       end
     end
 

@@ -134,7 +134,7 @@ class PostResendApi
 
     def build_unsubscribe_url(recipient)
       if recipient[:purchase]
-        unsubscribe_purchase_url(recipient[:purchase].external_id)
+        unsubscribe_purchase_url(recipient[:purchase].secure_external_id(scope: "unsubscribe"))
       elsif recipient[:follower]
         cancel_follow_url(recipient[:follower].external_id)
       elsif recipient[:affiliate]

@@ -152,6 +152,29 @@ describe "Checkout bundles", :js, type: :feature do
     end
   end
 
+  context "gifting bundles with license keys" do
+    let(:bundle_with_licensed_product) { create(:product, user: seller, is_bundle: true) }
+    let(:licensed_product) { create(:product, user: seller, name: "Licensed product", is_licensed: true) }
+    let!(:licensed_bundle_product) { create(:bundle_product, bundle: bundle_with_licensed_product, product: licensed_product) }
+    let(:giftee_email) { "giftee@gumroad.com" }
+
+    it "only generates a license key for the giftee" do
+      visit bundle_with_licensed_product.long_url
+      add_to_cart(bundle_with_licensed_product)
+      check_out(bundle_with_licensed_product, gift: { email: giftee_email, note: "Gifting licensed bundle!" })
+
+      expect(Purchase.all_success_states.count).to eq 4
+      expect(Gift.successful.where(link_id: bundle_with_licensed_product.id, gifter_email: "test@gumroad.com", giftee_email:).count).to eq 1
+
+      gifter_purchase = bundle_with_licensed_product.sales.is_gift_sender_purchase.sole
+      giftee_purchase = bundle_with_licensed_product.sales.is_gift_receiver_purchase.sole
+
+      expect(gifter_purchase.product_purchases.sole.license).to be_nil
+      expect(giftee_purchase.product_purchases.sole.license).to_not be_nil
+      expect(giftee_purchase.product_purchases.sole.license_key).to be_present
+    end
+  end
+
   context "test purchase" do
     it "displays the temporary library on purchase" do
       login_as seller

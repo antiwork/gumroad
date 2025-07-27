@@ -54,7 +54,7 @@ describe Ai::ProductDetailsGeneratorService, :vcr do
     context "with blank prompt" do
       it "raises an error" do
         expect { service.generate_product_details(prompt: "") }
-          .to raise_error(StandardError, "Prompt is blank")
+          .to raise_error(described_class::InvalidPromptError, "Prompt cannot be blank")
       end
     end
 

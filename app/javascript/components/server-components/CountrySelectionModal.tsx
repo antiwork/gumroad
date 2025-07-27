@@ -65,7 +65,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
             </legend>
             <select id={`${uid}country`} value={country} onChange={(e) => setCountry(e.target.value)} disabled={saving}>
               {Object.entries(countries).map(([code, name]) => (
-                <option key={code} value={code}>
+                <option key={code} value={code} disabled={name.includes("(not supported)")}>
                   {name}
                 </option>
               ))}

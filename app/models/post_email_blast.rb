@@ -64,17 +64,6 @@ class PostEmailBlast < ApplicationRecord
     )
   end
 
-  def self.format_latency(seconds)
-    return if seconds.nil?
-    minutes, seconds = seconds.to_i.divmod(60)
-    hours, minutes = minutes.divmod(60)
-    parts = []
-    parts << "#{hours}h" if hours > 0
-    parts << "#{minutes}m" if minutes > 0 || hours > 0
-    parts << "#{seconds}s"
-    parts.join(" ")
-  end
-
   def self.format_datetime(time_with_zone)
     return if time_with_zone.nil?
     time_with_zone.to_fs(:db).delete_suffix(" UTC")

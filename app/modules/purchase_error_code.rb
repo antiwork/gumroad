@@ -15,8 +15,6 @@ module PurchaseErrorCode
   STRIPE_UNAVAILABLE = "stripe_unavailable"
   PAYPAL_UNAVAILABLE = "paypal_unavailable"
   PROCESSING_ERROR = "processing_error"
-  SAFE_MODE_HIGH_PROXY_SCORE = "safe_mode_high_ip_proxy_score"
-  SAFE_MODE_RESTRICTED_ORGANIZATION = "safe_mode_restricted_organization"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
   PRICE_CENTS_TOO_LOW = "price_cents_too_low"

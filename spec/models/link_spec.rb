@@ -275,6 +275,37 @@ describe Link, :vcr do
     end
   end
 
+  describe "daily product creation limit validation" do
+    let(:user) { create(:user) }
+
+    it "allows creating up to 100 products in 24 hours" do
+      create_list(:product, 99, user: user)
+      new_product = build(:product, user: user)
+      expect(new_product).to be_valid
+    end
+
+    it "prevents creating more than 100 products in 24 hours" do
+      create_list(:product, 100, user: user)
+      new_product = build(:product, user: user)
+      expect(new_product).not_to be_valid
+      expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
+    end
+
+    it "allows different users to each create 100 products in 24 hours" do
+      user1 = create(:user)
+      user2 = create(:user)
+      create_list(:product, 100, user: user1)
+      new_product = build(:product, user: user2)
+      expect(new_product).to be_valid
+    end
+
+    it "allows creating products after 24 hours have passed" do
+      create_list(:product, 100, user: user, created_at: 25.hours.ago)
+      new_product = build(:product, user: user)
+      expect(new_product).to be_valid
+    end
+  end
+
   describe "callbacks" do
     describe "set_default_discover_fee_per_thousand" do
       it "sets the boosted discover fee when user has discover_boost_enabled" do
@@ -3225,21 +3256,21 @@ describe Link, :vcr do
     end
 
     it "can create an offer code that lowers the price to 0" do
-      offer_code = build(:offer_code, products: [@product_for_code], amount_cents: 240)
+      offer_code = build(:offer_code, products: [@product_for_code], currency_type: "eur", amount_cents: 240)
       expect do
         offer_code.save!
       end.to change { OfferCode.count }.by(1)
     end
 
     it "can create an offer code that keeps the price above the minimum" do
-      offer_code = build(:offer_code, products: [@product_for_code], amount_cents: 100)
+      offer_code = build(:offer_code, products: [@product_for_code], currency_type: "eur", amount_cents: 100)
       expect do
         offer_code.save!
       end.to change { OfferCode.count }.by(1)
     end
 
     it "cannot create an offer code that brings the price to below the minimum" do
-      offer_code = build(:offer_code, products: [@product_for_code], amount_cents: 239)
+      offer_code = build(:offer_code, products: [@product_for_code], currency_type: "eur", amount_cents: 239)
       expect do
         expect do
           offer_code.save!

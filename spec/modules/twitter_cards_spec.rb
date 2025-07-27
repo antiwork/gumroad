@@ -71,6 +71,18 @@ describe TwitterCards, :vcr do
       metas = TwitterCards.twitter_product_card(link)
       expect(metas).to match(link.main_preview.url)
     end
+
+    it "uses the card description if provided" do
+      link = build(:product, unique_permalink: "abcABC")
+      metas = TwitterCards.twitter_product_card(link, product_description: "This is a test description")
+      expect(metas).to match('<meta property="twitter:description" value="This is a test description"')
+    end
+
+    it "uses the link description if no card description is provided" do
+      link = build(:product, unique_permalink: "abcABC", description: "This is a test description")
+      metas = TwitterCards.twitter_product_card(link)
+      expect(metas).to match('<meta property="twitter:description" value="This is a test description"')
+    end
   end
 
   describe "#twitter_post_card" do
