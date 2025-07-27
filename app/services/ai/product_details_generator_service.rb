@@ -2,6 +2,7 @@
 
 class Ai::ProductDetailsGeneratorService
   class MaxRetriesExceededError < StandardError; end
+  class InvalidPromptError < StandardError; end
 
   PRODUCT_DETAILS_GENERATION_TIMEOUT_IN_SECONDS = 30
   RICH_CONTENT_PAGES_GENERATION_TIMEOUT_IN_SECONDS = 90
@@ -35,7 +36,7 @@ class Ai::ProductDetailsGeneratorService
   #   - price_frequency_in_months: [Integer] The product price frequency in months (1, 3, 6, 12, 24)
   #   - duration_in_seconds: [Integer] The duration of the operation in seconds
   def generate_product_details(prompt:)
-    raise "Prompt is blank" if prompt.to_s.strip.blank?
+    raise InvalidPromptError, "Prompt cannot be blank" if prompt.to_s.strip.blank?
 
     result, duration = with_retries(operation: "Generate product details", context: prompt) do
       response = openai_client(PRODUCT_DETAILS_GENERATION_TIMEOUT_IN_SECONDS).chat(
