@@ -403,7 +403,7 @@ class SettingsPresenter
       processor_fee_percent = processor_fee_percent.to_i == processor_fee_percent ? processor_fee_percent.to_i : processor_fee_percent
       processor_fee_fixed_cents = Purchase::PROCESSOR_FIXED_FEE_CENTS
 
-      discover_fee_percent = (Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND / 10.0).round(1)
+      discover_fee_percent = seller.custom_direct_fee_percentage || (Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND / 10.0).round(1)
       discover_fee_percent = discover_fee_percent.to_i == discover_fee_percent ? discover_fee_percent.to_i : discover_fee_percent
       direct_fee_percent = (Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 10.0).round(1)
       direct_fee_percent = direct_fee_percent.to_i == direct_fee_percent ? direct_fee_percent.to_i : direct_fee_percent
