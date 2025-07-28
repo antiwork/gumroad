@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::PurchasesController < Admin::BaseController
-  include RiskState
-
   before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud resend_receipt
                                           show sync_status_with_charge_processor block_buyer unblock_buyer]
 

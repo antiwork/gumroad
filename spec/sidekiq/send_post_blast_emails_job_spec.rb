@@ -8,6 +8,11 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
   before do
     @seller = create(:named_user)
+
+    # Since secure_external_id changes on each call, we need to mock it to get a consistent value
+    allow_any_instance_of(Purchase).to receive(:secure_external_id) do |purchase, scope:|
+      "sample-secure-id-#{scope}-#{purchase.id}"
+    end
   end
 
   let(:basic_post_with_audience) do
@@ -120,11 +125,11 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
         expect_sent_email @sales[0].email, content_match: [
           /because you've purchased.*#{post.purchase_url_redirect(@sales[0]).download_page_url}.*#{@products[0].name}/,
-          /#{unsubscribe_purchase_url(@sales[0].external_id)}.*Unsubscribe/
+          /#{unsubscribe_purchase_url(@sales[0].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
         ]
         expect_sent_email @sales[2].email, content_match: [
           /because you've purchased.*#{post.purchase_url_redirect(@sales[2]).download_page_url}.*#{@products[0].name}/,
-          /#{unsubscribe_purchase_url(@sales[2].external_id)}.*Unsubscribe/
+          /#{unsubscribe_purchase_url(@sales[2].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
         ]
       end
 
@@ -139,15 +144,15 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
         expect_sent_email @sales[3].email, content_match: [
           /because you've purchased.*#{post.purchase_url_redirect(@sales[3]).download_page_url}.*#{@products[1].name}/,
-          /#{unsubscribe_purchase_url(@sales[3].external_id)}.*Unsubscribe/
+          /#{unsubscribe_purchase_url(@sales[3].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
         ]
         expect_sent_email @sales[4].email, content_match: [
           /because you've purchased.*#{post.purchase_url_redirect(@sales[4]).download_page_url}.*#{@products[1].name}/,
-          /#{unsubscribe_purchase_url(@sales[4].external_id)}.*Unsubscribe/
+          /#{unsubscribe_purchase_url(@sales[4].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
         ]
         expect_sent_email @sales[5].email, content_match: [
           /because you've purchased.*#{post.purchase_url_redirect(@sales[5]).download_page_url}.*#{@products[2].name}/,
-          /#{unsubscribe_purchase_url(@sales[5].external_id)}.*Unsubscribe/
+          /#{unsubscribe_purchase_url(@sales[5].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
         ]
       end
 
@@ -162,7 +167,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect_sent_count 1
         expect_sent_email @sales[3].email, content_match: [
           /because you've purchased.*#{post.purchase_url_redirect(@sales[3]).download_page_url}.*#{@products[1].name}/,
-          /#{unsubscribe_purchase_url(@sales[3].external_id)}.*Unsubscribe/
+          /#{unsubscribe_purchase_url(@sales[3].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
         ]
       end
 
@@ -175,7 +180,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
         [1, 2, 3, 4, 5].each do |sale_index|
           expect_sent_email @sales[sale_index].email, content_match: [
             /because you've purchased a product from #{@seller.name}/,
-            /#{unsubscribe_purchase_url(@sales[sale_index].external_id)}.*Unsubscribe/
+            /#{unsubscribe_purchase_url(@sales[sale_index].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
           ]
         end
       end
@@ -220,7 +225,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
         ]
         [2, 3, 4, 5].each do |sale_index|
           expect_sent_email @sales[sale_index].email, content_match: [
-            /#{unsubscribe_purchase_url(@sales[sale_index].external_id)}.*Unsubscribe/
+            /#{unsubscribe_purchase_url(@sales[sale_index].secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
           ]
         end
       end

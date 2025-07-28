@@ -58,7 +58,7 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
     @product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
     @product.save!
 
-    @offer_code = create(:offer_code, products: [@product], amount_cents: 50_00, user: @product.user)
+    @offer_code = create(:offer_code, products: [@product], currency_type: "gbp", amount_cents: 50_00, user: @product.user)
     previous_successful_purchase_count = Purchase.successful.count
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"

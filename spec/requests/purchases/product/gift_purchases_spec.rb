@@ -33,5 +33,22 @@ describe("Gift purchases from the product page", type: :feature, js: true) do
       expect(Purchase.all_success_states.count).to eq 2
       expect(Gift.successful.where(link_id: @product.id, gifter_email: "test@gumroad.com", giftee_email:).count).to eq 1
     end
+
+    it "only generates license key for giftee when purchasing licensed product as gift" do
+      licensed_product = create(:product, user: @user, is_licensed: true)
+      visit "/l/#{licensed_product.unique_permalink}"
+      add_to_cart(licensed_product)
+      check_out(licensed_product, gift: { email: giftee_email, note: "Gifting licensed product!" })
+
+      expect(Purchase.all_success_states.count).to eq 2
+      expect(Gift.successful.where(link_id: licensed_product.id, gifter_email: "test@gumroad.com", giftee_email:).count).to eq 1
+
+      gifter_purchase = licensed_product.sales.is_gift_sender_purchase.sole
+      giftee_purchase = licensed_product.sales.is_gift_receiver_purchase.sole
+
+      expect(gifter_purchase.license).to be_nil
+      expect(giftee_purchase.license).to_not be_nil
+      expect(giftee_purchase.license_key).to be_present
+    end
   end
 end

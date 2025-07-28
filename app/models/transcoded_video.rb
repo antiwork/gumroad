@@ -32,7 +32,6 @@ class TranscodedVideo < ApplicationRecord
   end
 
   scope :completed,     -> { where(state: "completed") }
-  scope :not_completed, -> { where("state != 'completed'") }
   scope :processing,    -> { where(state: "processing") }
   scope :s3, -> { } # assume they're all on S3 (needed for CdnDeletable)
 

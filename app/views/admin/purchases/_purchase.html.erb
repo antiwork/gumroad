@@ -109,6 +109,10 @@
               Refund Status:
               <%= refund.status.capitalize %>
             </li>
+            <li>
+              Date of refund:
+              <%= format_datetime_with_relative_tooltip(refund.created_at) %>
+            </li>
           <% end %>
           </ul>
         </dd>

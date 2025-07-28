@@ -118,4 +118,24 @@ describe "Coffee", type: :feature, js: true do
       expect(purchase.variant_attributes).to eq([])
     end
   end
+
+  context "email formatting in body text" do
+    let(:coffee_with_email) do
+      create(
+        :product,
+        name: "Buy me a coffee!",
+        description: "Contact me at test@example.com for questions.",
+        user: seller,
+        native_type: Link::NATIVE_TYPE_COFFEE,
+      )
+    end
+
+    it "displays email addresses as clickable links" do
+      visit coffee_with_email.long_url
+
+      expect(page).to have_selector("h1", text: "Buy me a coffee!")
+      expect(page).to have_link("test@example.com", href: "mailto:test@example.com")
+      expect(page).not_to have_text('<a href="mailto:test@example.com"')
+    end
+  end
 end

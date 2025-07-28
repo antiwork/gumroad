@@ -3,7 +3,7 @@
 class Exports::PurchaseExportService
   PURCHASE_FIELDS = [
     "Purchase ID", "Item Name", "Buyer Name", "Purchase Email", "Buyer Email", "Do not contact?",
-    "Purchase Date", "Purchase Time (UTC timezone)", "Subtotal ($)", "Taxes ($)", "Shipping ($)",
+    "Purchase Date", "Purchase Time (UTC timezone)", "Subtotal ($)", "Taxes ($)", "Tax Type", "Shipping ($)",
     "Sale Price ($)", "Fees ($)", "Net Total ($)", "Tip ($)", "Tax Included in Price?",
     "Street Address", "City", "Zip Code", "State", "Country", "Referrer", "Refunded?",
     "Partial Refund ($)", "Fully Refunded?", "Disputed?", "Dispute Won?", "Access Revoked?", "Variants",
@@ -11,7 +11,7 @@ class Exports::PurchaseExportService
     "Pre-order authorization time (UTC timezone)", "Custom Fields", "Item Price ($)",
     "Variants Price ($)", "Giftee Email", "SKU ID", "Quantity", "Recurrence",
     "Affiliate", "Affiliate commission ($)", "Discover?", "Subscription End Date", "Rating", "Review",
-    "License Key", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
+    "License Key", "License Key Activation Count", "Payment Type", "PayPal Transaction ID", "PayPal Fee Amount", "PayPal Fee Currency",
     "Stripe Transaction ID", "Stripe Fee Amount", "Stripe Fee Currency",
     "Purchasing Power Parity Discounted?", "Upsold?", "Sent Abandoned Cart Email?",
     "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content"
@@ -137,6 +137,7 @@ class Exports::PurchaseExportService
         "Purchase Time (UTC timezone)" => purchase.created_at.to_time.to_s,
         "Subtotal ($)" => purchase.sub_total,
         "Taxes ($)" => purchase.tax_dollars,
+        "Tax Type" => purchase.has_tax_label? ? purchase.tax_label(include_tax_rate: false) : "",
         "Shipping ($)" => purchase.shipping_dollars,
         "Sale Price ($)" => purchase.price_dollars,
         "Fees ($)" => purchase.fee_dollars,
@@ -177,6 +178,7 @@ class Exports::PurchaseExportService
         "Rating" => main_or_giftee_purchase&.original_product_review&.rating,
         "Review" => main_or_giftee_purchase&.original_product_review&.message,
         "License Key" => main_or_giftee_purchase&.license_key,
+        "License Key Activation Count" => main_or_giftee_purchase&.license&.uses,
         "Payment Type" => ((purchase.card_type == "paypal" ? "PayPal" : "Card") if purchase.card_type.present?),
         "PayPal Transaction ID" => (purchase.stripe_transaction_id if purchase.paypal_order_id?),
         "PayPal Fee Amount" => (purchase.processor_fee_dollars if purchase.paypal_order_id?),

@@ -9,6 +9,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
@@ -174,6 +175,11 @@ export const CardGrid = ({
 
   const [enteredMinPrice, setEnteredMinPrice] = React.useState(searchParams.min_price ?? null);
   const [enteredMaxPrice, setEnteredMaxPrice] = React.useState(searchParams.max_price ?? null);
+
+  const debouncedTrySetPrice = useDebouncedCallback((minPrice: number | null, maxPrice: number | null) => {
+    trySetPrice(minPrice, maxPrice);
+  }, 500);
+
   const trySetPrice = (minPrice: number | null, maxPrice: number | null) => {
     if (minPrice == null || maxPrice == null || maxPrice > minPrice) {
       updateParams({ min_price: minPrice ?? undefined, max_price: maxPrice ?? undefined });
@@ -218,7 +224,7 @@ export const CardGrid = ({
   return (
     <div className="with-sidebar">
       {hideFilters ? null : (
-        <div className="stack top-12 lg:sticky" aria-label="Filters">
+        <div className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
           <header>
             {title ?? "Filters"}
             {anyFilters ? (
@@ -307,7 +313,7 @@ export const CardGrid = ({
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMinPrice(value);
-                      trySetPrice(value, enteredMaxPrice);
+                      debouncedTrySetPrice(value, enteredMaxPrice);
                     }}
                     value={enteredMinPrice ?? null}
                   >
@@ -324,7 +330,7 @@ export const CardGrid = ({
                   <NumberInput
                     onChange={(value) => {
                       setEnteredMaxPrice(value);
-                      trySetPrice(enteredMinPrice, value);
+                      debouncedTrySetPrice(enteredMinPrice, value);
                     }}
                     value={enteredMaxPrice ?? null}
                   >

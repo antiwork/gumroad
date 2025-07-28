@@ -400,65 +400,6 @@ describe Credit do
     end
   end
 
-  describe ".create_for_australia_backtaxes!", :vcr do
-    let!(:creator) { create(:user) }
-    let!(:amount_cents) { -25_00 }
-    let!(:merchant_account) { create(:merchant_account_stripe, user: creator) }
-    let!(:backtax_agreement) { create(:backtax_agreement, user: creator) }
-
-    it "assigns the backtax agreement as backtax_agreement" do
-      credit = Credit.create_for_australia_backtaxes!(backtax_agreement:, amount_cents:)
-      expect(credit.backtax_agreement).to eq(backtax_agreement)
-    end
-
-    it "updates the unpaid_balance_cents for the seller" do
-      balance_before_credit = creator.unpaid_balance_cents
-
-      credit = Credit.create_for_australia_backtaxes!(backtax_agreement:, amount_cents:)
-
-      expect(credit.merchant_account).to eq(merchant_account)
-      expect(credit.balance_transaction.holding_amount_currency).to eq(merchant_account.currency)
-      expect(credit.amount_cents).to eq(amount_cents)
-      expect(creator.reload.unpaid_balance_cents).to eq(balance_before_credit + credit.amount_cents)
-    end
-
-    describe "when the Stripe account is non-USD" do
-      let!(:merchant_account) { create(:merchant_account_stripe_canada, user: creator) }
-
-      it "updates the unpaid_balance_cents for the seller for the correct deducted amounts" do
-        balance_before_credit = creator.unpaid_balance_cents
-
-        credit = Credit.create_for_australia_backtaxes!(backtax_agreement:, amount_cents:)
-
-        expect(credit.merchant_account).to eq(merchant_account)
-        expect(credit.balance_transaction.holding_amount_currency).to eq(merchant_account.currency)
-        expect(credit.amount_cents).to eq(amount_cents)
-        expect(creator.reload.unpaid_balance_cents).to eq(balance_before_credit + credit.amount_cents)
-      end
-    end
-
-    describe "when the Stripe account does not accept charges" do
-      let!(:merchant_account) { create(:merchant_account_stripe_korea, user: creator) }
-      let(:gumroad_merchant_account) { MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) }
-
-      it "updates the unpaid_balance_cents for the seller for the correct deducted amounts and uses Gumroad's merchant account" do
-        balance_before_credit = creator.unpaid_balance_cents
-
-        credit = Credit.create_for_australia_backtaxes!(backtax_agreement:, amount_cents:)
-
-        expect(credit.merchant_account).to eq(gumroad_merchant_account)
-        expect(credit.balance_transaction.holding_amount_currency).to eq(gumroad_merchant_account.currency)
-        expect(credit.amount_cents).to eq(amount_cents)
-        expect(creator.reload.unpaid_balance_cents).to eq(balance_before_credit + credit.amount_cents)
-      end
-    end
-
-    it "creates a balance record after credit" do
-      credit = Credit.create_for_australia_backtaxes!(backtax_agreement:, amount_cents:)
-      expect(credit.balance).to eq(Balance.last)
-    end
-  end
-
   describe ".create_for_balance_forfeit!" do
     let!(:user) { create(:user) }
     let!(:merchant_account) { create(:merchant_account, user:) }

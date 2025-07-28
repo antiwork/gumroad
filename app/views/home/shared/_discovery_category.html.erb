@@ -1,29 +1,90 @@
-<div class="flex flex-col gap-4 rounded-lg border border-black <%= bg %> p-4 lg:p-8" role="listitem">
-  <%= link_to discover_taxonomy_url(path, host: DISCOVER_DOMAIN), class: "flex flex-col gap-4 no-underline" do %>
-    <div class="flex flex-col gap-3">
-      <%= image_tag icon,
-          alt: title,
-          loading: "lazy",
-          class: "w-[100px] h-[72px]" %>
-      <div class="text-3xl lg:text-4xl hover:underline">
-        <%= title %>
-      </div>
-      <div class="text-xl lg:text-2xl">
-        <%= description %>
-      </div>
-    </div>
-  <% end %>
+<%
+  discovery_rows = [
+    {
+      animation: "marquee-left",
+      tags: [
+        {name: "blender", path: "3d", icon: "discover/animation.svg"},
+        {name: "meditation", path: "audio", icon: "discover/audio.svg"},
+        {name: "comic", path: "comics-and-graphic-novels", icon: "discover/comics.svg"},
+        {name: "notion template", path: "business-and-money", icon: "discover/software.svg"},
+        {name: "textures", path: "design", icon: "discover/design.svg"},
+        {name: "procreate", path: "drawing-and-painting", icon: "discover/drawing.svg"},
+        {name: "3d model", path: "3d", icon: "discover/animation.svg"},
+        {name: "hypnosis", path: "audio", icon: "discover/audio.svg"},
+        {name: "manga", path: "comics-and-graphic-novels", icon: "discover/comics.svg"},
+        {name: "investing", path: "business-and-money", icon: "discover/software.svg"},
+        {name: "mockup", path: "design", icon: "discover/design.svg"},
+        {name: "brushes", path: "drawing-and-painting", icon: "discover/drawing.svg"},
+        {name: "spark ar", path: "3d", icon: "discover/animation.svg"},
+        {name: "subliminal messages", path: "audio", icon: "discover/audio.svg"},
+        {name: "anime", path: "comics-and-graphic-novels", icon: "discover/comics.svg"},
+        {name: "instagram", path: "business-and-money", icon: "discover/design.svg"},
+        {name: "font", path: "design", icon: "discover/design.svg"}
+      ]
+    },
+    {
+      animation: "marquee-right",
+      tags: [
+        {name: "art", path: "drawing-and-painting", icon: "discover/drawing.svg"},
+        {name: "after effects", path: "films", icon: "discover/film.svg"},
+        {name: "education", path: "education", icon: "discover/education.svg"},
+        {name: "fitness", path: "fitness-and-health", icon: "discover/sports.svg"},
+        {name: "sci-fi", path: "fiction-books", icon: "discover/writing.svg"},
+        {name: "vrchat", path: "gaming", icon: "discover/games.svg"},
+        {name: "ableton", path: "music-and-sound-design", icon: "discover/music.svg"},
+        {name: "certification exams", path: "education", icon: "discover/education.svg"},
+        {name: "vj loops", path: "films", icon: "discover/film.svg"},
+        {name: "workout program", path: "fitness-and-health", icon: "discover/sports.svg"},
+        {name: "poetry", path: "fiction-books", icon: "discover/writing.svg"},
+        {name: "avatar", path: "gaming", icon: "discover/games.svg"},
+        {name: "sample pack", path: "music-and-sound-design", icon: "discover/music.svg"},
+        {name: "learning", path: "education", icon: "discover/education.svg"},
+        {name: "luts", path: "films", icon: "discover/film.svg"},
+        {name: "yoga", path: "fitness-and-health", icon: "discover/sports.svg"},
+        {name: "fiction", path: "fiction-books", icon: "discover/writing.svg"},
+        {name: "assets", path: "gaming", icon: "discover/games.svg"},
+        {name: "sheet music", path: "music-and-sound-design", icon: "discover/music.svg"}
+      ]
+    },
+    {
+      animation: "marquee-left",
+      tags: [
+        {name: "reference photos", path: "photography", icon: "discover/photography.svg"},
+        {name: "coloring page", path: "self-improvement", icon: "discover/drawing.svg"},
+        {name: "singles", path: "recorded-music", icon: "discover/music.svg"},
+        {name: "programming", path: "software-development", icon: "discover/software.svg"},
+        {name: "kdp interior", path: "writing-and-publishing", icon: "discover/writing.svg"},
+        {name: "stock photos", path: "photography", icon: "discover/photography.svg"},
+        {name: "printable", path: "self-improvement", icon: "discover/crafts.svg"},
+        {name: "jazz", path: "recorded-music", icon: "discover/music.svg"},
+        {name: "windows", path: "software-development", icon: "discover/software.svg"},
+        {name: "ebook", path: "writing-and-publishing", icon: "discover/writing.svg"},
+        {name: "photobash", path: "photography", icon: "discover/photography.svg"},
+        {name: "productivity", path: "self-improvement", icon: "discover/software.svg"},
+        {name: "instrumental music", path: "recorded-music", icon: "discover/music.svg"},
+        {name: "theme", path: "software-development", icon: "discover/software.svg"},
+        {name: "low content books", path: "writing-and-publishing", icon: "discover/writing.svg"}
+      ]
+    }
+  ]
+%>
 
-  <div class="flex flex-col gap-3">
-    <div class="text-base">Popular tags</div>
-    <div class="flex flex-wrap gap-2">
-      <% tags.each do |tag| %>
-        <%= link_to(
-          tag,
-          discover_taxonomy_url(path, tags: tag, host: DISCOVER_DOMAIN),
-          class: "px-3 py-1 text-sm bg-white rounded-full border border-black no-underline hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all"
-        ) %>
+<div class="group flex flex-wrap gap-x-4 gap-y-6 justify-center" role="list">
+  <% discovery_rows.each do |row| %>
+    <div class="flex w-[200%] group-hover:[animation-play-state:paused] motion-safe:animate-[marquee_20s_linear_infinite] motion-safe:md:animate-[marquee_60s_linear_infinite] motion-reduce:animate-none">
+      <% (row[:tags] * 2).each do |tag| %>
+        <div class="flex-shrink-0 mr-3 flex gap-3 justify-center items-center h-auto">
+          <%= image_tag tag[:icon],
+              alt: "#{tag[:tag]} icon",
+              loading: "lazy",
+              class: "w-12 h-auto md:w-20 flex-shrink-0" %>
+          <%= link_to(
+            tag[:name],
+            discover_taxonomy_url(tag[:path], tags: tag[:name], host: DISCOVER_DOMAIN),
+            class: "px-4 py-2 bg-white rounded-full text-lg md:text-2xl font-medium text-black border border-gray-300 no-underline motion-safe:hover:-translate-x-1 motion-safe:hover:-translate-y-1 hover:shadow-[4px_4px_0_0_#000000] transition-all whitespace-nowrap"
+          ) %>
+        </div>
       <% end %>
     </div>
-  </div>
+  <% end %>
 </div>

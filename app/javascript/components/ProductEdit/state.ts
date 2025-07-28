@@ -103,6 +103,7 @@ export type Product = {
   quantity_enabled: boolean;
   can_enable_quantity: boolean;
   should_show_sales_count: boolean;
+  hide_sold_out_variants: boolean;
   is_epublication: boolean;
   product_refund_policy_enabled: boolean;
   refund_policy: RefundPolicy;
@@ -163,6 +164,7 @@ export const ProductEditContext = React.createContext<{
   thumbnail: Thumbnail | null;
   refundPolicies: OtherRefundPolicy[];
   currencyType: CurrencyCode;
+  setCurrencyType: (newCurrencyCode: CurrencyCode) => void;
   isListedOnDiscover: boolean;
   isPhysical: boolean;
   profileSections: ProfileSection[];

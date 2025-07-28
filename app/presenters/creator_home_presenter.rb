@@ -28,14 +28,24 @@ class CreatorHomePresenter
 
     today = Time.now.in_time_zone(seller.timezone).to_date
     analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - 30, today)
-    sales = analytics[:by_date][:sales]
+    top_sales_data = analytics[:by_date][:sales]
       .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
-      .map do |p|
-      product = seller.products.find_by(unique_permalink: p[0])
+
+    # Preload products with thumbnail attachments to avoid N+1 queries
+    product_permalinks = top_sales_data.map(&:first)
+    products_by_permalink = seller.products
+      .where(unique_permalink: product_permalinks)
+      .includes(thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
+      .index_by(&:unique_permalink)
+
+    sales = top_sales_data.map do |p|
+      product = products_by_permalink[p[0]]
+      next unless product
+
       {
         "id" => product.unique_permalink,
         "name" => product.name,
-        "thumbnail" => product.thumbnail&.url,
+        "thumbnail" => product.thumbnail_alive&.url,
         "sales" => product.successful_sales_count,
         "revenue" => product.total_usd_cents,
         "visits" => product.number_of_views,
@@ -43,7 +53,7 @@ class CreatorHomePresenter
         "last_7" => analytics[:by_date][:totals][product.unique_permalink]&.last(7)&.sum || 0,
         "last_30" => analytics[:by_date][:totals][product.unique_permalink]&.sum || 0,
       }
-    end
+    end.compact
     balances = UserBalanceStatsService.new(user: seller).fetch[:overview]
 
     stripe_verification_message = nil
@@ -54,6 +64,8 @@ class CreatorHomePresenter
         end
       end
     end
+
+    previous_year = Time.current.prev_year.year
 
     {
       name: seller.alive_user_compliance_info&.first_name || "",
@@ -68,7 +80,7 @@ class CreatorHomePresenter
       sales:,
       activity_items:,
       stripe_verification_message:,
-      show_1099_download_notice: seller.tax_form_1099_download_url(year: Time.current.prev_year.year).present?,
+      show_1099_download_notice: seller.eligible_for_1099?(previous_year) && seller.tax_form_1099_download_url(year: previous_year).present?,
     }
   end
 

@@ -20,6 +20,7 @@ export const PriceEditor = ({
   numberOfInstallments,
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
+  currencyCodeSelector,
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -33,6 +34,7 @@ export const PriceEditor = ({
   numberOfInstallments: number | null;
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
+  currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
 }) => {
   const uid = React.useId();
 
@@ -44,6 +46,7 @@ export const PriceEditor = ({
         currencyCode={currencyType}
         cents={priceCents}
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
+        currencyCodeSelector={currencyCodeSelector}
       />
       <Details
         className="toggle"

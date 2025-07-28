@@ -3,21 +3,6 @@
 require "spec_helper"
 
 describe D3 do
-  describe "#date_to_string" do
-    before :each do
-      @timezone = DateTime.current.zone
-    end
-
-    it "returns today string if a given date is today" do
-      expect(D3.date_to_string(DateTime.current.in_time_zone(@timezone.to_i).to_date, @timezone)).to eq "Today"
-    end
-
-    it "returns date string in %b %e format if a given date is not today" do
-      yesterday = DateTime.current.in_time_zone(@timezone.to_i).to_date - 1
-      expect(D3.date_to_string(yesterday, @timezone)).to eq yesterday.strftime("%b %e, %Y")
-    end
-  end
-
   describe ".formatted_date" do
     it "returns 'Today' if date is today" do
       expect(described_class.formatted_date(Date.today)).to eq("Today")

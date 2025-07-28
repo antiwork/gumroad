@@ -73,12 +73,6 @@ module User::Stats
     formatted_dollar_amount(unpaid_balance_cents(via:), with_currency: should_be_shown_currencies_always?)
   end
 
-  def affiliate_credits_sum_for_credits_created_after(previous_time)
-    paid_scope = affiliate_credits.paid.where("created_at > ?", previous_time)
-    all_scope = affiliate_credits.where("affiliate_credits.created_at > ?", previous_time)
-    affiliate_credit_sum_from_scope(paid_scope, all_scope)
-  end
-
   def affiliate_credits_sum_for_credits_created_between(start_time, end_time)
     paid_scope = affiliate_credits.paid.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
     all_scope = affiliate_credits.where("affiliate_credits.created_at > ? AND affiliate_credits.created_at <= ? ", start_time, end_time)
@@ -559,9 +553,8 @@ module User::Stats
   # Public: Returns the list of products that should be considered for creator analytics purposes.
   # We omit products only if they've been deleted or archived *and* they don't have any sales.
   def products_for_creator_analytics
-    one_successful_purchase_sql = Purchase.successful_or_preorder_authorization_successful.where("purchases.link_id = links.id").select(:id).limit(1).to_sql
-    links.joins("left join purchases on purchases.id = (#{one_successful_purchase_sql})")
-         .where("purchases.id IS NOT NULL OR (links.deleted_at IS NULL AND #{Link.not_archived_condition})")
+    successful_purchase_exists_sql = Purchase.successful_or_preorder_authorization_successful.where("purchases.link_id = links.id").to_sql
+    links.where("EXISTS (#{successful_purchase_exists_sql}) OR (links.deleted_at IS NULL AND #{Link.not_archived_condition})")
          .order(id: :desc)
   end
 

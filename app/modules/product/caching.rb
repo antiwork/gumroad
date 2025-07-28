@@ -46,8 +46,6 @@ module Product::Caching
   end
 
   def self.dashboard_collection_data(collection, cache: false)
-    cached_values = []
-
     product_ids = collection.pluck(:id)
     cached_values = ProductCachedValue.fresh.where(product_id: product_ids)
     uncached_product_ids = (product_ids - cached_values.pluck(:product_id)).zip

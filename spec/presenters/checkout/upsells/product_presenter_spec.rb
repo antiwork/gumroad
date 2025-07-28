@@ -27,7 +27,8 @@ describe Checkout::Upsells::ProductPresenter do
         currency_code: "usd",
         review_count: 1,
         average_rating: 5.0,
-        native_type: "ebook"
+        native_type: "ebook",
+        options: []
       )
     end
   end

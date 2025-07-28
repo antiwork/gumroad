@@ -2,10 +2,6 @@
 // It should be removed once everything uses the new stuff.
 @use "sass:math";
 
-.soft-hidden {
-  display: none;
-}
-
 .legacy-only {
   display: none !important;
 }
@@ -14,100 +10,6 @@
 button[draggable="true"] {
   -webkit-user-drag: element;
 }
-
-// jQuery Chosen
-.chosen-container {
-  min-width: 100%;
-  position: relative;
-
-  ul {
-    list-style: none;
-    padding: 0;
-  }
-
-  .chosen-choices {
-    @extend .input;
-    flex-wrap: wrap;
-    row-gap: spacer(1);
-    padding: spacer(1) math.div($form-element-padding-x, 2);
-
-    .search-field input {
-      padding: 0 math.div($form-element-padding-x, 2);
-      margin: 0;
-    }
-
-    .search-choice {
-      @extend .pill, .primary;
-      margin: 0 !important;
-      display: inline-flex;
-
-      span {
-        text-overflow: ellipsis;
-        overflow: hidden;
-      }
-
-      .search-choice-close {
-        @extend %icon, .icon-x;
-        cursor: pointer;
-        margin-left: spacer(2);
-      }
-    }
-  }
-
-  .chosen-drop {
-    display: none;
-    position: absolute;
-    top: 100%;
-    width: 100%;
-    border-radius: 0 0 $form-element-border-radius $form-element-border-radius;
-    z-index: z-index(tooltip);
-    @include bg-color(filled);
-
-    .chosen-results {
-      width: 100%;
-      max-height: 5 * $form-element-height;
-      overflow: auto;
-      scroll-behavior: auto;
-
-      &:not(:empty) {
-        border: $border;
-        box-shadow: box-shadow(1);
-      }
-
-      .active-result {
-        padding: $form-element-padding-y $form-element-padding-x;
-        border-top: $border;
-        cursor: pointer;
-
-        &.highlighted {
-          @include bg-color(primary);
-        }
-      }
-
-      .result-selected {
-        display: none;
-      }
-    }
-  }
-
-  &.chosen-with-drop {
-    .chosen-drop {
-      display: flex;
-    }
-
-    .chosen-choices {
-      border-bottom-left-radius: 0;
-      border-bottom-right-radius: 0;
-    }
-  }
-
-  &.chosen-disabled {
-    cursor: not-allowed;
-    opacity: $disabled-opacity;
-  }
-}
-
-// jQuery Chosen is disabled on mobile see here: https://stackoverflow.com/questions/22016578/chosen-plugin-doesnt-seem-to-work-on-mobile-browsers/22016765#22016765
 // quick UX improvement for native select[multiple] while we're migrating to the new design
 select[multiple].chosen-fallback {
   background-image: none;

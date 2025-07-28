@@ -5,9 +5,11 @@ class LargeSellersUpdateUserBalanceStatsCacheWorker
   sidekiq_options retry: 1, queue: :low
 
   def perform
-    user_ids = UserBalanceStatsService.cacheable_users.pluck(:id)
-    user_ids.each do |user_id|
-      UpdateUserBalanceStatsCacheWorker.perform_async(user_id)
-    end
+    user_ids = UserBalanceStatsService.cacheable_users.pluck(:id).map { |el| [el] }
+
+    Sidekiq::Client.push_bulk(
+      "class" => UpdateUserBalanceStatsCacheWorker,
+      "args" => user_ids,
+    )
   end
 end

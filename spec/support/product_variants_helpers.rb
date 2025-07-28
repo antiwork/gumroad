@@ -10,30 +10,8 @@ module ProductVariantsHelpers
     all("[role=listitem]")
   end
 
-  def within_content_tab_section(section_name, &block)
-    within "main", match: :first do
-      within_section section_name, section_element: :section, &block
-    end
-  end
-
-  def be_selected_for_option
-    have_checked_field "Add file to option"
-  end
-
   def remove_version_option
     click_on "Remove version"
-  end
-
-  def variant_rows
-    all(".variants-box")
-  end
-
-  def sku_rows
-    all(".sku-row")
-  end
-
-  def offer_code_rows
-    all(".discount-code-row")
   end
 
   def tier_rows

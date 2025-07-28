@@ -163,7 +163,7 @@ class PostSendgridApi
       personalization.add_substitution SendGrid::Substitution.new(key: "{{t_unsubscribe}}", value: "Unsubscribe")
 
       unsubscribe_url = if recipient[:purchase]
-        unsubscribe_purchase_url(recipient[:purchase].external_id)
+        unsubscribe_purchase_url(recipient[:purchase].secure_external_id(scope: "unsubscribe"))
       elsif recipient[:follower]
         cancel_follow_url(recipient[:follower].external_id)
       elsif recipient[:affiliate]

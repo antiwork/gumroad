@@ -874,7 +874,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
     if (state.status.type === "input") payPromise.reject(new Error());
     else payPromise.resolve();
     setPayPromise(null);
-  }, [state.status.type]);
+  }, [state.status.type, payPromise]);
 
   const stateRef = useRefToLatest(state);
 

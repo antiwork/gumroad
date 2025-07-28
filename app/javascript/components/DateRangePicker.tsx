@@ -1,4 +1,15 @@
-import { endOfMonth, endOfYear, startOfMonth, startOfYear, subDays, subMonths, subYears } from "date-fns";
+import {
+  endOfMonth,
+  endOfYear,
+  startOfMonth,
+  startOfYear,
+  subDays,
+  subMonths,
+  subYears,
+  endOfQuarter,
+  startOfQuarter,
+  subQuarters,
+} from "date-fns";
 import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
@@ -35,7 +46,7 @@ export const DateRangePicker = ({
         setOpen(open);
       }}
       trigger={
-        <div className="input">
+        <div className="input" aria-label="Date range selector">
           <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
           <Icon name="outline-cheveron-down" style={{ marginLeft: "auto" }} />
         </div>
@@ -73,6 +84,9 @@ export const DateRangePicker = ({
           <div role="menuitem" onClick={() => quickSet(subDays(today, 30), today)}>
             Last 30 days
           </div>
+          <div role="menuitem" onClick={() => quickSet(startOfMonth(today), today)}>
+            This month
+          </div>
           <div
             role="menuitem"
             onClick={() => {
@@ -87,6 +101,18 @@ export const DateRangePicker = ({
             onClick={() => quickSet(startOfMonth(subMonths(today, 3)), endOfMonth(subMonths(today, 1)))}
           >
             Last 3 months
+          </div>
+          <div role="menuitem" onClick={() => quickSet(startOfQuarter(today), today)}>
+            This quarter
+          </div>
+          <div
+            role="menuitem"
+            onClick={() => {
+              const lastQuarter = subQuarters(today, 1);
+              quickSet(startOfQuarter(lastQuarter), endOfQuarter(lastQuarter));
+            }}
+          >
+            Last quarter
           </div>
           <div role="menuitem" onClick={() => quickSet(startOfYear(today), today)}>
             This year

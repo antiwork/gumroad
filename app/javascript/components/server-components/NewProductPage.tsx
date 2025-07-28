@@ -100,8 +100,8 @@ const NewProductPage = ({
   };
 
   return (
-    <main>
-      <header>
+    <>
+      <header className="sticky-top">
         <h1>{show_orientation_text ? "Publish your first product" : "What are you creating?"}</h1>
         <div className="actions">
           <NavigationButton href={Routes.products_path()}>
@@ -113,8 +113,8 @@ const NewProductPage = ({
           </Button>
         </div>
       </header>
-
-      <div>
+      <main>
+        <div>
         <form id={`new-product-form-${formUID}`} className="row" onSubmit={(e) => void submit(e)}>
           <section>
             <header>
@@ -221,7 +221,8 @@ const NewProductPage = ({
           </section>
         </form>
       </div>
-    </main>
+      </main>
+    </>
   );
 };
 
@@ -243,7 +244,7 @@ const PRODUCT_TYPES = {
     title: "Coffee",
   },
   commission: {
-    description: "Sell unique tailored work or services to your customers.",
+    description: "Sell custom services with 50% deposit upfront, 50% upon completion.",
     title: "Commission",
   },
   course: {

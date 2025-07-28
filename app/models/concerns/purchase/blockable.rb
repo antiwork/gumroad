@@ -163,10 +163,15 @@ module Purchase::Blockable
       return if IGNORED_ERROR_CODES.include?(error_code)
 
       failed_seller_purchases_watch_minutes,
-      max_seller_failed_purchases_price_cents = $redis.mget(
+      max_seller_failed_purchases_price_cents,
+      seller_age_threshold_days = $redis.mget(
         RedisKey.failed_seller_purchases_watch_minutes,
-        RedisKey.max_seller_failed_purchases_price_cents
+        RedisKey.max_seller_failed_purchases_price_cents,
+        RedisKey.seller_age_threshold_days
       )
+
+      seller_age_threshold_days = seller_age_threshold_days.try(:to_i) || 730 # 2 years
+      return if seller.created_at < seller_age_threshold_days.days.ago
 
       failed_seller_purchases_watch_minutes = failed_seller_purchases_watch_minutes.try(:to_i) || 60 # 1 hour
       max_seller_failed_purchases_price_cents = max_seller_failed_purchases_price_cents.try(:to_i) || 200_000 # $2000

@@ -39,6 +39,7 @@ class Link < ApplicationRecord
             30 => :community_chat_enabled,
             31 => :DEPRECATED_excluded_from_mobile_app_discover,
             32 => :moderated_by_iffy,
+            33 => :hide_sold_out_variants,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -47,7 +48,7 @@ class Link < ApplicationRecord
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
           Product::ReviewStat, Product::Utils, ActionView::Helpers::SanitizeHelper,
-          ActionView::Helpers::NumberHelper, Mongoable, RiskState, TimestampScopes, ExternalId,
+          ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
           Integrations, Product::StaffPicked, RichContents, Product::Sorting
 
@@ -142,6 +143,7 @@ class Link < ApplicationRecord
   has_many :active_integrations, through: :live_product_integrations, source: :integration
   has_many :product_cached_values, foreign_key: :product_id
   has_one :upsell, -> { upsell.alive }, foreign_key: :product_id
+  has_many :upsell_variants, through: :upsell
   has_and_belongs_to_many :custom_fields, join_table: "custom_fields_products", foreign_key: "product_id"
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"
@@ -194,6 +196,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :validate_daily_product_creation_limit, on: :create
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
   before_save :downcase_filetype
@@ -283,11 +286,7 @@ class Link < ApplicationRecord
     with(latest_product_cached_values: ProductCachedValue.joins(cte_join_sql)).joins(join_sql)
   }
 
-  scope :eligible_for_content_upsells, -> {
-    visible_and_not_archived
-      .not_is_tiered_membership
-      .where.missing(:variant_categories_alive)
-  }
+  scope :eligible_for_content_upsells, -> { visible_and_not_archived.not_is_tiered_membership }
 
   alias super_as_json as_json
 
@@ -534,10 +533,6 @@ class Link < ApplicationRecord
     twitter_url(long_url, social_share_text)
   end
 
-  def facebook_share_url(title: true)
-    title ? facebook_url(long_url, social_share_text) : facebook_url(long_url)
-  end
-
   def social_share_text
     if user.twitter_handle.present?
       return "I pre-ordered #{name} from @#{user.twitter_handle} on @Gumroad" if is_in_preorder_state
@@ -575,6 +570,7 @@ class Link < ApplicationRecord
         "formatted_price" => price_formatted_verbose,
         "recommendable" => recommendable?,
         "rated_as_adult" => rated_as_adult?,
+        "hide_sold_out_variants" => hide_sold_out_variants?,
       )
       json["custom_delivery_url"] = nil # Deprecated
       if preorder_link.present?
@@ -632,8 +628,10 @@ class Link < ApplicationRecord
   def options
     if skus_enabled
       skus.not_is_default_sku.alive.map(&:to_option_for_product)
+    elsif variant_categories_alive.any?
+      variants.where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
     else
-      (variant_category = variant_categories_alive.first) ? variant_category.variants.in_order.alive.map(&:to_option) : []
+      []
     end
   end
 
@@ -841,19 +839,6 @@ class Link < ApplicationRecord
     variants
   end
 
-  def serialized_shipping_destinations
-    {
-      destinations: shipping_destinations.alive.map do |shipping_destination|
-        {
-          country_code: shipping_destination.country_code,
-          name: shipping_destination.country_name,
-          one_item_rate: shipping_destination.displayed_one_item_rate(price_currency_type, with_symbol: false),
-          multiple_items_rate: shipping_destination.displayed_multiple_items_rate(price_currency_type, with_symbol: false)
-        }
-      end
-    }
-  end
-
   def reorder_previews(preview_positions)
     asset_previews.alive.each do |preview|
       position = preview_positions[preview.guid].try(:to_i)
@@ -862,29 +847,6 @@ class Link < ApplicationRecord
         preview.save!
       end
     end
-  end
-
-  def offer_code_info(code)
-    offer_code_params = {}
-    if code.present?
-      offer_code = find_offer_code(code:)
-      offer_code_error_message = nil
-      if offer_code.nil?
-        offer_code_error_message = "Sorry, the discount code you wish to use is invalid."
-      elsif !offer_code.is_valid_for_purchase?
-        offer_code_error_message = "Sorry, the discount code you wish to use has expired."
-      end
-
-      if offer_code_error_message.present?
-        offer_code_params[:is_valid] = false
-        offer_code_params[:error_message] = offer_code_error_message
-      else
-        offer_code_params[:is_valid] = true
-        offer_code_params[:amount] = offer_code.amount
-        offer_code_params[:is_percent] = offer_code.is_percent?
-      end
-    end
-    offer_code_params
   end
 
   def find_offer_code(code:)
@@ -1483,6 +1445,15 @@ class Link < ApplicationRecord
       end
     end
 
+    def validate_daily_product_creation_limit
+      return unless user.present?
+
+      last_24h_links_count = user.links.where(created_at: 24.hours.ago..Time.current).count
+      if last_24h_links_count >= 100
+        errors.add(:base, "Sorry, you can only create 100 products per day.")
+      end
+    end
+
     def custom_permalink_or_is_licensed_changed?
       custom_permalink_changed? || is_licensed_changed?
     end
@@ -1513,7 +1484,7 @@ class Link < ApplicationRecord
           node.remove
         elsif node.name == "upsell-card"
           node.attributes.each do |attr|
-            node.remove_attribute(attr.first) unless %w[id productid discount].include?(attr.first)
+            node.remove_attribute(attr.first) unless %w[id productid variantid discount].include?(attr.first)
           end
         elsif node.name == "review-card"
           node.attributes.each do |attr|

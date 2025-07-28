@@ -121,9 +121,13 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
     it "shows the locations table" do
       visit sales_dashboard_path(from: "2023-12-01", to: "2023-12-31")
       within_table("Locations") do
-        expect(page).to have_table_row({ "Country" => "🇮🇹 Italy", "Views" => "3", "Sales" => "2", "Total" => "$2" })
-        expect(page).to have_table_row({ "Country" => "🇺🇸 United States", "Views" => "3", "Sales" => "1", "Total" => "$5" })
-        expect(page).to have_table_row({ "Country" => "🇯🇵 Japan", "Views" => "0", "Sales" => "1", "Total" => "$5" })
+        expect(page).to have_table_rows_in_order(
+          [
+            { "Country" => "🇺🇸 United States", "Views" => "3", "Sales" => "1", "Total" => "$5" },
+            { "Country" => "🇯🇵 Japan", "Views" => "0", "Sales" => "1", "Total" => "$5" },
+            { "Country" => "🇮🇹 Italy", "Views" => "3", "Sales" => "2", "Total" => "$2" },
+          ]
+        )
       end
 
       select_disclosure "Select products..." do
@@ -149,8 +153,12 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
       select "United States", from: "Locations"
       within_table("Locations") do
-        expect(page).to have_table_row({ "State" => "New York", "Views" => "0", "Sales" => "1", "Total" => "$5" })
-        expect(page).to have_table_row({ "State" => "California", "Views" => "3", "Sales" => "0", "Total" => "$0" })
+        expect(page).to have_table_rows_in_order(
+          [
+            { "State" => "New York", "Views" => "0", "Sales" => "1", "Total" => "$5" },
+            { "State" => "California", "Views" => "3", "Sales" => "0", "Total" => "$0" },
+          ]
+        )
       end
     end
 
@@ -158,6 +166,84 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       visit sales_dashboard_path(from: "2023-12-14", to: "2023-01-01")
       expect(page).to have_disclosure("12/14/2023")
       expect(page).to have_current_path(sales_dashboard_path(from: "2023-12-14", to: "2023-12-14"))
+    end
+
+    it "supports quarterly date range selection" do
+      visit sales_dashboard_path
+
+      # Get the initial date picker text
+      initial_date_picker_text = find('[aria-label="Date range selector"]').text
+
+      # Test "This quarter" option - verify it's available and clickable
+      select_disclosure initial_date_picker_text do
+        expect(page).to have_content("This quarter")
+        click_on "This quarter"
+      end
+
+      # Verify the URL parameters changed to quarter dates
+      expect(page.current_url).to include("from=")
+      expect(page.current_url).to include("to=")
+
+      # Get the new date picker text after selecting "This quarter"
+      quarter_date_picker_text = find('[aria-label="Date range selector"]').text
+
+      # Test "Last quarter" option - verify it's available and clickable
+      select_disclosure quarter_date_picker_text do
+        expect(page).to have_content("Last quarter")
+        click_on "Last quarter"
+      end
+
+      # Verify the URL parameters changed again for last quarter
+      expect(page.current_url).to include("from=")
+      expect(page.current_url).to include("to=")
+
+      # Verify the date picker text changed to show the last quarter range
+      last_quarter_date_picker_text = find('[aria-label="Date range selector"]').text
+      expect(last_quarter_date_picker_text).not_to eq(initial_date_picker_text)
+      expect(last_quarter_date_picker_text).not_to eq(quarter_date_picker_text)
+    end
+
+    it "handles quarterly date ranges and verifies quarterly options are present" do
+      visit sales_dashboard_path
+
+      # Get the initial date picker text
+      initial_date_picker_text = find('[aria-label="Date range selector"]').text
+
+      # Verify both quarterly options are available in the dropdown
+      select_disclosure initial_date_picker_text do
+        expect(page).to have_content("This quarter")
+        expect(page).to have_content("Last quarter")
+
+        # Verify other expected options are also present
+        expect(page).to have_content("This month")
+        expect(page).to have_content("Last month")
+        expect(page).to have_content("This year")
+        expect(page).to have_content("Last year")
+
+        # Test both quarterly options work
+        click_on "This quarter"
+      end
+
+      # Verify "This quarter" produces valid URL parameters
+      expect(page.current_url).to match(/from=\d{4}-\d{2}-\d{2}/)
+      expect(page.current_url).to match(/to=\d{4}-\d{2}-\d{2}/)
+
+      # Get the new date range after "This quarter"
+      this_quarter_text = find('[aria-label="Date range selector"]').text
+
+      # Test "Last quarter" option
+      select_disclosure this_quarter_text do
+        click_on "Last quarter"
+      end
+
+      # Verify "Last quarter" produces different valid URL parameters
+      expect(page.current_url).to match(/from=\d{4}-\d{2}-\d{2}/)
+      expect(page.current_url).to match(/to=\d{4}-\d{2}-\d{2}/)
+
+      # Verify the date range changed
+      last_quarter_text = find('[aria-label="Date range selector"]').text
+      expect(last_quarter_text).not_to eq(initial_date_picker_text)
+      expect(last_quarter_text).not_to eq(this_quarter_text)
     end
   end
 

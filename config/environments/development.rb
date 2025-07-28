@@ -45,7 +45,7 @@ Rails.application.configure do
   config.action_mailer.raise_delivery_errors = false
 
   config.action_mailer.perform_caching = false
-  config.action_mailer.preview_path = "#{Rails.root}/lib/mailer_previews"
+  config.action_mailer.preview_paths << "#{Rails.root}/lib/mailer_previews"
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   config.action_mailer.asset_host = "#{PROTOCOL}://#{DOMAIN}"
@@ -81,4 +81,13 @@ Rails.application.configure do
   # config.action_cable.disable_request_forgery_protection = true
 
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Bullet configuration for N+1 query detection
+  config.after_initialize do
+    Bullet.enable = true
+    Bullet.alert = true
+    Bullet.bullet_logger = true
+    Bullet.rails_logger = true
+    Bullet.add_footer = true
+  end
 end

@@ -81,6 +81,10 @@ class OfferCode < ApplicationRecord
     is_percent? ? amount_percentage : amount_cents
   end
 
+  def is_currency_valid?(product)
+    is_percent? || currency_type.nil? || product.price_currency_type == currency_type
+  end
+
   # Return amount buyer got off of the purchase with or without currency/'%'
   #
   # with_symbol - include currency/'%' in returned amount
@@ -209,6 +213,7 @@ class OfferCode < ApplicationRecord
       applicable_products.each do |product|
         validate_price_after_discount(product)
         validate_membership_price_after_discount(product)
+        validate_currency_type_after_discount(product)
         return if errors.present?
       end
     end
@@ -217,6 +222,12 @@ class OfferCode < ApplicationRecord
       return if is_amount_valid?(product)
 
       errors.add(:base, "The price after discount for all of your products must be either #{product.currency["symbol"]}0 or at least #{product.min_price_formatted}.")
+    end
+
+    def validate_currency_type_after_discount(product)
+      return if is_currency_valid?(product)
+
+      errors.add(:base, "This discount code uses #{currency_type.upcase} but the product uses #{product.price_currency_type.upcase}. Please change the discount code to use the same currency as the product.")
     end
 
     def validate_membership_price_after_discount(product)

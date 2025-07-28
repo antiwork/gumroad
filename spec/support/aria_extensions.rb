@@ -270,3 +270,47 @@ module Capybara
     end
   end
 end
+
+RSpec::Matchers.define :have_table_rows_in_order do |expected_rows|
+  match do |actual|
+    return false unless expected_rows.is_a?(Array) && expected_rows.any?
+
+    all_table_rows = actual.all(:table_row)
+    actual_row_positions = []
+
+    expected_rows.each_with_index do |row_data, index|
+      # `#find` fails the assertion if the row is not found, thus we do not
+      # need to handle this error in our own `failure_message` implementation.
+      found_row = actual.find(:table_row, row_data)
+
+      actual_row_positions << all_table_rows.index(found_row)
+    end
+
+    actual_row_positions.each_index do |index|
+      next if index == 0
+
+      prev_position = actual_row_positions[index - 1]
+      current_position = actual_row_positions[index]
+
+      if current_position < prev_position
+        @out_of_order_indices = [index - 1, index]
+        return false
+      end
+    end
+
+    true
+  end
+
+  failure_message do |actual|
+    first_index, second_index = @out_of_order_indices
+    first_row = expected_rows[first_index]
+    second_row = expected_rows[second_index]
+
+    <<~TEXT
+      expected table rows to be in order, but row
+        #{second_row.inspect}
+      appeared before row
+        #{first_row.inspect}
+    TEXT
+  end
+end

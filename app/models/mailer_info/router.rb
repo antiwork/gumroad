@@ -65,7 +65,7 @@ module MailerInfo::Router
   end
 
   def stats
-    MailerInfo::DeliveryMethod::DOMAINS.to_h { [_1, domain_stats(_1)] }
+    MailerInfo::DeliveryMethod::DOMAINS.index_with { domain_stats(_1) }
   end
 
   private

@@ -40,8 +40,8 @@ class ProductPresenter
   end
 
   ASSOCIATIONS_FOR_CARD = ProductPresenter::Card::ASSOCIATIONS
-  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil)
-    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:)
+  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: true)
+    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, compute_description:)
   end
 
   def self.card_for_email(product:)
@@ -98,6 +98,7 @@ class ProductPresenter
         quantity_enabled: product.quantity_enabled,
         can_enable_quantity: product.can_enable_quantity?,
         should_show_sales_count: product.should_show_sales_count,
+        hide_sold_out_variants: product.hide_sold_out_variants?,
         is_epublication: product.is_epublication?,
         product_refund_policy_enabled: product.product_refund_policy_enabled?,
         refund_policy: {
@@ -258,17 +259,6 @@ class ProductPresenter
   private
     def default_sku
       skus_enabled && skus.alive.not_is_default_sku.empty? ? skus.is_default_sku.first : nil
-    end
-
-    def recurrence_values_for_recurring_product
-      product.is_recurring_billing ? BasePrice::Recurrence.all.map do |recurrence|
-        {
-          id: recurrence,
-          enabled: product.has_price_for_recurrence?(recurrence),
-          suggested: product.suggested_price_formatted_without_dollar_sign_for_recurrence(recurrence),
-          value: product.has_price_for_recurrence?(recurrence) && product.price_formatted_without_dollar_sign_for_recurrence(recurrence)
-        }
-      end : nil
     end
 
     def collaborating_user

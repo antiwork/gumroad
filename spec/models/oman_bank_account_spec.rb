@@ -35,6 +35,13 @@ describe OmanBankAccount do
   end
 
   describe "#validate_account_number" do
+    it "allows records that are valid Omani IBANs" do
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      expect(build(:oman_bank_account, account_number: "OM030001234567890123456")).to be_valid
+      expect(build(:oman_bank_account, account_number: "OM810180000001299123456")).to be_valid
+    end
+
     it "allows records that match the required account number regex" do
       allow(Rails.env).to receive(:production?).and_return(true)
 
@@ -42,6 +49,25 @@ describe OmanBankAccount do
       expect(build(:oman_bank_account, account_number: "123456")).to be_valid
       expect(build(:oman_bank_account, account_number: "000123456789")).to be_valid
       expect(build(:oman_bank_account, account_number: "1234567890123456")).to be_valid
+    end
+
+    it "rejects records that are invalid Omani IBANs" do
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      # all values are incorrect
+      om_bank_account = build(:oman_bank_account, account_number: "OM000000000000000000000")
+      expect(om_bank_account).not_to be_valid
+      expect(om_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      # incorrect check digits
+      om_bank_account = build(:oman_bank_account, account_number: "OM060001234567890123456")
+      expect(om_bank_account).not_to be_valid
+      expect(om_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      # incorrect country code
+      om_bank_account = build(:oman_bank_account, account_number: "FR1420041010050500013M02606")
+      expect(om_bank_account).not_to be_valid
+      expect(om_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
 
     it "rejects records that do not match the required account number regex" do
