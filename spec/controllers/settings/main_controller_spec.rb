@@ -57,7 +57,7 @@ describe Settings::MainController do
       end
 
       it "expires the user's products", :sidekiq_inline do
-        put :update, params: { user: user_params.merge(enable_recurring_subscription_charge_email: false) }, format: :json
+        put :update, params: { user: user_params.merge(enable_payment_email: false) }, format: :json
         expect(response.parsed_body["success"]).to be(true)
         expect(Rails.cache.read(product.scoped_cache_key("en"))).to be(nil)
         expect(product.reload.product_cached_values.fresh).to eq([])
@@ -152,23 +152,6 @@ describe Settings::MainController do
       }.from(false).to(true)
     end
 
-    it "updates the enable_recurring_subscription_charge_email flag correctly" do
-      seller.update!(enable_recurring_subscription_charge_email: true)
-
-      expect do
-        put :update, params: { user: user_params.merge(enable_recurring_subscription_charge_email: false) }, format: :json
-        expect(response).to be_successful
-      end.to change {
-        seller.reload.enable_recurring_subscription_charge_email
-      }.from(true).to(false)
-
-      expect do
-        put :update, params: { user: user_params.merge(enable_recurring_subscription_charge_email: true) }, format: :json
-        expect(response).to be_successful
-      end.to change {
-        seller.reload.enable_recurring_subscription_charge_email
-      }.from(false).to(true)
-    end
 
     it "updates the enable_recurring_subscription_charge_push_notification flag correctly" do
       seller.update!(enable_recurring_subscription_charge_push_notification: true)

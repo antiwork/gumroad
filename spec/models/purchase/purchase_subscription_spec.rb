@@ -266,7 +266,6 @@ describe "PurchaseSubscription", :vcr do
 
           it "does not send an email to the creator if notifications are disabled" do
             expect(ContactingCreatorMailer).to_not receive(:mail)
-            seller.update!(enable_recurring_subscription_charge_email: true)
 
             Sidekiq::Testing.inline! do
               purchase.update_balance_and_mark_successful!

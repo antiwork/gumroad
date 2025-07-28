@@ -86,7 +86,6 @@ describe SettingsPresenter do
           purchasing_power_parity_excluded_product_ids: [product.external_id],
           enable_payment_email: true,
           enable_payment_push_notification: true,
-          enable_recurring_subscription_charge_email: true,
           enable_recurring_subscription_charge_push_notification: true,
           enable_free_downloads_email: true,
           enable_free_downloads_push_notification: true,
