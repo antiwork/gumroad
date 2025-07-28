@@ -128,15 +128,31 @@ module Product::Prices
   # For tax-exclusive products, returns the same as display_price_cents.
   def net_price_cents_for_tax_rate(tax_rate)
     return display_price_cents unless tax_inclusive && tax_rate&.combined_rate
-
-    # For tax-inclusive pricing: net_price = price_with_tax / (1 + tax_rate)
-    display_price_cents / (1 + tax_rate.combined_rate)
+    
+    # Input validation for edge cases (matching SalesTaxCalculator patterns)
+    combined_rate = tax_rate.combined_rate
+    return display_price_cents unless combined_rate >= 0 && combined_rate <= 1
+    return display_price_cents if combined_rate == -1
+    
+    # For tax-inclusive pricing: extract net price using BigDecimal for precision
+    # net_price = price_with_tax / (1 + tax_rate)
+    price_decimal = BigDecimal(display_price_cents.to_s)
+    rate_decimal = BigDecimal(combined_rate.to_s)
+    
+    # Calculate net price with proper precision
+    net_price_decimal = price_decimal / (BigDecimal("1") + rate_decimal)
+    net_price_cents = net_price_decimal.round(0).to_i
+    
+    # Ensure net price is positive
+    return display_price_cents if net_price_cents <= 0
+    
+    net_price_cents
   end
 
   # Public: Returns formatted net price (excluding tax) for tax-inclusive products
   def net_price_formatted_for_tax_rate(tax_rate, additional_attrs = {})
-    net_price = net_price_cents_for_tax_rate(tax_rate)
-    display_price_for_price_cents(net_price, additional_attrs)
+    net_price_cents = net_price_cents_for_tax_rate(tax_rate)
+    display_price_for_price_cents(net_price_cents, additional_attrs)
   end
 
   def min_price_formatted
