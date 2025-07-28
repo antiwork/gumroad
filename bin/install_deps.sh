@@ -8,8 +8,6 @@ set -eo pipefail
 # If no argument is provided, OS will be auto-detected
 
 
-# Helper functions
-command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 # Colors for output
 green="\033[0;32m"
