@@ -39,7 +39,6 @@ type Props = {
     purchasing_power_parity_excluded_product_ids: string[];
     enable_payment_email: boolean;
     enable_payment_push_notification: boolean;
-    enable_recurring_subscription_charge_email: boolean;
     enable_recurring_subscription_charge_push_notification: boolean;
     enable_free_downloads_email: boolean;
     enable_free_downloads_push_notification: boolean;
@@ -213,27 +212,6 @@ const MainPage = (props: Props) => {
                     <Toggle
                       value={userSettings.enable_payment_push_notification}
                       onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
-                      disabled={props.is_form_disabled}
-                    />
-                  </td>
-                </tr>
-                <tr>
-                  <th scope="row">Recurring payments</th>
-                  <td data-label="Email">
-                    <Toggle
-                      value={userSettings.enable_recurring_subscription_charge_email}
-                      onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
-                      disabled={props.is_form_disabled}
-                    />
-                  </td>
-                  <td data-label="Mobile">
-                    <Toggle
-                      value={userSettings.enable_recurring_subscription_charge_push_notification}
-                      onChange={(value) =>
-                        updateUserSettings({
-                          enable_recurring_subscription_charge_push_notification: value,
-                        })
-                      }
                       disabled={props.is_form_disabled}
                     />
                   </td>

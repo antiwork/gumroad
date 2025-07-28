@@ -313,8 +313,7 @@ describe "PurchaseSubscription", :vcr do
               end
             end
 
-            it "does not send email notifications for monthly recurring charges even when enabled" do
-              seller.update!(enable_recurring_subscription_charge_email: true)
+            it "never sends email notifications for monthly recurring charges" do
               recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
                                                     credit_card: create(:credit_card), purchaser: create(:user),
                                                     price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
@@ -357,8 +356,7 @@ describe "PurchaseSubscription", :vcr do
               end
             end
 
-            it "still sends email notifications for yearly recurring charges when enabled" do
-              seller.update!(enable_recurring_subscription_charge_email: true)
+            it "always sends email notifications for yearly recurring charges" do
               recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
                                                     credit_card: create(:credit_card), purchaser: create(:user),
                                                     price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
@@ -367,22 +365,6 @@ describe "PurchaseSubscription", :vcr do
               index_model_records(Purchase)
 
               expect(ContactingCreatorMailer).to receive(:notify).and_call_original
-
-              Sidekiq::Testing.inline! do
-                recurring_purchase.update_balance_and_mark_successful!
-              end
-            end
-
-            it "does not send email notifications for yearly recurring charges when disabled" do
-              seller.update!(enable_recurring_subscription_charge_email: false)
-              recurring_purchase = build(:purchase, subscription:, is_original_subscription_purchase: false, seller:, link:,
-                                                    credit_card: create(:credit_card), purchaser: create(:user),
-                                                    price_cents: 200, fee_cents: 10, purchase_state: "in_progress")
-              recurring_purchase.process!
-              recurring_purchase.save!
-              index_model_records(Purchase)
-
-              expect(ContactingCreatorMailer).to_not receive(:notify)
 
               Sidekiq::Testing.inline! do
                 recurring_purchase.update_balance_and_mark_successful!

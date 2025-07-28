@@ -237,7 +237,7 @@ class User < ApplicationRecord
             31 => :disable_paypal_sales,
             32 => :all_adult_products,
             33 => :enable_free_downloads_email,
-            34 => :enable_recurring_subscription_charge_email,
+            34 => :DEPRECATED_enable_recurring_subscription_charge_email,
             35 => :enable_payment_push_notification,
             36 => :enable_recurring_subscription_charge_push_notification,
             37 => :enable_free_downloads_push_notification,
@@ -1052,7 +1052,6 @@ class User < ApplicationRecord
       enable_payment_push_notification
       enable_free_downloads_email
       enable_free_downloads_push_notification
-      enable_recurring_subscription_charge_email
       enable_recurring_subscription_charge_push_notification
     }
     private_constant :FLAGS_TO_ENABLE_BY_DEFAULT

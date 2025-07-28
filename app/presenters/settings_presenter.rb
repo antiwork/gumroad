@@ -75,7 +75,6 @@ class SettingsPresenter
         purchasing_power_parity_excluded_product_ids: seller.purchasing_power_parity_excluded_product_external_ids,
         enable_payment_email: seller.enable_payment_email,
         enable_payment_push_notification: seller.enable_payment_push_notification,
-        enable_recurring_subscription_charge_email: seller.enable_recurring_subscription_charge_email,
         enable_recurring_subscription_charge_push_notification: seller.enable_recurring_subscription_charge_push_notification,
         enable_free_downloads_email: seller.enable_free_downloads_email,
         enable_free_downloads_push_notification: seller.enable_free_downloads_push_notification,

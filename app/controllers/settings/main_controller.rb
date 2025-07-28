@@ -52,7 +52,6 @@ class Settings::MainController < Sellers::BaseController
         :email,
         :enable_payment_email,
         :enable_payment_push_notification,
-        :enable_recurring_subscription_charge_email,
         :enable_recurring_subscription_charge_push_notification,
         :enable_free_downloads_email,
         :enable_free_downloads_push_notification,

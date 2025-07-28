@@ -34,7 +34,7 @@ class UsersController < ApplicationController
                           :disable_third_party_analytics, :two_factor_authentication_enabled, :facebook_meta_tag,
                           :enable_verify_domain_third_party_services,
                           :enable_payment_email, :enable_payment_push_notification, :enable_free_downloads_email, :enable_free_downloads_push_notification,
-                          :enable_recurring_subscription_charge_email, :enable_recurring_subscription_charge_push_notification,
+                          :enable_recurring_subscription_charge_push_notification,
                           :disable_comments_email, :disable_reviews_email]
 
   def show
