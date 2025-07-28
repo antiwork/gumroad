@@ -310,4 +310,165 @@ describe "Product with installment plan", type: :feature, js: true do
       )
     end
   end
+
+  context "when the product is priced in non-USD currency" do
+    let!(:product) { create(:product, name: "Awesome product in EUR", user: seller, price_cents: 149500, price_currency_type: Currency::EUR) }
+    let!(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3) }
+    before do
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with("eur").and_return("0.86734042676")
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(:eur).and_return("0.86734042676")
+    end
+
+    it "displays and charges correct installment amounts in USD" do
+      visit product.long_url
+      expect(page).to have_text("First installment of €498.34, followed by 2 monthly installments of €498.33", normalize_ws: true)
+
+      click_on "Pay in 3 installments"
+
+      within_cart_item product.name do
+        expect(page).to have_text("US$1,723.66 in 3 installments", normalize_ws: true)
+
+        select_disclosure "Configure" do
+          choose "Pay in full"
+          click_on "Save changes"
+        end
+      end
+
+      expect(page).to have_text("Subtotal US$1,723.66", normalize_ws: true)
+      expect(page).to have_text("Total US$1,723.66", normalize_ws: true)
+      expect(page).not_to have_text("Payment today", normalize_ws: true)
+      expect(page).not_to have_text("Future installments", normalize_ws: true)
+
+      within_cart_item product.name do
+        expect(page).to_not have_text("in 3 installments")
+
+        select_disclosure "Configure" do
+          choose "Pay in 3 installments"
+          click_on "Save changes"
+        end
+      end
+
+      within_cart_item product.name do
+        expect(page).to have_text("US$1,723.66 in 3 installments", normalize_ws: true)
+      end
+
+      expect(page).to have_text("Subtotal US$1,723.66", normalize_ws: true)
+      expect(page).to have_text("Total US$1,723.66", normalize_ws: true)
+      expect(page).to have_text("Payment today US$574.56", normalize_ws: true)
+      expect(page).to have_text("Future installments US$1,149.10", normalize_ws: true)
+
+      fill_checkout_form(product)
+      click_on "Pay"
+
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+      purchase = product.sales.last
+      subscription = purchase.subscription
+      expect(purchase).to have_attributes(
+                            price_cents: 57456,
+                            displayed_price_cents: 49834,
+                            is_installment_payment: true,
+                            is_original_subscription_purchase: true,
+                            )
+      expect(subscription).to have_attributes(
+                                is_installment_plan: true,
+                                charge_occurrence_count: 3,
+                                recurrence: "monthly",
+                                )
+      expect(subscription.last_payment_option.installment_plan).to eq(installment_plan)
+
+      travel_to(1.month.from_now)
+      RecurringChargeWorker.new.perform(subscription.id)
+      expect(subscription.purchases.successful.count).to eq(2)
+      expect(subscription.purchases.successful.last).to have_attributes(
+                                                          price_cents: 57455,
+                                                          displayed_price_cents: 49833,
+                                                          is_installment_payment: true,
+                                                          is_original_subscription_purchase: false,
+                                                          )
+    end
+
+    describe "with sales tax" do
+      before do
+        Feature.activate("collect_tax_in")
+        allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("103.48.196.103") # India
+        create(:zip_tax_rate, country: "IN", state: nil, zip_code: nil, combined_rate: 0.18, is_seller_responsible: false)
+        create(:user_compliance_info_empty, user: product.user,
+                                            first_name: "edgar", last_name: "gumstein", street_address: "123 main", city: "sf", state: "ca",
+                                            zip_code: "94107", country: Compliance::Countries::USA.common_name)
+      end
+
+      it "displays and charges correct installment amounts in USD" do
+        visit product.long_url
+        expect(page).to have_text("First installment of €498.34, followed by 2 monthly installments of €498.33", normalize_ws: true)
+
+        click_on "Pay in 3 installments"
+        fill_checkout_form(product, country: "India", zip_code: nil)
+
+        within_cart_item product.name do
+          expect(page).to have_text("US$1,723.66 in 3 installments", normalize_ws: true)
+
+          select_disclosure "Configure" do
+            choose "Pay in full"
+            click_on "Save changes"
+          end
+        end
+
+        expect(page).to have_text("Subtotal US$1,723.66", normalize_ws: true)
+        expect(page).to have_text("GST US$310.26", normalize_ws: true)
+        expect(page).to have_text("Total US$2,033.92", normalize_ws: true)
+        expect(page).not_to have_text("Payment today", normalize_ws: true)
+        expect(page).not_to have_text("Future installments", normalize_ws: true)
+
+        within_cart_item product.name do
+          expect(page).to_not have_text("in 3 installments")
+
+          select_disclosure "Configure" do
+            choose "Pay in 3 installments"
+            click_on "Save changes"
+          end
+        end
+
+        within_cart_item product.name do
+          expect(page).to have_text("US$1,723.66 in 3 installments", normalize_ws: true)
+        end
+
+        expect(page).to have_text("Subtotal US$1,723.66", normalize_ws: true)
+        expect(page).to have_text("GST US$310.26", normalize_ws: true)
+        expect(page).to have_text("Total US$2,033.92", normalize_ws: true)
+        expect(page).to have_text("Payment today US$884.82", normalize_ws: true)
+        expect(page).to have_text("Future installments US$1,149.10", normalize_ws: true)
+
+        fill_checkout_form(product, zip_code: nil)
+        click_on "Pay"
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+        purchase = product.sales.last
+        subscription = purchase.subscription
+        expect(purchase).to have_attributes(
+                              price_cents: 57456,
+                              displayed_price_cents: 49834,
+                              is_installment_payment: true,
+                              is_original_subscription_purchase: true,
+                              )
+        expect(subscription).to have_attributes(
+                                  is_installment_plan: true,
+                                  charge_occurrence_count: 3,
+                                  recurrence: "monthly",
+                                  )
+        expect(subscription.last_payment_option.installment_plan).to eq(installment_plan)
+
+        travel_to(1.month.from_now)
+        RecurringChargeWorker.new.perform(subscription.id)
+        expect(subscription.purchases.successful.count).to eq(2)
+        expect(subscription.purchases.successful.last).to have_attributes(
+                                                            price_cents: 57455,
+                                                            displayed_price_cents: 49833,
+                                                            is_installment_payment: true,
+                                                            is_original_subscription_purchase: false,
+                                                            )
+      end
+    end
+  end
 end
