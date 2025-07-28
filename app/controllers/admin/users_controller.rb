@@ -166,7 +166,8 @@ class Admin::UsersController < Admin::BaseController
     custom_direct_fee = params.require(:custom_direct_fee).permit(:percentage)
     percentage_value = custom_direct_fee[:percentage]
 
-    @user.update!(custom_direct_fee_percentage: percentage_value.present? ? percentage_value.to_f : nil)
+    @user.custom_direct_fee_percentage = percentage_value.present? ? percentage_value.to_f : nil
+    @user.save!
 
     render json: { success: true }
   rescue => e
