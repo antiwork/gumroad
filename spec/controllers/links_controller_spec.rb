@@ -3010,6 +3010,30 @@ describe LinksController, :vcr do
         expect(link.reload.preorder_link.present?).to be(false)
       end
 
+      it "sets tax_inclusive to true by default for new products" do
+        params = { price_cents: 100, name: "test link" }
+        post :create, params: { format: :json, link: params }
+        expect(response.parsed_body["success"]).to be(true)
+        link = seller.links.last
+        expect(link.tax_inclusive).to be(true)
+      end
+
+      it "allows explicit tax_inclusive setting" do
+        params = { price_cents: 100, name: "test link", tax_inclusive: false }
+        post :create, params: { format: :json, link: params }
+        expect(response.parsed_body["success"]).to be(true)
+        link = seller.links.last
+        expect(link.tax_inclusive).to be(false)
+      end
+
+      it "maintains tax_inclusive true when explicitly set" do
+        params = { price_cents: 100, name: "test link", tax_inclusive: true }
+        post :create, params: { format: :json, link: params }
+        expect(response.parsed_body["success"]).to be(true)
+        link = seller.links.last
+        expect(link.tax_inclusive).to be(true)
+      end
+
       it "is able to set currency type" do
         params = { price_cents: 100, name: "test link", url: @s3_url, price_currency_type: "jpy" }
         post :create, params: { format: :json, link: params }

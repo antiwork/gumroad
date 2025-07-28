@@ -41,9 +41,36 @@ class SalesTaxCalculator
     return SalesTaxCalculation.zero_tax(price_cents) if tax_rate.nil?
     return SalesTaxCalculation.zero_tax(price_cents) unless tax_eligible?
 
-    tax_amount_cents = price_cents * tax_rate.combined_rate
+    # Input validation for edge cases
+    combined_rate = tax_rate.combined_rate
+    raise SalesTaxCalculatorValidationError, "Tax rate must be between 0 and 1" unless combined_rate >= 0 && combined_rate <= 1
+    raise SalesTaxCalculatorValidationError, "Invalid tax rate configuration" if combined_rate == -1
+
+    if product.tax_inclusive
+      # For tax-inclusive pricing: extract tax from the price using BigDecimal for precision
+      # tax_amount = price_with_tax / (1 + tax_rate) * tax_rate
+      price_decimal = BigDecimal(price_cents.to_s)
+      rate_decimal = BigDecimal(combined_rate.to_s)
+      
+      # Calculate tax amount with proper precision
+      tax_amount_decimal = price_decimal * rate_decimal / (BigDecimal("1") + rate_decimal)
+      tax_amount_cents = tax_amount_decimal.round(0).to_i
+      net_price_cents = price_cents - tax_amount_cents
+      
+      # Ensure net price is positive
+      raise SalesTaxCalculatorValidationError, "Net price must be positive" if net_price_cents <= 0
+    else
+      # For tax-exclusive pricing: add tax to the price (current behavior)
+      price_decimal = BigDecimal(price_cents.to_s)
+      rate_decimal = BigDecimal(combined_rate.to_s)
+      tax_amount_decimal = price_decimal * rate_decimal
+      tax_amount_cents = tax_amount_decimal.round(0).to_i
+      net_price_cents = price_cents
+    end
+
     SalesTaxCalculation.new(price_cents:,
                             tax_cents: tax_amount_cents,
+                            net_price_cents:,
                             zip_tax_rate: tax_rate,
                             business_vat_status: @buyer_vat_id.present? ? :invalid : nil,
                             is_quebec:)
@@ -102,9 +129,19 @@ class SalesTaxCalculator
       }
 
       tax_amount_cents = (taxjar_response_json["amount_to_collect"] * 100.0).round.to_d
+      
+      if product.tax_inclusive
+        # For tax-inclusive pricing with TaxJar: the price_cents already includes tax
+        # TaxJar tells us the tax amount, so net price = price - tax
+        net_price_cents = price_cents - tax_amount_cents
+      else
+        # For tax-exclusive pricing: net price equals the price (tax added on top)
+        net_price_cents = price_cents
+      end
 
       SalesTaxCalculation.new(price_cents:,
                               tax_cents: tax_amount_cents,
+                              net_price_cents:,
                               zip_tax_rate: nil,
                               business_vat_status: buyer_vat_id.present? ? :invalid : nil,
                               used_taxjar: true,
@@ -115,6 +152,7 @@ class SalesTaxCalculator
 
     def validate
       raise SalesTaxCalculatorValidationError, "Price (cents) should be an Integer" unless @price_cents.is_a? Integer
+      raise SalesTaxCalculatorValidationError, "Price (cents) must be positive" unless @price_cents > 0
       raise SalesTaxCalculatorValidationError, "Buyer Location should be a Hash" unless @buyer_location.is_a? Hash
       raise SalesTaxCalculatorValidationError, "Product should be a Link instance" unless @product.is_a? Link
     end

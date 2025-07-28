@@ -124,6 +124,21 @@ module Product::Prices
     CURRENCY_CHOICES[price_currency_type]
   end
 
+  # Public: Returns the net price (excluding tax) for tax-inclusive products.
+  # For tax-exclusive products, returns the same as display_price_cents.
+  def net_price_cents_for_tax_rate(tax_rate)
+    return display_price_cents unless tax_inclusive && tax_rate&.combined_rate
+
+    # For tax-inclusive pricing: net_price = price_with_tax / (1 + tax_rate)
+    display_price_cents / (1 + tax_rate.combined_rate)
+  end
+
+  # Public: Returns formatted net price (excluding tax) for tax-inclusive products
+  def net_price_formatted_for_tax_rate(tax_rate, additional_attrs = {})
+    net_price = net_price_cents_for_tax_rate(tax_rate)
+    display_price_for_price_cents(net_price, additional_attrs)
+  end
+
   def min_price_formatted
     MoneyFormatter.format(currency["min_price"], price_currency_type.to_sym, no_cents_if_whole: true, symbol: true)
   end

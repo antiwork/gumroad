@@ -121,6 +121,7 @@ class LinksController < ApplicationController
     @product.taxonomy = Taxonomy.find_by(slug: "other")
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
+    @product.tax_inclusive = true unless params[:link]&.key?(:tax_inclusive)
 
     begin
       @product.save!
@@ -601,7 +602,7 @@ class LinksController < ApplicationController
                                    :should_include_last_post, :should_show_all_posts, :should_show_sales_count, :duration_in_months,
                                    :free_trial_enabled, :free_trial_duration_amount, :free_trial_duration_unit,
                                    :is_adult, :is_epublication, :product_refund_policy_enabled, :seller_refund_policy_enabled,
-                                   :refund_policy, :taxonomy_id)
+                                   :refund_policy, :taxonomy_id, :tax_inclusive)
     end
 
     def paged_params

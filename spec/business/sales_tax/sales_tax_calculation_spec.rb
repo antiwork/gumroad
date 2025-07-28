@@ -28,6 +28,20 @@ describe SalesTaxCalculation do
 
       expect(actual_hash[:price_cents]).to eq(100)
       expect(actual_hash[:tax_cents]).to eq(10)
+      expect(actual_hash[:net_price_cents]).to eq(100) # Default to price_cents for backward compatibility
+      expect(actual_hash[:has_vat_id_input]).to be(false)
+    end
+
+    it "serializes a tax calculation with explicit net_price_cents" do
+      zip_tax_rate = create(:zip_tax_rate, is_seller_responsible: 0)
+      actual_hash = SalesTaxCalculation.new(price_cents: 100,
+                                            tax_cents: 10,
+                                            net_price_cents: 90,
+                                            zip_tax_rate:).to_hash
+
+      expect(actual_hash[:price_cents]).to eq(100)
+      expect(actual_hash[:tax_cents]).to eq(10)
+      expect(actual_hash[:net_price_cents]).to eq(90)
       expect(actual_hash[:has_vat_id_input]).to be(false)
     end
 

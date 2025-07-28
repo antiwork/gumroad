@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class SalesTaxCalculation
-  attr_reader :price_cents, :tax_cents, :zip_tax_rate, :business_vat_status, :used_taxjar, :gumroad_is_mpf, :taxjar_info, :is_quebec
+  attr_reader :price_cents, :tax_cents, :net_price_cents, :zip_tax_rate, :business_vat_status, :used_taxjar, :gumroad_is_mpf, :taxjar_info, :is_quebec
 
-  def initialize(price_cents:, tax_cents:, zip_tax_rate:, business_vat_status: nil, used_taxjar: false, gumroad_is_mpf: false, taxjar_info: nil, is_quebec: false)
+  def initialize(price_cents:, tax_cents:, zip_tax_rate:, net_price_cents: nil, business_vat_status: nil, used_taxjar: false, gumroad_is_mpf: false, taxjar_info: nil, is_quebec: false)
     @price_cents = price_cents
-    @tax_cents = tax_cents
+    @tax_cents = tax_cents.is_a?(BigDecimal) ? tax_cents.to_i : tax_cents
+    @net_price_cents = net_price_cents || price_cents # Default to price_cents for backward compatibility
     @zip_tax_rate = zip_tax_rate
     @business_vat_status = business_vat_status
     @used_taxjar = used_taxjar
@@ -31,6 +32,7 @@ class SalesTaxCalculation
     {
       price_cents:,
       tax_cents:,
+      net_price_cents:,
       business_vat_status:,
       has_vat_id_input: has_vat_id_input?
     }

@@ -2216,8 +2216,184 @@ describe SalesTaxCalculator do
 
     expect(actual.price_cents).to eq(expected.price_cents)
     expect(actual.tax_cents).to eq(expected.tax_cents)
+    expect(actual.net_price_cents).to eq(expected.net_price_cents)
     expect(actual.zip_tax_rate).to eq(expected.zip_tax_rate)
     expect(actual.used_taxjar).to eq(expected.used_taxjar)
     expect(actual.taxjar_info).to eq(expected.taxjar_info)
+  end
+
+  describe "tax-inclusive pricing" do
+    before(:each) do
+      @seller = create(:user)
+    end
+
+    context "with lookup table calculation" do
+      it "calculates tax correctly for tax-inclusive product" do
+        tax_rate = create(:zip_tax_rate, country: "ES", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        tax_inclusive_product = create(:product, user: @seller, tax_inclusive: true, price_cents: 1000)
+
+        # For tax-inclusive: tax = price_with_tax / (1 + rate) * rate
+        # tax = 1000 / (1 + 0.21) * 0.21 = 1000 / 1.21 * 0.21 ≈ 173.55
+        expected_tax_cents = (1000 / (1 + 0.21) * 0.21).round
+        expected_net_price_cents = 1000 - expected_tax_cents
+
+        expected_calculation = SalesTaxCalculation.new(
+          price_cents: 1000,
+          tax_cents: expected_tax_cents,
+          net_price_cents: expected_net_price_cents,
+          zip_tax_rate: tax_rate
+        )
+
+        actual_calculation = SalesTaxCalculator.new(
+          product: tax_inclusive_product,
+          price_cents: 1000,
+          buyer_location: { country: "ES" }
+        ).calculate
+
+        compare_calculations(expected: expected_calculation, actual: actual_calculation)
+      end
+
+      it "calculates tax correctly for tax-exclusive product (existing behavior)" do
+        tax_rate = create(:zip_tax_rate, country: "ES", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        tax_exclusive_product = create(:product, user: @seller, tax_inclusive: false, price_cents: 1000)
+
+        # For tax-exclusive: tax = price * rate (existing behavior)
+        expected_tax_cents = (1000 * 0.21).round
+        expected_net_price_cents = 1000 # net price equals price for tax-exclusive
+
+        expected_calculation = SalesTaxCalculation.new(
+          price_cents: 1000,
+          tax_cents: expected_tax_cents,
+          net_price_cents: expected_net_price_cents,
+          zip_tax_rate: tax_rate
+        )
+
+        actual_calculation = SalesTaxCalculator.new(
+          product: tax_exclusive_product,
+          price_cents: 1000,
+          buyer_location: { country: "ES" }
+        ).calculate
+
+        compare_calculations(expected: expected_calculation, actual: actual_calculation)
+      end
+
+      it "returns zero tax for tax-inclusive product when no tax applies" do
+        tax_inclusive_product = create(:product, user: @seller, tax_inclusive: true, price_cents: 1000)
+
+        calculation = SalesTaxCalculator.new(
+          product: tax_inclusive_product,
+          price_cents: 1000,
+          buyer_location: { country: "ZZ" }
+        ).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(1000), actual: calculation)
+      end
+    end
+
+    context "with TaxJar calculation", :vcr do
+      before do
+        @creator = create(:user_with_compliance_info)
+        @tax_inclusive_product = create(:physical_product, user: @creator, require_shipping: true, price_cents: 1000, tax_inclusive: true)
+        @tax_inclusive_product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 100, multiple_items_rate_cents: 200)
+        @tax_inclusive_product.save!
+      end
+
+      it "calculates tax correctly for tax-inclusive product with TaxJar" do
+        # Mock TaxJar response - in real scenario, TaxJar would calculate based on the price
+        allow_any_instance_of(TaxjarApi).to receive(:calculate_tax_for_order).and_return({
+          "rate" => 0.1025,
+          "amount_to_collect" => 93.87, # Tax amount for $1000 inclusive price
+          "breakdown" => {
+            "state_tax_rate" => 0.065,
+            "county_tax_rate" => 0.003,
+            "city_tax_rate" => 0.0115,
+            "gst_tax_rate" => nil,
+            "pst_tax_rate" => nil,
+            "qst_tax_rate" => nil
+          },
+          "jurisdictions" => {
+            "state" => "WA",
+            "county" => "KING",
+            "city" => "SEATTLE"
+          }
+        })
+
+        expected_tax_cents = 9387 # $93.87 in cents
+        expected_net_price_cents = 1000 - expected_tax_cents # For tax-inclusive: net = price - tax
+
+        calculation = SalesTaxCalculator.new(
+          product: @tax_inclusive_product,
+          price_cents: 1000,
+          shipping_cents: 100,
+          quantity: 1,
+          buyer_location: { postal_code: "98121", country: "US" }
+        ).calculate
+
+        expect(calculation.price_cents).to eq(1000)
+        expect(calculation.tax_cents).to eq(expected_tax_cents)
+        expect(calculation.net_price_cents).to eq(expected_net_price_cents)
+        expect(calculation.used_taxjar).to be(true)
+      end
+    end
+
+    context "edge cases" do
+      before(:each) do
+        @seller = create(:user)
+      end
+
+      it "handles zero tax rate for tax-inclusive product" do
+        create(:zip_tax_rate, country: "ES", zip_code: nil, state: nil, combined_rate: 0.0, is_seller_responsible: false)
+        tax_inclusive_product = create(:product, user: @seller, tax_inclusive: true, price_cents: 1000)
+
+        calculation = SalesTaxCalculator.new(
+          product: tax_inclusive_product,
+          price_cents: 1000,
+          buyer_location: { country: "ES" }
+        ).calculate
+
+        # With 0% tax rate, net price should equal total price
+        expect(calculation.price_cents).to eq(1000)
+        expect(calculation.tax_cents).to eq(0)
+        expect(calculation.net_price_cents).to eq(1000)
+      end
+
+      it "handles very small tax rates for tax-inclusive product" do
+        tax_rate = create(:zip_tax_rate, country: "ES", zip_code: nil, state: nil, combined_rate: 0.001, is_seller_responsible: false)
+        tax_inclusive_product = create(:product, user: @seller, tax_inclusive: true, price_cents: 1000)
+
+        expected_tax_cents = (1000 / (1 + 0.001) * 0.001).round
+        expected_net_price_cents = 1000 - expected_tax_cents
+
+        calculation = SalesTaxCalculator.new(
+          product: tax_inclusive_product,
+          price_cents: 1000,
+          buyer_location: { country: "ES" }
+        ).calculate
+
+        expect(calculation.price_cents).to eq(1000)
+        expect(calculation.tax_cents).to eq(expected_tax_cents)
+        expect(calculation.net_price_cents).to eq(expected_net_price_cents)
+      end
+
+      it "handles high tax rates for tax-inclusive product" do
+        tax_rate = create(:zip_tax_rate, country: "ES", zip_code: nil, state: nil, combined_rate: 0.50, is_seller_responsible: false)
+        tax_inclusive_product = create(:product, user: @seller, tax_inclusive: true, price_cents: 1500)
+
+        expected_tax_cents = (1500 / (1 + 0.50) * 0.50).round
+        expected_net_price_cents = 1500 - expected_tax_cents
+
+        calculation = SalesTaxCalculator.new(
+          product: tax_inclusive_product,
+          price_cents: 1500,
+          buyer_location: { country: "ES" }
+        ).calculate
+
+        expect(calculation.price_cents).to eq(1500)
+        expect(calculation.tax_cents).to eq(expected_tax_cents)
+        expect(calculation.net_price_cents).to eq(expected_net_price_cents)
+        # Verify the calculation is approximately correct: net + tax ≈ total
+        expect(calculation.net_price_cents + calculation.tax_cents).to be_within(1).of(1500)
+      end
+    end
   end
 end

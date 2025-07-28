@@ -5299,4 +5299,50 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "tax-inclusive pricing methods" do
+    describe "#net_price_cents_for_tax_rate" do
+      it "returns display_price_cents for tax-exclusive products" do
+        product = create(:product, tax_inclusive: false, price_cents: 1000)
+        tax_rate = double(combined_rate: 0.21)
+
+        expect(product.net_price_cents_for_tax_rate(tax_rate)).to eq(1000)
+      end
+
+      it "returns display_price_cents when tax_rate is nil" do
+        product = create(:product, tax_inclusive: true, price_cents: 1000)
+
+        expect(product.net_price_cents_for_tax_rate(nil)).to eq(1000)
+      end
+
+      it "calculates net price for tax-inclusive products" do
+        product = create(:product, tax_inclusive: true, price_cents: 1000)
+        tax_rate = double(combined_rate: 0.21)
+
+        # For tax-inclusive: net_price = price_with_tax / (1 + tax_rate)
+        expected_net_price = 1000 / (1 + 0.21)
+        expect(product.net_price_cents_for_tax_rate(tax_rate)).to eq(expected_net_price)
+      end
+
+      it "handles zero tax rate for tax-inclusive products" do
+        product = create(:product, tax_inclusive: true, price_cents: 1000)
+        tax_rate = double(combined_rate: 0.0)
+
+        expect(product.net_price_cents_for_tax_rate(tax_rate)).to eq(1000)
+      end
+    end
+
+    describe "#net_price_formatted_for_tax_rate" do
+      it "formats net price correctly" do
+        product = create(:product, tax_inclusive: true, price_cents: 1000, price_currency_type: "usd")
+        tax_rate = double(combined_rate: 0.20)
+
+        # Mock the display_price_for_price_cents method behavior
+        expected_net_price = 1000 / (1 + 0.20)
+        allow(product).to receive(:display_price_for_price_cents).with(expected_net_price, {}).and_return("$8.33")
+
+        expect(product.net_price_formatted_for_tax_rate(tax_rate)).to eq("$8.33")
+      end
+    end
+  end
 end
