@@ -84,36 +84,25 @@ brew services stop mysql@8.0
     - `apt install libmysqlclient-dev`
   - Percona Toolkit: https://www.percona.com/doc/percona-toolkit/LATEST/installation.html
 
-#### Image Processing Libraries
+#### System libraries
 
-##### ImageMagick
+The app requires several system libraries for image processing. You can install them with a helper script:
 
-We use `imagemagick` for preview editing.
+```
+bin/install_deps.sh
+```
 
-- For MacOS: `brew install imagemagick`
-- For Linux: `sudo apt-get install imagemagick`
+The script works for ubuntu-like distros (with apt) and macOS. It will try to detect your OS, but if it fails you can force it:
 
-##### libvips
+```
+bin/install_deps.sh --ubuntu
+bin/install_deps.sh --macos
+```
 
-For newer image formats we use `libvips` for image processing with ActiveStorage.
+If on windows, run it under the WSL ubuntu shell. On ubuntu, it will prompt for the sudo password at the beginning.
 
-- For MacOS: `brew install libvips`
-- For Linux: `sudo apt-get install libvips-dev`
-
-#### FFmpeg
-
-We use `ffprobe` that comes with `FFmpeg` package to fetch metadata from video files.
-
-- For MacOS: `brew install ffmpeg`
-- For Linux: `sudo apt-get install ffmpeg`
-
-#### PDFtk
-
-We use [pdftk](https://www.pdflabs.com/tools/pdftk-server/) to stamp PDF files with the Gumroad logo and the buyers' emails.
-
-- For MacOS: Download from [here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg)
-  - **Note:** pdftk may be blocked by Apple's firewall. If this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
-- For Linux: `sudo apt-get install pdftk`
+##### MacOS only
+[pdftk](https://www.pdflabs.com/tools/pdftk-server/) for mac is available as a GUI installer, so it needs to be installed manually. [Download from here](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg). The domain may be blocked by Apple's firewall - if this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
 
 ### Installation
 
