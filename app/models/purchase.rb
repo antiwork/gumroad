@@ -69,6 +69,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :chargeback_reason
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
+  attr_json_data_accessor :custom_direct_fee_percentage
 
   belongs_to :link, optional: true
   has_one :url_redirect
