@@ -132,7 +132,6 @@ module Product::Prices
     # Input validation for edge cases (matching SalesTaxCalculator patterns)
     combined_rate = tax_rate.combined_rate
     return display_price_cents unless combined_rate >= 0 && combined_rate <= 1
-    return display_price_cents if combined_rate == -1
     
     # For tax-inclusive pricing: extract net price using BigDecimal for precision
     # net_price = price_with_tax / (1 + tax_rate)

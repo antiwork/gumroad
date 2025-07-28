@@ -2302,7 +2302,7 @@ describe SalesTaxCalculator do
         # Mock TaxJar response - in real scenario, TaxJar would calculate based on the price
         allow_any_instance_of(TaxjarApi).to receive(:calculate_tax_for_order).and_return({
           "rate" => 0.1025,
-          "amount_to_collect" => 93.87, # Tax amount for $1000 inclusive price
+          "amount_to_collect" => 0.93, # Tax amount for $10 inclusive price (~10% tax rate)
           "breakdown" => {
             "state_tax_rate" => 0.065,
             "county_tax_rate" => 0.003,
@@ -2318,7 +2318,7 @@ describe SalesTaxCalculator do
           }
         })
 
-        expected_tax_cents = 9387 # $93.87 in cents
+        expected_tax_cents = 93 # $0.93 in cents  
         expected_net_price_cents = 1000 - expected_tax_cents # For tax-inclusive: net = price - tax
 
         calculation = SalesTaxCalculator.new(

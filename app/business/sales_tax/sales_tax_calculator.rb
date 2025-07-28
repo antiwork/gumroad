@@ -132,7 +132,7 @@ class SalesTaxCalculator
       if product.tax_inclusive
         # For tax-inclusive pricing with TaxJar: the price_cents already includes tax
         # TaxJar tells us the tax amount, so net price = price - tax
-        net_price_cents = price_cents - tax_amount_cents
+        net_price_cents = (price_cents - tax_amount_cents).to_i
         raise SalesTaxCalculatorValidationError, "Net price must be positive" if net_price_cents <= 0
       else
         # For tax-exclusive pricing: net price equals the price (tax added on top)
