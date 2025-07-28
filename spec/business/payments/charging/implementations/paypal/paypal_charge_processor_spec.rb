@@ -49,6 +49,9 @@ describe PaypalChargeProcessor, :vcr do
       before do
         @purchase = create(:purchase_with_balance, id: 1001)
         allow_any_instance_of(Purchase).to receive(:fight_chargeback).and_return(true)
+        allow_any_instance_of(Purchase).to receive(:secure_external_id).and_return("sample-secure-id")
+        allow(Purchase).to receive(:find_by_external_id).and_return(@purchase)
+        allow(DisputeEvidence).to receive(:create_from_dispute!).and_return nil
       end
 
       describe "reversal and reversal cancelled events" do
