@@ -44,7 +44,6 @@ class SalesTaxCalculator
     # Input validation for edge cases
     combined_rate = tax_rate.combined_rate
     raise SalesTaxCalculatorValidationError, "Tax rate must be between 0 and 1" unless combined_rate >= 0 && combined_rate <= 1
-    raise SalesTaxCalculatorValidationError, "Invalid tax rate configuration" if combined_rate == -1
 
     if product.tax_inclusive
       # For tax-inclusive pricing: extract tax from the price using BigDecimal for precision
@@ -134,6 +133,7 @@ class SalesTaxCalculator
         # For tax-inclusive pricing with TaxJar: the price_cents already includes tax
         # TaxJar tells us the tax amount, so net price = price - tax
         net_price_cents = price_cents - tax_amount_cents
+        raise SalesTaxCalculatorValidationError, "Net price must be positive" if net_price_cents <= 0
       else
         # For tax-exclusive pricing: net price equals the price (tax added on top)
         net_price_cents = price_cents
