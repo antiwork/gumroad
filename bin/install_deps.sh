@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 set -eo pipefail
 
@@ -68,6 +67,14 @@ if [[ -n "$MANUAL_OS" ]]; then
 else
   OS=$(detect_os)
   header "Detected OS: $OS"
+fi
+
+# Update package lists
+header "Updating package lists..."
+if [[ "$OS" == "macos" ]]; then
+  brew update
+elif [[ "$OS" == "ubuntu" ]]; then
+  sudo apt update
 fi
 
 # INSTALL IMAGE PROCESSING LIBRARIES
