@@ -5320,7 +5320,7 @@ describe Link, :vcr do
         tax_rate = double(combined_rate: 0.21)
 
         # For tax-inclusive: net_price = price_with_tax / (1 + tax_rate)
-        expected_net_price = 1000 / (1 + 0.21)
+        expected_net_price = (1000 / (1 + 0.21)).round
         expect(product.net_price_cents_for_tax_rate(tax_rate)).to eq(expected_net_price)
       end
 
