@@ -378,6 +378,30 @@ describe("Discover", js: true, type: :feature) do
     expect(page).to have_text("On the market")
   end
 
+  it "excludes products from users that are not compliant" do
+    Link.__elasticsearch__.create_index!(force: true)
+    product = create(:product, :recommendable)
+    product.user.flag_for_fraud!(author_name: "test")
+    product.__elasticsearch__.index_document
+    Link.__elasticsearch__.refresh_index!
+
+    visit discover_url(host: discover_host)
+
+    expect(page).to have_text("No products found")
+  end
+
+  it "does not display products with no successful purchases" do
+    Link.__elasticsearch__.create_index!(force: true)
+    product = create(:product, :recommendable)
+    allow(product).to receive(:successful_sales_count).and_return(0)
+    product.__elasticsearch__.index_document
+    Link.__elasticsearch__.refresh_index!
+
+    visit discover_url(host: discover_host)
+
+    expect(page).to have_text("No products found")
+  end
+
   it "displays thumbnail in preview if available" do
     Link.__elasticsearch__.create_index!(force: true)
     product = create(:product, name: "Nothing but pine martens", price_cents: 3378, user: create(:compliant_user, name: "Sam Smith", username: "sam"))
