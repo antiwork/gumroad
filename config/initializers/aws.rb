@@ -23,18 +23,20 @@ KINDLE_EMAIL_REGEX = /\A(?=.{3,255}$)(                                         #
                      ([^@\s()\[\],.<>;:\\"]+(\.[^@\s()\[\],.<>;:\\"]+)*))      # cannot start with or have consecutive dots
                      @kindle\.com\z/xi
 
+S3_BUCKET_NAME_DEV = GlobalConfig.get("S3_BUCKET_NAME_DEV", "gumroad_dev")
 S3_BUCKET = {
-  development: "gumroad_dev",
-  staging: "gumroad_dev",
+  development: S3_BUCKET_NAME_DEV,
+  staging: S3_BUCKET_NAME_DEV,
   test: "gumroad-specs",
   production: "gumroad"
 }[Rails.env.to_sym]
 
 S3_BASE_URL = GlobalConfig.get("S3_BASE_URL_TEMPLATE", "https://s3.amazonaws.com/#{S3_BUCKET}/")
 
+S3_PUBLIC_STORAGE_BUCKET_DEV = GlobalConfig.get("S3_PUBLIC_STORAGE_BUCKET_DEV", "gumroad-dev-public-storage")
 PUBLIC_STORAGE_S3_BUCKET = {
-  development: "gumroad-dev-public-storage",
-  staging: "gumroad-dev-public-storage",
+  development: S3_PUBLIC_STORAGE_BUCKET_DEV,
+  staging: S3_PUBLIC_STORAGE_BUCKET_DEV,
   test: "gumroad-specs",
   production: "gumroad-public-storage"
 }[Rails.env.to_sym]
