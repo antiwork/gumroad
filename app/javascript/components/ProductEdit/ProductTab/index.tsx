@@ -7,6 +7,7 @@ import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
+import { Icon } from "$app/components/Icons";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
@@ -60,6 +61,14 @@ export const ProductTab = () => {
   const [initialProduct] = React.useState(product);
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
+  const [showAiNotification, setShowAiNotification] = React.useState(false);
+
+  React.useEffect(() => {
+    if (window.location.hash === "#ai-generated") {
+      setShowAiNotification(true);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -76,6 +85,23 @@ export const ProductTab = () => {
       <main className="squished">
         <form>
           <section>
+            {showAiNotification ? (
+              <div
+                role="status"
+                className="grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
+              >
+                <span className="self-center text-lg">
+                  <Icon name="sparkle" />
+                </span>
+                <div>
+                  <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
+                  Tweak things and make it your own—this is your time to shine!
+                </div>
+                <button className="link !col-start-3 self-center" onClick={() => setShowAiNotification(false)}>
+                  close
+                </button>
+              </div>
+            ) : null}
             <BundleConversionNotice />
             <fieldset>
               <label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</label>
@@ -284,7 +310,11 @@ export const ProductTab = () => {
                       <section>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
-                          <a href="https://gumroad.com/help/article/70-can-i-sell-services.html#call" target="_blank" rel="noreferrer">
+                          <a
+                            href="https://gumroad.com/help/article/70-can-i-sell-services.html#call"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Learn more
                           </a>
                         </div>

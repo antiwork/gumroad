@@ -1,0 +1,94 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"\nYou
+        are an expert digital product creator. Generate detailed product information
+        based on the user''s prompt.\nReturn the following JSON format **only**:\n{\n\"name\":
+        \"Product name as a string\",\n\"number_of_content_pages\": 2, // Number of
+        chapters or pages to generate based on the user''s prompt. If specified more
+        than 6 pages/chapters, generate only 6 pages/chapters. If no number is specified,
+        generate 4 pages/chapters\n\"description\": \"Product description as a safe
+        HTML string with only \u003cp\u003e, \u003cul\u003e, \u003col\u003e, \u003cli\u003e,
+        \u003ch2\u003e, \u003ch3\u003e, \u003ch4\u003e, \u003cstrong\u003e, and \u003cem\u003e
+        tags; feel free to add emojis. Don''t mention the number of pages or chapters
+        in the description.\",\n\"summary\": \"Short summary of the product\",\n\"native_type\":
+        \"Must be one of: digital, course, ebook, membership\",\n\"price\": 4.99,
+        // Price in usd\n\"price_frequency_in_months\": 1 // Only include if native_type
+        is ''membership'' (1, 3, 6, 12, 24)\n}\n"},{"role":"user","content":"Create
+        a quarterly membership for Ruby on Rails developers for $19/month"}],"response_format":{"type":"json_object"},"temperature":0.5}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sun, 29 Jun 2025 14:03:45 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '5418'
+      Openai-Version:
+      - '2020-10-01'
+      X-Envoy-Upstream-Service-Time:
+      - '5423'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999757'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_2b1841ad8213c828d2abe8fc3d1a511c
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=hello-1751205825-1.0.1.1-hello;
+        path=/; expires=Sun, 29-Jun-25 14:33:45 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=hello-1751205825367-0.0.1.1-hello;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9575f7f1cce631cf-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        ewogICJpZCI6ICJjaGF0Y21wbC1Cbm12NVNlOE5EYXE3ZW9FUWttbkVaMWhsWkNiQiIsCiAgIm9iamVjdCI6ICJjaGF0LmNvbXBsZXRpb24iLAogICJjcmVhdGVkIjogMTc1MTIwNTgxOSwKICAibW9kZWwiOiAiZ3B0LTRvLW1pbmktMjAyNC0wNy0xOCIsCiAgImNob2ljZXMiOiBbCiAgICB7CiAgICAgICJpbmRleCI6IDAsCiAgICAgICJtZXNzYWdlIjogewogICAgICAgICJyb2xlIjogImFzc2lzdGFudCIsCiAgICAgICAgImNvbnRlbnQiOiAie1xuXCJuYW1lXCI6IFwiUnVieSBvbiBSYWlscyBEZXZlbG9wZXIgTWVtYmVyc2hpcFwiLFxuXCJudW1iZXJfb2ZfY29udGVudF9wYWdlc1wiOiA0LFxuXCJkZXNjcmlwdGlvblwiOiBcIjxwPkpvaW4gb3VyIGV4Y2x1c2l2ZSA8c3Ryb25nPlJ1Ynkgb24gUmFpbHMgRGV2ZWxvcGVyIE1lbWJlcnNoaXA8L3N0cm9uZz4gYW5kIGVsZXZhdGUgeW91ciBjb2Rpbmcgc2tpbGxzISDwn5qAPC9wPjxwPlRoaXMgbWVtYmVyc2hpcCBvZmZlcnMgYSByaWNoIGFycmF5IG9mIHJlc291cmNlcyB0YWlsb3JlZCBzcGVjaWZpY2FsbHkgZm9yIFJ1Ynkgb24gUmFpbHMgZGV2ZWxvcGVycy4gV2hldGhlciB5b3UgYXJlIGEgYmVnaW5uZXIgb3IgYW4gZXhwZXJpZW5jZWQgZGV2ZWxvcGVyLCBvdXIgY29tbXVuaXR5IGlzIGhlcmUgdG8gc3VwcG9ydCB5b3UuPC9wPjxoMj5XaGF0IFlvdSBHZXQ6PC9oMj48dWw+PGxpPkFjY2VzcyB0byBtb250aGx5IHdlYmluYXJzIHdpdGggaW5kdXN0cnkgZXhwZXJ0czwvbGk+PGxpPkV4Y2x1c2l2ZSB0dXRvcmlhbHMgYW5kIGNvZGluZyBjaGFsbGVuZ2VzPC9saT48bGk+QSB2aWJyYW50IGNvbW11bml0eSBmb3J1bSBmb3IgbmV0d29ya2luZyBhbmQgY29sbGFib3JhdGlvbjwvbGk+PGxpPlJlZ3VsYXIgdXBkYXRlcyBvbiB0aGUgbGF0ZXN0IFJ1Ynkgb24gUmFpbHMgdHJlbmRzIGFuZCBiZXN0IHByYWN0aWNlczwvbGk+PC91bD48aDM+V2h5IEpvaW4/PC9oMz48cD5TdGF5IGFoZWFkIGluIHlvdXIgY2FyZWVyIGJ5IGxlYXJuaW5nIGZyb20gdGhlIGJlc3QsIHNoYXJpbmcga25vd2xlZGdlLCBhbmQgZ2V0dGluZyBmZWVkYmFjayBvbiB5b3VyIHByb2plY3RzLiBPdXIgbWVtYmVyc2hpcCBpcyBkZXNpZ25lZCB0byBmb3N0ZXIgZ3Jvd3RoIGFuZCBpbm5vdmF0aW9uLjwvcD48aDQ+Sm9pbiBVcyBUb2RheSE8L2g0PjxwPlNpZ24gdXAgbm93IGFuZCBzdGFydCB5b3VyIGpvdXJuZXkgdG93YXJkcyBiZWNvbWluZyBhIFJ1Ynkgb24gUmFpbHMgZXhwZXJ0ISDwn4yfPC9wPlwiLFxuXCJzdW1tYXJ5XCI6IFwiQSBtZW1iZXJzaGlwIGZvciBSdWJ5IG9uIFJhaWxzIGRldmVsb3BlcnMgb2ZmZXJpbmcgcmVzb3VyY2VzLCB3ZWJpbmFycywgYW5kIGNvbW11bml0eSBzdXBwb3J0LlwiLFxuXCJuYXRpdmVfdHlwZVwiOiBcIm1lbWJlcnNoaXBcIixcblwicHJpY2VcIjogMTkuMDAsXG5cInByaWNlX2ZyZXF1ZW5jeV9pbl9tb250aHNcIjogM1xufSIsCiAgICAgICAgInJlZnVzYWwiOiBudWxsLAogICAgICAgICJhbm5vdGF0aW9ucyI6IFtdCiAgICAgIH0sCiAgICAgICJsb2dwcm9icyI6IG51bGwsCiAgICAgICJmaW5pc2hfcmVhc29uIjogInN0b3AiCiAgICB9CiAgXSwKICAidXNhZ2UiOiB7CiAgICAicHJvbXB0X3Rva2VucyI6IDI1OCwKICAgICJjb21wbGV0aW9uX3Rva2VucyI6IDI3MywKICAgICJ0b3RhbF90b2tlbnMiOiA1MzEsCiAgICAicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjogewogICAgICAiY2FjaGVkX3Rva2VucyI6IDAsCiAgICAgICJhdWRpb190b2tlbnMiOiAwCiAgICB9LAogICAgImNvbXBsZXRpb25fdG9rZW5zX2RldGFpbHMiOiB7CiAgICAgICJyZWFzb25pbmdfdG9rZW5zIjogMCwKICAgICAgImF1ZGlvX3Rva2VucyI6IDAsCiAgICAgICJhY2NlcHRlZF9wcmVkaWN0aW9uX3Rva2VucyI6IDAsCiAgICAgICJyZWplY3RlZF9wcmVkaWN0aW9uX3Rva2VucyI6IDAKICAgIH0KICB9LAogICJzZXJ2aWNlX3RpZXIiOiAiZGVmYXVsdCIsCiAgInN5c3RlbV9maW5nZXJwcmludCI6ICJmcF82MmEyM2E4MWVmIgp9Cg==
+  recorded_at: Sun, 29 Jun 2025 14:03:45 GMT
+recorded_with: VCR 6.2.0
