@@ -92,6 +92,30 @@ describe Product::Recommendations, :elasticsearch_wait_for_refresh do
     expect(@product.recommendable?).to be(false)
   end
 
+  context "when user is not compliant" do
+    before do
+      @product = create(:product, :recommendable)
+      @product.user.flag_for_fraud!(author_name: "test")
+    end
+
+    it "is false" do
+      expect(@product.recommendable_reasons[:seller_compliant]).to be(false)
+      expect(@product.recommendable?).to be(false)
+    end
+  end
+
+  context "when product has no successful sales" do
+    before do
+      @product = create(:product, :recommendable)
+      allow(@product).to receive(:successful_sales_count).and_return(0)
+    end
+
+    it "is false" do
+      expect(@product.recommendable_reasons[:has_sales]).to be(false)
+      expect(@product.recommendable?).to be(false)
+    end
+  end
+
   context "when product is recommendable" do
     before { @product = create(:product, :recommendable) }
 

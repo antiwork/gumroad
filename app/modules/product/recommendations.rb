@@ -14,7 +14,9 @@ module Product::Recommendations
       not_archived: !archived?,
       reviews_displayed: display_product_reviews?,
       not_sold_out: max_purchase_count.present? ? sales_count_for_inventory < max_purchase_count : true,
-      taxonomy_filled: taxonomy.present?
+      taxonomy_filled: taxonomy.present?,
+      has_sales: has_successful_sales?,
+      seller_compliant: user&.compliant?,
     }
 
     user.recommendable_reasons.each do |reason, value|
