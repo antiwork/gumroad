@@ -89,6 +89,7 @@ brew services stop mysql@8.0
 The app requires several system libraries for image processing. You can install them with a helper script:
 
 ```shell
+chmod +x bin/install_deps.sh
 bin/install_deps.sh
 ```
 
