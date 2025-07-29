@@ -154,7 +154,7 @@ export const Nav = (props: Props) => {
           additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.utm_links_dashboard_url(routeParams)]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <NavLink text="Payouts" icon="solid-currency-dollar" href={Routes.balance_url(routeParams)} />
+          <NavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
           <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
