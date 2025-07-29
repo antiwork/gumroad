@@ -14,10 +14,9 @@ describe Throttling, type: :request do
       end
 
       private
-
-      def test_throttle
-        throttle!(key: "test_key", limit: 5, period: 1.hour)
-      end
+        def test_throttle
+          throttle!(key: "test_key", limit: 5, period: 1.hour)
+        end
     end
   end
 
