@@ -88,13 +88,13 @@ brew services stop mysql@8.0
 
 The app requires several system libraries for image processing. You can install them with a helper script:
 
-```
+```shell
 bin/install_deps.sh
 ```
 
 The script works for ubuntu-like distros (with apt) and macOS. It will try to detect your OS, but if it fails you can force it:
 
-```
+```shell
 bin/install_deps.sh --ubuntu
 bin/install_deps.sh --macos
 ```

@@ -17,7 +17,7 @@ reset="\033[0m"
 
 header() { echo -e "${green}==> $1${reset}"; }
 info() { echo -e "${yellow}==>    $1${reset}"; }
-error() { echo -e "${red}==> $1${reset}"; }
+error() { echo -e "${red}==> $1${reset}" >&2; }
 
 # Parse command line arguments
 parse_args() {
