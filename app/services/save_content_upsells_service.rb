@@ -21,8 +21,9 @@ class SaveContentUpsellsService
       next if card["id"].present?
 
       product_id = ObfuscateIds.decrypt(card["productid"])
+      variant_id = ObfuscateIds.decrypt(card["variantid"]) if card["variantid"]
       discount = JSON.parse(card["discount"]) if card["discount"]
-      card["id"] = create_upsell!(product_id, discount).external_id
+      card["id"] = create_upsell!(product_id, variant_id, discount).external_id
     end
 
     new_doc.to_html
@@ -39,8 +40,9 @@ class SaveContentUpsellsService
       next if node.dig("attrs", "id").present?
 
       product_id = ObfuscateIds.decrypt(node.dig("attrs", "productId"))
+      variant_id = ObfuscateIds.decrypt(node.dig("attrs", "variantId")) if node.dig("attrs", "variantId")
       discount = node.dig("attrs", "discount")
-      node["attrs"]["id"] = create_upsell!(product_id, discount).external_id
+      node["attrs"]["id"] = create_upsell!(product_id, variant_id, discount).external_id
     end
 
     content
@@ -59,10 +61,11 @@ class SaveContentUpsellsService
       end
     end
 
-    def create_upsell!(product_id, discount)
+    def create_upsell!(product_id, variant_id, discount)
       Upsell.create!(
         seller:,
         product_id:,
+        variant_id:,
         is_content_upsell: true,
         cross_sell: true,
         offer_code: build_offer_code(product_id, discount),

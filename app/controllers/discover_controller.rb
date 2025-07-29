@@ -41,6 +41,7 @@ class DiscoverController < ApplicationController
         request:,
         recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION,
         target: Product::Layout::DISCOVER,
+        compute_description: false,
         query: params[:query]
       )
     end

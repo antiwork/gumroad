@@ -4,6 +4,7 @@ class Variant < BaseVariant
   include Variant::Prices
 
   belongs_to :variant_category, optional: true
+
   has_many :prices, class_name: "VariantPrice"
   has_many :alive_prices, -> { alive }, class_name: "VariantPrice"
   has_and_belongs_to_many :skus, join_table: :skus_variants
@@ -18,14 +19,13 @@ class Variant < BaseVariant
   after_save :set_customizable_price
 
   delegate :link, to: :variant_category
+  delegate :user, to: :link
 
   scope :in_order, -> { order(position_in_category: :asc, created_at: :asc) }
 
   def alive_skus
     skus.alive
   end
-
-  delegate :user, to: :link
 
   def name_displayable
     "#{link.name} (#{name})"

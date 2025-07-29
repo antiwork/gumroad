@@ -3161,6 +3161,76 @@ describe LinksController, :vcr do
           end
         end
       end
+
+      describe "Product details generation using AI" do
+        let(:params) do
+          {
+            name: "UX design mastery using Figma",
+            description: "<p>Learn how to design user interfaces using Figma</p>",
+            custom_summary: "Learn how to design user interfaces using Figma",
+            number_of_content_pages: 2,
+            ai_prompt: "Create an ebook on UX design using Figma",
+            price_cents: 100,
+            native_type: "ebook",
+          }
+        end
+
+        before do
+          Feature.activate_user(:ai_product_generation, seller)
+        end
+
+        it "calls AI service when ai_prompt is present and feature is active" do
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          allow(service_double).to receive(:generate_cover_image).and_return({ image_data: "fake_image_data" })
+          allow(service_double).to receive(:generate_rich_content_pages).and_return({
+                                                                                      pages: [
+                                                                                        { "title" => "Introduction", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Welcome to the course" }] }] },
+                                                                                        { "title" => "Conclusion", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Thank you for reading this course" }] }] }
+                                                                                      ]
+                                                                                    })
+          allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_return(nil)
+          allow_any_instance_of(Link).to receive_message_chain(:asset_previews, :build).and_return(nil)
+          allow_any_instance_of(Link).to receive(:build_thumbnail).and_return(nil)
+
+          post :create, params: { format: :json, link: params }
+
+          expect(service_double).to have_received(:generate_cover_image)
+          expect(service_double).to have_received(:generate_rich_content_pages)
+          expect(response.parsed_body["success"]).to eq(true)
+
+          link = Link.last
+          expect(link.name).to eq("UX design mastery using Figma")
+          expect(link.description).to eq("<p>Learn how to design user interfaces using Figma</p>")
+          expect(link.custom_summary).to eq("Learn how to design user interfaces using Figma")
+          expect(link.custom_attributes.sole).to eq({ "name" => "Pages", "value" => "2" })
+          expect(link.rich_contents.count).to eq(2)
+          expect(link.rich_contents.first.title).to eq("Introduction")
+          expect(link.rich_contents.first.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Welcome to the course" }] }])
+          expect(link.rich_contents.last.title).to eq("Conclusion")
+          expect(link.rich_contents.last.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Thank you for reading this course" }] }])
+        end
+
+        it "does not call AI service when feature is inactive" do
+          Feature.deactivate_user(:ai_product_generation, seller)
+
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          expect(service_double).not_to receive(:generate_cover_image)
+          expect(service_double).not_to receive(:generate_rich_content_pages)
+
+          post :create, params: { format: :json, link: params }
+        end
+
+        it "does not call AI service when ai_prompt is blank" do
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          expect(service_double).not_to receive(:generate_cover_image)
+          expect(service_double).not_to receive(:generate_rich_content_pages)
+
+          post :create, params: { format: :json, link: { price_cents: 100, name: "Regular Product" } }
+        end
+      end
     end
 
     describe "POST release_preorder" do

@@ -374,7 +374,7 @@ class ContactingCreatorMailer < ApplicationMailer
     file_or_url = MailerAttachmentOrLinkService.new(
       file: sales_csv_tempfile,
       extension: "csv",
-      filename: "Sales_#{user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.csv"
+      filename: "user-sales-data/Sales_#{user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.csv"
     ).perform
     file = file_or_url[:file]
     if file

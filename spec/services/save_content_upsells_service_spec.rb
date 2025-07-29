@@ -3,13 +3,15 @@
 describe SaveContentUpsellsService do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 1000) }
+  let(:variant_category) { create(:variant_category, link: product) }
+  let(:variant) { create(:variant, variant_category:) }
 
   describe "#from_html" do
     let(:service) { described_class.new(seller:, content:, old_content:) }
 
     context "when adding a new upsell" do
       let(:old_content) { "<p>Old content</p>" }
-      let(:content) { %(<p>Content with upsell</p><upsell-card productid="#{product.external_id}"></upsell-card>) }
+      let(:content) { %(<p>Content with upsell</p><upsell-card productid="#{product.external_id}" variantid="#{variant.external_id}"></upsell-card>) }
 
       it "creates an upsell" do
         expect { service.from_html }.to change(Upsell, :count).by(1)
@@ -17,6 +19,7 @@ describe SaveContentUpsellsService do
         upsell = Upsell.last
         expect(upsell.seller).to eq(seller)
         expect(upsell.product_id).to eq(product.id)
+        expect(upsell.variant_id).to eq(variant.id)
         expect(upsell.is_content_upsell).to be true
         expect(upsell.cross_sell).to be true
       end
@@ -69,7 +72,7 @@ describe SaveContentUpsellsService do
       let(:content) do
         [
           { "type" => "paragraph", "content" => "Content with upsell" },
-          { "type" => "upsellCard", "attrs" => { "productId" => product.external_id } }
+          { "type" => "upsellCard", "attrs" => { "productId" => product.external_id, "variantId" => variant.external_id } }
         ]
       end
 
@@ -79,6 +82,7 @@ describe SaveContentUpsellsService do
         upsell = Upsell.last
         expect(upsell.seller).to eq(seller)
         expect(upsell.product_id).to eq(product.id)
+        expect(upsell.variant_id).to eq(variant.id)
         expect(upsell.is_content_upsell).to be true
         expect(upsell.cross_sell).to be true
       end
