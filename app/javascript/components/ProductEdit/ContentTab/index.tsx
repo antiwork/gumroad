@@ -55,7 +55,7 @@ import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
-import { UpsellSelectModal, Product } from "$app/components/UpsellSelectModal";
+import { UpsellSelectModal, Product, ProductOption } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
@@ -423,7 +423,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const [showUpsellModal, setShowUpsellModal] = React.useState(false);
   const [showReviewModal, setShowReviewModal] = React.useState(false);
 
-  const onInsertUpsell = (product: Product, discount: InputtedDiscount | null) => {
+  const onInsertUpsell = (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => {
     if (!editor) return;
 
     editor
@@ -431,6 +431,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       .focus()
       .insertUpsellCard({
         productId: product.id,
+        variantId: variant?.id || null,
         discount: discount
           ? discount.type === "cents"
             ? { type: "fixed", cents: discount.value ?? 0 }

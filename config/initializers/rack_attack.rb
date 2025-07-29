@@ -255,6 +255,13 @@ class Rack::Attack
                             requests: 60,
                             period: 60.seconds
 
+  # Throttle AI product details generation requests
+  # 10 requests per 60 seconds (per IP)
+  throttle_by_ip_for_period path: "/internal/ai_product_details_generations",
+                            method: :post,
+                            requests: 10,
+                            period: 60.seconds
+
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)
 end

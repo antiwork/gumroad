@@ -14,7 +14,8 @@ class Checkout::Upsells::ProductPresenter
       currency_code: product.price_currency_type.downcase,
       review_count: product.reviews_count,
       average_rating: product.average_rating,
-      native_type: product.native_type
+      native_type: product.native_type,
+      options: product.options
     }
   end
 

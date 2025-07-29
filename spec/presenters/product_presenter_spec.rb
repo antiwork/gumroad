@@ -27,6 +27,8 @@ describe ProductPresenter do
           release_at_date:,
           show_orientation_text: true,
           eligible_for_service_products: false,
+          ai_generation_enabled: false,
+          ai_promo_dismissed: false,
         }
       )
     end
@@ -43,6 +45,8 @@ describe ProductPresenter do
           release_at_date:,
           show_orientation_text: false,
           eligible_for_service_products: false,
+          ai_generation_enabled: false,
+          ai_promo_dismissed: false,
         }
       )
     end

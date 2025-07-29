@@ -143,6 +143,7 @@ class Link < ApplicationRecord
   has_many :active_integrations, through: :live_product_integrations, source: :integration
   has_many :product_cached_values, foreign_key: :product_id
   has_one :upsell, -> { upsell.alive }, foreign_key: :product_id
+  has_many :upsell_variants, through: :upsell
   has_and_belongs_to_many :custom_fields, join_table: "custom_fields_products", foreign_key: "product_id"
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"
@@ -285,11 +286,7 @@ class Link < ApplicationRecord
     with(latest_product_cached_values: ProductCachedValue.joins(cte_join_sql)).joins(join_sql)
   }
 
-  scope :eligible_for_content_upsells, -> {
-    visible_and_not_archived
-      .not_is_tiered_membership
-      .where.missing(:variant_categories_alive)
-  }
+  scope :eligible_for_content_upsells, -> { visible_and_not_archived.not_is_tiered_membership }
 
   alias super_as_json as_json
 
@@ -631,8 +628,10 @@ class Link < ApplicationRecord
   def options
     if skus_enabled
       skus.not_is_default_sku.alive.map(&:to_option_for_product)
+    elsif variant_categories_alive.any?
+      variants.where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
     else
-      (variant_category = variant_categories_alive.first) ? variant_category.variants.in_order.alive.map(&:to_option) : []
+      []
     end
   end
 
@@ -1485,7 +1484,7 @@ class Link < ApplicationRecord
           node.remove
         elsif node.name == "upsell-card"
           node.attributes.each do |attr|
-            node.remove_attribute(attr.first) unless %w[id productid discount].include?(attr.first)
+            node.remove_attribute(attr.first) unless %w[id productid variantid discount].include?(attr.first)
           end
         elsif node.name == "review-card"
           node.attributes.each do |attr|

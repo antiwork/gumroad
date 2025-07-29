@@ -10,8 +10,6 @@ describe "Product creation", type: :feature, js: true do
 
   include_context "with switching account to user as admin for seller"
 
-
-
   describe "native types" do
     it "selects 'digital' by default" do
       visit new_product_path
@@ -320,5 +318,69 @@ describe "Product creation", type: :feature, js: true do
     product = seller.products.last
     expect(product.community_chat_enabled?).to be(false)
     expect(product.active_community).to be_nil
+  end
+
+  describe "AI Product Generation" do
+    before do
+      Feature.activate_user(:ai_product_generation, seller)
+      allow_any_instance_of(User).to receive(:eligible_for_ai_product_generation?).and_return(true)
+    end
+
+    it "creates a product using AI prompt and customizes it" do
+      vcr_turned_on do
+        VCR.use_cassette("Product creation using AI") do
+          visit new_product_path
+
+          expect(page).to have_status(text: "New. You can create your product using AI now")
+
+          click_on "Create a product with AI"
+
+          fill_in "Create a product with AI", with: "Create a Ruby on Rails coding tutorial ebook with 4 chapters for $29.99"
+
+          click_on "Generate"
+          wait_for_ajax
+
+          expect(page).to have_alert(text: "All set! Review the form below and hit 'Next: customize' to continue.")
+
+          expect(page).to have_field("Name", with: "Ruby on Rails Coding Tutorial")
+          expect(page).to have_radio_button("E-book", checked: true)
+          expect(page).to have_field("Price", with: "29.99")
+
+          click_on "Next: Customize"
+          wait_for_ajax
+
+          expect(page).to have_title("Ruby on Rails Coding Tutorial")
+          expect(page).to have_status(text: "Your AI product is ready! Take a moment to check out the product and content tabs. Tweak things and make it your own—this is your time to shine!")
+          within find("[aria-label='Description']") do
+            expect(page).to have_text("Welcome to the Ruby on Rails Coding Tutorial ebook! This comprehensive guide is designed for both beginners and experienced developers who want to master the Ruby on Rails framework.")
+          end
+
+          product = seller.products.last
+          within_section "Cover", section_element: :section do
+            expect(page).to have_image(src: product.display_asset_previews.sole.url)
+          end
+          within_section "Thumbnail", section_element: :section do
+            expect(page).to have_image("Thumbnail image", src: product.thumbnail.url)
+          end
+          within_fieldset "Additional details" do
+            expect(page).to have_field("Attribute", with: "Pages")
+            expect(page).to have_field("Value", with: "4")
+          end
+          within_section "Pricing", section_element: :section do
+            expect(page).to have_field("Amount", with: "29.99")
+          end
+          select_tab "Content"
+          expect(page).to have_text("Chapter 1: Introduction to Ruby on Rails")
+          expect(page).to have_text("Chapter 2: Setting Up Your Development Environment")
+          expect(page).to have_text("Chapter 3: Building Your First Rails Application")
+          expect(page).to have_text("Chapter 4: Advanced Features and Best Practices")
+          within find("[aria-label='Content editor']") do
+            expect(page).to have_text("What is Ruby on Rails?")
+            expect(page).to have_text("Key Features of Ruby on Rails")
+            expect(page).to have_text("In this chapter, we will delve deeper into the history of Ruby on Rails and its community.")
+          end
+        end
+      end
+    end
   end
 end
