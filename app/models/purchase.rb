@@ -3205,7 +3205,7 @@ class Purchase < ApplicationRecord
 
     def calculate_gumroad_fee_per_thousand
       if custom_direct_fee_per_thousand.present?
-        (custom_direct_fee_per_thousand.to_f)
+        (custom_direct_fee_per_thousand.to_f) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif flat_fee_applicable?
         gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?

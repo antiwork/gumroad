@@ -1163,7 +1163,7 @@ describe Purchase, :vcr do
     let!(:seller) { create(:user, custom_direct_fee_per_thousand: 70) }
     let!(:product) { create(:product, user: seller) }
 
-    context "when purchase has custom fee percentages stored" do
+    context "when purchase has custom fee per thousand stored" do
       let!(:purchase) do
         create(:purchase,
           link: product,
@@ -1172,13 +1172,13 @@ describe Purchase, :vcr do
         )
       end
 
-      it "uses the stored custom fee percentage, not the seller's current rate retroactively" do
+      it "uses the stored custom fee per thousand, not the seller's current rate retroactively" do
         # Change seller's fee after purchase creation
         seller.update!(custom_direct_fee_per_thousand: 100)
 
         purchase.send(:calculate_fees)
 
-        expect(purchase.fee_cents).to eq(150) # 70 variable + 80 fixed
+        expect(purchase.fee_cents).to eq(179) # 70 custom + 80 fixed + 29 processor
       end
     end
 
@@ -1211,7 +1211,7 @@ describe Purchase, :vcr do
 
         recurring_purchase.send(:calculate_fees)
 
-        expect(recurring_purchase.fee_cents).to eq(150) # 70 variable + 80 fixed
+        expect(recurring_purchase.fee_cents).to eq(179) # 70 custom + 80 fixed + 29 processor
       end
     end
   end
