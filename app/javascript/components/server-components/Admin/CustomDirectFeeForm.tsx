@@ -27,7 +27,7 @@ export const AdminCustomDirectFeeForm = ({
             type="number"
             min="0"
             max="100"
-            step="0.01"
+            step="0.1"
             defaultValue={current_percentage || ""}
             placeholder="Enter a custom direct fee percentage (0–100). Leave blank to remove."
           />

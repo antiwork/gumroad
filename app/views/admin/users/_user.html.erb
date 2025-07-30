@@ -24,9 +24,9 @@
           <% end %>
           <% if user.custom_direct_fee_percentage.present? %>
             <li>
-              <%= with_tooltip(tip: "Custom direct fee that will be charged on each new purchase made", position: "bottom") do %>
-                Custom direct fee:
-                <%= number_with_precision(user.custom_direct_fee_percentage, precision: 2) %>%
+              <%= with_tooltip(tip: "Custom fee that will be charged on all their new direct (non-discover) sales", position: "bottom") do %>
+                Custom fee:
+                <%= number_with_precision(user.custom_direct_fee_percentage, precision: 1) %>%
               <% end %>
             </li>
           <% end %>
