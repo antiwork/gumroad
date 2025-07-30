@@ -11,7 +11,7 @@ export const AdminCustomDirectFeeForm = ({
   current_percentage,
 }: {
   user_id: number;
-  current_percentage?: string | null;
+  current_percentage?: number | null;
 }) => (
   <Form
     url={Routes.custom_direct_fee_admin_user_path(user_id)}
@@ -28,7 +28,7 @@ export const AdminCustomDirectFeeForm = ({
             min="0"
             max="100"
             step="0.1"
-            defaultValue={current_percentage || ""}
+            defaultValue={current_percentage ?? ""}
             placeholder="Enter a custom direct fee percentage (0–100). Leave blank to remove."
           />
           <button type="submit" className="button" disabled={isLoading} id="update-custom-direct-fee">

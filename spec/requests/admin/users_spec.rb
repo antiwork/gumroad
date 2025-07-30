@@ -80,7 +80,7 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       it "shows the custom direct fee percentage" do
         visit admin_user_path(user.id)
 
-        expect(page).to have_text("Custom direct fee: 5.00%")
+        expect(page).to have_text("Custom fee: 5.0%")
       end
     end
 
@@ -88,11 +88,11 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       it "does not show the custom direct fee percentage" do
         visit admin_user_path(user.id)
 
-        expect(page).not_to have_text("Custom direct fee:")
+        expect(page).not_to have_text("Custom fee:")
       end
     end
 
-    it "allows updating the custom direct fee percentage" do
+    it "allows updating the custom fee percentage" do
       visit admin_user_path(user.id)
 
       find_and_click "h3", text: "Custom direct fee"
