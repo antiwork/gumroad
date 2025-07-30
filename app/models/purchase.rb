@@ -345,7 +345,7 @@ class Purchase < ApplicationRecord
   before_create :validate_shipping
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
-  before_create :set_custom_fee_percentage
+  before_create :set_custom_direct_fee_per_thousand
   before_create :check_for_fraud
 
   before_save :assign_default_rental_expired
@@ -3844,7 +3844,7 @@ class Purchase < ApplicationRecord
       installment_plan || subscription&.last_payment_option&.installment_plan
     end
 
-    def set_custom_fee_percentage
+    def set_custom_direct_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         self.custom_direct_fee_per_thousand = subscription.original_purchase.custom_direct_fee_per_thousand
       elsif is_preorder_charge?
