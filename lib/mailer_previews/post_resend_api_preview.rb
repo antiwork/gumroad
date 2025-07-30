@@ -5,7 +5,7 @@ class PostResendApiPreview < ActionMailer::Preview
     post = Installment.joins(:product_files).find_each(order: :desc).find(&:has_files?)
     post ||= begin
       record = create_generic_post
-      record.product_files.create!(url: "https://s3.amazonaws.com/gumroad_dev/test", filetype: "pdf", filegroup: "document")
+      record.product_files.create!(url: "https://s3.amazonaws.com/#{S3_BUCKET_NAME_DEV}/test", filetype: "pdf", filegroup: "document")
       record
     end
     build_mail(post:, recipient: { url_redirect: UrlRedirect.find_or_create_by!(installment: post, purchase: nil) })

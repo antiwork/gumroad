@@ -40,7 +40,7 @@ if CDN_S3_PROXY_HOST && PUBLIC_STORAGE_CDN_S3_PROXY_HOST
   else
     CDN_URL_MAP.merge!("https://s3.amazonaws.com/gumroad/" => "#{CDN_S3_PROXY_HOST}/res/gumroad/",
                        "https://s3.amazonaws.com/gumroad-staging/" => "#{CDN_S3_PROXY_HOST}/res/gumroad-staging/",
-                       "https://s3.amazonaws.com/gumroad_dev/" => "#{CDN_S3_PROXY_HOST}/res/gumroad_dev/",
-                       "https://gumroad-dev-public-storage.s3.amazonaws.com/" => "#{PUBLIC_STORAGE_CDN_S3_PROXY_HOST}/")
+                       "https://s3.amazonaws.com/#{S3_BUCKET_NAME_DEV}/" => "#{CDN_S3_PROXY_HOST}/res/gumroad_dev/",
+                       "https://#{S3_PUBLIC_STORAGE_BUCKET_DEV}.s3.amazonaws.com/" => "#{PUBLIC_STORAGE_CDN_S3_PROXY_HOST}/")
   end
 end
