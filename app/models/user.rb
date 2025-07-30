@@ -30,6 +30,8 @@ class User < ApplicationRecord
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
+  MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
+
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
   has_many :affiliate_requests, foreign_key: :seller_id
@@ -254,6 +256,7 @@ class User < ApplicationRecord
             48 => :upcoming_refund_policy_change_email_sent,
             49 => :can_create_physical_products,
             50 => :paypal_payout_fee_waived,
+            51 => :dismissed_create_products_with_ai_promo_alert,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -981,6 +984,16 @@ class User < ApplicationRecord
     purchases.all_success_states_including_test
       .where(link_id: small_bets_product_id)
       .exists?
+  end
+
+  def eligible_for_ai_product_generation?
+    return false unless Feature.active?(:ai_product_generation, self)
+    return true if Rails.env.development?
+    return false unless confirmed?
+    return false if suspended?
+    return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
+
+    has_completed_payouts?
   end
 
   protected

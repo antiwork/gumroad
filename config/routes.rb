@@ -464,6 +464,7 @@ Rails.application.routes.draw do
           end
         end
       end
+      resource :dismiss_ai_product_generation_promo, only: [:create]
     end
 
     resources :stripe_account_sessions, only: :create
@@ -931,6 +932,8 @@ Rails.application.routes.draw do
             resources :rejections, only: [:create]
           end
         end
+
+        resources :ai_product_details_generations, only: [:create]
       end
     end
 
