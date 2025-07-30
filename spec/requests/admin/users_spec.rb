@@ -74,7 +74,7 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
   describe "custom fees" do
     context "when the user has a custom direct fee percentage" do
       before do
-        user.update(custom_direct_fee_percentage: 5.00)
+        user.update(custom_direct_fee_per_thousand: 50)
       end
 
       it "shows the custom direct fee percentage" do
@@ -101,11 +101,11 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       accept_browser_dialog
       wait_for_ajax
 
-      expect(user.reload.custom_direct_fee_percentage).to eq(10.00)
+      expect(user.reload.custom_direct_fee_per_thousand).to eq(100)
     end
 
     it "allows removing the custom direct fee percentage" do
-      user.update(custom_direct_fee_percentage: 15.00)
+      user.update(custom_direct_fee_per_thousand: 150)
       visit admin_user_path(user.id)
 
       find_and_click "h3", text: "Custom direct fee"
@@ -114,7 +114,7 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       accept_browser_dialog
       wait_for_ajax
 
-      expect(user.reload.custom_direct_fee_percentage).to be_nil
+      expect(user.reload.custom_direct_fee_per_thousand).to be_nil
     end
   end
 

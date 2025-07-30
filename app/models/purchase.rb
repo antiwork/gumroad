@@ -69,7 +69,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :chargeback_reason
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
-  attr_json_data_accessor :custom_direct_fee_percentage
+  attr_json_data_accessor :custom_direct_fee_per_thousand
 
   belongs_to :link, optional: true
   has_one :url_redirect
@@ -328,7 +328,7 @@ class Purchase < ApplicationRecord
   validates :call, presence: true, if: -> { link.native_type == Link::NATIVE_TYPE_CALL }
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
-  validates :custom_direct_fee_percentage, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
+  validates :custom_direct_fee_per_thousand, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }, allow_nil: true
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
@@ -3204,8 +3204,8 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_gumroad_fee_per_thousand
-      if custom_direct_fee_percentage.present?
-        (custom_direct_fee_percentage.to_f * 10) # convert 10% → 100 per 1000
+      if custom_direct_fee_per_thousand.present?
+        (custom_direct_fee_per_thousand.to_f)
       elsif flat_fee_applicable?
         gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?
@@ -3846,11 +3846,11 @@ class Purchase < ApplicationRecord
 
     def set_custom_fee_percentage
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        self.custom_direct_fee_percentage = subscription&.original_purchase&.custom_direct_fee_percentage
+        self.custom_direct_fee_per_thousand = subscription.original_purchase.custom_direct_fee_per_thousand
       elsif is_preorder_charge?
-        self.custom_direct_fee_percentage = preorder&.authorization_purchase&.custom_direct_fee_percentage
+        self.custom_direct_fee_per_thousand = preorder.authorization_purchase.custom_direct_fee_per_thousand
       else
-        self.custom_direct_fee_percentage = seller&.custom_direct_fee_percentage
+        self.custom_direct_fee_per_thousand = seller.custom_direct_fee_per_thousand
       end
     end
 end

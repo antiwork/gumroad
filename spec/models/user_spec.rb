@@ -244,24 +244,24 @@ describe User, :vcr do
   end
 
   describe "validations" do
-    describe "custom_direct_fee_percentage" do
+    describe "custom_direct_fee_per_thousand" do
       it "allows nil" do
-        user = build(:user, custom_direct_fee_percentage: nil)
+        user = build(:user, custom_direct_fee_per_thousand: nil)
         expect(user).to be_valid
       end
 
-      it "is valid between 0 and 100" do
-        [0, 5, 25.5, 100].each do |value|
-          user = build(:user, custom_direct_fee_percentage: value)
+      it "is valid between 0 and 1000" do
+        [0, 500, 1000].each do |value|
+          user = build(:user, custom_direct_fee_per_thousand: value)
           expect(user).to be_valid, "expected #{value} to be valid"
         end
       end
 
-      it "is invalid below 0 or above 100" do
-        [-1, 101].each do |value|
-          user = build(:user, custom_direct_fee_percentage: value)
+      it "is invalid below 0 or above 1000" do
+        [-1, 1001].each do |value|
+          user = build(:user, custom_direct_fee_per_thousand: value)
           expect(user).to be_invalid, "expected #{value} to be invalid"
-          expect(user.errors[:custom_direct_fee_percentage]).to be_present
+          expect(user.errors[:custom_direct_fee_per_thousand]).to be_present
         end
       end
     end

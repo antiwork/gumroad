@@ -151,7 +151,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :gumroad_day_timezone
   attr_json_data_accessor :payout_threshold_cents, default: -> { minimum_payout_threshold_cents }
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
-  attr_json_data_accessor :custom_direct_fee_percentage
+  attr_json_data_accessor :custom_direct_fee_per_thousand
 
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
@@ -184,14 +184,12 @@ class User < ApplicationRecord
   validates :recommendation_type, inclusion: { in: User::RecommendationType::TYPES }
 
   validates :currency_type, inclusion: { in: CURRENCY_CHOICES.keys, message: "%{value} is not a supported currency." }
-
+  validates :custom_direct_fee_per_thousand, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }, allow_nil: true
   validate :json_data, :json_data_must_be_hash
   validate :account_created_email_domain_is_not_blocked, on: :create
   validate :account_created_ip_is_not_blocked, on: :create
   validate :facebook_meta_tag_is_valid
   validate :support_email_domain_is_not_reserved
-  validate :validate_custom_direct_fee_percentage_range
-
   validates_format_of :payment_address, with: EMAIL_REGEX, allow_blank: true
 
   before_save :append_http
@@ -1151,13 +1149,5 @@ class User < ApplicationRecord
 
     def reset_avatar_changed
       self.avatar_changed = false
-    end
-
-    def validate_custom_direct_fee_percentage_range
-      return unless custom_direct_fee_percentage.present?
-
-      if custom_direct_fee_percentage < 0 || custom_direct_fee_percentage > 100
-        errors.add(:custom_direct_fee_percentage, "must be between 0 and 100")
-      end
     end
 end

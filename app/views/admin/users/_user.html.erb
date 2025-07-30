@@ -22,11 +22,11 @@
               <%= blocked_email_tooltip(user.form_email) %>
             </li>
           <% end %>
-          <% if user.custom_direct_fee_percentage.present? %>
+          <% if user.custom_direct_fee_per_thousand.present? %>
             <li>
               <%= with_tooltip(tip: "Custom fee that will be charged on all their new direct (non-discover) sales", position: "bottom") do %>
                 Custom fee:
-                <%= number_with_precision(user.custom_direct_fee_percentage, precision: 1) %>%
+                <%= number_with_precision(user.custom_direct_fee_per_thousand / 10, precision: 1) %>%
               <% end %>
             </li>
           <% end %>
@@ -77,7 +77,7 @@
     <summary>
       <h3>Custom direct fee</h3>
     </summary>
-    <%= react_component "AdminCustomDirectFeeForm", props: { user_id: user.id, current_percentage: user.custom_direct_fee_percentage }, prerender: true %>
+    <%= react_component "AdminCustomDirectFeeForm", props: { user_id: user.id, current_percentage: user.custom_direct_fee_per_thousand / 10 }, prerender: true %>
   </details>
 
   <hr>
