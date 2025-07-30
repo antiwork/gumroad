@@ -21,13 +21,13 @@ describe Post::SocialImage do
       content_with_one_image = <<~HTML
       <p>First paragraph</p>
       <figure>
-        <img src="https://gumroad-dev-public-storage.s3.amazonaws.com/blobKey">
+        <img src="https://#{S3_PUBLIC_STORAGE_BUCKET_DEV}.s3.amazonaws.com/blobKey">
         <p class="figcaption">Image description</p>
       </figure>
       <p>Second paragraph</p>
       HTML
       social_image = Post::SocialImage.for(content_with_one_image)
-      expect(social_image.url).to eq("https://gumroad-dev-public-storage.s3.amazonaws.com/blobKey")
+      expect(social_image.url).to eq("https://#{S3_PUBLIC_STORAGE_BUCKET_DEV}.s3.amazonaws.com/blobKey")
     end
   end
 
