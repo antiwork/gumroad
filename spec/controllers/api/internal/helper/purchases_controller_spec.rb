@@ -306,10 +306,10 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:receipt_url] = receipt_purchase_url(refunded_purchase.external_id, host: UrlService.domain_with_protocol, email: refunded_purchase.email)
         purchase_json[:refund_status] = "refunded"
         purchase_json[:refund_date] = refund.created_at
-        
+
         amount_in_cents = refunded_purchase.usd_cents_to_currency(refunded_purchase.displayed_price_currency_type, refunded_purchase.amount_refunded_cents, refunded_purchase.rate_converted_to_usd)
         purchase_json[:refund_amount] = Money.new(amount_in_cents, refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-        
+
         params = { email: "refunded@example.com", timestamp: Time.now.to_i }
         post :search, params: params
 
@@ -326,10 +326,10 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:receipt_url] = receipt_purchase_url(partially_refunded_purchase.external_id, host: UrlService.domain_with_protocol, email: partially_refunded_purchase.email)
         purchase_json[:refund_status] = "partially_refunded"
         purchase_json[:refund_date] = refund.created_at
-        
+
         amount_in_cents = partially_refunded_purchase.usd_cents_to_currency(partially_refunded_purchase.displayed_price_currency_type, partially_refunded_purchase.amount_refunded_cents, partially_refunded_purchase.rate_converted_to_usd)
         purchase_json[:refund_amount] = Money.new(amount_in_cents, partially_refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-        
+
         params = { email: "partial@example.com", timestamp: Time.now.to_i }
         post :search, params: params
 
