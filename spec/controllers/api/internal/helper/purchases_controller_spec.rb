@@ -217,8 +217,9 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       purchase_json[:id] = @purchase.external_id_numeric
       purchase_json[:seller_email] = @purchase.seller_email
       purchase_json[:receipt_url] = receipt_purchase_url(@purchase.external_id, host: UrlService.domain_with_protocol, email: @purchase.email)
-      purchase_json[:refund_status] = @purchase.refunded?
+      purchase_json[:refund_status] = nil
       purchase_json[:refund_date] = nil
+      purchase_json[:refund_amount] = nil
 
       post :search, params: @params
 
@@ -241,8 +242,9 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:id] = purchase.external_id_numeric
         purchase_json[:seller_email] = purchase.seller_email
         purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
-        purchase_json[:refund_status] = purchase.refunded?
+        purchase_json[:refund_status] = nil
         purchase_json[:refund_date] = nil
+        purchase_json[:refund_amount] = nil
         params = @params.merge(email: "user@example.com")
         post :search, params: params
 
@@ -257,8 +259,9 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:id] = purchase.external_id_numeric
         purchase_json[:seller_email] = purchase.seller_email
         purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
-        purchase_json[:refund_status] = purchase.refunded?
+        purchase_json[:refund_status] = nil
         purchase_json[:refund_date] = nil
+        purchase_json[:refund_amount] = nil
         params = { card_last4: "4242", timestamp: Time.now.to_i }
         post :search, params: params
 
@@ -282,11 +285,50 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:id] = purchase.external_id_numeric
         purchase_json[:seller_email] = purchase.seller_email
         purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
-        purchase_json[:refund_status] = purchase.refunded?
+        purchase_json[:refund_status] = nil
         purchase_json[:refund_date] = nil
+        purchase_json[:refund_amount] = nil
         params = { charge_amount: "10.00", timestamp: Time.now.to_i }
         post :search, params: params
 
+        expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
+      end
+    end
+
+    context "with refunded purchases" do
+      it "returns fully refunded purchase data" do
+        refunded_purchase = create(:purchase, stripe_refunded: true, stripe_partially_refunded: false)
+        refund = create(:refund, purchase: refunded_purchase, amount_cents: refunded_purchase.price_cents)
+        
+        purchase_json = refunded_purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
+        purchase_json[:id] = refunded_purchase.external_id_numeric
+        purchase_json[:seller_email] = refunded_purchase.seller_email
+        purchase_json[:receipt_url] = receipt_purchase_url(refunded_purchase.external_id, host: UrlService.domain_with_protocol, email: refunded_purchase.email)
+        purchase_json[:refund_status] = "refunded"
+        purchase_json[:refund_date] = refund.created_at
+        purchase_json[:refund_amount] = Money.new(refund.amount_cents, refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
+        
+        params = { purchase_id: refunded_purchase.external_id_numeric.to_s, timestamp: Time.now.to_i }
+        post :search, params: params
+        
+        expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
+      end
+      
+      it "returns partially refunded purchase data" do
+        partially_refunded_purchase = create(:purchase, stripe_refunded: false, stripe_partially_refunded: true, price_cents: 1000)
+        refund = create(:refund, purchase: partially_refunded_purchase, amount_cents: 500)
+        
+        purchase_json = partially_refunded_purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
+        purchase_json[:id] = partially_refunded_purchase.external_id_numeric
+        purchase_json[:seller_email] = partially_refunded_purchase.seller_email
+        purchase_json[:receipt_url] = receipt_purchase_url(partially_refunded_purchase.external_id, host: UrlService.domain_with_protocol, email: partially_refunded_purchase.email)
+        purchase_json[:refund_status] = "partially_refunded"
+        purchase_json[:refund_date] = refund.created_at
+        purchase_json[:refund_amount] = Money.new(500, partially_refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
+        
+        params = { purchase_id: partially_refunded_purchase.external_id_numeric.to_s, timestamp: Time.now.to_i }
+        post :search, params: params
+        
         expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
       end
     end
