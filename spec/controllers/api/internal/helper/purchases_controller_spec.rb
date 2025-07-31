@@ -299,7 +299,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       it "returns fully refunded purchase data" do
         refunded_purchase = create(:purchase, stripe_refunded: true, stripe_partially_refunded: false)
         refund = create(:refund, purchase: refunded_purchase, amount_cents: refunded_purchase.price_cents)
-        
+
         purchase_json = refunded_purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
         purchase_json[:id] = refunded_purchase.external_id_numeric
         purchase_json[:seller_email] = refunded_purchase.seller_email
@@ -307,17 +307,17 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:refund_status] = "refunded"
         purchase_json[:refund_date] = refund.created_at
         purchase_json[:refund_amount] = Money.new(refund.amount_cents, refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-        
+
         params = { purchase_id: refunded_purchase.external_id_numeric.to_s, timestamp: Time.now.to_i }
         post :search, params: params
-        
+
         expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
       end
-      
+
       it "returns partially refunded purchase data" do
         partially_refunded_purchase = create(:purchase, stripe_refunded: false, stripe_partially_refunded: true, price_cents: 1000)
         refund = create(:refund, purchase: partially_refunded_purchase, amount_cents: 500)
-        
+
         purchase_json = partially_refunded_purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
         purchase_json[:id] = partially_refunded_purchase.external_id_numeric
         purchase_json[:seller_email] = partially_refunded_purchase.seller_email
@@ -325,10 +325,10 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:refund_status] = "partially_refunded"
         purchase_json[:refund_date] = refund.created_at
         purchase_json[:refund_amount] = Money.new(500, partially_refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-        
+
         params = { purchase_id: partially_refunded_purchase.external_id_numeric.to_s, timestamp: Time.now.to_i }
         post :search, params: params
-        
+
         expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
       end
     end

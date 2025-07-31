@@ -223,14 +223,14 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     else
       purchase_json[:refund_status] = nil
     end
-    
+
     if purchase.amount_refunded_cents > 0
       amount_in_cents = purchase.usd_cents_to_currency(purchase.link.price_currency_type, purchase.amount_refunded_cents, purchase.rate_converted_to_usd)
       purchase_json[:refund_amount] = Money.new(amount_in_cents, purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
     else
       purchase_json[:refund_amount] = nil
     end
-    
+
     if purchase_json[:refund_status] && purchase.refunds.any?
       most_recent_refund = purchase.refunds.order(:created_at).last
       purchase_json[:refund_date] = most_recent_refund.created_at
