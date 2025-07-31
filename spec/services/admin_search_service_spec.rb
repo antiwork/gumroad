@@ -99,6 +99,12 @@ describe AdminSearchService do
         expect(purchases).to eq [purchase_visa]
       end
 
+      it "supports filtering by decimal price" do
+        purchase_decimal = create(:purchase, price_cents: 1999, stripe_fingerprint: "test_fingerprint")
+        purchases = AdminSearchService.new.search_purchases(price: "19.99")
+        expect(purchases).to eq [purchase_decimal]
+      end
+
       it "supports filtering by combination of params" do
         purchases = AdminSearchService.new.search_purchases(card_type: "visa", last_4: "1234", price: "7", transaction_date: "2019-01-17", expiry_date: "10/22")
         expect(purchases).to eq [purchase_visa]
