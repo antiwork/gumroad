@@ -297,7 +297,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
     context "with refunded purchases" do
       it "returns fully refunded purchase data" do
-        refunded_purchase = create(:purchase, stripe_refunded: true, stripe_partially_refunded: false)
+        refunded_purchase = create(:purchase, stripe_refunded: true, stripe_partially_refunded: false, email: "refunded@example.com")
         refund = create(:refund, purchase: refunded_purchase, amount_cents: refunded_purchase.price_cents)
 
         purchase_json = refunded_purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
@@ -306,16 +306,18 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:receipt_url] = receipt_purchase_url(refunded_purchase.external_id, host: UrlService.domain_with_protocol, email: refunded_purchase.email)
         purchase_json[:refund_status] = "refunded"
         purchase_json[:refund_date] = refund.created_at
-        purchase_json[:refund_amount] = Money.new(refund.amount_cents, refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-
-        params = { purchase_id: refunded_purchase.external_id_numeric.to_s, timestamp: Time.now.to_i }
+        
+        amount_in_cents = refunded_purchase.usd_cents_to_currency(refunded_purchase.displayed_price_currency_type, refunded_purchase.amount_refunded_cents, refunded_purchase.rate_converted_to_usd)
+        purchase_json[:refund_amount] = Money.new(amount_in_cents, refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
+        
+        params = { email: "refunded@example.com", timestamp: Time.now.to_i }
         post :search, params: params
 
         expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
       end
 
       it "returns partially refunded purchase data" do
-        partially_refunded_purchase = create(:purchase, stripe_refunded: false, stripe_partially_refunded: true, price_cents: 1000)
+        partially_refunded_purchase = create(:purchase, stripe_refunded: false, stripe_partially_refunded: true, price_cents: 1000, email: "partial@example.com")
         refund = create(:refund, purchase: partially_refunded_purchase, amount_cents: 500)
 
         purchase_json = partially_refunded_purchase.slice(:email, :link_name, :price_cents, :purchase_state, :created_at)
@@ -324,9 +326,11 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         purchase_json[:receipt_url] = receipt_purchase_url(partially_refunded_purchase.external_id, host: UrlService.domain_with_protocol, email: partially_refunded_purchase.email)
         purchase_json[:refund_status] = "partially_refunded"
         purchase_json[:refund_date] = refund.created_at
-        purchase_json[:refund_amount] = Money.new(500, partially_refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-
-        params = { purchase_id: partially_refunded_purchase.external_id_numeric.to_s, timestamp: Time.now.to_i }
+        
+        amount_in_cents = partially_refunded_purchase.usd_cents_to_currency(partially_refunded_purchase.displayed_price_currency_type, partially_refunded_purchase.amount_refunded_cents, partially_refunded_purchase.rate_converted_to_usd)
+        purchase_json[:refund_amount] = Money.new(amount_in_cents, partially_refunded_purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
+        
+        params = { email: "partial@example.com", timestamp: Time.now.to_i }
         post :search, params: params
 
         expect(response.body).to eq({ success: true, message: "Purchase found", purchase: purchase_json }.to_json)
