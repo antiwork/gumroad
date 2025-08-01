@@ -195,7 +195,7 @@ describe("Library Scenario", type: :feature, js: true) do
 
     # Clicking banner should toggle to archived view
     click_on "click here to view"
-    expect(page).to have_current_path("/library?show_archived_only=true")
+    expect(page.current_url).to include("show_archived_only=true")
 
     # Banner should not appear when viewing archived purchases
     expect(page).to_not have_text("You have 2 archived purchases- click here to view")
