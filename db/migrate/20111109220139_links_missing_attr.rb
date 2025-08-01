@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class LinksMissingAttr < ActiveRecord::Migration[7.1]
+class LinksMissingAttr < ActiveRecord::Migration
   def up
     add_column :links, :owner, :string
     add_column :links, :length_of_exclusivity, :integer

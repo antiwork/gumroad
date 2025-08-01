@@ -264,6 +264,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
   const hasArchivedProducts = results.some((result) => result.purchase.is_archived);
+  const archivedCount = results.filter((result) => result.purchase.is_archived).length;
   const showArchivedNotice = !state.search.showArchivedOnly && !results.some((result) => !result.purchase.is_archived);
   const hasParams =
     state.search.showArchivedOnly || state.search.query || state.search.creators.length || state.search.bundles.length;
@@ -344,19 +345,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             )}
           </div>
         ) : null}
-        {hasArchivedProducts && !state.search.showArchivedOnly ? (
-          <div
-            className="archived-banner"
-            style={{
-              marginBottom: "20px",
-              padding: "12px",
-              backgroundColor: "#f8f9fa",
-              border: "1px solid #dee2e6",
-              borderRadius: "4px",
-              textAlign: "center",
-            }}
-          >
-            You have archived purchases-{" "}
+        {archivedCount > 0 && !state.search.showArchivedOnly ? (
+          <div className="mb-5 p-3 bg-gray-100 border border-gray-300 rounded text-center">
+            You have {archivedCount} archived purchase{archivedCount === 1 ? '' : 's'}-{" "}
             <button
               className="link"
               onClick={(e) => {

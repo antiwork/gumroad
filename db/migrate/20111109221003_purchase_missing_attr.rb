@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class PurchaseMissingAttr < ActiveRecord::Migration[7.1]
+class PurchaseMissingAttr < ActiveRecord::Migration
   def up
     add_column :purchases, :owner, :string
     add_column :purchases, :create_date, :integer
