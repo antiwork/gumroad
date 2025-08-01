@@ -44,11 +44,14 @@ class GenerateSalesReportJob
       temp_file.rewind
 
       s3_filename = "#{country.common_name.downcase.tr(' ', '-')}-sales-report-#{start_time_of_quarter.to_date}-to-#{end_time_of_quarter.to_date}-#{SecureRandom.hex(4)}.csv"
-      base_path = "sales-tax/#{country.alpha2.downcase}-sales-quarterly/#{s3_filename}"
-      s3_report_key = s3_prefix.present? ? "#{s3_prefix.chomp('/')}/#{base_path}" : base_path
-      s3_object = Aws::S3::Resource.new.bucket(REPORTING_S3_BUCKET).object(s3_report_key)
-      s3_object.upload_file(temp_file)
-      s3_signed_url = s3_object.presigned_url(:get).to_s
+      s3_path = s3_prefix.present? ? "#{s3_prefix.chomp('/')}/sales-tax/#{country.alpha2.downcase}-sales-quarterly" : "sales-tax/#{country.alpha2.downcase}-sales-quarterly"
+      s3_signed_url = ExpiringS3FileService.new(
+        file: temp_file,
+        filename: s3_filename,
+        path: s3_path,
+        expiry: 1.week,
+        bucket: REPORTING_S3_BUCKET
+      ).perform
 
       if send_notification
         message = "#{country.common_name} sales report (#{start_time_of_quarter.to_date} to #{end_time_of_quarter.to_date}) is ready - #{s3_signed_url}"
