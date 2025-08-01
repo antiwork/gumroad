@@ -183,30 +183,30 @@ describe("Library Scenario", type: :feature, js: true) do
   end
 
   it "shows archived purchases banner with count when user has archived purchases" do
-    purchase1 = create(:purchase, purchaser: @user)
-    purchase2 = create(:purchase, purchaser: @user, is_archived: true)
-    purchase3 = create(:purchase, purchaser: @user, is_archived: true)
+    create(:purchase, purchaser: @user)
+    create(:purchase, purchaser: @user, is_archived: true)
+    create(:purchase, purchaser: @user, is_archived: true)
     Link.import(refresh: true, force: true)
 
     visit "/library"
-    
+
     # Banner should show with count of 2 archived purchases
     expect(page).to have_text("You have 2 archived purchases- click here to view")
-    
+
     # Clicking banner should toggle to archived view
     click_on "click here to view"
     expect(page).to have_current_path("/library?show_archived_only=true")
-    
+
     # Banner should not appear when viewing archived purchases
     expect(page).to_not have_text("You have 2 archived purchases- click here to view")
   end
 
   it "does not show banner when user has no archived purchases" do
-    purchase = create(:purchase, purchaser: @user)
+    create(:purchase, purchaser: @user)
     Link.import(refresh: true, force: true)
 
     visit "/library"
-    
+
     expect(page).to_not have_text("archived purchases- click here to view")
   end
 
