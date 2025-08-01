@@ -958,12 +958,14 @@ class User < ApplicationRecord
       # Add a negative credit to make zero the balance currently held against creator's Stripe account.
       amount_cents_usd = balances_to_transfer.sum(:amount_cents)
       amount_cents_holding_currency = balances_to_transfer.sum(:holding_amount_cents)
-      Credit.create_for_balance_change_on_stripe_account!(amount_cents_holding_currency: -amount_cents_holding_currency,
+      negative_credit = Credit.create_for_balance_change_on_stripe_account!(amount_cents_holding_currency: -amount_cents_holding_currency,
                                                           merchant_account: stripe_account,
                                                           amount_cents_usd: -amount_cents_usd)
+      negative_credit.update!(internal: true)
 
       # Add a positive credit for the same amount against Gumroad's Stripe account.
-      Credit.create_for_credit!(user: self, amount_cents: amount_cents_usd, crediting_user: User.find(GUMROAD_ADMIN_ID))
+      positive_credit = Credit.create_for_credit!(user: self, amount_cents: amount_cents_usd, crediting_user: User.find(GUMROAD_ADMIN_ID))
+      positive_credit.update!(internal: true)
 
       # Actually transfer the money from creator's Stripe account to Gumroad's Stripe account.
       TransferStripeConnectAccountBalanceToGumroadJob.perform_async(stripe_account.id, amount_cents_usd)

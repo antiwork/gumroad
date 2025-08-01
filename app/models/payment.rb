@@ -132,7 +132,7 @@ class Payment < ApplicationRecord
   end
 
   def credits
-    Credit.where(balance_id: balances)
+    Credit.displayable.where(balance_id: balances)
   end
 
   def credit_amount_cents

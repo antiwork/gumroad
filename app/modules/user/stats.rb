@@ -211,6 +211,7 @@ module User::Stats
 
   def credits_cents_for_balances(balance_ids)
     credits
+      .displayable
       .where(financing_paydown_purchase_id: nil)
       .where(fee_retention_refund_id: nil)
       .where(balance_id: balance_ids)

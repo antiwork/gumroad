@@ -24,6 +24,19 @@ class Credit < ApplicationRecord
   validate :validate_associated_entity
 
   attr_json_data_accessor :stripe_loan_paydown_id
+  attr_json_data_accessor :internal
+
+  scope :internal, -> { where("json_data->'$.internal' = true") }
+  scope :displayable, -> { where("json_data->'$.internal' IS NULL OR json_data->'$.internal' = false") }
+
+  def internal?
+    internal == true
+  end
+
+  def mark_as_internal!
+    self.internal = true
+    save!
+  end
 
   def self.create_for_credit!(user:, amount_cents:, crediting_user:)
     credit = new

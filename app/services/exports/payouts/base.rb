@@ -55,7 +55,7 @@ class Exports::Payouts::Base
           data << summarize_affiliate_credit(bal, affiliate_credit_cents)
         end
 
-        Credit.where(balance: bal).find_each do |credit|
+        Credit.displayable.where(balance: bal).find_each do |credit|
           next if credit.fee_retention_refund.present? && credit.amount_cents <= 0
 
           amount = (credit.amount_cents / 100.0).round(2)
