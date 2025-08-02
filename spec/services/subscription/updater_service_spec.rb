@@ -2354,11 +2354,11 @@ describe Subscription::UpdaterService, :vcr do
           product = create(:membership_product, subscription_duration: BasePrice::Recurrence::MONTHLY, price_cents: 300)
           price = create(:price, link: product, recurrence: BasePrice::Recurrence::MONTHLY, price_cents: 300)
           purchase = create(:recurring_membership_purchase,
-            link: product,
-            price:,
-            price_cents: 300,
-            is_original_subscription_purchase: false,
-            purchaser: @user
+                            link: product,
+                            price:,
+                            price_cents: 300,
+                            is_original_subscription_purchase: false,
+                            purchaser: @user
           )
 
           mail = ContactingCreatorMailer.notify(purchase.id)
@@ -2369,11 +2369,11 @@ describe Subscription::UpdaterService, :vcr do
           product = create(:membership_product, subscription_duration: BasePrice::Recurrence::YEARLY, price_cents: 1000)
           price = create(:price, link: product, recurrence: BasePrice::Recurrence::YEARLY, price_cents: 1000)
           purchase = create(:recurring_membership_purchase,
-            link: product,
-            price:,
-            price_cents: 1000,
-            is_original_subscription_purchase: false,
-            purchaser: @user
+                            link: product,
+                            price:,
+                            price_cents: 1000,
+                            is_original_subscription_purchase: false,
+                            purchaser: @user
           )
 
           mail = ContactingCreatorMailer.notify(purchase.id)
