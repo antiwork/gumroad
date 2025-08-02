@@ -812,6 +812,10 @@ Rails.application.routes.draw do
     # balances
     get "/payouts", to: "balance#index", as: :balance
     get "/payouts/payments", to: "balance#payments_paged", as: :payments_paged
+    get "/payouts/taxes", to: "taxes#index", as: :taxes
+    get "/payouts/taxes/download-document", to: "taxes#download_document", as: :download_tax_document
+    get "/payouts/taxes/download-all", to: "taxes#download_all", as: :download_all_tax_documents
+    get "/payouts/taxes/reseller-certificate", to: "taxes#reseller_certificate", as: :download_reseller_certificate
     resources :instant_payouts, only: [:create]
     namespace :payouts do
       resources :exportables, only: [:index]
