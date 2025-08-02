@@ -196,7 +196,7 @@ class TaxesController < Sellers::BaseController
       current_seller.payments
         .completed
         .displayable
-        .where(created_at: Time.zone.local(year, start_month, 1)..Time.zone.local(year, end_month, -1))
+        .where(created_at: Time.zone.local(year, start_month, 1)..Time.zone.local(year, end_month).end_of_month)
         .exists?
     end
 
@@ -232,7 +232,7 @@ class TaxesController < Sellers::BaseController
         result = current_seller.payments
           .completed
           .displayable
-          .where(created_at: Time.zone.local(year, start_month, 1)..Time.zone.local(year, end_month, -1))
+          .where(created_at: Time.zone.local(year, start_month, 1)..Time.zone.local(year, end_month).end_of_month)
           .select(
             "SUM(amount_cents) AS gross",
             "SUM(gumroad_fee_cents) AS fees",
