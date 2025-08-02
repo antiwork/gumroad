@@ -298,5 +298,24 @@ describe Admin::UsersController do
       expect(assigns(:search_query)).to eq("Amazing")
       expect(assigns(:title)).to eq("Purchase history for #{user.display_name}")
     end
+
+    it "handles purchases with deleted products gracefully" do
+      # Create a purchase normally first
+      product_to_delete = create(:product, user: seller, name: "Product to be deleted")
+      purchase_with_deleted_product = create(:purchase,
+        link: product_to_delete,
+        purchaser: user,
+        email: user.email,
+        purchase_state: "successful"
+      )
+
+      # Simulate the product being deleted by setting link to nil
+      purchase_with_deleted_product.update_column(:link_id, nil)
+
+      get :purchase_history, params: { id: user.id }
+
+      expect(response).to be_successful
+      expect(response.body).to have_text("(Product deleted)")
+    end
   end
 end
