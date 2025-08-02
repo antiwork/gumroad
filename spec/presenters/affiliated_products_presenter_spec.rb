@@ -554,7 +554,7 @@ describe AffiliatedProductsPresenter do
         expect(invitation[:id]).to eq(pending_affiliate.external_id)
         expect(invitation[:product_name]).to eq(product.name)
         expect(invitation[:seller_name]).to eq(seller.display_name)
-        expect(invitation[:fee_percentage]).to eq(pending_affiliate.affiliate_basis_points / 100)
+        expect(invitation[:fee_percentage]).to eq(pending_affiliate.affiliate_basis_points)
       end
     end
 

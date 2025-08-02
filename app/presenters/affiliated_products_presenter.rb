@@ -61,7 +61,7 @@ class AffiliatedProductsPresenter
             id: affiliate.external_id,
             product_name: product.name,
             seller_name: affiliate.seller.display_name,
-            fee_percentage: affiliate.affiliate_basis_points / 100,
+            fee_percentage: affiliate.affiliate_basis_points,
             created_at: affiliate.created_at.iso8601,
             product_id: product.external_id
           }
