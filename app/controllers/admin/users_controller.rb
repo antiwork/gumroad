@@ -35,8 +35,8 @@ class Admin::UsersController < Admin::BaseController
     purchases = @user.purchases.includes(:link).order(created_at: :desc)
 
     if params[:product_title].present?
-      search_term = "%#{params[:product_title]}%"
-      purchases = purchases.joins(:link).where("links.name LIKE ?", search_term)
+      escaped_search_term = "%#{ActiveRecord::Base.sanitize_sql_like(params[:product_title])}%"
+      purchases = purchases.left_joins(:link).where("links.name LIKE ?", escaped_search_term)
     end
 
     @purchases = purchases.page_with_kaminari(params[:page]).per(25)
