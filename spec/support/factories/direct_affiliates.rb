@@ -6,7 +6,7 @@ FactoryBot.define do
     association :seller, factory: :user
     affiliate_basis_points { 300 }
     send_posts { true }
-    status { 'approved' } # Default to approved for existing tests
+    status { 'approved' } # Default to approved for existing tests to maintain compatibility
 
     trait :pending do
       status { 'pending' }

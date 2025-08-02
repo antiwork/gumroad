@@ -34,7 +34,7 @@ class AffiliatedProductsPresenter
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE)
       records = records.map do |product|
         revenue = product.revenue || 0
-        affiliate = product.affiliate_type.constantize.new(id: product.affiliate_id)
+        affiliate = product.affiliate_type.constantize.find(product.affiliate_id)
         {
           product_name: product.name,
           url: affiliate.referral_url_for_product(product),

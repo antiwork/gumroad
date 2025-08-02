@@ -721,9 +721,15 @@ describe DirectAffiliate do
     let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller:, status: 'pending') }
 
     describe "initial state" do
-      it "defaults to pending" do
+      it "defaults to pending via state machine" do
         new_affiliate = DirectAffiliate.new
+        # The state machine sets the initial state, overriding the database default
         expect(new_affiliate.status).to eq('pending')
+      end
+
+      it "database default is pending" do
+        # Verify the database column default aligns with state machine
+        expect(DirectAffiliate.column_defaults['status']).to eq('pending')
       end
     end
 
