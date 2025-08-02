@@ -85,6 +85,7 @@ class AffiliateRequest < ApplicationRecord
         affiliate.apply_to_all_products = false
         affiliate.affiliate_basis_points = Affiliate::BasisPointsValidations::MIN_AFFILIATE_BASIS_POINTS
         affiliate.send_posts = true
+        affiliate.status = 'approved' # Affiliate requests are pre-approved
       end
 
       affiliate.product_affiliates.build(

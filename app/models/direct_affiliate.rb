@@ -16,10 +16,35 @@ class DirectAffiliate < Affiliate
   validate :destination_url_or_username_required
   validate :affiliate_basis_points_must_fall_in_an_acceptable_range
   validate :eligible_for_stripe_payments
+  validates :status, inclusion: { in: %w[pending approved denied] }
 
-  after_commit :send_invitation_email, on: :create
+  after_commit :send_invitation_email, on: :create, if: :should_send_invitation_email?
 
   validates_uniqueness_of :affiliate_user_id, scope: :seller_id, conditions: -> { alive }, if: :alive?
+
+  # Status scopes
+  scope :pending, -> { where(status: 'pending') }
+  scope :approved, -> { where(status: 'approved') }
+  scope :denied, -> { where(status: 'denied') }
+
+  # State machine for status
+  state_machine :status, initial: :pending do
+    after_transition pending: :approved, do: :notify_seller_of_approval
+    after_transition pending: :denied, do: :notify_seller_of_denial
+    after_transition approved: :denied, do: :notify_seller_of_revocation
+
+    event :approve do
+      transition pending: :approved
+    end
+
+    event :deny do
+      transition pending: :denied
+    end
+
+    event :revoke do
+      transition approved: :denied
+    end
+  end
 
   def self.cookie_lifetime
     AFFILIATE_COOKIE_LIFETIME_DAYS.days
@@ -134,6 +159,22 @@ class DirectAffiliate < Affiliate
       return if prevent_sending_invitation_email
 
       AffiliateMailer.direct_affiliate_invitation(id, prevent_sending_invitation_email_to_seller).deliver_later(wait: 3.seconds)
+    end
+
+    def should_send_invitation_email?
+      pending? && !prevent_sending_invitation_email
+    end
+
+    def notify_seller_of_approval
+      AffiliateMailer.affiliate_approved_notification(id).deliver_later(wait: 3.seconds)
+    end
+
+    def notify_seller_of_denial
+      AffiliateMailer.affiliate_denied_notification(id).deliver_later(wait: 3.seconds)
+    end
+
+    def notify_seller_of_revocation
+      AffiliateMailer.affiliate_revoked_notification(id).deliver_later(wait: 3.seconds)
     end
 
     def eligible_for_stripe_payments

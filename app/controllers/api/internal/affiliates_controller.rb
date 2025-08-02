@@ -139,6 +139,8 @@ class Api::Internal::AffiliatesController < Api::Internal::BaseController
       else
         true
       end
+      # Set status to pending for new affiliates, keep existing status for updates
+      affiliate.status = 'pending' if affiliate.new_record?
       affiliate.save
 
       return render json: { success: false, message: affiliate.errors.full_messages.first } if affiliate.errors.present?

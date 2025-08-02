@@ -658,7 +658,13 @@ Rails.application.routes.draw do
     get "/memberships/paged", to: "links#memberships_paged", as: :memberships_paged
 
     namespace :products do
-      resources :affiliated, only: [:index]
+      resources :affiliated, only: [:index] do
+        member do
+          patch :approve
+          patch :deny
+          patch :revoke
+        end
+      end
       resources :collabs, only: [:index] do
         collection do
           get :products_paged

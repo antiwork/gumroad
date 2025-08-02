@@ -1,33 +1,30 @@
 <%= header_section(@subject) %>
 <div>
   <p>
-    You are now able to share <%= @product_name %> with your audience. For every sale you make, you will get <%= @affiliate_percentage_text %> of the total sale as your commission.
+    You have been invited to become an affiliate for <%= @product_name %>. If you approve this invitation, you'll be able to share these products with your audience and earn <%= @affiliate_percentage_text %> commission on every sale you make.
   </p>
-  <h3>How do you share products with your audience?</h3>
+
   <p>
-    You can direct them to this link:
-    <%= link_to @affiliate_referral_url, @affiliate_referral_url, clicktracking: "off" %>
-    <% if @direct_affiliate.products.count > 1 || @direct_affiliate.destination_url.present? %>
-      — after they click, we'll redirect them to
-      <%= link_to @final_destination_url, @final_destination_url, clicktracking: "off" %>.
-      <br>
-      <br>
-      <% if @products.count == 1 %>
-        Or, if you'd like to share the product, you can use this link:
-      <% else %>
-        Or, if you'd like to share individual products, you can use these links:
-      <% end %>
-      <ul>
-      <% @products.each do |product| %>
-        <li>
-          <strong><%= product[:name] %></strong>
-          <span> - Your commission: <%= product[:fee_percent] %>%</span>
-          <br>
-          <%= link_to product[:referral_url], product[:referral_url], clicktracking: "off" %>
-        </li>
-      <% end %>
-      </ul>
+    <strong>To get started, please approve this invitation by visiting your Affiliated Products dashboard:</strong>
+  </p>
+
+  <p>
+    <%= link_to "Review and Approve Invitation", products_affiliated_index_url, class: "button primary" %>
+  </p>
+
+  <p>Once you approve the invitation, you'll be able to access your affiliate links and start earning commissions.</p>
+  <h3>What products are you being invited to promote?</h3>
+  <ul>
+    <% @products.each do |product| %>
+      <li>
+        <strong><%= product[:name] %></strong>
+        <span> - Your commission: <%= product[:fee_percent] %>%</span>
+      </li>
     <% end %>
+  </ul>
+
+  <p>
+    If you have any questions about this invitation, you can contact <%= @seller_name %> directly.
   </p>
   <%= render("notify_affiliate_footer") %>
 </div>

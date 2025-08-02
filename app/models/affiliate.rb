@@ -22,6 +22,7 @@ class Affiliate < ApplicationRecord
 
   scope :created_after,   ->(start_at) { where("affiliates.created_at > ?", start_at) if start_at.present? }
   scope :created_before,  ->(end_at) { where("affiliates.created_at < ?", end_at) if end_at.present? }
+  scope :approved, -> { where(status: 'approved') }
 
   has_flags 1 => :apply_to_all_products,
             2 => :send_posts,

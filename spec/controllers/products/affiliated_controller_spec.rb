@@ -153,4 +153,83 @@ describe Products::AffiliatedController do
       sales_count: [0, 1, 2]
     }
   end
+
+  describe "affiliate approval actions" do
+    let(:pending_affiliate) { create(:direct_affiliate, affiliate_user:, seller: creator, status: 'pending', products: [product_one]) }
+    let(:approved_affiliate) { create(:direct_affiliate, affiliate_user:, seller: creator, status: 'approved', products: [product_one]) }
+
+    describe "PATCH #approve" do
+      context "when affiliate can be approved" do
+        it "approves the affiliate and returns success" do
+          patch :approve, params: { id: pending_affiliate.external_id }, as: :json
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be true
+          expect(response.parsed_body["message"]).to eq("Affiliate invitation approved!")
+
+          pending_affiliate.reload
+          expect(pending_affiliate.status).to eq('approved')
+        end
+      end
+
+      context "when affiliate cannot be approved" do
+        it "returns error" do
+          patch :approve, params: { id: approved_affiliate.external_id }, as: :json
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be false
+          expect(response.parsed_body["error"]).to be_present
+        end
+      end
+
+      context "when affiliate not found" do
+        it "returns error" do
+          patch :approve, params: { id: "nonexistent" }, as: :json
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be false
+          expect(response.parsed_body["error"]).to eq("Affiliate not found")
+        end
+      end
+
+      context "when user is not the affiliate" do
+        let(:other_user) { create(:user) }
+        let(:other_affiliate) { create(:direct_affiliate, affiliate_user: other_user, seller: creator, status: 'pending') }
+
+        it "returns unauthorized error" do
+          patch :approve, params: { id: other_affiliate.external_id }, as: :json
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be false
+          expect(response.parsed_body["error"]).to eq("Unauthorized")
+        end
+      end
+    end
+
+    describe "PATCH #deny" do
+      it "denies the affiliate and returns success" do
+        patch :deny, params: { id: pending_affiliate.external_id }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["message"]).to eq("Affiliate invitation denied")
+
+        pending_affiliate.reload
+        expect(pending_affiliate.status).to eq('denied')
+      end
+    end
+
+    describe "PATCH #revoke" do
+      it "revokes the affiliate and returns success" do
+        patch :revoke, params: { id: approved_affiliate.external_id }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["message"]).to eq("Affiliate access revoked")
+
+        approved_affiliate.reload
+        expect(approved_affiliate.status).to eq('denied')
+      end
+    end
+  end
 end

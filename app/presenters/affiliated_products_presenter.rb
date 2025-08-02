@@ -18,6 +18,7 @@ class AffiliatedProductsPresenter
   def affiliated_products_page_props
     {
       **affiliated_products_data,
+      **pending_invitations_data,
       stats:,
       global_affiliates_data:,
       discover_url: UrlService.discover_domain_with_protocol,
@@ -33,17 +34,41 @@ class AffiliatedProductsPresenter
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE)
       records = records.map do |product|
         revenue = product.revenue || 0
+        affiliate = product.affiliate_type.constantize.new(id: product.affiliate_id)
         {
           product_name: product.name,
-          url: product.affiliate_type.constantize.new(id: product.affiliate_id).referral_url_for_product(product),
+          url: affiliate.referral_url_for_product(product),
           fee_percentage: product.basis_points / 100,
           revenue:,
           humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
           sales_count: product.sales_count,
-          affiliate_type: product.affiliate_type.underscore
+          affiliate_type: product.affiliate_type.underscore,
+          affiliate_id: product.affiliate_type == 'DirectAffiliate' ? affiliate.external_id : nil
         }
       end
       { pagination: PagyPresenter.new(pagination).props, affiliated_products: records }
+    end
+
+    def pending_invitations_data
+      pending_affiliates = DirectAffiliate.pending
+                                          .where(affiliate_user_id: user.id)
+                                          .includes(:seller, :products)
+                                          .alive
+
+      pending_invitations = pending_affiliates.flat_map do |affiliate|
+        affiliate.products.map do |product|
+          {
+            id: affiliate.external_id,
+            product_name: product.name,
+            seller_name: affiliate.seller.display_name,
+            fee_percentage: affiliate.affiliate_basis_points / 100,
+            created_at: affiliate.created_at.iso8601,
+            product_id: product.external_id
+          }
+        end
+      end
+
+      { pending_invitations: pending_invitations }
     end
 
     def stats
@@ -106,7 +131,7 @@ class AffiliatedProductsPresenter
         joins(affiliate_credits_join).
         joins(:product).
         joins(:affiliate).
-        where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.where(affiliate_user_id: user.id).pluck(:id)).
+        where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.approved.where(affiliate_user_id: user.id).pluck(:id)).
         where(links: { deleted_at: nil, banned_at: nil }).
         select(select_columns).
         group(group_by).

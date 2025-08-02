@@ -14,6 +14,7 @@ describe DirectAffiliate do
 
   describe "validations" do
     it { is_expected.to validate_presence_of(:affiliate_basis_points) }
+    it { is_expected.to validate_inclusion_of(:status).in_array(%w[pending approved denied]) }
 
     describe "eligible_for_stripe_payments" do
       let(:seller) { create(:user) }
@@ -712,6 +713,79 @@ describe DirectAffiliate do
               volume_cents: 0
             }
           ])
+      end
+    end
+  end
+
+  describe "status state machine" do
+    let(:direct_affiliate) { create(:direct_affiliate, affiliate_user:, seller:, status: 'pending') }
+
+    describe "initial state" do
+      it "defaults to pending" do
+        new_affiliate = DirectAffiliate.new
+        expect(new_affiliate.status).to eq('pending')
+      end
+    end
+
+    describe "approve!" do
+      it "transitions from pending to approved" do
+        expect(direct_affiliate.status).to eq('pending')
+        direct_affiliate.approve!
+        expect(direct_affiliate.status).to eq('approved')
+      end
+
+      it "sends notification to seller" do
+        expect(AffiliateMailer).to receive(:affiliate_approved_notification).with(direct_affiliate.id).and_return(double(deliver_later: true))
+        direct_affiliate.approve!
+      end
+    end
+
+    describe "deny!" do
+      it "transitions from pending to denied" do
+        expect(direct_affiliate.status).to eq('pending')
+        direct_affiliate.deny!
+        expect(direct_affiliate.status).to eq('denied')
+      end
+
+      it "sends notification to seller" do
+        expect(AffiliateMailer).to receive(:affiliate_denied_notification).with(direct_affiliate.id).and_return(double(deliver_later: true))
+        direct_affiliate.deny!
+      end
+    end
+
+    describe "revoke!" do
+      let(:approved_affiliate) { create(:direct_affiliate, affiliate_user:, seller:, status: 'approved') }
+
+      it "transitions from approved to denied" do
+        expect(approved_affiliate.status).to eq('approved')
+        approved_affiliate.revoke!
+        expect(approved_affiliate.status).to eq('denied')
+      end
+
+      it "sends notification to seller" do
+        expect(AffiliateMailer).to receive(:affiliate_revoked_notification).with(approved_affiliate.id).and_return(double(deliver_later: true))
+        approved_affiliate.revoke!
+      end
+    end
+
+    describe "scopes" do
+      let!(:pending_affiliate) { create(:direct_affiliate, affiliate_user:, seller:, status: 'pending') }
+      let!(:approved_affiliate) { create(:direct_affiliate, affiliate_user: create(:user), seller:, status: 'approved') }
+      let!(:denied_affiliate) { create(:direct_affiliate, affiliate_user: create(:user), seller:, status: 'denied') }
+
+      it "filters by pending status" do
+        expect(DirectAffiliate.pending).to include(pending_affiliate)
+        expect(DirectAffiliate.pending).not_to include(approved_affiliate, denied_affiliate)
+      end
+
+      it "filters by approved status" do
+        expect(DirectAffiliate.approved).to include(approved_affiliate)
+        expect(DirectAffiliate.approved).not_to include(pending_affiliate, denied_affiliate)
+      end
+
+      it "filters by denied status" do
+        expect(DirectAffiliate.denied).to include(denied_affiliate)
+        expect(DirectAffiliate.denied).not_to include(pending_affiliate, approved_affiliate)
       end
     end
   end

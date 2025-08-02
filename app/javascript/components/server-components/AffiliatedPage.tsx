@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
-import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
+import { getPagedAffiliatedProducts, approveAffiliateInvitation, denyAffiliateInvitation, revokeAffiliateAccess } from "$app/data/affiliated_products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -34,6 +34,16 @@ export type AffiliatedProduct = {
   humanized_revenue: string;
   sales_count: number;
   affiliate_type: "direct_affiliate" | "global_affiliate";
+  affiliate_id?: string; // Only for direct affiliates that can be revoked
+};
+
+export type PendingInvitation = {
+  id: string;
+  product_name: string;
+  seller_name: string;
+  fee_percentage: number;
+  created_at: string;
+  product_id: string;
 };
 
 type Stats = {
@@ -46,6 +56,7 @@ type Stats = {
 type Props = {
   pagination: PaginationProps;
   affiliated_products: AffiliatedProduct[];
+  pending_invitations: PendingInvitation[];
   stats: Stats;
   global_affiliates_data: {
     global_affiliate_id: number;
@@ -91,6 +102,7 @@ type AffiliatedProductsTableProps = {
   pagination: PaginationProps;
   loadAffiliatedProducts: (page: number, sort: Sort<SortKey> | null) => void;
   isLoading: boolean;
+  onRevoke?: (affiliateId: string) => void;
 };
 
 export type SortKey = "product_name" | "sales_count" | "commission" | "revenue";
@@ -100,6 +112,7 @@ const AffiliatedProductsTable = ({
   pagination,
   loadAffiliatedProducts,
   isLoading,
+  onRevoke,
 }: AffiliatedProductsTableProps) => {
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
   const thProps = useSortingTableDriver<SortKey>(sort, setSort);
@@ -164,6 +177,17 @@ const AffiliatedProductsTable = ({
                       Copy link
                     </Button>
                   </CopyToClipboard>
+                  {affiliatedProduct.affiliate_id && onRevoke && (
+                    <WithTooltip tip="Remove yourself as an affiliate" position="bottom">
+                      <Button
+                        color="danger"
+                        onClick={() => onRevoke(affiliatedProduct.affiliate_id!)}
+                      >
+                        <Icon name="trash" />
+                        Remove
+                      </Button>
+                    </WithTooltip>
+                  )}
                 </div>
               </td>
             </tr>
@@ -224,8 +248,59 @@ type AffiliatedPageState = {
   query: string;
 };
 
+type PendingInvitationsTableProps = {
+  pendingInvitations: PendingInvitation[];
+  onApprove: (invitation: PendingInvitation) => void;
+  onDeny: (invitation: PendingInvitation) => void;
+};
+
+const PendingInvitationsTable = ({ pendingInvitations, onApprove, onDeny }: PendingInvitationsTableProps) => {
+  if (pendingInvitations.length === 0) return null;
+
+  return (
+    <section>
+      <h3>Pending Affiliate Invitations</h3>
+      <p>You have been invited to be an affiliate for the following products. Please approve or deny each invitation.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Creator</th>
+            <th>Commission</th>
+            <th>Invited</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pendingInvitations.map((invitation) => (
+            <tr key={`${invitation.id}-${invitation.product_id}`}>
+              <td>{invitation.product_name}</td>
+              <td>{invitation.seller_name}</td>
+              <td>{(invitation.fee_percentage / 100).toLocaleString([], { style: "percent" })}</td>
+              <td>{new Date(invitation.created_at).toLocaleDateString()}</td>
+              <td>
+                <div className="actions">
+                  <Button color="primary" onClick={() => onApprove(invitation)}>
+                    <Icon name="check" />
+                    Approve
+                  </Button>
+                  <Button onClick={() => onDeny(invitation)}>
+                    <Icon name="x" />
+                    Deny
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+};
+
 const AffiliatedPage = ({
   affiliated_products: initialAffiliatedProducts,
+  pending_invitations: pendingInvitations,
   stats,
   global_affiliates_data: globalAffiliatesData,
   archived_tab_visible: archivedTabVisible,
@@ -248,6 +323,7 @@ const AffiliatedPage = ({
   });
   const { affiliatedProducts, pagination } = state;
   const [isLoading, setIsLoading] = React.useState(false);
+  const [currentPendingInvitations, setCurrentPendingInvitations] = React.useState<PendingInvitation[]>(pendingInvitations);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
   const loadAffiliatedProducts = async (page: number, query?: string, sort?: Sort<SortKey> | null) => {
@@ -281,6 +357,54 @@ const AffiliatedPage = ({
     url.searchParams.set("affiliates", newState.toString());
     window.history.pushState({}, "", url);
   };
+
+  const handleApproveInvitation = asyncVoid(async (invitation: PendingInvitation) => {
+    try {
+      const response = await approveAffiliateInvitation(invitation.id);
+      if (response.success) {
+        setCurrentPendingInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
+        showAlert(response.message || "Affiliate invitation approved!", "success");
+        // Reload the page to refresh the affiliated products list
+        window.location.reload();
+      } else {
+        showAlert(response.error || "Failed to approve invitation", "error");
+      }
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  });
+
+  const handleDenyInvitation = asyncVoid(async (invitation: PendingInvitation) => {
+    try {
+      const response = await denyAffiliateInvitation(invitation.id);
+      if (response.success) {
+        setCurrentPendingInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
+        showAlert(response.message || "Affiliate invitation denied", "success");
+      } else {
+        showAlert(response.error || "Failed to deny invitation", "error");
+      }
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  });
+
+  const handleRevokeAffiliate = asyncVoid(async (affiliateId: string) => {
+    try {
+      const response = await revokeAffiliateAccess(affiliateId);
+      if (response.success) {
+        showAlert(response.message || "Affiliate access revoked", "success");
+        // Reload the page to refresh the affiliated products list
+        window.location.reload();
+      } else {
+        showAlert(response.error || "Failed to revoke affiliate access", "error");
+      }
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  });
 
   return (
     <ProductsLayout
@@ -334,6 +458,11 @@ const AffiliatedPage = ({
           ) : (
             <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
               <StatsSection {...stats} />
+              <PendingInvitationsTable
+                pendingInvitations={currentPendingInvitations}
+                onApprove={handleApproveInvitation}
+                onDeny={handleDenyInvitation}
+              />
               {state.affiliatedProducts.length === 0 ? (
                 <div className="placeholder">
                   <figure>
@@ -349,6 +478,7 @@ const AffiliatedPage = ({
                     void loadAffiliatedProducts(page, state.query, sort);
                   }}
                   isLoading={isLoading}
+                  onRevoke={handleRevokeAffiliate}
                 />
               )}
             </div>

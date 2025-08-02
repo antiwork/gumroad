@@ -213,6 +213,37 @@ class AffiliateMailer < ApplicationMailer
            template_name: "notify_collaborator_of_sale"
     end
 
+    def affiliate_approved_notification(affiliate_id)
+      @direct_affiliate = DirectAffiliate.find(affiliate_id)
+      @affiliate_user = @direct_affiliate.affiliate_user
+      @seller = @direct_affiliate.seller
+      @products = @direct_affiliate.enabled_products
+
+      @subject = "#{@affiliate_user.display_name} approved your affiliate invitation"
+      mail to: @seller.form_email,
+           subject: @subject
+    end
+
+    def affiliate_denied_notification(affiliate_id)
+      @direct_affiliate = DirectAffiliate.find(affiliate_id)
+      @affiliate_user = @direct_affiliate.affiliate_user
+      @seller = @direct_affiliate.seller
+
+      @subject = "#{@affiliate_user.display_name} declined your affiliate invitation"
+      mail to: @seller.form_email,
+           subject: @subject
+    end
+
+    def affiliate_revoked_notification(affiliate_id)
+      @direct_affiliate = DirectAffiliate.find(affiliate_id)
+      @affiliate_user = @direct_affiliate.affiliate_user
+      @seller = @direct_affiliate.seller
+
+      @subject = "#{@affiliate_user.display_name} removed themselves as an affiliate"
+      mail to: @seller.form_email,
+           subject: @subject
+    end
+
     def affiliate_referral_url
       @direct_affiliate.products.count == 1 && @direct_affiliate.destination_url.blank? ? @direct_affiliate.referral_url_for_product(@direct_affiliate.products.first) : @direct_affiliate.referral_url
     end
