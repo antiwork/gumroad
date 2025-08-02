@@ -31,6 +31,7 @@
           <% if user.payments.any? %>
             <li><%= link_to("Payouts", admin_user_payouts_path(user)) %></li>
           <% end %>
+          <li><%= link_to("Purchase history", purchase_history_admin_user_path(user)) %></li>
         </ul>
         <%= react_component "AdminUserStats", props: { user_id: user.id }, prerender: true %>
       </div>
