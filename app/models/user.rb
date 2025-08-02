@@ -153,6 +153,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :gumroad_day_timezone
   attr_json_data_accessor :payout_threshold_cents, default: -> { minimum_payout_threshold_cents }
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
+  attr_json_data_accessor :custom_fee_per_thousand
 
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
@@ -185,6 +186,7 @@ class User < ApplicationRecord
   validates :recommendation_type, inclusion: { in: User::RecommendationType::TYPES }
 
   validates :currency_type, inclusion: { in: CURRENCY_CHOICES.keys, message: "%{value} is not a supported currency." }
+  validates :custom_fee_per_thousand, allow_nil: true, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }
 
   validate :json_data, :json_data_must_be_hash
   validate :account_created_email_domain_is_not_blocked, on: :create

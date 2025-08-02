@@ -86,6 +86,30 @@ describe "RecommendationsScenario", type: :feature, js: true do
     assert_buying_with_recommended_by_from_profile_page(recommended_by: "search")
   end
 
+  context "when a custom fee is set for the seller" do
+    before do
+      @recommended_product.user.update!(custom_fee_per_thousand: 50)
+      @recommended_product.update!(taxonomy: create(:taxonomy))
+    end
+
+    it "charges the regular discover fee and not custom fee" do
+      visit "/l/#{@recommended_product.unique_permalink}?recommended_by=discover&recommender_model_name=#{RecommendedProductsService::MODEL_SALES}"
+
+      expect do
+        add_to_cart(@recommended_product, recommended_by: "discover")
+        check_out(@recommended_product)
+      end.to change { Purchase.successful.count }.by(1)
+
+      purchase = Purchase.last!
+      expect(purchase.link_id).to eq @recommended_product.id
+      expect(purchase.recommender_model_name).to eq(RecommendedProductsService::MODEL_SALES)
+      expect(purchase.recommended_purchase_info.recommender_model_name).to eq(RecommendedProductsService::MODEL_SALES)
+      expect(purchase.was_discover_fee_charged?).to eq(true)
+      expect(purchase.custom_fee_per_thousand).to be_nil
+      expect(purchase.fee_cents).to eq(30) # 30% discover fee
+    end
+  end
+
   describe "more like this" do
     let(:seller1) { create(:named_user) }
     let(:seller2) { create(:named_user, recommendation_type: User::RecommendationType::NO_RECOMMENDATIONS) }

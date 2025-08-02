@@ -1419,6 +1419,34 @@ describe User, :vcr do
         expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
       end
     end
+
+    describe "custom_fee_per_thousand" do
+      it "allows nil and an integer between 0 and 1000" do
+        user = build(:user, custom_fee_per_thousand: nil)
+        expect(user).to be_valid
+
+        user.custom_fee_per_thousand = 100.5
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be an integer"]
+
+        user.custom_fee_per_thousand = -1
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be greater than or equal to 0"]
+
+        user.custom_fee_per_thousand = 1001
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be less than or equal to 1000"]
+
+        user.custom_fee_per_thousand = "abc"
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["is not a number"]
+
+        [0, 50, 100, 500, 750, 1000].each do |value|
+          user.custom_fee_per_thousand = value
+          expect(user).to be_valid
+        end
+      end
+    end
   end
 
   describe "user roles" do

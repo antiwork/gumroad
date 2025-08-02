@@ -6375,4 +6375,158 @@ describe Purchase, :vcr do
       end
     end
   end
+
+  describe "#calculate_custom_fee_per_thousand" do
+    it "does nothing and returns if custom fee is already set" do
+      purchase = create(:purchase, custom_fee_per_thousand: 50)
+      expect(purchase.custom_fee_per_thousand).to eq(50)
+
+      expect(purchase).not_to receive(:is_recurring_subscription_charge)
+      expect(purchase.seller).not_to receive(:custom_fee_per_thousand)
+
+      purchase.send(:calculate_custom_fee_per_thousand)
+      expect(purchase.custom_fee_per_thousand).to eq(50)
+    end
+
+    it "does nothing and returns if discover fee is being charged" do
+      seller = create(:user)
+      product = create(:product, user: seller)
+      purchase = create(:purchase, link: product)
+      seller.update!(custom_fee_per_thousand: 50)
+      allow_any_instance_of(Purchase).to receive(:charge_discover_fee?).and_return(true)
+
+      expect(purchase).not_to receive(:is_recurring_subscription_charge)
+      expect(purchase.seller).not_to receive(:custom_fee_per_thousand)
+
+      purchase.send(:calculate_custom_fee_per_thousand)
+      expect(purchase.custom_fee_per_thousand).to be nil
+    end
+
+    context "for a recurring charge" do
+      let!(:subscription) { create(:subscription) }
+      let!(:original_subscription_purchase) { create(:purchase, subscription:, is_original_subscription_purchase: true) }
+
+      context "when original subscription purchase had a custom fee" do
+        it "sets custom fee same as original subscription purchase's custom fee" do
+          original_subscription_purchase.update!(custom_fee_per_thousand: 50)
+          original_subscription_purchase.seller.update!(custom_fee_per_thousand: 75)
+
+          recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false)
+          expect(recurring_purchase.reload.custom_fee_per_thousand).to be_nil
+
+          recurring_purchase.send(:calculate_custom_fee_per_thousand)
+          expect(recurring_purchase.custom_fee_per_thousand).to eq(50)
+        end
+      end
+
+      context "when original subscription purchase did not have a custom fee" do
+        it "does not set a custom fee" do
+          original_subscription_purchase.seller.update!(custom_fee_per_thousand: 75)
+          expect(original_subscription_purchase.custom_fee_per_thousand).to be_nil
+
+          recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false)
+          expect(recurring_purchase.reload.custom_fee_per_thousand).to be_nil
+
+          recurring_purchase.send(:calculate_custom_fee_per_thousand)
+          expect(recurring_purchase.custom_fee_per_thousand).to be_nil
+        end
+      end
+    end
+
+    context "for a preorder charge" do
+      let!(:seller) { create(:user) }
+      let!(:product) { create(:product, user: seller, price_cents: 10_00, is_in_preorder_state: true) }
+      let!(:preorder_product) { create(:preorder_link, link: product) }
+      let!(:authorization_purchase) do build(:purchase, link: product, chargeable: create(:chargeable),
+                                                        purchase_state: "in_progress", is_preorder_authorization: true) end
+      let!(:preorder) { preorder_product.build_preorder(authorization_purchase) }
+
+      context "when preorder authorization purchase had a custom fee" do
+        it "sets custom fee same as preorder authorization purchase's custom fee" do
+          authorization_purchase.update!(custom_fee_per_thousand: 50)
+          authorization_purchase.seller.update!(custom_fee_per_thousand: 75)
+
+          preorder.authorize!
+          preorder.mark_authorization_successful
+          product.update!(is_in_preorder_state: false)
+          preorder_charge = preorder.reload.charge!
+
+          expect(preorder_charge.custom_fee_per_thousand).to eq(50)
+          expect(preorder_charge.fee_cents).to eq 1_59 # 5% gumroad flat fee + 50c + 2.9% cc fee + 30c fixed cc fee
+
+          preorder_charge.send(:calculate_custom_fee_per_thousand)
+          expect(preorder_charge.custom_fee_per_thousand).to eq(50)
+        end
+      end
+
+      context "when preorder authorization purchase did not have a custom fee" do
+        it "does not set a custom fee" do
+          preorder.authorize!
+          preorder.mark_authorization_successful
+          product.update!(is_in_preorder_state: false)
+
+          authorization_purchase.seller.update!(custom_fee_per_thousand: 75)
+          preorder_charge = preorder.reload.charge!
+
+          expect(preorder_charge.custom_fee_per_thousand).to be_nil
+          expect(preorder_charge.fee_cents).to eq 2_09 # 10% gumroad flat fee + 50c + 2.9% cc fee + 30c fixed cc fee
+
+          preorder_charge.send(:calculate_custom_fee_per_thousand)
+          expect(preorder_charge.custom_fee_per_thousand).to be_nil
+        end
+      end
+    end
+
+    context "for a regular purchase" do
+      let!(:seller) { create(:user) }
+      let!(:product) { create(:product, user: seller) }
+
+      context "when seller has a custom fee set" do
+        it "sets custom fee same as seller's custom fee" do
+          seller.update!(custom_fee_per_thousand: 50)
+          purchase = create(:purchase, link: product)
+          expect(purchase.custom_fee_per_thousand).to eq(50)
+
+          purchase.send(:calculate_custom_fee_per_thousand)
+          expect(purchase.custom_fee_per_thousand).to eq(50)
+        end
+      end
+
+      context "when seller does not have a custom fee set" do
+        it "does not set a custom fee" do
+          purchase = create(:purchase, link: product)
+          expect(purchase.custom_fee_per_thousand).to be_nil
+
+          purchase.send(:calculate_custom_fee_per_thousand)
+          expect(purchase.custom_fee_per_thousand).to be_nil
+        end
+      end
+    end
+
+    context "for a new subscription purchase" do
+      let!(:seller) { create(:user) }
+      let!(:membership_product) { create(:membership_product, user: seller) }
+      let!(:subscription) { create(:subscription, link: membership_product) }
+      let!(:subscription_purchase) { create(:purchase, subscription:, link: membership_product, is_original_subscription_purchase: true) }
+
+      context "when seller has a custom fee set" do
+        it "sets custom fee same as seller's custom fee" do
+          expect(subscription_purchase.custom_fee_per_thousand).to be_nil
+
+          seller.update!(custom_fee_per_thousand: 25)
+          subscription_purchase.send(:calculate_custom_fee_per_thousand)
+          expect(subscription_purchase.custom_fee_per_thousand).to eq(25)
+        end
+      end
+
+      context "when seller does not have a custom fee set" do
+        it "does not set a custom fee" do
+          expect(subscription_purchase.custom_fee_per_thousand).to be_nil
+
+          subscription_purchase.send(:calculate_custom_fee_per_thousand)
+          expect(subscription_purchase.custom_fee_per_thousand).to be_nil
+        end
+      end
+    end
+  end
 end
