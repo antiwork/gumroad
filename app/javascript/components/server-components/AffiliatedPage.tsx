@@ -1,7 +1,12 @@
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
-import { getPagedAffiliatedProducts, approveAffiliateInvitation, denyAffiliateInvitation, revokeAffiliateAccess } from "$app/data/affiliated_products";
+import {
+  getPagedAffiliatedProducts,
+  approveAffiliateInvitation,
+  denyAffiliateInvitation,
+  revokeAffiliateAccess,
+} from "$app/data/affiliated_products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -179,11 +184,8 @@ const AffiliatedProductsTable = ({
                   </CopyToClipboard>
                   {affiliatedProduct.affiliate_id && onRevoke && (
                     <WithTooltip tip="Remove yourself as an affiliate" position="bottom">
-                      <Button
-                        color="danger"
-                        onClick={() => onRevoke(affiliatedProduct.affiliate_id!)}
-                      >
-                        <Icon name="trash" />
+                      <Button color="danger" onClick={() => onRevoke(affiliatedProduct.affiliate_id!)}>
+                        <Icon name="trash2" />
                         Remove
                       </Button>
                     </WithTooltip>
@@ -258,31 +260,40 @@ const PendingInvitationsTable = ({ pendingInvitations, onApprove, onDeny }: Pend
   if (pendingInvitations.length === 0) return null;
 
   // Group invitations by affiliate (seller) to show the relationship correctly
-  const groupedInvitations = pendingInvitations.reduce((acc, invitation) => {
-    const key = `${invitation.id}-${invitation.seller_name}`;
-    if (!acc[key]) {
-      acc[key] = {
-        id: invitation.id,
-        seller_name: invitation.seller_name,
-        fee_percentage: invitation.fee_percentage,
-        created_at: invitation.created_at,
-        products: []
-      };
-    }
-    acc[key].products.push(invitation.product_name);
-    return acc;
-  }, {} as Record<string, {
-    id: string;
-    seller_name: string;
-    fee_percentage: number;
-    created_at: string;
-    products: string[];
-  }>);
+  const groupedInvitations = pendingInvitations.reduce(
+    (acc, invitation) => {
+      const key = `${invitation.id}-${invitation.seller_name}`;
+      if (!acc[key]) {
+        acc[key] = {
+          id: invitation.id,
+          seller_name: invitation.seller_name,
+          fee_percentage: invitation.fee_percentage,
+          created_at: invitation.created_at,
+          products: [],
+        };
+      }
+      acc[key].products.push(invitation.product_name);
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        id: string;
+        seller_name: string;
+        fee_percentage: number;
+        created_at: string;
+        products: string[];
+      }
+    >,
+  );
 
   return (
     <section>
       <h3>Pending Affiliate Invitations</h3>
-      <p>You have been invited to become an affiliate by the following creators. <strong>Approving will give you access to promote ALL their products.</strong></p>
+      <p>
+        You have been invited to become an affiliate by the following creators.{" "}
+        <strong>Approving will give you access to promote ALL their products.</strong>
+      </p>
       <table>
         <thead>
           <tr>
@@ -300,18 +311,22 @@ const PendingInvitationsTable = ({ pendingInvitations, onApprove, onDeny }: Pend
               <td>
                 {invitation.products.length === 1
                   ? invitation.products[0]
-                  : `${invitation.products.length} products: ${invitation.products.join(', ')}`
-                }
+                  : `${invitation.products.length} products: ${invitation.products.join(", ")}`}
               </td>
-              <td>{(invitation.fee_percentage / 10000).toLocaleString([], { style: "percent", minimumFractionDigits: 0 })}</td>
+              <td>
+                {(invitation.fee_percentage / 10000).toLocaleString([], { style: "percent", minimumFractionDigits: 0 })}
+              </td>
               <td>{new Date(invitation.created_at).toLocaleDateString()}</td>
               <td>
                 <div className="actions">
-                  <Button color="primary" onClick={() => onApprove(pendingInvitations.find(inv => inv.id === invitation.id)!)}>
-                    <Icon name="check" />
+                  <Button
+                    color="primary"
+                    onClick={() => onApprove(pendingInvitations.find((inv) => inv.id === invitation.id)!)}
+                  >
+                    <Icon name="outline-check" />
                     Approve All
                   </Button>
-                  <Button onClick={() => onDeny(pendingInvitations.find(inv => inv.id === invitation.id)!)}>
+                  <Button onClick={() => onDeny(pendingInvitations.find((inv) => inv.id === invitation.id)!)}>
                     <Icon name="x" />
                     Deny All
                   </Button>
@@ -350,7 +365,8 @@ const AffiliatedPage = ({
   });
   const { affiliatedProducts, pagination } = state;
   const [isLoading, setIsLoading] = React.useState(false);
-  const [currentPendingInvitations, setCurrentPendingInvitations] = React.useState<PendingInvitation[]>(pendingInvitations);
+  const [currentPendingInvitations, setCurrentPendingInvitations] =
+    React.useState<PendingInvitation[]>(pendingInvitations);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
   const loadAffiliatedProducts = async (page: number, query?: string, sort?: Sort<SortKey> | null) => {
@@ -389,7 +405,7 @@ const AffiliatedPage = ({
     try {
       const response = await approveAffiliateInvitation(invitation.id);
       if (response.success) {
-        setCurrentPendingInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
+        setCurrentPendingInvitations((prev) => prev.filter((inv) => inv.id !== invitation.id));
         showAlert(response.message || "Affiliate invitation approved!", "success");
         // Reload the page to refresh the affiliated products list
         window.location.reload();
@@ -406,7 +422,7 @@ const AffiliatedPage = ({
     try {
       const response = await denyAffiliateInvitation(invitation.id);
       if (response.success) {
-        setCurrentPendingInvitations(prev => prev.filter(inv => inv.id !== invitation.id));
+        setCurrentPendingInvitations((prev) => prev.filter((inv) => inv.id !== invitation.id));
         showAlert(response.message || "Affiliate invitation denied", "success");
       } else {
         showAlert(response.error || "Failed to deny invitation", "error");
