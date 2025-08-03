@@ -420,7 +420,7 @@ const CustomersPage = ({
                   e.currentTarget.submit();
                 }}
               >
-                <button type="submit" className="button primary">
+                <button type="submit" color="primary">
                   Download
                 </button>
               </form>
