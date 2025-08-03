@@ -572,6 +572,7 @@ describe AffiliatedProductsPresenter do
         affiliated_product = props[:affiliated_products].first
         expect(affiliated_product[:product_name]).to eq(product.name)
         expect(affiliated_product[:affiliate_id]).to eq(approved_affiliate.external_id)
+        expect(affiliated_product[:fee_percentage]).to eq(approved_affiliate.affiliate_basis_points)
       end
     end
 
@@ -583,6 +584,34 @@ describe AffiliatedProductsPresenter do
         props = presenter.affiliated_products_page_props
 
         expect(props[:pending_invitations]).to be_empty
+        expect(props[:affiliated_products]).to be_empty
+      end
+    end
+
+    context "with missing affiliate records" do
+      let!(:approved_affiliate) { create(:direct_affiliate, affiliate_user: user, seller: seller, products: [product]) }
+      let(:presenter) { described_class.new(user) }
+
+      it "handles missing affiliate records gracefully" do
+        # Simulate a missing affiliate record by deleting it after creating the product affiliate relationship
+        affiliate_id = approved_affiliate.id
+        approved_affiliate.destroy!
+
+        # Stub the query to return a product with a non-existent affiliate_id
+        allow(presenter).to receive(:affiliated_products).and_return([
+          double(
+            name: product.name,
+            revenue: 1000,
+            basis_points: 300,
+            sales_count: 5,
+            affiliate_type: 'DirectAffiliate',
+            affiliate_id: affiliate_id
+          )
+        ])
+
+        props = presenter.affiliated_products_page_props
+
+        # Should exclude the product with missing affiliate and not raise an error
         expect(props[:affiliated_products]).to be_empty
       end
     end

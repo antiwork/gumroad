@@ -32,19 +32,24 @@ class AffiliatedProductsPresenter
 
     def affiliated_products_data
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE)
-      records = records.map do |product|
-        revenue = product.revenue || 0
-        affiliate = product.affiliate_type.constantize.find(product.affiliate_id)
-        {
-          product_name: product.name,
-          url: affiliate.referral_url_for_product(product),
-          fee_percentage: product.basis_points / 100,
-          revenue:,
-          humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
-          sales_count: product.sales_count,
-          affiliate_type: product.affiliate_type.underscore,
-          affiliate_id: product.affiliate_type == 'DirectAffiliate' ? affiliate.external_id : nil
-        }
+      records = records.filter_map do |product|
+        begin
+          affiliate = product.affiliate_type.constantize.find(product.affiliate_id)
+          revenue = product.revenue || 0
+          {
+            product_name: product.name,
+            url: affiliate.referral_url_for_product(product),
+            fee_percentage: product.basis_points, # Keep as basis points for consistency
+            revenue:,
+            humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
+            sales_count: product.sales_count,
+            affiliate_type: product.affiliate_type.underscore,
+            affiliate_id: product.affiliate_type == 'DirectAffiliate' ? affiliate.external_id : nil
+          }
+        rescue ActiveRecord::RecordNotFound => e
+          Rails.logger.warn "Affiliate not found for product #{product.id}: #{e.message}"
+          nil # filter_map will exclude nil values
+        end
       end
       { pagination: PagyPresenter.new(pagination).props, affiliated_products: records }
     end

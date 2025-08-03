@@ -29,7 +29,7 @@ import placeholder from "$assets/images/placeholders/affiliated.png";
 export type AffiliatedProduct = {
   product_name: string;
   url: string;
-  fee_percentage: number;
+  fee_percentage: number; // In basis points (e.g., 300 = 3%)
   revenue: number;
   humanized_revenue: string;
   sales_count: number;
@@ -162,7 +162,7 @@ const AffiliatedProductsTable = ({
               </td>
 
               <td data-label="Commission">
-                {(affiliatedProduct.fee_percentage / 100).toLocaleString([], { style: "percent" })}
+                {(affiliatedProduct.fee_percentage / 10000).toLocaleString([], { style: "percent" })}
               </td>
 
               <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
