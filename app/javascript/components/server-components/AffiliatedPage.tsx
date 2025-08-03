@@ -182,9 +182,12 @@ const AffiliatedProductsTable = ({
                       Copy link
                     </Button>
                   </CopyToClipboard>
-                  {affiliatedProduct.affiliate_id && onRevoke && (
+                  {Boolean(affiliatedProduct.affiliate_id && onRevoke) && (
                     <WithTooltip tip="Remove yourself as an affiliate" position="bottom">
-                      <Button color="danger" onClick={() => onRevoke(affiliatedProduct.affiliate_id!)}>
+                      <Button
+                        color="danger"
+                        onClick={() => affiliatedProduct.affiliate_id && onRevoke?.(affiliatedProduct.affiliate_id)}
+                      >
                         <Icon name="trash2" />
                         Remove
                       </Button>
@@ -260,22 +263,8 @@ const PendingInvitationsTable = ({ pendingInvitations, onApprove, onDeny }: Pend
   if (pendingInvitations.length === 0) return null;
 
   // Group invitations by affiliate (seller) to show the relationship correctly
-  const groupedInvitations = pendingInvitations.reduce(
-    (acc, invitation) => {
-      const key = `${invitation.id}-${invitation.seller_name}`;
-      if (!acc[key]) {
-        acc[key] = {
-          id: invitation.id,
-          seller_name: invitation.seller_name,
-          fee_percentage: invitation.fee_percentage,
-          created_at: invitation.created_at,
-          products: [],
-        };
-      }
-      acc[key].products.push(invitation.product_name);
-      return acc;
-    },
-    {} as Record<
+  const groupedInvitations = pendingInvitations.reduce<
+    Record<
       string,
       {
         id: string;
@@ -283,9 +272,25 @@ const PendingInvitationsTable = ({ pendingInvitations, onApprove, onDeny }: Pend
         fee_percentage: number;
         created_at: string;
         products: string[];
+        invitations: PendingInvitation[];
       }
-    >,
-  );
+    >
+  >((acc, invitation) => {
+    const key = invitation.seller_name;
+    if (!acc[key]) {
+      acc[key] = {
+        id: invitation.id,
+        seller_name: invitation.seller_name,
+        fee_percentage: invitation.fee_percentage,
+        created_at: invitation.created_at,
+        products: [],
+        invitations: [],
+      };
+    }
+    acc[key].products.push(invitation.product_name);
+    acc[key].invitations.push(invitation);
+    return acc;
+  }, {});
 
   return (
     <section>
@@ -321,12 +326,20 @@ const PendingInvitationsTable = ({ pendingInvitations, onApprove, onDeny }: Pend
                 <div className="actions">
                   <Button
                     color="primary"
-                    onClick={() => onApprove(pendingInvitations.find((inv) => inv.id === invitation.id)!)}
+                    onClick={() => {
+                      // Approve all invitations from this seller
+                      invitation.invitations.forEach((inv) => onApprove(inv));
+                    }}
                   >
                     <Icon name="outline-check" />
                     Approve All
                   </Button>
-                  <Button onClick={() => onDeny(pendingInvitations.find((inv) => inv.id === invitation.id)!)}>
+                  <Button
+                    onClick={() => {
+                      // Deny all invitations from this seller
+                      invitation.invitations.forEach((inv) => onDeny(inv));
+                    }}
+                  >
                     <Icon name="x" />
                     Deny All
                   </Button>

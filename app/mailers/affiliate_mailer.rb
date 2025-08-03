@@ -181,7 +181,7 @@ class AffiliateMailer < ApplicationMailer
     @direct_affiliate = DirectAffiliate.find(affiliate_id)
     @affiliate_user = @direct_affiliate.affiliate_user
     @seller = @direct_affiliate.seller
-    @products = @direct_affiliate.enabled_products
+    @products = @direct_affiliate.products
 
     @subject = "#{@affiliate_user.display_name} approved your affiliate invitation"
     mail to: @seller.form_email,

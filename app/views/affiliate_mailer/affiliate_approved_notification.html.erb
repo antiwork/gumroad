@@ -2,16 +2,16 @@
 
 <div>
   <p>Great news! <%= @affiliate_user.display_name %> has approved your affiliate invitation.</p>
-  
+
   <p>They are now officially an affiliate for:</p>
   <ul>
     <% @products.each do |product| %>
-      <li><strong><%= product[:name] %></strong> - <%= product[:fee_percent] %>% commission</li>
+      <li><strong><%= product.name %></strong> - <%= @direct_affiliate.affiliate_basis_points / 100 %>% commission</li>
     <% end %>
   </ul>
-  
+
   <p>They can now start promoting your products and earning commissions on sales.</p>
-  
+
   <p>
     <%= link_to "Manage your affiliates", affiliates_url, class: "button primary" %>
   </p>
