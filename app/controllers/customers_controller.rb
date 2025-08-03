@@ -162,7 +162,10 @@ class CustomersController < Sellers::BaseController
     def load_sales(sales)
       sales.records
         .includes(
+          :call,
+          :purchase_offer_code_discount,
           :tip,
+          :upsell_purchase,
           product_review: [:response, { alive_videos: [:video_file] }],
           utm_link: [target_resource: [:seller, :user]]
         )
