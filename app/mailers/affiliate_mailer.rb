@@ -25,7 +25,7 @@ class AffiliateMailer < ApplicationMailer
     @affiliate_referral_url = affiliate_referral_url
     @final_destination_url = @products.one? ? product[:destination_url] : @direct_affiliate.final_destination_url
 
-    @subject = "#{@seller_name} has added you as an affiliate."
+    @subject = "#{@seller_name} has invited you to be an affiliate."
     params = {
       to: @direct_affiliate.affiliate_user.form_email,
       subject: @subject
@@ -177,34 +177,45 @@ class AffiliateMailer < ApplicationMailer
          subject: @subject
   end
 
-  def affiliate_approved_notification(affiliate_id)
-    @direct_affiliate = DirectAffiliate.find(affiliate_id)
-    @affiliate_user = @direct_affiliate.affiliate_user
-    @seller = @direct_affiliate.seller
-    @products = @direct_affiliate.products
+  def affiliate_invitation_accepted(affiliate_id)
+    affiliate = DirectAffiliate.find_by(id: affiliate_id)
+    return unless affiliate
 
-    @subject = "#{@affiliate_user.display_name} approved your affiliate invitation"
-    mail to: @seller.form_email,
+    inviter = affiliate.seller
+    @invitee = affiliate.affiliate_user
+    invitee_name = @invitee.name_or_username
+
+    @subject = "#{invitee_name} has accepted your affiliate invitation on Gumroad"
+
+    mail to: inviter.form_email,
          subject: @subject
   end
 
-  def affiliate_denied_notification(affiliate_id)
-    @direct_affiliate = DirectAffiliate.find(affiliate_id)
-    @affiliate_user = @direct_affiliate.affiliate_user
-    @seller = @direct_affiliate.seller
+  def affiliate_invitation_declined(affiliate_id)
+    affiliate = DirectAffiliate.find_by(id: affiliate_id)
+    return unless affiliate
 
-    @subject = "#{@affiliate_user.display_name} declined your affiliate invitation"
-    mail to: @seller.form_email,
+    inviter = affiliate.seller
+    @invitee = affiliate.affiliate_user
+    invitee_name = @invitee.name_or_username
+
+    @subject = "#{invitee_name} has declined your affiliate invitation on Gumroad"
+
+    mail to: inviter.form_email,
          subject: @subject
   end
 
-  def affiliate_revoked_notification(affiliate_id)
-    @direct_affiliate = DirectAffiliate.find(affiliate_id)
-    @affiliate_user = @direct_affiliate.affiliate_user
-    @seller = @direct_affiliate.seller
+  def affiliate_self_removal(affiliate_id)
+    affiliate = DirectAffiliate.find_by(id: affiliate_id)
+    return unless affiliate
 
-    @subject = "#{@affiliate_user.display_name} removed themselves as an affiliate"
-    mail to: @seller.form_email,
+    seller = affiliate.seller
+    @affiliate_user = affiliate.affiliate_user
+    affiliate_name = @affiliate_user.name_or_username
+
+    @subject = "#{affiliate_name} has removed themselves as your affiliate"
+
+    mail to: seller.form_email,
          subject: @subject
   end
 

@@ -1,0 +1,11 @@
+<%= header_section(@subject) %>
+<div>
+  <p><%= @affiliate_user.name_or_username %> has removed themselves from your affiliate program. If you need to reconnect with them, please reach out directly.</p>
+  <p>You can always invite new affiliates from your dashboard.</p>
+
+  <div>
+    <a href="<%= affiliates_url %>" class="button accent">
+      Manage affiliates
+    </a>
+  </div>
+</div>

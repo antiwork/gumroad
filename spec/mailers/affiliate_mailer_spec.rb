@@ -170,10 +170,10 @@ describe AffiliateMailer do
           mail = AffiliateMailer.direct_affiliate_invitation(direct_affiliate.id)
           expect(mail.to).to eq([direct_affiliate.affiliate_user.form_email])
           expect(mail.cc).to eq([direct_affiliate.seller.form_email])
-          expect(mail.subject).to include("#{seller.name} has added you as an affiliate.")
-          expect(mail.body.encoded).to include("For every sale you make, you will get 10% of the total sale as your commission.")
-          expect(mail.body.encoded.squish).to include(%(You can direct them to this link: <a clicktracking="off" href="#{direct_affiliate.referral_url}">#{direct_affiliate.referral_url}</a> — after they click, we'll redirect them to <a clicktracking="off" href="#{direct_affiliate.final_destination_url(product:)}">#{direct_affiliate.final_destination_url(product:)}</a>.))
-          expect(mail.body.encoded).to include("Or, if you'd like to share the product, you can use this link:")
+          expect(mail.subject).to include("#{seller.name} has invited you to be an affiliate.")
+          expect(mail.body.encoded).to include("would like you to become an affiliate")
+          expect(mail.body.encoded).to include("you'll earn 10% commission on every sale you refer")
+          expect(mail.body.encoded).to include("View invitation")
         end
       end
 
@@ -185,10 +185,10 @@ describe AffiliateMailer do
           mail = AffiliateMailer.direct_affiliate_invitation(direct_affiliate.id)
           expect(mail.to).to eq([direct_affiliate.affiliate_user.form_email])
           expect(mail.cc).to eq([direct_affiliate.seller.form_email])
-          expect(mail.subject).to include("#{seller.name} has added you as an affiliate.")
-          expect(mail.body.encoded).to include("For every sale you make, you will get 10% of the total sale as your commission.")
-          expect(mail.body.encoded.squish).to include(%(You can direct them to this link: <a clicktracking="off" href="#{direct_affiliate.referral_url_for_product(product)}">#{direct_affiliate.referral_url_for_product(product)}</a>))
-          expect(mail.body.encoded).to_not include("— after they click, we'll redirect them to")
+          expect(mail.subject).to include("#{seller.name} has invited you to be an affiliate.")
+          expect(mail.body.encoded).to include("would like you to become an affiliate")
+          expect(mail.body.encoded).to include("you'll earn 10% commission on every sale you refer")
+          expect(mail.body.encoded).to include("View invitation")
         end
       end
     end
@@ -203,15 +203,12 @@ describe AffiliateMailer do
         mail = AffiliateMailer.direct_affiliate_invitation(direct_affiliate.id)
         expect(mail.to).to eq([direct_affiliate.affiliate_user.form_email])
         expect(mail.cc).to eq([direct_affiliate.seller.form_email])
-        expect(mail.subject).to include("#{seller.name} has added you as an affiliate.")
-        expect(mail.body.encoded.squish).to include(%(You can direct them to this link: <a clicktracking="off" href="#{direct_affiliate.referral_url}">#{direct_affiliate.referral_url}</a> — after they click, we'll redirect them to <a clicktracking="off" href="#{seller.subdomain_with_protocol}">#{seller.subdomain_with_protocol}</a>))
+        expect(mail.subject).to include("#{seller.name} has invited you to be an affiliate.")
+        expect(mail.body.encoded).to include("would like you to become an affiliate")
+        expect(mail.body.encoded).to include("View invitation")
 
-        body = mail.body.encoded.split("<body>").pop
-        mail_plaintext = ActionView::Base.full_sanitizer.sanitize(body).gsub("\r\n", " ").gsub(/\s{2,}/, " ").strip
-        expect(mail_plaintext).to include("For every sale you make, you will get 5 - 10% of the total sale as your commission.")
-        expect(mail_plaintext).to include("Or, if you'd like to share individual products, you can use these links:")
-        expect(mail_plaintext).to include("#{product.name} - Your commission: 10%")
-        expect(mail_plaintext).to include("Gumbot bits - Your commission: 5%")
+        expect(mail.body.encoded).to include("Once you accept this invitation")
+        expect(mail.body.encoded).to include("How does the affiliate program work?")
       end
     end
 
@@ -439,6 +436,36 @@ describe AffiliateMailer do
       mail = AffiliateMailer.collaborator_invitation_declined(collaborator.id)
       expect(mail.to).to eq([collaborator.seller.form_email])
       expect(mail.subject).to include("#{collaborator.affiliate_user.name} declined your invitation to collaborate on Gumroad")
+    end
+  end
+
+  describe "#affiliate_invitation_accepted" do
+    let(:affiliate) { create(:direct_affiliate) }
+
+    it "sends email to the seller" do
+      mail = AffiliateMailer.affiliate_invitation_accepted(affiliate.id)
+      expect(mail.to).to eq([affiliate.seller.form_email])
+      expect(mail.subject).to include("#{affiliate.affiliate_user.name_or_username} has accepted your affiliate invitation on Gumroad")
+    end
+  end
+
+  describe "#affiliate_invitation_declined" do
+    let(:affiliate) { create(:direct_affiliate) }
+
+    it "sends email to the seller" do
+      mail = AffiliateMailer.affiliate_invitation_declined(affiliate.id)
+      expect(mail.to).to eq([affiliate.seller.form_email])
+      expect(mail.subject).to include("#{affiliate.affiliate_user.name_or_username} has declined your affiliate invitation on Gumroad")
+    end
+  end
+
+  describe "#affiliate_self_removal" do
+    let(:affiliate) { create(:direct_affiliate) }
+
+    it "sends email to the seller" do
+      mail = AffiliateMailer.affiliate_self_removal(affiliate.id)
+      expect(mail.to).to eq([affiliate.seller.form_email])
+      expect(mail.subject).to include("#{affiliate.affiliate_user.name_or_username} has removed themselves as your affiliate")
     end
   end
 end

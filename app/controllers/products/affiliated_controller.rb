@@ -2,7 +2,6 @@
 
 class Products::AffiliatedController < Sellers::BaseController
   before_action :authorize
-  before_action :set_affiliate, only: [:approve, :deny, :revoke]
 
   def index
     @title = "Products"
@@ -17,48 +16,25 @@ class Products::AffiliatedController < Sellers::BaseController
     end
   end
 
-  def approve
-    if @affiliate.can_approve?
-      @affiliate.approve!
-      render json: { success: true, message: "Affiliate invitation approved!" }
-    else
-      render json: { success: false, error: "Cannot approve this invitation" }
-    end
-  rescue StateMachines::InvalidTransition => e
-    render json: { success: false, error: e.message }
-  end
+  def destroy
+    affiliate = DirectAffiliate.alive.find_by_external_id!(params[:id])
 
-  def deny
-    if @affiliate.can_deny?
-      @affiliate.deny!
-      render json: { success: true, message: "Affiliate invitation denied" }
-    else
-      render json: { success: false, error: "Cannot deny this invitation" }
+    # Ensure the current user is the affiliate user (not the seller)
+    unless affiliate.affiliate_user == current_seller
+      return render json: { success: false, message: "Unauthorized" }, status: :unauthorized
     end
-  rescue StateMachines::InvalidTransition => e
-    render json: { success: false, error: e.message }
-  end
 
-  def revoke
-    if @affiliate.can_revoke?
-      @affiliate.revoke!
-      render json: { success: true, message: "Affiliate access revoked" }
-    else
-      render json: { success: false, error: "Cannot revoke this affiliate" }
-    end
-  rescue StateMachines::InvalidTransition => e
-    render json: { success: false, error: e.message }
+    affiliate.mark_deleted!
+
+    # Notify the seller that the affiliate user removed themselves
+    AffiliateMailer.affiliate_self_removal(affiliate.id).deliver_later
+
+    render json: { success: true }
   end
 
   private
     def authorize
       super([:products, :affiliated])
-    end
-
-    def set_affiliate
-      @affiliate = DirectAffiliate.find_by_external_id(params[:id])
-      return render json: { success: false, error: "Affiliate not found" } unless @affiliate
-      return render json: { success: false, error: "Unauthorized" } unless @affiliate.affiliate_user_id == current_seller.id
     end
 
     def affiliated_products_params

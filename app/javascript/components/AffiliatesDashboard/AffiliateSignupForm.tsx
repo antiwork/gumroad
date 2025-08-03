@@ -85,7 +85,7 @@ export const AffiliateSignupForm = () => {
               className="button"
               inert={!loggedInUser?.policies.direct_affiliate.create || data.affiliates_disabled_reason !== null}
             >
-              Add affiliate
+              Invite affiliate
             </Link>
           </WithTooltip>
           <Button

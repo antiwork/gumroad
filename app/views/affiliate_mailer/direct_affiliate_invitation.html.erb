@@ -1,30 +1,33 @@
 <%= header_section(@subject) %>
 <div>
   <p>
-    You have been invited to become an affiliate for <%= @product_name %>. If you approve this invitation, you'll be able to share these products with your audience and earn <%= @affiliate_percentage_text %> commission on every sale you make.
+    <%= @seller_name %> would like you to become an affiliate for <%= @product_name %>. If you accept, you'll earn <%= @affiliate_percentage_text %> commission on every sale you refer.
   </p>
 
+  <div style="text-align: center; margin: 30px 0;">
+    <%= link_to "View invitation", "#{PROTOCOL}://#{DOMAIN}/products/affiliated",
+        class: "button accent",
+        style: "display: inline-block; padding: 12px 24px; background-color: #ff90e8; color: white; text-decoration: none; border-radius: 4px;",
+        clicktracking: "off" %>
+  </div>
+
+  <p style="text-align: center; color: #666; font-size: 14px;">
+    You'll need to log in to your Gumroad account to respond to this invitation.
+  </p>
+
+  <h3>What happens if you accept?</h3>
   <p>
-    <strong>To get started, please approve this invitation by visiting your Affiliated Products dashboard:</strong>
+    Once you accept this invitation, you'll get access to your unique affiliate links and be able to start earning commissions by sharing <%= @product_name %> with your audience.
   </p>
 
+  <h3>How does the affiliate program work?</h3>
   <p>
-    <%= link_to "Review and Approve Invitation", products_affiliated_index_url, class: "button primary" %>
+    When someone clicks your affiliate link, we'll place a cookie on their device. If they make a purchase within 30 days, you'll receive <%= @affiliate_percentage_text %> commission on that sale.
   </p>
 
-  <p>Once you approve the invitation, you'll be able to access your affiliate links and start earning commissions.</p>
-  <h3>What products are you being invited to promote?</h3>
-  <ul>
-    <% @products.each do |product| %>
-      <li>
-        <strong><%= product[:name] %></strong>
-        <span> - Your commission: <%= product[:fee_percent] %>%</span>
-      </li>
-    <% end %>
-  </ul>
-
+  <h3>Questions about the affiliate program?</h3>
   <p>
-    If you have any questions about this invitation, you can contact <%= @seller_name %> directly.
+    You can learn more about how our affiliate program works here:
+    <%= link_to HomePageLinkService.affiliates, HomePageLinkService.affiliates, clicktracking: "off" %>
   </p>
-  <%= render("notify_affiliate_footer") %>
 </div>

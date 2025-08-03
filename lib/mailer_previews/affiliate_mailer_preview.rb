@@ -63,4 +63,16 @@ class AffiliateMailerPreview < ActionMailer::Preview
   def collaboration_ended_by_affiliate_user
     AffiliateMailer.collaboration_ended_by_affiliate_user(Collaborator.last&.id)
   end
+
+  def affiliate_invitation_accepted
+    AffiliateMailer.affiliate_invitation_accepted(DirectAffiliate.last&.id)
+  end
+
+  def affiliate_invitation_declined
+    AffiliateMailer.affiliate_invitation_declined(DirectAffiliate.last&.id)
+  end
+
+  def affiliate_self_removal
+    AffiliateMailer.affiliate_self_removal(DirectAffiliate.last&.id)
+  end
 end

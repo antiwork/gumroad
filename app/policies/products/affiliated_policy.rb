@@ -7,4 +7,10 @@ class Products::AffiliatedPolicy < ApplicationPolicy
     user.role_marketing_for?(seller) ||
     user.role_support_for?(seller)
   end
+
+  def destroy?
+    # Allow users to remove themselves from affiliations
+    # The actual affiliate record authorization is handled in the controller
+    true
+  end
 end

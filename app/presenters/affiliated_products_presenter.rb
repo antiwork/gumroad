@@ -32,56 +32,54 @@ class AffiliatedProductsPresenter
 
     def affiliated_products_data
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE)
-      records = records.filter_map do |product|
-        begin
-          affiliate = product.affiliate_type.constantize.find(product.affiliate_id)
-          revenue = product.revenue || 0
-          {
-            product_name: product.name,
-            url: affiliate.referral_url_for_product(product),
-            fee_percentage: product.basis_points, # Keep as basis points for consistency
-            revenue:,
-            humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
-            sales_count: product.sales_count,
-            affiliate_type: product.affiliate_type.underscore,
-            affiliate_id: product.affiliate_type == 'DirectAffiliate' ? affiliate.external_id : nil
-          }
-        rescue ActiveRecord::RecordNotFound => e
-          Rails.logger.warn "Affiliate not found for product #{product.id}: #{e.message}"
-          nil # filter_map will exclude nil values
-        end
+      records = records.map do |product|
+        revenue = product.revenue || 0
+        {
+          product_name: product.name,
+          url: product.affiliate_type.constantize.new(id: product.affiliate_id).referral_url_for_product(product),
+          fee_percentage: product.basis_points / 100,
+          revenue:,
+          humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
+          sales_count: product.sales_count,
+          affiliate_type: product.affiliate_type.underscore,
+          affiliate_id: product.affiliate_external_id
+        }
       end
       { pagination: PagyPresenter.new(pagination).props, affiliated_products: records }
     end
 
     def pending_invitations_data
-      pending_affiliates = DirectAffiliate.pending
-                                          .where(affiliate_user_id: user.id)
-                                          .includes(:seller, :products)
-                                          .alive
+      invitations = pending_invitations.map do |affiliate|
+        seller = affiliate.seller
+        products = affiliate.enabled_products
 
-      pending_invitations = pending_affiliates.flat_map do |affiliate|
-        affiliate.products.map do |product|
+        products.map do |product|
           {
-            id: affiliate.external_id,
-            product_name: product.name,
-            seller_name: affiliate.seller.display_name,
-            fee_percentage: affiliate.affiliate_basis_points,
-            created_at: affiliate.created_at.iso8601,
-            product_id: product.external_id
+            invitation_id: affiliate.affiliate_invitation.external_id,
+            affiliate_id: affiliate.external_id,
+            product_name: product[:name],
+            seller_name: seller.name_or_username,
+            fee_percentage: product[:fee_percent],
+            url: product[:referral_url],
           }
         end
-      end
+      end.flatten
 
-      { pending_invitations: pending_invitations }
+      { pending_invitations: invitations }
     end
 
     def stats
+      accepted_affiliations = Affiliate.direct_or_global_affiliates.alive.invitation_accepted.where(affiliate_user_id: user.id)
+      affiliated_creator_ids = ProductAffiliate.joins(:product).where(affiliate_id: accepted_affiliations.pluck(:id))
+                                             .where(links: { deleted_at: nil, banned_at: nil })
+                                             .joins("JOIN users ON users.id = links.user_id")
+                                             .pluck("users.id").uniq
+
       {
         total_revenue: user.affiliate_credits_sum_total,
         total_sales: user.affiliate_credits.count,
         total_products: affiliated_products.map(&:link_id).uniq.size,
-        total_affiliated_creators: user.affiliated_creators.count,
+        total_affiliated_creators: affiliated_creator_ids.size,
       }
     end
 
@@ -98,30 +96,32 @@ class AffiliatedProductsPresenter
       return @_affiliated_products if defined?(@_affiliated_products)
 
       select_columns = %{
-        affiliates_links.link_id AS link_id,
-        affiliates_links.affiliate_id AS affiliate_id,
-        links.unique_permalink AS unique_permalink,
-        links.name AS name,
-        affiliates.type AS affiliate_type,
-        COALESCE(affiliates_links.affiliate_basis_points, affiliates.affiliate_basis_points) AS basis_points,
-        SUM(affiliate_credits.amount_cents) AS revenue,
-        COUNT(DISTINCT affiliate_credits.id) AS sales_count
-      }
+      affiliates_links.link_id AS link_id,
+      affiliates_links.affiliate_id AS affiliate_id,
+      links.unique_permalink AS unique_permalink,
+      links.name AS name,
+      affiliates.type AS affiliate_type,
+      affiliates.external_id AS affiliate_external_id,
+      COALESCE(affiliates_links.affiliate_basis_points, affiliates.affiliate_basis_points) AS basis_points,
+      SUM(affiliate_credits.amount_cents) AS revenue,
+      COUNT(DISTINCT affiliate_credits.id) AS sales_count
+    }
       group_by = %{
-        affiliates_links.link_id,
-        affiliates_links.affiliate_id,
-        links.unique_permalink,
-        links.name,
-        affiliates.type,
-        affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points
-      }
+      affiliates_links.link_id,
+      affiliates_links.affiliate_id,
+      links.unique_permalink,
+      links.name,
+      affiliates.type,
+      affiliates.external_id,
+      affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points
+    }
       affiliate_credits_join = %{
-        LEFT OUTER JOIN affiliate_credits ON
-          affiliates_links.link_id = affiliate_credits.link_id AND
-          affiliate_credits.affiliate_id = affiliates_links.affiliate_id AND
-          affiliate_credits.affiliate_credit_chargeback_balance_id IS NULL AND
-          affiliate_credits.affiliate_credit_refund_balance_id IS NULL
-      }
+      LEFT OUTER JOIN affiliate_credits ON
+        affiliates_links.link_id = affiliate_credits.link_id AND
+        affiliate_credits.affiliate_id = affiliates_links.affiliate_id AND
+        affiliate_credits.affiliate_credit_chargeback_balance_id IS NULL AND
+        affiliate_credits.affiliate_credit_refund_balance_id IS NULL
+    }
       sort_direction = sort&.dig(:direction)&.upcase == "DESC" ? "DESC" : "ASC"
       order_by = case sort&.dig(:key)
                  when "product_name" then "links.name #{sort_direction}"
@@ -136,7 +136,7 @@ class AffiliatedProductsPresenter
         joins(affiliate_credits_join).
         joins(:product).
         joins(:affiliate).
-        where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.approved.where(affiliate_user_id: user.id).pluck(:id)).
+        where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.invitation_accepted.where(affiliate_user_id: user.id).pluck(:id)).
         where(links: { deleted_at: nil, banned_at: nil }).
         select(select_columns).
         group(group_by).
@@ -144,5 +144,21 @@ class AffiliatedProductsPresenter
 
       @_affiliated_products = @_affiliated_products.where("links.name LIKE :query", query: "%#{query.strip}%") if query
       @_affiliated_products
+    end
+
+    def pending_invitations
+      return @_pending_invitations if defined?(@_pending_invitations)
+
+      @_pending_invitations = DirectAffiliate
+        .invitation_pending
+        .alive
+        .where(affiliate_user: user)
+        .includes(
+          :seller,
+          :affiliate_invitation,
+          product_affiliates: :product
+        )
+
+      @_pending_invitations
     end
 end

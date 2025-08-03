@@ -453,7 +453,7 @@ const AffiliatesTab = () => {
                   : undefined
               }
             >
-              Add affiliate
+              Invite affiliate
             </Link>
           </WithTooltip>
         </>
@@ -723,8 +723,9 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
     }
 
     try {
-      await ("id" in affiliateState ? updateAffiliate(affiliateState) : addAffiliate(affiliateState));
-      showAlert("Changes saved!", "success");
+      const isEditing = "id" in affiliateState;
+      await (isEditing ? updateAffiliate(affiliateState) : addAffiliate(affiliateState));
+      showAlert(isEditing ? "Changes saved!" : "Invitation sent!", "success");
       navigate("/affiliates");
     } catch (e) {
       assertResponseError(e);
@@ -904,9 +905,9 @@ const routes: RouteObject[] = [
     path: "affiliates/new",
     element: (
       <Form
-        title="New Affiliate"
-        headerLabel="Add a new affiliate below and we'll send them a unique link to share with their audience. Your affiliate will then earn a commission on each sale they refer. <a data-helper-prompt='How do affiliates work?'>Learn more</a>"
-        submitLabel="Add affiliate"
+        title="Invite Affiliate"
+        headerLabel="Invite a new affiliate below and we'll send them an invitation to join. Once they accept, they'll get a unique link to share with their audience and earn a commission on each sale they refer. <a data-helper-prompt='How do affiliates work?'>Learn more</a>"
+        submitLabel="Send invitation"
       />
     ),
     loader: async () => {

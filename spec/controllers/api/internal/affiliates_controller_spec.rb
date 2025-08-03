@@ -362,6 +362,7 @@ describe Api::Internal::AffiliatesController do
       expect(direct_affiliate.products).to eq([product])
       expect(direct_affiliate.apply_to_all_products).to be false
       expect(direct_affiliate.send_posts).to be true
+      expect(direct_affiliate.affiliate_invitation).to be_present
     end
 
     it "doesn't allow an affiliate to be created if the affiliate user email is invalid" do
@@ -775,6 +776,12 @@ describe Api::Internal::AffiliatesController do
       expect do
         patch :update, params: params.deep_merge(extra_params), as: :json
       end.to change { direct_affiliate.product_affiliates.first.reload.destination_url }.from(nil).to("https://example.com")
+    end
+
+    it "does not create an invitation when updating an existing affiliate" do
+      patch :update, params:, as: :json
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(direct_affiliate.reload.affiliate_invitation).to be_nil
     end
   end
 

@@ -27,39 +27,3 @@ export const getPagedAffiliatedProducts = (page?: number, query?: string, sort?:
     cancel: () => abort.abort(),
   };
 };
-
-type AffiliateActionResponse = {
-  success: boolean;
-  message?: string;
-  error?: string;
-};
-
-export async function approveAffiliateInvitation(affiliateId: string): Promise<AffiliateActionResponse> {
-  const response = await request({
-    method: "PATCH",
-    accept: "json",
-    url: Routes.approve_products_affiliated_path(affiliateId),
-  });
-
-  return cast<AffiliateActionResponse>(await response.json());
-}
-
-export async function denyAffiliateInvitation(affiliateId: string): Promise<AffiliateActionResponse> {
-  const response = await request({
-    method: "PATCH",
-    accept: "json",
-    url: Routes.deny_products_affiliated_path(affiliateId),
-  });
-
-  return cast<AffiliateActionResponse>(await response.json());
-}
-
-export async function revokeAffiliateAccess(affiliateId: string): Promise<AffiliateActionResponse> {
-  const response = await request({
-    method: "PATCH",
-    accept: "json",
-    url: Routes.revoke_products_affiliated_path(affiliateId),
-  });
-
-  return cast<AffiliateActionResponse>(await response.json());
-}

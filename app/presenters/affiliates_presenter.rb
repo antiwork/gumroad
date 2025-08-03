@@ -85,6 +85,7 @@ class AffiliatesPresenter
     def fetch_direct_affiliates
       affiliates = seller.direct_affiliates
                             .alive
+                            .invitation_accepted
                             .includes(:affiliate_user, :seller)
                             .sorted_by(**sort.to_h.symbolize_keys)
 
