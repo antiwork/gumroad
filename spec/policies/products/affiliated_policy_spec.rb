@@ -44,4 +44,26 @@ describe Products::AffiliatedPolicy do
       expect(subject).to permit(seller_context, :affiliated)
     end
   end
+
+  permissions :destroy? do
+    let(:affiliate_user) { create(:user) }
+    let(:different_user) { create(:user) }
+    let(:affiliate) { create(:direct_affiliate, affiliate_user:, seller:) }
+
+    it "grants access when user is the affiliate user" do
+      seller_context = SellerContext.new(user: affiliate_user, seller:)
+      expect(subject).to permit(seller_context, affiliate)
+    end
+
+    it "denies access when user is not the affiliate user" do
+      seller_context = SellerContext.new(user: different_user, seller:)
+      expect(subject).not_to permit(seller_context, affiliate)
+    end
+
+    it "grants access for symbol record (general authorization)" do
+      seller_context = SellerContext.new(user: affiliate_user, seller:)
+      policy = subject.new(seller_context, :affiliated)
+      expect(policy.destroy?).to be true
+    end
+  end
 end

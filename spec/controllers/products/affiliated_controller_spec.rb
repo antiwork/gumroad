@@ -158,6 +158,12 @@ describe Products::AffiliatedController do
   describe "DELETE destroy" do
     let(:affiliate_to_remove) { create(:direct_affiliate, affiliate_user: affiliate_user, seller: creator) }
 
+    it_behaves_like "authorize called for action", :delete, :destroy do
+      let(:record) { affiliate_to_remove }
+      let(:request_params) { { id: affiliate_to_remove.external_id } }
+      let(:request_format) { :json }
+    end
+
     it "successfully removes affiliate when current user is the affiliate user" do
       expect do
         delete :destroy, params: { id: affiliate_to_remove.external_id }, format: :json
