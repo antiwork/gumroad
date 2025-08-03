@@ -405,18 +405,25 @@ const CustomersPage = ({
                   : "This will download a CSV with each purchase on its own row."}
               </div>
               <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-              <NavigationButton
-                color="primary"
-                href={Routes.export_purchases_path({
+              <form 
+                action={Routes.export_purchases_path({
                   format: "csv",
                   start_time: lightFormat(from, "yyyy-MM-dd"),
                   end_time: lightFormat(to, "yyyy-MM-dd"),
                   product_ids: includedProductIds,
                   variant_ids: includedVariantIds,
                 })}
+                method="post"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  showAlert("Your export has started and will be emailed to you shortly.", "info");
+                  e.currentTarget.submit();
+                }}
               >
-                Download
-              </NavigationButton>
+                <button type="submit" className="button primary">
+                  Download
+                </button>
+              </form>
             </div>
           </Popover>
         </div>
