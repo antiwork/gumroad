@@ -227,6 +227,7 @@ class SettingsPresenter
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      user_under_18: user_under_18?(user_compliance_info),
     }
   end
 
@@ -439,5 +440,11 @@ class SettingsPresenter
           paypal_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: #{direct_fee_percent}% + #{fixed_fee_cents}¢ Gumroad fee + #{processor_fee_percent}% + #{processor_fee_fixed_cents}¢ PayPal fee.\n• Discover sales: #{discover_fee_percent}% flat\n",
         }
       end
+    end
+
+    def user_under_18?(user_compliance_info)
+      return false unless user_compliance_info&.birthday
+
+      user_compliance_info.birthday > 18.years.ago
     end
 end
