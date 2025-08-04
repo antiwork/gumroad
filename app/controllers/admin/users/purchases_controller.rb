@@ -10,7 +10,7 @@ class Admin::Users::PurchasesController < Admin::BaseController
 
     if params[:product_title].present?
       escaped_search_term = "%#{ActiveRecord::Base.sanitize_sql_like(params[:product_title])}%"
-      purchases = purchases.left_joins(:link).where("links.name LIKE ? OR links.name IS NULL", escaped_search_term)
+      purchases = purchases.left_joins(:link).where("links.name LIKE ?", escaped_search_term)
     end
 
     @purchases = purchases.page_with_kaminari(params[:page]).per(25)
