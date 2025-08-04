@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::Users::PurchasesController < Admin::BaseController
-  include Pagy::Backend
-
   before_action :fetch_user
 
   def index
@@ -12,7 +10,7 @@ class Admin::Users::PurchasesController < Admin::BaseController
 
     if params[:product_title].present?
       escaped_search_term = "%#{ActiveRecord::Base.sanitize_sql_like(params[:product_title])}%"
-      purchases = purchases.left_joins(:link).where("links.name LIKE ?", escaped_search_term)
+      purchases = purchases.left_joins(:link).where("links.name LIKE ? OR links.name IS NULL", escaped_search_term)
     end
 
     @purchases = purchases.page_with_kaminari(params[:page]).per(25)
@@ -21,7 +19,7 @@ class Admin::Users::PurchasesController < Admin::BaseController
 
   private
     def fetch_user
-      if params[:user_id].include?("@")
+      if params[:user_id]&.include?("@")
         @user = User.find_by(email: params[:user_id])
       else
         @user = User.find_by(username: params[:user_id]) ||

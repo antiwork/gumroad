@@ -9,7 +9,7 @@ describe Admin::Users::PurchasesController do
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
-    @admin_user = create(:admin_user)
+    @admin_user = create(:admin_user, email: "admin@example.com")
     sign_in @admin_user
   end
 
