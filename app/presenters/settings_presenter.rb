@@ -451,6 +451,6 @@ class SettingsPresenter
     def user_under_18?(user_compliance_info)
       return false unless user_compliance_info&.birthday
 
-      user_compliance_info.birthday > 18.years.ago
+      user_compliance_info.birthday > 18.years.ago.to_date
     end
 end
