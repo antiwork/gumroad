@@ -82,7 +82,7 @@ class SignupController < Devise::RegistrationsController
       purchase&.attach_to_user_and_card(@user, chargeable, card_data_handling_mode)
 
       if params[:user][:email].present?
-        Purchase.where(email: params[:user][:email], purchaser_id: nil).each do |past_purchase|
+        Purchase.where(email: params[:user][:email], purchaser_id: nil).includes(:preorder).each do |past_purchase|
           past_purchase.attach_to_user_and_card(@user, chargeable, card_data_handling_mode)
         end
       end
