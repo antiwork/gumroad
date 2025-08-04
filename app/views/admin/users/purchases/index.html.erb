@@ -3,7 +3,7 @@
 <div class="paragraphs">
   <h2>Purchase history for <%= @user.display_name %></h2>
 
-  <%= form_with url: purchase_history_admin_user_path(@user), method: :get, class: "form" do |form| %>
+  <%= form_with url: admin_user_purchases_path(@user), method: :get, class: "form" do |form| %>
     <div class="form-group">
       <%= form.text_field :product_title,
                          value: @search_query,
@@ -11,7 +11,7 @@
                          class: "form-control" %>
       <%= form.submit "Search", class: "button" %>
       <% if @search_query.present? %>
-        <%= link_to "Clear", purchase_history_admin_user_path(@user), class: "button secondary" %>
+        <%= link_to "Clear", admin_user_purchases_path(@user), class: "button secondary" %>
       <% end %>
     </div>
   <% end %>
