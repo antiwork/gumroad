@@ -239,7 +239,7 @@ module StripeMerchantAccountManager
   def self.update_guardian_person(user, stripe_account, last_user_compliance_info_id, passphrase)
     # Find guardian person (legal_guardian: true)
     stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
-    guardian_person = stripe_persons.find { |person| person["relationship"]["legal_guardian"] }
+    guardian_person = stripe_persons.find { |person| person["relationship"]&.[]("legal_guardian") }
 
     last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
     user_compliance_info = user.alive_user_compliance_info
@@ -985,7 +985,7 @@ module StripeMerchantAccountManager
 
   def self.handle_guardian_stripe_info_requirements(stripe_event_id, stripe_account, user)
     stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
-    guardian_person = stripe_persons.find { |person| person["relationship"]["legal_guardian"] }
+    guardian_person = stripe_persons.find { |person| person["relationship"]&.[]("legal_guardian") }
 
     return unless guardian_person
 
@@ -1095,7 +1095,7 @@ module StripeMerchantAccountManager
     raise "Stripe Event #{stripe_event_id} does not contain a 'person' object." if stripe_person["object"] != "person"
 
     # Only handle legal guardian persons
-    return unless stripe_person["relationship"]["legal_guardian"] == true
+    return unless stripe_person["relationship"]&.[]("legal_guardian") == true
 
     stripe_account_id = stripe_person["account"]
     merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
