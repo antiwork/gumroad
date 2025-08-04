@@ -29,6 +29,7 @@ import BankAccountSection, {
   BankAccountDetails,
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
+import LegalGuardianDetailsSections from "$app/components/Settings/PaymentsPage/LegalGuardianDetailsSections";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
@@ -889,7 +890,9 @@ const PaymentsPage = (props: Props) => {
           </div>
         ) : null}
         <section>
-          {props.user_under_18 ? <LegalGuardianInformationRequiredBanner /> : null}
+          {props.user_under_18 && props.show_legal_guardian_verification_section ? (
+            <LegalGuardianInformationRequiredBanner />
+          ) : null}
           <header>
             <h2>Verification</h2>
           </header>
@@ -1173,7 +1176,28 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {props.paypal_connect.show_paypal_connect ? (
+        {props.user_under_18 && props.show_legal_guardian_verification_section ? (
+          <section>
+            <header>
+              <h2>Legal guardian’s details</h2>
+              <div>
+                <a data-helper-prompt="I have a question about my payout settings?">
+                  Because you're under 18, we need to verify your legal guardian's details to enable payments.
+                </a>
+              </div>
+            </header>
+            <LegalGuardianDetailsSections
+              user={props.user}
+              complianceInfo={complianceInfo}
+              updateComplianceInfo={updateComplianceInfo}
+              isFormDisabled={props.is_form_disabled}
+              countries={props.countries}
+              states={props.states}
+              errorFieldNames={errorFieldNames}
+            />
+          </section>
+        ) : null}
+        {props.paypal_connect.allow_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}
             isFormDisabled={props.is_form_disabled}
