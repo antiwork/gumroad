@@ -69,6 +69,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :chargeback_reason
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
+  attr_json_data_accessor :custom_fee_per_thousand
 
   belongs_to :link, optional: true
   has_one :url_redirect
@@ -327,6 +328,7 @@ class Purchase < ApplicationRecord
   validates :call, presence: true, if: -> { link.native_type == Link::NATIVE_TYPE_CALL }
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
+  validates :custom_fee_per_thousand, allow_nil: true, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
@@ -3188,21 +3190,22 @@ class Purchase < ApplicationRecord
 
     def calculate_additional_discover_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
-        preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
+        preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) + PROCESSOR_FEE_PER_THOUSAND : 0)
       else
         if Feature.active?(:merchant_of_record_fee, seller)
-          GUMROAD_DISCOVER_FEE_PER_THOUSAND - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+          GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
         else
-          link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
+          link.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) : 0)
         end
       end
     end
 
     def calculate_gumroad_fee_per_thousand
       if flat_fee_applicable?
-        gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        calculate_custom_fee_per_thousand
+        (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?
         (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
       else
@@ -3211,6 +3214,19 @@ class Purchase < ApplicationRecord
         else
           gumroad_fee_percentage_for_migrated_account
         end
+      end
+    end
+
+    def calculate_custom_fee_per_thousand
+      return if custom_fee_per_thousand.present?
+      return if charge_discover_fee?
+
+      if is_recurring_subscription_charge || is_updated_original_subscription_purchase
+        self.custom_fee_per_thousand = subscription.original_purchase.custom_fee_per_thousand if subscription.original_purchase.custom_fee_per_thousand.present?
+      elsif is_preorder_charge?
+        self.custom_fee_per_thousand = preorder.authorization_purchase.custom_fee_per_thousand if preorder.authorization_purchase.custom_fee_per_thousand.present?
+      elsif seller.custom_fee_per_thousand.present?
+        self.custom_fee_per_thousand = seller.custom_fee_per_thousand
       end
     end
 
