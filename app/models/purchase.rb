@@ -3178,10 +3178,8 @@ class Purchase < ApplicationRecord
         else
           fixed_processor_fee_cents
         end
-      elsif Feature.active?(:merchant_of_record_fee, seller)
-        was_discover_fee_charged? ? 0 : GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
       else
-        fixed_processor_fee_cents
+        was_discover_fee_charged? ? 0 : GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
       end
 
       self.fee_cents = variable_fee_cents + fixed_fee_cents
@@ -3194,11 +3192,7 @@ class Purchase < ApplicationRecord
       elsif is_preorder_charge?
         preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) + PROCESSOR_FEE_PER_THOUSAND : 0)
       else
-        if Feature.active?(:merchant_of_record_fee, seller)
-          GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
-        else
-          link.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) : 0)
-        end
+        GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       end
     end
 
