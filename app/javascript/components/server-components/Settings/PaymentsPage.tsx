@@ -127,6 +127,8 @@ export type ComplianceInfo = {
   guardian_nationality?: string | null;
 };
 
+export type GuardianVerificationState = "not_required" | "requires_input" | "pending" | "verified";
+
 type Props = {
   settings_pages: SettingPage[];
   is_form_disabled: boolean;
@@ -143,7 +145,6 @@ type Props = {
     au_backtaxes_paid_date: string | null;
   };
   show_verification_section: boolean;
-  show_legal_guardian_verification_section: boolean;
   countries: Record<string, string>;
   ip_country_code: string | null;
   bank_account_details: BankAccountDetails;
@@ -178,8 +179,8 @@ type Props = {
   minimum_payout_threshold_cents: number;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
-  both_user_and_guardian_verified: boolean;
   user_under_18: boolean;
+  guardian_verification_state: GuardianVerificationState;
 };
 
 export type PayoutMethod = "bank" | "card" | "paypal" | "stripe";
@@ -868,31 +869,14 @@ const PaymentsPage = (props: Props) => {
       ) : null}
       <form ref={formRef}>
         <section>
-          {props.user_under_18 && props.show_legal_guardian_verification_section ? (
-            <LegalGuardianInformationRequiredBanner />
+          {props.user_under_18 && props.guardian_verification_state !== "not_required" ? (
+            <LegalGuardianInformationRequiredBanner status={props.guardian_verification_state} />
           ) : null}
           <header>
             <h2>Verification</h2>
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
-          ) : props.both_user_and_guardian_verified ? (
-            <div className="flex flex-col">
-              <div role="status" className="success">
-                Both the minor's and legal guardian's information has been verified.
-              </div>
-              <div className="mt-4 flex items-center">
-                <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
-                <span className="text-muted text-sm">
-                  Creator since{" "}
-                  {new Date(props.user.joined_at).toLocaleDateString(userAgentInfo.locale, {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-            </div>
           ) : (
             <div className="flex flex-col">
               <div role="status" className="success">
@@ -1130,7 +1114,7 @@ const PaymentsPage = (props: Props) => {
                 states={props.states}
                 errorFieldNames={errorFieldNames}
                 payoutMethod={selectedPayoutMethod}
-                isLegalGuardianInformationRequired={props.show_legal_guardian_verification_section}
+                isLegalGuardianInformationRequired={props.guardian_verification_state !== "not_required"}
               />
             ) : (
               <StripeConnectSection
@@ -1141,7 +1125,7 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {props.user_under_18 && props.show_legal_guardian_verification_section ? (
+        {props.user_under_18 && props.guardian_verification_state !== "not_required" ? (
           <section>
             <header>
               <h2>Legal guardian’s details</h2>
