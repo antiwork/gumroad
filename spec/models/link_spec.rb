@@ -5118,6 +5118,45 @@ describe Link, :vcr do
     end
   end
 
+  describe "reply to email validations" do
+    let(:product) { build(:product) }
+
+    context "when reply_to_email is nil" do
+      it "is valid" do
+        product.reply_to_email = nil
+        expect(product).to be_valid
+      end
+    end
+
+    context "when reply_to_email is blank" do
+      it "is valid" do
+        product.reply_to_email = ""
+        expect(product).not_to be_valid
+      end
+    end
+
+    context "when reply_to_email has a valid format" do
+      it "is valid" do
+        product.reply_to_email = "support@example.com"
+        expect(product).to be_valid
+      end
+    end
+
+    context "when reply_to_email has invalid format" do
+      it "is invalid without @ symbol" do
+        product.reply_to_email = "invalidemail"
+        expect(product).not_to be_valid
+        expect(product.errors[:reply_to_email]).to include("is invalid")
+      end
+
+      it "is invalid without domain" do
+        product.reply_to_email = "user@"
+        expect(product).not_to be_valid
+        expect(product.errors[:reply_to_email]).to include("is invalid")
+      end
+    end
+  end
+
   describe "#can_gift?" do
     let(:product) { build(:product) }
 

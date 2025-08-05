@@ -37,13 +37,11 @@ class CustomerMailer < ApplicationMailer
 
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
-    purchase = @chargeable.is_a?(Purchase) ? @chargeable : @chargeable.purchases.last
-    reply_to = purchase&.link&.support_email || @chargeable.seller.support_or_form_email
 
     mail(
       to: @chargeable.orderable.email,
       from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
-      reply_to: reply_to,
+      reply_to: @chargeable.reply_to_email,
       subject: @receipt_presenter.mail_subject,
       template_name: is_receipt_for_gift_receiver ? "gift_receiver_receipt" : "receipt",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller)
@@ -72,12 +70,11 @@ class CustomerMailer < ApplicationMailer
     else
       @product = Link.find(link_id)
     end
-    reply_to = @product.support_email
 
     mail(
       to: email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
-      reply_to: reply_to,
+      reply_to: @product.support_email,
       subject: "You pre-ordered #{@product.name}!",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
     )

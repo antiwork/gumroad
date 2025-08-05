@@ -495,15 +495,19 @@ class User < ApplicationRecord
   end
 
   def update_reply_to_emails!(reply_to_emails_data)
-    products.where.not(reply_to_email: nil).update_all(reply_to_email: nil)
+    reply_to_emails_data = (reply_to_emails_data || []).reject { |data| data[:email]&.strip&.blank? }
 
-    reply_to_emails_data&.each do |email_data|
-      email = email_data[:email]&.strip
-      next if email.blank?
+    ActiveRecord::Base.transaction do
+      all_product_external_ids = reply_to_emails_data.flat_map { |data| data[:product_ids] }.compact
+      products.where.not(reply_to_email: nil)
+              .where.not(id: all_product_external_ids.map { |id| ObfuscateIds.decrypt(id) })
+              .update_all(reply_to_email: nil)
 
-      raise ArgumentError, "Invalid email format: #{email}" if !email.match?(URI::MailTo::EMAIL_REGEXP)
+      reply_to_emails_data.each do |email_data|
+        raise ArgumentError, "Invalid email format: #{email_data[:email]}" if !email_data[:email].match?(URI::MailTo::EMAIL_REGEXP)
 
-      products.by_external_ids(email_data[:product_ids]).update_all(reply_to_email: email)
+        products.by_external_ids(email_data[:product_ids]).update_all(reply_to_email: email_data[:email])
+      end
     end
   end
 

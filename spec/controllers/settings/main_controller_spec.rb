@@ -368,6 +368,34 @@ describe Settings::MainController do
           expect(product1.reload.reply_to_email).to be_nil
           expect(product2.reload.reply_to_email).to be_nil
         end
+
+        it "clears existing reply to emails if provided email is blank" do
+          product1.update!(reply_to_email: "contact@example.com")
+          product2.update!(reply_to_email: "support@example.com")
+
+          reply_to_emails_params = [
+            { email: "", product_ids: [product1.external_id, product2.external_id] }
+          ]
+          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(product1.reload.reply_to_email).to be_nil
+          expect(product2.reload.reply_to_email).to be_nil
+        end
+
+        it "returns error message if provided email is not valid" do
+          product1.update!(reply_to_email: "contact@example.com")
+
+          reply_to_emails_params = [
+            { email: "invalid_email", product_ids: [product2.external_id] }
+          ]
+          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["error_message"]).to eq("Invalid email format: invalid_email")
+          expect(product1.reload.reply_to_email).to eq("contact@example.com") # not changed, as the transaction has failed
+          expect(product2.reload.reply_to_email).to be_nil
+        end
       end
     end
   end

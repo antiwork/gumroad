@@ -919,6 +919,24 @@ describe CustomerMailer do
       expect(mailer[:from].value).to eq("#{charge.seller.name} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>")
       expect(mailer[:reply_to].value).to eq(charge.seller.email)
     end
+
+    context "when reply to email is set" do
+      let(:product) { create(:product, user: seller, name: "Product One", reply_to_email: "reply_to@example.com") }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", reply_to_email: "reply_to@example.com") }
+
+      it "uses correct reply to email" do
+        expect(mailer[:reply_to].value).to eq("reply_to@example.com")
+      end
+
+      context "when products have different reply to emails" do
+        let(:product) { create(:product, user: seller, name: "Product One", reply_to_email: "reply_to@example.com") }
+        let(:product_two) { create(:product, user: seller, name: "Product Two", reply_to_email: "support@example.com") }
+
+        it "uses seller's default email" do
+          expect(mailer[:reply_to].value).to eq(charge.seller.email)
+        end
+      end
+    end
   end
 
   describe ".abandoned_cart_preview" do

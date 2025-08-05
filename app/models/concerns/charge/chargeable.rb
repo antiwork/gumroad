@@ -72,6 +72,14 @@ module Charge::Chargeable
     is_a?(Charge) ? order : self
   end
 
+  def reply_to_email
+    return link.reply_to_email || seller.support_or_form_email if is_a?(Purchase)
+
+    reply_to_emails = successful_purchases.includes(:link).map(&:link).uniq.filter_map(&:reply_to_email).uniq
+
+    reply_to_emails.size == 1 ? reply_to_emails.first : seller.support_or_form_email
+  end
+
   def unbundled_purchases
     @_unbundled_purchases ||=
       successful_purchases.map do |purchase|
