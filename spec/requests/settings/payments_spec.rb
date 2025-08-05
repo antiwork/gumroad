@@ -215,6 +215,25 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
       expect(bank_account.account_number_last_four).to eq("8210")
     end
 
+    it "allows the creator to update other info when they have a debit card connected" do
+      creator = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: creator, phone: "+15022541982")
+      create(:card_bank_account, user: creator)
+      expect(creator.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
+
+      login_as creator
+      visit settings_payments_path
+      expect(page).to have_select("Schedule", selected: "Weekly")
+      select "Monthly", from: "Schedule"
+
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(creator.reload.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
+      refresh
+      expect(page).to have_select("Schedule", selected: "Monthly")
+    end
+
     it "allows the creator to connect their Stripe account if they are from Brazil" do
       visit settings_payments_path
       expect(page).not_to have_field("Stripe")
