@@ -339,6 +339,12 @@ class Subscription < ApplicationRecord
   # Returns the new `Purchase` object
   def charge!(override_params: {}, from_failed_charge_email: false, off_session: true)
     purchase = build_purchase(override_params:, from_failed_charge_email:)
+    if customer&.business_vat_id.present? && VatValidationService.new(customer.business_vat_id).process
+      purchase.tax_cents = 0
+      purchase.gumroad_tax_cents = 0
+      # Optional: Mark subscription as VAT exempt for clarity
+    end
+
     process_purchase!(purchase, from_failed_charge_email, off_session:)
   end
 

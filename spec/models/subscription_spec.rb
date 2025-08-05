@@ -1395,6 +1395,51 @@ describe Subscription, :vcr do
         expect(purchase.reload.should_exclude_product_review?).to eq false
       end
     end
+    describe "VAT handling" do
+      before do
+        # Stub all Stripe interactions
+        allow(Stripe::PaymentMethod).to receive(:create).and_return(double(id: "pm_mocked"))
+        allow(Stripe::Customer).to receive(:create).and_return(double(id: "cus_mocked"))
+        allow(Stripe::PaymentIntent).to receive(:create).and_return(double(id: "pi_mocked", status: "succeeded"))
+
+        @product = create(:subscription_product, user: create(:user), price_cents: 1000)
+        @subscription = create(:subscription, user: create(:user), credit_card: build_stubbed(:credit_card), link: @product)
+        @purchase = create(:purchase, link: @product, is_original_subscription_purchase: true,
+                                      subscription: @subscription, purchase_state: "successful")
+      end
+
+      it "skips VAT when customer has a valid VAT ID from the start" do
+        @subscription.user.update!(business_vat_id: "IE6388047V")
+        allow(VatValidationService).to receive(:new).and_return(double(process: true))
+
+        purchase = @subscription.charge!
+
+        expect(purchase.gumroad_tax_cents).to eq(0)
+        expect(purchase.tax_cents).to eq(0)
+      end
+
+      it "applies VAT if VAT ID validation fails" do
+        @subscription.user.update!(business_vat_id: "INVALID123")
+        allow(VatValidationService).to receive(:new).and_return(double(process: false))
+
+        purchase = @subscription.charge!
+
+        expect(purchase.gumroad_tax_cents).to be > 0
+      end
+
+      it "skips VAT on subsequent charges when VAT ID added later" do
+        allow(VatValidationService).to receive(:new).and_return(double(process: false))
+        @subscription.charge! # First charge applies VAT
+
+        @subscription.user.update!(business_vat_id: "IE6388047V")
+        allow(VatValidationService).to receive(:new).and_return(double(process: true))
+
+        purchase = @subscription.charge!
+
+        expect(purchase.gumroad_tax_cents).to eq(0)
+        expect(purchase.tax_cents).to eq(0)
+      end
+    end
   end
 
   describe "#schedule_charge", :freeze_time do
