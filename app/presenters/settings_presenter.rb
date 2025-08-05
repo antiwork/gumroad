@@ -210,8 +210,6 @@ class SettingsPresenter
       bank_account_details:,
       paypal_address: seller.payment_address,
       show_verification_section: seller.user_compliance_info_requests.requested.present? && seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
-      show_legal_guardian_verification_section: seller.guardian_compliance_info_requests.requested.present? && seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
-      both_user_and_guardian_verified: seller.stripe_account.present? && seller.user_compliance_info_requests.requested.blank? && seller.guardian_compliance_info_requests.provided.present? && seller.guardian_compliance_info_requests.requested.blank?,
       paypal_connect:,
       fee_info: fee_info(user_compliance_info),
       user: user_details(user_compliance_info),
@@ -232,6 +230,7 @@ class SettingsPresenter
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
       user_under_18: user_under_18?(user_compliance_info),
+      guardian_verification_state: guardian_verification_state,
     }
   end
 
@@ -452,5 +451,39 @@ class SettingsPresenter
       return false unless user_compliance_info&.birthday
 
       user_compliance_info.birthday > 18.years.ago.to_date
+    end
+
+    def guardian_verification_state
+      return "not_required" unless seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?
+
+      guardian_requests = seller.guardian_compliance_info_requests
+      user_compliance_info = seller.alive_user_compliance_info
+
+      # Check if user has submitted all required guardian information
+      has_submitted_guardian_info = user_compliance_info.present? && (
+        user_compliance_info.guardian_first_name.present? &&
+        user_compliance_info.guardian_last_name.present? &&
+        user_compliance_info.guardian_email.present? &&
+        user_compliance_info.guardian_phone.present? &&
+        user_compliance_info.guardian_street_address.present? &&
+        user_compliance_info.guardian_city.present? &&
+        user_compliance_info.guardian_state.present? &&
+        user_compliance_info.guardian_zip_code.present? &&
+        user_compliance_info.guardian_country.present? &&
+        user_compliance_info.guardian_dob_day.present? &&
+        user_compliance_info.guardian_dob_month.present? &&
+        user_compliance_info.guardian_dob_year.present? &&
+        user_compliance_info.guardian_individual_tax_id.present?
+      )
+
+      if guardian_requests.empty? || !has_submitted_guardian_info
+        "requires_input"
+      elsif guardian_requests.requested.present?
+        "pending"
+      elsif guardian_requests.provided.present? && guardian_requests.requested.blank?
+        "verified"
+      else
+        "requires_input"
+      end
     end
 end
