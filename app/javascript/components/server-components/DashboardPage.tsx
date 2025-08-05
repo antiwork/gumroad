@@ -19,6 +19,7 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -59,6 +60,7 @@ type Props = {
   };
   activity_items: ActivityItem[];
   stripe_verification_message?: string | null;
+  tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
 };
 type TableProps = { sales: ProductRow[] };
@@ -296,6 +298,7 @@ export const DashboardPage = ({
   activity_items,
   balances,
   stripe_verification_message,
+  tax_forms,
   show_1099_download_notice,
 }: Props) => {
   const loggedInUser = useLoggedInUser();
@@ -318,6 +321,9 @@ export const DashboardPage = ({
           {name ? `Hey, ${name}! ` : null}
           {has_sale ? "Welcome back to Gumroad." : "Welcome to Gumroad."}
         </h1>
+        <div className="actions flex gap-2">
+          {Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+        </div>
       </header>
       <div className="main-app-content" style={{ display: "grid", gap: "var(--spacer-7)" }}>
         {stripe_verification_message ? (

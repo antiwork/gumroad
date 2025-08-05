@@ -286,5 +286,49 @@ describe CreatorHomePresenter do
         end
       end
     end
+
+    describe "tax forms" do
+      download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+
+      before do
+        seller.update!(created_at: 2.years.ago)
+        allow(seller).to receive(:eligible_for_1099?).and_return(true)
+        allow(seller).to receive(:tax_form_1099_download_url).and_return(download_url)
+      end
+
+      it "includes tax forms since the seller's account was created" do
+        expect(presenter.creator_home_props[:tax_forms]).to eq(
+          {
+            2022 => download_url,
+            2021 => download_url,
+            2020 => download_url,
+          }
+        )
+      end
+
+      it "only includes years where the seller is eligible for a 1099" do
+        allow(seller).to receive(:eligible_for_1099?) do |year|
+          [2022, 2021].include?(year)
+        end
+
+        expect(presenter.creator_home_props[:tax_forms]).to eq(
+          {
+            2022 => download_url,
+            2021 => download_url,
+          })
+      end
+
+      it "only includes years that have downloadable tax forms" do
+        allow(seller).to receive(:tax_form_1099_download_url) do |year:|
+          year == 2021 ? download_url : nil
+        end
+
+        expect(presenter.creator_home_props[:tax_forms]).to eq(
+          {
+            2021 => download_url,
+          }
+        )
+      end
+    end
   end
 end

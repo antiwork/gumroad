@@ -65,7 +65,10 @@ class CreatorHomePresenter
       end
     end
 
-    previous_year = Time.current.prev_year.year
+    tax_forms = (Time.current.year.downto(seller.created_at.year)).each_with_object({}) do |year, hash|
+      url = seller.eligible_for_1099?(year) ? seller.tax_form_1099_download_url(year: year) : nil
+      hash[year] = url if url.present?
+    end
 
     {
       name: seller.alive_user_compliance_info&.first_name || "",
@@ -80,7 +83,8 @@ class CreatorHomePresenter
       sales:,
       activity_items:,
       stripe_verification_message:,
-      show_1099_download_notice: seller.eligible_for_1099?(previous_year) && seller.tax_form_1099_download_url(year: previous_year).present?,
+      tax_forms:,
+      show_1099_download_notice: tax_forms[Time.current.prev_year.year].present?
     }
   end
 
