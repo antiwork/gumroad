@@ -37,7 +37,6 @@ class CustomerMailer < ApplicationMailer
 
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
-
     mail(
       to: @chargeable.orderable.email,
       from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
@@ -70,7 +69,6 @@ class CustomerMailer < ApplicationMailer
     else
       @product = Link.find(link_id)
     end
-
     mail(
       to: email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),

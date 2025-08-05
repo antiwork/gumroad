@@ -5129,20 +5129,20 @@ describe Link, :vcr do
     end
 
     context "when reply_to_email is blank" do
-      it "is valid" do
+      it "is invalid" do
         product.reply_to_email = ""
         expect(product).not_to be_valid
       end
     end
 
-    context "when reply_to_email has a valid format" do
+    context "when reply_to_email has a valid email format" do
       it "is valid" do
         product.reply_to_email = "support@example.com"
         expect(product).to be_valid
       end
     end
 
-    context "when reply_to_email has invalid format" do
+    context "when reply_to_email has an invalid email format" do
       it "is invalid without @ symbol" do
         product.reply_to_email = "invalidemail"
         expect(product).not_to be_valid
