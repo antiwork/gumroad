@@ -11,7 +11,7 @@ export const LegalGuardianInformationRequiredBanner = ({ status }: Props) => {
     case "requires_input":
       return (
         <div role="status" className="warning">
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 pb-3">
             <p>
               <strong>You're under 18</strong>, so we need your <strong>legal guardian's details</strong> to enable
               payments.
