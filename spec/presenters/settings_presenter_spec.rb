@@ -437,6 +437,11 @@ describe SettingsPresenter do
         paypal_connect: {
           allow_paypal_connect: false,
           unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
+          restricted_countries_with_requirements: %w[Morocco Egypt Algeria],
+          earnings_requirement_met: false,
+          payout_requirement_met: false,
+          compliance_requirement_met: false,
+          minimum_earnings_formatted: "$100 USD",
           email: nil,
           charge_processor_merchant_id: nil,
           charge_processor_verified: false,

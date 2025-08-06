@@ -76,20 +76,22 @@ const PayPalConnectSection = ({
                 </a>
               </div>
             ) : (
-              <>
-                {paypalConnect.restricted_countries_with_requirements.some(country => 
-                  paypalConnect.unsupported_countries.includes(country)
-                ) && (
-                  <div role="alert" className="warning">
-                    <p>To connect PayPal from your country, you must meet the following requirements:</p>
-                    <ul>
-                      {!paypalConnect.compliance_requirement_met && <li>Your account must be marked as compliant</li>}
-                      {!paypalConnect.earnings_requirement_met && <li>You must have earned at least {paypalConnect.minimum_earnings_formatted}</li>}
-                      {!paypalConnect.payout_requirement_met && <li>You must have received at least one successful payout</li>}
-                    </ul>
-                  </div>
-                )}
-              </>
+              paypalConnect.restricted_countries_with_requirements.some((country) =>
+                paypalConnect.unsupported_countries.includes(country),
+              ) && (
+                <div role="alert" className="warning">
+                  <p>To connect PayPal from your country, you must meet the following requirements:</p>
+                  <ul>
+                    {!paypalConnect.compliance_requirement_met && <li>Your account must be marked as compliant</li>}
+                    {!paypalConnect.earnings_requirement_met && (
+                      <li>You must have earned at least {paypalConnect.minimum_earnings_formatted}</li>
+                    )}
+                    {!paypalConnect.payout_requirement_met && (
+                      <li>You must have received at least one successful payout</li>
+                    )}
+                  </ul>
+                </div>
+              )
             )}
           </>
         ) : paypalConnect.charge_processor_verified ? (
@@ -150,20 +152,22 @@ const PayPalConnectSection = ({
                 </div>
               </>
             ) : (
-              <>
-                {paypalConnect.restricted_countries_with_requirements.some(country => 
-                  paypalConnect.unsupported_countries.includes(country)
-                ) && (
-                  <div role="alert" className="warning">
-                    <p>To connect PayPal from your country, you must meet the following requirements:</p>
-                    <ul>
-                      {!paypalConnect.compliance_requirement_met && <li>Your account must be marked as compliant</li>}
-                      {!paypalConnect.earnings_requirement_met && <li>You must have earned at least {paypalConnect.minimum_earnings_formatted}</li>}
-                      {!paypalConnect.payout_requirement_met && <li>You must have received at least one successful payout</li>}
-                    </ul>
-                  </div>
-                )}
-              </>
+              paypalConnect.restricted_countries_with_requirements.some((country) =>
+                paypalConnect.unsupported_countries.includes(country),
+              ) && (
+                <div role="alert" className="warning">
+                  <p>To connect PayPal from your country, you must meet the following requirements:</p>
+                  <ul>
+                    {!paypalConnect.compliance_requirement_met && <li>Your account must be marked as compliant</li>}
+                    {!paypalConnect.earnings_requirement_met && (
+                      <li>You must have earned at least {paypalConnect.minimum_earnings_formatted}</li>
+                    )}
+                    {!paypalConnect.payout_requirement_met && (
+                      <li>You must have received at least one successful payout</li>
+                    )}
+                  </ul>
+                </div>
+              )
             )}
           </>
         )}
