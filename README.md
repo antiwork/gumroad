@@ -115,6 +115,11 @@ We use [pdftk](https://www.pdflabs.com/tools/pdftk-server/) to stamp PDF files w
   - **Note:** pdftk may be blocked by Apple's firewall. If this happens, go to Settings > Privacy & Security and click "Open Anyways" to allow the installation.
 - For Linux: `sudo apt-get install pdftk`
 
+#### wkhtmltopdf
+
+While generating invoices, to convert HTML to PDF, PDFKit expects [wkhtmltopdf](https://wkhtmltopdf.org/) to be installed on your system. [Download](https://wkhtmltopdf.org/downloads.html) and install the version 0.12.6 for your platform. 
+- **Note** similar to pdftk, this may also be blocked by Apple's firewall on MacOS. Follow a similar process as above.
+  
 ### Installation
 
 #### Bundler and gems
