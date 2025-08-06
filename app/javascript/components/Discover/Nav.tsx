@@ -85,18 +85,20 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], forceDomain: bo
       label: "All",
       href: forceDomain ? Routes.discover_url({ host: discoverDomain }) : Routes.discover_path(),
     },
-    ...wholeTaxonomy.map((taxonomy): MenuItem => {
-      const root = getRootTaxonomy(taxonomy.slug);
-      return {
-        key: taxonomy.key,
-        label: taxonomy.label,
-        href: generateHref(taxonomy),
-        ...(taxonomy.parent_key
-          ? { parentKey: taxonomy.parent_key }
-          : root
-            ? { css: getRootTaxonomyCss(root), image: getRootTaxonomyImage(root) }
-            : {}),
-      };
-    }),
+    ...wholeTaxonomy
+      .filter((taxonomy) => taxonomy.label !== null)
+      .map((taxonomy): MenuItem => {
+        const root = getRootTaxonomy(taxonomy.slug);
+        return {
+          key: taxonomy.key,
+          label: taxonomy.label as string,
+          href: generateHref(taxonomy),
+          ...(taxonomy.parent_key
+            ? { parentKey: taxonomy.parent_key }
+            : root
+              ? { css: getRootTaxonomyCss(root), image: getRootTaxonomyImage(root) }
+              : {}),
+        };
+      }),
   ];
 };

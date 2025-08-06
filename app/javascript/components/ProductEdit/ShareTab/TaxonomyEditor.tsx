@@ -16,12 +16,18 @@ export const TaxonomyEditor = ({
   const uid = React.useId();
   const options = React.useMemo(() => {
     const taxonomyMap = new Map(taxonomies.map((item) => [item.key, item]));
-    return taxonomies.map((taxonomy) => {
-      let label = taxonomy.label;
-      let current: Taxonomy | undefined = taxonomy;
-      while ((current = taxonomyMap.get(current.parent_key ?? ""))) label = `${current.label} > ${label}`;
-      return { id: taxonomy.key, label };
-    });
+    return taxonomies
+      .filter((taxonomy) => taxonomy.label !== null)
+      .map((taxonomy) => {
+        let label = taxonomy.label as string;
+        let current: Taxonomy | undefined = taxonomy;
+        while ((current = taxonomyMap.get(current.parent_key ?? ""))) {
+          if (current.label) {
+            label = `${current.label} > ${label}`;
+          }
+        }
+        return { id: taxonomy.key, label };
+      });
   }, [taxonomies]);
 
   return (
