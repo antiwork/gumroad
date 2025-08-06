@@ -91,7 +91,7 @@ class PaypalController < ApplicationController
     end
 
     def validate_paypal_connect_eligible
-      return if current_seller.eligible_for_paypal_connect?
+      return if current_seller.eligible_for_paypal_payout?
 
       redirect_to settings_payments_path, notice: "PayPal Connect requires $100 in earnings and one completed payout for users in your country."
     end

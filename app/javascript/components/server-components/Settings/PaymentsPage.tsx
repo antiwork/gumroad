@@ -121,6 +121,7 @@ type Props = {
   paypal_address: string | null;
   stripe_connect: StripeConnect;
   paypal_connect: PayPalConnect;
+  paypal_payout_method_available: boolean;
   fee_info: {
     card_fee_info_text: string;
     paypal_fee_info_text: string;
@@ -1047,9 +1048,11 @@ const PaymentsPage = (props: Props) => {
                 feeInfoText={props.fee_info.paypal_fee_info_text}
                 updatePayoutMethod={updatePayoutMethod}
                 errorFieldNames={errorFieldNames}
+                isEligibleForPayPalPayout={props.paypal_payout_method_available}
               />
             ) : null}
-            {selectedPayoutMethod !== "stripe" ? (
+            {selectedPayoutMethod !== "stripe" &&
+            (selectedPayoutMethod !== "paypal" || props.paypal_payout_method_available) ? (
               <AccountDetailsSection
                 user={props.user}
                 complianceInfo={complianceInfo}
@@ -1064,16 +1067,16 @@ const PaymentsPage = (props: Props) => {
                 errorFieldNames={errorFieldNames}
                 payoutMethod={selectedPayoutMethod}
               />
-            ) : (
+            ) : selectedPayoutMethod === "stripe" ? (
               <StripeConnectSection
                 stripeConnect={props.stripe_connect}
                 isFormDisabled={props.is_form_disabled}
                 connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
               />
-            )}
+            ) : null}
           </section>
         </section>
-        {props.paypal_connect.show_paypal_connect ? (
+        {props.paypal_connect.show_paypal_connect && props.paypal_payout_method_available ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}
             isFormDisabled={props.is_form_disabled}

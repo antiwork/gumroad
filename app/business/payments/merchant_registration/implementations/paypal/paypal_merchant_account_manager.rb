@@ -41,7 +41,7 @@ class PaypalMerchantAccountManager
                               send_email_confirmation_notification: true,
                               create_new: true)
     return "There was an error connecting your PayPal account with Gumroad." if user.blank? || paypal_merchant_id.blank?
-    return "PayPal Connect requires $100 in earnings and one completed payout for users in your country." unless user.eligible_for_paypal_connect?
+    return "PayPal Connect requires $100 in earnings and one completed payout for users in your country." unless user.eligible_for_paypal_payout?
 
     paypal_merchant_accounts = user.merchant_accounts
                                    .where(charge_processor_id: PaypalChargeProcessor.charge_processor_id)

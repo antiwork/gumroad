@@ -3323,7 +3323,7 @@ describe User, :vcr do
     end
   end
 
-  describe "#eligible_for_paypal_connect?" do
+  describe "#eligible_for_paypal_payout?" do
     let(:user) { create(:user) }
 
     context "when user is from Morocco" do
@@ -3334,18 +3334,18 @@ describe User, :vcr do
       it "returns true when user has made minimum required sales and has completed payouts" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
+        expect(user.eligible_for_paypal_payout?).to eq(true)
       end
 
       it "returns false when user has not made minimum required sales" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
+        expect(user.eligible_for_paypal_payout?).to eq(false)
       end
 
       it "returns false when user has not completed payouts" do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
+        expect(user.eligible_for_paypal_payout?).to eq(false)
       end
     end
 
@@ -3357,18 +3357,18 @@ describe User, :vcr do
       it "returns true when user has made minimum required sales and has completed payouts" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
+        expect(user.eligible_for_paypal_payout?).to eq(true)
       end
 
       it "returns false when user has not made minimum required sales" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
+        expect(user.eligible_for_paypal_payout?).to eq(false)
       end
 
       it "returns false when user has not completed payouts" do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
+        expect(user.eligible_for_paypal_payout?).to eq(false)
       end
     end
 
@@ -3380,18 +3380,18 @@ describe User, :vcr do
       it "returns true when user has made minimum required sales and has completed payouts" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
+        expect(user.eligible_for_paypal_payout?).to eq(true)
       end
 
       it "returns false when user has not made minimum required sales" do
         create(:payment_completed, user:)
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
+        expect(user.eligible_for_paypal_payout?).to eq(false)
       end
 
       it "returns false when user has not completed payouts" do
         allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
+        expect(user.eligible_for_paypal_payout?).to eq(false)
       end
     end
 
@@ -3402,7 +3402,7 @@ describe User, :vcr do
 
       it "returns true regardless of sales amount or completed payouts" do
         allow(user).to receive(:sales_cents_total).and_return(0)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
+        expect(user.eligible_for_paypal_payout?).to eq(true)
       end
     end
   end

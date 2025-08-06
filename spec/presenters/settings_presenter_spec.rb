@@ -437,8 +437,6 @@ describe SettingsPresenter do
         paypal_connect: {
           allow_paypal_connect: false,
           show_paypal_connect: false,
-          eligible_for_paypal_connect: true,
-          paypal_connect_restriction_message: nil,
           unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
           email: nil,
           charge_processor_merchant_id: nil,
@@ -659,8 +657,6 @@ describe SettingsPresenter do
         paypal_connect_details = @base_us_props[:paypal_connect].merge({
                                                                          allow_paypal_connect: true,
                                                                          show_paypal_connect: true,
-                                                                         eligible_for_paypal_connect: true,
-                                                                         paypal_connect_restriction_message: nil,
                                                                          email: paypal_connect_account.paypal_account_details["primary_email"],
                                                                          charge_processor_merchant_id: paypal_connect_account.charge_processor_merchant_id,
                                                                          charge_processor_verified: true,
