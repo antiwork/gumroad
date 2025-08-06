@@ -115,6 +115,66 @@ describe Charge::Chargeable do
     end
   end
 
+  describe "#reply_to_email" do
+    context "when purchase" do
+      let(:chargeable) { create(:purchase, link: product) }
+      context "when link's reply to email is set" do
+        let(:product) { create(:product, reply_to_email: "support@example.com") }
+
+        it "returns reply_to_email of the link" do
+          expect(chargeable.reply_to_email).to eq("support@example.com")
+        end
+      end
+
+      context "when link's reply to email is not set" do
+        let(:product) { create(:product, reply_to_email: nil) }
+        it "returns seller.support_or_form_email" do
+          allow(chargeable.seller).to receive(:support_or_form_email).and_return("seller@example.com")
+
+          expect(chargeable.reply_to_email).to eq("seller@example.com")
+        end
+      end
+    end
+
+    context "when charge" do
+      let(:chargeable) { create(:charge) }
+
+      context "when all purchases links have the same reply to email" do
+        let(:product1) { create(:product, reply_to_email: "support@example.com") }
+        let(:product2) { create(:product, reply_to_email: "support@example.com") }
+        let(:purchase1) { create(:purchase, link: product1) }
+        let(:purchase2) { create(:purchase, link: product2) }
+
+        before do
+          chargeable.purchases << purchase1
+          chargeable.purchases << purchase2
+        end
+
+        it "returns the common reply to email" do
+          expect(chargeable.reply_to_email).to eq("support@example.com")
+        end
+      end
+
+      context "when purchases links have different reply to emails" do
+        let(:product1) { create(:product, reply_to_email: "support@example.com") }
+        let(:product2) { create(:product, reply_to_email: "sales@example.com") }
+        let(:purchase1) { create(:purchase, link: product1) }
+        let(:purchase2) { create(:purchase, link: product2) }
+
+        before do
+          chargeable.purchases << purchase1
+          chargeable.purchases << purchase2
+        end
+
+        it "returns seller's support email" do
+          allow(chargeable.seller).to receive(:support_or_form_email).and_return("seller@example.com")
+
+          expect(chargeable.reply_to_email).to eq("seller@example.com")
+        end
+      end
+    end
+  end
+
   describe "#charged_purchases" do
     describe "for a Charge" do
       it "returns an array containing all non-free purchases included in the Charge" do
