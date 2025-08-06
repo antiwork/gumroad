@@ -26,7 +26,7 @@ namespace :admin do
           post :sync
         end
       end
-      resources :purchases, only: :index
+
     end
     resources :service_charges, only: :index
     member do

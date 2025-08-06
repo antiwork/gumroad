@@ -2,6 +2,11 @@
 
 <div class="paragraphs">
   <%= render("admin/users/user", user: user, is_affiliate_user: is_affiliate_user) %>
+
+  <% unless is_affiliate_user %>
+    <%= render("admin/users/purchase_history", user: user) %>
+  <% end %>
+
   <% if products.none? %>
     <div class="info" role="status"><%= is_affiliate_user ? "No affiliated products." : "No products created." %></div>
   <% end %>
