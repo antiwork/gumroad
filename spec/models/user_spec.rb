@@ -403,6 +403,66 @@ describe User, :vcr do
     end
   end
 
+  describe "#reply_to_emails" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user: user, reply_to_email: "support@example.com") }
+    let!(:product2) { create(:product, user: user, reply_to_email: "support@example.com") }
+    let!(:product3) { create(:product, user: user, reply_to_email: "help@example.com") }
+    let!(:product4) { create(:product, user: user, reply_to_email: nil) }
+
+    it "returns the user's product reply to emails" do
+      result = user.reply_to_emails
+
+      expect(result).to match_array([{ email: "support@example.com", product_ids: [product1.external_id, product2.external_id] }, { email: "help@example.com", product_ids: [product3.external_id] }])
+    end
+  end
+
+  describe "#update_reply_to_emails!" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user: user, reply_to_email: "support@example.com") }
+    let!(:product2) { create(:product, user: user, reply_to_email: "support@example.com") }
+    let!(:product3) { create(:product, user: user, reply_to_email: "help@example.com") }
+
+    it "updates products reply to emails" do
+      user.update_reply_to_emails!([
+                                     { email: "new_email@example.com", product_ids: [product1.external_id, product2.external_id] }
+                                   ])
+
+      expect(product1.reload.reply_to_email).to eq("new_email@example.com")
+      expect(product2.reload.reply_to_email).to eq("new_email@example.com")
+      expect(product3.reload.reply_to_email).to be_nil
+    end
+
+    context "when provided email is blank" do
+      it "sets reply_to_email to nil for the specified products" do
+        user.update_reply_to_emails!([
+                                       { email: "", product_ids: [product1.external_id, product2.external_id] },
+                                       { email: "admin@example.com", product_ids: [product3.external_id] }
+                                     ])
+
+        expect(product1.reload.reply_to_email).to be_nil
+        expect(product2.reload.reply_to_email).to be_nil
+        expect(product3.reload.reply_to_email).to eq("admin@example.com")
+      end
+    end
+
+    context "when empty hash is provided" do
+      it "clears all user emails" do
+        expect do
+          user.update_reply_to_emails!({})
+        end.to change { [product1.reload.reply_to_email, product2.reload.reply_to_email, product3.reload.reply_to_email] }.to([nil, nil, nil])
+      end
+    end
+
+    context "when nil is provided" do
+      it "clears all user emails" do
+        expect do
+          user.update_reply_to_emails!(nil)
+        end.to change { [product1.reload.reply_to_email, product2.reload.reply_to_email, product3.reload.reply_to_email] }.to([nil, nil, nil])
+      end
+    end
+  end
+
   describe "#has_valid_payout_info?" do
     let(:user) { create(:user) }
 
