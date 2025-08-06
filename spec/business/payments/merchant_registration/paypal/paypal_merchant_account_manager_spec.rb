@@ -240,5 +240,55 @@ describe PaypalMerchantAccountManager, :vcr do
       expect(old_records.count).to eq(0)
       expect(creator.merchant_account("paypal").charge_processor_merchant_id).to eq(new_paypal_merchant_id)
     end
+
+    context "when user is not eligible for PayPal Connect" do
+      it "returns eligibility error for users from Morocco without sufficient earnings" do
+        creator = create(:user)
+        create(:user_compliance_info_empty, user: creator, country: "Morocco")
+        allow(creator).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+        expect(result).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+      end
+
+      it "returns eligibility error for users from Egypt without sufficient earnings" do
+        creator = create(:user)
+        create(:user_compliance_info_empty, user: creator, country: "Egypt")
+        allow(creator).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+        expect(result).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+      end
+
+      it "returns eligibility error for users from Algeria without sufficient earnings" do
+        creator = create(:user)
+        create(:user_compliance_info_empty, user: creator, country: "Algeria")
+        allow(creator).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+        expect(result).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+      end
+
+      it "allows connection for eligible users from restricted countries" do
+        creator = create(:user)
+        create(:user_compliance_info_empty, user: creator, country: "Morocco")
+        create(:payment_completed, user: creator)
+        allow(creator).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+
+        expect do
+          subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+        end.to change { creator.merchant_accounts.charge_processor_verified.paypal.count }.by(1)
+      end
+
+      it "allows connection for users from non-restricted countries regardless of earnings" do
+        creator = create(:user)
+        create(:user_compliance_info_empty, user: creator, country: "United States")
+        allow(creator).to receive(:sales_cents_total).and_return(0)
+
+        expect do
+          subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+        end.to change { creator.merchant_accounts.charge_processor_verified.paypal.count }.by(1)
+      end
+    end
   end
 end

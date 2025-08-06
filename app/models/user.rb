@@ -897,6 +897,13 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
+  def eligible_for_paypal_connect?
+    return true unless signed_up_from_morocco? || signed_up_from_egypt? || signed_up_from_algeria?
+    return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
+
+    has_completed_payouts?
+  end
+
   LAST_ALLOWED_TIME_FOR_PRODUCT_LEVEL_REFUND_POLICY = Time.new(2025, 3, 31).end_of_day
 
   def account_level_refund_policy_delayed?

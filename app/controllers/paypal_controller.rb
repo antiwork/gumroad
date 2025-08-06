@@ -3,6 +3,7 @@
 class PaypalController < ApplicationController
   before_action :authenticate_user!, only: [:connect, :disconnect]
   before_action :validate_paypal_connect_enabled, only: %i[connect]
+  before_action :validate_paypal_connect_eligible, only: %i[connect]
   before_action :validate_paypal_disconnect_allowed, only: %i[disconnect]
   after_action :verify_authorized, only: [:connect, :disconnect]
 
@@ -87,6 +88,12 @@ class PaypalController < ApplicationController
       return if current_seller.paypal_connect_enabled?
 
       redirect_to settings_payments_path, notice: "Your PayPal account could not be connected because this PayPal integration is not supported in your country."
+    end
+
+    def validate_paypal_connect_eligible
+      return if current_seller.eligible_for_paypal_connect?
+
+      redirect_to settings_payments_path, notice: "PayPal Connect requires $100 in earnings and one completed payout for users in your country."
     end
 
     def validate_paypal_disconnect_allowed

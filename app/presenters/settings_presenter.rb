@@ -376,7 +376,10 @@ class SettingsPresenter
       end
 
       {
-        allow_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        allow_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled? && seller.eligible_for_paypal_connect?,
+        show_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        eligible_for_paypal_connect: seller.eligible_for_paypal_connect?,
+        paypal_connect_restriction_message: seller.eligible_for_paypal_connect? ? nil : "PayPal Connect requires $100 in earnings and one completed payout for users in your country.",
         unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
         email: paypal_merchant_account_email,
         charge_processor_merchant_id: paypal_merchant_account&.charge_processor_merchant_id,

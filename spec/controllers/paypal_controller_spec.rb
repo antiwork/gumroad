@@ -120,6 +120,58 @@ describe PaypalController, :vcr do
         expect(flash[:notice]).to eq("Invalid request. Please try again later.")
       end
     end
+
+    context "when user is from Morocco and not eligible" do
+      before do
+        create(:user_compliance_info_empty, user: @user, country: "Morocco")
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+      end
+
+      it "redirects to settings payments path with eligibility error" do
+        get :connect
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+      end
+    end
+
+    context "when user is from Egypt and not eligible" do
+      before do
+        create(:user_compliance_info_empty, user: @user, country: "Egypt")
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+      end
+
+      it "redirects to settings payments path with eligibility error" do
+        get :connect
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+      end
+    end
+
+    context "when user is from Algeria and not eligible" do
+      before do
+        create(:user_compliance_info_empty, user: @user, country: "Algeria")
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+      end
+
+      it "redirects to settings payments path with eligibility error" do
+        get :connect
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+      end
+    end
+
+    context "when user is from Morocco and eligible" do
+      before do
+        create(:user_compliance_info_empty, user: @user, country: "Morocco")
+        create(:payment_completed, user: @user)
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      end
+
+      it "allows connection and redirects to paypal url" do
+        get :connect
+        expect(response).to redirect_to(partner_referral_success_response[:redirect_url])
+      end
+    end
   end
 
   describe "#disconnect" do

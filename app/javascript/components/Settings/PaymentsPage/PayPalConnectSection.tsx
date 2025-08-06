@@ -15,6 +15,9 @@ export type PayPalConnect = {
   needs_email_confirmation: boolean;
   unsupported_countries: string[];
   allow_paypal_connect: boolean;
+  show_paypal_connect: boolean;
+  eligible_for_paypal_connect: boolean;
+  paypal_connect_restriction_message: string | null;
   paypal_disconnect_allowed: boolean;
 };
 
@@ -58,17 +61,25 @@ const PayPalConnectSection = ({
               supported in every country except {paypalConnect.unsupported_countries.join(", ")}.
             </p>
             <p>{connectAccountFeeInfoText}</p>
-            {paypalConnect.allow_paypal_connect ? (
-              <div>
-                <a
-                  className="button button-paypal paypal-connect"
-                  href={Routes.connect_paypal_path({
-                    referer: Routes.settings_payments_path(),
-                  })}
-                  inert={isFormDisabled}
-                >
-                  Connect with Paypal
-                </a>
+            <div>
+              <a
+                className={`button button-paypal paypal-connect ${!paypalConnect.allow_paypal_connect ? "button-disabled" : ""}`}
+                href={
+                  paypalConnect.allow_paypal_connect
+                    ? Routes.connect_paypal_path({
+                        referer: Routes.settings_payments_path(),
+                      })
+                    : undefined
+                }
+                inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                style={!paypalConnect.allow_paypal_connect ? { pointerEvents: "none", opacity: 0.5 } : undefined}
+              >
+                Connect with Paypal
+              </a>
+            </div>
+            {paypalConnect.paypal_connect_restriction_message ? (
+              <div role="alert" className="warning">
+                {paypalConnect.paypal_connect_restriction_message}
               </div>
             ) : null}
           </>
