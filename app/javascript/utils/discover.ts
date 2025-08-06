@@ -4,7 +4,7 @@ import { SearchRequest } from "$app/data/search";
 
 const categoryImages = require.context("$assets/images/discover/");
 
-export type Taxonomy = { key: string; slug: string; label: string; parent_key: string | null };
+export type Taxonomy = { key: string; slug: string; label: string | null; parent_key: string | null };
 
 export function getRootTaxonomyCss(slug: RootTaxonomySlug) {
   return { backgroundColor: `var(--${rootTaxonomies[slug].color})`, color: "black", "--color": "0 0 0" };
