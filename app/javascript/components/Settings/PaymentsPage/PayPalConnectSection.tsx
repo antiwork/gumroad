@@ -14,6 +14,11 @@ export type PayPalConnect = {
   charge_processor_verified: boolean;
   needs_email_confirmation: boolean;
   unsupported_countries: string[];
+  restricted_countries_with_requirements: string[];
+  earnings_requirement_met: boolean;
+  payout_requirement_met: boolean;
+  compliance_requirement_met: boolean;
+  minimum_earnings_formatted: string;
   allow_paypal_connect: boolean;
   paypal_disconnect_allowed: boolean;
 };
@@ -70,7 +75,22 @@ const PayPalConnectSection = ({
                   Connect with Paypal
                 </a>
               </div>
-            ) : null}
+            ) : (
+              <>
+                {paypalConnect.restricted_countries_with_requirements.some(country => 
+                  paypalConnect.unsupported_countries.includes(country)
+                ) && (
+                  <div role="alert" className="warning">
+                    <p>To connect PayPal from your country, you must meet the following requirements:</p>
+                    <ul>
+                      {!paypalConnect.compliance_requirement_met && <li>Your account must be marked as compliant</li>}
+                      {!paypalConnect.earnings_requirement_met && <li>You must have earned at least {paypalConnect.minimum_earnings_formatted}</li>}
+                      {!paypalConnect.payout_requirement_met && <li>You must have received at least one successful payout</li>}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
           </>
         ) : paypalConnect.charge_processor_verified ? (
           <>
@@ -129,7 +149,22 @@ const PayPalConnectSection = ({
                   connecting again and grant the requested permissions.
                 </div>
               </>
-            ) : null}
+            ) : (
+              <>
+                {paypalConnect.restricted_countries_with_requirements.some(country => 
+                  paypalConnect.unsupported_countries.includes(country)
+                ) && (
+                  <div role="alert" className="warning">
+                    <p>To connect PayPal from your country, you must meet the following requirements:</p>
+                    <ul>
+                      {!paypalConnect.compliance_requirement_met && <li>Your account must be marked as compliant</li>}
+                      {!paypalConnect.earnings_requirement_met && <li>You must have earned at least {paypalConnect.minimum_earnings_formatted}</li>}
+                      {!paypalConnect.payout_requirement_met && <li>You must have received at least one successful payout</li>}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
           </>
         )}
       </div>

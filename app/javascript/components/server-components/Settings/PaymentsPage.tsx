@@ -1073,13 +1073,11 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {props.paypal_connect.allow_paypal_connect ? (
-          <PayPalConnectSection
-            paypalConnect={props.paypal_connect}
-            isFormDisabled={props.is_form_disabled}
-            connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
-          />
-        ) : null}
+        <PayPalConnectSection
+          paypalConnect={props.paypal_connect}
+          isFormDisabled={props.is_form_disabled}
+          connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
+        />
         {props.saved_card ? (
           <CreditCardForm
             card={props.saved_card}

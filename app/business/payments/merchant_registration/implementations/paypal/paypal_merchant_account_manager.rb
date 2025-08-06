@@ -11,6 +11,9 @@ class PaypalMerchantAccountManager
     Compliance::Countries::JPN,
     Compliance::Countries::FSM,
     Compliance::Countries::TUR,
+    Compliance::Countries::MAR,
+    Compliance::Countries::EGY,
+    Compliance::Countries::DZA,
   ].map(&:alpha2).freeze
 
   def create_partner_referral(user, return_url)

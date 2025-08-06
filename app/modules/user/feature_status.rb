@@ -12,7 +12,19 @@ class User
     end
 
     def paypal_connect_enabled?
-      alive_user_compliance_info.present? && PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.exclude?(::Compliance::Countries.find_by_name(alive_user_compliance_info.country)&.alpha2)
+      return false unless alive_user_compliance_info.present?
+
+      user_country_code = ::Compliance::Countries.find_by_name(alive_user_compliance_info.country)&.alpha2
+      return false if PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.include?(user_country_code)
+
+      restricted_countries_with_requirements = %w[MA EG DZ]
+      if restricted_countries_with_requirements.include?(user_country_code)
+        return false unless user_risk_state == "compliant"
+        return false unless sales_cents_total >= 10_000
+        return false unless payments.completed.exists?
+      end
+
+      true
     end
 
     def paypal_disconnect_allowed?
