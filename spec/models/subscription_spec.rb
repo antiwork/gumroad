@@ -1817,6 +1817,7 @@ describe Subscription, :vcr do
         # calculated
         affiliate_credit_cents: 11, # $5.99 * 200/10,000
       )
+      @original_purchase.seller.mark_compliant!(author_name: "Iffy")
       @original_purchase.purchase_custom_fields.create!(name: "favorite color", type: CustomField::TYPE_TEXT, value: "Blue")
       @original_purchase.create_recommended_purchase_info({
                                                             recommended_link_id: @original_purchase.link_id,
