@@ -339,7 +339,8 @@ class Subscription < ApplicationRecord
   # Returns the new `Purchase` object
   def charge!(override_params: {}, from_failed_charge_email: false, off_session: true)
     purchase = build_purchase(override_params:, from_failed_charge_email:)
-    if customer&.business_vat_id.present? && VatValidationService.new(customer.business_vat_id).process
+
+    if user&.business_vat_id.present? && vat_id_valid?(user.business_vat_id)
       purchase.tax_cents = 0
       purchase.gumroad_tax_cents = 0
       # Optional: Mark subscription as VAT exempt for clarity
@@ -980,4 +981,12 @@ class Subscription < ApplicationRecord
     def assign_seller
       self.seller_id = link.user_id
     end
+
+    private
+      def vat_id_valid?(vat_id)
+        VatValidationService.new(vat_id).process
+      rescue => e
+        Rails.logger.error("VAT validation failed for subscription #{id}: #{e.message}")
+        false
+      end
 end
