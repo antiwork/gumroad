@@ -17,9 +17,9 @@ export const TaxonomyEditor = ({
   const options = React.useMemo(() => {
     const taxonomyMap = new Map(taxonomies.map((item) => [item.key, item]));
     return taxonomies
-      .filter((taxonomy) => taxonomy.label !== null)
+      .filter((taxonomy): taxonomy is Taxonomy & { label: string } => taxonomy.label !== null)
       .map((taxonomy) => {
-        let label = taxonomy.label as string;
+        let label = taxonomy.label;
         let current: Taxonomy | undefined = taxonomy;
         while ((current = taxonomyMap.get(current.parent_key ?? ""))) {
           if (current.label) {

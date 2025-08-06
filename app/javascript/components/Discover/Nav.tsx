@@ -86,12 +86,12 @@ const generateTaxonomyItemsForMenu = (wholeTaxonomy: Taxonomy[], forceDomain: bo
       href: forceDomain ? Routes.discover_url({ host: discoverDomain }) : Routes.discover_path(),
     },
     ...wholeTaxonomy
-      .filter((taxonomy) => taxonomy.label !== null)
+      .filter((taxonomy): taxonomy is Taxonomy & { label: string } => taxonomy.label !== null)
       .map((taxonomy): MenuItem => {
         const root = getRootTaxonomy(taxonomy.slug);
         return {
           key: taxonomy.key,
-          label: taxonomy.label as string,
+          label: taxonomy.label,
           href: generateHref(taxonomy),
           ...(taxonomy.parent_key
             ? { parentKey: taxonomy.parent_key }
