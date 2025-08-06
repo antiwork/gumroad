@@ -84,12 +84,7 @@ class SettingsPresenter
         disable_reviews_email: seller.disable_reviews_email,
         show_nsfw_products: seller.show_nsfw_products?,
         seller_refund_policy:,
-        reply_to_emails: seller.products
-                          .where.not(reply_to_email: nil)
-                          .group_by(&:reply_to_email)
-                          .map do |email, products|
-                            { email: email, product_ids: products.map(&:external_id) }
-                          end
+        reply_to_emails: seller.reply_to_emails
       }
     }
   end

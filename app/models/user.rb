@@ -494,6 +494,14 @@ class User < ApplicationRecord
     end
   end
 
+  def reply_to_emails
+    products.where.not(reply_to_email: nil)
+            .group_by(&:reply_to_email)
+            .map do |email, products|
+              { email: email, product_ids: products.map(&:external_id) }
+            end
+  end
+
   def update_reply_to_emails!(reply_to_emails_data)
     reply_to_emails_data = (reply_to_emails_data || []).reject { |data| data[:email]&.strip&.blank? }
 
