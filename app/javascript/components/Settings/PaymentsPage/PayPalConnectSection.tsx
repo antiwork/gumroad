@@ -27,10 +27,12 @@ const PayPalConnectSection = ({
   paypalConnect,
   isFormDisabled,
   connectAccountFeeInfoText,
+  userCountry,
 }: {
   paypalConnect: PayPalConnect;
   isFormDisabled: boolean;
   connectAccountFeeInfoText: string;
+  userCountry?: string | null;
 }) => {
   const disconnectPayPal = asyncVoid(async () => {
     const response = await request({
@@ -76,9 +78,8 @@ const PayPalConnectSection = ({
                 </a>
               </div>
             ) : (
-              paypalConnect.restricted_countries_with_requirements.some((country) =>
-                paypalConnect.unsupported_countries.includes(country),
-              ) && (
+              userCountry &&
+              paypalConnect.restricted_countries_with_requirements.includes(userCountry) && (
                 <div role="alert" className="warning">
                   <p>To connect PayPal from your country, you must meet the following requirements:</p>
                   <ul>
@@ -152,9 +153,8 @@ const PayPalConnectSection = ({
                 </div>
               </>
             ) : (
-              paypalConnect.restricted_countries_with_requirements.some((country) =>
-                paypalConnect.unsupported_countries.includes(country),
-              ) && (
+              userCountry &&
+              paypalConnect.restricted_countries_with_requirements.includes(userCountry) && (
                 <div role="alert" className="warning">
                   <p>To connect PayPal from your country, you must meet the following requirements:</p>
                   <ul>
