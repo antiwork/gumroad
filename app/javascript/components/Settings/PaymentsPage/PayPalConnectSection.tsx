@@ -32,7 +32,7 @@ const PayPalConnectSection = ({
   paypalConnect: PayPalConnect;
   isFormDisabled: boolean;
   connectAccountFeeInfoText: string;
-  userCountry?: string | null;
+  userCountry?: string | null | undefined;
 }) => {
   const disconnectPayPal = asyncVoid(async () => {
     const response = await request({

@@ -54,7 +54,7 @@ export type User = {
   can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;
   joined_at: string;
-  compliance_country: string | null;
+  compliance_country?: string | null;
 };
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
