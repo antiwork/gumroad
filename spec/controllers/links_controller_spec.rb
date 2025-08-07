@@ -4243,6 +4243,7 @@ describe LinksController, :vcr do
           @creator = create(:compliant_user, username: "creatordudey", name: "Creator Dudey")
           @section = create(:seller_profile_products_section, seller: @creator)
           @product = create(:product, name: "Top quality weasel", user: @creator, taxonomy: Taxonomy.find_or_create_by(slug: "3d"))
+          create(:purchase, :with_review, link: @product, created_at: 1.week.ago)
           create(:product_review, link: @product)
           Link.import(force: true, refresh: true)
         end

@@ -273,7 +273,7 @@ describe("Discover", js: true, type: :feature) do
     end
 
     it "excludes recommended products from the main list" do
-      create_list(:product, 5, user: create(:compliant_user), taxonomy: three_d_taxonomy)
+      create_list(:product, 5, :recommendable, user: create(:compliant_user), taxonomy: three_d_taxonomy)
       index_model_records(Link)
 
       visit "#{discover_host}/3d"
@@ -306,7 +306,7 @@ describe("Discover", js: true, type: :feature) do
   describe "pagination" do
     before do
       creator = create(:recommendable_user)
-      create_list(:product, 72, user: creator, taxonomy: films_taxonomy) do |product, index|
+      create_list(:product, 72, :recommendable, user: creator, taxonomy: films_taxonomy) do |product, index|
         product.name = "product #{index + 1}"
         product.price_cents = index * 100
         product.save!

@@ -65,7 +65,7 @@ describe GenerateFeesByCreatorLocationReportJob do
         end
         australia_product = create(:product, user: australia_creator, price_cents: 100_00, native_type: "digital")
 
-        singapore_creator = create(:user).tap do |creator|
+        singapore_creator = create(:compliant_user).tap do |creator|
           creator.fetch_or_build_user_compliance_info.dup_and_save! do |new_compliance_info|
             new_compliance_info.country = "Singapore"
           end
