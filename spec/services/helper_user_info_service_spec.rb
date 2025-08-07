@@ -17,6 +17,7 @@ describe HelperUserInfoService do
       expect(result[:prompt]).to include("User ID: #{user.id}")
       expect(result[:prompt]).to include("User Name: #{user.name}")
       expect(result[:prompt]).to include("User Email: #{user.email}")
+      expect(result[:prompt]).to include("Account Created: #{user.created_at.to_fs(:formatted_date_full_month)}")
       expect(result[:prompt]).to include("Account Status: Active")
       expect(result[:prompt]).to include("Total Earnings Since Joining: $22.50")
       expect(result[:metadata]).to eq({

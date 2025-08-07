@@ -968,7 +968,7 @@ class Subscription < ApplicationRecord
     end
 
     def enable_mor_fee
-      self.mor_fee_applicable = Feature.active?(:merchant_of_record_fee, seller)
+      self.mor_fee_applicable = true
     end
 
     def assign_seller

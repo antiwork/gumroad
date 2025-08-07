@@ -46,7 +46,7 @@ class AdminSearchService
       end
       purchases = purchases.where(card_type:) if card_type.present?
       purchases = purchases.where(card_visual_sql_finder(last_4)) if last_4.present?
-      purchases = purchases.where("price_cents between ? and ?", price.to_i * 75, price.to_i * 125) if price.present?
+      purchases = purchases.where("price_cents between ? and ?", (price.to_d * 75).to_i, (price.to_d * 125).to_i) if price.present?
       if expiry_date.present?
         expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(expiry_date)
         purchases = purchases.where(card_expiry_year: "20#{expiry_year}") if expiry_year.present?
@@ -82,7 +82,7 @@ class AdminSearchService
 
       service_charges = service_charges.where(card_type:) if card_type.present?
       service_charges = service_charges.where(card_visual_sql_finder(last_4)) if last_4.present?
-      service_charges = service_charges.where("charge_cents between ? and ?", price.to_i * 75, price.to_i * 125) if price.present?
+      service_charges = service_charges.where("charge_cents between ? and ?", (price.to_d * 75).to_i, (price.to_d * 125).to_i) if price.present?
 
       if expiry_date.present?
         expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(expiry_date)

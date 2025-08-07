@@ -1,0 +1,105 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"\nYou
+        are an expert digital product creator. Generate detailed product information
+        based on the user''s prompt.\n\nIMPORTANT: Carefully extract price and currency
+        information from the user''s prompt:\n- Look for explicit prices like \"for
+        2 yen\", \"$10\", \"€15\", \"£20\", etc.\n- Always use the exact numerical
+        value from the prompt without currency conversion\n- Common currency mappings:
+        \"yen\" = \"jpy\", \"dollar\"/\"$\" = \"usd\", \"euro\"/\"€\" = \"eur\", \"pound\"/\"£\"
+        = \"gbp\"\n- Allowed currency codes: usd, gbp, eur, jpy, inr, aud, cad, hkd,
+        sgd, twd, nzd, brl, zar, chf, ils, php, krw, pln, czk\n- If no price is specified,
+        use your best guess based on the product type\n- If no currency is specified,
+        use the seller''s default currency: usd\n\nReturn the following JSON format
+        **only**:\n{\n\"name\": \"Product name as a string\",\n\"number_of_content_pages\":
+        2, // Number of chapters or pages to generate based on the user''s prompt.
+        If specified more than 6 pages/chapters, generate only 6 pages/chapters. If
+        no number is specified, generate 4 pages/chapters\n\"description\": \"Product
+        description as a safe HTML string with only \u003cp\u003e, \u003cul\u003e,
+        \u003col\u003e, \u003cli\u003e, \u003ch2\u003e, \u003ch3\u003e, \u003ch4\u003e,
+        \u003cstrong\u003e, and \u003cem\u003e tags; feel free to add emojis. Don''t
+        mention the number of pages or chapters in the description.\",\n\"summary\":
+        \"Short summary of the product\",\n\"native_type\": \"Must be one of: digital,
+        course, ebook, membership\",\n\"price\": 4.99, // Extract the exact price
+        from the prompt if specified, otherwise use your best guess\n\"currency_code\":
+        \"usd\", // Extract currency from prompt if specified, otherwise use seller
+        default (usd)\n\"price_frequency_in_months\": 1 // Only include if native_type
+        is ''membership'' (1, 3, 6, 12, 24)\n}\n"},{"role":"user","content":"Create
+        a coding tutorial ebook about Ruby on Rails for 19.99 yen"}],"response_format":{"type":"json_object"},"temperature":0.5}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sun, 29 Jun 2025 15:10:04 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '5907'
+      Openai-Version:
+      - '2020-10-01'
+      X-Envoy-Upstream-Service-Time:
+      - '5912'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999561'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_01b7a8fcd6bb60ce6d5d87406897346b
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=1234-1751209804-1.0.1.1-1234.iHRboGi1MtNWECk0qD8IZsnZGnBM_r4;
+        path=/; expires=Sun, 29-Jun-25 15:40:04 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=hello-1751209804261-0.0.1.1-hello;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 957659136c0e3ba9-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: !binary |-
+        ewogICJpZCI6ICJjaGF0Y21wbC1Cbm54R2dEQkw3cHBXS2VLQ1pORUUwTHN3ZEgyNSIsCiAgIm9iamVjdCI6ICJjaGF0LmNvbXBsZXRpb24iLAogICJjcmVhdGVkIjogMTc1MTIwOTc5OCwKICAibW9kZWwiOiAiZ3B0LTRvLW1pbmktMjAyNC0wNy0xOCIsCiAgImNob2ljZXMiOiBbCiAgICB7CiAgICAgICJpbmRleCI6IDAsCiAgICAgICJtZXNzYWdlIjogewogICAgICAgICJyb2xlIjogImFzc2lzdGFudCIsCiAgICAgICAgImNvbnRlbnQiOiAie1xuXCJuYW1lXCI6IFwiUnVieSBvbiBSYWlscyBDb2RpbmcgVHV0b3JpYWxcIixcblwibnVtYmVyX29mX2NvbnRlbnRfcGFnZXNcIjogNCxcblwiZGVzY3JpcHRpb25cIjogXCI8cD5VbmxvY2sgdGhlIHBvd2VyIG9mIHdlYiBkZXZlbG9wbWVudCB3aXRoIG91ciBjb21wcmVoZW5zaXZlIDxzdHJvbmc+UnVieSBvbiBSYWlscyBDb2RpbmcgVHV0b3JpYWw8L3N0cm9uZz4gZWJvb2shIPCfmoAgV2hldGhlciB5b3UncmUgYSBiZWdpbm5lciBvciBsb29raW5nIHRvIGVuaGFuY2UgeW91ciBza2lsbHMsIHRoaXMgZWJvb2sgaXMgZGVzaWduZWQgdG8gZ3VpZGUgeW91IHRocm91Z2ggdGhlIGZ1bmRhbWVudGFscyBhbmQgYWR2YW5jZWQgY29uY2VwdHMgb2YgUnVieSBvbiBSYWlscy48L3A+PHA+SW5zaWRlLCB5b3UnbGwgZGlzY292ZXI6PC9wPjx1bD48bGk+PHN0cm9uZz5JbnRyb2R1Y3Rpb24gdG8gUnVieSBvbiBSYWlsczo8L3N0cm9uZz4gVW5kZXJzdGFuZCB0aGUgZnJhbWV3b3JrIGFuZCBpdHMgYWR2YW50YWdlcy48L2xpPjxsaT48c3Ryb25nPlNldHRpbmcgVXAgWW91ciBFbnZpcm9ubWVudDo8L3N0cm9uZz4gU3RlcC1ieS1zdGVwIGluc3RydWN0aW9ucyB0byBnZXQgeW91IHN0YXJ0ZWQuPC9saT48bGk+PHN0cm9uZz5CdWlsZGluZyBZb3VyIEZpcnN0IEFwcGxpY2F0aW9uOjwvc3Ryb25nPiBIYW5kcy1vbiBwcm9qZWN0IHRvIGFwcGx5IHdoYXQgeW91J3ZlIGxlYXJuZWQuPC9saT48bGk+PHN0cm9uZz5BZHZhbmNlZCBGZWF0dXJlczo8L3N0cm9uZz4gRXhwbG9yZSBSRVNUZnVsIHJvdXRlcywgbWlncmF0aW9ucywgYW5kIG1vcmUhPC9saT48L3VsPjxwPkpvaW4gdGhlIGNvbW11bml0eSBvZiBSdWJ5IG9uIFJhaWxzIGRldmVsb3BlcnMgYW5kIHN0YXJ0IHlvdXIgam91cm5leSB0b2RheSEg8J+MnzwvcD5cIixcblwic3VtbWFyeVwiOiBcIkEgY29tcHJlaGVuc2l2ZSBlYm9vayBmb3IgbGVhcm5pbmcgUnVieSBvbiBSYWlscywgY292ZXJpbmcgYmFzaWNzIHRvIGFkdmFuY2VkIGZlYXR1cmVzLlwiLFxuXCJuYXRpdmVfdHlwZVwiOiBcImVib29rXCIsXG5cInByaWNlXCI6IDE5Ljk5LFxuXCJjdXJyZW5jeV9jb2RlXCI6IFwianB5XCIsXG5cInByaWNlX2ZyZXF1ZW5jeV9pbl9tb250aHNcIjogMVxufSIsCiAgICAgICAgInJlZnVzYWwiOiBudWxsLAogICAgICAgICJhbm5vdGF0aW9ucyI6IFtdCiAgICAgIH0sCiAgICAgICJsb2dwcm9icyI6IG51bGwsCiAgICAgICJmaW5pc2hfcmVhc29uIjogInN0b3AiCiAgICB9CiAgXSwKICAidXNhZ2UiOiB7CiAgICAicHJvbXB0X3Rva2VucyI6IDQ4MCwKICAgICJjb21wbGV0aW9uX3Rva2VucyI6IDI1MiwKICAgICJ0b3RhbF90b2tlbnMiOiA3MzIsCiAgICAicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjogewogICAgICAiY2FjaGVkX3Rva2VucyI6IDAsCiAgICAgICJhdWRpb190b2tlbnMiOiAwCiAgICB9LAogICAgImNvbXBsZXRpb25fdG9rZW5zX2RldGFpbHMiOiB7CiAgICAgICJyZWFzb25pbmdfdG9rZW5zIjogMCwKICAgICAgImF1ZGlvX3Rva2VucyI6IDAsCiAgICAgICJhY2NlcHRlZF9wcmVkaWN0aW9uX3Rva2VucyI6IDAsCiAgICAgICJyZWplY3RlZF9wcmVkaWN0aW9uX3Rva2VucyI6IDAKICAgIH0KICB9LAogICJzZXJ2aWNlX3RpZXIiOiAiZGVmYXVsdCIsCiAgInN5c3RlbV9maW5nZXJwcmludCI6ICJmcF8zNGE1NGFlOTNjIgp9Cg==
+  recorded_at: Sun, 29 Jun 2025 15:10:04 GMT
+recorded_with: VCR 6.2.0

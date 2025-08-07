@@ -35,7 +35,7 @@ module AdminHelper
 
     suffix = Time.current > value ? " ago" : " from now"
     relative_time = time_ago_in_words(value) + suffix
-    tag.span(value.strftime("%b %d, %Y at %l:%M %p").strip, title: relative_time)
+    tag.span(value.strftime("%b %d, %Y at %l:%M %p UTC").strip, title: relative_time)
   end
 
   def card_types_for_react

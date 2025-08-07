@@ -3216,6 +3216,30 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
+  describe "seller has custom fee set" do
+    before do
+      product.user.update!(custom_fee_per_thousand: 50)
+      params[:purchase][:chargeable] = CardParamsHelper.build_chargeable(
+        StripePaymentMethodHelper.success.with_zip_code(zip_code).to_stripejs_params.merge(product_permalink: product.unique_permalink),
+        browser_guid
+      )
+      params[:purchase][:chargeable].prepare!
+    end
+
+    it "creates a purchase and sets Gumroad fee as per the custom fee applicable to the seller" do
+      expect do
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase.purchase_state).to eq "successful"
+        expect(purchase.card_country).to be_present
+        expect(purchase.stripe_fingerprint).to be_present
+        expect(purchase.fee_cents).to eq 127 # 5% of $6 + 50c + 2.9% of $6 + 30c
+        expect(purchase.gumroad_tax_cents).to eq 0
+        expect(purchase.tax_cents).to eq 0
+      end.to change { Purchase.count }.by 1
+    end
+  end
+
   describe "commission deposit purchase" do
     let(:commission_product) { create(:commission_product) }
 

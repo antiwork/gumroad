@@ -28,6 +28,13 @@
               <%= copy_to_clipboard(user.support_email) %>
             </li>
           <% end %>
+          <% if user.custom_fee_per_thousand.present? %>
+            <li>
+              <%= with_tooltip(tip: "Custom fee that will be charged on all their new direct (non-discover) sales", position: "bottom") do %>
+                Custom fee: <%= number_with_precision(user.custom_fee_per_thousand / 10.0, precision: 1) %>%
+              <% end %>
+            </li>
+          <% end %>
           <% if user.payments.any? %>
             <li><%= link_to("Payouts", admin_user_payouts_path(user)) %></li>
           <% end %>
@@ -70,6 +77,14 @@
       <h3>Change email</h3>
     </summary>
     <%= react_component "AdminChangeEmailForm", props: { user_id: user.id, current_email: user.email } %>
+  </details>
+
+  <hr>
+  <details>
+    <summary>
+      <h3>Custom fee</h3>
+    </summary>
+    <%= react_component "AdminSetCustomFeeForm", props: { user_id: user.id, custom_fee_percent: user.custom_fee_per_thousand.present? ? (user.custom_fee_per_thousand / 10.0).round(1) : nil }, prerender: true %>
   </details>
 
   <hr>

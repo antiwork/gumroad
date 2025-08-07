@@ -84,6 +84,8 @@ type CreateProductDataBase = {
   price_range: string;
   release_at_date: string;
   release_at_time: string;
+  ai_prompt: string | null;
+  number_of_content_pages: number | null;
 };
 
 type CreateProductDataPhysical = {

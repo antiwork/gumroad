@@ -80,6 +80,7 @@ class HelperUserInfoService
       @info << "User ID: #{user.id}"
       @info << "User Name: #{user.name}"
       @info << "User Email: #{user.email}"
+      @info << "Account Created: #{user.created_at.to_fs(:formatted_date_full_month)}"
       @info << "Account Status: #{user.suspended? ? 'Suspended' : 'Active'}"
     end
 

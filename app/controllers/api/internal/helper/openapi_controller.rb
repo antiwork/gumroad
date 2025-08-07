@@ -47,11 +47,17 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         "/purchases/resend_last_receipt": {
           post: Api::Internal::Helper::PurchasesController::RESEND_LAST_RECEIPT_OPENAPI,
         },
+        "/purchases/resend_all_receipts": {
+          post: Api::Internal::Helper::PurchasesController::RESEND_ALL_RECEIPTS_OPENAPI,
+        },
         "/purchases/resend_receipt_by_number": {
           post: Api::Internal::Helper::PurchasesController::RESEND_RECEIPT_BY_NUMBER_OPENAPI,
         },
         "/purchases/search": {
           post: Api::Internal::Helper::PurchasesController::SEARCH_PURCHASE_OPENAPI,
+        },
+        "/purchases/refresh_library": {
+          post: Api::Internal::Helper::PurchasesController::REFRESH_LIBRARY_OPENAPI,
         },
         "/purchases/reassign_purchases": {
           post: Api::Internal::Helper::PurchasesController::REASSIGN_PURCHASES_OPENAPI,

@@ -374,7 +374,7 @@ class ContactingCreatorMailer < ApplicationMailer
     file_or_url = MailerAttachmentOrLinkService.new(
       file: sales_csv_tempfile,
       extension: "csv",
-      filename: "Sales_#{user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.csv"
+      filename: "user-sales-data/Sales_#{user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.csv"
     ).perform
     file = file_or_url[:file]
     if file
@@ -531,6 +531,7 @@ class ContactingCreatorMailer < ApplicationMailer
       if @purchase.price_cents == 0
         @seller.enable_free_downloads_email?
       elsif @purchase.is_recurring_subscription_charge && !@purchase.is_upgrade_purchase?
+        return false if @purchase.subscription&.recurrence == BasePrice::Recurrence::MONTHLY
         @seller.enable_recurring_subscription_charge_email?
       else
         @seller.enable_payment_email?

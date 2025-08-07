@@ -138,6 +138,11 @@ describe "Dashboard", js: true, type: :feature do
   end
 
   describe "tax form download notice" do
+    before do
+      freeze_time
+      seller.update!(created_at: 1.year.ago)
+    end
+
     it "displays a 1099 form ready notice with a link to download if eligible" do
       download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
       allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(true)
@@ -156,6 +161,69 @@ describe "Dashboard", js: true, type: :feature do
 
       expect(page).not_to have_text("Your 1099 tax form for #{Time.current.prev_year.year} is ready!")
       expect(page).not_to have_link("Click here to download", href: dashboard_download_tax_form_path)
+    end
+  end
+
+  describe "download tax forms button" do
+    download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+
+    before do
+      freeze_time
+      seller.update!(created_at: 1.year.ago)
+      allow(seller).to receive(:eligible_for_1099?).and_return(true)
+      allow(seller).to receive(:tax_form_1099_download_url).and_return(download_url)
+    end
+
+    it "displays button when there are tax forms" do
+      visit dashboard_path
+
+      expect(page).to have_button("Tax forms")
+    end
+
+    it "opens a popover with a checkbox for each year with a tax form" do
+      visit dashboard_path
+
+      click_button("Tax forms")
+
+      expect(page).to have_text("Download tax forms")
+      expect(page).to have_text("Select the tax years you want to download.")
+      expect(page).to have_unchecked_field(Time.current.year.to_s)
+      expect(page).to have_unchecked_field(Time.current.prev_year.year.to_s)
+    end
+
+    it "allows selecting all years and deselecting all years" do
+      visit dashboard_path
+
+      click_button("Tax forms")
+      click_button("Select all")
+
+      expect(page).to have_checked_field(Time.current.year.to_s)
+      expect(page).to have_checked_field(Time.current.prev_year.year.to_s)
+
+      click_button("Deselect all")
+
+      expect(page).to have_unchecked_field(Time.current.year.to_s)
+      expect(page).to have_unchecked_field(Time.current.prev_year.year.to_s)
+    end
+
+    it "downloads selected tax forms" do
+      visit dashboard_path
+
+      click_button("Tax forms")
+      check(Time.current.prev_year.year.to_s)
+      new_window = window_opened_by { click_button("Download") }
+
+      within_window new_window do
+        expect(current_url).to eq(download_url)
+      end
+    end
+
+    it "does not display button if there are no tax forms" do
+      allow(seller).to receive(:eligible_for_1099?).and_return(false)
+
+      visit dashboard_path
+
+      expect(page).not_to have_button("Tax forms")
     end
   end
 end
