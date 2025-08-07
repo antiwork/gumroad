@@ -24,6 +24,7 @@ class ReceiptPresenter::PaymentInfo
 
   def notes
     [
+      installment_final_note,
       recurring_subscription_notes,
       usd_currency_note,
       credit_card_note
@@ -153,8 +154,13 @@ class ReceiptPresenter::PaymentInfo
     def today_payment_heading_attribute
       return unless any_upcoming_payments?
 
+      label = "Today's payment"
+      if installment_subscription
+        label = "#{label}: #{installment_index} of #{installment_count}"
+      end
+
       {
-        label: "Today's payment",
+        label: label,
         value: nil
       }
     end
@@ -217,8 +223,14 @@ class ReceiptPresenter::PaymentInfo
     end
 
     def upcoming_payment_heading_attribute
+      label = "Upcoming #{"payment".pluralize(upcoming_price_attributes.size)}"
+      if installment_subscription
+        next_index = [installment_index + 1, installment_count].min
+        label = "Upcoming payment: #{next_index} of #{installment_count}"
+      end
+
       {
-        label: "Upcoming #{"payment".pluralize(upcoming_price_attributes.size)}",
+        label: label,
         value: nil
       }
     end
@@ -311,5 +323,40 @@ class ReceiptPresenter::PaymentInfo
 
       tax_percent = tax_rate / taxjar_info.combined_tax_rate.to_f
       amount_cents * tax_percent
+    end
+
+    # Installment helpers
+    def installment_subscription
+      @_installment_subscription ||= begin
+        subs = chargeable.successful_purchases.filter_map(&:subscription).compact
+        sub = subs.find(&:has_fixed_length?)
+        sub if sub&.has_fixed_length?
+      end
+    end
+
+    def installment_count
+      installment_subscription&.charge_occurrence_count
+    end
+
+    def installment_index
+      return unless installment_subscription
+      installment_subscription.purchases.successful.count
+    end
+
+    def installment_final_note
+      sub = installment_subscription
+      return unless sub&.charges_completed?
+
+      dates = sub.purchases.successful.order(:created_at).pluck(:created_at)
+      formatted_dates = dates.map { _1.to_fs(:formatted_date_abbrev_month) }
+
+      total_cents = sub.purchases.successful.sum(&:total_transaction_cents)
+      total_formatted = formatted_dollar_amount(total_cents)
+
+      [
+        "This is your final payment for your installment plan. You will not be charged again.",
+        (formatted_dates.any? ? "Payments on: #{formatted_dates.join(', ')}" : nil),
+        "Total paid: #{total_formatted}"
+      ].compact
     end
 end

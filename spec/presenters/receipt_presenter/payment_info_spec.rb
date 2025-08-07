@@ -260,22 +260,22 @@ describe ReceiptPresenter::PaymentInfo do
               purchase.subscription.update!(charge_occurrence_count: 2)
             end
 
-            it "returns today's payment attributes" do
+            it "returns today's payment attributes with installment index" do
               purchase.subscription.original_purchase.reload
               expect(today_payment_attributes).to eq(
                 [
-                  { label: "Today's payment", value: nil },
+                  { label: "Today's payment: 1 of 2", value: nil },
                   { label: "Membership product", value: "$19.98" },
                   { label: nil, value: link_to("Generate invoice", invoice_url) },
                 ]
               )
             end
 
-            it "returns upcoming payment attributes" do
+            it "returns upcoming payment attributes with installment index" do
               purchase.subscription.original_purchase.reload
               expect(upcoming_payment_attributes).to eq(
                 [
-                  { label: "Upcoming payment", value: nil },
+                  { label: "Upcoming payment: 2 of 2", value: nil },
                   { label: "Membership product", value: "$19.98 on Feb 1, 2023" },
                 ]
               )
@@ -287,7 +287,7 @@ describe ReceiptPresenter::PaymentInfo do
               purchase.subscription.update!(charge_occurrence_count: 1)
             end
 
-            it "does not includes today's payment header and upcoming payments" do
+            it "does not includes today's payment header and upcoming payments; adds final note" do
               expect(today_payment_attributes).to eq(
                 [
                   { label: "Membership product", value: "$19.98" },
@@ -298,6 +298,12 @@ describe ReceiptPresenter::PaymentInfo do
 
             it "returns empty upcoming payment attributes" do
               expect(upcoming_payment_attributes).to eq([])
+            end
+
+            it "includes a final installment note in notes" do
+              notes = payment_info.notes
+              expect(notes.first).to include("This is your final payment for your installment plan. You will not be charged again.")
+              expect(notes.join(" ")).to include("Total paid:")
             end
           end
         end
