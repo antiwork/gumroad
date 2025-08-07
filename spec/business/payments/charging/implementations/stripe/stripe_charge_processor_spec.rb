@@ -237,7 +237,7 @@ describe StripeChargeProcessor, :vcr do
 
       # Charge where transfer_group does not match but metadata matches
       allow_any_instance_of(Purchase).to receive(:id).and_return(1234567890)
-      allow_any_instance_of(Purchase).to receive(:external_id).and_return(ObfuscateIds.encrypt(115780))
+      allow_any_instance_of(Purchase).to receive(:external_id).and_return("6RNPNSondrJ8t9SqSjxTjw==")
 
       charge = subject.search_charge(purchase: create(:purchase, created_at: Time.zone.at(1621973384)))
 
