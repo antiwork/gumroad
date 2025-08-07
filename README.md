@@ -117,9 +117,10 @@ We use [pdftk](https://www.pdflabs.com/tools/pdftk-server/) to stamp PDF files w
 
 #### wkhtmltopdf
 
-While generating invoices, to convert HTML to PDF, PDFKit expects [wkhtmltopdf](https://wkhtmltopdf.org/) to be installed on your system. [Download](https://wkhtmltopdf.org/downloads.html) and install the version 0.12.6 for your platform. 
+While generating invoices, to convert HTML to PDF, PDFKit expects [wkhtmltopdf](https://wkhtmltopdf.org/) to be installed on your system. [Download](https://wkhtmltopdf.org/downloads.html) and install the version 0.12.6 for your platform.
+
 - **Note** similar to pdftk, this may also be blocked by Apple's firewall on MacOS. Follow a similar process as above.
-  
+
 ### Installation
 
 #### Bundler and gems
