@@ -898,7 +898,6 @@ class User < ApplicationRecord
   end
 
   def eligible_for_paypal_connect?
-    return true unless signed_up_from_morocco? || signed_up_from_egypt? || signed_up_from_algeria?
     return false if sales_cents_total < Installment::MINIMUM_SALES_CENTS_VALUE
 
     has_completed_payouts?

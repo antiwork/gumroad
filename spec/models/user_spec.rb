@@ -3326,84 +3326,26 @@ describe User, :vcr do
   describe "#eligible_for_paypal_connect?" do
     let(:user) { create(:user) }
 
-    context "when user is from Morocco" do
-      before do
-        create(:user_compliance_info_empty, user:, country: "Morocco")
-      end
-
-      it "returns true when user has made minimum required sales and has completed payouts" do
-        create(:payment_completed, user:)
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
-      end
-
-      it "returns false when user has not made minimum required sales" do
-        create(:payment_completed, user:)
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
-      end
-
-      it "returns false when user has not completed payouts" do
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
-      end
+    it "returns true when user has made minimum required sales and has completed payouts" do
+      create(:payment_completed, user:)
+      allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      expect(user.eligible_for_paypal_connect?).to eq(true)
     end
 
-    context "when user is from Egypt" do
-      before do
-        create(:user_compliance_info_empty, user:, country: "Egypt")
-      end
-
-      it "returns true when user has made minimum required sales and has completed payouts" do
-        create(:payment_completed, user:)
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
-      end
-
-      it "returns false when user has not made minimum required sales" do
-        create(:payment_completed, user:)
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
-      end
-
-      it "returns false when user has not completed payouts" do
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
-      end
+    it "returns false when user has not made minimum required sales" do
+      create(:payment_completed, user:)
+      allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+      expect(user.eligible_for_paypal_connect?).to eq(false)
     end
 
-    context "when user is from Algeria" do
-      before do
-        create(:user_compliance_info_empty, user:, country: "Algeria")
-      end
-
-      it "returns true when user has made minimum required sales and has completed payouts" do
-        create(:payment_completed, user:)
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
-      end
-
-      it "returns false when user has not made minimum required sales" do
-        create(:payment_completed, user:)
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
-      end
-
-      it "returns false when user has not completed payouts" do
-        allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
-        expect(user.eligible_for_paypal_connect?).to eq(false)
-      end
+    it "returns false when user has not completed payouts" do
+      allow(user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      expect(user.eligible_for_paypal_connect?).to eq(false)
     end
 
-    context "when user is from other countries" do
-      before do
-        create(:user_compliance_info_empty, user:, country: "United States")
-      end
-
-      it "returns true regardless of sales amount or completed payouts" do
-        allow(user).to receive(:sales_cents_total).and_return(0)
-        expect(user.eligible_for_paypal_connect?).to eq(true)
-      end
+    it "returns false when user has not made sales and has not completed payouts" do
+      allow(user).to receive(:sales_cents_total).and_return(0)
+      expect(user.eligible_for_paypal_connect?).to eq(false)
     end
   end
 

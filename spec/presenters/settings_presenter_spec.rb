@@ -772,5 +772,26 @@ describe SettingsPresenter do
         expect(presenter.payments_props[:user][:can_connect_stripe]).to eq(true)
       end
     end
+
+    context "when seller is from restricted country but meets earnings requirements" do
+      ["Morocco", "Egypt", "Algeria"].each do |country|
+        context "when seller is from #{country}" do
+          before do
+            create(:user_compliance_info, user: seller, country:)
+            create(:payment_completed, user: seller)
+            allow(seller).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+          end
+
+          it "does not show PayPal Connect section despite meeting earnings requirements" do
+            paypal_connect_data = presenter.payments_props[:paypal_connect]
+
+            expect(paypal_connect_data[:show_paypal_connect]).to eq(false)
+            expect(paypal_connect_data[:allow_paypal_connect]).to eq(false)
+            expect(paypal_connect_data[:eligible_for_paypal_connect]).to eq(true)
+            expect(paypal_connect_data[:paypal_connect_restriction_message]).to be_nil
+          end
+        end
+      end
+    end
   end
 end

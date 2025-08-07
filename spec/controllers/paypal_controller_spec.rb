@@ -121,48 +121,64 @@ describe PaypalController, :vcr do
       end
     end
 
-    context "when user is from Morocco and not eligible" do
+    context "when user is from Morocco" do
       before do
         create(:user_compliance_info_empty, user: @user, country: "Morocco")
-        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+        create(:payment_completed, user: @user)
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
       end
 
-      it "redirects to settings payments path with eligibility error" do
+      it "redirects to settings payments path with country restriction error" do
         get :connect
         expect(response).to redirect_to(settings_payments_path)
-        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+        expect(flash[:notice]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
       end
     end
 
-    context "when user is from Egypt and not eligible" do
+    context "when user is from Egypt" do
       before do
         create(:user_compliance_info_empty, user: @user, country: "Egypt")
-        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
+        create(:payment_completed, user: @user)
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
       end
 
-      it "redirects to settings payments path with eligibility error" do
+      it "redirects to settings payments path with country restriction error" do
         get :connect
         expect(response).to redirect_to(settings_payments_path)
-        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+        expect(flash[:notice]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
       end
     end
 
-    context "when user is from Algeria and not eligible" do
+    context "when user is from Algeria" do
       before do
         create(:user_compliance_info_empty, user: @user, country: "Algeria")
+        create(:payment_completed, user: @user)
+        allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      end
+
+      it "redirects to settings payments path with country restriction error" do
+        get :connect
+        expect(response).to redirect_to(settings_payments_path)
+        expect(flash[:notice]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
+      end
+    end
+
+    context "when user is not eligible due to earnings" do
+      before do
+        create(:user_compliance_info_empty, user: @user, country: "United States")
         allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
       end
 
       it "redirects to settings payments path with eligibility error" do
         get :connect
         expect(response).to redirect_to(settings_payments_path)
-        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout for users in your country.")
+        expect(flash[:notice]).to eq("PayPal Connect requires $100 in earnings and one completed payout.")
       end
     end
 
-    context "when user is from Morocco and eligible" do
+    context "when user is eligible" do
       before do
-        create(:user_compliance_info_empty, user: @user, country: "Morocco")
+        create(:user_compliance_info_empty, user: @user, country: "United States")
         create(:payment_completed, user: @user)
         allow(@user).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
       end

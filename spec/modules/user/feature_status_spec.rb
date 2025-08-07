@@ -40,6 +40,48 @@ describe User::FeatureStatus do
     end
   end
 
+  describe "#paypal_connect_enabled?" do
+    let(:user) { create(:user) }
+
+    context "when user has compliance info" do
+      it "returns true for users from allowed countries" do
+        create(:user_compliance_info, user:, country: "United States")
+        expect(user.paypal_connect_enabled?).to be true
+      end
+
+      it "returns false for users from Morocco" do
+        create(:user_compliance_info, user:, country: "Morocco")
+        expect(user.paypal_connect_enabled?).to be false
+      end
+
+      it "returns false for users from Egypt" do
+        create(:user_compliance_info, user:, country: "Egypt")
+        expect(user.paypal_connect_enabled?).to be false
+      end
+
+      it "returns false for users from Algeria" do
+        create(:user_compliance_info, user:, country: "Algeria")
+        expect(user.paypal_connect_enabled?).to be false
+      end
+
+      it "returns false for users from other previously restricted countries like Brazil" do
+        create(:user_compliance_info, user:, country: "Brazil")
+        expect(user.paypal_connect_enabled?).to be false
+      end
+
+      it "returns false for users from other previously restricted countries like India" do
+        create(:user_compliance_info, user:, country: "India")
+        expect(user.paypal_connect_enabled?).to be false
+      end
+    end
+
+    context "when user has no compliance info" do
+      it "returns false" do
+        expect(user.alive_user_compliance_info).to be nil
+        expect(user.paypal_connect_enabled?).to be false
+      end
+    end
+  end
 
 
   describe "#charge_paypal_payout_fee?" do
