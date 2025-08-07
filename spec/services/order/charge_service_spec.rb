@@ -258,6 +258,38 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[1]]).to eq(order.purchases.last.purchase_response)
     end
 
+    it "charges the correct custom fee when seller has custom Gumroad fee set" do
+      seller_1.update!(custom_fee_per_thousand: 50)
+
+      seller_stripe_account = create(:merchant_account_stripe, user: seller_1)
+
+      params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
+
+      order, _ = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(2)
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      expect(order.reload.purchases.successful.count).to eq(2)
+      expect(order.charges.count).to eq(1)
+      charge = order.charges.last
+      expect(charge.purchases.successful.count).to eq(2)
+      expect(charge.merchant_account).to eq(seller_stripe_account)
+      expect(charge.amount_cents).to eq(order.purchases.sum(&:total_transaction_cents))
+      expect(charge.gumroad_amount_cents).to eq 397
+      expect(order.purchases.pluck(:stripe_transaction_id).uniq).to eq([charge.processor_transaction_id])
+      expect(order.purchases.pluck(:stripe_fingerprint).uniq).to eq([charge.payment_method_fingerprint])
+      expect(charge.stripe_payment_intent_id).to be_present
+      expect(charge.purchases.where(link_id: product_1.id).last.merchant_account).to eq(seller_stripe_account)
+      expect(charge.purchases.where(link_id: product_1.id).last.fee_cents).to eq 159 # 5% of $10 + 50c + 2.9% of $10 + 30c
+      expect(charge.purchases.where(link_id: product_2.id).last.merchant_account).to eq(seller_stripe_account)
+      expect(charge.purchases.where(link_id: product_2.id).last.fee_cents).to eq 238 # 5% of $20 + 50c + 2.9% of $20 + 30c
+
+      expect(charge_responses.size).to eq(2)
+      expect(charge_responses[charge_responses.keys[0]]).to eq(order.purchases.first.purchase_response)
+      expect(charge_responses[charge_responses.keys[1]]).to eq(order.purchases.last.purchase_response)
+    end
+
     it "returns error responses for all purchases if corresponding charge fails" do
       params = line_items_params.merge!(common_order_params_without_payment).merge!(fail_payment_params)
 

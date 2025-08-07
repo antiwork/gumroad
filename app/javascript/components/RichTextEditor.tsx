@@ -22,7 +22,7 @@ import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
 import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/Link";
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
-import { Product, UpsellSelectModal } from "$app/components/UpsellSelectModal";
+import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { Raw } from "./TiptapExtensions/MediaEmbed";
@@ -314,7 +314,7 @@ export const RichTextEditorToolbar = ({
   const [isUpsellModalOpen, setIsUpsellModalOpen] = React.useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = React.useState(false);
 
-  const handleUpsellInsert = (product: Product, discount: InputtedDiscount | null) => {
+  const handleUpsellInsert = (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => {
     editor
       .chain()
       .focus()
@@ -322,6 +322,7 @@ export const RichTextEditorToolbar = ({
         type: "upsellCard",
         attrs: {
           productId: product.id,
+          variantId: variant?.id,
           discount: discount
             ? discount.type === "cents"
               ? { type: "fixed", cents: discount.value ?? 0 }

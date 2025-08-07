@@ -51,7 +51,7 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       end
     end
 
-    context "whent the user has user memberships" do
+    context "when the user has user memberships" do
       let(:seller_one) { create(:user, :without_username) }
       let(:seller_two) { create(:user) }
       let(:seller_three) { create(:user) }
@@ -69,5 +69,79 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
         expect(page).not_to have_text(seller_three.display_name(prefer_email_over_default_username: true))
       end
     end
+  end
+
+  describe "custom fees" do
+    context "when the user has a custom fee set" do
+      before do
+        user.update(custom_fee_per_thousand: 50)
+      end
+
+      it "shows the custom fee percentage" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_text("Custom fee: 5.0%")
+      end
+    end
+
+    context "when the user does not have a custom fee set" do
+      it "does not show the custom fee heading" do
+        visit admin_user_path(user.id)
+
+        expect(page).not_to have_text("Custom fee:")
+      end
+    end
+
+    it "allows setting new custom fee" do
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+
+      visit admin_user_path(user.id)
+      find_and_click "h3", text: "Custom fee"
+      fill_in "custom_fee_percent", with: "2.5"
+      click_on "Submit"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_fee_per_thousand).to eq(25)
+    end
+
+    it "allows updating the existing custom fee" do
+      user.update(custom_fee_per_thousand: 50)
+      expect(user.reload.custom_fee_per_thousand).to eq(50)
+
+      visit admin_user_path(user.id)
+      find_and_click "h3", text: "Custom fee"
+      fill_in "custom_fee_percent", with: "2.5"
+      click_on "Submit"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_fee_per_thousand).to eq(25)
+    end
+
+    it "allows clearing the existing custom fee" do
+      user.update(custom_fee_per_thousand: 75)
+      expect(user.reload.custom_fee_per_thousand).to eq(75)
+
+      visit admin_user_path(user.id)
+      find_and_click "h3", text: "Custom fee"
+      fill_in "custom_fee_percent", with: ""
+      click_on "Submit"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+    end
+  end
+
+  def accept_browser_dialog
+    wait = Selenium::WebDriver::Wait.new(timeout: 30)
+    wait.until do
+      page.driver.browser.switch_to.alert
+      true
+    rescue Selenium::WebDriver::Error::NoAlertPresentError
+      false
+    end
+    page.driver.browser.switch_to.alert.accept
   end
 end

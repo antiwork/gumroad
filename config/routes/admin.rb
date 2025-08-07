@@ -50,6 +50,7 @@ namespace :admin do
       post :suspend_for_tos_violation
       post :put_on_probation
       post :flag_for_fraud
+      post :set_custom_fee
     end
   end
 

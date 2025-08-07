@@ -27,6 +27,8 @@ describe ProductPresenter do
           release_at_date:,
           show_orientation_text: true,
           eligible_for_service_products: false,
+          ai_generation_enabled: false,
+          ai_promo_dismissed: false,
         }
       )
     end
@@ -43,6 +45,8 @@ describe ProductPresenter do
           release_at_date:,
           show_orientation_text: false,
           eligible_for_service_products: false,
+          ai_generation_enabled: false,
+          ai_promo_dismissed: false,
         }
       )
     end
@@ -383,7 +387,7 @@ describe ProductPresenter do
             }
           ],
           is_tiered_membership: false,
-          is_listed_on_discover: true,
+          is_listed_on_discover: false,
           is_physical: false,
           earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(product.user.timezone).iso8601,
           profile_sections: [

@@ -1,5 +1,12 @@
 // Should match BasePrice::Recurrence::ALLOWED_RECURRENCES
 export const recurrenceIds = ["monthly", "quarterly", "biannually", "yearly", "every_two_years"] as const;
+export const durationInMonthsToRecurrenceId: Record<number, RecurrenceId> = {
+  1: "monthly",
+  3: "quarterly",
+  6: "biannually",
+  12: "yearly",
+  24: "every_two_years",
+};
 export type RecurrenceId = "biannually" | "every_two_years" | "monthly" | "quarterly" | "yearly";
 
 // Keep in sync with BasePrice::Recurrence.number_of_months_in_recurrence

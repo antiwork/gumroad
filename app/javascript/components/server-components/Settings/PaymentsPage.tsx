@@ -712,10 +712,8 @@ const PaymentsPage = (props: Props) => {
 
     let cardData;
     if (selectedPayoutMethod === "card") {
-      if (!debitCard) {
+      if (!debitCard || debitCard.type === "saved") {
         cardData = null;
-      } else if (debitCard.type === "saved") {
-        cardData = {};
       } else {
         try {
           cardData = await prepareCardTokenForPayouts({ cardElement: debitCard.element });

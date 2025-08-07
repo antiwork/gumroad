@@ -1419,6 +1419,34 @@ describe User, :vcr do
         expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
       end
     end
+
+    describe "custom_fee_per_thousand" do
+      it "allows nil and an integer between 0 and 1000" do
+        user = build(:user, custom_fee_per_thousand: nil)
+        expect(user).to be_valid
+
+        user.custom_fee_per_thousand = 100.5
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be an integer"]
+
+        user.custom_fee_per_thousand = -1
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be greater than or equal to 0"]
+
+        user.custom_fee_per_thousand = 1001
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be less than or equal to 1000"]
+
+        user.custom_fee_per_thousand = "abc"
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["is not a number"]
+
+        [0, 50, 100, 500, 750, 1000].each do |value|
+          user.custom_fee_per_thousand = value
+          expect(user).to be_valid
+        end
+      end
+    end
   end
 
   describe "user roles" do
@@ -3451,6 +3479,70 @@ describe User, :vcr do
       create(:purchase, purchaser: user, link: small_bets_product)
 
       expect(user.purchased_small_bets?).to eq(true)
+    end
+  end
+
+  describe "#eligible_for_ai_product_generation?" do
+    let(:user) { create(:user) }
+
+    before do
+      Feature.activate_user(:ai_product_generation, user)
+      user.confirm
+      allow(user).to receive(:sales_cents_total).and_return(15_000)
+    end
+
+    it "returns true when user has completed payments" do
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+
+    it "returns true when user made successful sale with Stripe Connect account" do
+      stripe_connect_account = create(:merchant_account_stripe_connect, user:)
+      create(:purchase, seller: user, link: create(:product, user:), merchant_account: stripe_connect_account)
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+
+    it "returns true when user made successful sale with PayPal Connect account" do
+      paypal_connect_account = create(:merchant_account_paypal, user:)
+      create(:purchase, seller: user, link: create(:product, user:), merchant_account: paypal_connect_account)
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+
+    it "returns false when user has no completed payments or successful sales" do
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when feature flag is inactive" do
+      Feature.deactivate_user(:ai_product_generation, user)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when user is not confirmed" do
+      user.update!(confirmed_at: nil)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when user is suspended" do
+      user.update!(user_risk_state: :suspended_for_fraud)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when user has insufficient sales" do
+      allow(user).to receive(:sales_cents_total).and_return(5_000)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns true regardless of other conditions in development environment" do
+      allow(Rails.env).to receive(:development?).and_return(true)
+      user.update!(confirmed_at: nil)
+      user.update!(user_risk_state: :suspended_for_fraud)
+      allow(user).to receive(:sales_cents_total).and_return(0)
+
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
     end
   end
 end

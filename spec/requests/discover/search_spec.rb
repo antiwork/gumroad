@@ -75,6 +75,25 @@ describe("Discover - Search scenarios", js: true, type: :feature) do
          .and change { RecommendedPurchaseInfo.where(recommendation_type: "search").count }.by(1)
     end
 
+    it "does not show product in search results if seller is not compliant" do
+      recommendable_product_title = "Nothing but pine martens"
+      recommendable_product = create(:product, :recommendable, name: recommendable_product_title, price_cents: 3378)
+      index_model_records(Link)
+      expect(recommendable_product.recommendable?).to be(true)
+
+      visit discover_url(host: discover_host)
+      fill_in "Search products", with: "pine martens\n"
+      expect_product_cards_in_order([recommendable_product])
+
+      recommendable_product.user.update!(user_risk_state: "not_reviewed")
+      recommendable_product.enqueue_index_update_for(%w[is_recommendable])
+      expect(recommendable_product.recommendable?).to be(false)
+
+      visit discover_url(host: discover_host)
+      fill_in "Search products", with: "pine martens\n"
+      expect(page).not_to have_selector(".product-card")
+    end
+
     it "shows autocomplete results for products" do
       create(:product, :recommendable, name: "Rust: The best parts")
       create(:product, :recommendable, name: "Why Rust is better than C++", price_cents: 3378)

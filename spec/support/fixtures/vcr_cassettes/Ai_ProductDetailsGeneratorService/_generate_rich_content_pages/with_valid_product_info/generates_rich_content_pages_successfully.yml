@@ -1,0 +1,136 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.openai.com/v1/chat/completions
+    body:
+      encoding: UTF-8
+      string: '{"model":"gpt-4o-mini","messages":[{"role":"system","content":"\nYou
+        are creating rich content pages for a digital product.\nGenerate exactly 2
+        pages in valid Tiptap JSON format, each page having a title and content array
+        with at least 5-6 meaningful and contextually relevant paragraphs, headings,
+        and lists. Try to match the page titles from the titles of pages/chapters
+        in the description of the product if any.\n\nCRITICAL: Generate ONLY valid
+        JSON. Always use exactly \"type\" as the key name, never \"type: \" or any
+        variation. Ensure all JSON syntax is correct.\n\nReturn a JSON object with
+        pages array. Example output format:\n{\n\"pages\": [\n{ \"title\": \"Page
+        1\",\n\"content\": [\n{ \"type\": \"heading\", \"attrs\": { \"level\": 2 },
+        \"content\": [ { \"type\": \"text\", \"text\": \"Heading\" } ] },\n{ \"type\":
+        \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Paragraph
+        1\" } ] },\n{ \"type\": \"orderedList\", \"content\": [ { \"type\": \"listItem\",
+        \"content\": [ { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\",
+        \"text\": \"List item\" } ] } ] } ] },\n{ \"type\": \"bulletList\", \"content\":
+        [ { \"type\": \"listItem\", \"content\": [ { \"type\": \"paragraph\", \"content\":
+        [ { \"type\": \"text\", \"text\": \"List item\" } ] } ] } ] },\n{ \"type\":
+        \"codeBlock\", \"content\": [ { \"type\": \"text\", \"text\": \"class Dog\ndef
+        bark\nputs ''Woof!''\nend\nend\" } ] }\n]\n}\n]\n}\n"},{"role":"user","content":"\n              Create
+        detailed content pages for ebook product:\n              Product name: \"Joy
+        of Programming in Ruby\".\n              Number of content pages: 2.\n              Product
+        description: \"\u003cp\u003eLearn Ruby from the ground up\u003c/p\u003e\".\n              "}],"response_format":{"type":"json_object"},"temperature":0.5}'
+    headers:
+      Content-Type:
+      - application/json
+      Authorization:
+      - Bearer <OPENAI_ACCESS_TOKEN>
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Sun, 29 Jun 2025 15:15:05 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Expose-Headers:
+      - X-Request-ID
+      Openai-Organization:
+      - gumroad
+      Openai-Processing-Ms:
+      - '12393'
+      Openai-Version:
+      - '2020-10-01'
+      X-Envoy-Upstream-Service-Time:
+      - '12396'
+      X-Ratelimit-Limit-Requests:
+      - '30000'
+      X-Ratelimit-Limit-Tokens:
+      - '150000000'
+      X-Ratelimit-Remaining-Requests:
+      - '29999'
+      X-Ratelimit-Remaining-Tokens:
+      - '149999625'
+      X-Ratelimit-Reset-Requests:
+      - 2ms
+      X-Ratelimit-Reset-Tokens:
+      - 0s
+      X-Request-Id:
+      - req_d44a2195c243023bc43e39551d11556b
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Cf-Cache-Status:
+      - DYNAMIC
+      Set-Cookie:
+      - __cf_bm=6XjvuEBsvJVeAN2CSYRR695F2KtGXD.9LN0e6t0Z_3A-1751210105-1.0.1.1-hello;
+        path=/; expires=Sun, 29-Jun-25 15:45:05 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=hello-1751210105936-0.0.1.1-hello;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      X-Content-Type-Options:
+      - nosniff
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - 9576604ab8bc3b6d-BOM
+      Alt-Svc:
+      - h3=":443"; ma=86400
+    body:
+      encoding: ASCII-8BIT
+      string: |
+        {
+          "id": "chatcmpl-Bno21iOpslzidedikiDx99ej52rfT",
+          "object": "chat.completion",
+          "created": 1751210093,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "{\n  \"pages\": [\n    {\n      \"title\": \"Introduction to Ruby\",\n      \"content\": [\n        { \"type\": \"heading\", \"attrs\": { \"level\": 2 }, \"content\": [ { \"type\": \"text\", \"text\": \"What is Ruby?\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Ruby is a dynamic, open-source programming language that is known for its simplicity and productivity. It was created by Yukihiro Matsumoto in the mid-1990s and has since gained immense popularity among developers.\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"One of the key features of Ruby is its elegant syntax that is easy to read and write. This makes it an ideal choice for beginners who are just starting their programming journey.\" } ] },\n        { \"type\": \"heading\", \"attrs\": { \"level\": 3 }, \"content\": [ { \"type\": \"text\", \"text\": \"Why Learn Ruby?\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Learning Ruby opens up a world of opportunities, especially in web development. Ruby on Rails, a popular web application framework, is built on Ruby and is widely used by many startups and established companies.\" } ] },\n        { \"type\": \"bulletList\", \"content\": [ \n          { \"type\": \"listItem\", \"content\": [ { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Easy to learn for beginners.\" } ] } ] },\n          { \"type\": \"listItem\", \"content\": [ { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Strong community support.\" } ] } ] },\n          { \"type\": \"listItem\", \"content\": [ { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Versatile for various applications.\" } ] } ] }\n        ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"In this section, we will cover the foundational concepts of Ruby, including variables, data types, and control structures.\" } ] }\n      ]\n    },\n    {\n      \"title\": \"Getting Started with Ruby\",\n      \"content\": [\n        { \"type\": \"heading\", \"attrs\": { \"level\": 2 }, \"content\": [ { \"type\": \"text\", \"text\": \"Setting Up Your Environment\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Before diving into programming, you need to set up your development environment. This involves installing Ruby and a code editor.\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"You can download Ruby from the official website, and we recommend using Visual Studio Code as your code editor due to its rich features and extensions.\" } ] },\n        { \"type\": \"heading\", \"attrs\": { \"level\": 3 }, \"content\": [ { \"type\": \"text\", \"text\": \"Writing Your First Ruby Program\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Once your environment is set up, you can create your first Ruby program. Open your code editor, create a new file named 'hello.rb', and write the following code:\" } ] },\n        { \"type\": \"codeBlock\", \"content\": [ { \"type\": \"text\", \"text\": \"puts 'Hello, World!'\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"Save the file and run it in your terminal using the command `ruby hello.rb`. You should see 'Hello, World!' printed on the screen.\" } ] },\n        { \"type\": \"heading\", \"attrs\": { \"level\": 3 }, \"content\": [ { \"type\": \"text\", \"text\": \"Next Steps\" } ] },\n        { \"type\": \"paragraph\", \"content\": [ { \"type\": \"text\", \"text\": \"In the following chapters, we will explore more advanced topics such as object-oriented programming, error handling, and building web applications using Ruby on Rails.\" } ] }\n      ]\n    }\n  ]\n}",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 422,
+            "completion_tokens": 959,
+            "total_tokens": 1381,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_34a54ae93c"
+        }
+  recorded_at: Sun, 29 Jun 2025 15:15:06 GMT
+recorded_with: VCR 6.2.0

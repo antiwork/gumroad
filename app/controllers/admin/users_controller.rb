@@ -202,6 +202,15 @@ class Admin::UsersController < Admin::BaseController
     end
   end
 
+  def set_custom_fee
+    custom_fee_per_thousand = params[:custom_fee_percent].present? ? (params[:custom_fee_percent].to_f * 10).round : nil
+    @user.update!(custom_fee_per_thousand:)
+
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
   private
     def fetch_user
       if params[:id].include?("@")
