@@ -1950,7 +1950,7 @@ describe StripeChargeProcessor, :vcr do
 
       describe "event payment failed" do
         let(:stripe_event_type) { "payment_intent.payment_failed" }
-
+        let(:purchase_external_id) { "q3jUBQrrGrIId3SjC4VJ0g==" }
         let(:stripe_event) do
           {
             "id" => "evt_2OQy7L9e1RjUNIyY0YbddRCB",
@@ -2084,10 +2084,11 @@ describe StripeChargeProcessor, :vcr do
         it "works as only informational event if corresponding purchase is not on an Indian card" do
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
 
-          create(:purchase, id: ObfuscateIds.decrypt("q3jUBQrrGrIId3SjC4VJ0g=="))
+          purchase = create(:purchase, id: ObfuscateIds.decrypt(purchase_external_id))
           expect_any_instance_of(Purchase).to receive(:handle_event_failed!).and_call_original
           expect_any_instance_of(Purchase).to receive(:handle_event_informational!).and_call_original
           expect_any_instance_of(Purchase).not_to receive(:mark_failed!)
+          allow(Purchase).to receive(:find_by_external_id).with(purchase_external_id).and_return(purchase)
 
           StripeChargeProcessor.handle_stripe_event(stripe_event)
         end
@@ -2095,10 +2096,11 @@ describe StripeChargeProcessor, :vcr do
         it "works as only informational event if corresponding purchase is not an off-session purchase" do
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
 
-          create(:purchase, id: ObfuscateIds.decrypt("q3jUBQrrGrIId3SjC4VJ0g=="), card_country: Compliance::Countries::IND.alpha2)
+          purchase = create(:purchase, id: ObfuscateIds.decrypt(purchase_external_id), card_country: Compliance::Countries::IND.alpha2)
           expect_any_instance_of(Purchase).to receive(:handle_event_failed!).and_call_original
           expect_any_instance_of(Purchase).to receive(:handle_event_informational!).and_call_original
           expect_any_instance_of(Purchase).not_to receive(:mark_failed!)
+          allow(Purchase).to receive(:find_by_external_id).with(purchase_external_id).and_return(purchase)
 
           StripeChargeProcessor.handle_stripe_event(stripe_event)
         end
@@ -2109,11 +2111,12 @@ describe StripeChargeProcessor, :vcr do
           subscription = create(:subscription)
           create(:purchase, subscription:, is_original_subscription_purchase: true)
           allow_any_instance_of(Subscription).to receive(:terminate_by).and_return(1.month.from_now)
-          recurring_membership_purchase = create(:purchase, purchase_state: "in_progress", id: ObfuscateIds.decrypt("q3jUBQrrGrIId3SjC4VJ0g=="), card_country: "IN", subscription:)
+          recurring_membership_purchase = create(:purchase, purchase_state: "in_progress", id: ObfuscateIds.decrypt(purchase_external_id), card_country: "IN", subscription:)
 
           expect_any_instance_of(Purchase).to receive(:handle_event_failed!).and_call_original
           expect_any_instance_of(Purchase).to receive(:handle_event_informational!).and_call_original
           expect_any_instance_of(Purchase).to receive(:mark_failed!).and_call_original
+          allow(Purchase).to receive(:find_by_external_id).with(purchase_external_id).and_return(recurring_membership_purchase)
 
           StripeChargeProcessor.handle_stripe_event(stripe_event)
 
