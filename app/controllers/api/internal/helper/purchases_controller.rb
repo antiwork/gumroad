@@ -277,6 +277,23 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     purchase_json[:id] = purchase.external_id_numeric
     purchase_json[:seller_email] = purchase.seller_email
     purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
+
+    if purchase.refunded?
+      purchase_json[:refund_status] = "refunded"
+    elsif purchase.stripe_partially_refunded
+      purchase_json[:refund_status] = "partially_refunded"
+    else
+      purchase_json[:refund_status] = nil
+    end
+
+    if purchase.amount_refunded_cents > 0
+      purchase_json[:refund_amount] = purchase.amount_refunded_cents
+    end
+
+    if purchase_json[:refund_status]
+      purchase_json[:refund_date] = purchase.refunds.order(:created_at).last&.created_at
+    end
+
     render json: { success: true, message: "Purchase found", purchase: purchase_json }
   rescue AdminSearchService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
