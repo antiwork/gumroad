@@ -50,7 +50,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
       }
     >
       {isOpen ? (
-        <div className="max-w-[300px] sm:max-w-full space-y-4">
+        <div className="max-w-[300px] space-y-4 sm:max-w-full">
           {Object.keys(taxForms).length === 0 ? (
             <section className="text-muted">No tax forms available.</section>
           ) : (
@@ -64,24 +64,26 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
 
               <section className="relative -mx-4 max-h-[300px] max-w-none overflow-y-auto border-b p-4">
                 <fieldset>
-                  {Object.keys(taxForms).sort().reverse().map((year) => (
-                    <label key={year}>
-                      <input
-                        type="checkbox"
-                        checked={selectedYears.has(year)}
-                        onChange={(event) => {
-                          const newSelectedYears = new Set(selectedYears);
-                          if (event.target.checked) {
-                            newSelectedYears.add(year);
-                          } else {
-                            newSelectedYears.delete(year);
-                          }
-                          setSelectedYears(newSelectedYears);
-                        }}
-                      />
-                      {year}
-                    </label>
-                  ))}
+                  {Object.keys(taxForms)
+                    .sort((a, b) => Number(b) - Number(a))
+                    .map((year) => (
+                      <label key={year}>
+                        <input
+                          type="checkbox"
+                          checked={selectedYears.has(year)}
+                          onChange={(event) => {
+                            const newSelectedYears = new Set(selectedYears);
+                            if (event.target.checked) {
+                              newSelectedYears.add(year);
+                            } else {
+                              newSelectedYears.delete(year);
+                            }
+                            setSelectedYears(newSelectedYears);
+                          }}
+                        />
+                        {year}
+                      </label>
+                    ))}
                 </fieldset>
               </section>
 
