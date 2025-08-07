@@ -252,10 +252,20 @@ describe PaypalMerchantAccountManager, :vcr do
         expect(result).not_to eq("PayPal Connect requires $100 in earnings and one completed payout.")
       end
 
-      it "does not allow connection for users regardless of earnings if they have insufficient earnings" do
+      it "returns eligibility error for users with insufficient earnings" do
         creator = create(:user)
         create(:user_compliance_info_empty, user: creator, country: "United States")
+        create(:payment_completed, user: creator)
         allow(creator).to receive(:sales_cents_total).and_return(0)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
+        expect(result).to eq("PayPal Connect requires $100 in earnings and one completed payout.")
+      end
+
+      it "returns eligibility error for users without completed payout" do
+        creator = create(:user)
+        create(:user_compliance_info_empty, user: creator, country: "United States")
+        allow(creator).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
 
         result = subject.update_merchant_account(user: creator, paypal_merchant_id: "GSQ5PDPXZCWGW")
         expect(result).to eq("PayPal Connect requires $100 in earnings and one completed payout.")
