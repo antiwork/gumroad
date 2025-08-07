@@ -1,3 +1,44 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe PurchasesController, type: :controller do
+  describe "GET export" do
+    let(:seller) { create(:named_seller) }
+
+    before do
+      allow(controller).to receive(:current_seller).and_return(seller)
+      allow(controller).to receive(:impersonating_user).and_return(nil)
+      allow(controller).to receive(:logged_in_user).and_return(seller)
+      allow(controller).to receive(:authorize).and_return(true)
+    end
+
+    context "when export exceeds synchronous threshold" do
+      it "enqueues background export and sets a warning flash" do
+        allow(EsClient).to receive(:count).and_return({ "count" => Exports::PurchaseExportService::SYNCHRONOUS_EXPORT_THRESHOLD + 1 })
+        allow(Exports::Sales::CreateAndEnqueueChunksWorker).to receive(:perform_async).and_return(true)
+
+        get :export, params: { start_time: "2023-01-01", end_time: "2023-01-31" }
+
+        expect(flash[:warning]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
+        expect(response).to redirect_to(customers_path)
+      end
+    end
+
+    context "when export is under threshold" do
+      it "sends a CSV file response" do
+        tempfile = Tempfile.new("Sales.csv")
+        allow(Exports::PurchaseExportService).to receive(:export).and_return(tempfile)
+
+        get :export, params: { start_time: "2023-01-01", end_time: "2023-01-31" }
+
+        expect(response).to be_successful
+        expect(response.header["Content-Transfer-Encoding"]).to be_present.or(be_nil)
+      end
+    end
+  end
+end
+
 # frozen_string_literal: false
 
 require "spec_helper"
