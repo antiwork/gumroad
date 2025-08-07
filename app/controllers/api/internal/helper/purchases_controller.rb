@@ -282,6 +282,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       purchase_json[:refund_status] = "refunded"
     elsif purchase.stripe_partially_refunded
       purchase_json[:refund_status] = "partially_refunded"
+    else
+      purchase_json[:refund_status] = nil
     end
 
     if purchase.amount_refunded_cents > 0
