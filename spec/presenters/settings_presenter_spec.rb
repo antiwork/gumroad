@@ -3,6 +3,27 @@
 require "spec_helper"
 
 describe SettingsPresenter do
+  let(:seller) { create(:named_seller) }
+  let(:pundit_user) { PunditUser.new(seller) }
+
+  describe "payouts paused state" do
+    it "exposes pause flags for payments page props" do
+      presenter = described_class.new(pundit_user: pundit_user)
+      allow(seller).to receive(:payouts_paused_internally?).and_return(true)
+      allow(seller).to receive(:payouts_paused_by_user?).and_return(false)
+
+      props = presenter.payments_props
+      expect(props[:payouts_paused_internally]).to eq(true)
+      expect(props[:payouts_paused_by_user]).to eq(false)
+    end
+  end
+end
+
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe SettingsPresenter do
   let(:product) do
     create(:product, purchasing_power_parity_disabled: true, user: create(:named_seller, purchasing_power_parity_limit: 60))
   end
