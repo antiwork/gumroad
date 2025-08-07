@@ -599,6 +599,21 @@ describe ReceiptPresenter::ItemInfo do
           )
         end
 
+        context "when the membership has fixed length (installments)" do
+          before do
+            purchase.subscription.update!(charge_occurrence_count: 3)
+          end
+
+          it "returns installment initiation and final charge message with link" do
+            presenter = described_class.new(purchase)
+            note = presenter.props[:manage_subscription_note]
+            expect(note).to include("Installment plan initiated on")
+            expect(note).to include("Your final charge will be on")
+            expect(note).to include("You can manage your payment settings")
+            expect(note).to include("href=\"")
+          end
+        end
+
         context "when not used in an email" do
           let(:for_email) { false }
 
