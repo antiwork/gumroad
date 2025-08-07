@@ -91,6 +91,10 @@ class Api::V2::LicensesController < Api::V2::BaseController
       json = { success: true }.merge(@license.as_json(only: [:uses]))
       if @license.purchase.present?
         purchase = @license.purchase
+        # If the purchase is a gift sender, try to use the giftee's purchase if it exists and has a license
+        if purchase.is_gift_sender_purchase && purchase.gift&.giftee_purchase&.license.present?
+          purchase = purchase.gift.giftee_purchase
+        end
         json[:purchase] = purchase.payload_for_ping_notification.merge(purchase_as_json(purchase))
       elsif @license.imported_customer.present?
         json[:imported_customer] = @license.imported_customer.as_json(without_license_key: true)

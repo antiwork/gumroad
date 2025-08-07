@@ -224,8 +224,13 @@ class PurchasesController < ApplicationController
       giftee_purchase.resend_receipt
     end
 
-    if @purchase.errors.empty?
-      render json: { success: true, purchase: @purchase.as_json(pundit_user:) }
+    # For gifted bundle purchases, use the giftee's purchase for API responses
+    purchase_to_render = @purchase
+    if @purchase.is_gift_sender_purchase && @purchase.gift&.giftee_purchase.present?
+      purchase_to_render = @purchase.gift.giftee_purchase
+    end
+    if purchase_to_render.errors.empty?
+      render json: { success: true, purchase: purchase_to_render.as_json(pundit_user:) }
     else
       render json: { success: false }
     end
