@@ -26,13 +26,13 @@ module Product::Prices
   def rental_price_cents
     return read_attribute(:rental_price_cents) unless persisted?
 
-    rentable? ? alive_prices.select(&:is_rental?).last.price_cents : nil
+    rentable? ? alive_prices.where(currency: price_currency_type).select(&:is_rental?).last&.price_cents : nil
   end
 
   def default_price
-    return alive_prices.select(&:is_rental?).last if rent_only?
+    return alive_prices.where(currency: price_currency_type).select(&:is_rental?).last if rent_only?
 
-    relevant_prices = alive_prices.select(&:is_buy?)
+    relevant_prices = alive_prices.where(currency: price_currency_type).select(&:is_buy?)
     relevant_prices = relevant_prices.select(&:is_default_recurrence?) if is_recurring_billing && subscription_duration.present?
     relevant_prices.last
   end
