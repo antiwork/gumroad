@@ -216,26 +216,18 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     purchase_json[:seller_email] = purchase.seller_email
     purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
 
-    if purchase.stripe_refunded
+    if purchase.refunded?
       purchase_json[:refund_status] = "refunded"
     elsif purchase.stripe_partially_refunded
       purchase_json[:refund_status] = "partially_refunded"
-    else
-      purchase_json[:refund_status] = nil
     end
 
     if purchase.amount_refunded_cents > 0
-      amount_in_cents = purchase.usd_cents_to_currency(purchase.displayed_price_currency_type, purchase.amount_refunded_cents, purchase.rate_converted_to_usd)
-      purchase_json[:refund_amount] = Money.new(amount_in_cents, purchase.displayed_price_currency_type).format(no_cents_if_whole: true, symbol: true)
-    else
-      purchase_json[:refund_amount] = nil
+      purchase_json[:refund_amount] = purchase.amount_refunded_cents
     end
 
-    if purchase_json[:refund_status] && purchase.refunds.any?
-      most_recent_refund = purchase.refunds.order(:created_at).last
-      purchase_json[:refund_date] = most_recent_refund.created_at
-    else
-      purchase_json[:refund_date] = nil
+    if purchase_json[:refund_status]
+      purchase_json[:refund_date] = purchase.refunds.order(:created_at).last&.created_at
     end
 
     render json: { success: true, message: "Purchase found", purchase: purchase_json }
