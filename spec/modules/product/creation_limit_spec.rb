@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Product::CreationLimit do
+describe Product::CreationLimit, :enforce_product_creation_limit do
   let(:user) { create(:user) }
 
   it "allows creating up to 10 products in 24 hours" do
