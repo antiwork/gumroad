@@ -709,7 +709,40 @@ const BalancePage = ({
           </div>
         ) : null}
       </header>
+
       <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "var(--spacer-4)",
+            borderBottom: "var(--border)",
+            marginBottom: "var(--spacer-4)",
+          }}
+        >
+          <a
+            href="/payouts"
+            style={{
+              padding: "var(--spacer-2) var(--spacer-4)",
+              textDecoration: "none",
+              color: "var(--color-text-primary)",
+              borderBottom: "2px solid var(--color-primary)",
+            }}
+          >
+            Payouts
+          </a>
+          <a
+            href="/payouts/taxes"
+            style={{
+              padding: "var(--spacer-2) var(--spacer-4)",
+              textDecoration: "none",
+              color: "var(--color-text-secondary)",
+              borderBottom: "2px solid transparent",
+            }}
+          >
+            Taxes
+          </a>
+        </div>
+
         {!instant_payout ? (
           show_instant_payouts_notice ? (
             <div className="info" role="status">
