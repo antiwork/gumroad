@@ -730,7 +730,7 @@ describe Purchase::CreateService, :vcr do
   context "when the user has a different currency" do
     describe "english pound" do
       it "sets the displayed price on the purchase" do
-        product.update!(price_currency_type: :gbp)
+        product.update!(price_currency_type: :gbp, price_cents: 600)
         product.reload
 
         purchase, _ = Purchase::CreateService.new(product:, params:).perform
@@ -2491,7 +2491,7 @@ describe Purchase::CreateService, :vcr do
 
     it "allows purchases with offer codes in different currencies" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
-        product.update!(price_cents: 15_000, price_currency_type: currency)
+        product.update!(price_currency_type: currency, price_cents: 15_000)
         offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
           offer_code_name: offer_code.name,
@@ -2566,7 +2566,7 @@ describe Purchase::CreateService, :vcr do
 
     it "fails if the amount paid is less than it should be in any currency" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
-        product.update!(price_cents: 15_000, price_currency_type: currency)
+        product.update!(price_currency_type: currency, price_cents: 15_000)
         offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
           offer_code_name: offer_code.name,

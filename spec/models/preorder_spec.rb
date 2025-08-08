@@ -529,7 +529,7 @@ describe Preorder, :vcr do
     end
 
     it "charges the card the right amount based on the exchange rate at the time of the charge" do
-      @product.update_attribute(:price_currency_type, "jpy")
+      @product.update!(price_currency_type: "jpy", price_cents: 600)
       $currency_namespace.set("JPY",  95)
       authorization_purchase = build(:purchase, link: @product, chargeable: @good_card, purchase_state: "in_progress", is_preorder_authorization: true)
       preorder = @preorder_product.build_preorder(authorization_purchase)
@@ -564,8 +564,11 @@ describe Preorder, :vcr do
     end
 
     it "charges the card the right amount based on the custom price the buyer entered at preorder time - non USD" do
-      @product.update_attribute(:customizable_price, true)
-      @product.update_attribute(:price_currency_type, "jpy")
+      @product.update!(
+        price_currency_type: "jpy",
+        price_cents: 600,
+        customizable_price: true
+      )
       $currency_namespace.set("JPY",  90)
       authorization_purchase = build(:purchase, link: @product, perceived_price_cents: 700, chargeable: @good_card,
                                                 purchase_state: "in_progress", is_preorder_authorization: true)
@@ -683,7 +686,7 @@ describe Preorder, :vcr do
     end
 
     it "charges the buyer the amount equal to the price (in yens) at the time of the preorder" do
-      @product.update_attribute(:price_currency_type, "jpy")
+      @product.update!(price_currency_type: "jpy", price_cents: 600)
       authorization_purchase = build(:purchase, link: @product, chargeable: @good_card, purchase_state: "in_progress", is_preorder_authorization: true)
       preorder = @preorder_product.build_preorder(authorization_purchase)
       preorder.authorize!
