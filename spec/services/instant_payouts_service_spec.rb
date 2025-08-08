@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe InstantPayoutsService, :vcr do
-  let(:seller) { create(:user) }
+  let(:seller) { create(:compliant_user) }
 
   before do
     create(:tos_agreement, user: seller)
@@ -160,6 +160,7 @@ describe InstantPayoutsService, :vcr do
       end
 
       it "returns error message" do
+        expect(seller.eligible_for_instant_payouts?).to be false
         expect do
           result = described_class.new(seller).perform
           expect(result).to eq(
@@ -167,29 +168,6 @@ describe InstantPayoutsService, :vcr do
             error: "Your account is not eligible for instant payouts at this time."
           )
         end.not_to change { Payment.count }
-      end
-    end
-
-    context "when seller is compliant" do
-      before do
-        seller.update!(user_risk_state: "compliant")
-        create(:ach_account_stripe_succeed, user: seller)
-        merchant_account = StripeMerchantAccountManager.create_account(seller.reload, passphrase: "1234")
-        @merchant_account = merchant_account
-        create(:balance, amount_cents: 1000_00, holding_amount_cents: 1000_00, user: seller, date: Date.yesterday, merchant_account: merchant_account)
-
-        @stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-        @stripe_account.refresh until @stripe_account.payouts_enabled?
-        Stripe::Transfer.create(destination: @stripe_account.id, currency: "usd", amount: 1000_00)
-      end
-
-      it "allows instant payout when compliant" do
-        expect(seller.eligible_for_instant_payouts?).to be true
-
-        expect do
-          result = described_class.new(seller).perform
-          expect(result[:success]).to be true
-        end.to change { Payment.count }.by(1)
       end
     end
 
