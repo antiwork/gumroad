@@ -1,10 +1,10 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast, createCast } from "ts-safe-cast";
 
 import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError } from "$app/utils/request";
+import { AbortError, assertResponseError, ResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
@@ -177,13 +177,17 @@ const AffiliatedProductsTable = ({
                       Copy link
                     </Button>
                   </CopyToClipboard>
-                  {onRemoveAffiliation && affiliatedProduct.affiliate_type === "direct_affiliate" && (
+                  {onRemoveAffiliation && affiliatedProduct.affiliate_type === "direct_affiliate" ? (
                     <WithTooltip position="bottom" tip="Remove affiliation">
-                      <Button onClick={() => onRemoveAffiliation(affiliatedProduct.affiliate_id)} color="danger" small>
+                      <Button
+                        aria-label="Remove affiliation"
+                        onClick={() => onRemoveAffiliation(affiliatedProduct.affiliate_id)}
+                        color="danger"
+                      >
                         <Icon name="trash2" />
                       </Button>
                     </WithTooltip>
-                  )}
+                  ) : null}
                 </div>
               </td>
             </tr>
@@ -268,12 +272,13 @@ const PendingInvitationsTable = ({ pendingInvitations, onInvitationResponse }: P
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to ${accepted ? "accept" : "decline"} invitation`);
+        throw new ResponseError(`Failed to ${accepted ? "accept" : "decline"} invitation`);
       }
 
       showAlert(`Invitation ${accepted ? "accepted" : "declined"} successfully`, "success");
       await onInvitationResponse();
     } catch (error) {
+      assertResponseError(error);
       showAlert(`Failed to ${accepted ? "accept" : "decline"} invitation`, "error");
     } finally {
       setLoadingInvitations((prev) => {
@@ -310,7 +315,9 @@ const PendingInvitationsTable = ({ pendingInvitations, onInvitationResponse }: P
                 <div className="actions" style={{ display: "flex", gap: "var(--spacer-2)" }}>
                   <Button
                     disabled={isLoading}
-                    onClick={() => handleInvitationResponse(invitation.invitation_id, invitation.affiliate_id, true)}
+                    onClick={asyncVoid(() =>
+                      handleInvitationResponse(invitation.invitation_id, invitation.affiliate_id, true),
+                    )}
                     color="accent"
                     small
                   >
@@ -319,7 +326,9 @@ const PendingInvitationsTable = ({ pendingInvitations, onInvitationResponse }: P
                   </Button>
                   <Button
                     disabled={isLoading}
-                    onClick={() => handleInvitationResponse(invitation.invitation_id, invitation.affiliate_id, false)}
+                    onClick={asyncVoid(() =>
+                      handleInvitationResponse(invitation.invitation_id, invitation.affiliate_id, false),
+                    )}
                     small
                   >
                     <Icon name="x" />
@@ -393,10 +402,16 @@ const AffiliatedPage = ({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to refresh data");
+        throw new ResponseError("Failed to refresh data");
       }
 
-      const data = (await response.json()) as Props;
+      const data = cast<{
+        pagination: PaginationProps;
+        affiliated_products: AffiliatedProduct[];
+        pending_invitations: PendingInvitation[];
+        stats: Stats;
+      }>(await response.json());
+
       setState({
         pagination: data.pagination,
         affiliatedProducts: data.affiliated_products,
@@ -405,7 +420,8 @@ const AffiliatedPage = ({
       });
       setCurrentStats(data.stats);
     } catch (error) {
-      showAlert("Failed to refresh data", "error");
+      assertResponseError(error);
+      showAlert(error.message, "error");
     }
   };
 
@@ -426,13 +442,14 @@ const AffiliatedPage = ({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to remove affiliation");
+        throw new ResponseError("Failed to remove affiliation");
       }
 
       showAlert("Affiliation removed successfully", "success");
       await refetchAllData();
     } catch (error) {
-      showAlert("Failed to remove affiliation", "error");
+      assertResponseError(error);
+      showAlert(error.message, "error");
     }
   };
 
@@ -478,48 +495,56 @@ const AffiliatedPage = ({
           {initialAffiliatedProducts.length === 0 && initialPendingInvitations.length === 0 ? (
             <div className="placeholder">
               <figure>
-                <img src={placeholder} />
+                <img src={placeholder} alt="Affiliate placeholder" />
               </figure>
               <h2>Become an affiliate and earn!</h2>
-              Gumroad is a great place for you to make some side income, even if you're not actively creating your own
-              products.
-              <WithTooltip position="top" tip={affiliatesDisabledReason}>
-                <Button disabled={affiliatesDisabledReason !== null} color="accent" onClick={() => toggleOpen(true)}>
-                  Become an affiliate
-                </Button>
-              </WithTooltip>
               <p>
-                or <a data-helper-prompt="How do I get started as an affiliate?">learn more to get started</a>
+                Gumroad is a great place for you to make some side income, even if you're not actively creating your own
+                products.
               </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-4)", alignItems: "center" }}>
+                <WithTooltip position="top" tip={affiliatesDisabledReason}>
+                  <Button disabled={affiliatesDisabledReason !== null} color="accent" onClick={() => toggleOpen(true)}>
+                    Become an affiliate
+                  </Button>
+                </WithTooltip>
+                <p style={{ margin: 0 }}>
+                  or <a data-helper-prompt="How do I get started as an affiliate?">learn more to get started</a>
+                </p>
+              </div>
             </div>
           ) : (
             <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
               <StatsSection {...currentStats} />
 
-              {state.pendingInvitations.length > 0 && (
+              {state.pendingInvitations.length > 0 ? (
                 <section>
-                  <h2>Pending affiliate invitations</h2>
-                  <p>
-                    You have been invited to become an affiliate for these products. Choose to accept or decline each
-                    invitation.
-                  </p>
+                  <div style={{ marginBottom: "var(--spacer-4)" }}>
+                    <h2>Pending affiliate invitations</h2>
+                    <p style={{ margin: "var(--spacer-2) 0 0 0" }}>
+                      You have been invited to become an affiliate for these products. Choose to accept or decline each
+                      invitation.
+                    </p>
+                  </div>
                   <PendingInvitationsTable
                     pendingInvitations={state.pendingInvitations}
                     onInvitationResponse={refetchAllData}
                   />
                 </section>
-              )}
+              ) : null}
 
               {state.affiliatedProducts.length === 0 && state.pendingInvitations.length === 0 ? (
                 <div className="placeholder">
                   <figure>
-                    <img src={placeholder} />
+                    <img src={placeholder} alt="No affiliated products" />
                   </figure>
                   <h2>No affiliated products found.</h2>
                 </div>
               ) : state.affiliatedProducts.length > 0 ? (
                 <section>
-                  <h2>Active affiliations</h2>
+                  <div style={{ marginBottom: "var(--spacer-4)" }}>
+                    <h2>Active affiliations</h2>
+                  </div>
                   <AffiliatedProductsTable
                     affiliatedProducts={affiliatedProducts}
                     pagination={pagination}
@@ -527,7 +552,7 @@ const AffiliatedPage = ({
                       void loadAffiliatedProducts(page, state.query, sort);
                     }}
                     isLoading={isLoading}
-                    onRemoveAffiliation={handleRemoveAffiliation}
+                    onRemoveAffiliation={asyncVoid(handleRemoveAffiliation)}
                   />
                 </section>
               ) : null}
