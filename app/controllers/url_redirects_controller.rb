@@ -96,7 +96,7 @@ class UrlRedirectsController < ApplicationController
   # Triggers PDF stamping for this purchase and emails the receipt once ready.
   # Also performs a quick capability check for PDFs that haven't been checked yet.
   def request_stamped_pdfs
-    e404 unless request.format.json?
+    return e404 if !request.format.json?
 
     purchase = @url_redirect.purchase
     product = @url_redirect.referenced_link

@@ -633,8 +633,8 @@ describe("Download Page", type: :feature, js: true) do
 
   context "when a PDF hasn't been stamped yet" do
     it "triggers stamping and shows an inline notice on click" do
-      product = create(:product)
-      create(:product_file, link: product, pdf_stamp_enabled: true)
+      product = create(:product_with_pdf_file)
+      product.product_files.first.update!(pdf_stamp_enabled: true)
       purchase = create(:purchase, link: product)
       url_redirect = create(:url_redirect, purchase:)
 
