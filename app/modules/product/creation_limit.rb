@@ -40,6 +40,7 @@ module Product::CreationLimit
     end
 
     def skip_daily_product_creation_limit?
+      return true if Rails.env.development?
       return true if self.class.product_creation_limit_bypassed?
       return true if user.blank?
       return true if user.is_team_member?
