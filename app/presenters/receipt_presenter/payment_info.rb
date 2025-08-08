@@ -24,6 +24,7 @@ class ReceiptPresenter::PaymentInfo
 
   def notes
     [
+      installment_plan_final_payment_note,
       recurring_subscription_notes,
       usd_currency_note,
       credit_card_note
@@ -154,7 +155,7 @@ class ReceiptPresenter::PaymentInfo
       return unless any_upcoming_payments?
 
       {
-        label: "Today's payment",
+      label: todays_payment_heading_with_installment_number,
         value: nil
       }
     end
@@ -217,10 +218,7 @@ class ReceiptPresenter::PaymentInfo
     end
 
     def upcoming_payment_heading_attribute
-      {
-        label: "Upcoming #{"payment".pluralize(upcoming_price_attributes.size)}",
-        value: nil
-      }
+    { label: upcoming_payment_heading_with_installment_number, value: nil }
     end
 
     def today_membership_paid_until_attribute
@@ -254,6 +252,41 @@ class ReceiptPresenter::PaymentInfo
         .map { upcoming_price_attribute(_1) }
         .compact
     end
+
+  def installment_index_and_total
+    subscription = chargeable.respond_to?(:subscription) ? chargeable.subscription : nil
+    return [nil, nil] unless subscription&.has_fixed_length? && subscription.is_installment_plan?
+
+    completed = subscription.purchases.successful.count
+    total = subscription.charge_occurrence_count
+    [completed, total]
+  end
+
+  def todays_payment_heading_with_installment_number
+    index, total = installment_index_and_total
+    return "Today's payment" unless index && total
+    "Today's payment: #{index} of #{total}"
+  end
+
+  def upcoming_payment_heading_with_installment_number
+    index, total = installment_index_and_total
+    return "Upcoming #{"payment".pluralize(upcoming_price_attributes.size)}" unless index && total
+    next_index = [index + 1, total].min
+    "Upcoming payment: #{next_index} of #{total}"
+  end
+
+  def installment_plan_final_payment_note
+    return nil unless chargeable.respond_to?(:subscription)
+    subscription = chargeable.subscription
+    return nil unless subscription&.is_installment_plan?
+    return nil unless subscription.charges_completed?
+
+    charges = subscription.purchases.successful.order(:created_at)
+    dates = charges.map { |p| (p.succeeded_at || p.created_at).to_fs(:formatted_date_abbrev_month) }
+    total_cents = charges.sum(&:total_transaction_cents)
+
+    "This is your final payment for your installment plan. You will not be charged again. Charges on #{dates.join(", ")}. Total paid: #{formatted_dollar_amount(total_cents)}."
+  end
 
     def upcoming_price_attribute(purchase)
       if purchase.is_commission_deposit_purchase?
