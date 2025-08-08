@@ -11,10 +11,11 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
+import { CommunityButton } from "$app/components/Download/CommunityButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
-import { FileItem, FolderItem, FileList as DownloadFileList } from "$app/components/Download/FileList";
+import { FileItem, FileList as DownloadFileList, FolderItem } from "$app/components/Download/FileList";
 import { OpenInAppButton } from "$app/components/Download/OpenInAppButton";
-import { Post, DownloadPagePostList } from "$app/components/Download/PostList";
+import { DownloadPagePostList, Post } from "$app/components/Download/PostList";
 import {
   FileDownloadInfo,
   FilesAndFoldersDownloadInfoProvider,
@@ -263,11 +264,7 @@ const WithContent = ({
           {props.purchase && content.discord ? (
             <DiscordButton purchaseId={props.purchase.id} connected={content.discord.connected} />
           ) : null}
-          {content.community_chat_url ? (
-            <a className="button !bg-orange" href={content.community_chat_url}>
-              Community
-            </a>
-          ) : null}
+          {content.community_chat_url ? <CommunityButton href={content.community_chat_url} /> : null}
           <OpenInAppButton iosAppUrl={content.ios_app_url} androidAppUrl={content.android_app_url} />
           {content.download_all_button ? (
             <DownloadAllButton
