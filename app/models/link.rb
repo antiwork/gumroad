@@ -50,7 +50,7 @@ class Link < ApplicationRecord
           Product::ReviewStat, Product::Utils, ActionView::Helpers::SanitizeHelper,
           ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
-          Integrations, Product::StaffPicked, RichContents, Product::Sorting
+          Integrations, Product::StaffPicked, RichContents, Product::Sorting, Product::CreationLimit
 
   has_cdn_url :description
 
@@ -196,7 +196,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
-  validate :validate_daily_product_creation_limit, on: :create
+
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
   before_save :downcase_filetype
@@ -1442,16 +1442,6 @@ class Link < ApplicationRecord
     def quantity_enabled_state_is_allowed
       if quantity_enabled && !can_enable_quantity?
         errors.add(:base, "Customers cannot be allowed to choose a quantity for this product.")
-      end
-    end
-
-    def validate_daily_product_creation_limit
-      return unless user.present?
-      return if Rails.env.test?
-
-      last_24h_links_count = user.links.where(created_at: 24.hours.ago..Time.current).count
-      if last_24h_links_count >= 10
-        errors.add(:base, "Sorry, you can only create 10 products per day.")
       end
     end
 
