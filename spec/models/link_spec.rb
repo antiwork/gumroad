@@ -298,8 +298,6 @@ describe Link, :vcr do
     end
   end
 
-
-
   describe "callbacks" do
     describe "set_default_discover_fee_per_thousand" do
       it "sets the boosted discover fee when user has discover_boost_enabled" do
