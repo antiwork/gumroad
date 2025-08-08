@@ -321,7 +321,7 @@ module Product::Prices
 
     def prices_to_validate
       if persisted?
-        prices.alive.map(&:price_cents)
+        prices.alive.where(currency: price_currency_type).pluck(:price_cents)
       else
         price_cents_to_validate = []
         price_cents_to_validate << buy_price_cents if buyable?
