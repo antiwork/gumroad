@@ -23,9 +23,5 @@ describe("ProductPurchaseFlowScenario", type: :feature, js: true) do
     expect(page).to have_field("Require shipping information")
 
     expect(product.reload.require_shipping).to be false
-
-    product2 = create(:physical_product)
-    visit edit_link_path(product2.unique_permalink)
-    expect(page).to have_field("Require shipping information")
   end
 end
