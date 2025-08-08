@@ -336,7 +336,7 @@ describe CustomerPresenter do
     let(:purchase) { create(:physical_purchase, stripe_partially_refunded: true, chargeback_date: Time.current, created_at: 7.months.ago, card_type: CardType::PAYPAL) }
 
     before do
-      purchase.link.update!(price_currency_type: Currency::EUR)
+      purchase.link.update!(price_currency_type: Currency::EUR, price_cents: 100)
       allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR).and_return(0.8)
     end
 
