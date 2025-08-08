@@ -185,7 +185,7 @@ describe InstantPayoutsService, :vcr do
 
       it "allows instant payout when compliant" do
         expect(seller.eligible_for_instant_payouts?).to be true
-        
+
         expect do
           result = described_class.new(seller).perform
           expect(result[:success]).to be true
