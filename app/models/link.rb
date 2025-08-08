@@ -1445,8 +1445,6 @@ class Link < ApplicationRecord
       end
     end
 
-
-
     def custom_permalink_or_is_licensed_changed?
       custom_permalink_changed? || is_licensed_changed?
     end

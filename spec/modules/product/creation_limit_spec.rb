@@ -63,5 +63,3 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
     end
   end
 end
-
-
