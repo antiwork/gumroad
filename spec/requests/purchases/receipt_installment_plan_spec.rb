@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe "Installment plan receipt", type: :feature, js: true do
-  let(:first_purchase) { create(:installment_plan_purchase) }
+  let(:first_purchase) { create(:installment_plan_purchase, state: "successful", succeeded_at: Time.current) }
   let(:subscription) { first_purchase.subscription }
   let(:product) { first_purchase.link }
   let(:manage_subscription_url) { Rails.application.routes.url_helpers.manage_subscription_url(subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}") }
@@ -34,7 +34,9 @@ describe "Installment plan receipt", type: :feature, js: true do
     second_purchase = create(:recurring_installment_plan_purchase,
                            subscription: subscription,
                            link: product,
-                           created_at: 1.month.from_now)
+                           created_at: 1.month.from_now,
+                           succeeded_at: 1.month.from_now,
+                           state: "successful")
 
     visit receipt_purchase_url(second_purchase.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
     expect(page).to have_content("Confirm your email address")
@@ -47,14 +49,19 @@ describe "Installment plan receipt", type: :feature, js: true do
     third_purchase = create(:recurring_installment_plan_purchase,
                           subscription: subscription,
                           link: product,
-                          created_at: 2.months.from_now)
+                          created_at: 2.months.from_now,
+                          succeeded_at: 2.months.from_now,
+                          state: "successful")
 
     visit receipt_purchase_url(third_purchase.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
     expect(page).to have_content("Confirm your email address")
     fill_in "Email address:", with: third_purchase.email
     click_button "View receipt"
 
-    expect(page).to have_text("This is your final payment for your installment plan. You will not be charged again")
-    expect(page).to have_text("Total paid", normalize_ws: true)
+    expect(page).to have_text("Your final charge was on", normalize_ws: true)
+    expect(page).to have_text("This is your final payment for your installment plan with charges on", normalize_ws: true)
+    expect(page).to have_text(", and ", normalize_ws: true)
+    expect(page).to have_text("You will not be charged again", normalize_ws: true)
+    expect(page).to have_text("Total paid:", normalize_ws: true)
   end
 end

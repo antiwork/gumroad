@@ -276,16 +276,25 @@ class ReceiptPresenter::PaymentInfo
   end
 
   def installment_plan_final_payment_note
-    return nil unless chargeable.respond_to?(:subscription)
+    return [] unless chargeable.respond_to?(:subscription)
     subscription = chargeable.subscription
-    return nil unless subscription&.is_installment_plan?
-    return nil unless subscription.charges_completed?
+    return [] unless subscription&.is_installment_plan?
+    return [] unless subscription.charges_completed?
 
     charges = subscription.purchases.successful.order(:created_at)
     dates = charges.map { |p| (p.succeeded_at || p.created_at).to_fs(:formatted_date_abbrev_month) }
     total_cents = charges.sum(&:total_transaction_cents)
 
-    "This is your final payment for your installment plan. You will not be charged again. Charges on #{dates.join(", ")}. Total paid: #{formatted_dollar_amount(total_cents)}."
+    formatted_dates = if dates.size > 1
+      "#{dates[0..-2].join(", ")}, and #{dates.last}"
+    else
+      dates.first
+    end
+
+    [
+      "This is your final payment for your installment plan with charges on #{formatted_dates}. You will not be charged again.",
+      "Total paid: #{formatted_dollar_amount(total_cents)}."
+    ]
   end
 
     def upcoming_price_attribute(purchase)

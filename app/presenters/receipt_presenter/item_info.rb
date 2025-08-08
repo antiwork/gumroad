@@ -264,8 +264,10 @@ class ReceiptPresenter::ItemInfo
 
         if subscription.is_installment_plan?
           initiated_on = subscription.created_at.to_fs(:formatted_date_abbrev_month)
-          final_charge_on = subscription.end_time_of_subscription.to_fs(:formatted_date_abbrev_month)
-          "Installment plan initiated on #{initiated_on}. Your final charge will be on #{final_charge_on}. You can manage your payment settings #{link_to(
+          final_charge_date = subscription.created_at + ((subscription.charge_occurrence_count - 1) * subscription.period)
+          final_charge_on = final_charge_date.to_fs(:formatted_date_abbrev_month)
+          tense = subscription.charges_completed? ? "was" : "will be"
+          "Installment plan initiated on #{initiated_on}. Your final charge #{tense} on #{final_charge_on}. You can manage your payment settings #{link_to(
             "here",
             manage_url,
             target: "_blank"
