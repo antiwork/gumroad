@@ -131,6 +131,7 @@ describe ReceiptPresenter::PaymentInfo do
 
           context "when the purchase is in EUR" do
             before do
+              purchase.link.default_price.update!(currency: Currency::EUR)
               purchase.link.update!(price_currency_type: Currency::EUR)
               purchase.update!(
                 displayed_price_currency_type: Currency::EUR,
@@ -329,7 +330,7 @@ describe ReceiptPresenter::PaymentInfo do
 
             context "when the purchase is in EUR" do
               before do
-                purchase.link.update!(price_currency_type: Currency::EUR)
+                purchase.link.update!(price_currency_type: Currency::EUR, price_cents: 1499)
                 purchase.update!(
                   displayed_price_currency_type: Currency::EUR,
                   rate_converted_to_usd: 1.07,

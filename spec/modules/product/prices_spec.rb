@@ -28,6 +28,13 @@ describe Product::Prices do
 
       expect(@subscription_product.reload.default_price).to eq @subscription_price
     end
+
+    it "considers the product currency" do
+      create(:price, link: @product, price_cents: 2000, currency: "eur")
+
+      expect(@product.default_price.currency).to eq("usd")
+      expect(@product.default_price.price_cents).to eq(2_50)
+    end
   end
 
   describe "#price_cents=" do
@@ -68,6 +75,32 @@ describe Product::Prices do
           product.price_cents = 200
         end.to change { product.reload.price_cents }.from(100).to(200)
       end.to change { second_price.reload.price_cents }.from(100).to(200)
+    end
+
+    it "updates the price for the corresponding currency" do
+      product = create(:product, price_currency_type: "usd", price_cents: 100)
+
+      usd_price = product.default_price
+      expect(usd_price.currency).to eq("usd")
+      expect(usd_price.price_cents).to eq(100)
+
+      product.update!(price_currency_type: "eur", price_cents: 200)
+      euro_price = product.default_price
+      expect(euro_price.currency).to eq("eur")
+      expect(euro_price.price_cents).to eq(200)
+      usd_price.reload
+      expect(usd_price.currency).to eq("usd")
+      expect(usd_price.price_cents).to eq(100)
+
+      product.update!(price_currency_type: "usd", price_cents: 300)
+      usd_price.reload
+      expect(usd_price.currency).to eq("usd")
+      expect(usd_price.price_cents).to eq(300)
+      euro_price.reload
+      expect(euro_price.currency).to eq("eur")
+      expect(euro_price.price_cents).to eq(200)
+
+      expect(product.alive_prices).to contain_exactly(usd_price, euro_price)
     end
   end
 

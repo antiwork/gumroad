@@ -214,4 +214,37 @@ describe Admin::UsersController do
       end
     end
   end
+
+  describe "POST #set_custom_fee" do
+    let(:user) { create(:user) }
+
+    it "sets the custom fee for the user" do
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "2.5" }
+
+      expect(response).to be_successful
+      expect(user.reload.custom_fee_per_thousand).to eq 25
+    end
+
+    it "returns error if custom fee parameter is invalid" do
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "-5" }
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be greater than or equal to 0")
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "101" }
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be less than or equal to 1000")
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+    end
+
+    it "updates the existing custom fee" do
+      user.update!(custom_fee_per_thousand: 75)
+      expect(user.reload.custom_fee_per_thousand).to eq 75
+
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "5" }
+
+      expect(response).to be_successful
+      expect(user.reload.custom_fee_per_thousand).to eq 50
+    end
+  end
 end
