@@ -13,7 +13,9 @@ describe Product::CreationLimit do
 
   it "prevents creating more than 10 products in 24 hours" do
     create_list(:product, 10, user: user)
+
     new_product = build(:product, user: user)
+
     expect(new_product).not_to be_valid
     expect(new_product.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
   end
@@ -22,7 +24,9 @@ describe Product::CreationLimit do
     user1 = create(:user)
     user2 = create(:user)
     create_list(:product, 10, user: user1)
+
     new_product = build(:product, user: user2)
+
     expect(new_product).to be_valid
   end
 
@@ -30,6 +34,17 @@ describe Product::CreationLimit do
     create_list(:product, 10, user: user, created_at: 25.hours.ago)
     new_product = build(:product, user: user)
     expect(new_product).to be_valid
+  end
+
+  context "when user is a team member" do
+    it "skips the daily product creation limit" do
+      admin = create(:user, is_team_member: true)
+      create_list(:product, 10, user: admin)
+
+      new_product = build(:product, user: admin)
+
+      expect(new_product).to be_valid
+    end
   end
 end
 
