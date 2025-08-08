@@ -840,6 +840,7 @@ Rails.application.routes.draw do
     get "/r/:id/:product_file_id/index.m3u8", to: "url_redirects#hls_playlist", as: :hls_playlist_for_product_file
     get "/r/:id", to: "url_redirects#show", as: :url_redirect
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :url_redirect_download_product_files
+    post "/r/:id/request_stamped_pdfs", to: "url_redirects#request_stamped_pdfs", as: :url_redirect_request_stamped_pdfs, defaults: { format: :json }
     get "/zip/:id", to: "url_redirects#download_archive", as: :url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
@@ -1056,6 +1057,7 @@ Rails.application.routes.draw do
     get "/r/:id/:product_file_id/index.m3u8", to: "url_redirects#hls_playlist", as: :custom_domain_hls_playlist_for_product_file
     get "/r/:id", to: "url_redirects#show", as: :custom_domain_url_redirect
     get "/r/:id/product_files", to: "url_redirects#download_product_files", as: :custom_domain_url_redirect_download_product_files
+    post "/r/:id/request_stamped_pdfs", to: "url_redirects#request_stamped_pdfs", as: :custom_domain_url_redirect_request_stamped_pdfs, defaults: { format: :json }
     get "/zip/:id", to: "url_redirects#download_archive", as: :custom_domain_url_redirect_download_archive
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :custom_domain_url_redirect_download_subtitle_file
     get "/s/:id", to: "url_redirects#stream", as: :custom_domain_url_redirect_stream_page

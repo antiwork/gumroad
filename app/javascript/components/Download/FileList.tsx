@@ -161,11 +161,28 @@ export const FileRow = ({
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const downloadUrl = file.download_url;
+  const requestStampedPdfs = async () => {
+    try {
+      await request({
+        method: "POST",
+        url: Routes.url_redirect_request_stamped_pdfs_path(purchaseInfo.token),
+        accept: "json",
+      });
+      showAlert("The PDF will be emailed to you shortly!", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+  };
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" resourceId={file.id}>
-      <NavigationButton disabled={file.processing} href={downloadUrl}>
-        Download
-      </NavigationButton>
+      {file.pdf_stamp_enabled && purchaseInfo.purchaseId !== null ? (
+        <Button onClick={requestStampedPdfs}>Download</Button>
+      ) : (
+        <NavigationButton disabled={file.processing} href={downloadUrl}>
+          Download
+        </NavigationButton>
+      )}
     </TrackClick>
   ) : null;
   const streamUrl = file.stream_url;

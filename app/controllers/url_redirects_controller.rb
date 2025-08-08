@@ -5,7 +5,7 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
 
   before_action :fetch_url_redirect, except: %i[
-    show stream download_subtitle_file read download_archive latest_media_locations download_product_files
+    show stream download_subtitle_file read download_archive latest_media_locations download_product_files request_stamped_pdfs
     audio_durations
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
@@ -13,7 +13,7 @@ class UrlRedirectsController < ApplicationController
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file read
-                                             download_archive latest_media_locations download_product_files audio_durations]
+                                             download_archive latest_media_locations download_product_files audio_durations request_stamped_pdfs]
   before_action :hide_layouts, only: %i[
     confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
   ]
@@ -25,7 +25,7 @@ class UrlRedirectsController < ApplicationController
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_VIEW) }, only: [:download_page]
 
   skip_before_action :check_suspended, only: %i[show stream confirm confirm_page download_page
-                                                download_subtitle_file download_archive download_product_files audio_durations]
+                                                download_subtitle_file download_archive download_product_files audio_durations request_stamped_pdfs]
   before_action :set_noindex_header, only: %i[confirm_page download_page]
 
   rescue_from ActionController::RoutingError do |exception|
@@ -90,6 +90,29 @@ class UrlRedirectsController < ApplicationController
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
     end
+  end
+
+  # POST /r/:id/request_stamped_pdfs (JSON only)
+  # Triggers PDF stamping for this purchase and emails the receipt once ready.
+  # Also performs a quick capability check for PDFs that haven't been checked yet.
+  def request_stamped_pdfs
+    e404 unless request.format.json?
+
+    purchase = @url_redirect.purchase
+    product = @url_redirect.referenced_link
+    return render(json: { success: false, message: "Not applicable." }, status: :unprocessable_entity) if purchase.blank? || product.blank?
+
+    if product.has_stampable_pdfs?
+      @url_redirect.alive_product_files.pdf.pdf_stamp_enabled.find_each do |product_file|
+        next if product_file.stampable_pdf.in?([true, false])
+        is_stampable = PdfStampingService.can_stamp_file?(product_file: product_file)
+        product_file.update!(stampable_pdf: is_stampable)
+      end
+
+      SendPurchaseReceiptJob.set(queue: "default").perform_async(purchase.id)
+    end
+
+    render json: { success: true }
   end
 
   def download_archive
