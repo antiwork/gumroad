@@ -12,6 +12,31 @@ describe UrlRedirectsController do
     @url = @url_redirect.referenced_link.product_files.alive.first.url
   end
 
+  describe "POST request_stamped_pdfs" do
+    let(:product) { create(:product) }
+    let!(:product_file) { create(:readable_document, link: product, pdf_stamp_enabled: true) }
+    let(:purchase) { create(:purchase, link: product) }
+    let(:url_redirect) { create(:url_redirect, purchase:) }
+
+    it "returns success JSON and enqueues SendPurchaseReceiptJob on default queue" do
+      allow(PdfStampingService).to receive(:can_stamp_file?).and_return(true)
+
+      post :request_stamped_pdfs, params: { id: url_redirect.token, format: :json }
+
+      expect(response).to be_successful
+      expect(JSON.parse(response.body)).to include("success" => true)
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("default")
+    end
+
+    it "returns 422 when not applicable (no purchase)" do
+      url_redirect_without_purchase = create(:url_redirect, link: product, purchase: nil)
+
+      post :request_stamped_pdfs, params: { id: url_redirect_without_purchase.token, format: :json }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+  end
+
   describe "GET 'download_page'" do
     before do
       # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)

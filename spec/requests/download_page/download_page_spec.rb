@@ -632,17 +632,15 @@ describe("Download Page", type: :feature, js: true) do
   end
 
   context "when a PDF hasn't been stamped yet" do
-    it "displays an alert and disables the download button" do
+    it "triggers stamping and shows an inline notice on click" do
       product = create(:product)
       create(:product_file, link: product, pdf_stamp_enabled: true)
       purchase = create(:purchase, link: product)
       url_redirect = create(:url_redirect, purchase:)
 
       visit url_redirect.download_page_url
-      expect(page).to have_alert(text: "This product includes a file that's being processed. You'll be able to download it shortly.")
-      download_button = find_link("Download", inert: true)
-      download_button.hover
-      expect(download_button).to have_tooltip(text: "This file will be ready to download shortly.")
+      click_on("Download")
+      expect(page).to have_alert(text: "The PDF will be emailed to you shortly!")
     end
   end
 
