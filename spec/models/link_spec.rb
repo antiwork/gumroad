@@ -75,6 +75,29 @@ describe Link, :vcr do
       expect(link).not_to be_valid
       expect(link.errors.full_messages).to include "Sorry, a product must be at least $0.99."
     end
+
+    context "when product has prices in multiple currencies" do
+      let(:product) { create(:product, price_currency_type: "usd", price_cents: 100) }
+
+      it "validates prices for the current currency against correct thresholds when switching currencies" do
+        usd_price = product.default_price
+        expect(usd_price.currency).to eq "usd"
+        expect(usd_price.price_cents).to eq 100
+
+        expect do
+          product.update!(price_currency_type: "inr", price_cents: 5000)
+        end
+          .to raise_error(ActiveRecord::RecordInvalid)
+          .with_message("Validation failed: Sorry, a product must be at least ₹73.")
+
+        # The USD 1.00 is lower than the INR 73.00 dollar threshold, but should
+        # be ignored since it's not the current currency
+        expect do
+          product.update!(price_currency_type: "inr", price_cents: 50000)
+        end
+          .to_not raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
   end
 
   describe "native_type inclusion validation" do

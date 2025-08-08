@@ -370,7 +370,7 @@ describe PurchasesController, :vcr do
 
       context "when product is sold in a single unit currency type" do
         before do
-          @l.update!(price_cents: 1000, price_currency_type: "jpy")
+          @l.update!(price_currency_type: "jpy", price_cents: 1000)
           @p1 = create(:purchase_in_progress,
                        link: @l,
                        seller: @l.user,

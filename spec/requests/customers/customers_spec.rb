@@ -1419,7 +1419,7 @@ describe "Sales page", type: :feature, js: true do
       context "for non-USD purchases" do
         before do
           purchase1.update!(purchase_state: "in_progress", chargeable: create(:chargeable))
-          purchase1.link.update!(price_currency_type: Currency::EUR)
+          purchase1.link.update!(price_currency_type: Currency::EUR, price_cents: 100)
           purchase1.process!
           purchase1.mark_successful!
         end

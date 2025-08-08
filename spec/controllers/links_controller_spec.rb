@@ -779,6 +779,39 @@ describe LinksController, :vcr do
         expect(@product.reload.removed_file_info_attributes).to eq %i[Size Length]
       end
 
+      describe "currency and price updates" do
+        before do
+          @product.update!(price_currency_type: "usd", price_cents: 1000)
+        end
+
+        it "changes product from USD $10 to EUR €12 and back to USD $11" do
+          expect(@product.price_currency_type).to eq "usd"
+          expect(@product.price_cents).to eq 1000
+
+          put :update, params: {
+            id: @product.unique_permalink,
+            price_currency_type: "eur",
+            price_cents: 1200
+          }, as: :json
+
+          expect(response).to be_successful
+          @product.reload
+          expect(@product.price_currency_type).to eq "eur"
+          expect(@product.price_cents).to eq 1200
+
+          put :update, params: {
+            id: @product.unique_permalink,
+            price_currency_type: "usd",
+            price_cents: 1100
+          }, as: :json
+
+          expect(response).to be_successful
+          @product.reload
+          expect(@product.price_currency_type).to eq "usd"
+          expect(@product.price_cents).to eq 1100
+        end
+      end
+
       it "sets the correct value for removed_file_info_attributes if there are none" do
         post :update, params: @params.merge({
                                               file_attributes: [
