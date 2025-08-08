@@ -265,7 +265,7 @@ class Subscription < ApplicationRecord
     get_vat_id_from_original_purchase(purchase)
 
     # Centralized VAT handling for all purchases created here
-    if user&.business_vat_id.present? && vat_id_valid?(user.business_vat_id)
+    if purchase.subscription && user&.business_vat_id.present? && vat_id_valid?(user.business_vat_id)
       purchase.tax_cents = 0
       purchase.gumroad_tax_cents = 0 if purchase.respond_to?(:gumroad_tax_cents=)
       # optional: purchase.vat_exempt = true if that attribute exists
