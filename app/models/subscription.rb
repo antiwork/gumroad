@@ -263,6 +263,15 @@ class Subscription < ApplicationRecord
     purchase.affiliate = original_purchase.affiliate if original_purchase.affiliate.try(:eligible_for_credit?)
     purchase.is_upgrade_purchase = is_upgrade_purchase if is_upgrade_purchase
     get_vat_id_from_original_purchase(purchase)
+
+    # Centralized VAT handling for all purchases created here
+    if user&.business_vat_id.present? && vat_id_valid?(user.business_vat_id)
+      purchase.tax_cents = 0
+      purchase.gumroad_tax_cents = 0 if purchase.respond_to?(:gumroad_tax_cents=)
+      # optional: purchase.vat_exempt = true if that attribute exists
+    end
+    #
+
     purchase
   end
 
@@ -308,44 +317,10 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def handle_purchase_success(purchase, succeeded_at: nil)
-    purchase.succeeded_at = succeeded_at if succeeded_at.present?
-    purchase.update_balance_and_mark_successful!
-    original_purchase.update!(should_exclude_product_review: false) if original_purchase.should_exclude_product_review?
-    self.credit_card_id = purchase.credit_card_id
-    save!
-    create_purchase_event(purchase)
-    if purchase.was_product_recommended
-      recommendation_type = original_purchase.recommended_purchase_info.try(:recommendation_type)
-      original_link = original_purchase.recommended_purchase_info.try(:recommended_by_link)
-      RecommendedPurchaseInfo.create!(purchase:,
-                                      recommended_link: link,
-                                      recommended_by_link: original_link,
-                                      recommendation_type:,
-                                      is_recurring_purchase: true,
-                                      discover_fee_per_thousand: original_purchase.discover_fee_per_thousand)
-    end
-  end
-
-  def handle_purchase_failure(purchase)
-    CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
-    ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
-    # schedule for termination 5 days after subscription is overdue for a charge
-    UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
-    purchase.mark_failed!
-  end
-
   # Public: Charge the user and create a new purchase
   # Returns the new `Purchase` object
   def charge!(override_params: {}, from_failed_charge_email: false, off_session: true)
     purchase = build_purchase(override_params:, from_failed_charge_email:)
-
-    if user&.business_vat_id.present? && vat_id_valid?(user.business_vat_id)
-      purchase.tax_cents = 0
-      purchase.gumroad_tax_cents = 0
-      # Optional: Mark subscription as VAT exempt for clarity
-    end
-
     process_purchase!(purchase, from_failed_charge_email, off_session:)
   end
 

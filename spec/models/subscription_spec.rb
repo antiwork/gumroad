@@ -1395,6 +1395,7 @@ describe Subscription, :vcr do
         expect(purchase.reload.should_exclude_product_review?).to eq false
       end
     end
+
     describe "VAT handling" do
       before do
         # Stub all Stripe interactions
