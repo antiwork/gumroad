@@ -84,7 +84,7 @@ describe Admin::PurchasesController, :vcr do
     end
 
     it "successfully refunds taxes when refundable taxes are available" do
-      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).and_return(true)
+      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: nil, business_vat_id: nil).and_return(true)
 
       post :refund_taxes_only, params: { id: @purchase.id }
 
@@ -93,7 +93,7 @@ describe Admin::PurchasesController, :vcr do
     end
 
     it "includes note and business_vat_id when provided" do
-      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).and_return(true)
+      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: "Tax exemption request", business_vat_id: "VAT123456").and_return(true)
 
       post :refund_taxes_only, params: {
         id: @purchase.id,
@@ -106,29 +106,16 @@ describe Admin::PurchasesController, :vcr do
     end
 
     it "returns error when tax refund fails" do
-      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).and_return(false)
+      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: nil, business_vat_id: nil).and_return(false)
       allow_any_instance_of(Purchase).to receive(:errors).and_return(
-        double(full_messages: double(to_sentence: "No refundable taxes available"))
+        double(full_messages: double(to_sentence: "Tax already refunded and Invalid tax amount"))
       )
 
       post :refund_taxes_only, params: { id: @purchase.id }
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["message"]).to eq("No refundable taxes available")
-    end
-
-    it "handles multiple error messages" do
-      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).and_return(false)
-      allow_any_instance_of(Purchase).to receive(:errors).and_return(
-        double(full_messages: double(to_sentence: "Tax already refunded and Invalid purchase state"))
-      )
-
-      post :refund_taxes_only, params: { id: @purchase.id }
-
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["message"]).to eq("Tax already refunded and Invalid purchase state")
+      expect(response.parsed_body["message"]).to eq("Tax already refunded and Invalid tax amount")
     end
 
     it "raises error when purchase is not found" do

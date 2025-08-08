@@ -689,14 +689,10 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
 
   def refund_taxes_only
-    purchase_id = params[:purchase_id]
+    purchase_id = params[:purchase_id]&.to_i
     email = params[:email]
 
     return render json: { success: false, message: "Both 'purchase_id' and 'email' parameters are required" }, status: :bad_request unless purchase_id.present? && email.present?
-
-    purchase_id = purchase_id.to_i
-    note = params[:note]
-    business_vat_id = params[:business_vat_id]
 
     purchase = Purchase.find_by_external_id_numeric(purchase_id)
 
@@ -704,7 +700,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
       return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
     end
 
-    if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: note, business_vat_id: business_vat_id)
+    if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: params[:note], business_vat_id: params[:business_vat_id])
       render json: { success: true, message: "Successfully refunded taxes for purchase ID #{purchase.id}" }
     else
       error_message = purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available"

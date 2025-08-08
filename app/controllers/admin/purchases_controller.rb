@@ -32,13 +32,10 @@ class Admin::PurchasesController < Admin::BaseController
   def refund_taxes_only
     e404 if @purchase.nil?
 
-    note = params[:note]
-    business_vat_id = params[:business_vat_id]
-
-    if @purchase.refund_gumroad_taxes!(refunding_user_id: current_user.id, note: note, business_vat_id: business_vat_id)
+    if @purchase.refund_gumroad_taxes!(refunding_user_id: current_user.id, note: params[:note], business_vat_id: params[:business_vat_id])
       render json: { success: true }
     else
-      render json: { success: false, message: @purchase.errors.full_messages.to_sentence }
+      render json: { success: false, message: @purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available" }
     end
   end
 
