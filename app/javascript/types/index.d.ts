@@ -30,3 +30,10 @@ declare namespace React {
 }
 
 declare const SSR: boolean;
+
+// IconName is generated to app/javascript/types/icons.d.ts at build time; provide a fallback for TS
+type IconName = string;
+
+// Provide a global Routes declaration so TS sees it everywhere
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Routes is generated dynamically by Rails and has dynamic method names
+declare const Routes: Record<string, any>;
