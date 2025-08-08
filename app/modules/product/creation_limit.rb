@@ -7,8 +7,28 @@ module Product::CreationLimit
     validate :validate_daily_product_creation_limit, on: :create
   end
 
+  class_methods do
+    def bypass_product_creation_limit
+      previous = product_creation_limit_bypassed?
+      self.product_creation_limit_bypassed = true
+      yield
+    ensure
+      self.product_creation_limit_bypassed = previous
+    end
+
+    def product_creation_limit_bypassed?
+      ActiveSupport::IsolatedExecutionState[ISOLATED_EXECUTION_STATE_KEY]
+    end
+
+    private
+      def product_creation_limit_bypassed=(value)
+        ActiveSupport::IsolatedExecutionState[ISOLATED_EXECUTION_STATE_KEY] = value
+      end
+  end
+
   private
     DAILY_CREATION_LIMIT = 10
+    ISOLATED_EXECUTION_STATE_KEY = :gumroad_bypass_product_creation_limit
 
     def validate_daily_product_creation_limit
       return if skip_daily_product_creation_limit?
@@ -20,6 +40,7 @@ module Product::CreationLimit
     end
 
     def skip_daily_product_creation_limit?
+      return true if self.class.product_creation_limit_bypassed?
       return true if user.blank?
       return true if user.is_team_member?
 

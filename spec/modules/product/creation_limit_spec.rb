@@ -46,6 +46,22 @@ describe Product::CreationLimit do
       expect(new_product).to be_valid
     end
   end
+
+  describe ".bypass_product_creation_limit" do
+    it "bypasses the limit within the block and restores it afterwards" do
+      user = create(:user)
+      create_list(:product, 10, user: user)
+
+      Link.bypass_product_creation_limit do
+        bypassed_product = build(:product, user: user)
+        expect(bypassed_product).to be_valid
+      end
+
+      blocked_product = build(:product, user: user)
+      expect(blocked_product).not_to be_valid
+      expect(blocked_product.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
+    end
+  end
 end
 
 
