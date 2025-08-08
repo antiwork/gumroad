@@ -10,12 +10,7 @@ class Products::AffiliatedPolicy < ApplicationPolicy
 
   def destroy?
     # Allow users to remove themselves from affiliations
-    # When called with a symbol (general authorization), allow access
-    # When called with an actual affiliate record, check if user is the affiliate user
-    return true if record.is_a?(Symbol)
-
-    when_record_available do
-      user == record.affiliate_user
-    end
+    # The actual affiliate record authorization is handled in the controller
+    true
   end
 end

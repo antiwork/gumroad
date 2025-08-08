@@ -32,8 +32,13 @@ class AffiliatedProductsPresenter
 
     def affiliated_products_data
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE)
+
+      affiliate_ids = records.map(&:affiliate_id).uniq
+      affiliates_by_id = Affiliate.where(id: affiliate_ids).index_by(&:id)
+
       records = records.map do |product|
         revenue = product.revenue || 0
+        affiliate = affiliates_by_id[product.affiliate_id]
         {
           product_name: product.name,
           url: product.affiliate_type.constantize.new(id: product.affiliate_id).referral_url_for_product(product),
@@ -42,7 +47,7 @@ class AffiliatedProductsPresenter
           humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
           sales_count: product.sales_count,
           affiliate_type: product.affiliate_type.underscore,
-          affiliate_id: product.affiliate_external_id
+          affiliate_id: affiliate&.external_id
         }
       end
       { pagination: PagyPresenter.new(pagination).props, affiliated_products: records }
@@ -101,7 +106,6 @@ class AffiliatedProductsPresenter
       links.unique_permalink AS unique_permalink,
       links.name AS name,
       affiliates.type AS affiliate_type,
-      affiliates.external_id AS affiliate_external_id,
       COALESCE(affiliates_links.affiliate_basis_points, affiliates.affiliate_basis_points) AS basis_points,
       SUM(affiliate_credits.amount_cents) AS revenue,
       COUNT(DISTINCT affiliate_credits.id) AS sales_count
@@ -112,7 +116,6 @@ class AffiliatedProductsPresenter
       links.unique_permalink,
       links.name,
       affiliates.type,
-      affiliates.external_id,
       affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points
     }
       affiliate_credits_join = %{
