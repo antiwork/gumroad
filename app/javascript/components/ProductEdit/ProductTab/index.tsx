@@ -447,14 +447,12 @@ export const ProductTab = () => {
                       setShowPreview={setShowRefundPolicyPreview}
                     />
                   ) : null}
-                  {product.native_type !== "physical" && initialProduct.require_shipping ? (
-                    <Toggle
-                      value={product.require_shipping}
-                      onChange={(newValue) => updateProduct({ require_shipping: newValue })}
-                    >
-                      Require shipping information
-                    </Toggle>
-                  ) : null}
+                  <Toggle
+                    value={product.require_shipping}
+                    onChange={(newValue) => updateProduct({ require_shipping: newValue })}
+                  >
+                    Require shipping information
+                  </Toggle>
                 </fieldset>
                 {product.native_type === "membership" ? (
                   <fieldset>
