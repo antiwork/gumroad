@@ -505,6 +505,7 @@ class Subscription < ApplicationRecord
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
       new_purchase.business_vat_id = original_purchase.purchase_sales_tax_info&.business_vat_id
+      new_purchase.business_vat_id = effective_business_vat_id if new_purchase.business_vat_id.blank?
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
@@ -873,6 +874,22 @@ class Subscription < ApplicationRecord
     free_trial_ends_at <= Time.current
   end
 
+  def effective_business_vat_id
+    @effective_business_vat_id ||= begin
+       if original_purchase&.purchase_sales_tax_info&.business_vat_id.present?
+         return original_purchase.purchase_sales_tax_info.business_vat_id
+       end
+
+       refund = original_purchase&.refunds
+                  &.where("gumroad_tax_cents > 0")
+                  &.where(amount_cents: 0)
+                  &.where&.not(business_vat_id: [nil, ""])
+                  &.reorder(created_at: :desc)
+                  &.first
+       refund&.business_vat_id
+     end
+  end
+
   def free_trial_end_date_formatted
     return unless has_free_trial?
     free_trial_ends_at.to_fs(:formatted_date_full_month)
@@ -979,11 +996,8 @@ class Subscription < ApplicationRecord
     end
 
     def get_vat_id_from_original_purchase(purchase)
-      if original_purchase.purchase_sales_tax_info&.business_vat_id
-        purchase.business_vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
-      elsif original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
-        purchase.business_vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
-      end
+      vat_id = effective_business_vat_id
+      purchase.business_vat_id = vat_id if vat_id.present?
     end
 
     def schedule_member_cancellation_workflow_jobs
