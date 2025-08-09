@@ -27,7 +27,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:13 GMT
+      - Sat, 09 Aug 2025 23:21:07 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -50,7 +50,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -69,7 +69,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1RuKuzPSKqtlYPhZfRTpForY",
+          "id": "pm_1RuM4VPSKqtlYPhZXaTNDk8R",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -113,16 +113,16 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1754777233,
+          "created": 1754781667,
           "customer": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:13 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:07 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/payment_methods/pm_1RuKuzPSKqtlYPhZfRTpForY
+    uri: https://api.stripe.com/v1/payment_methods/pm_1RuM4VPSKqtlYPhZXaTNDk8R
     body:
       encoding: US-ASCII
       string: ''
@@ -147,7 +147,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:13 GMT
+      - Sat, 09 Aug 2025 23:21:07 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -170,7 +170,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -187,7 +187,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1RuKuzPSKqtlYPhZfRTpForY",
+          "id": "pm_1RuM4VPSKqtlYPhZXaTNDk8R",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -231,19 +231,19 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1754777233,
+          "created": 1754781667,
           "customer": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:13 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:07 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/customers
     body:
       encoding: UTF-8
-      string: description=&payment_method=pm_1RuKuzPSKqtlYPhZfRTpForY
+      string: description=&payment_method=pm_1RuM4VPSKqtlYPhZXaTNDk8R
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -265,7 +265,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:14 GMT
+      - Sat, 09 Aug 2025 23:21:08 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -288,7 +288,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -307,18 +307,18 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "cus_Sq0wepWU5FF4wR",
+          "id": "cus_Sq28rffYYmsuzQ",
           "object": "customer",
           "address": null,
           "balance": 0,
-          "created": 1754777233,
+          "created": 1754781667,
           "currency": null,
           "default_source": null,
           "delinquent": false,
           "description": null,
           "discount": null,
           "email": null,
-          "invoice_prefix": "ZLF3KHAD",
+          "invoice_prefix": "IOLNLGQS",
           "invoice_settings": {
             "custom_fields": null,
             "default_payment_method": null,
@@ -334,7 +334,7 @@ http_interactions:
           "tax_exempt": "none",
           "test_clock": null
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:14 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:08 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/payment_methods
@@ -362,7 +362,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:14 GMT
+      - Sat, 09 Aug 2025 23:21:08 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -385,7 +385,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -404,7 +404,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1RuKv0PSKqtlYPhZlgq3xYnv",
+          "id": "pm_1RuM4WPSKqtlYPhZLjyQ86sp",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -448,16 +448,16 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1754777234,
+          "created": 1754781668,
           "customer": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:14 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:08 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/payment_methods/pm_1RuKv0PSKqtlYPhZlgq3xYnv
+    uri: https://api.stripe.com/v1/payment_methods/pm_1RuM4WPSKqtlYPhZLjyQ86sp
     body:
       encoding: US-ASCII
       string: ''
@@ -482,7 +482,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:15 GMT
+      - Sat, 09 Aug 2025 23:21:09 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -505,7 +505,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -522,7 +522,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1RuKv0PSKqtlYPhZlgq3xYnv",
+          "id": "pm_1RuM4WPSKqtlYPhZLjyQ86sp",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -566,19 +566,19 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1754777234,
+          "created": 1754781668,
           "customer": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:15 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:09 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/customers
     body:
       encoding: UTF-8
-      string: description=&payment_method=pm_1RuKv0PSKqtlYPhZlgq3xYnv
+      string: description=&payment_method=pm_1RuM4WPSKqtlYPhZLjyQ86sp
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -600,7 +600,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:15 GMT
+      - Sat, 09 Aug 2025 23:21:09 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -623,7 +623,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -642,18 +642,18 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "cus_Sq0wzPHastxIsq",
+          "id": "cus_Sq28caQHkvMKnZ",
           "object": "customer",
           "address": null,
           "balance": 0,
-          "created": 1754777235,
+          "created": 1754781669,
           "currency": null,
           "default_source": null,
           "delinquent": false,
           "description": null,
           "discount": null,
           "email": null,
-          "invoice_prefix": "ZRJVGFAZ",
+          "invoice_prefix": "SX5BJMCO",
           "invoice_settings": {
             "custom_fields": null,
             "default_payment_method": null,
@@ -669,13 +669,13 @@ http_interactions:
           "tax_exempt": "none",
           "test_clock": null
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:15 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:09 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/payment_intents
     body:
       encoding: UTF-8
-      string: amount=100&currency=usd&description=You+bought+http%3A%2F%2Fedgar6703362010.test.gumroad.com%3A31337%2Fl%2Ff%21&metadata[purchase]=4awXaQAbKr4Add_Ex8KkmQ%3D%3D&transfer_group=13&payment_method_types[0]=card&off_session=true&confirm=true&customer=cus_Sq0wzPHastxIsq&payment_method=pm_1RuKv0PSKqtlYPhZlgq3xYnv&statement_descriptor_suffix=edgar6703362010
+      string: amount=100&currency=usd&description=You+bought+http%3A%2F%2Fedgarb7bf922e10.test.gumroad.com%3A31337%2Fl%2Fd%21&metadata[purchase]=4awXaQAbKr4Add_Ex8KkmQ%3D%3D&transfer_group=13&payment_method_types[0]=card&off_session=true&confirm=true&customer=cus_Sq28caQHkvMKnZ&payment_method=pm_1RuM4WPSKqtlYPhZLjyQ86sp&statement_descriptor_suffix=edgarb7bf922e10
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -697,7 +697,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:17 GMT
+      - Sat, 09 Aug 2025 23:21:11 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -720,7 +720,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -739,7 +739,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pi_3RuKv2PSKqtlYPhZ1RxoDPwY",
+          "id": "pi_3RuM4YPSKqtlYPhZ0XqHkbk5",
           "object": "payment_intent",
           "amount": 100,
           "amount_capturable": 0,
@@ -753,22 +753,22 @@ http_interactions:
           "canceled_at": null,
           "cancellation_reason": null,
           "capture_method": "automatic",
-          "client_secret": "pi_3RuKv2PSKqtlYPhZ1RxoDPwY_secret_Rqq2W6ZXap6kcepKG8EEwjS9R",
+          "client_secret": "pi_3RuM4YPSKqtlYPhZ0XqHkbk5_secret_wZh2NyQLVqX8IbLYupuEm6fa8",
           "confirmation_method": "automatic",
-          "created": 1754777236,
+          "created": 1754781670,
           "currency": "usd",
-          "customer": "cus_Sq0wzPHastxIsq",
-          "description": "You bought http://edgar6703362010.test.gumroad.com:31337/l/f!",
+          "customer": "cus_Sq28caQHkvMKnZ",
+          "description": "You bought http://edgarb7bf922e10.test.gumroad.com:31337/l/d!",
           "invoice": null,
           "last_payment_error": null,
-          "latest_charge": "ch_3RuKv2PSKqtlYPhZ1ldS27Uq",
+          "latest_charge": "ch_3RuM4YPSKqtlYPhZ0jybbA90",
           "livemode": false,
           "metadata": {
             "purchase": "4awXaQAbKr4Add_Ex8KkmQ=="
           },
           "next_action": null,
           "on_behalf_of": null,
-          "payment_method": "pm_1RuKv0PSKqtlYPhZlgq3xYnv",
+          "payment_method": "pm_1RuM4WPSKqtlYPhZLjyQ86sp",
           "payment_method_configuration_details": null,
           "payment_method_options": {
             "card": {
@@ -788,15 +788,15 @@ http_interactions:
           "shipping": null,
           "source": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar6703362010",
+          "statement_descriptor_suffix": "edgarb7bf922e10",
           "status": "succeeded",
           "transfer_data": null,
           "transfer_group": "13"
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:17 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:11 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/charges/ch_3RuKv2PSKqtlYPhZ1ldS27Uq?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
+    uri: https://api.stripe.com/v1/charges/ch_3RuM4YPSKqtlYPhZ0jybbA90?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
     body:
       encoding: US-ASCII
       string: ''
@@ -821,7 +821,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 09 Aug 2025 22:07:18 GMT
+      - Sat, 09 Aug 2025 23:21:11 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -844,7 +844,7 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eSFgDMwr5JFb8u75Did9i2qV8JVvUUc-f1CuTuwi92u_2VnsFhiqYiMRE9yVyH6_hSjRkfAgchwD4j20
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=IuWhVcthbMFeEc5uHstRj83VEnMdDUvnfBx8c2g4Flyy8HR6erCHZAr24amzXJq4D-jwhgeIoQQ8oHQv
       Stripe-Version:
       - '2023-10-16'
       Vary:
@@ -861,7 +861,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "ch_3RuKv2PSKqtlYPhZ1ldS27Uq",
+          "id": "ch_3RuM4YPSKqtlYPhZ0jybbA90",
           "object": "charge",
           "amount": 100,
           "amount_captured": 100,
@@ -870,14 +870,14 @@ http_interactions:
           "application_fee": null,
           "application_fee_amount": null,
           "balance_transaction": {
-            "id": "txn_3RuKv2PSKqtlYPhZ1UAYrjUD",
+            "id": "txn_3RuM4YPSKqtlYPhZ0FXf5fnA",
             "object": "balance_transaction",
             "amount": 84,
             "available_on": 1755302400,
             "balance_type": "payments",
-            "created": 1754777236,
+            "created": 1754781670,
             "currency": "eur",
-            "description": "You bought http://edgar6703362010.test.gumroad.com:31337/l/f!",
+            "description": "You bought http://edgarb7bf922e10.test.gumroad.com:31337/l/d!",
             "exchange_rate": 0.841448,
             "fee": 28,
             "fee_details": [
@@ -891,7 +891,7 @@ http_interactions:
             ],
             "net": 56,
             "reporting_category": "charge",
-            "source": "ch_3RuKv2PSKqtlYPhZ1ldS27Uq",
+            "source": "ch_3RuM4YPSKqtlYPhZ0jybbA90",
             "status": "pending",
             "type": "charge"
           },
@@ -909,12 +909,12 @@ http_interactions:
             "phone": null,
             "tax_id": null
           },
-          "calculated_statement_descriptor": "STRIPE* EDGAR670336201",
+          "calculated_statement_descriptor": "STRIPE* EDGARB7BF922E1",
           "captured": true,
-          "created": 1754777236,
+          "created": 1754781670,
           "currency": "usd",
-          "customer": "cus_Sq0wzPHastxIsq",
-          "description": "You bought http://edgar6703362010.test.gumroad.com:31337/l/f!",
+          "customer": "cus_Sq28caQHkvMKnZ",
+          "description": "You bought http://edgarb7bf922e10.test.gumroad.com:31337/l/d!",
           "destination": null,
           "dispute": null,
           "disputed": false,
@@ -936,17 +936,17 @@ http_interactions:
             "network_status": "approved_by_network",
             "reason": null,
             "risk_level": "normal",
-            "risk_score": 54,
+            "risk_score": 27,
             "seller_message": "Payment complete.",
             "type": "authorized"
           },
           "paid": true,
-          "payment_intent": "pi_3RuKv2PSKqtlYPhZ1RxoDPwY",
-          "payment_method": "pm_1RuKv0PSKqtlYPhZlgq3xYnv",
+          "payment_intent": "pi_3RuM4YPSKqtlYPhZ0XqHkbk5",
+          "payment_method": "pm_1RuM4WPSKqtlYPhZLjyQ86sp",
           "payment_method_details": {
             "card": {
               "amount_authorized": 100,
-              "authorization_code": "644500",
+              "authorization_code": "731185",
               "brand": "visa",
               "checks": {
                 "address_line1_check": null,
@@ -988,17 +988,17 @@ http_interactions:
           "radar_options": {},
           "receipt_email": null,
           "receipt_number": null,
-          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xUnVIWVFQU0txdGxZUGhaKJWN38QGMgZZV8HqQLs6LBbqPLFx-RgLLzy9dlJIQb93WhNEENXSbQ6JqtjqO0gTJAU_x-y4TuAZf2ld",
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xUnVIWVFQU0txdGxZUGhaKOev38QGMgbMARW8aaY6LBZdCPuixF4oalpFvecakUCME_HWPKS_yc_YSv63UP95vYutusvgqs_M5-4e",
           "refunded": false,
           "review": null,
           "shipping": null,
           "source": null,
           "source_transfer": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar6703362010",
+          "statement_descriptor_suffix": "edgarb7bf922e10",
           "status": "succeeded",
           "transfer_data": null,
           "transfer_group": "13"
         }
-  recorded_at: Sat, 09 Aug 2025 22:07:18 GMT
+  recorded_at: Sat, 09 Aug 2025 23:21:11 GMT
 recorded_with: VCR 6.2.0
