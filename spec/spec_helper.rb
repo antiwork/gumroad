@@ -108,13 +108,21 @@ def configure_vcr
     config.filter_sensitive_data("<HOSTNAME>") { Socket.gethostname }
 
     config.filter_sensitive_data("<COMPUTER_NAME>") do
-      `scutil --get ComputerName`.strip
+      next nil unless RUBY_PLATFORM.match?(/darwin/i)
+
+      name = `scutil --get ComputerName 2>/dev/null`.to_s.strip
+      name.empty? ? nil : name
     rescue StandardError
       nil
     end
 
     config.filter_sensitive_data("<GUMROAD_TEST_HOST>") do
-      URI(Capybara.app_host).host
+      app_host = Capybara.app_host.to_s.strip
+      next nil if app_host.empty?
+
+      host = URI(app_host).host
+      host = nil if host.to_s.empty?
+      host
     rescue StandardError
       nil
     end
