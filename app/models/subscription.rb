@@ -219,6 +219,47 @@ class Subscription < ApplicationRecord
     save! if persisted?
   end
 
+  def vat_id_for(purchase)
+    return purchase.vat_id if purchase.respond_to?(:vat_id) && purchase.vat_id.present?
+    return purchase.tax_id if purchase.respond_to?(:tax_id) && purchase.tax_id.present?
+    if purchase.respond_to?(:tax_refund) && purchase.tax_refund&.respond_to?(:vat_id)
+      return purchase.tax_refund.vat_id
+    end
+    nil
+  end
+
+  def vat_id_valid?(vat_id)
+    VatValidationService.new(vat_id).process
+  rescue => e
+    Rails.logger.error("VAT validation failed for subscription #{id}: #{e.message}")
+    false
+  end
+
+  def elected_tax_country_for(purchase)
+    purchase.purchase_sales_tax_info&.elected_tax_country.presence ||
+      purchase.purchase_sales_tax_info&.country.presence ||
+      purchase.country.presence ||
+      purchase.ip_country.presence
+  end
+
+  def seller_responsible_for_vat?(purchase)
+    country_input = elected_tax_country_for(purchase)
+
+    code =
+      ISO3166::Country.find_country_by_any_name(country_input)&.alpha2 ||
+      Compliance::Countries.find_by_name(country_input)&.alpha2 ||
+      country_input.to_s.upcase
+
+    return false if code.blank?
+
+    rate = ZipTaxRate
+             .where(country: code, state: nil, zip_code: nil)
+             .order(created_at: :desc)
+             .first
+
+    rate&.is_seller_responsible?
+  end
+
   def build_purchase(override_params: {}, from_failed_charge_email: false)
     perceived_price_cents = override_params.delete(:perceived_price_cents)
     perceived_price_cents ||= current_subscription_price_cents
@@ -263,6 +304,15 @@ class Subscription < ApplicationRecord
     purchase.affiliate = original_purchase.affiliate if original_purchase.affiliate.try(:eligible_for_credit?)
     purchase.is_upgrade_purchase = is_upgrade_purchase if is_upgrade_purchase
     get_vat_id_from_original_purchase(purchase)
+
+    # Reverse-charge VAT for subscription renewals when buyer has a valid VAT ID
+    if (vat = vat_id_for(purchase)).present? &&
+       vat_id_valid?(vat) &&
+       !seller_responsible_for_vat?(purchase)
+      purchase.tax_cents = 0
+      purchase.gumroad_tax_cents = 0 if purchase.respond_to?(:gumroad_tax_cents=)
+    end
+
     purchase
   end
 
