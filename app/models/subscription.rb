@@ -236,10 +236,18 @@ class Subscription < ApplicationRecord
   end
 
   def elected_tax_country_for(purchase)
-    purchase.purchase_sales_tax_info&.elected_tax_country.presence ||
-      purchase.purchase_sales_tax_info&.country.presence ||
-      purchase.country.presence ||
-      purchase.ip_country.presence
+    sti = purchase.respond_to?(:purchase_sales_tax_info) ? purchase.purchase_sales_tax_info : nil
+
+    elected = sti&.respond_to?(:elected_tax_country) ? sti.elected_tax_country : nil
+    return elected if elected.present?
+
+    sti_country = sti&.respond_to?(:country) ? sti.country : nil
+    return sti_country if sti_country.present?
+
+    purch_country = purchase.respond_to?(:country) ? purchase.country : nil
+    return purch_country if purch_country.present?
+
+    purchase.respond_to?(:ip_country) ? purchase.ip_country : nil
   end
 
   def seller_responsible_for_vat?(purchase)
@@ -880,13 +888,13 @@ class Subscription < ApplicationRecord
          return original_purchase.purchase_sales_tax_info.business_vat_id
        end
 
-       refund = original_purchase&.refunds
-                  &.where("gumroad_tax_cents > 0")
-                  &.where(amount_cents: 0)
-                  &.where&.not(business_vat_id: [nil, ""])
-                  &.reorder(created_at: :desc)
-                  &.first
-       refund&.business_vat_id
+       scope = original_purchase&.refunds
+                 &.where("gumroad_tax_cents > 0")
+                 &.where("amount_cents = 0")
+                 &.reorder(id: :desc)
+
+       refund_with_id = scope&.detect { |r| r.business_vat_id.present? }
+       refund_with_id&.business_vat_id
      end
   end
 

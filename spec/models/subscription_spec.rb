@@ -855,7 +855,8 @@ describe Subscription, :vcr do
 
         renewal = subscription.charge!
         expect(renewal.purchase_state).to eq "successful"
-        expect(renewal.gumroad_tax_cents.to_i).to eq(0)
+        expect(renewal.gumroad_tax_cents.to_i).to eq(0), "gumroad VAT should be zero when seller is responsible"
+        expect(renewal.business_vat_id).to be_nil, "renewal should not carry a VAT ID in seller-responsible countries"
       end
     end
 
