@@ -53,8 +53,8 @@ export type Availability = {
 };
 
 export type RecurrencePriceValue =
-  | { enabled: false; price_cents?: number | null }
-  | { enabled: true; price_cents: number | null; suggested_price_cents: number | null };
+  | { enabled: false; price_cents?: number | null; fixed_duration_months?: number | null }
+  | { enabled: true; price_cents: number | null; suggested_price_cents: number | null; fixed_duration_months?: number | null };
 export type Tier = Variant & {
   customizable_price: boolean;
   apply_price_changes_to_existing_memberships: boolean;

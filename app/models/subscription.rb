@@ -101,7 +101,7 @@ class Subscription < ApplicationRecord
       purchase_ids: purchases.for_sales_api.map(&:external_id),
       created_at:,
       user_requested_cancellation_at:,
-      charge_occurrence_count:,
+      charge_occurrence_count: calculated_charge_occurrence_count,
       recurrence:,
       cancelled_at:,
       ended_at:,
@@ -111,6 +111,19 @@ class Subscription < ApplicationRecord
     }
 
     json[:license_key] = license_key if license_key.present?
+
+    # Add tier-specific duration information
+    if has_fixed_length?
+      json[:fixed_duration_months] = current_subscription_duration_months
+      json[:duration_display] = subscription_duration_display
+      json[:remaining_charges] = remaining_charges_count
+    end
+
+    # Add tier information for tiered memberships
+    if tier.present?
+      json[:tier_id] = tier.external_id
+      json[:tier_name] = tier.name
+    end
 
     json
   end
@@ -718,15 +731,53 @@ class Subscription < ApplicationRecord
   end
 
   def has_fixed_length?
-    charge_occurrence_count.present?
+    calculated_charge_occurrence_count.present?
   end
 
   def charges_completed?
-    has_fixed_length? && purchases.successful.count == charge_occurrence_count
+    has_fixed_length? && purchases.successful.count == calculated_charge_occurrence_count
   end
 
   def remaining_charges_count
-    has_fixed_length? ? charge_occurrence_count - purchases.successful.count : 0
+    has_fixed_length? ? calculated_charge_occurrence_count - purchases.successful.count : 0
+  end
+
+  def tier_price
+    return nil unless tier.present? && recurrence.present?
+    tier.variant_price_for_recurrence(recurrence)
+  end
+
+  def calculated_charge_occurrence_count
+    # For tier-specific durations, get from tier price
+    if tier_price&.has_fixed_duration?
+      tier_price.charge_occurrence_count
+    # For regular products, get from product price
+    elsif price&.has_fixed_duration?
+      price.charge_occurrence_count
+    # Fall back to legacy charge_occurrence_count field
+    else
+      charge_occurrence_count
+    end
+  end
+
+  def current_subscription_duration_months
+    if tier_price&.has_fixed_duration?
+      tier_price.fixed_duration_months
+    elsif price&.has_fixed_duration?
+      price.fixed_duration_months
+    else
+      nil
+    end
+  end
+
+  def subscription_duration_display
+    if tier_price&.has_fixed_duration?
+      tier_price.duration_display
+    elsif price&.has_fixed_duration?
+      price.duration_display
+    else
+      "Ongoing"
+    end
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
@@ -894,10 +945,6 @@ class Subscription < ApplicationRecord
       successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first&.succeeded_at
     end
 
-    def tier_price
-      return nil unless original_purchase.link.is_tiered_membership? && tier.present?
-      tier.prices.alive.is_buy.find_by(recurrence:)
-    end
 
     def create_purchase_event(purchase, template_purchase: nil)
       original_purchase_event = Event.find_by(purchase_id: (template_purchase || original_purchase).id)

@@ -27,6 +27,7 @@ import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
+import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -136,6 +137,20 @@ const TierEditor = ({
   const { product, currencyType } = useProductEditContext();
 
   const [isOpen, setIsOpen] = React.useState(true);
+
+  // Check if any enabled recurrence has a fixed duration
+  const existingFixedDuration = Object.values(tier.recurrence_price_values).find(
+    (value) => value.enabled && "fixed_duration_months" in value && value.fixed_duration_months != null,
+  );
+  const [hasFixedDuration, setHasFixedDuration] = React.useState(!!existingFixedDuration);
+  const existingMonths =
+    existingFixedDuration && "fixed_duration_months" in existingFixedDuration
+      ? existingFixedDuration.fixed_duration_months || 12
+      : 12;
+  const [fixedDurationMonths, setFixedDurationMonths] = React.useState<number>(existingMonths);
+  const [durationUnit, setDurationUnit] = React.useState<"months" | "years">(
+    existingMonths >= 12 && existingMonths % 12 === 0 ? "years" : "months",
+  );
 
   const url = useProductUrl({ option: tier.id });
 
@@ -259,7 +274,7 @@ const TierEditor = ({
                   onChange={() => updateRecurrencePriceValue(recurrence, { enabled: !value.enabled })}
                 />
                 <PriceInput
-                  id={`${uid}-price`}
+                  id={`${uid}-price-${recurrence}`}
                   currencyCode={currencyType}
                   cents={value.price_cents ?? null}
                   onChange={(price_cents) => updateRecurrencePriceValue(recurrence, { price_cents })}
@@ -341,6 +356,96 @@ const TierEditor = ({
                 </Toggle>
               ))}
             </fieldset>
+          ) : null}
+          <Toggle
+            value={hasFixedDuration}
+            onChange={(enabled) => {
+              setHasFixedDuration(enabled);
+              if (enabled) {
+                // Apply duration to all enabled recurrences that have valid prices
+                const updatedRecurrencePriceValues = { ...tier.recurrence_price_values };
+                Object.entries(updatedRecurrencePriceValues).forEach(([recurrence, value]) => {
+                  if (value.enabled && value.price_cents) {
+                    updatedRecurrencePriceValues[recurrence] = {
+                      ...value,
+                      fixed_duration_months: fixedDurationMonths,
+                    };
+                  }
+                });
+                updateTier({ recurrence_price_values: updatedRecurrencePriceValues });
+              } else {
+                // Remove duration from all recurrences
+                const updatedRecurrencePriceValues = { ...tier.recurrence_price_values };
+                Object.entries(updatedRecurrencePriceValues).forEach(([recurrence, value]) => {
+                  if (value.enabled) {
+                    const { fixed_duration_months, ...valueWithoutDuration } = value as RecurrencePriceValue & {
+                      fixed_duration_months?: number;
+                    };
+                    updatedRecurrencePriceValues[recurrence] = valueWithoutDuration;
+                  }
+                });
+                updateTier({ recurrence_price_values: updatedRecurrencePriceValues });
+              }
+            }}
+          >
+            Require a minimum subscription period
+          </Toggle>
+          {hasFixedDuration ? (
+            <div
+              style={{
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--border-radius)",
+                padding: "var(--spacer-4)",
+                marginTop: "var(--spacer-3)",
+              }}
+            >
+              <fieldset>
+                <label htmlFor={`${uid}-fixed-duration`}>Duration</label>
+                <div className="input" style={{ display: "flex", gap: "var(--spacer-2)", alignItems: "stretch" }}>
+                  <input
+                    id={`${uid}-fixed-duration`}
+                    type="number"
+                    min="1"
+                    value={durationUnit === "months" ? fixedDurationMonths : Math.round(fixedDurationMonths / 12)}
+                    onChange={(evt) => {
+                      const value = parseInt(evt.target.value, 10) || 1;
+                      const months = durationUnit === "months" ? value : value * 12;
+                      setFixedDurationMonths(months);
+                      // Apply to all enabled recurrences that have valid prices
+                      const updatedRecurrencePriceValues = { ...tier.recurrence_price_values };
+                      Object.entries(updatedRecurrencePriceValues).forEach(([recurrence, priceValue]) => {
+                        if (priceValue.enabled && priceValue.price_cents) {
+                          updatedRecurrencePriceValues[recurrence] = {
+                            ...priceValue,
+                            fixed_duration_months: months,
+                          };
+                        }
+                      });
+                      updateTier({ recurrence_price_values: updatedRecurrencePriceValues });
+                    }}
+                    style={{ flex: "1", padding: "var(--spacer-2)" }}
+                  />
+                  <label className="pill select" style={{ minWidth: "100px" }}>
+                    <span>{durationUnit === "months" ? "Months" : "Years"}</span>
+                    <TypeSafeOptionSelect
+                      onChange={(newUnit: "months" | "years") => {
+                        setDurationUnit(newUnit);
+                        // No need to update months value here, the input onChange will handle it
+                      }}
+                      value={durationUnit}
+                      aria-label="Duration unit"
+                      options={[
+                        { id: "months", label: "Months" },
+                        { id: "years", label: "Years" },
+                      ]}
+                    />
+                  </label>
+                </div>
+              </fieldset>
+              <small style={{ color: "var(--color-text-secondary)", display: "block", marginTop: "var(--spacer-3)" }}>
+                Customers will be committed to this subscription for the specified duration.
+              </small>
+            </div>
           ) : null}
         </Drawer>
       ) : null}

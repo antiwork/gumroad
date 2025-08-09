@@ -30,7 +30,7 @@ import {
 import { formatCallDate } from "$app/utils/date";
 import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
-import { recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
+import { recurrenceNames, recurrenceLabels, formatFixedDurationPricing, RecurrenceId } from "$app/utils/recurringPricing";
 
 import { Breaklines } from "$app/components/Breaklines";
 import { Button } from "$app/components/Button";
@@ -99,7 +99,7 @@ export type Option = {
   price_difference_cents: number | null;
   recurrence_price_values:
     | {
-        [key in RecurrenceId]?: { price_cents: number; suggested_price_cents: number | null };
+        [key in RecurrenceId]?: { price_cents: number; suggested_price_cents: number | null; fixed_duration_months?: number | null };
       }
     | null;
   is_pwyw: boolean;
@@ -206,6 +206,7 @@ export const OptionRadioButton = ({
   status,
   discount,
   recurrence,
+  fixedDurationMonths,
   product,
   hidePrice,
 }: {
@@ -221,6 +222,7 @@ export const OptionRadioButton = ({
   status?: string | undefined;
   discount: Discount | null;
   recurrence?: RecurrenceId | null;
+  fixedDurationMonths?: number | null;
   product: Product;
   hidePrice?: boolean | undefined;
 }) => {
@@ -245,16 +247,47 @@ export const OptionRadioButton = ({
       ) : null}
       {hidePrice ? null : (
         <div className="pill">
-          {discountedPriceCents < priceCents ? (
+          {fixedDurationMonths && recurrence ? (
+            // Fixed duration format: "6-month plan at $10/month" 
             <>
-              <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
+              {formatFixedDurationPricing(recurrence, fixedDurationMonths)}{" "}
+              {discountedPriceCents < priceCents ? (
+                <>
+                  <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
+                </>
+              ) : null}
+              {formatPriceCentsWithCurrencySymbol(currencyCode, discountedPriceCents, {
+                symbolFormat: "long",
+              })}
+              /
+              {recurrence === "monthly"
+                ? "month"
+                : recurrence === "yearly"
+                  ? "year"
+                  : recurrence === "quarterly"
+                    ? "quarter"
+                    : recurrence === "biannually"
+                      ? "6 months"
+                      : recurrence === "every_two_years"
+                        ? "2 years"
+                        : "period"}
+              {isPWYW ? "+" : null}
             </>
-          ) : null}
-          {formatPriceCentsWithCurrencySymbol(currencyCode, discountedPriceCents, {
-            symbolFormat: "long",
-          })}
-          {isPWYW ? "+" : null}
-          {recurrence ? ` ${recurrenceLabels[recurrence]}` : null}
+          ) : (
+            // Regular format: "$10 a month"
+            <>
+              {discountedPriceCents < priceCents ? (
+                <>
+                  <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
+                </>
+              ) : null}
+              {formatPriceCentsWithCurrencySymbol(currencyCode, discountedPriceCents, {
+                symbolFormat: "long",
+              })}
+              {isPWYW ? "+" : null}
+              {recurrence ? ` ${recurrenceLabels[recurrence]}` : null}
+            </>
+          )}
           <div itemProp="price" hidden>
             {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
           </div>
@@ -718,6 +751,11 @@ export const ConfigurationSelector = React.forwardRef<
                 status={option.status}
                 discount={discount}
                 recurrence={selection.recurrence}
+                fixedDurationMonths={
+                  selection.recurrence
+                    ? option.recurrence_price_values?.[selection.recurrence]?.fixed_duration_months || null
+                    : null
+                }
                 product={product}
                 hidePrice={hidePrices}
               />

@@ -66,6 +66,13 @@ class Variant < BaseVariant
           }
           # TODO: :product_edit_react cleanup
           recurrence_price_values[recurrence][:suggested_price] = price.suggested_price_formatted_without_symbol if price.suggested_price_cents.present?
+
+          # Add duration information for edit mode
+          if price.has_fixed_duration?
+            recurrence_price_values[recurrence][:fixed_duration_months] = price.fixed_duration_months
+            recurrence_price_values[recurrence][:duration_display] = price.duration_display
+            recurrence_price_values[recurrence][:formatted_duration_with_recurrence] = price.formatted_duration_with_recurrence
+          end
         else
           recurrence_price_values[recurrence] = {
             enabled: false
@@ -78,10 +85,35 @@ class Variant < BaseVariant
             price_cents:,
             suggested_price_cents: price.suggested_price_cents,
           }
+
+          # Add duration information for display mode
+          if price.has_fixed_duration?
+            recurrence_price_values[recurrence][:fixed_duration_months] = price.fixed_duration_months
+            recurrence_price_values[recurrence][:duration_display] = price.duration_display
+            recurrence_price_values[recurrence][:formatted_price_with_duration] = price.formatted_price_with_duration
+          end
         end
       end
     end
     recurrence_price_values
+  end
+
+  def variant_price_for_recurrence(recurrence)
+    alive_prices.is_buy.find_by(recurrence: recurrence)
+  end
+
+  def has_fixed_duration_pricing?
+    alive_prices.is_buy.any?(&:has_fixed_duration?)
+  end
+
+  def duration_for_recurrence(recurrence)
+    price = variant_price_for_recurrence(recurrence)
+    price&.has_fixed_duration? ? price.fixed_duration_months : nil
+  end
+
+  def duration_display_for_recurrence(recurrence)
+    price = variant_price_for_recurrence(recurrence)
+    price&.has_fixed_duration? ? price.duration_display : "Ongoing"
   end
 
   def self.create_or_update!(external_id, params)

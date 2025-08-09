@@ -34,8 +34,10 @@ class Purchase::BaseService
       charge_occurrence_count =
         if purchase.is_installment_payment
           purchase.link.installment_plan.number_of_installments
-        elsif purchase.link.duration_in_months.present?
-          purchase.link.duration_in_months / BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
+        else
+          calculate_tier_specific_charge_occurrence_count
+        # elsif purchase.link.duration_in_months.present?
+        #   purchase.link.duration_in_months / BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
         end
 
       subscription = purchase.link.subscriptions.build(
@@ -101,5 +103,27 @@ class Purchase::BaseService
         purchase.mark_preorder_authorization_failed
         preorder&.mark_authorization_failed!
       end
+    end
+    private
+
+    def calculate_tier_specific_charge_occurrence_count
+      # For tier-specific durations, get from variant price
+      if purchase.tier&.present? && purchase.link.is_tiered_membership?
+        variant_price = purchase.tier.variant_price_for_recurrence(purchase.price.recurrence)
+        return variant_price.charge_occurrence_count if variant_price&.has_fixed_duration?
+      end
+
+      # For regular products, get from price
+      if purchase.price&.has_fixed_duration?
+        return purchase.price.charge_occurrence_count
+      end
+
+      # Fall back to legacy calculation for backward compatibility
+      if purchase.link.duration_in_months.present?
+        return purchase.link.duration_in_months / BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
+      end
+
+      # No fixed duration
+      nil
     end
 end

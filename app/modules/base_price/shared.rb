@@ -30,11 +30,16 @@ module BasePrice::Shared
       suggested_price = attributes[:suggested_price]
       # TODO: :product_edit_react cleanup
       suggested_price_cents = attributes[:suggested_price_cents] || (suggested_price.present? ? clean_price(suggested_price) : nil)
+
+      # Extract fixed duration field
+      fixed_duration_months = attributes[:fixed_duration_months]
+
       create_or_update_new_price!(
         price_cents:,
         suggested_price_cents:,
         recurrence:,
-        is_rental: false
+        is_rental: false,
+        fixed_duration_months:
       )
     end
 
@@ -70,7 +75,7 @@ module BasePrice::Shared
     # is_rental - Indicating if the newly created Price is for rentals.
     # suggested_price_cents - The suggested amount to pay if pay-what-you-want is enabled. Can be nil if PWYW is not enabled.
     #
-    def create_or_update_new_price!(price_cents:, recurrence:, is_rental:, suggested_price_cents: nil)
+    def create_or_update_new_price!(price_cents:, recurrence:, is_rental:, suggested_price_cents: nil, fixed_duration_months: nil)
       if is_rental && price_cents.nil?
         errors.add(:base, "Please enter the rental price.")
         raise ActiveRecord::RecordInvalid.new(self)
@@ -84,6 +89,7 @@ module BasePrice::Shared
         price.price_cents = price_cents
         price.suggested_price_cents = suggested_price_cents
         price.is_rental = is_rental
+        price.fixed_duration_months = fixed_duration_months
         changed = price.changed?
         begin
           price.save!
