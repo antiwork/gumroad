@@ -75,4 +75,51 @@ describe Admin::PurchasesController, :vcr do
        .and change { @purchase.purchaser.comments.where(content: comment_content, comment_type: "note", author_id: @admin_user.id, purchase: @purchase).count }.by(1)
     end
   end
+
+  describe "POST refund_taxes_only" do
+    before do
+      @purchase = create(:purchase_in_progress, chargeable: create(:chargeable), purchaser: create(:user))
+      @purchase.process!
+      @purchase.mark_successful!
+    end
+
+    it "successfully refunds taxes when refundable taxes are available" do
+      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: nil, business_vat_id: nil).and_return(true)
+
+      post :refund_taxes_only, params: { id: @purchase.id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "includes note and business_vat_id when provided" do
+      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: "Tax exemption request", business_vat_id: "VAT123456").and_return(true)
+
+      post :refund_taxes_only, params: {
+        id: @purchase.id,
+        note: "Tax exemption request",
+        business_vat_id: "VAT123456"
+      }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "returns error when tax refund fails" do
+      allow_any_instance_of(Purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: @admin_user.id, note: nil, business_vat_id: nil).and_return(false)
+      allow_any_instance_of(Purchase).to receive(:errors).and_return(
+        double(full_messages: double(to_sentence: "Tax already refunded and Invalid tax amount"))
+      )
+
+      post :refund_taxes_only, params: { id: @purchase.id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("Tax already refunded and Invalid tax amount")
+    end
+
+    it "raises error when purchase is not found" do
+      expect { post :refund_taxes_only, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
+    end
+  end
 end
