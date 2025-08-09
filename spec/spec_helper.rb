@@ -105,6 +105,34 @@ def configure_vcr
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
     config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
+    config.filter_sensitive_data("<HOSTNAME>") { Socket.gethostname }
+
+    config.filter_sensitive_data("<COMPUTER_NAME>") do
+      `scutil --get ComputerName`.strip
+    rescue StandardError
+      nil
+    end
+
+    config.filter_sensitive_data("<GUMROAD_TEST_HOST>") do
+      URI(Capybara.app_host).host
+    rescue StandardError
+      nil
+    end
+
+    config.before_record do |interaction|
+      headers_to_strip = %w[
+        X-Stripe-Client-User-Agent
+        X-Stripe-Client-Telemetry
+        Idempotency-Key
+        Request-Id
+        Original-Request
+      ]
+
+      headers_to_strip.each do |header|
+        interaction.request.headers&.delete(header)
+        interaction.response.headers&.delete(header)
+      end
+    end
   end
 end
 
