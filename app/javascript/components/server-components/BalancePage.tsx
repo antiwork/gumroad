@@ -211,7 +211,6 @@ type CurrentPeriodPayoutData = (
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
   payout_note?: string | null;
-  last_failed_payout_reason?: string | null;
 };
 
 type PastPeriodPayoutsData = {
@@ -714,7 +713,7 @@ const BalancePage = ({
       </header>
       <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
         {hasFailedPayoutNote ? (
-          <div className="danger" role="alert">
+          <div className="danger" role="alert" data-testid="payout-failure-banner">
             <p>
               <strong>A recent payout attempt failed.</strong>
             </p>

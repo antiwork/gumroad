@@ -10,7 +10,6 @@ describe BalanceController do
 
     context "when seller has a failed payout note" do
       before do
-        # Create a payout note comment for failed payout
         comment = create(:comment, 
           user: seller, 
           content: "Payout via Stripe on #{Date.current} failed because insufficient funds in bank account. Solution: Please update your bank account information. The balance has been carried over and will be included in your next payout.",
@@ -18,7 +17,6 @@ describe BalanceController do
           author_id: User::GUMROAD_ADMIN_ID
         )
         
-        # Ensure the comment is newer than any completed payments
         comment.update!(created_at: Time.current)
       end
 
@@ -29,7 +27,6 @@ describe BalanceController do
         payout_presenter = assigns(:payout_presenter)
         props = payout_presenter.props
         
-        # The payout_note should be present and contain "failed"
         expect(props[:next_payout_period_data]).to be_present
         expect(props[:next_payout_period_data][:payout_note]).to be_present
         expect(props[:next_payout_period_data][:payout_note].downcase).to include("failed")
@@ -44,9 +41,8 @@ describe BalanceController do
         payout_presenter = assigns(:payout_presenter)
         props = payout_presenter.props
         
-        # The payout_note should be nil or not contain "failed"
         payout_note = props[:next_payout_period_data]&.[](:payout_note)
-        expect(payout_note).to be_nil.or not_include("failed")
+        expect(payout_note).to be_nil.or satisfy { |v| !v.to_s.downcase.include?("failed") }
       end
     end
   end

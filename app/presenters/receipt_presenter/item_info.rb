@@ -257,27 +257,25 @@ class ReceiptPresenter::ItemInfo
         return if purchase.is_gift_receiver_purchase && subscription.credit_card_id.blank?
         return gift_subscription_renewal_note if subscription.gift? && subscription.credit_card_id.blank?
 
+        manage_url = Rails.application.routes.url_helpers.manage_subscription_url(
+          subscription.external_id,
+          { host: UrlService.domain_with_protocol },
+        )
+        
         if subscription.has_fixed_length?
           init_date = installment_initial_date.to_fs(:formatted_date_abbrev_month)
           final_date = installment_final_date.to_fs(:formatted_date_abbrev_month)
-          manage_url = Rails.application.routes.url_helpers.manage_subscription_url(
-            subscription.external_id,
-            { host: UrlService.domain_with_protocol },
-          )
-          "Installment plan initiated on #{init_date}. Your final charge will be on #{final_date}. You can manage your payment settings #{link_to(
-            "here",
-            manage_url,
-            target: "_blank"
-          )}.".html_safe
+          ActionView::Base.safe_join([
+            "Installment plan initiated on #{init_date}. Your final charge will be on #{final_date}. You can manage your payment settings ",
+            link_to("here", manage_url, target: "_blank"),
+            "."
+          ])
         else
-          "You will be charged once #{recurrence_long_indicator(subscription.recurrence)}. If you would like to manage your membership you can visit #{link_to(
-              "subscription settings",
-              Rails.application.routes.url_helpers.manage_subscription_url(
-                subscription.external_id,
-                { host: UrlService.domain_with_protocol },
-              ),
-              target: "_blank"
-            )}.".html_safe
+          ActionView::Base.safe_join([
+            "You will be charged once #{recurrence_long_indicator(subscription.recurrence)}. If you would like to manage your membership you can visit ",
+            link_to("subscription settings", manage_url, target: "_blank"),
+            "."
+          ])
         end
       end
     end
@@ -291,10 +289,9 @@ class ReceiptPresenter::ItemInfo
     end
 
     def installment_final_date
-      # last scheduled charge date based on fixed length and recurrence period
       start_at = subscription.original_purchase&.created_at || installment_initial_date
       occurrences = subscription.charge_occurrence_count.to_i
-      # final occurs at (occurrences - 1) periods after start
+      return start_at if occurrences <= 1
       start_at + (subscription.period * (occurrences - 1))
     end
 end

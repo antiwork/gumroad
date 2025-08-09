@@ -3,27 +3,6 @@
 require "spec_helper"
 
 describe SettingsPresenter do
-  let(:seller) { create(:named_seller) }
-  let(:pundit_user) { PunditUser.new(seller) }
-
-  describe "payouts paused state" do
-    it "exposes pause flags for payments page props" do
-      presenter = described_class.new(pundit_user: pundit_user)
-      allow(seller).to receive(:payouts_paused_internally?).and_return(true)
-      allow(seller).to receive(:payouts_paused_by_user?).and_return(false)
-
-      props = presenter.payments_props
-      expect(props[:payouts_paused_internally]).to eq(true)
-      expect(props[:payouts_paused_by_user]).to eq(false)
-    end
-  end
-end
-
-# frozen_string_literal: true
-
-require "spec_helper"
-
-describe SettingsPresenter do
   let(:product) do
     create(:product, purchasing_power_parity_disabled: true, user: create(:named_seller, purchasing_power_parity_limit: 60))
   end
@@ -784,6 +763,21 @@ describe SettingsPresenter do
 
       it "returns true for can_connect_stripe" do
         expect(presenter.payments_props[:user][:can_connect_stripe]).to eq(true)
+      end
+    end
+
+    context "when testing with different pundit_user types" do
+      let(:test_seller) { create(:named_seller) }
+      let(:test_pundit_user) { SellerContext.new(user: test_seller, seller: test_seller) }
+      let(:test_presenter) { described_class.new(pundit_user: test_pundit_user) }
+
+      it "exposes pause flags for payments page props" do
+        allow(test_seller).to receive(:payouts_paused_internally?).and_return(true)
+        allow(test_seller).to receive(:payouts_paused_by_user?).and_return(false)
+
+        props = test_presenter.payments_props
+        expect(props[:payouts_paused_internally]).to eq(true)
+        expect(props[:payouts_paused_by_user]).to eq(false)
       end
     end
   end

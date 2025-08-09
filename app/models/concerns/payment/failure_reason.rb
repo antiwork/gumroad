@@ -139,7 +139,7 @@ module Payment::FailureReason
 
   private
     def add_payment_failure_reason_comment
-      return unless failure_reason.present?
+      return if failure_reason.blank?
 
       solution_mapping = if processor == PayoutProcessorType::PAYPAL
         PAYPAL_FAILURE_SOLUTIONS[failure_reason]
@@ -147,10 +147,14 @@ module Payment::FailureReason
         STRIPE_FAILURE_SOLUTIONS[failure_reason]
       end
 
-      reason_text = solution_mapping&.dig(:reason) || failure_reason.to_s.tr("_", " ")
+      reason_text =
+        solution_mapping&.dig(:reason) ||
+        (processor == PayoutProcessorType::PAYPAL ? PAYPAL_MASS_PAY[failure_reason] : nil) ||
+        failure_reason.to_s.tr("_", " ")
       solution_text = solution_mapping&.dig(:solution)
 
-      content = "Payout via #{processor.capitalize} on #{created_at} failed because #{reason_text}."
+      processor_label = processor.to_s.capitalize
+      content = "Payout via #{processor_label} on #{created_at} failed because #{reason_text}."
       content += " Solution: #{solution_text}." if solution_text.present?
       content += " The balance has been carried over and will be included in your next payout."
 

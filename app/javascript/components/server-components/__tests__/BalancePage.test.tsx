@@ -142,7 +142,7 @@ describe("BalancePage", () => {
     render(<BalancePage {...propsWithFailure} />);
 
     // Check that the failure banner is present
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByTestId("payout-failure-banner")).toBeInTheDocument();
     expect(screen.getByText("A recent payout attempt failed.")).toBeInTheDocument();
     expect(screen.getByText(/Payout via Stripe failed because insufficient funds/u)).toBeInTheDocument();
   });
@@ -182,7 +182,7 @@ describe("BalancePage", () => {
     render(<BalancePage {...propsWithNormalNote} />);
 
     // Check that no failure banner is present
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("payout-failure-banner")).not.toBeInTheDocument();
     expect(screen.queryByText("A recent payout attempt failed.")).not.toBeInTheDocument();
   });
 
@@ -221,7 +221,7 @@ describe("BalancePage", () => {
     render(<BalancePage {...propsWithNullNote} />);
 
     // Check that no failure banner is present
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("payout-failure-banner")).not.toBeInTheDocument();
     expect(screen.queryByText("A recent payout attempt failed.")).not.toBeInTheDocument();
   });
 });

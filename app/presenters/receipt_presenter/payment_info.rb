@@ -155,7 +155,7 @@ class ReceiptPresenter::PaymentInfo
       return unless any_upcoming_payments?
 
       label = "Today's payment"
-      if installment_subscription
+      if installment_subscription && installment_index&.positive?
         label = "#{label}: #{installment_index} of #{installment_count}"
       end
 
@@ -224,8 +224,8 @@ class ReceiptPresenter::PaymentInfo
 
     def upcoming_payment_heading_attribute
       label = "Upcoming #{"payment".pluralize(upcoming_price_attributes.size)}"
-      if installment_subscription
-        next_index = [installment_index + 1, installment_count].min
+      if installment_subscription && installment_index&.positive? && installment_index < installment_count
+        next_index = installment_index + 1
         label = "Upcoming payment: #{next_index} of #{installment_count}"
       end
 
@@ -327,11 +327,7 @@ class ReceiptPresenter::PaymentInfo
 
     # Installment helpers
     def installment_subscription
-      @_installment_subscription ||= begin
-        subs = chargeable.successful_purchases.filter_map(&:subscription).compact
-        sub = subs.find(&:has_fixed_length?)
-        sub if sub&.has_fixed_length?
-      end
+      @_installment_subscription ||= chargeable.successful_purchases.map(&:subscription).compact.detect(&:has_fixed_length?)
     end
 
     def installment_count
