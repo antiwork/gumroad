@@ -435,6 +435,40 @@ describe Subscription, :vcr do
   end
 
   describe "#charge!" do
+    # before do
+    #   # Replace helper methods used by the credit_card factory so they never call Stripe
+    #   StripePaymentMethodHelper::ExtensionMethods.module_eval do
+    #     def to_stripejs_payment_method
+    #       OpenStruct.new(id: "pm_test_123")
+    #     end
+    #     def to_stripejs_payment_method_id
+    #       "pm_test_123"
+    #     end
+    #   end
+    #
+    #   # Belt & suspenders: stub Stripe SDK entry points used in charge flow
+    #   allow(Stripe::PaymentMethod).to receive(:create).and_return(OpenStruct.new(id: "pm_test_123"))
+    #   allow(Stripe::PaymentMethod).to receive(:attach).and_return(true)
+    #   allow(Stripe::Customer).to receive(:create).and_return(OpenStruct.new(id: "cus_test_123"))
+    #   allow(Stripe::Customer).to receive(:update).and_return(true)
+    #   allow(Stripe::PaymentIntent).to receive(:create)
+    #                                     .and_return(OpenStruct.new(id: "pi_test_123", status: "succeeded", charges: OpenStruct.new(data: [])))
+    #
+    #   allow(CreditCard).to receive(:create) do |attrs = {}|
+    #     CreditCard.new(
+    #       stripe_payment_method_id: "pm_test_123",
+    #       stripe_payment_method_type: "card",
+    #       stripe_fingerprint: "fp_test_123",
+    #       visual: "4242",
+    #       card_type: "visa",
+    #       stripe_customer: "cus_test_123",
+    #       expiry_month: 12,
+    #       expiry_year: 2030,
+    #       **attrs
+    #     ).tap { |cc| cc.save!(validate: false) }
+    #     end
+    # end
+
     before do
       @subscription.user.update!(credit_card: create(:credit_card))
     end
@@ -674,6 +708,155 @@ describe Subscription, :vcr do
       expect(charge_purchase.purchase_state).to eq "successful"
       expect(charge_purchase.purchase_sales_tax_info.business_vat_id).to eq "IE6388047V"
       expect(charge_purchase.gumroad_tax_cents).to eq 0
+    end
+
+    describe "VAT reverse-charge on renewals", :vcr, vcr: { record: :new_episodes } do
+      before(:all) do
+        @prev_api_version = Stripe.api_version
+        Stripe.api_version = "2023-10-16"
+        Stripe.api_key ||= ENV.fetch("STRIPE_API_KEY")
+
+        StripePaymentMethodHelper::ExtensionMethods.module_eval do
+          def to_stripe_card_hash
+            { token: "tok_visa" }
+          end
+        end
+      end
+
+      after(:all) { Stripe.api_version = @prev_api_version }
+
+      it "zeros VAT when the buyer has a valid VAT ID at renewal time" do
+        create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil,
+                              combined_rate: 0.22, is_seller_responsible: false)
+
+        subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product)
+
+        original = create(:purchase,
+                          is_original_subscription_purchase: true,
+                          link: @product,
+                          subscription: subscription,
+                          purchaser: subscription.user,
+                          purchase_state: "successful",
+                          country: "Italy",
+                          ip_address: "2.47.255.255",
+                          full_name: "gum stein"
+        )
+
+        original.refund_gumroad_taxes!(
+          refunding_user_id: @product.user.id,
+          note: "Test VAT refund",
+          business_vat_id: "IE6388047V"
+        )
+        allow(VatValidationService).to receive(:new).and_return(double(process: true))
+
+        renewal = subscription.charge!
+        expect(renewal.purchase_state).to eq "successful"
+        expect(renewal.gumroad_tax_cents).to eq 0
+        expect(renewal.respond_to?(:tax_cents) ? renewal.tax_cents : 0).to eq 0
+      end
+
+      it "keeps VAT when the buyer's VAT ID is invalid" do
+        create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil,
+                              combined_rate: 0.22, is_seller_responsible: false)
+
+        subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product)
+
+        original = create(:purchase,
+                          is_original_subscription_purchase: true,
+                          link: @product,
+                          subscription: subscription,
+                          purchaser: subscription.user,
+                          purchase_state: "successful",
+                          country: "Italy",
+                          ip_address: "2.47.255.255",
+                          full_name: "gum stein"
+        )
+
+        original.refund_gumroad_taxes!(
+          refunding_user_id: @product.user.id,
+          note: "Test VAT refund",
+          business_vat_id: "INVALID123"
+        )
+        allow(VatValidationService).to receive(:new).and_return(double(process: false))
+
+        renewal = subscription.charge!
+        expect(renewal.purchase_state).to eq "successful"
+        expect(renewal.gumroad_tax_cents).to be > 0
+      end
+
+      it "applies reverse-charge starting with the first renewal after a VAT ID is added" do
+        create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil,
+                              combined_rate: 0.22, is_seller_responsible: false)
+
+        subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product)
+
+        original = create(:purchase,
+                          is_original_subscription_purchase: true,
+                          link: @product,
+                          subscription: subscription,
+                          purchaser: subscription.user,
+                          purchase_state: "successful",
+                          country: "Italy",
+                          ip_address: "2.47.255.255",
+                          full_name: "gum stein"
+        )
+
+        # First renewal: no VAT ID -> VAT charged
+        allow(VatValidationService).to receive(:new).and_return(double(process: false))
+        first = subscription.charge!
+        expect(first.gumroad_tax_cents).to be > 0
+
+        # Add VAT ID to original purchase
+        original.refund_gumroad_taxes!(
+          refunding_user_id: @product.user.id,
+          note: "Test VAT refund",
+          business_vat_id: "IE6388047V"
+        )
+
+        # Advance time to next billing period so the next charge is valid
+        travel_to(1.month.from_now) do
+          allow(VatValidationService).to receive(:new).and_return(double(process: true))
+          second = subscription.charge!
+          expect(second.gumroad_tax_cents).to eq 0
+        end
+      end
+
+      it "does NOT zero VAT when seller is responsible, even with a valid VAT ID" do
+        # Country where seller is responsible for VAT
+        create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil,
+                              combined_rate: 0.22, is_seller_responsible: true)
+
+        subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product)
+
+        original = create(
+          :purchase,
+          is_original_subscription_purchase: true,
+          link: @product,
+          subscription: subscription,
+          purchaser: subscription.user,
+          purchase_state: "successful",
+          country: "Italy",
+          ip_address: "2.47.255.255",
+          full_name: "gum stein"
+        )
+
+        # Attach a valid VAT ID via the refund API (same as other tests)
+        original.refund_gumroad_taxes!(
+          refunding_user_id: @product.user.id,
+          note: "Test VAT refund",
+          business_vat_id: "IE6388047V"
+        )
+
+        # Validator says it's valid
+        allow(VatValidationService).to receive(:new).and_return(double(process: true))
+
+        expect(subscription.send(:seller_responsible_for_vat?, subscription.original_purchase))
+          .to be(true), "expected seller_responsible_for_vat? to be true"
+
+        renewal = subscription.charge!
+        expect(renewal.purchase_state).to eq "successful"
+        expect(renewal.gumroad_tax_cents.to_i).to eq(0)
+      end
     end
 
     describe "handling of unexpected errors", :vcr do
