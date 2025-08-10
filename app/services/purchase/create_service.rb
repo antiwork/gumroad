@@ -111,9 +111,9 @@ class Purchase::CreateService < Purchase::BaseService
 
             # If there was an original discount code, check if it should be preserved
             if original_offer_code.present? && original_discount_code.present?
-              # Check if original discount code is valid for the upsell product
-              upsell_product = product # The current product being purchased (upsell target)
-              original_code_for_upsell = upsell_product.find_offer_code(code: original_discount_code)
+              upsell_product = product
+              normalized_code = original_discount_code.to_s.downcase.strip
+              original_code_for_upsell = upsell_product.find_offer_code(code: normalized_code)
               
               # If original discount is valid for upsell product, preserve it over upsell's code
               if original_code_for_upsell.present?
