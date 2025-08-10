@@ -30,7 +30,12 @@ import {
 import { formatCallDate } from "$app/utils/date";
 import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
-import { recurrenceNames, recurrenceLabels, formatFixedDurationPricing, RecurrenceId } from "$app/utils/recurringPricing";
+import {
+  recurrenceNames,
+  recurrenceLabels,
+  formatFixedDurationPricing,
+  RecurrenceId,
+} from "$app/utils/recurringPricing";
 
 import { Breaklines } from "$app/components/Breaklines";
 import { Button } from "$app/components/Button";
@@ -99,7 +104,11 @@ export type Option = {
   price_difference_cents: number | null;
   recurrence_price_values:
     | {
-        [key in RecurrenceId]?: { price_cents: number; suggested_price_cents: number | null; fixed_duration_months?: number | null };
+        [key in RecurrenceId]?: {
+          price_cents: number;
+          suggested_price_cents: number | null;
+          fixed_duration_months?: number | null;
+        };
       }
     | null;
   is_pwyw: boolean;
@@ -193,6 +202,23 @@ export const computeOptionPrice = (option: Option, selectedRecurrence: Recurrenc
   (selectedRecurrence !== null ? (option.recurrence_price_values?.[selectedRecurrence]?.price_cents ?? 0) : 0) +
   (option.price_difference_cents ?? 0);
 
+const getRecurrenceText = (recurrence: string): string => {
+  switch (recurrence) {
+    case "monthly":
+      return "month";
+    case "yearly":
+      return "year";
+    case "quarterly":
+      return "quarter";
+    case "biannually":
+      return "6 months";
+    case "every_two_years":
+      return "2 years";
+    default:
+      return "period";
+  }
+};
+
 export const OptionRadioButton = ({
   disabled,
   selected,
@@ -248,7 +274,7 @@ export const OptionRadioButton = ({
       {hidePrice ? null : (
         <div className="pill">
           {fixedDurationMonths && recurrence ? (
-            // Fixed duration format: "6-month plan at $10/month" 
+            // Fixed duration format: "6-month plan at $10/month"
             <>
               {formatFixedDurationPricing(recurrence, fixedDurationMonths)}{" "}
               {discountedPriceCents < priceCents ? (
@@ -259,18 +285,7 @@ export const OptionRadioButton = ({
               {formatPriceCentsWithCurrencySymbol(currencyCode, discountedPriceCents, {
                 symbolFormat: "long",
               })}
-              /
-              {recurrence === "monthly"
-                ? "month"
-                : recurrence === "yearly"
-                  ? "year"
-                  : recurrence === "quarterly"
-                    ? "quarter"
-                    : recurrence === "biannually"
-                      ? "6 months"
-                      : recurrence === "every_two_years"
-                        ? "2 years"
-                        : "period"}
+              /{getRecurrenceText(recurrence)}
               {isPWYW ? "+" : null}
             </>
           ) : (
