@@ -41,7 +41,13 @@ class Api::Internal::CartsController < Api::Internal::BaseController
         cart_product.recommender_model_name = item[:recommender_model_name]
         cart_product.call_start_time = item[:call_start_time].present? ? Time.zone.parse(item[:call_start_time]) : nil
         cart_product.pay_in_installments = !!item[:pay_in_installments] && product.allow_installment_plan?
-        cart_product.fixed_duration_months = item[:fixed_duration_months]
+        
+        fixed_duration = item[:fixed_duration_months].presence
+        if item[:recurrence].present?
+          cart_product.fixed_duration_months = fixed_duration&.to_i
+        else
+          cart_product.fixed_duration_months = nil
+        end
         cart_product.save!
         cart_product
       end

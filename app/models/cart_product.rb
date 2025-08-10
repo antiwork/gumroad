@@ -23,9 +23,12 @@ class CartProduct < ApplicationRecord
   after_initialize :assign_default_values
 
   validates :price, :quantity, :referrer, presence: true
+  validates :fixed_duration_months, 
+    numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   validate :ensure_url_parameters_conform_to_schema
   validate :ensure_accepted_offer_details_conform_to_schema
+  validate :fixed_duration_applicability
 
   private
     def assign_default_values
@@ -39,5 +42,18 @@ class CartProduct < ApplicationRecord
 
     def ensure_accepted_offer_details_conform_to_schema
       JSON::Validator.fully_validate(ACCEPTED_OFFER_DETAILS_JSON_SCHEMA, accepted_offer_details).each { errors.add(:accepted_offer_details, _1) }
+    end
+
+    def fixed_duration_applicability
+      if fixed_duration_months.present? && recurrence.blank?
+        errors.add(:fixed_duration_months, "requires a recurrence")
+      end
+      
+      if fixed_duration_months.present? && recurrence.present?
+        period_months = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
+        if period_months && (fixed_duration_months % period_months != 0)
+          errors.add(:fixed_duration_months, "must be a multiple of the recurrence period (#{period_months} months)")
+        end
+      end
     end
 end
