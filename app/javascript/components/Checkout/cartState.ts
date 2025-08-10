@@ -93,6 +93,7 @@ export type CartItem = {
   } | null;
   call_start_time: string | null;
   pay_in_installments: boolean;
+  fixed_duration_months?: number | null;
 };
 
 export type CrossSell = {

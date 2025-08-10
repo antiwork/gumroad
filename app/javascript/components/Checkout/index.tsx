@@ -9,7 +9,7 @@ import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
-import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
+import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels, formatFixedDurationPricing } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -415,6 +415,8 @@ const CartItemComponent = ({
       return setError("You already have this item in your cart.");
     const index = cart.items.findIndex((i) => i === item);
     const items = cart.items.slice();
+    const selectedOption = item.product.options.find((option) => option.id === selection.optionId);
+    const fixedDurationMonths = selection.recurrence && selectedOption?.recurrence_price_values?.[selection.recurrence]?.fixed_duration_months || null;
     items[index] = {
       ...item,
       price: isPWYW ? (selection.price.value ?? priceCents) : priceCents,
@@ -424,6 +426,7 @@ const CartItemComponent = ({
       quantity: selection.quantity,
       call_start_time: selection.callStartTime,
       pay_in_installments: selection.payInInstallments,
+      fixed_duration_months: fixedDurationMonths,
     };
     updateCart({ items });
     setEditPopoverOpen(false);
@@ -458,6 +461,7 @@ const CartItemComponent = ({
               {item.recurrence ? (
                 <li>
                   <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
+                  {item.fixed_duration_months ? `, ${formatFixedDurationPricing(item.recurrence, item.fixed_duration_months).replace(' at', '')}` : ''}
                 </li>
               ) : null}
               {item.call_start_time ? (

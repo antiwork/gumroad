@@ -25,6 +25,35 @@ type Props = {
   tooltipPosition?: "top" | "right";
 };
 
+const getRecurrenceLabel = (
+  recurrence: { id: RecurrenceId; duration_in_months: number | null } | undefined,
+  fixedDurationMonths: number | null | undefined,
+) => {
+  if (!recurrence) return null;
+
+  if (fixedDurationMonths) {
+    return formatFixedDurationPricing(recurrence.id, fixedDurationMonths);
+  }
+  return formatRecurrenceWithDuration(recurrence.id, recurrence.duration_in_months);
+};
+
+const getRecurrenceSuffix = (recurrence: RecurrenceId) => {
+  switch (recurrence) {
+    case "monthly":
+      return "/month";
+    case "yearly":
+      return "/year";
+    case "quarterly":
+      return "/quarter";
+    case "biannually":
+      return "/6 months";
+    case "every_two_years":
+      return "/2 years";
+    default:
+      return "";
+  }
+};
+
 export const PriceTag = ({
   url,
   currencyCode,
@@ -39,41 +68,19 @@ export const PriceTag = ({
 }: Props) => {
   const formattedAmount = formatPriceCentsWithCurrencySymbol(currencyCode, price, { symbolFormat: "long" });
 
-  // Use fixed duration formatting if available, otherwise use the existing format
-  const recurrenceLabel = (() => {
-    if (!recurrence) return null;
-
-    if (fixedDurationMonths) {
-      return formatFixedDurationPricing(recurrence.id, fixedDurationMonths);
-    }
-
-    return formatRecurrenceWithDuration(recurrence.id, recurrence.duration_in_months);
-  })();
+  const recurrenceLabel = getRecurrenceLabel(recurrence, fixedDurationMonths);
 
   // Should match CurrencyHelper#product_card_formatted_price
   const priceTag = (() => {
     if (fixedDurationMonths && recurrence) {
       // For fixed duration: "6-month plan at $10/month"
-      const recurrenceSuffix =
-        recurrence.id === "monthly"
-          ? "/month"
-          : recurrence.id === "yearly"
-            ? "/year"
-            : recurrence.id === "quarterly"
-              ? "/quarter"
-              : recurrence.id === "biannually"
-                ? "/6 months"
-                : recurrence.id === "every_two_years"
-                  ? "/2 years"
-                  : "";
+      const recurrenceSuffix = getRecurrenceSuffix(recurrence.id);
 
       return (
         <>
           {oldPrice != null ? (
             <>
-              <s>
-                {formatPriceCentsWithCurrencySymbol(currencyCode, oldPrice, { symbolFormat: "long" })}
-              </s>{" "}
+              <s>{formatPriceCentsWithCurrencySymbol(currencyCode, oldPrice, { symbolFormat: "long" })}</s>{" "}
             </>
           ) : null}
           {recurrenceLabel} {formattedAmount}
