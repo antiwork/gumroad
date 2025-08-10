@@ -433,7 +433,7 @@ const CartItemComponent = ({
       quantity: selection.quantity,
       call_start_time: selection.callStartTime,
       pay_in_installments: selection.payInInstallments,
-      fixed_duration_months: fixedDurationMonths,
+      ...(fixedDurationMonths != null ? { fixed_duration_months: fixedDurationMonths } : {}),
     };
     updateCart({ items });
     setEditPopoverOpen(false);
