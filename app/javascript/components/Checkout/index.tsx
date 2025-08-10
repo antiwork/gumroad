@@ -468,7 +468,7 @@ const CartItemComponent = ({
               {item.recurrence ? (
                 <li>
                   <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-                  {item.fixed_duration_months != null
+                  {typeof item.fixed_duration_months === "number"
                     ? `, ${formatFixedDurationPricing(item.fixed_duration_months).replace(" at", "")}`
                     : ""}
                 </li>

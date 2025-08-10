@@ -39,7 +39,7 @@ module BasePrice::Recurrence
 
   PERMITTED_PARAMS = ALLOWED_RECURRENCES.inject({}) do |c, recurrence|
     # TODO: :product_edit_react cleanup
-    c.merge!(recurrence.to_sym => [:enabled, :price, :price_cents, :suggested_price, :suggested_price_cents, :fixed_duration_months, :duration_display_name])
+    c.merge!(recurrence.to_sym => [:enabled, :price, :price_cents, :suggested_price, :suggested_price_cents, :fixed_duration_months])
   end.freeze
 
   def self.all

@@ -14,6 +14,7 @@ class BasePrice < ApplicationRecord
   validates :price_cents, :currency, presence: true
   validates :fixed_duration_months,
     numericality: { greater_than: 0, only_integer: true }, allow_nil: true
+  validate :fixed_duration_must_be_multiple_of_recurrence_period
 
   has_flags 1 => :is_rental,
             :column => "flags",
@@ -73,6 +74,19 @@ class BasePrice < ApplicationRecord
       "#{occurrence_count} #{occurrence_count == 1 ? 'payment' : 'payments'} (2 years each)"
     else
       duration_display
+    end
+  end
+
+  private
+
+  def fixed_duration_must_be_multiple_of_recurrence_period
+    return if fixed_duration_months.nil? || recurrence.blank?
+
+    period_months = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
+    return unless period_months
+
+    if fixed_duration_months % period_months != 0
+      errors.add(:fixed_duration_months, "must be a multiple of the recurrence period (#{period_months} months)")
     end
   end
 end
