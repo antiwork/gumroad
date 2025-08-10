@@ -105,4 +105,114 @@ describe VariantPrice do
       end
     end
   end
+
+  describe "tier-specific duration functionality" do
+    let(:variant) { create(:variant) }
+    let(:variant_price) { create(:variant_price, variant: variant, recurrence: "monthly") }
+
+    describe "#tier_name" do
+      it "returns variant name when available" do
+        variant.update!(name: "Premium Tier")
+        expect(variant_price.tier_name).to eq "Premium Tier"
+      end
+
+      it "returns 'Tier' when variant name is not available" do
+        variant_price.variant = nil
+        expect(variant_price.tier_name).to eq "Tier"
+      end
+    end
+
+    describe "#formatted_price_with_duration" do
+      before do
+        variant_price.update!(
+          price_cents: 4999,
+          fixed_duration_months: 12,
+          recurrence: "monthly"
+        )
+      end
+
+      it "formats price with duration when fixed duration is set" do
+        result = variant_price.formatted_price_with_duration
+        expect(result).to include("49.99")
+        expect(result).to include("month")
+        expect(result).to include("12 months")
+      end
+
+      context "without fixed duration" do
+        before { variant_price.update!(fixed_duration_months: nil) }
+
+        it "formats price without duration information" do
+          result = variant_price.formatted_price_with_duration
+          expect(result).to include("49.99")
+          expect(result).to include("month")
+          expect(result).not_to include("12 months")
+        end
+      end
+    end
+
+    describe "#subscription_summary" do
+      before do
+        variant.update!(name: "Premium")
+        variant_price.update!(
+          price_cents: 2999,
+          fixed_duration_months: 24,
+          recurrence: "monthly"
+        )
+      end
+
+      it "returns complete subscription summary" do
+        summary = variant_price.subscription_summary
+        expect(summary).to include("Premium")
+        expect(summary).to include("29.99")
+        expect(summary).to include("24 months")
+      end
+    end
+
+    describe "duration validation" do
+      context "when fixed duration is less than billing cycle" do
+        it "adds validation error for yearly billing with 6 month duration" do
+          variant_price.fixed_duration_months = 6
+          variant_price.recurrence = "yearly"
+          
+          expect(variant_price).not_to be_valid
+          expect(variant_price.errors[:fixed_duration_months]).to include(
+            "must be at least 12 months for yearly billing"
+          )
+        end
+      end
+
+      context "when fixed duration matches or exceeds billing cycle" do
+        it "validates successfully for yearly billing with 12 month duration" do
+          variant_price.fixed_duration_months = 12
+          variant_price.recurrence = "yearly"
+          
+          expect(variant_price).to be_valid
+        end
+
+        it "validates successfully for yearly billing with 24 month duration" do
+          variant_price.fixed_duration_months = 24
+          variant_price.recurrence = "yearly"
+          
+          expect(variant_price).to be_valid
+        end
+      end
+
+      context "when no fixed duration is set" do
+        it "validates successfully" do
+          variant_price.fixed_duration_months = nil
+          expect(variant_price).to be_valid
+        end
+      end
+    end
+
+    describe "inheritance from BasePrice" do
+      let(:variant_price) { create(:variant_price, fixed_duration_months: 18, recurrence: "monthly") }
+
+      it "inherits duration calculation methods" do
+        expect(variant_price.charge_occurrence_count).to eq 18
+        expect(variant_price.has_fixed_duration?).to be true
+        expect(variant_price.duration_display).to eq "18 months"
+      end
+    end
+  end
 end

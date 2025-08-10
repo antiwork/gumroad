@@ -162,23 +162,25 @@ const TierEditor = ({
       },
     });
 
-  // Helper function to update fixed duration for all enabled recurrences
   const updateFixedDurationForAllRecurrences = (months: number | null) => {
-    const updatedRecurrencePriceValues = Object.entries(tier.recurrence_price_values).reduce(
+    const updatedRecurrencePriceValues = Object.entries(tier.recurrence_price_values).reduce<
+      typeof tier.recurrence_price_values
+    >(
       (acc, [recurrence, value]) => {
         if (value.enabled && value.price_cents) {
-          acc[recurrence] = months !== null
-            ? { ...value, fixed_duration_months: months }
-            : (() => {
-                const { fixed_duration_months, ...valueWithoutDuration } = value;
-                return valueWithoutDuration;
-              })();
+          acc[recurrence] =
+            months !== null
+              ? { ...value, fixed_duration_months: months }
+              : (() => {
+                  const { fixed_duration_months, ...valueWithoutDuration } = value;
+                  return valueWithoutDuration;
+                })();
         } else {
           acc[recurrence] = value;
         }
         return acc;
       },
-      {} as typeof tier.recurrence_price_values,
+      { ...tier.recurrence_price_values },
     );
     updateTier({ recurrence_price_values: updatedRecurrencePriceValues });
   };
