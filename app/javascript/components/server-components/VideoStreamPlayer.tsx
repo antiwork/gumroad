@@ -1,4 +1,4 @@
-import throttle from "lodash/throttle";
+mport throttle from "lodash/throttle";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -52,7 +52,7 @@ export const VideoStreamPlayer = ({
     const createPlayer = async () => {
       if (!containerRef.current) return;
 
-      const playerId = `video-player-${GuidGenerator.generate()}`;
+      const playerId = video-player-${GuidGenerator.generate()};
       containerRef.current.id = playerId;
 
       let lastPlayedId: number | undefined;
@@ -146,70 +146,81 @@ export const VideoStreamPlayer = ({
         }
         isInitialSeekDone = true;
       });
+      
+let lastPosition = 0;
+let pausedAt: number | null = null;
+const LONG_PAUSE_MS = 8 * 60 * 1000;
 
-      // --- Anti loop after long pause: JW Player resume recovery ---
-      let lastPosition = 0;
-      let pausedAt: number | null = null;
-      const LONG_PAUSE_MS = 8 * 60 * 1000; // 8 minuti
+player.on("time", (ev) => {
+  lastPosition = ev.position ?? lastPosition;
+});
+player.on("seek", (ev) => {
+  lastPosition = ev.offset ?? lastPosition;
+});
 
-      // salva sempre l’ultima posizione
-      player.on("time", (ev) => {
-        lastPosition = ev.position ?? lastPosition;
+player.on("pause", () => {
+  pausedAt = Date.now();
+});
+
+async function recoverAfterLongPauseIfNeeded() {
+  const wasLongPause = pausedAt !== null && Date.now() - pausedAt > LONG_PAUSE_MS;
+  if (!wasLongPause) return;
+  pausedAt = null;
+
+  try {
+    const idx = player.getPlaylistIndex();
+    const pos = lastPosition || 0;
+
+    const currentPlaylist = player.getPlaylist();
+    player.load(currentPlaylist);
+
+    player.once("ready", () => {
+      player.playlistItem(idx);
+      player.once("play", () => {
+        if (pos > 0) player.seek(pos);
       });
-      player.on("seek", (ev) => {
-        lastPosition = ev.offset ?? lastPosition;
-      });
+    });
+  } catch (error) {
+    console.error("Failed to recover after long pause:", error);
+    try {
+      await player.play();
+    } catch (playError) {
+      console.error("Failed to resume playback:", playError);
+    }
+  }
+}
 
-      // marca quando mettono in pausa
-      player.on("pause", () => {
-        pausedAt = Date.now();
-      });
+const recoverRef = (VideoStreamPlayer as any)._recoverRef || { current: null };
+recoverRef.current = () => { void recoverAfterLongPauseIfNeeded(); };
+(VideoStreamPlayer as any)._recoverRef = recoverRef;
 
-      // recovery se si riparte dopo una pausa lunga
-      async function recoverAfterLongPauseIfNeeded() {
-        const wasLongPause = pausedAt !== null && Date.now() - pausedAt > LONG_PAUSE_MS;
-        if (!wasLongPause) return;
-        pausedAt = null;
-
-        try {
-          const idx = player.getPlaylistIndex();
-          const pos = lastPosition || 0;
-
-          // ricarica la playlist per rigenerare sorgenti/segmenti
-          const currentPlaylist = player.getPlaylist();
-          player.load(currentPlaylist);
-
-          player.once("ready", () => {
-            player.playlistItem(idx);
-            player.once("play", () => {
-              if (pos > 0) player.seek(pos);
-            });
-          });
-        } catch {
-          try { await player.play(); } catch {}
-        }
-      }
-
-      // quando torni alla tab, prova a recuperare
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) void recoverAfterLongPauseIfNeeded();
-      });
-
-      // se al resume resta in buffer/stall, prova a recuperare
-      player.on("buffer", () => {
-        void recoverAfterLongPauseIfNeeded();
-      });
-      player.on("playAttemptFailed", () => {
-        void recoverAfterLongPauseIfNeeded();
-      });
-      // --- end anti loop patch ---
-    }; 
-
-   
+player.on("buffer", () => {
+  void recoverAfterLongPauseIfNeeded();
+});
+player.on("playAttemptFailed", () => {
+  void recoverAfterLongPauseIfNeeded();
+});
+      
+    };
 
     void createPlayer();
   });
+  
+React.useEffect(() => {
+  const recoverRef: { current: null | (() => void) } = (VideoStreamPlayer as any)._recoverRef || { current: null };
 
+  const handleVisibilityChange = () => {
+    if (!document.hidden && typeof recoverRef.current === "function") {
+      recoverRef.current();
+    }
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  
+  return () => {
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+}, []);
   return (
     <>
       {should_show_transcoding_notice ? (
