@@ -23,7 +23,7 @@ class CustomersController < Sellers::BaseController
   end
 
   def paged
-    params[:page] = params[:page].to_i - 1
+    params[:page] = [params[:page].to_i - 1, 0].max
     sales = fetch_sales(
       query: params[:query],
       sort: params[:sort] ? { params[:sort][:key] => { order: params[:sort][:direction] } } : nil,
@@ -125,8 +125,8 @@ class CustomersController < Sellers::BaseController
         exclude_purchasers_of_product: excluded_products,
         exclude_purchasers_of_variant: excluded_variants,
         exclude_non_original_subscription_purchases: true,
-        exclude_giftees: true,
-        exclude_bundle_product_purchases: true,
+        exclude_giftees: false,
+        exclude_bundle_product_purchases: false,
         exclude_commission_completion_purchases: true,
         from: params[:page].to_i * CUSTOMERS_PER_PAGE,
         size: CUSTOMERS_PER_PAGE,

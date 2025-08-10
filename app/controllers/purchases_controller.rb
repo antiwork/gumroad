@@ -386,8 +386,20 @@ class PurchasesController < ApplicationController
   def receipt
     if (@purchase.purchaser && @purchase.purchaser == logged_in_user) ||
        (logged_in_user && logged_in_user.is_team_member?) ||
-       (params[:email].present? && ActiveSupport::SecurityUtils.secure_compare(@purchase.email.downcase, params[:email].to_s.strip.downcase))
-      message = CustomerMailer.receipt(@purchase.id, for_email: false)
+       (params[:email].present? && ActiveSupport::SecurityUtils.secure_compare(
+         @purchase.email.downcase,
+         params[:email].to_s.strip.downcase
+       ))
+
+      main_purchase =
+        if @purchase.is_gift_sender_purchase? &&
+           (giftee = @purchase.gift_given&.giftee_purchase)
+          giftee
+        else
+          @purchase
+        end
+
+      message = CustomerMailer.receipt(main_purchase.id, for_email: false)
       # Generate the same markup used in the email
       Premailer::Rails::Hook.perform(message)
 

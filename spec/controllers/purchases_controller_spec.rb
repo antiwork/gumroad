@@ -581,7 +581,6 @@ describe PurchasesController, :vcr do
 
             get :search, params: { query: "sally" }
 
-
             expect(response.parsed_body.length).to eq 1
             expect(response.parsed_body[0]["purchase_email"]).to eq @original_purchase.email
           end
@@ -805,7 +804,7 @@ describe PurchasesController, :vcr do
           hash_including(
             created_on_or_after: Time.utc(2020, 7, 31, 15),
             created_before: Time.utc(2020, 8, 31, 14).end_of_hour,
-        )).and_call_original
+          )).and_call_original
 
         params[:start_time] = "2020-08-01"
         params[:end_time] = "2020-08-31"
@@ -1380,8 +1379,6 @@ describe PurchasesController, :vcr do
         expect(assigns(:hide_layouts)).to be(true)
       end
     end
-
-
 
     describe "GET receipt" do
       let(:purchase) { create(:purchase, email: "test@example.com") }
@@ -2104,6 +2101,45 @@ describe PurchasesController, :vcr do
           end
         end
       end
+    end
+  end
+
+  describe "GET #receipt for gifted purchase" do
+    render_views
+
+    let(:seller) { create(:user) }
+    let(:buyer) { create(:user) }
+    let(:licensed_prod) { create(:product, user: seller, price_cents: 0) }
+    let(:gifter_email) { "gifter@example.com" }
+    let(:giftee_email) { "giftee@example.com" }
+
+    before do
+      stub_const("ObfuscateIds::CIPHER_KEY", "spec-test-key")
+      allow(SecureExternalId).to receive(:config).and_return(
+        { secret_key: "x" * 64, salt: "y" * 32, primary_key_version: 1 }
+      )
+    end
+
+    it "renders using the giftee purchase (no 500/spinner)" do
+      sender_purchase, _ = Purchase::CreateService.new(
+        product: licensed_prod,
+        params: {
+          is_gift: true,
+          purchase: { email: gifter_email, perceived_price_cents: 0 },
+          gift: { giftee_email: giftee_email }
+        },
+        buyer: buyer
+      ).perform
+
+      sender_purchase.reload
+      giftee_purchase = sender_purchase.gift_given&.giftee_purchase
+      expect(giftee_purchase).to be_present
+
+      create(:license, link: licensed_prod, purchase: giftee_purchase, serial: "TEST-KEY-123")
+
+      get :receipt, params: { id: sender_purchase.external_id, email: gifter_email }
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("<html")
     end
   end
 end

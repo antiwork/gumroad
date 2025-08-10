@@ -4,6 +4,8 @@ class CreatorAnalytics::Sales
   SEARCH_OPTIONS = Purchase::CHARGED_SALES_SEARCH_OPTIONS.merge(
     exclude_refunded: false,
     exclude_unreversed_chargedback: false,
+    exclude_giftees: false,
+    exclude_bundle_product_purchases: false
   )
 
   def initialize(user:, products:, dates:)

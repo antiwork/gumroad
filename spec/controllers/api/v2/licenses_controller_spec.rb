@@ -695,4 +695,43 @@ describe Api::V2::LicensesController do
     it_behaves_like "decrement uses count", :product_permalink, :custom_permalink
     it_behaves_like "decrement uses count", :product_id, :external_id
   end
+
+  describe "#verify (gifted purchase)" do
+    before { stub_const("ObfuscateIds::CIPHER_KEY", "spec-test-key") }
+
+    let(:seller) { create(:user) }
+    let(:buyer) { create(:user) }
+    let(:licensed_prod) { create(:product, user: seller, price_cents: 0) }
+    let(:other_product) { create(:product, user: seller) }
+    let(:gifter_email) { "gifter@example.com" }
+    let(:giftee_email) { "giftee@example.com" }
+
+    let!(:giftee_purchase) do
+      sender_purchase, _ = Purchase::CreateService.new(
+        product: licensed_prod,
+        params: {
+          is_gift: true,
+          purchase: { email: gifter_email, perceived_price_cents: 0 },
+          gift: { giftee_email: giftee_email }
+        },
+        buyer: buyer
+      ).perform
+
+      sender_purchase.reload
+      gp = sender_purchase.gift_given&.giftee_purchase
+      expect(gp).to be_present
+      gp
+    end
+
+    let!(:license) { create(:license, link: licensed_prod, purchase: giftee_purchase, serial: "TEST-KEY-123") }
+
+    it "accepts the giftee's product_id and rejects a different product_id" do
+      post :verify, params: { license_key: license.serial, product_id: licensed_prod.external_id }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true)
+
+      post :verify, params: { license_key: license.serial, product_id: other_product.external_id }
+      expect(response).to have_http_status(:not_found)
+    end
+  end
 end
