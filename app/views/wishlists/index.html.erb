@@ -1,3 +1,0 @@
-<%= load_pack("wishlists") %>
-
-<%= react_component "WishlistsPage", props: { wishlists: @wishlists_props, reviews_page_enabled: Feature.active?(:reviews_page, current_seller), following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller) }, prerender: true %>

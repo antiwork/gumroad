@@ -1,8 +1,0 @@
-.card {
-  @include bg-color(filled);
-  padding: spacer(4);
-  border: $border;
-  border-radius: border-radius(1);
-  display: grid;
-  gap: spacer(4);
-}

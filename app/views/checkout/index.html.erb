@@ -1,3 +1,0 @@
-<%= render("shared/recaptcha_script") %>
-<%= load_pack("checkout") %>
-<%= react_component "CheckoutPage", props: @checkout_presenter.checkout_props(params:, browser_guid: cookies[:_gumroad_guid]), prerender: false %>

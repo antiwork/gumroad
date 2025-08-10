@@ -1,4 +1,0 @@
-<%= render("shared/recaptcha_script") %>
-<%= load_pack("subscription_edit") %>
-
-<%= react_component "SubscriptionManager", props: CheckoutPresenter.new(logged_in_user: logged_in_user, ip: request.remote_ip).subscription_manager_props(subscription: @subscription), prerender: true %>

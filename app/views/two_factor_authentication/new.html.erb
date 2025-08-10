@@ -1,3 +1,0 @@
-<%= load_pack("signup") %>
-
-<%= react_component "TwoFactorAuthenticationPage", props: { user_id: @user.encrypted_external_id, email: @user.email, token: (User::DEFAULT_AUTH_TOKEN unless Rails.env.production?) }, prerender: true %>
