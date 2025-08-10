@@ -167,7 +167,7 @@ const TierEditor = ({
       typeof tier.recurrence_price_values
     >(
       (acc, [recurrence, value]) => {
-        if (value.enabled && value.price_cents) {
+        if (value.enabled) {
           acc[recurrence] =
             months !== null
               ? { ...value, fixed_duration_months: months }
@@ -398,7 +398,7 @@ const TierEditor = ({
                     id={`${uid}-fixed-duration`}
                     type="number"
                     min="1"
-                    value={durationUnit === "months" ? fixedDurationMonths : Math.round(fixedDurationMonths / 12)}
+                    value={durationUnit === "months" ? fixedDurationMonths : Math.ceil(fixedDurationMonths / 12)}
                     onChange={(evt) => {
                       const value = parseInt(evt.target.value, 10) || 1;
                       const months = durationUnit === "months" ? value : value * 12;

@@ -47,7 +47,7 @@ describe "VariantPrice tier-specific fixed duration functionality" do
 
   describe "#formatted_duration_with_recurrence" do
     context "with monthly recurrence and fixed duration" do
-      let(:price) { create(:variant_price, 
+      let(:price) { create(:variant_price,
                            recurrence: "monthly",
                            fixed_duration_months: 12) }
 
@@ -57,7 +57,7 @@ describe "VariantPrice tier-specific fixed duration functionality" do
     end
 
     context "with yearly recurrence and fixed duration" do
-      let(:price) { create(:variant_price, 
+      let(:price) { create(:variant_price,
                            recurrence: "yearly",
                            fixed_duration_months: 24) }
 
@@ -77,7 +77,7 @@ describe "VariantPrice tier-specific fixed duration functionality" do
 
   describe "#formatted_price_with_duration" do
     context "with fixed duration" do
-      let(:price) { create(:variant_price, 
+      let(:price) { create(:variant_price,
                            price_cents: 2400,
                            currency: "usd",
                            fixed_duration_months: 12) }
@@ -90,7 +90,7 @@ describe "VariantPrice tier-specific fixed duration functionality" do
     end
 
     context "without fixed duration" do
-      let(:price) { create(:variant_price, 
+      let(:price) { create(:variant_price,
                            price_cents: 1000,
                            currency: "usd",
                            recurrence: "monthly") }
@@ -111,13 +111,13 @@ describe "VariantPrice tier-specific fixed duration functionality" do
       let(:tier2) { create(:variant, name: "Premium", variant_category: variant_category) }
 
       it "allows different durations for different tiers" do
-        price1 = create(:variant_price, 
+        price1 = create(:variant_price,
                        variant: tier1,
                        recurrence: "monthly",
                        fixed_duration_months: 12)
-        
+
         price2 = create(:variant_price,
-                       variant: tier2, 
+                       variant: tier2,
                        recurrence: "monthly",
                        fixed_duration_months: 24)
 
@@ -128,13 +128,12 @@ describe "VariantPrice tier-specific fixed duration functionality" do
       end
 
       it "allows the same recurrence with different durations across tiers" do
-        # Create prices directly instead of using save_recurring_prices! to avoid validation conflicts
         price1 = create(:variant_price,
                         variant: tier1,
                         recurrence: "monthly",
                         price_cents: 1000,
                         fixed_duration_months: 12)
-        
+
         price2 = create(:variant_price,
                         variant: tier2,
                         recurrence: "monthly",

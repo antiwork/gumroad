@@ -116,7 +116,7 @@ class Subscription < ApplicationRecord
     if has_fixed_length?
       json[:fixed_duration_months] = current_subscription_duration_months
       json[:duration_display] = subscription_duration_display
-      json[:remaining_charges] = remaining_charges_count
+      json[:remaining_charges] = [remaining_charges_count, 0].max
     end
 
     # Add tier information for tiered memberships
@@ -735,11 +735,11 @@ class Subscription < ApplicationRecord
   end
 
   def charges_completed?
-    has_fixed_length? && purchases.successful.count == calculated_charge_occurrence_count
+    has_fixed_length? && successful_purchases.count == calculated_charge_occurrence_count
   end
 
   def remaining_charges_count
-    has_fixed_length? ? calculated_charge_occurrence_count - purchases.successful.count : 0
+    has_fixed_length? ? [calculated_charge_occurrence_count - successful_purchases.count, 0].max : 0
   end
 
   def tier_price

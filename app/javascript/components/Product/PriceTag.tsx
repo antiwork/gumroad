@@ -32,7 +32,7 @@ const getRecurrenceLabel = (
   if (!recurrence) return null;
 
   if (fixedDurationMonths) {
-    return formatFixedDurationPricing(recurrence.id, fixedDurationMonths);
+    return formatFixedDurationPricing(fixedDurationMonths);
   }
   return formatRecurrenceWithDuration(recurrence.id, recurrence.duration_in_months);
 };

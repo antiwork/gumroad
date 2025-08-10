@@ -124,14 +124,12 @@ class CheckoutPresenter
       recommender_model_name: params[:recommender_model_name],
       accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount } : nil,
     }
-    
-    # Extract fixed_duration_months from the selected option's recurrence_price_values
+
     if cart_item[:recurrence] && option_id
-      selected_option = product.options.find { |opt| opt[:id] == option_id }
-      if selected_option && selected_option[:recurrence_price_values] && selected_option[:recurrence_price_values][cart_item[:recurrence]]
-        value[:fixed_duration_months] = selected_option[:recurrence_price_values][cart_item[:recurrence]][:fixed_duration_months]
-      end
+      selected_option = value.dig(:product, :options)&.find { |opt| opt[:id] == option_id }
+      value[:fixed_duration_months] = selected_option&.dig(:recurrence_price_values, cart_item[:recurrence], :fixed_duration_months)
     end
+
     if include_cross_sells
       value[:product][:cross_sells] = product.cross_sells.filter_map do |cross_sell|
         next unless cross_sell.product.alive? &&

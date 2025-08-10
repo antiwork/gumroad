@@ -65,8 +65,10 @@ export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, product
   return `${baseFormattedLabel} x ${(productDuration / numberOfMonths).toFixed(0)}`;
 };
 
-// Format fixed duration pricing as "6-month plan at $X/month" instead of "$X a month x 6"
-export const formatFixedDurationPricing = (_recurrenceId: RecurrenceId, fixedDurationMonths: number): string => {
+export const formatFixedDurationPricing = (fixedDurationMonths: number): string => {
+  if (fixedDurationMonths <= 0) {
+    throw new Error("fixedDurationMonths must be a positive value");
+  }
   if (fixedDurationMonths === 1) {
     return `1-month plan at`;
   }

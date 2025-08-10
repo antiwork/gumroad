@@ -23,14 +23,16 @@ class VariantPrice < BasePrice
   end
 
   def tier_name
-    variant&.name || "Tier"
+    variant&.name.presence || "Tier"
   end
 
   def formatted_price_with_duration
     base_price = price_formatted_without_symbol
     duration_text = formatted_duration_with_recurrence
     recurrence_text = recurrence_short_indicator(recurrence)
-    
+
+    return base_price if recurrence.blank?
+
     if has_fixed_duration?
       "#{base_price}#{recurrence_text} for #{duration_text}"
     else
@@ -62,13 +64,13 @@ class VariantPrice < BasePrice
     end
 
     def fixed_duration_validation
-      return unless fixed_duration_months.present? && recurrence.present?
-      
+      return if !fixed_duration_months.present? || !recurrence.present?
+
       months_per_cycle = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
-      return unless months_per_cycle
-      
+      return if !months_per_cycle
+
       if fixed_duration_months < months_per_cycle
-        errors.add(:fixed_duration_months, 
+        errors.add(:fixed_duration_months,
           "must be at least #{months_per_cycle} months for #{recurrence} billing")
       end
     end

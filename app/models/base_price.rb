@@ -12,8 +12,8 @@ class BasePrice < ApplicationRecord
   include FlagShihTzu
 
   validates :price_cents, :currency, presence: true
-  validates :fixed_duration_months, 
-    numericality: { greater_than: 0, allow_nil: true }
+  validates :fixed_duration_months,
+    numericality: { greater_than: 0, only_integer: true }, allow_nil: true
 
   has_flags 1 => :is_rental,
             :column => "flags",
@@ -37,25 +37,29 @@ class BasePrice < ApplicationRecord
   end
 
   def charge_occurrence_count
-    return nil unless has_fixed_duration? && recurrence.present?
-    
+    return nil if !has_fixed_duration? || !recurrence.present?
+
     months_per_cycle = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
-    return nil unless months_per_cycle
-    
-    (fixed_duration_months / months_per_cycle.to_f).ceil
+    return nil if !months_per_cycle
+
+    # Use integer division with ceiling behavior to avoid float rounding errors
+    (fixed_duration_months + months_per_cycle - 1) / months_per_cycle
   end
 
   def duration_display
-    return "#{fixed_duration_months} months" if fixed_duration_months
+    if fixed_duration_months
+      unit = fixed_duration_months == 1 ? "month" : "months"
+      return "#{fixed_duration_months} #{unit}"
+    end
     "Ongoing"
   end
 
   def formatted_duration_with_recurrence
     return duration_display unless has_fixed_duration?
-    
+
     occurrence_count = charge_occurrence_count
     return duration_display unless occurrence_count
-    
+
     case recurrence
     when "monthly"
       "#{occurrence_count} #{occurrence_count == 1 ? 'month' : 'months'}"

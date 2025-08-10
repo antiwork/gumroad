@@ -31,8 +31,7 @@ module BasePrice::Shared
       # TODO: :product_edit_react cleanup
       suggested_price_cents = attributes[:suggested_price_cents] || (suggested_price.present? ? clean_price(suggested_price) : nil)
 
-      # Extract fixed duration field
-      fixed_duration_months = attributes[:fixed_duration_months]
+      fixed_duration_months = attributes[:fixed_duration_months].present? ? attributes[:fixed_duration_months].to_i : nil
 
       create_or_update_new_price!(
         price_cents:,

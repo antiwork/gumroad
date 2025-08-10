@@ -76,4 +76,23 @@ describe CartProduct do
       end
     end
   end
+
+  describe "fixed_duration_months" do
+    it "can be set and retrieved" do
+      cart_product = build(:cart_product, fixed_duration_months: 12)
+      expect(cart_product.fixed_duration_months).to eq(12)
+    end
+
+    it "can be nil for ongoing subscriptions" do
+      cart_product = build(:cart_product, fixed_duration_months: nil)
+      expect(cart_product.fixed_duration_months).to be_nil
+      expect(cart_product).to be_valid
+    end
+
+    it "persists when saved" do
+      cart_product = create(:cart_product, fixed_duration_months: 24)
+      cart_product.reload
+      expect(cart_product.fixed_duration_months).to eq(24)
+    end
+  end
 end

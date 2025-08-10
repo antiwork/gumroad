@@ -274,9 +274,8 @@ export const OptionRadioButton = ({
       {hidePrice ? null : (
         <div className="pill">
           {fixedDurationMonths && recurrence ? (
-            // Fixed duration format: "6-month plan at $10/month"
             <>
-              {formatFixedDurationPricing(recurrence, fixedDurationMonths)}{" "}
+              {formatFixedDurationPricing(fixedDurationMonths)}{" "}
               {discountedPriceCents < priceCents ? (
                 <>
                   <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
@@ -289,7 +288,6 @@ export const OptionRadioButton = ({
               {isPWYW ? "+" : null}
             </>
           ) : (
-            // Regular format: "$10 a month"
             <>
               {discountedPriceCents < priceCents ? (
                 <>
@@ -768,7 +766,7 @@ export const ConfigurationSelector = React.forwardRef<
                 recurrence={selection.recurrence}
                 fixedDurationMonths={
                   selection.recurrence
-                    ? option.recurrence_price_values?.[selection.recurrence]?.fixed_duration_months || null
+                    ? (option.recurrence_price_values?.[selection.recurrence]?.fixed_duration_months ?? null)
                     : null
                 }
                 product={product}

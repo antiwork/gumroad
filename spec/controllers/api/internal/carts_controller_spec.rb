@@ -231,6 +231,28 @@ describe Api::Internal::CartsController do
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body).to eq("error" => "You cannot add more than 50 products to the cart.")
       end
+
+      it "stores fixed_duration_months when provided" do
+        product = create(:product)
+
+        put :update, params: {
+          cart: {
+            items: [{
+              product: { id: product.external_id },
+              price: product.price_cents,
+              quantity: 1,
+              rent: false,
+              referrer: "direct",
+              fixed_duration_months: 24,
+              url_parameters: {}
+            }],
+            discountCodes: []
+          }
+        }, as: :json
+
+        cart = controller.logged_in_user.alive_cart
+        expect(cart.cart_products.sole.fixed_duration_months).to eq(24)
+      end
     end
 
     context "when user is not signed in" do

@@ -36,8 +36,6 @@ class Purchase::BaseService
           purchase.link.installment_plan.number_of_installments
         else
           calculate_tier_specific_charge_occurrence_count
-        # elsif purchase.link.duration_in_months.present?
-        #   purchase.link.duration_in_months / BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
         end
 
       subscription = purchase.link.subscriptions.build(
@@ -107,23 +105,19 @@ class Purchase::BaseService
     private
 
     def calculate_tier_specific_charge_occurrence_count
-      # For tier-specific durations, get from variant price
-      if purchase.tier&.present? && purchase.link.is_tiered_membership?
-        variant_price = purchase.tier.variant_price_for_recurrence(purchase.price.recurrence)
-        return variant_price.charge_occurrence_count if variant_price&.has_fixed_duration?
+      if purchase.tier && purchase.link.is_tiered_membership?
+        if (vp = purchase.tier.variant_price_for_recurrence(purchase.price.recurrence))&.has_fixed_duration?
+          return vp.charge_occurrence_count
+        end
       end
 
-      # For regular products, get from price
-      if purchase.price&.has_fixed_duration?
-        return purchase.price.charge_occurrence_count
-      end
+      return purchase.price.charge_occurrence_count if purchase.price&.has_fixed_duration?
 
-      # Fall back to legacy calculation for backward compatibility
       if purchase.link.duration_in_months.present?
-        return purchase.link.duration_in_months / BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
+        months = BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
+        return purchase.link.duration_in_months / months if months
       end
 
-      # No fixed duration
       nil
     end
 end

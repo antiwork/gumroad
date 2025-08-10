@@ -7,5 +7,9 @@ FactoryBot.define do
     price { product.price_cents }
     quantity { 1 }
     referrer { "direct" }
+
+    trait :with_fixed_duration do
+      fixed_duration_months { 12 }
+    end
   end
 end
