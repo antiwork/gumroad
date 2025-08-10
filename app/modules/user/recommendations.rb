@@ -13,6 +13,7 @@ module User::Recommendations
       name_filled: name_or_username.present?,
       not_deleted: !deleted?,
       payout_filled: !(payment_address.blank? && active_bank_account.blank? && stripe_connect_account.blank? && !has_paypal_account_connected?),
+      compliant: compliant?,
     }
   end
 end

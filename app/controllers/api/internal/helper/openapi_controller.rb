@@ -65,6 +65,9 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
         "/purchases/auto_refund_purchase": {
           post: Api::Internal::Helper::PurchasesController::AUTO_REFUND_PURCHASE_OPENAPI,
         },
+        "/purchases/refund_taxes_only": {
+          post: Api::Internal::Helper::PurchasesController::REFUND_TAXES_ONLY_OPENAPI,
+        },
         "/payouts": {
           post: Api::Internal::Helper::PayoutsController::CREATE_PAYOUT_OPENAPI,
           get: Api::Internal::Helper::PayoutsController::PAYOUT_INDEX_OPENAPI,

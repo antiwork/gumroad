@@ -704,6 +704,18 @@ describe SettingsPresenter do
       end
     end
 
+    context "when the seller has custom fee set" do
+      before do
+        seller.update!(custom_fee_per_thousand: 75)
+      end
+
+      it "returns custom Gumroad fee percent in the fee info text" do
+        expect(presenter.payments_props[:fee_info][:card_fee_info_text]).to eq "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 7.5% + 50¢ Gumroad fee + 2.9% + 30¢ credit card fee.\n• Discover sales: 30% flat\n"
+        expect(presenter.payments_props[:fee_info][:paypal_fee_info_text]).to eq "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 7.5% + 50¢ Gumroad fee + 2.9% + 30¢ PayPal fee.\n• Discover sales: 30% flat\n"
+        expect(presenter.payments_props[:fee_info][:connect_account_fee_info_text]).to eq "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 7.5% + 50¢\n• Discover sales: 30% flat\n"
+      end
+    end
+
     context "when payouts are paused internally" do
       before do
         seller.update!(payouts_paused_internally: true)

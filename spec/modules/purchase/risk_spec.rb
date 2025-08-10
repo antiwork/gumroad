@@ -134,6 +134,7 @@ describe Purchase::Risk do
 
         context "when it is a subscription recurring charge" do
           it "doesn't block the purchase when ip_address is blocked" do
+            create(:membership_purchase, is_original_subscription_purchase: true, subscription:)
             purchase = build(:membership_purchase, is_original_subscription_purchase: false, ip_address: blocked_ip_address, subscription:)
             purchase.send(:check_for_fraud)
             expect(purchase.errors).to be_empty

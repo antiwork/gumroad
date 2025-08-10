@@ -215,6 +215,25 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
       expect(bank_account.account_number_last_four).to eq("8210")
     end
 
+    it "allows the creator to update other info when they have a debit card connected" do
+      creator = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: creator, phone: "+15022541982")
+      create(:card_bank_account, user: creator)
+      expect(creator.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
+
+      login_as creator
+      visit settings_payments_path
+      expect(page).to have_select("Schedule", selected: "Weekly")
+      select "Monthly", from: "Schedule"
+
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(creator.reload.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
+      refresh
+      expect(page).to have_select("Schedule", selected: "Monthly")
+    end
+
     it "allows the creator to connect their Stripe account if they are from Brazil" do
       visit settings_payments_path
       expect(page).not_to have_field("Stripe")
@@ -5645,6 +5664,28 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
         expect(page).to have_field("First name", disabled: true)
         expect(page).not_to have_button("Update settings")
       end
+    end
+  end
+
+  describe "Country selection modal" do
+    before do
+      @user = create(:named_user, payment_address: nil)
+      login_as @user
+    end
+
+    it "navigates back to previous page when modal is closed" do
+      visit settings_main_path
+      find('a[role="tab"]', text: "Payments").click
+      expect(page).to have_content("Where are you located?")
+      find("button[aria-label='Close']").click
+      expect(page).to have_current_path(settings_main_path)
+    end
+
+    it "navigates to dashboard page when modal is closed and no previous page exists" do
+      visit settings_payments_path
+      expect(page).to have_content("Where are you located?")
+      find("button[aria-label='Close']").click
+      expect(page).to have_current_path(dashboard_path)
     end
   end
 

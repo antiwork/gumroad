@@ -730,7 +730,7 @@ describe Purchase::CreateService, :vcr do
   context "when the user has a different currency" do
     describe "english pound" do
       it "sets the displayed price on the purchase" do
-        product.update!(price_currency_type: :gbp)
+        product.update!(price_currency_type: :gbp, price_cents: 600)
         product.reload
 
         purchase, _ = Purchase::CreateService.new(product:, params:).perform
@@ -2491,7 +2491,7 @@ describe Purchase::CreateService, :vcr do
 
     it "allows purchases with offer codes in different currencies" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
-        product.update!(price_cents: 15_000, price_currency_type: currency)
+        product.update!(price_currency_type: currency, price_cents: 15_000)
         offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
           offer_code_name: offer_code.name,
@@ -2566,7 +2566,7 @@ describe Purchase::CreateService, :vcr do
 
     it "fails if the amount paid is less than it should be in any currency" do
       %i[eur gbp aud inr cad hkd sgd twd nzd].each do |currency|
-        product.update!(price_cents: 15_000, price_currency_type: currency)
+        product.update!(price_currency_type: currency, price_cents: 15_000)
         offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
           offer_code_name: offer_code.name,
@@ -3212,6 +3212,30 @@ describe Purchase::CreateService, :vcr do
 
         expect(purchase.reload.purchase_state).to eq "failed"
         expect(purchase.error_code).to eq PurchaseErrorCode::BRAZILIAN_MERCHANT_ACCOUNT_WITH_AFFILIATE
+      end.to change { Purchase.count }.by 1
+    end
+  end
+
+  describe "seller has custom fee set" do
+    before do
+      product.user.update!(custom_fee_per_thousand: 50)
+      params[:purchase][:chargeable] = CardParamsHelper.build_chargeable(
+        StripePaymentMethodHelper.success.with_zip_code(zip_code).to_stripejs_params.merge(product_permalink: product.unique_permalink),
+        browser_guid
+      )
+      params[:purchase][:chargeable].prepare!
+    end
+
+    it "creates a purchase and sets Gumroad fee as per the custom fee applicable to the seller" do
+      expect do
+        purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+        expect(purchase.purchase_state).to eq "successful"
+        expect(purchase.card_country).to be_present
+        expect(purchase.stripe_fingerprint).to be_present
+        expect(purchase.fee_cents).to eq 127 # 5% of $6 + 50c + 2.9% of $6 + 30c
+        expect(purchase.gumroad_tax_cents).to eq 0
+        expect(purchase.tax_cents).to eq 0
       end.to change { Purchase.count }.by 1
     end
   end

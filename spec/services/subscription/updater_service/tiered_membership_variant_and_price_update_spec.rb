@@ -1046,7 +1046,7 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
         context "for a product in non-USD currency" do
           it "rounds up to the minimum product price in that currency" do
             currency = "eur"
-            change_product_currency_to(currency)
+            change_membership_product_currency_to(@product, currency)
             set_tier_price_difference_below_min_upgrade_price(currency)
 
             params = {

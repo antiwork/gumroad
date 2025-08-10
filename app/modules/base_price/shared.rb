@@ -100,6 +100,6 @@ module BasePrice::Shared
     end
 
     def prices_to_validate
-      prices.alive.map(&:price_cents)
+      prices.alive.where(currency: price_currency_type).pluck(:price_cents)
     end
 end
