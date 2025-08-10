@@ -146,7 +146,66 @@ export const VideoStreamPlayer = ({
         }
         isInitialSeekDone = true;
       });
-    };
+
+      // --- Anti loop after long pause: JW Player resume recovery ---
+      let lastPosition = 0;
+      let pausedAt: number | null = null;
+      const LONG_PAUSE_MS = 8 * 60 * 1000; // 8 minuti
+
+      // salva sempre l’ultima posizione
+      player.on("time", (ev) => {
+        lastPosition = ev.position ?? lastPosition;
+      });
+      player.on("seek", (ev) => {
+        lastPosition = ev.offset ?? lastPosition;
+      });
+
+      // marca quando mettono in pausa
+      player.on("pause", () => {
+        pausedAt = Date.now();
+      });
+
+      // recovery se si riparte dopo una pausa lunga
+      async function recoverAfterLongPauseIfNeeded() {
+        const wasLongPause = pausedAt !== null && Date.now() - pausedAt > LONG_PAUSE_MS;
+        if (!wasLongPause) return;
+        pausedAt = null;
+
+        try {
+          const idx = player.getPlaylistIndex();
+          const pos = lastPosition || 0;
+
+          // ricarica la playlist per rigenerare sorgenti/segmenti
+          const currentPlaylist = player.getPlaylist();
+          player.load(currentPlaylist);
+
+          player.once("ready", () => {
+            player.playlistItem(idx);
+            player.once("play", () => {
+              if (pos > 0) player.seek(pos);
+            });
+          });
+        } catch {
+          try { await player.play(); } catch {}
+        }
+      }
+
+      // quando torni alla tab, prova a recuperare
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) void recoverAfterLongPauseIfNeeded();
+      });
+
+      // se al resume resta in buffer/stall, prova a recuperare
+      player.on("buffer", () => {
+        void recoverAfterLongPauseIfNeeded();
+      });
+      player.on("playAttemptFailed", () => {
+        void recoverAfterLongPauseIfNeeded();
+      });
+      // --- end anti loop patch ---
+    }; 
+
+   
 
     void createPlayer();
   });
