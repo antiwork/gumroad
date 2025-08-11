@@ -173,10 +173,10 @@ module ManageSubscriptionHelpers
     subscription
   end
 
-  def change_product_currency_to(currency)
-    @product.update!(price_currency_type: currency)
-    @product.prices.update_all(currency:)
-    @product.tiers.map { |t| t.prices.update_all(currency:) }
+  def change_membership_product_currency_to(product, currency)
+    product.prices.update_all(currency:)
+    product.update!(price_currency_type: currency)
+    product.tiers.map { |t| t.prices.update_all(currency:) }
   end
 
   def set_tier_price_difference_below_min_upgrade_price(currency)

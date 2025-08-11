@@ -38,6 +38,23 @@ describe Product::Recommendations, :elasticsearch_wait_for_refresh do
     expect(@product.recommendable?).to be(false)
   end
 
+  it "is false if no sale made" do
+    expect(@product.recommendable_reasons[:sale_made]).to be(false)
+    expect(@product.recommendable_reasons.except(:sale_made).values).to all(be true)
+    expect(@product.recommendable?).to be(false)
+  end
+
+  it "is false if there are no non-refunded sales" do
+    purchase = create(:purchase, :with_review, link: @product, created_at: 1.week.ago)
+    expect(@product.recommendable_reasons[:sale_made]).to be(true)
+    expect(@product.recommendable?).to be(true)
+
+    purchase.update!(stripe_refunded: true)
+    expect(@product.reload.recommendable_reasons[:sale_made]).to be(false)
+    expect(@product.recommendable_reasons.except(:sale_made).values).to all(be true)
+    expect(@product.recommendable?).to be(false)
+  end
+
   context "when taxonomy is not set" do
     before do
       @product.update_attribute(:taxonomy, nil)

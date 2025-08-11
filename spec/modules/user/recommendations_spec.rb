@@ -12,6 +12,16 @@ describe Product::Recommendations, :elasticsearch_wait_for_refresh do
     end
   end
 
+  context "when user is not compliant" do
+    let(:user) { create(:recommendable_user, user_risk_state: "not_reviewed") }
+
+    it "is not recommendable" do
+      expect(user.recommendable_reasons[:compliant]).to be(false)
+      expect(user.recommendable_reasons.except(:compliant).values).to all(be true)
+      expect(user.recommendable?).to be(false)
+    end
+  end
+
   context "when user is deleted" do
     let(:user) { create(:recommendable_user, :deleted) }
 

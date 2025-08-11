@@ -74,6 +74,81 @@ describe "Product with installment plan", type: :feature, js: true do
     )
   end
 
+  describe "custom fee" do
+    before do
+      product.user.update!(custom_fee_per_thousand: 50)
+    end
+
+    it "allows paying in installments and charges the correct custom fee set for the seller" do
+      visit product.long_url
+      expect(page).to have_text("First installment of $3.34, followed by 2 monthly installments of $3.33", normalize_ws: true)
+
+      click_on "Pay in 3 installments"
+
+      within_cart_item product.name do
+        expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+
+        select_disclosure "Configure" do
+          choose "Pay in full"
+          click_on "Save changes"
+        end
+      end
+
+      expect(page).to have_text("Subtotal US$10", normalize_ws: true)
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).not_to have_text("Payment today", normalize_ws: true)
+      expect(page).not_to have_text("Future installments", normalize_ws: true)
+
+      within_cart_item product.name do
+        expect(page).to_not have_text("in 3 installments")
+
+        select_disclosure "Configure" do
+          choose "Pay in 3 installments"
+          click_on "Save changes"
+        end
+      end
+
+      within_cart_item product.name do
+        expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+      end
+
+      expect(page).to have_text("Subtotal US$10", normalize_ws: true)
+      expect(page).to have_text("Total US$10", normalize_ws: true)
+      expect(page).to have_text("Payment today US$3.34", normalize_ws: true)
+      expect(page).to have_text("Future installments US$6.66", normalize_ws: true)
+
+      fill_checkout_form(product)
+      click_on "Pay"
+
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+      purchase = product.sales.last
+      subscription = purchase.subscription
+      expect(purchase).to have_attributes(
+                            price_cents: 334,
+                            fee_cents: 106, # 5% of $3.34 + 50c + 2.9% of $3.34 + 30c
+                            is_installment_payment: true,
+                            is_original_subscription_purchase: true,
+                            )
+      expect(subscription).to have_attributes(
+                                is_installment_plan: true,
+                                charge_occurrence_count: 3,
+                                recurrence: "monthly",
+                                )
+      expect(subscription.last_payment_option.installment_plan).to eq(installment_plan)
+
+      travel_to(1.month.from_now)
+      RecurringChargeWorker.new.perform(subscription.id)
+      expect(subscription.purchases.successful.count).to eq(2)
+      expect(subscription.purchases.successful.last).to have_attributes(
+                                                          price_cents: 333,
+                                                          fee_cents: 106, # 5% of $3.34 + 50c + 2.9% of $3.34 + 30c
+                                                          is_installment_payment: true,
+                                                          is_original_subscription_purchase: false,
+                                                          )
+    end
+  end
+
   it "does not change CTA buttons behavior when pay_in_installments parameter is present" do
     visit "#{product.long_url}?pay_in_installments=true"
 

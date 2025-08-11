@@ -181,7 +181,6 @@ RSpec.configure do |config|
       log_email_events
       follow_wishlists
       seller_refund_policy_new_users_enabled
-      merchant_of_record_fee
       paypal_payout_fee
     ].each do |feature|
       Feature.activate(feature)
@@ -204,6 +203,16 @@ RSpec.configure do |config|
       Sidekiq::Testing.fake!
     end
     example.run
+  end
+
+  config.around(:each) do |example|
+    if example.metadata[:enforce_product_creation_limit]
+      example.run
+    else
+      Link.bypass_product_creation_limit do
+        example.run
+      end
+    end
   end
 
   config.around(:each, :elasticsearch_wait_for_refresh) do |example|

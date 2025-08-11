@@ -1419,6 +1419,34 @@ describe User, :vcr do
         expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
       end
     end
+
+    describe "custom_fee_per_thousand" do
+      it "allows nil and an integer between 0 and 1000" do
+        user = build(:user, custom_fee_per_thousand: nil)
+        expect(user).to be_valid
+
+        user.custom_fee_per_thousand = 100.5
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be an integer"]
+
+        user.custom_fee_per_thousand = -1
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be greater than or equal to 0"]
+
+        user.custom_fee_per_thousand = 1001
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be less than or equal to 1000"]
+
+        user.custom_fee_per_thousand = "abc"
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["is not a number"]
+
+        [0, 50, 100, 500, 750, 1000].each do |value|
+          user.custom_fee_per_thousand = value
+          expect(user).to be_valid
+        end
+      end
+    end
   end
 
   describe "user roles" do
@@ -2965,12 +2993,11 @@ describe User, :vcr do
   end
 
   describe "#eligible_for_instant_payouts?" do
-    let(:user) { create(:user) }
+    let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }
     let!(:payments) { create_list(:payment_completed, 4, user:) }
 
     before do
-      allow(user).to receive(:compliant?).and_return(true)
       allow(user).to receive(:payouts_paused?).and_return(false)
     end
 
@@ -2978,9 +3005,16 @@ describe User, :vcr do
       expect(user.eligible_for_instant_payouts?).to eq(true)
     end
 
-    it "returns false when user is suspended" do
-      allow(user).to receive(:suspended?).and_return(true)
-      expect(user.eligible_for_instant_payouts?).to eq(false)
+    it "returns false when user is not compliant" do
+      [:not_reviewed,
+       :on_probation,
+       :flagged_for_fraud,
+       :flagged_for_tos_violation,
+       :suspended_for_fraud,
+       :suspended_for_tos_violation].each do |non_compliant_risk_state|
+        user.update!(user_risk_state: non_compliant_risk_state)
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
     end
 
     it "returns false when payouts are paused" do

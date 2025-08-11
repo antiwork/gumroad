@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Admin::PurchasesController < Admin::BaseController
-  before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud resend_receipt
+  before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud refund_taxes_only resend_receipt
                                           show sync_status_with_charge_processor block_buyer unblock_buyer]
 
   def cancel_subscription
@@ -26,6 +26,16 @@ class Admin::PurchasesController < Admin::BaseController
       render json: { success: true }
     else
       render json: { success: false }
+    end
+  end
+
+  def refund_taxes_only
+    e404 if @purchase.nil?
+
+    if @purchase.refund_gumroad_taxes!(refunding_user_id: current_user.id, note: params[:note], business_vat_id: params[:business_vat_id])
+      render json: { success: true }
+    else
+      render json: { success: false, message: @purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available" }
     end
   end
 

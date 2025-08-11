@@ -60,6 +60,51 @@ describe("Subscription Purchases from the product page", type: :feature, js: tru
         purchase = Purchase.successful.last
         expect(purchase.subscription.price).to eq @membership_product.prices.find_by!(recurrence: BasePrice::Recurrence::YEARLY)
         expect(purchase.variant_attributes.map(&:id)).to eq [@second_tier.id]
+        expect(purchase.custom_fee_per_thousand).to be_nil
+        expect(purchase.fee_cents).to eq(261) # 10% of $14 + 50c + 2.9% of $14 + 30c
+
+        @membership_product.user.update!(custom_fee_per_thousand: 25)
+        travel_to(1.year.from_now)
+        expect(purchase.seller.reload.custom_fee_per_thousand).to eq(25)
+        RecurringChargeWorker.new.perform(purchase.subscription.id)
+
+        recurring_charge = purchase.subscription.purchases.successful.last
+        expect(purchase.subscription.purchases.successful.count).to eq(2)
+        expect(recurring_charge.custom_fee_per_thousand).to be_nil
+        expect(recurring_charge.fee_cents).to eq(261)
+      end
+
+      it "charges custom Gumroad fee if custom fee is set for the seller" do
+        @membership_product.user.update!(custom_fee_per_thousand: 50)
+
+        visit "/l/#{@membership_product.unique_permalink}"
+
+        select "Yearly", from: "Recurrence"
+
+        expect(page).to have_radio_button("First Tier", text: "$10")
+        expect(page).to have_radio_button("Second Tier", text: "$14")
+
+        add_to_cart(@membership_product, option: "Second Tier")
+
+        expect(page).to have_text("Total US$14", normalize_ws: true)
+
+        check_out(@membership_product)
+
+        purchase = Purchase.successful.last
+        expect(purchase.subscription.price).to eq @membership_product.prices.find_by!(recurrence: BasePrice::Recurrence::YEARLY)
+        expect(purchase.variant_attributes.map(&:id)).to eq [@second_tier.id]
+        expect(purchase.custom_fee_per_thousand).to eq(50)
+        expect(purchase.fee_cents).to eq(191) # 5% of $14 + 50c + 2.9% of $14 + 30c
+
+        @membership_product.user.update!(custom_fee_per_thousand: 25)
+        travel_to(1.year.from_now)
+        expect(purchase.seller.reload.custom_fee_per_thousand).to eq(25)
+        RecurringChargeWorker.new.perform(purchase.subscription.id)
+
+        recurring_charge = purchase.subscription.purchases.successful.last
+        expect(purchase.subscription.purchases.successful.count).to eq(2)
+        expect(recurring_charge.custom_fee_per_thousand).to eq(50)
+        expect(recurring_charge.fee_cents).to eq(191)
       end
 
       context "when a tier has pay-what-you-want enabled" do

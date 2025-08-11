@@ -52,9 +52,14 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
   it "only has the $50 offer code affect the product and not shipping and taxes" do
     @user = create(:user_with_compliance_info)
 
-    @product = create(:product, user: @user, require_shipping: true, price_cents: 100_00)
-    @product.is_physical = true
-    @product.price_currency_type = "gbp"
+    @product = create(
+      :product,
+      user: @user,
+      require_shipping: true,
+      price_cents: 100_00,
+      price_currency_type: "gbp",
+      is_physical: true
+    )
     @product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
     @product.save!
 
