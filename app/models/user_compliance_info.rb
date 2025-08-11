@@ -74,6 +74,8 @@ class UserComplianceInfo < ApplicationRecord
   attr_json_data_accessor :guardian_country_code
   attr_json_data_accessor :guardian_stripe_tos_accepted
   attr_json_data_accessor :guardian_stripe_processing_tos_accepted
+  attr_json_data_accessor :guardian_stripe_identity_document_id
+  attr_json_data_accessor :guardian_stripe_additional_document_id
 
   def is_individual?
     !is_business?
