@@ -1101,6 +1101,32 @@ class User < ApplicationRecord
       update!(reset_password_token: nil, reset_password_sent_at: nil)
     end
 
+  def map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
+    # Convert person_XXXX.first_name to guardian_first_name
+    internal_field = stripe_field.gsub(/^person_#{guardian_person_id}\./, "guardian_")
+
+    # Map common Stripe fields to internal fields
+    field_mapping = {
+      "guardian_first_name" => GuardianComplianceInfoFields::Guardian::FIRST_NAME,
+      "guardian_last_name" => GuardianComplianceInfoFields::Guardian::LAST_NAME,
+      "guardian_email" => GuardianComplianceInfoFields::Guardian::EMAIL,
+      "guardian_phone" => GuardianComplianceInfoFields::Guardian::PHONE,
+      "guardian_dob.day" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.month" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_dob.year" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
+      "guardian_id_number" => GuardianComplianceInfoFields::Guardian::TAX_ID,
+      "guardian_address.line1" => GuardianComplianceInfoFields::Guardian::Address::STREET,
+      "guardian_address.city" => GuardianComplianceInfoFields::Guardian::Address::CITY,
+      "guardian_address.state" => GuardianComplianceInfoFields::Guardian::Address::STATE,
+      "guardian_address.postal_code" => GuardianComplianceInfoFields::Guardian::Address::ZIP_CODE,
+      "guardian_address.country" => GuardianComplianceInfoFields::Guardian::Address::COUNTRY,
+      "guardian_verification.document" => GuardianComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
+      "guardian_verification.additional_document" => GuardianComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
+    }
+
+    field_mapping[internal_field]
+  end
+
   private
     def append_http
       self.notification_endpoint = "http://#{notification_endpoint}" if notification_endpoint.present? && !notification_endpoint.include?("http")
@@ -1259,30 +1285,4 @@ class User < ApplicationRecord
     end
 
   private
-
-  def map_stripe_guardian_field_to_internal_field(stripe_field, guardian_person_id)
-    # Convert person_XXXX.first_name to guardian_first_name
-    internal_field = stripe_field.gsub(/^person_#{guardian_person_id}\./, "guardian_")
-
-    # Map common Stripe fields to internal fields
-    field_mapping = {
-      "guardian_first_name" => GuardianComplianceInfoFields::Guardian::FIRST_NAME,
-      "guardian_last_name" => GuardianComplianceInfoFields::Guardian::LAST_NAME,
-      "guardian_email" => GuardianComplianceInfoFields::Guardian::EMAIL,
-      "guardian_phone" => GuardianComplianceInfoFields::Guardian::PHONE,
-      "guardian_dob.day" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_dob.month" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_dob.year" => GuardianComplianceInfoFields::Guardian::DATE_OF_BIRTH,
-      "guardian_id_number" => GuardianComplianceInfoFields::Guardian::TAX_ID,
-      "guardian_address.line1" => GuardianComplianceInfoFields::Guardian::Address::STREET,
-      "guardian_address.city" => GuardianComplianceInfoFields::Guardian::Address::CITY,
-      "guardian_address.state" => GuardianComplianceInfoFields::Guardian::Address::STATE,
-      "guardian_address.postal_code" => GuardianComplianceInfoFields::Guardian::Address::ZIP_CODE,
-      "guardian_address.country" => GuardianComplianceInfoFields::Guardian::Address::COUNTRY,
-      "guardian_verification.document" => GuardianComplianceInfoFields::Guardian::STRIPE_IDENTITY_DOCUMENT_ID,
-      "guardian_verification.additional_document" => GuardianComplianceInfoFields::Guardian::STRIPE_ADDITIONAL_DOCUMENT_ID
-    }
-
-    field_mapping[internal_field]
-  end
 end

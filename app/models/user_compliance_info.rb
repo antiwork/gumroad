@@ -203,7 +203,7 @@ class UserComplianceInfo < ApplicationRecord
   def guardian_birthday
     return nil unless guardian_dob_year.present? && guardian_dob_month.present? && guardian_dob_day.present?
 
-    Date.new(guardian_dob_year, guardian_dob_month, guardian_dob_day)
+    Date.new(guardian_dob_year.to_i, guardian_dob_month.to_i, guardian_dob_day.to_i)
   rescue Date::Error
     nil
   end

@@ -370,11 +370,16 @@ RSpec.describe GuardianComplianceInfoRequest, type: :model do
   describe "external ID generation" do
     let(:user) { create(:user) }
 
+    before do
+      # Mock the global config for encryption
+      allow(GlobalConfig).to receive(:get).with("OBFUSCATE_IDS_CIPHER_KEY").and_return("test_key_32_characters_long!!")
+    end
+
     it "generates external ID on creation" do
       request = create(:guardian_compliance_info_request, user: user)
       
       expect(request.external_id).to be_present
-      expect(request.external_id.length).to be >= 10 # Nano ID typical length
+      expect(request.external_id.length).to be >= 10
     end
 
     it "generates unique external IDs" do

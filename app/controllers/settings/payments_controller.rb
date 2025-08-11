@@ -198,8 +198,17 @@ class Settings::PaymentsController < Sellers::BaseController
       # Handle both user params and user_compliance_info params for guardian information
       compliance_params_to_use = params[:user_compliance_info].present? ? params[:user_compliance_info] : params[:user]
       
-      # Validate guardian information if it's for an under-18 user
-      if compliance_params_to_use.present? && has_guardian_params?(compliance_params_to_use)
+      # Filter out guardian params if user doesn't require guardian verification
+      unless user_requires_guardian_verification?
+        compliance_params_to_use = filter_out_guardian_params(compliance_params_to_use) if compliance_params_to_use.present?
+      end
+      
+      # Only validate guardian information if:
+      # 1. User is actually under 18, AND
+      # 2. Guardian parameters are present in the request
+      if compliance_params_to_use.present? && 
+         user_requires_guardian_verification? && 
+         has_guardian_params?(compliance_params_to_use)
         validation_result = validate_guardian_params(compliance_params_to_use)
         if validation_result
           render json: { success: false, error_message: validation_result }
@@ -271,5 +280,25 @@ class Settings::PaymentsController < Sellers::BaseController
       end
 
       nil # No validation errors
+    end
+
+    def user_requires_guardian_verification?
+      user_compliance_info = current_seller.alive_user_compliance_info
+      return false unless user_compliance_info&.birthday
+
+      user_compliance_info.birthday > 18.years.ago.to_date
+    end
+
+    def filter_out_guardian_params(params_hash)
+      return params_hash unless params_hash.respond_to?(:except)
+      
+      guardian_fields = %w[
+        guardian_first_name guardian_last_name guardian_email guardian_phone
+        guardian_street_address guardian_city guardian_state guardian_zip_code 
+        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
+        guardian_individual_tax_id guardian_stripe_tos_accepted guardian_stripe_processing_tos_accepted
+      ]
+      
+      params_hash.except(*guardian_fields)
     end
 end
