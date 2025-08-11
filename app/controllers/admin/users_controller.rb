@@ -23,10 +23,9 @@ class Admin::UsersController < Admin::BaseController
     # Purchase history data - only fetch when searching
     @search_query = params[:product_title]
     if @search_query.present?
-      escaped_search_term = "%#{ActiveRecord::Base.sanitize_sql_like(@search_query)}%"
       @purchases = @user.purchases.includes(:link)
                        .left_joins(:link)
-                       .where("links.name LIKE ?", escaped_search_term)
+                       .where("links.name LIKE :query", query: "%#{@search_query.strip}%")
                        .order(created_at: :desc)
                        .limit(10)
     else
