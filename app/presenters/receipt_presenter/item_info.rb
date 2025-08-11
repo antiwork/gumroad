@@ -219,8 +219,12 @@ class ReceiptPresenter::ItemInfo
     end
 
     def refund_policy_attribute
-      # gift.giftee_purchase doesn't have a copy of the refund policy, so it needs to be retrieved from the gifter_purchase
-      refund_policy = purchase.is_gift_receiver_purchase ? purchase.gift.gifter_purchase.purchase_refund_policy : purchase.purchase_refund_policy
+      # Bundle product purchases' refund policy is on the bundle purchase, not the individual product purchases.
+      with_refund_policy = purchase.is_bundle_product_purchase ? purchase.bundle_purchase : purchase
+      # Gift purchases' refund policy is on the gift sender's purchase, not the giftee's purchase.
+      with_refund_policy = with_refund_policy.is_gift_receiver_purchase ? with_refund_policy.gift.gifter_purchase : with_refund_policy
+      refund_policy = with_refund_policy.purchase_refund_policy
+
       return unless refund_policy.present?
 
       {
