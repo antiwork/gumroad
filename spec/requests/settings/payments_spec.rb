@@ -5667,6 +5667,28 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
     end
   end
 
+  describe "Country selection modal" do
+    before do
+      @user = create(:named_user, payment_address: nil)
+      login_as @user
+    end
+
+    it "navigates back to previous page when modal is closed" do
+      visit settings_main_path
+      find('a[role="tab"]', text: "Payments").click
+      expect(page).to have_content("Where are you located?")
+      find("button[aria-label='Close']").click
+      expect(page).to have_current_path(settings_main_path)
+    end
+
+    it "navigates to dashboard page when modal is closed and no previous page exists" do
+      visit settings_payments_path
+      expect(page).to have_content("Where are you located?")
+      find("button[aria-label='Close']").click
+      expect(page).to have_current_path(dashboard_path)
+    end
+  end
+
   describe "Taxes collection section" do
     before do
       @creator = create(:user_with_compliance_info, name: "Chuck Bartowski", au_backtax_sales_cents: 30000_00, au_backtax_owed_cents: 2727_27)
