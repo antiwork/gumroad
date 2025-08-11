@@ -376,13 +376,9 @@ class SettingsPresenter
       end
 
       {
-        allow_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        show_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        allow_paypal_connect: seller.paypal_connect_allowed?,
         unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
-        restricted_countries_with_requirements: %w[Morocco Egypt Algeria],
-        earnings_requirement_met: seller.sales_cents_total >= 10_000,
-        payout_requirement_met: seller.payments.completed.exists?,
-        compliance_requirement_met: seller.user_risk_state == "compliant",
-        minimum_earnings_formatted: seller.formatted_dollar_amount(10_000, with_currency: true),
         email: paypal_merchant_account_email,
         charge_processor_merchant_id: paypal_merchant_account&.charge_processor_merchant_id,
         charge_processor_verified: paypal_merchant_account.present? && paypal_merchant_account.charge_processor_verified?,

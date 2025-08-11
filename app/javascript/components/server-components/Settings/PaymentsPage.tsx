@@ -54,7 +54,6 @@ export type User = {
   can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;
   joined_at: string;
-  compliance_country?: string | null;
 };
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
@@ -1074,12 +1073,13 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        <PayPalConnectSection
-          paypalConnect={props.paypal_connect}
-          isFormDisabled={props.is_form_disabled}
-          connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
-          userCountry={props.user.compliance_country}
-        />
+        {props.paypal_connect.show_paypal_connect ? (
+          <PayPalConnectSection
+            paypalConnect={props.paypal_connect}
+            isFormDisabled={props.is_form_disabled}
+            connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
+          />
+        ) : null}
         {props.saved_card ? (
           <CreditCardForm
             card={props.saved_card}

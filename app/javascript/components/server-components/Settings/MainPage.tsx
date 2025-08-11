@@ -31,7 +31,7 @@ type Props = {
     timezone: string;
     currency_type: string;
     has_unconfirmed_email: boolean;
-    compliance_country?: string | null;
+    compliance_country: string | null;
     purchasing_power_parity_enabled: boolean;
     purchasing_power_parity_limit: number | null;
     purchasing_power_parity_payment_verification_disabled: boolean;
