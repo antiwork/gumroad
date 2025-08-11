@@ -304,7 +304,7 @@ describe "Tiered Membership Spec", type: :feature, js: true do
     context "for non-USD currency" do
       it "rounds up to the minimum product price for that currency" do
         currency = "cad"
-        change_product_currency_to(currency)
+        change_membership_product_currency_to(@product, currency)
         set_tier_price_difference_below_min_upgrade_price(currency)
         displayed_upgrade_charge_in_usd = formatted_price("usd", get_usd_cents(currency, @min_price_in_currency))
 

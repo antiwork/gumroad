@@ -90,7 +90,7 @@ describe SubscriptionPlanChange do
       expect(plan_change.formatted_display_price).to eq "$1 every 3 months"
 
       plan_change.update!(perceived_price_cents: 350, recurrence: "monthly")
-      plan_change.subscription.link.update!(price_currency_type: "eur")
+      plan_change.subscription.link.update!(price_currency_type: "eur", price_cents: 350)
       expect(plan_change.formatted_display_price).to eq "€3.50 a month"
     end
 

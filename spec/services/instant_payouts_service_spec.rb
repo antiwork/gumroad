@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe InstantPayoutsService, :vcr do
-  let(:seller) { create(:user) }
+  let(:seller) { create(:compliant_user) }
 
   before do
     create(:tos_agreement, user: seller)
@@ -144,6 +144,23 @@ describe InstantPayoutsService, :vcr do
 
     context "when seller has no stripe account" do
       it "returns an error" do
+        expect do
+          result = described_class.new(seller).perform
+          expect(result).to eq(
+            success: false,
+            error: "Your account is not eligible for instant payouts at this time."
+          )
+        end.not_to change { Payment.count }
+      end
+    end
+
+    context "when seller is not compliant" do
+      before do
+        seller.update!(user_risk_state: "not_reviewed")
+      end
+
+      it "returns error message" do
+        expect(seller.eligible_for_instant_payouts?).to be false
         expect do
           result = described_class.new(seller).perform
           expect(result).to eq(

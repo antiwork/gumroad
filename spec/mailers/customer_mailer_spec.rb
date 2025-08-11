@@ -351,6 +351,7 @@ describe CustomerMailer do
 
           context "when purchase is in EUR" do
             before do
+              purchase.link.default_price.update!(currency: Currency::EUR)
               purchase.link.update!(price_currency_type: Currency::EUR)
               purchase.update!(
                 displayed_price_currency_type: Currency::EUR,

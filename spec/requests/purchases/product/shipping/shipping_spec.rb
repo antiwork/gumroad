@@ -4,9 +4,14 @@ describe("Product Page - Shipping Scenarios", type: :feature, js: true, shipping
   it "shows the shipping in USD in the blurb and not apply taxes on top of it" do
     @user = create(:user_with_compliance_info)
 
-    @product = create(:physical_product, user: @user, require_shipping: true, price_cents: 100_00)
+    @product = create(
+      :physical_product,
+      user: @user,
+      require_shipping: true,
+      price_cents: 100_00,
+      price_currency_type: "gbp"
+    )
     @product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
-    @product.price_currency_type = "gbp"
     @product.save!
 
     visit "/l/#{@product.unique_permalink}"
