@@ -195,7 +195,19 @@ class Settings::PaymentsController < Sellers::BaseController
     end
 
     def update_user_compliance_info
-      result = UpdateUserComplianceInfo.new(compliance_params: params[:user], user: current_seller).process
+      # Handle both user params and user_compliance_info params for guardian information
+      compliance_params_to_use = params[:user_compliance_info].present? ? params[:user_compliance_info] : params[:user]
+      
+      # Validate guardian information if it's for an under-18 user
+      if compliance_params_to_use.present? && has_guardian_params?(compliance_params_to_use)
+        validation_result = validate_guardian_params(compliance_params_to_use)
+        if validation_result
+          render json: { success: false, error_message: validation_result }
+          return false
+        end
+      end
+      
+      result = UpdateUserComplianceInfo.new(compliance_params: compliance_params_to_use, user: current_seller).process
 
       if result[:success]
         true
@@ -216,5 +228,48 @@ class Settings::PaymentsController < Sellers::BaseController
 
     def current_seller_policy
       [:settings, :payments, current_seller]
+    end
+
+    def has_guardian_params?(params_hash)
+      guardian_fields = %w[
+        guardian_first_name guardian_last_name guardian_email guardian_phone
+        guardian_street_address guardian_city guardian_state guardian_zip_code 
+        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
+        guardian_individual_tax_id guardian_stripe_tos_accepted guardian_stripe_processing_tos_accepted
+      ]
+      guardian_fields.any? { |field| params_hash[field].present? }
+    end
+
+    def validate_guardian_params(params_hash)
+      required_fields = %w[
+        guardian_first_name guardian_last_name guardian_email guardian_phone
+        guardian_street_address guardian_city guardian_state guardian_zip_code 
+        guardian_country guardian_dob_year guardian_dob_month guardian_dob_day
+      ]
+
+      missing_fields = required_fields.select { |field| params_hash[field].blank? }
+      return "Missing required guardian fields: #{missing_fields.join(', ')}" if missing_fields.any?
+
+      # Validate email format
+      email = params_hash[:guardian_email]
+      unless email =~ URI::MailTo::EMAIL_REGEXP
+        return "Guardian email must be a valid email address"
+      end
+
+      # Validate date of birth is realistic (guardian should be at least 18 years old)
+      year = params_hash[:guardian_dob_year].to_i
+      month = params_hash[:guardian_dob_month].to_i  
+      day = params_hash[:guardian_dob_day].to_i
+      
+      if year < 1900 || year > Date.current.year - 18
+        return "Guardian must be at least 18 years old"
+      end
+
+      # Validate TOS acceptance
+      unless params_hash[:guardian_stripe_tos_accepted] == true || params_hash[:guardian_stripe_tos_accepted] == "true"
+        return "Guardian must accept the terms of service"
+      end
+
+      nil # No validation errors
     end
 end

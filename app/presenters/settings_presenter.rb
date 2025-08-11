@@ -249,6 +249,42 @@ class SettingsPresenter
     }
   end
 
+  def guardian_verification_state
+    return "not_required" unless seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?
+
+    user_compliance_info = seller.alive_user_compliance_info
+    
+    # Return not_required if user is 18 or older
+    return "not_required" unless user_under_18?(user_compliance_info)
+
+    guardian_requests = seller.guardian_compliance_info_requests
+
+    # Check if user has submitted all required guardian information
+    has_submitted_guardian_info = user_compliance_info.present? && (
+      user_compliance_info.guardian_first_name.present? &&
+      user_compliance_info.guardian_last_name.present? &&
+      user_compliance_info.guardian_email.present? &&
+      user_compliance_info.guardian_phone.present? &&
+      user_compliance_info.guardian_street_address.present? &&
+      user_compliance_info.guardian_city.present? &&
+      user_compliance_info.guardian_state.present? &&
+      user_compliance_info.guardian_zip_code.present? &&
+      user_compliance_info.guardian_country.present? &&
+      guardian_date_complete?(user_compliance_info) &&
+      user_compliance_info.guardian_individual_tax_id.present?
+    )
+
+    if guardian_requests.empty? || !has_submitted_guardian_info
+      "requires_input"
+    elsif guardian_requests.requested.present?
+      "pending"
+    elsif guardian_requests.provided.present? && guardian_requests.requested.blank?
+      "verified"
+    else
+      "requires_input"
+    end
+  end
+
   private
     def user_details(user_compliance_info)
       {
@@ -453,37 +489,17 @@ class SettingsPresenter
       user_compliance_info.birthday > 18.years.ago.to_date
     end
 
-    def guardian_verification_state
-      return "not_required" unless seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?
-
-      guardian_requests = seller.guardian_compliance_info_requests
-      user_compliance_info = seller.alive_user_compliance_info
-
-      # Check if user has submitted all required guardian information
-      has_submitted_guardian_info = user_compliance_info.present? && (
-        user_compliance_info.guardian_first_name.present? &&
-        user_compliance_info.guardian_last_name.present? &&
-        user_compliance_info.guardian_email.present? &&
-        user_compliance_info.guardian_phone.present? &&
-        user_compliance_info.guardian_street_address.present? &&
-        user_compliance_info.guardian_city.present? &&
-        user_compliance_info.guardian_state.present? &&
-        user_compliance_info.guardian_zip_code.present? &&
-        user_compliance_info.guardian_country.present? &&
-        user_compliance_info.guardian_dob_day.present? &&
-        user_compliance_info.guardian_dob_month.present? &&
-        user_compliance_info.guardian_dob_year.present? &&
-        user_compliance_info.guardian_individual_tax_id.present?
-      )
-
-      if guardian_requests.empty? || !has_submitted_guardian_info
-        "requires_input"
-      elsif guardian_requests.requested.present?
-        "pending"
-      elsif guardian_requests.provided.present? && guardian_requests.requested.blank?
-        "verified"
-      else
-        "requires_input"
-      end
+    def guardian_date_complete?(user_compliance_info)
+      return false unless user_compliance_info
+      
+      day = user_compliance_info.guardian_dob_day
+      month = user_compliance_info.guardian_dob_month
+      year = user_compliance_info.guardian_dob_year
+      
+      # All components must be present and greater than 0
+      day.present? && day.to_i > 0 &&
+      month.present? && month.to_i > 0 &&
+      year.present? && year.to_i > 0
     end
+
 end
