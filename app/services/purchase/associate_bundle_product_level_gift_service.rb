@@ -53,12 +53,12 @@ class Purchase::AssociateBundleProductLevelGiftService
     def gift_sender_bundle_product_purchase
       @gift_sender_bundle_product_purchase ||= gift_sender_bundle_purchase
         .product_purchases
-        .find_by(link: @bundle_product.product)
+        .find_by(link_id: @bundle_product.product_id)
     end
 
     def gift_receiver_bundle_product_purchase
       @gift_receiver_bundle_product_purchase ||= gift_receiver_bundle_purchase
         .product_purchases
-        .find_by(link: @bundle_product.product)
+        .find_by(link_id: @bundle_product.product_id)
     end
 end
