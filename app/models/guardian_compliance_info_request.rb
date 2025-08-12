@@ -27,10 +27,15 @@ class GuardianComplianceInfoRequest < ApplicationRecord
     event :mark_provided do
       transition requested: :provided
     end
+
+    event :mark_verified do
+      transition provided: :verified
+    end
   end
 
   scope :requested, -> { where(state: :requested) }
   scope :provided, -> { where(state: :provided) }
+  scope :verified, -> { where(state: :verified) }
 
   def emails_sent_at
     email_sent_at_raw = json_data_for_attr("emails_sent_at", default: [])
