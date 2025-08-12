@@ -64,6 +64,9 @@ describe "Product with installment plan", type: :feature, js: true do
     )
     expect(subscription.last_payment_option.installment_plan).to eq(installment_plan)
 
+    visit purchase.receipt_url
+    expect(page).to have_text("Installment plan initiated on #{subscription.created_at.to_fs(:formatted_date_abbrev_month)}.")
+
     travel_to(1.month.from_now)
     RecurringChargeWorker.new.perform(subscription.id)
     expect(subscription.purchases.successful.count).to eq(2)

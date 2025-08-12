@@ -708,10 +708,6 @@ describe ReceiptPresenter::ItemInfo do
           )
           purchase = create(:installment_plan_purchase, link: product_installment_plan.link)
           subscription = purchase.subscription
-          url = Rails.application.routes.url_helpers.manage_subscription_url(
-            subscription.external_id,
-            host: UrlService.domain_with_protocol,
-          )
 
           props = described_class.new(purchase).props
 
