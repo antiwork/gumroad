@@ -1115,9 +1115,9 @@ module StripeMerchantAccountManager
   def self.handle_guardian_verification_success(stripe_event_id, stripe_person, user)
     guardian_person_id = stripe_person["id"]
 
-    # Mark all guardian compliance info requests as provided for this guardian person
-    user.guardian_compliance_info_requests.requested.where(guardian_person_id: guardian_person_id).find_each do |request|
-      request.mark_provided!
+    # Mark all guardian compliance info requests as verified for this guardian person
+    user.guardian_compliance_info_requests.provided.where(guardian_person_id: guardian_person_id).find_each do |request|
+      request.mark_verified!
     end
 
     # Also mark requests that don't have a specific guardian_person_id (from legal_guardian.* requirements)
@@ -1133,13 +1133,13 @@ module StripeMerchantAccountManager
       future_requirements["past_due"]
     ].compact.flatten.uniq
 
-    # If no fields are required anymore, mark all guardian requests as provided
+    # If no fields are required anymore, mark all guardian requests as verified
     guardian_fields_still_needed = all_required_fields.select do |field|
       field.start_with?("person_#{guardian_person_id}.") || field.start_with?("legal_guardian.")
     end
 
     if guardian_fields_still_needed.empty?
-      user.guardian_compliance_info_requests.requested.find_each(&:mark_provided!)
+      user.guardian_compliance_info_requests.provided.find_each(&:mark_verified!)
     end
   end
 end

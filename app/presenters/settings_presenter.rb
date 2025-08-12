@@ -253,7 +253,7 @@ class SettingsPresenter
     return "not_required" unless seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?
 
     user_compliance_info = seller.alive_user_compliance_info
-    
+
     # Return not_required if user is 18 or older
     return "not_required" unless user_under_18?(user_compliance_info)
 
@@ -278,8 +278,11 @@ class SettingsPresenter
       "requires_input"
     elsif guardian_requests.requested.present?
       "pending"
-    elsif guardian_requests.provided.present? && guardian_requests.requested.blank?
+    elsif guardian_requests.verified.present? && guardian_requests.requested.blank?
       "verified"
+    elsif guardian_requests.provided.present?
+      # Info submitted to Stripe but not yet verified
+      "pending"
     else
       "requires_input"
     end
@@ -491,15 +494,14 @@ class SettingsPresenter
 
     def guardian_date_complete?(user_compliance_info)
       return false unless user_compliance_info
-      
+
       day = user_compliance_info.guardian_dob_day
       month = user_compliance_info.guardian_dob_month
       year = user_compliance_info.guardian_dob_year
-      
+
       # All components must be present and greater than 0
       day.present? && day.to_i > 0 &&
       month.present? && month.to_i > 0 &&
       year.present? && year.to_i > 0
     end
-
 end
