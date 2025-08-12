@@ -62,6 +62,11 @@ describe Purchase::AssociateBundleProductLevelGiftService do
         expect(product_level_gift.gifter_email).to eq(gifter_email)
         expect(product_level_gift.giftee_email).to eq(giftee_email)
         expect(product_level_gift.id).not_to eq(bundle_level_gift.id)
+
+        # Re-running should not create a duplicate when both sides present
+        expect do
+          described_class.new(bundle_purchase: sender_bundle_purchase, bundle_product: bundle_product).perform
+        end.to change(Gift, :count).by(0)
       end
 
       it "is indifferent to which bundle purchase instance is passed (sender or receiver)" do
@@ -71,6 +76,17 @@ describe Purchase::AssociateBundleProductLevelGiftService do
 
         expect(product_level_gift.giftee_purchase).to eq(receiver_product_purchase)
         expect(product_level_gift.link).to eq(bundle_product.product)
+      end
+    end
+
+    context "when bundle_product does not belong to the bundle" do
+      it "does nothing" do
+        unrelated_bundle = create(:product, :bundle, user: seller)
+        unrelated_bundle_product = unrelated_bundle.bundle_products.first
+
+        expect do
+          described_class.new(bundle_purchase: sender_bundle_purchase, bundle_product: unrelated_bundle_product).perform
+        end.to change(Gift, :count).by(0)
       end
     end
 

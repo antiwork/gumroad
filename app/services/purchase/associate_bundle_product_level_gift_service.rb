@@ -7,6 +7,7 @@ class Purchase::AssociateBundleProductLevelGiftService
   end
 
   def perform
+    return unless bundle_product_belongs_to_bundle?
     return if bundle_level_gift.blank?
 
     product_level_gift = existing_product_level_gift || Gift.new
@@ -14,6 +15,10 @@ class Purchase::AssociateBundleProductLevelGiftService
   end
 
   private
+    def bundle_product_belongs_to_bundle?
+      @bundle_product.bundle_id == @bundle_purchase.link_id
+    end
+
     def existing_product_level_gift
       query = Gift.none
 
