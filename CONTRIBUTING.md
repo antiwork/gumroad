@@ -1,39 +1,5 @@
 # Contributing to Gumroad
 
-Thanks for your interest in contributing! This document will help you get started.
-
-## Quick Start
-
-1. Set up the repository
-
-```bash
-git clone https://github.com/antiwork/gumroad.git
-```
-
-2. Set up your development environment
-
-For detailed instructions on setting up your local development environment, please refer to our [README](README.md).
-
-## Development
-
-1. Create your feature branch
-
-```bash
-git checkout -b feature/your-feature
-```
-
-2. Start the development environment
-
-```bash
-bin/dev
-```
-
-3. Run the test suite
-
-```bash
-bundle exec rspec spec
-```
-
 ## Testing Guidelines
 
 - Don't use "should" in test descriptions
@@ -165,4 +131,4 @@ feat(cli): Add mobile testing support
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [Gumroad Community License](LICENSE.md).
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE.md).
