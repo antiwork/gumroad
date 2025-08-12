@@ -2,7 +2,7 @@
 
 class PaypalController < ApplicationController
   before_action :authenticate_user!, only: [:connect, :disconnect]
-  before_action :validate_paypal_connect_enabled, only: %i[connect]
+  before_action :validate_paypal_connect_allowed, only: %i[connect]
   before_action :validate_paypal_disconnect_allowed, only: %i[disconnect]
   after_action :verify_authorized, only: [:connect, :disconnect]
 
@@ -83,10 +83,16 @@ class PaypalController < ApplicationController
   end
 
   private
-    def validate_paypal_connect_enabled
-      return if current_seller.paypal_connect_enabled?
+    def validate_paypal_connect_allowed
+      return if current_seller.paypal_connect_enabled? && current_seller.paypal_connect_allowed?
 
-      redirect_to settings_payments_path, notice: "Your PayPal account could not be connected because this PayPal integration is not supported in your country."
+      alert = if !current_seller.paypal_connect_enabled?
+        "Your PayPal account could not be connected because this PayPal integration is not supported in your country."
+      elsif !current_seller.paypal_connect_allowed?
+        "Your PayPal account could not be connected because you do not meet the eligibility requirements."
+      end
+
+      redirect_to settings_payments_path, alert:
     end
 
     def validate_paypal_disconnect_allowed

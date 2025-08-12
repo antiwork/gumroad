@@ -15,6 +15,10 @@ class User
       alive_user_compliance_info.present? && PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.exclude?(::Compliance::Countries.find_by_name(alive_user_compliance_info.country)&.alpha2)
     end
 
+    def paypal_connect_allowed?
+      compliant? && sales_cents_total >= PaypalMerchantAccountManager::MIN_SALES_CENTS_REQ_FOR_PCP && has_completed_payouts?
+    end
+
     def paypal_disconnect_allowed?
       !active_subscribers?(charge_processor_id: PaypalChargeProcessor.charge_processor_id) &&
         !active_preorders?(charge_processor_id: PaypalChargeProcessor.charge_processor_id)

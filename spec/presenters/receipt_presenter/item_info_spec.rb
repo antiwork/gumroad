@@ -522,6 +522,64 @@ describe ReceiptPresenter::ItemInfo do
           )
         end
       end
+
+      context "when the purchase is a bundle product purchase" do
+        let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
+        let(:purchase) { create(:purchase, link: bundle, seller:) }
+        let!(:product) { create(:product, user: seller, name: "Product") }
+        let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
+
+        before do
+          purchase.create_purchase_refund_policy!(
+            title: "Bundle refund policy",
+            fine_print: "Bundle fine print."
+          )
+          purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "uses the bundle purchase's refund policy" do
+          presenter = described_class.new(purchase.product_purchases.last)
+          expect(presenter.props[:general_attributes]).to eq(
+            [
+              {
+                label: "Bundle",
+                value: link_to("Bundle product", bundle.long_url, target: "_blank")
+              },
+              { label: "Bundle refund policy", value: "Bundle fine print." },
+            ]
+          )
+        end
+      end
+
+      context "when the purchase is a bundle gift receiver purchase" do
+        let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
+        let(:gift) { create(:gift, gift_note: "Hope you like it!", giftee_email: "giftee@example.com", link: bundle) }
+        let(:gifter_purchase) { create(:purchase, link: bundle, seller:, gift_given: gift, is_gift_sender_purchase: true) }
+        let(:purchase) { create(:purchase, link: bundle, seller:, gift_received: gift, is_gift_receiver_purchase: true) }
+        let!(:product) { create(:product, user: seller, name: "Product") }
+        let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
+
+        before do
+          gifter_purchase.create_purchase_refund_policy!(
+            title: "Bundle gift refund policy",
+            fine_print: "Bundle gift fine print."
+          )
+          purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "uses the gifter bundle purchase's refund policy" do
+          presenter = described_class.new(purchase.product_purchases.last)
+          expect(presenter.props[:general_attributes]).to eq(
+            [
+              {
+                label: "Bundle",
+                value: link_to("Bundle product", bundle.long_url, target: "_blank")
+              },
+              { label: "Bundle gift refund policy", value: "Bundle gift fine print." },
+            ]
+          )
+        end
+      end
     end
 
     describe "#refund_policy_attribute" do

@@ -1073,7 +1073,7 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {props.paypal_connect.allow_paypal_connect ? (
+        {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}
             isFormDisabled={props.is_form_disabled}
