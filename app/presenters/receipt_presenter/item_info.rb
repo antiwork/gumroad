@@ -273,19 +273,23 @@ class ReceiptPresenter::ItemInfo
       <<~HTML.squish.html_safe
         You will be charged once #{recurrence_long_indicator(subscription.recurrence)}.
         If you would like to manage your membership you can visit
-        #{link_to("subscription settings", manage_subscription_url, target: "_blank")}.
+        #{link_to("subscription settings", manage_subscription_href, target: "_blank")}.
       HTML
     end
 
     def manage_installment_plan_note
+      timezone = subscription.user&.timezone
+      started_at = subscription.created_at.in_time_zone(timezone)
+      expected_ends_at = subscription.expected_completion_time.in_time_zone(timezone)
+
       <<~HTML.squish.html_safe
-        Installment plan initiated on #{subscription.created_at.to_fs(:formatted_date_abbrev_month)}.
-        Your final charge will be on #{subscription.expected_completion_time.to_fs(:formatted_date_abbrev_month)}.
-        You can manage your payment settings #{link_to("here", manage_subscription_url, target: "_blank")}.
+        Installment plan initiated on #{started_at.to_fs(:formatted_date_abbrev_month)}.
+        Your final charge will be on #{expected_ends_at.to_fs(:formatted_date_abbrev_month)}.
+        You can manage your payment settings #{link_to("here", manage_subscription_href, target: "_blank")}.
       HTML
     end
 
-    def manage_subscription_url
+    def manage_subscription_href
       Rails.application.routes.url_helpers.manage_subscription_url(
         subscription.external_id,
         { host: UrlService.domain_with_protocol },
