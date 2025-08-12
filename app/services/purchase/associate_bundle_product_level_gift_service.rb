@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Purchase::AssociateBundleProductLevelGiftService
-  def initialize(bundle_purchase: , bundle_product:)
+  def initialize(bundle_purchase:, bundle_product:)
     @bundle_purchase = bundle_purchase
     @bundle_product = bundle_product
   end
