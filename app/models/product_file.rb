@@ -17,6 +17,8 @@ class ProductFile < ApplicationRecord
   has_many :alive_stamped_pdfs, -> { alive }, class_name: "StampedPdf"
   has_many :subtitle_files
   has_many :alive_subtitle_files, -> { alive }, class_name: "SubtitleFile"
+  has_many :chapter_files
+  has_many :alive_chapter_files, -> { alive }, class_name: "ChapterFile"
   has_many :media_locations
   has_one :dropbox_file
   has_and_belongs_to_many :base_variants
@@ -193,9 +195,23 @@ class ProductFile < ApplicationRecord
     end
   end
 
+  def save_chapter_file!(file_data)
+    # Delete existing chapter file since we only support one per video
+    delete_all_chapter_files!
+    chapter_files.create!(file_data) if file_data.present?
+  end
+
+  def delete_all_chapter_files!
+    chapter_files.alive.each do |file|
+      file.mark_deleted
+      file.save!
+    end
+  end
+
   def delete!
     mark_deleted!
     delete_all_subtitle_files!
+    delete_all_chapter_files!
   end
 
   def display_extension
@@ -228,6 +244,17 @@ class ProductFile < ApplicationRecord
         kind: "captions"
       }
     end
+  end
+
+  def chapter_file_url
+    chapter_file = alive_chapter_files.first
+    return nil unless chapter_file
+
+    {
+      file: signed_download_url_for_s3_key_and_filename(chapter_file.s3_key, chapter_file.s3_filename, is_video: true),
+      kind: "chapters",
+      label: chapter_file.title || "Chapters"
+    }
   end
 
   def subtitle_files_for_mobile
@@ -370,6 +397,74 @@ class ProductFile < ApplicationRecord
         next if purchase.url_redirect.blank?
         StampPdfForPurchaseJob.perform_async(purchase.id)
       end
+    end
+
+    def extract_video_chapters(video_path)
+      # Extract chapter information from video file using ffprobe
+      begin
+        chapters_json = extract_chapters_with_ffprobe(video_path)
+        return unless chapters_json && chapters_json["chapters"]&.any?
+
+        # Generate VTT content from chapters
+        vtt_content = generate_vtt_from_chapters(chapters_json["chapters"])
+        
+        # Upload VTT file to S3 and create chapter file record
+        if vtt_content.present?
+          vtt_filename = "#{File.basename(s3_filename, '.*')}_chapters.vtt"
+          chapter_url = upload_vtt_to_s3(vtt_content, vtt_filename)
+          save_chapter_file!(url: chapter_url, title: "Chapters")
+        end
+      rescue => e
+        Rails.logger.warn("Could not extract chapters from video #{id}: #{e.message}")
+      end
+    end
+
+    def extract_chapters_with_ffprobe(video_path)
+      command = ["ffprobe", "-i", video_path, "-print_format", "json", "-show_chapters", "-v", "quiet"]
+      result = IO.popen(command, :err => [:child, :out]) { |io| io.read }
+      JSON.parse(result)
+    rescue => e
+      Rails.logger.warn("ffprobe failed for #{video_path}: #{e.message}")
+      nil
+    end
+
+    def generate_vtt_from_chapters(chapters)
+      return nil if chapters.empty?
+
+      vtt_content = "WEBVTT\n\n"
+      
+      chapters.each_with_index do |chapter, index|
+        start_time = format_timestamp(chapter["start_time"].to_f)
+        end_time = format_timestamp(chapter["end_time"].to_f)
+        title = chapter.dig("tags", "title") || "Chapter #{index + 1}"
+        
+        vtt_content += "#{start_time} --> #{end_time}\n"
+        vtt_content += "#{title}\n\n"
+      end
+      
+      vtt_content
+    end
+
+    def format_timestamp(seconds)
+      hours = seconds / 3600
+      minutes = (seconds % 3600) / 60
+      secs = seconds % 60
+      milliseconds = ((seconds - seconds.to_i) * 1000).to_i
+      
+      sprintf("%02d:%02d:%02d.%03d", hours, minutes, secs, milliseconds)
+    end
+
+    def upload_vtt_to_s3(content, filename)
+      key = "chapters/#{SecureRandom.uuid}/#{filename}"
+      
+      Aws::S3::Client.new.put_object(
+        bucket: S3_BUCKET,
+        key: key,
+        body: content,
+        content_type: 'text/vtt'
+      )
+      
+      "https://s3.amazonaws.com/#{S3_BUCKET}/#{key}"
     end
 
     def video_file_analysis_completed

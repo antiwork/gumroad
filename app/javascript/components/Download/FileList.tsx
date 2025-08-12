@@ -614,11 +614,13 @@ const VideoEmbedPreview = ({
       playlist: [
         {
           sources: mediaUrls.map((url) => ({ file: url })),
-          tracks: file.subtitle_files?.map((subtitleFile) => ({
-            file: subtitleFile.signed_url,
-            label: subtitleFile.language,
-            kind: "captions",
-          })),
+          ...(file.subtitle_files && file.subtitle_files.length > 0 ? {
+            tracks: file.subtitle_files.map((subtitleFile) => ({
+              file: subtitleFile.signed_url,
+              label: subtitleFile.language,
+              kind: "captions" as const,
+            }))
+          } : {}),
         },
       ],
     }).then((player) => {

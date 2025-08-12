@@ -47,6 +47,7 @@ const FileUtils = {
     return extension.length > 0 ? filename.slice(0, filename.length - extension.length - 1) : filename;
   },
   getAllowedSubtitleExtensions: (): string[] => ["srt", "vtt"],
+  getAllowedChapterExtensions: (): string[] => ["vtt"],
   extractUniqueUrlIdentifier: (url: string): string => {
     const guidLength = FileUtils.getGuidLength();
     const guid = url.split("/original/")[0].slice(-1 * guidLength);
@@ -76,6 +77,11 @@ const FileUtils = {
   isFileNameASubtitle: (fileName: string) => {
     const ext = FileUtils.getFileExtension(fileName);
     return FileUtils.isFileExtensionASubtitle(ext);
+  },
+  isFileExtensionAChapter: (ext: string) => FileUtils.getAllowedChapterExtensions().includes(ext.toLowerCase()),
+  isFileNameAChapter: (fileName: string) => {
+    const ext = FileUtils.getFileExtension(fileName);
+    return FileUtils.isFileExtensionAChapter(ext);
   },
   isFileNameExtensionAllowed: (filename: string, allowedExtensions: string[]) => {
     const ext = FileUtils.getFileExtension(filename).toLowerCase();

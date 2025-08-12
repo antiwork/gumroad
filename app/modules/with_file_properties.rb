@@ -101,6 +101,9 @@ module WithFileProperties
     self.analyze_completed = true if respond_to?(:analyze_completed=)
     save!
 
+    # Extract chapters from video if present
+    extract_video_chapters(path) if respond_to?(:extract_video_chapters)
+    
     video_file_analysis_completed
   rescue NoMethodError
     logger.info("Could not analyze movie product file #{id}")

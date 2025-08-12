@@ -4,6 +4,12 @@ type Optional<T> = { [k in keyof T]?: T[k] | undefined };
 export type JWPlayerOptions = Omit<jwplayer.SetupConfig, "playlist"> & {
   playlist: (Omit<Optional<jwplayer.PlaylistItem>, "file" | "sources"> & {
     sources: (Optional<jwplayer.Source> & Pick<jwplayer.Source, "file">)[];
+    tracks?: Array<{
+      file: string;
+      kind: "captions" | "chapters" | "thumbnails";
+      label?: string;
+      language?: string;
+    }>;
   })[];
 };
 

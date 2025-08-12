@@ -16,6 +16,7 @@ import { RecurrenceId } from "$app/utils/recurringPricing";
 
 import { PublicFile, Seller } from "$app/components/Product";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
+import { ChapterFile } from "$app/components/ChapterList/Row";
 
 import { Page } from "./ContentTab/PageTab";
 import { Attribute } from "./ProductTab/AttributesEditor";
@@ -218,6 +219,7 @@ export type FileEntry = {
   id: string; // id is either server ID or, in case of unsaved dropbox files, `drop_[external_id]`
   url: string | null;
   subtitle_files: SubtitleFile[];
+  chapter_file: ChapterFile | null;
   status: FileStatus | { type: "removed"; previousStatus: FileStatus };
   thumbnail: ThumbnailFile | null;
 };

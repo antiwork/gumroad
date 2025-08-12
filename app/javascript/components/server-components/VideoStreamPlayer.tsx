@@ -19,11 +19,18 @@ type SubtitleFile = {
   kind: "captions";
 };
 
+type ChapterFile = {
+  file: string;
+  kind: "chapters";
+  label?: string;
+};
+
 type Video = {
   sources: string[];
   guid: string;
   title: string;
   tracks: SubtitleFile[];
+  chapters?: ChapterFile;
   external_id: string;
   latest_media_location: { location: number } | null;
   content_length: number | null;
@@ -66,7 +73,10 @@ export const VideoStreamPlayer = ({
           sources: video.sources.map((source) => ({
             file: source.replace(fakeVideoUrlGuidForObfuscation, video.guid),
           })),
-          tracks: video.tracks,
+          tracks: [
+            ...video.tracks,
+            ...(video.chapters ? [video.chapters] : []),
+          ],
           title: video.title,
         })),
       });

@@ -28,6 +28,9 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
+import { ChapterList } from "$app/components/ChapterList";
+import { ChapterFile } from "$app/components/ChapterList/Row";
+import { ChapterUploadBox } from "$app/components/ChapterUploadBox";
 import { FileEmbedGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -220,6 +223,56 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
   const removeSubtitle = (url: string) =>
     updateFile({ subtitle_files: file.subtitle_files.filter((subtitle) => subtitle.url !== url) });
+  
+  const removeChapter = () => updateFile({ chapter_file: null });
+  
+  const uploadChapters = (files: File[]) => {
+    if (files.length === 0) return;
+    const chapterFile = files[0]; // Only one chapter file allowed
+    if (!chapterFile) return;
+    
+    const extension = FileUtils.getFileExtension(chapterFile.name).toUpperCase();
+    const fileName = FileUtils.getFileNameWithoutExtension(chapterFile.name);
+    const fileSize = chapterFile.size;
+    const id = FileUtils.generateGuid();
+    const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(id, chapterFile.name);
+    
+    const chapterEntry: ChapterFile = {
+      file_name: fileName,
+      extension,
+      title: "Chapters",
+      file_size: fileSize,
+      url: fileUrl,
+      signed_url: URL.createObjectURL(chapterFile),
+      status: { type: "unsaved", uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } } },
+    };
+    
+    const mimeType = getMimeType(chapterFile.name);
+    
+    const status = uploader.scheduleUpload({
+      cancellationKey: `chapter_for_${file.id}`,
+      name: s3key,
+      file: chapterFile,
+      mimeType,
+      onComplete: () => {
+        chapterEntry.status = { type: "unsaved", uploadStatus: { type: "uploaded" } };
+        updateFile({});
+      },
+      onProgress: (progress) => {
+        chapterEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
+        updateFile({});
+      },
+    });
+
+    if (typeof status === "string") {
+      // status contains error string if any
+      showAlert(status, "error");
+      return;
+    }
+    
+    updateFile({ chapter_file: chapterEntry });
+  };
+  
   const uploadSubtitles = (files: File[]) => {
     for (const subtitleFile of files) {
       const mimeType = getMimeType(subtitleFile.name);
@@ -613,6 +666,17 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                       }
                     />
                     <SubtitleUploadBox onUploadFiles={uploadSubtitles} />
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Chapters</legend>
+                  <div className="paragraphs">
+                    <ChapterList
+                      chapterFile={file.chapter_file}
+                      onRemoveChapter={removeChapter}
+                      onCancelChapterUpload={removeChapter}
+                    />
+                    <ChapterUploadBox onUploadFiles={uploadChapters} />
                   </div>
                 </fieldset>
                 <label>
