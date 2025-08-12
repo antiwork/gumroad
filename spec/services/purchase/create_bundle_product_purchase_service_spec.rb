@@ -53,33 +53,59 @@ describe Purchase::CreateBundleProductPurchaseService do
       expect(purchase.product_purchases).to eq([bundle_product_purchase])
     end
 
-    context "when the purchase is a gift sender purchase" do
+    context "gifting a bundle" do
+      let(:gifter_email) { "gifter@example.com" }
+      let(:giftee_email) { "giftee@example.com" }
+
+      let(:receiver_bundle_purchase) { create(:purchase, :gift_receiver, link: bundle, email: giftee_email) }
+      let(:sender_bundle_purchase) { create(:purchase, :gift_sender, link: bundle, email: gifter_email) }
+
+      let!(:bundle_level_gift) do
+        create(
+          :gift,
+          link: bundle,
+          gifter_purchase: sender_bundle_purchase,
+          giftee_purchase: receiver_bundle_purchase,
+          gifter_email: gifter_email,
+          giftee_email: giftee_email
+        )
+      end
+
       before do
-        purchase.update!(is_gift_sender_purchase: true)
+        receiver_bundle_purchase.reload
+        sender_bundle_purchase.reload
       end
 
       it "creates a bundle product purchase with the correct is_gift_sender_purchase flag" do
-        described_class.new(purchase, versioned_bundle_product).perform
+        described_class.new(sender_bundle_purchase, versioned_bundle_product).perform
 
         bundle_product_purchase = Purchase.last
 
         expect(bundle_product_purchase.is_gift_sender_purchase).to eq(true)
         expect(bundle_product_purchase.is_gift_receiver_purchase).to eq(false)
-      end
-    end
 
-    context "when the purchase is a gift receiver purchase" do
-      before do
-        purchase.update!(is_gift_receiver_purchase: true)
+        expect(bundle_product_purchase.gift).to be_present
+        expect(bundle_product_purchase.gift.link).to eq(versioned_bundle_product.product)
+        expect(bundle_product_purchase.gift.gifter_purchase).to eq(bundle_product_purchase)
+        expect(bundle_product_purchase.gift.giftee_purchase).to be_nil
+        expect(bundle_product_purchase.gift.gifter_email).to eq(gifter_email)
+        expect(bundle_product_purchase.gift.giftee_email).to eq(giftee_email)
       end
 
       it "creates a bundle product purchase with the correct is_gift_receiver_purchase flag" do
-        described_class.new(purchase, versioned_bundle_product).perform
+        described_class.new(receiver_bundle_purchase, versioned_bundle_product).perform
 
         bundle_product_purchase = Purchase.last
 
         expect(bundle_product_purchase.is_gift_sender_purchase).to eq(false)
         expect(bundle_product_purchase.is_gift_receiver_purchase).to eq(true)
+
+        expect(bundle_product_purchase.gift).to be_present
+        expect(bundle_product_purchase.gift.link).to eq(versioned_bundle_product.product)
+        expect(bundle_product_purchase.gift.gifter_purchase).to be_nil
+        expect(bundle_product_purchase.gift.giftee_purchase).to eq(bundle_product_purchase)
+        expect(bundle_product_purchase.gift.gifter_email).to eq(gifter_email)
+        expect(bundle_product_purchase.gift.giftee_email).to eq(giftee_email)
       end
     end
   end

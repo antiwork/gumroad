@@ -621,6 +621,93 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     end
   end
 
+  REFUND_TAXES_ONLY_OPENAPI = {
+    summary: "Refund taxes only",
+    description: "Refund only the tax portion of a purchase for tax-exempt customers. Does not refund the product price.",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              purchase_id: { type: "string", description: "Purchase ID/number to refund taxes for" },
+              email: { type: "string", description: "Email address of the customer, must match purchase" },
+              note: { type: "string", description: "Optional note for the refund" },
+              business_vat_id: { type: "string", description: "Optional business VAT ID for invoice generation" }
+            },
+            required: ["purchase_id", "email"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully refunded taxes",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '422': {
+        description: "No refundable taxes or refund failed",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '404': {
+        description: "Purchase not found or email mismatch",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+
+  def refund_taxes_only
+    purchase_id = params[:purchase_id]&.to_i
+    email = params[:email]
+
+    return render json: { success: false, message: "Both 'purchase_id' and 'email' parameters are required" }, status: :bad_request unless purchase_id.present? && email.present?
+
+    purchase = Purchase.find_by_external_id_numeric(purchase_id)
+
+    unless purchase && purchase.email.downcase == email.downcase
+      return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
+    end
+
+    if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: params[:note], business_vat_id: params[:business_vat_id])
+      render json: { success: true, message: "Successfully refunded taxes for purchase ID #{purchase.id}" }
+    else
+      error_message = purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available"
+      render json: { success: false, message: error_message }, status: :unprocessable_entity
+    end
+  end
+
   private
     def fetch_last_purchase
       @purchase = Purchase.where(email: params[:email]).order(created_at: :desc).first

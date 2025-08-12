@@ -14,6 +14,7 @@ export type PayPalConnect = {
   charge_processor_verified: boolean;
   needs_email_confirmation: boolean;
   unsupported_countries: string[];
+  show_paypal_connect: boolean;
   allow_paypal_connect: boolean;
   paypal_disconnect_allowed: boolean;
 };
@@ -58,18 +59,32 @@ const PayPalConnectSection = ({
               supported in every country except {paypalConnect.unsupported_countries.join(", ")}.
             </p>
             <p>{connectAccountFeeInfoText}</p>
-            {paypalConnect.allow_paypal_connect ? (
-              <div>
-                <a
-                  className="button button-paypal paypal-connect"
-                  href={Routes.connect_paypal_path({
-                    referer: Routes.settings_payments_path(),
-                  })}
-                  inert={isFormDisabled}
-                >
-                  Connect with Paypal
-                </a>
-              </div>
+            {paypalConnect.show_paypal_connect ? (
+              <>
+                <div>
+                  <a
+                    className="button button-paypal paypal-connect"
+                    href={Routes.connect_paypal_path({
+                      referer: Routes.settings_payments_path(),
+                    })}
+                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
+                  >
+                    Connect with Paypal
+                  </a>
+                </div>
+                {!paypalConnect.allow_paypal_connect ? (
+                  <div role="alert" className="warning">
+                    <div>
+                      <p>You must meet the following requirements in order to connect a PayPal account:</p>
+                      <ul>
+                        <li>Your account must be marked as compliant</li>
+                        <li>You must have earned at least $100</li>
+                        <li>You must have received at least one successful payout</li>
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </>
         ) : paypalConnect.charge_processor_verified ? (
@@ -85,7 +100,7 @@ const PayPalConnectSection = ({
                   <Icon name="solid-check-circle" style={{ color: "rgb(var(--success))" }} />
                 </div>
               </fieldset>
-              {paypalConnect.allow_paypal_connect ? (
+              {paypalConnect.show_paypal_connect ? (
                 <>
                   <p>
                     <Button
@@ -111,7 +126,7 @@ const PayPalConnectSection = ({
         ) : (
           <>
             <p>{connectAccountFeeInfoText}</p>
-            {paypalConnect.allow_paypal_connect ? (
+            {paypalConnect.show_paypal_connect ? (
               <>
                 <p>
                   <a
@@ -119,11 +134,23 @@ const PayPalConnectSection = ({
                     href={Routes.connect_paypal_path({
                       referer: Routes.settings_payments_path(),
                     })}
-                    inert={isFormDisabled}
+                    inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
                   >
                     Connect with Paypal
                   </a>
                 </p>
+                {!paypalConnect.allow_paypal_connect ? (
+                  <div role="alert" className="warning">
+                    <div>
+                      <p>You must meet the following requirements in order to connect a PayPal account:</p>
+                      <ul>
+                        <li>Your account must be marked as compliant</li>
+                        <li>You must have earned at least $100</li>
+                        <li>You must have received at least one successful payout</li>
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
                 <div role="alert" className="warning">
                   Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try
                   connecting again and grant the requested permissions.

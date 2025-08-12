@@ -93,6 +93,7 @@ namespace :admin do
     member do
       post :refund
       post :refund_for_fraud
+      post :refund_taxes_only
       post :cancel_subscription
       post "change_risk_state/:state", to: "purchases#change_risk_state", as: :change_risk_state
       post :resend_receipt

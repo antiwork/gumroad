@@ -2993,12 +2993,11 @@ describe User, :vcr do
   end
 
   describe "#eligible_for_instant_payouts?" do
-    let(:user) { create(:user) }
+    let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }
     let!(:payments) { create_list(:payment_completed, 4, user:) }
 
     before do
-      allow(user).to receive(:compliant?).and_return(true)
       allow(user).to receive(:payouts_paused?).and_return(false)
     end
 
@@ -3006,9 +3005,16 @@ describe User, :vcr do
       expect(user.eligible_for_instant_payouts?).to eq(true)
     end
 
-    it "returns false when user is suspended" do
-      allow(user).to receive(:suspended?).and_return(true)
-      expect(user.eligible_for_instant_payouts?).to eq(false)
+    it "returns false when user is not compliant" do
+      [:not_reviewed,
+       :on_probation,
+       :flagged_for_fraud,
+       :flagged_for_tos_violation,
+       :suspended_for_fraud,
+       :suspended_for_tos_violation].each do |non_compliant_risk_state|
+        user.update!(user_risk_state: non_compliant_risk_state)
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
     end
 
     it "returns false when payouts are paused" do

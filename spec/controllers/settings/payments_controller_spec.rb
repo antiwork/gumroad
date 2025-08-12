@@ -1183,6 +1183,12 @@ describe Settings::PaymentsController, :vcr do
       }
     end
 
+    before do
+      seller.mark_compliant!(author_name: "Iffy")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+      create(:payment_completed, user: seller)
+    end
+
     context "when the user has merchant migration enabled" do
       before do
         seller.check_merchant_account_is_linked = true
