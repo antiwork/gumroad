@@ -710,16 +710,29 @@ describe Subscription, :vcr do
       expect(charge_purchase.gumroad_tax_cents).to eq 0
     end
 
-    describe "VAT reverse-charge on renewals", :vcr, vcr: { record: :new_episodes } do
+    describe "VAT reverse-charge on renewals", :vcr do
       before(:all) do
         @prev_api_version = Stripe.api_version
         Stripe.api_version = "2023-10-16"
-        Stripe.api_key ||= ENV.fetch("STRIPE_API_KEY")
+        Stripe.api_key ||= ENV["STRIPE_API_KEY"] if VCR.current_cassette&.recording?
 
-        StripePaymentMethodHelper::ExtensionMethods.module_eval do
-          def to_stripe_card_hash
-            { token: "tok_visa" }
-          end
+        mod = StripePaymentMethodHelper::ExtensionMethods
+
+        @had_card_hash = mod.method_defined?(:to_stripe_card_hash)
+        mod.alias_method(:__orig_to_stripe_card_hash, :to_stripe_card_hash) if @had_card_hash
+
+        mod.define_method(:to_stripe_card_hash) { { token: "tok_visa" } }
+      end
+
+      after(:all) do
+        Stripe.api_version = @prev_api_version
+
+        mod = StripePaymentMethodHelper::ExtensionMethods
+        if @had_card_hash
+          mod.alias_method(:to_stripe_card_hash, :__orig_to_stripe_card_hash)
+          mod.remove_method(:__orig_to_stripe_card_hash)
+        else
+          mod.remove_method(:to_stripe_card_hash)
         end
       end
 
