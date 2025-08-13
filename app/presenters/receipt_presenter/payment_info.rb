@@ -134,7 +134,13 @@ class ReceiptPresenter::PaymentInfo
         return unless purchase.is_recurring_subscription_charge
 
         product = purchase.link
-        "We have successfully processed the payment for your recurring subscription to #{link_to(product.name, product.long_url, target: "_blank")}.".html_safe
+        link_to_product = link_to(product.name, product.long_url, target: "_blank")
+
+        if purchase.is_installment_payment?
+          "We have successfully processed the installment payment for #{link_to_product}.".html_safe
+        else
+          "We have successfully processed the payment for your recurring subscription to #{link_to_product}.".html_safe
+        end
       end
     end
 
@@ -176,20 +182,50 @@ class ReceiptPresenter::PaymentInfo
       end
 
       {
-        label: price_attribute_label(purchase),
-        value: formatted_dollar_amount(amount_cents),
+        label: price_attribute_label(purchase) + today_price_attribute_label_notes(purchase),
+        value: formatted_dollar_amount(amount_cents) + today_price_attribute_value_notes(purchase),
       }
     end
 
     def price_attribute_label(purchase)
       product = purchase.link
-      return product.name if purchase.quantity <= 1
 
-      [
-        product.name,
-        "×",
-        purchase.quantity
-      ].join(" ")
+      if purchase.quantity <= 1
+        product.name
+      else
+        "#{product.name} × #{purchase.quantity}"
+      end
+    end
+
+    def today_price_attribute_label_notes(purchase)
+      if purchase.subscription.present?
+        subscription_charge_progress(purchase).to_s
+      else
+        ""
+      end
+    end
+
+    def upcoming_price_attribute_label_notes(purchase)
+      if purchase.subscription.present?
+        upcoming_subscription_charge_progress(purchase).to_s
+      else
+        ""
+      end
+    end
+
+    def today_price_attribute_value_notes(purchase)
+      if purchase.subscription.present?
+        final_subscription_charge_note(purchase).to_s
+      else
+        ""
+      end
+    end
+
+    def final_subscription_charge_note(purchase)
+      return unless purchase.subscription.charges_completed?
+      return unless purchase == purchase.subscription.last_purchase
+
+      " - This is the final payment. You will not be charged for this product again."
     end
 
     def today_total_price_attribute
@@ -293,7 +329,7 @@ class ReceiptPresenter::PaymentInfo
 
         next_payment_date = purchase.is_free_trial_purchase? ? subscription.free_trial_ends_at : purchase.created_at + subscription.period
         {
-          label: price_attribute_label(purchase),
+          label: price_attribute_label(purchase) + upcoming_price_attribute_label_notes(purchase),
           value: "#{formatted_price(
               purchase.displayed_price_currency_type,
               subscription.current_subscription_price_cents + purchase.shipping_in_purchase_currency + next_payment_tax_cents
@@ -311,5 +347,38 @@ class ReceiptPresenter::PaymentInfo
 
       tax_percent = tax_rate / taxjar_info.combined_tax_rate.to_f
       amount_cents * tax_percent
+    end
+
+    def subscription_charge_progress(purchase)
+      return unless purchase.subscription.has_fixed_length?
+
+      if purchase.is_free_trial_purchase?
+        " (free trial)"
+      else
+        ": #{subscription_charge_number(purchase)} of #{purchase.subscription.charge_occurrence_count}"
+      end
+    end
+
+    def upcoming_subscription_charge_progress(purchase)
+      return unless purchase.subscription.has_fixed_length?
+
+      ": #{subscription_charge_number(purchase) + 1} of #{purchase.subscription.charge_occurrence_count}"
+    end
+
+    def subscription_charge_number(purchase)
+      return 0 if purchase.is_free_trial_purchase?
+
+      @_subscription_charge_number ||= {}
+
+      if @_subscription_charge_number.key?(purchase.id)
+        @_subscription_charge_number[purchase.id]
+      else
+        @_subscription_charge_number[purchase.id] = purchase
+          .subscription
+          .purchases
+          .successful
+          .where("succeeded_at < ?", purchase.succeeded_at)
+          .count + 1
+      end
     end
 end

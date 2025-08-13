@@ -403,7 +403,7 @@ describe CustomerMailer do
           it "renders upcoming payment information" do
             mail = CustomerMailer.receipt(purchase.id)
 
-            expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein $19.98 on Feb 1, 2023")
+            expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein: 2 of 2 $19.98 on Feb 1, 2023")
           end
         end
 
