@@ -115,7 +115,7 @@ class AffiliatesPresenter
               {
                 id: affiliate.external_id,
                 email: affiliate.affiliate_user.email,
-                affiliate_user_name: affiliate.affiliate_user.display_name(prefer_email_over_default_username: true),
+                affiliate_user_name: affiliate.affiliate_user.name.presence || affiliate.affiliate_user.username,
                 products: affiliate.enabled_products,
                 destination_url: affiliate.destination_url,
                 fee_percent: affiliate.affiliate_percentage || 0,

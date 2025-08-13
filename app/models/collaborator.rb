@@ -23,7 +23,7 @@ class Collaborator < Affiliate
     {
       id: external_id,
       email: affiliate_user.email,
-      name: affiliate_user.display_name(prefer_email_over_default_username: true),
+      name: affiliate_user.name.presence || affiliate_user.username,
       avatar_url: affiliate_user.avatar_url,
       apply_to_all_products:,
       percent_commission: affiliate_percentage,

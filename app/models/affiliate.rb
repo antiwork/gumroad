@@ -78,7 +78,7 @@ class Affiliate < ApplicationRecord
       id: external_id,
       email: affiliate_user.email,
       destination_url:,
-      affiliate_user_name: affiliate_user.display_name(prefer_email_over_default_username: true),
+      affiliate_user_name: affiliate_user.name.presence || affiliate_user.username,
       fee_percent: affiliate_percentage || 0,
     }
   end
