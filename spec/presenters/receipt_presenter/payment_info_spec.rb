@@ -656,6 +656,24 @@ describe ReceiptPresenter::PaymentInfo do
         )
       end
     end
+
+    context "when the purchase is an installment payment" do
+      let(:product) { create(:product, :with_installment_plan, user: seller, name: "Installment product") }
+      let(:original_installment_purchase) { create(:installment_plan_purchase, link: product) }
+      let(:purchase) do
+        create(
+          :recurring_installment_plan_purchase,
+          subscription: original_installment_purchase.subscription,
+          link: product
+        )
+      end
+
+      it "returns installment-specific note content" do
+        note = payment_info.send(:recurring_subscription_notes).first
+        expect(note).to include("We have successfully processed the installment payment for")
+        expect(note).to include(product.name)
+      end
+    end
   end
 
   describe "#usd_currency_note" do

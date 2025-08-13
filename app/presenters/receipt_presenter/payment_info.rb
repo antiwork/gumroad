@@ -134,7 +134,13 @@ class ReceiptPresenter::PaymentInfo
         return unless purchase.is_recurring_subscription_charge
 
         product = purchase.link
-        "We have successfully processed the payment for your recurring subscription to #{link_to(product.name, product.long_url, target: "_blank")}.".html_safe
+        link_to_product = link_to(product.name, product.long_url, target: "_blank")
+
+        if purchase.is_installment_payment?
+          "We have successfully processed the installment payment for #{link_to_product}.".html_safe
+        else
+          "We have successfully processed the payment for your recurring subscription to #{link_to_product}.".html_safe
+        end
       end
     end
 
