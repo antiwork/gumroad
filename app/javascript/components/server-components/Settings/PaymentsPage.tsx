@@ -1165,7 +1165,7 @@ const PaymentsPage = (props: Props) => {
             <header>
               <h2>Legal guardian’s details</h2>
               <div>
-                <a data-helper-prompt="I have a question about my payout settings?">
+                <a className="no-underline">
                   Because you're under 18, we need to verify your legal guardian's details to enable payments.
                 </a>
               </div>
