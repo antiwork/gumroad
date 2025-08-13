@@ -12,7 +12,8 @@ class AdminSearchService
         Gift.select("giftee_purchase_id as purchase_id").where(giftee_email: query).to_sql,
         Purchase.select("id as purchase_id").where(email: query).to_sql,
         Purchase.select("id as purchase_id").where(card_visual: query, card_type: CardType::PAYPAL).to_sql,
-        Purchase.select("id as purchase_id").where(stripe_fingerprint: query).to_sql
+        Purchase.select("id as purchase_id").where(stripe_fingerprint: query).to_sql,
+        Purchase.select("id as purchase_id").where(ip_address: query).to_sql
       ]
 
       union_sql = <<~SQL.squish
