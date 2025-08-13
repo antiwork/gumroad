@@ -255,6 +255,42 @@ describe ReceiptPresenter::PaymentInfo do
         end
 
         context "when the purchase has fixed length" do
+          context "when the purchase is a free trial" do
+            let(:purchase) do
+              create(
+                :free_trial_membership_purchase,
+                price_cents: 3_00,
+                created_at: Date.parse("Jan 1, 2023")
+              )
+            end
+
+            before do
+              purchase.link.update!(name: "Membership product")
+              purchase.subscription.update!(
+                free_trial_ends_at: Date.parse("Jan 8, 2023"),
+                charge_occurrence_count: 2
+              )
+            end
+
+            it "returns today's payment attributes" do
+              expect(today_payment_attributes).to eq(
+                [
+                  { label: "Today's payment", value: nil },
+                  { label: "Membership product (free trial)", value: "$0" },
+                ]
+              )
+            end
+
+            it "returns upcoming payment attributes" do
+              expect(upcoming_payment_attributes).to eq(
+                [
+                  { label: "Upcoming payment", value: nil },
+                  { label: "Membership product: 1 of 2", value: "$3 on Jan 8, 2023" },
+                ]
+              )
+            end
+          end
+
           context "when there is at least one more remaining charge" do
             before do
               purchase.subscription.update!(charge_occurrence_count: 2)
@@ -265,7 +301,7 @@ describe ReceiptPresenter::PaymentInfo do
               expect(today_payment_attributes).to eq(
                 [
                   { label: "Today's payment", value: nil },
-                  { label: "Membership product", value: "$19.98" },
+                  { label: "Membership product: 1 of 2", value: "$19.98" },
                   { label: nil, value: link_to("Generate invoice", invoice_url) },
                 ]
               )
@@ -276,7 +312,7 @@ describe ReceiptPresenter::PaymentInfo do
               expect(upcoming_payment_attributes).to eq(
                 [
                   { label: "Upcoming payment", value: nil },
-                  { label: "Membership product", value: "$19.98 on Feb 1, 2023" },
+                  { label: "Membership product: 2 of 2", value: "$19.98 on Feb 1, 2023" },
                 ]
               )
             end
@@ -290,7 +326,7 @@ describe ReceiptPresenter::PaymentInfo do
             it "does not includes today's payment header and upcoming payments" do
               expect(today_payment_attributes).to eq(
                 [
-                  { label: "Membership product", value: "$19.98" },
+                  { label: "Membership product: 1 of 1", value: "$19.98 - This is the final payment. You will not be charged for this product again." },
                   { label: nil, value: link_to("Generate invoice", invoice_url) },
                 ]
               )
