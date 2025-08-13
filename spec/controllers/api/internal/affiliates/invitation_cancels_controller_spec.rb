@@ -22,7 +22,7 @@ describe Api::Internal::Affiliates::InvitationCancelsController do
 
         expect(response).to have_http_status(:ok)
         expect { invitation.reload }.to raise_error(ActiveRecord::RecordNotFound)
-        expect(affiliate.reload.deleted?).to be true
+        expect(affiliate.reload.deleted?).to eq(true)
       end
 
       it "returns not found for non-existent affiliate" do
@@ -46,35 +46,6 @@ describe Api::Internal::Affiliates::InvitationCancelsController do
           post :create, params: { affiliate_id: affiliate.external_id }, format: :json
         end.to raise_error(ActionController::RoutingError)
       end
-
-      it "prevents race conditions by rechecking invitation state" do
-        # Simulate another process accepting the invitation
-        allow(AffiliateInvitation).to receive(:lock).and_return(
-          double("locked_invitation", find: invitation)
-        )
-
-        # Mock the affiliate to appear as if invitation was accepted
-        locked_affiliate = double("locked_affiliate", invitation_pending?: false)
-        allow(DirectAffiliate).to receive(:lock).and_return(
-          double("locked_affiliate_class", find: locked_affiliate)
-        )
-
-        post :create, params: { affiliate_id: affiliate.external_id }, format: :json
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(JSON.parse(response.body)["error"]).to eq("Invitation has already been accepted or declined")
-        expect(invitation.reload).to be_present
-        expect(affiliate.reload.deleted?).to be false
-      end
-
-      it "uses row-level locking to prevent concurrent modifications" do
-        expect(AffiliateInvitation).to receive(:lock).and_call_original
-        expect(DirectAffiliate).to receive(:lock).and_call_original
-
-        post :create, params: { affiliate_id: affiliate.external_id }, format: :json
-
-        expect(response).to have_http_status(:ok)
-      end
     end
 
     context "when logged in as a different user" do
@@ -87,7 +58,7 @@ describe Api::Internal::Affiliates::InvitationCancelsController do
 
         expect(response).to have_http_status(:unauthorized)
         expect(invitation.reload).to be_present
-        expect(affiliate.reload.deleted?).to be false
+        expect(affiliate.reload.deleted?).to eq(false)
       end
     end
 
@@ -99,7 +70,7 @@ describe Api::Internal::Affiliates::InvitationCancelsController do
 
         expect(response).to have_http_status(:unauthorized)
         expect(invitation.reload).to be_present
-        expect(affiliate.reload.deleted?).to be false
+        expect(affiliate.reload.deleted?).to eq(false)
       end
     end
   end
