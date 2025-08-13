@@ -344,7 +344,7 @@ const PendingInvitationsTable = ({
 
   const formattedFeePercentLabel = (invitation: PendingInvitation) => {
     if (invitation.apply_to_all_products) {
-      return invitation.fee_percent != null ? formatAffiliateBasisPoints(invitation.fee_percent) : "0%";
+      return formatAffiliateBasisPoints(invitation.fee_percent);
     }
 
     const productCommissions = invitation.products.map((product) => product.fee_percent ?? 0);
