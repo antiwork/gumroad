@@ -9,9 +9,10 @@ class Api::Internal::Affiliates::InvitationCancelsController < Api::Internal::Ba
   def create
     authorize @invitation, :cancel?
 
-    @invitation.destroy!
-    @affiliate.mark_deleted!
-
+    ActiveRecord::Base.transaction do
+      @invitation.destroy!
+      @affiliate.mark_deleted!
+    end
     head :ok
   end
 

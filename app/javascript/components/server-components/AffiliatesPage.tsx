@@ -328,16 +328,24 @@ const AffiliateRequestsTable = ({
   );
 };
 
-const PendingInvitationsTable = ({ pendingInvitations }: { pendingInvitations: PendingInvitation[] }) => {
+const PendingInvitationsTable = ({
+  pendingInvitations,
+  onCancelled,
+}: {
+  pendingInvitations: PendingInvitation[];
+  onCancelled?: () => void;
+}) => {
   const userAgentInfo = useUserAgentInfo();
   const loggedInUser = useLoggedInUser();
-  const [cancellingInvitations, setCancellingInvitations] = React.useState<Set<string>>(new Set());
+  const [cancellingAffiliates, setCancellingAffiliates] = React.useState<Set<string>>(new Set());
 
   const formatAffiliateBasisPoints = (basisPoints: number) =>
     (basisPoints / 100).toLocaleString([], { style: "percent" });
 
   const formattedFeePercentLabel = (invitation: PendingInvitation) => {
-    if (invitation.apply_to_all_products) return formatAffiliateBasisPoints(invitation.fee_percent);
+    if (invitation.apply_to_all_products) {
+      return invitation.fee_percent != null ? formatAffiliateBasisPoints(invitation.fee_percent) : "0%";
+    }
 
     const productCommissions = invitation.products.map((product) => product.fee_percent ?? 0);
     const minFeePercent = Math.min(...productCommissions);
@@ -350,19 +358,19 @@ const PendingInvitationsTable = ({ pendingInvitations }: { pendingInvitations: P
   const productName = (products: PendingInvitation["products"]) =>
     products.length === 1 ? (products[0]?.name ?? "") : `${products.length} products`;
 
-  const handleCancel = asyncVoid(async (invitationId: string) => {
-    setCancellingInvitations((prev) => new Set(prev).add(invitationId));
+  const handleCancel = asyncVoid(async (affiliateId: string) => {
+    setCancellingAffiliates((prev) => new Set(prev).add(affiliateId));
     try {
-      await cancelAffiliateInvitation(invitationId);
+      await cancelAffiliateInvitation(affiliateId);
       showAlert("Invitation cancelled successfully", "success");
-      window.location.reload();
+      onCancelled?.();
     } catch (e) {
       assertResponseError(e);
       showAlert("Failed to cancel invitation", "error");
     } finally {
-      setCancellingInvitations((prev) => {
+      setCancellingAffiliates((prev) => {
         const next = new Set(prev);
-        next.delete(invitationId);
+        next.delete(affiliateId);
         return next;
       });
     }
@@ -398,10 +406,10 @@ const PendingInvitationsTable = ({ pendingInvitations }: { pendingInvitations: P
                 <Button
                   color="danger"
                   onClick={() => handleCancel(invitation.id)}
-                  disabled={!loggedInUser?.policies.direct_affiliate.update || cancellingInvitations.has(invitation.id)}
+                  disabled={!loggedInUser?.policies.direct_affiliate.update || cancellingAffiliates.has(invitation.id)}
                   aria-label="Cancel invitation"
                 >
-                  {cancellingInvitations.has(invitation.id) ? "Cancelling..." : "Cancel"}
+                  {cancellingAffiliates.has(invitation.id) ? "Cancelling..." : "Cancel"}
                 </Button>
               </div>
             </td>
@@ -478,7 +486,9 @@ const AffiliatesTab = () => {
     (basisPoints / 100).toLocaleString([], { style: "percent" });
 
   const formattedFeePercentLabel = (affiliate: Affiliate) => {
-    if (affiliate.apply_to_all_products) return formatAffiliateBasisPoints(affiliate.fee_percent);
+    if (affiliate.apply_to_all_products) {
+      return formatAffiliateBasisPoints(affiliate.fee_percent);
+    }
 
     const productCommissions = affiliate.products.map((product) => product.fee_percent ?? 0);
     const minFeePercent = Math.min(...productCommissions);
@@ -559,7 +569,10 @@ const AffiliatesTab = () => {
               <AffiliateRequestsTable affiliateRequests={affiliateRequests} allowApproveAll={allowApproveAllRequests} />
             ) : null}
             {pending_invitations.length > 0 && !searchQuery && pagination.page === 1 ? (
-              <PendingInvitationsTable pendingInvitations={pending_invitations} />
+              <PendingInvitationsTable
+                pendingInvitations={pending_invitations}
+                onCancelled={() => revalidator.revalidate()}
+              />
             ) : null}
             {affiliates.length > 0 ? (
               <>
