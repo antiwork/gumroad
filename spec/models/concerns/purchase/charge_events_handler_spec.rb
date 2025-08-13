@@ -112,11 +112,13 @@ describe Purchase::ChargeEventsHandler, :vcr do
       @l = create(:product, user: @u)
       subscription = create(:subscription)
       create(:membership_purchase, subscription:)
-      @p = create(:purchase, id: ObfuscateIds.decrypt("q3jUBQrrGrIId3SjC4VJ0g=="), link: @l, seller: @l.user, price_cents: 100,
+      purchase_external_id = "q3jUBQrrGrIId3SjC4VJ0g=="
+      @p = create(:purchase, id: ObfuscateIds.decrypt(purchase_external_id), link: @l, seller: @l.user, price_cents: 100,
                              total_transaction_cents: 100, fee_cents: 30, purchase_state: "in_progress", card_country: "IN",
                              subscription:)
-      @e = build(:charge_event_payment_failed, charge_reference: "q3jUBQrrGrIId3SjC4VJ0g==")
+      @e = build(:charge_event_payment_failed, charge_reference: purchase_external_id)
 
+      allow(Purchase).to receive(:find_by_external_id).with(purchase_external_id).and_return(@p)
       expect_any_instance_of(Purchase).to receive(:handle_event_informational!).and_call_original
       expect_any_instance_of(Subscription).to receive(:handle_purchase_failure)
     end
