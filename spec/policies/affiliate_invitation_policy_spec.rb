@@ -35,4 +35,27 @@ describe AffiliateInvitationPolicy do
       end
     end
   end
+
+  permissions :cancel? do
+    context "when the current user is the seller" do
+      it "grants access" do
+        context = SellerContext.new(user: seller, seller: seller)
+        expect(subject).to permit(context, affiliate_invitation)
+      end
+    end
+
+    context "when the current user is the affiliate user" do
+      it "denies access" do
+        context = SellerContext.new(user: affiliate_user, seller: seller)
+        expect(subject).not_to permit(context, affiliate_invitation)
+      end
+    end
+
+    context "when the current user is other user" do
+      it "denies access" do
+        context = SellerContext.new(user: other_user, seller: seller)
+        expect(subject).not_to permit(context, affiliate_invitation)
+      end
+    end
+  end
 end
