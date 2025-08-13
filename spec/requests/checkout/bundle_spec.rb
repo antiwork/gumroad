@@ -172,6 +172,13 @@ describe "Checkout bundles", :js, type: :feature do
       expect(gifter_purchase.product_purchases.sole.license).to be_nil
       expect(giftee_purchase.product_purchases.sole.license).to_not be_nil
       expect(giftee_purchase.product_purchases.sole.license_key).to be_present
+
+      # Both sender and receiver receipts should load properly
+      visit gifter_purchase.receipt_url
+      expect(page).to have_text("Gift sent to")
+
+      visit giftee_purchase.receipt_url
+      expect(page).to have_text("You've received a gift!")
     end
   end
 

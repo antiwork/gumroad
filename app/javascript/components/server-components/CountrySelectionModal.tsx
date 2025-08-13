@@ -49,7 +49,14 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
     <div>
       <Modal
         open
-        onClose={() => (window.location.href = Routes.dashboard_path())}
+        onClose={() => {
+          const referrer = document.referrer;
+          if (referrer && new URL(referrer).origin === window.location.origin) {
+            window.history.back();
+          } else {
+            window.location.href = Routes.dashboard_path();
+          }
+        }}
         title="Where are you located?"
         footer={
           <Button color="accent" disabled={checked.length !== checkboxes.length || saving} onClick={() => void save()}>

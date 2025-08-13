@@ -536,7 +536,7 @@ describe("Library Scenario", type: :feature, js: true) do
         expect(page.current_path).to eq(reviews_path)
 
         expect(page).to have_text("You've reviewed all your products!")
-        expect(page).to have_link("Discover more", href: root_url(host: ROOT_DOMAIN))
+        expect(page).to have_link("Discover more", href: discover_url(host: DISCOVER_DOMAIN))
 
         within find("tr", text: "Product 0") do
           expect(page).to have_image(src: thumbnail.url)
@@ -651,7 +651,7 @@ describe("Library Scenario", type: :feature, js: true) do
         visit reviews_path
         expect(page).to have_text("You haven't bought anything... yet!")
         expect(page).to have_text("Once you do, it'll show up here so you can review them.")
-        expect(page).to have_link("Discover products", href: root_url(host: ROOT_DOMAIN))
+        expect(page).to have_link("Discover products", href: discover_url(host: DISCOVER_DOMAIN))
       end
     end
   end

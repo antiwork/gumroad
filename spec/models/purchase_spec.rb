@@ -3561,6 +3561,7 @@ describe Purchase, :vcr do
       @purchase.country = "Germany"
 
       @purchase.link.price_currency_type = "gbp"
+      @purchase.link.price_cents = 10000
       @purchase.link.shipping_destinations << ShippingDestination.new(country_code: Product::Shipping::ELSEWHERE, one_item_rate_cents: 10_00, multiple_items_rate_cents: 5_00)
       @purchase.link.save!
 
@@ -4968,7 +4969,6 @@ describe Purchase, :vcr do
       purchase = create(:purchase)
       expect(purchase.format_price_in_currency(5_50)).to eq "$5.50"
 
-      purchase.link.update!(price_currency_type: "gbp")
       purchase.displayed_price_currency_type = "gbp"
       expect(purchase.format_price_in_currency(5_50)).to eq "£2.75"
     end
@@ -4977,7 +4977,6 @@ describe Purchase, :vcr do
       purchase = create(:membership_purchase)
       expect(purchase.format_price_in_currency(5_50)).to eq "$5.50 a month"
 
-      purchase.link.update!(price_currency_type: "eur")
       purchase.displayed_price_currency_type = "eur"
       expect(purchase.format_price_in_currency(5_50)).to eq "€2.75 a month"
     end

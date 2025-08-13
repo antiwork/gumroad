@@ -407,4 +407,127 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       end
     end
   end
+
+  describe "POST refund_taxes_only" do
+    let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com") }
+    let(:params) { { purchase_id: "12345", email: "test@example.com" } }
+
+    before do
+      stub_const("GUMROAD_ADMIN_ID", admin_user.id)
+      allow(Purchase).to receive(:find_by_external_id_numeric).with(12345).and_return(purchase)
+    end
+
+    context "when the purchase exists and email matches" do
+      it "successfully refunds taxes when refundable taxes are available" do
+        allow(purchase).to receive(:refund_gumroad_taxes!).with(
+          refunding_user_id: admin_user.id,
+          note: nil,
+          business_vat_id: nil
+        ).and_return(true)
+
+        post :refund_taxes_only, params: params
+
+        expect(response).to have_http_status(:success)
+        expect(JSON.parse(response.body)["success"]).to eq(true)
+        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded taxes for purchase ID 1")
+      end
+
+      it "includes note and business_vat_id when provided" do
+        params_with_extras = params.merge(note: "Tax exemption", business_vat_id: "VAT123456")
+
+        allow(purchase).to receive(:refund_gumroad_taxes!).with(
+          refunding_user_id: admin_user.id,
+          note: "Tax exemption",
+          business_vat_id: "VAT123456"
+        ).and_return(true)
+
+        post :refund_taxes_only, params: params_with_extras
+
+        expect(response).to have_http_status(:success)
+        expect(JSON.parse(response.body)["success"]).to eq(true)
+        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded taxes for purchase ID 1")
+      end
+
+      it "returns an error when no refundable taxes are available" do
+        allow(purchase).to receive(:refund_gumroad_taxes!).with(
+          refunding_user_id: admin_user.id,
+          note: nil,
+          business_vat_id: nil
+        ).and_return(false)
+
+        allow(purchase).to receive(:errors).and_return(double(full_messages: double(presence: nil)))
+
+        post :refund_taxes_only, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)["success"]).to eq(false)
+        expect(JSON.parse(response.body)["message"]).to eq("No refundable taxes available")
+      end
+
+      it "returns specific error message when purchase has validation errors" do
+        error_messages = ["Tax already refunded", "Invalid tax amount"]
+        allow(purchase).to receive(:refund_gumroad_taxes!).and_return(false)
+        allow(purchase).to receive(:errors).and_return(
+          double(full_messages: double(presence: error_messages, to_sentence: "Tax already refunded and Invalid tax amount"))
+        )
+
+        post :refund_taxes_only, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)["success"]).to eq(false)
+        expect(JSON.parse(response.body)["message"]).to eq("Tax already refunded and Invalid tax amount")
+      end
+    end
+
+    context "when the purchase does not exist or email doesn't match" do
+      it "returns a not found error when purchase doesn't exist" do
+        allow(Purchase).to receive(:find_by_external_id_numeric).with(999999).and_return(nil)
+
+        post :refund_taxes_only, params: { purchase_id: "999999", email: "test@example.com" }
+
+        expect(response).to have_http_status(:not_found)
+        expect(JSON.parse(response.body)["success"]).to eq(false)
+        expect(JSON.parse(response.body)["message"]).to eq("Purchase not found or email doesn't match")
+      end
+
+      it "returns a not found error when email doesn't match (case insensitive)" do
+        mismatched_purchase = instance_double(Purchase, email: "different@example.com")
+        allow(Purchase).to receive(:find_by_external_id_numeric).with(54321).and_return(mismatched_purchase)
+
+        post :refund_taxes_only, params: { purchase_id: "54321", email: "wrong@example.com" }
+
+        expect(response).to have_http_status(:not_found)
+        expect(JSON.parse(response.body)["success"]).to eq(false)
+        expect(JSON.parse(response.body)["message"]).to eq("Purchase not found or email doesn't match")
+      end
+
+      it "handles email matching case insensitively" do
+        allow(purchase).to receive(:email).and_return("Test@Example.com")
+        allow(purchase).to receive(:refund_gumroad_taxes!).and_return(true)
+
+        post :refund_taxes_only, params: { purchase_id: "12345", email: "test@example.com" }
+
+        expect(response).to have_http_status(:success)
+        expect(JSON.parse(response.body)["success"]).to eq(true)
+      end
+    end
+
+    context "when required parameters are missing" do
+      it "handles missing purchase_id gracefully" do
+        post :refund_taxes_only, params: { email: "test@example.com" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(JSON.parse(response.body)["success"]).to eq(false)
+        expect(JSON.parse(response.body)["message"]).to eq("Both 'purchase_id' and 'email' parameters are required")
+      end
+
+      it "handles missing email gracefully" do
+        post :refund_taxes_only, params: { purchase_id: "12345" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(JSON.parse(response.body)["success"]).to eq(false)
+        expect(JSON.parse(response.body)["message"]).to eq("Both 'purchase_id' and 'email' parameters are required")
+      end
+    end
+  end
 end
