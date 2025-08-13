@@ -4,14 +4,14 @@ require "spec_helper"
 
 RSpec.describe CollaboratorInvitation, type: :model do
   describe "#accept!" do
-    it "destroys the invitation" do
+    it "destroys the invitation when accepted" do
       invitation = create(:collaborator_invitation)
 
       expect { invitation.accept! }.to change(CollaboratorInvitation, :count).by(-1)
       expect { invitation.reload }.to raise_error(ActiveRecord::RecordNotFound)
     end
 
-    it "sends a notification email" do
+    it "sends a notification email when accepted" do
       invitation = create(:collaborator_invitation)
 
       expect { invitation.accept! }
@@ -23,11 +23,11 @@ RSpec.describe CollaboratorInvitation, type: :model do
     let(:collaborator) { create(:collaborator) }
     let(:invitation) { create(:collaborator_invitation, collaborator:) }
 
-    it "marks the collaborator as deleted" do
+    it "marks the collaborator as deleted when declined" do
       expect { invitation.decline! }.to change { collaborator.reload.deleted? }.from(false).to(true)
     end
 
-    it "disables the is_collab flag on associated products" do
+    it "disables the is_collab flag on associated products when declined" do
       products = create_list(:product, 2, is_collab: true)
       create(:product_affiliate, product: products.first, affiliate: collaborator)
       create(:product_affiliate, product: products.second, affiliate: collaborator)
@@ -37,7 +37,7 @@ RSpec.describe CollaboratorInvitation, type: :model do
         .and change { products.second.reload.is_collab }.from(true).to(false)
     end
 
-    it "sends an email to the collaborator" do
+    it "sends an email to the collaborator when declined" do
       expect { invitation.decline! }
         .to have_enqueued_mail(AffiliateMailer, :collaborator_invitation_declined).with { invitation.id }
     end
