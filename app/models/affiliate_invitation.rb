@@ -6,7 +6,7 @@ class AffiliateInvitation < ApplicationRecord
   belongs_to :affiliate, foreign_key: :affiliate_id
 
   def pending?
-    affiliate&.status == "pending"
+    persisted? && affiliate&.alive?
   end
 
   def accept!
