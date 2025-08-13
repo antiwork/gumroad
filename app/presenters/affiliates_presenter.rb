@@ -118,7 +118,7 @@ class AffiliatesPresenter
                 affiliate_user_name: affiliate.affiliate_user.display_name(prefer_email_over_default_username: true),
                 products: affiliate.enabled_products,
                 destination_url: affiliate.destination_url,
-                fee_percent: affiliate.affiliate_percentage,
+                fee_percent: affiliate.affiliate_percentage || 0,
                 apply_to_all_products: affiliate.apply_to_all_products,
                 invitation_created_at: affiliate.affiliate_invitation.created_at.iso8601,
               }

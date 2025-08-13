@@ -66,7 +66,7 @@ class Affiliate < ApplicationRecord
         {
           id: ObfuscateIds.encrypt_numeric(_1.link_id),
           name: _1.name,
-          fee_percent: _1.affiliate_percentage || affiliate_percentage,
+          fee_percent: (_1.affiliate_percentage || affiliate_percentage || 0),
           destination_url: _1.destination_url,
           referral_url: construct_permalink(_1.unique_permalink)
         }
@@ -79,7 +79,7 @@ class Affiliate < ApplicationRecord
       email: affiliate_user.email,
       destination_url:,
       affiliate_user_name: affiliate_user.display_name(prefer_email_over_default_username: true),
-      fee_percent: affiliate_percentage,
+      fee_percent: affiliate_percentage || 0,
     }
   end
 

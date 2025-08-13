@@ -32,7 +32,7 @@ class CollaboratorPresenter
         {
           id: pa.product.external_id,
           name: pa.product.name,
-          percent_commission: pa.affiliate_percentage,
+          percent_commission: pa.affiliate_percentage || 0,
         }
       end
     end
@@ -48,7 +48,7 @@ class CollaboratorPresenter
           has_affiliates: product.direct_affiliates.alive.exists?,
           published: product.published?,
           enabled: product_affiliate.present?,
-          percent_commission: product_affiliate&.affiliate_percentage,
+          percent_commission: product_affiliate&.affiliate_percentage || 0,
           dont_show_as_co_creator: product_affiliate&.dont_show_as_co_creator || false,
         }
       end

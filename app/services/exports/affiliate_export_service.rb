@@ -55,7 +55,7 @@ class Exports::AffiliateExportService
         "Affiliate ID" => affiliate.external_id_numeric,
         "Name" => affiliate.affiliate_user.name.presence || affiliate.affiliate_user.username,
         "Email" => affiliate.affiliate_user.email,
-        "Fee" => "#{affiliate.affiliate_percentage} %",
+        "Fee" => "#{affiliate.affiliate_percentage || 0} %",
         "Sales ($)" => MoneyFormatter.format(affiliate.total_amount_cents, :usd, symbol: false),
         "Products" => affiliate.products.map(&:name),
         "Referral URL" => affiliate.referral_url,

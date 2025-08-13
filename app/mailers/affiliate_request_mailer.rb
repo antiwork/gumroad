@@ -30,7 +30,7 @@ class AffiliateRequestMailer < ApplicationMailer
         {
           name: affiliated_product.name,
           url: direct_affiliate.referral_url_for_product(affiliated_product),
-          commission: "#{direct_affiliate.affiliate_percentage}%"
+          commission: "#{direct_affiliate.affiliate_percentage || 0}%"
         }
       end
 

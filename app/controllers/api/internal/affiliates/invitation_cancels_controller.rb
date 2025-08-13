@@ -10,8 +10,14 @@ class Api::Internal::Affiliates::InvitationCancelsController < Api::Internal::Ba
     authorize @invitation, :cancel?
 
     ActiveRecord::Base.transaction do
-      @invitation.destroy!
-      @affiliate.mark_deleted!
+           @invitation.with_lock do
+              @invitation.reload
+              if @invitation.respond_to?(:pending?) && !@invitation.pending?
+                raise ActiveRecord::RecordInvalid.new(@invitation)
+              end
+              @invitation.destroy!
+        @affiliate.mark_deleted!
+      end
     end
     head :ok
   end

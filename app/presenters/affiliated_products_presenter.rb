@@ -64,7 +64,7 @@ class AffiliatedProductsPresenter
             affiliate_id: affiliate.external_id,
             product_name: product[:name],
             seller_name: seller.name_or_username,
-            fee_percentage: product[:fee_percent],
+            fee_percentage: product[:fee_percent] || 0,
             url: product[:referral_url],
           }
         end
