@@ -9,8 +9,6 @@ class Products::AffiliatedPolicy < ApplicationPolicy
   end
 
   def destroy?
-    # Allow users to remove themselves from affiliations
-    # The actual affiliate record authorization is handled in the controller
     true
   end
 end
