@@ -8,4 +8,8 @@ class AffiliateInvitationPolicy < ApplicationPolicy
   def decline?
     accept?
   end
+
+  def cancel?
+    user == record.affiliate.seller
+  end
 end

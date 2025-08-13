@@ -22,10 +22,12 @@ class AffiliatesPresenter
 
     affiliates = direct_affiliates.map(&:as_json)
     affiliate_requests = should_get_affiliate_requests ? fetch_affiliate_requests : []
+    pending_invitations = fetch_pending_invitations
 
     {
       affiliate_requests:,
       affiliates:,
+      pending_invitations:,
       pagination: PagyPresenter.new(pagination).props,
       allow_approve_all_requests: Feature.active?(:auto_approve_affiliates, seller),
       affiliates_disabled_reason: seller.has_brazilian_stripe_connect_account? ? "Affiliates with Brazilian Stripe accounts are not supported." : nil,
@@ -101,5 +103,25 @@ class AffiliatesPresenter
         affiliate_requests.unattended_or_approved_but_awaiting_requester_to_sign_up.includes(:seller).
         order(created_at: :desc, id: :desc).
         map { _1.as_json(pundit_user:) }
+    end
+
+    def fetch_pending_invitations
+      seller.direct_affiliates
+            .invitation_pending
+            .alive
+            .includes(:affiliate_user, :affiliate_invitation, product_affiliates: :product)
+            .order(created_at: :desc)
+            .map do |affiliate|
+              {
+                id: affiliate.external_id,
+                email: affiliate.affiliate_user.email,
+                affiliate_user_name: affiliate.affiliate_user.display_name(prefer_email_over_default_username: true),
+                products: affiliate.enabled_products,
+                destination_url: affiliate.destination_url,
+                fee_percent: affiliate.affiliate_percentage,
+                apply_to_all_products: affiliate.apply_to_all_products,
+                invitation_created_at: affiliate.affiliate_invitation.created_at.iso8601,
+              }
+            end
     end
 end

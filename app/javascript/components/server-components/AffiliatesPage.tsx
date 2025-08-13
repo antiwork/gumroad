@@ -24,8 +24,10 @@ import { updateAffiliateRequest, approvePendingAffiliateRequests } from "$app/da
 import {
   getPagedAffiliates,
   removeAffiliate,
+  cancelAffiliateInvitation,
   Affiliate,
   AffiliateRequest,
+  PendingInvitation,
   PagedAffiliatesData,
   getOnboardingAffiliateData,
   AffiliateRequestPayload,
@@ -326,6 +328,92 @@ const AffiliateRequestsTable = ({
   );
 };
 
+const PendingInvitationsTable = ({ pendingInvitations }: { pendingInvitations: PendingInvitation[] }) => {
+  const userAgentInfo = useUserAgentInfo();
+  const loggedInUser = useLoggedInUser();
+  const [cancellingInvitations, setCancellingInvitations] = React.useState<Set<string>>(new Set());
+
+  const formatAffiliateBasisPoints = (basisPoints: number) =>
+    (basisPoints / 100).toLocaleString([], { style: "percent" });
+
+  const formattedFeePercentLabel = (invitation: PendingInvitation) => {
+    if (invitation.apply_to_all_products) return formatAffiliateBasisPoints(invitation.fee_percent);
+
+    const productCommissions = invitation.products.map((product) => product.fee_percent ?? 0);
+    const minFeePercent = Math.min(...productCommissions);
+    const maxFeePercent = Math.max(...productCommissions);
+    return minFeePercent === maxFeePercent
+      ? formatAffiliateBasisPoints(minFeePercent)
+      : `${formatAffiliateBasisPoints(minFeePercent)} - ${formatAffiliateBasisPoints(maxFeePercent)}`;
+  };
+
+  const productName = (products: PendingInvitation["products"]) =>
+    products.length === 1 ? (products[0]?.name ?? "") : `${products.length} products`;
+
+  const handleCancel = asyncVoid(async (invitationId: string) => {
+    setCancellingInvitations((prev) => new Set(prev).add(invitationId));
+    try {
+      await cancelAffiliateInvitation(invitationId);
+      showAlert("Invitation cancelled successfully", "success");
+      window.location.reload();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Failed to cancel invitation", "error");
+    } finally {
+      setCancellingInvitations((prev) => {
+        const next = new Set(prev);
+        next.delete(invitationId);
+        return next;
+      });
+    }
+  });
+
+  return pendingInvitations.length > 0 ? (
+    <table>
+      <caption>Outgoing invites</caption>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Products</th>
+          <th>Commission</th>
+          <th>Invited</th>
+          <th />
+        </tr>
+      </thead>
+
+      <tbody>
+        {pendingInvitations.map((invitation) => (
+          <tr key={invitation.id}>
+            <td data-label="Name">
+              {invitation.affiliate_user_name}
+              <small>{invitation.email}</small>
+            </td>
+            <td data-label="Products">{productName(invitation.products)}</td>
+            <td data-label="Commission">{formattedFeePercentLabel(invitation)}</td>
+            <td data-label="Invited">
+              {parseISO(invitation.invitation_created_at).toLocaleDateString(userAgentInfo.locale)}
+            </td>
+            <td>
+              <div className="actions">
+                <Button
+                  color="danger"
+                  onClick={() => handleCancel(invitation.id)}
+                  disabled={!loggedInUser?.policies.direct_affiliate.update || cancellingInvitations.has(invitation.id)}
+                  aria-label="Cancel invitation"
+                >
+                  {cancellingInvitations.has(invitation.id) ? "Cancelling..." : "Cancel"}
+                </Button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  ) : (
+    <div className="placeholder">No outgoing invites</div>
+  );
+};
+
 const formattedSalesVolumeAmount = (amountCents: number) =>
   formatPriceCentsWithCurrencySymbol("usd", amountCents, { symbolFormat: "short" });
 
@@ -344,7 +432,7 @@ const AffiliatesTab = () => {
 
   const data = cast<PagedAffiliatesData>(useLoaderData());
   const [affiliateRequests] = React.useState(data.affiliate_requests);
-  const { allow_approve_all_requests: allowApproveAllRequests, affiliates, pagination } = data;
+  const { allow_approve_all_requests: allowApproveAllRequests, affiliates, pagination, pending_invitations } = data;
   const [selectedAffiliate, setSelectedAffiliate] = React.useState<Affiliate | null>(null);
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
   const searchQuery = searchParams.get("query") ?? "";
@@ -469,6 +557,9 @@ const AffiliatesTab = () => {
           <>
             {affiliateRequests.length > 0 && !searchQuery && pagination.page === 1 ? (
               <AffiliateRequestsTable affiliateRequests={affiliateRequests} allowApproveAll={allowApproveAllRequests} />
+            ) : null}
+            {pending_invitations.length > 0 && !searchQuery && pagination.page === 1 ? (
+              <PendingInvitationsTable pendingInvitations={pending_invitations} />
             ) : null}
             {affiliates.length > 0 ? (
               <>
@@ -890,7 +981,13 @@ const routes: RouteObject[] = [
         shouldGetAffiliateRequests: SSR || request.url.endsWith("/affiliates"),
         abortSignal: request.signal,
       });
-      if (data.affiliates.length === 0 && data.affiliate_requests.length === 0 && !page && !query) {
+      if (
+        data.affiliates.length === 0 &&
+        data.affiliate_requests.length === 0 &&
+        data.pending_invitations.length === 0 &&
+        !page &&
+        !query
+      ) {
         return redirect("/affiliates/onboarding");
       }
       return data;

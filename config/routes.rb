@@ -883,6 +883,7 @@ Rails.application.routes.draw do
           scope module: :affiliates do
             resources :invitation_acceptances, only: [:create]
             resources :invitation_declines, only: [:create]
+            resources :invitation_cancels, only: [:create]
           end
           collection do
             get :onboarding

@@ -44,6 +44,17 @@ export type AffiliateRequest = {
   state: "created" | "approved" | "ignored";
 };
 
+export type PendingInvitation = {
+  id: string;
+  email: string;
+  affiliate_user_name: string;
+  products: AffiliateProductInfo[];
+  destination_url: string | null;
+  fee_percent: number;
+  apply_to_all_products: boolean;
+  invitation_created_at: string;
+};
+
 export type AffiliateRequestPayload = {
   id?: string;
   email: string;
@@ -77,6 +88,7 @@ export type AffiliateSignupFormPageData = {
 export type PagedAffiliatesData = {
   affiliate_requests: AffiliateRequest[];
   affiliates: Affiliate[];
+  pending_invitations: PendingInvitation[];
   pagination: PaginationProps;
   allow_approve_all_requests: boolean;
   affiliates_disabled_reason: string | null;
@@ -112,6 +124,16 @@ export async function removeAffiliate(id: string) {
   const response = await request({ method: "DELETE", accept: "json", url: Routes.internal_affiliate_path(id) });
   const parsed = cast<{ success: boolean }>(await response.json());
   if (!response.ok || !parsed.success) throw new ResponseError();
+}
+
+export async function cancelAffiliateInvitation(affiliateId: string) {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_affiliate_invitation_cancels_path(affiliateId),
+  });
+
+  if (!response.ok) throw new ResponseError();
 }
 
 export function getPagedAffiliates({
