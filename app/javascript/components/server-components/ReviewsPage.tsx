@@ -5,7 +5,7 @@ import { ProductNativeType } from "$app/parsers/product";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { useDomains } from "$app/components/DomainSettings";
+import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
@@ -54,7 +54,7 @@ const ReviewsPage = ({
   purchases: { id: string; email_digest: string; product: Product }[];
   following_wishlists_enabled: boolean;
 }) => {
-  const { rootDomain } = useDomains();
+  const discoverUrl = useDiscoverUrl();
 
   const [reviews, setReviews] = React.useState(initialReviews);
   const [purchases, setPurchases] = React.useState(initialPurchases);
@@ -128,7 +128,7 @@ const ReviewsPage = ({
         <section>
           <div className="placeholder">
             <h2>You've reviewed all your products!</h2>
-            <NavigationButton href={Routes.root_url({ host: rootDomain })} color="accent">
+            <NavigationButton href={discoverUrl} color="accent">
               Discover more
             </NavigationButton>
           </div>
@@ -142,7 +142,7 @@ const ReviewsPage = ({
             </figure>
             <h2>You haven't bought anything... yet!</h2>
             Once you do, it'll show up here so you can review them.
-            <NavigationButton href={Routes.root_url({ host: rootDomain })} color="accent">
+            <NavigationButton href={discoverUrl} color="accent">
               Discover products
             </NavigationButton>
             <a href="#" data-helper-prompt="What are reviews and how can I remove reviews I've written?">

@@ -554,7 +554,10 @@ const DiscountsPage = ({
                       ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
                       : null;
                   return (
-                    <div key={product.id}>
+                    <div
+                      key={product.id}
+                      style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}
+                    >
                       <div>
                         <h5>{product.name}</h5>
                         {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
