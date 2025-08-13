@@ -87,7 +87,7 @@ class DirectAffiliate < Affiliate
         name: product.name,
         volume_cents: credit&.volume_cents || 0,
         sales_count: credit&.sales_count || 0,
-        fee_percent: (product_affiliate&.affiliate_percentage || affiliate_percentage || 0),
+        fee_percent: (product_affiliate&.affiliate_percentage || affiliate_percentage ),
         referral_url: referral_url_for_product(product),
         destination_url: product_affiliate&.destination_url,
       }
