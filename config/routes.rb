@@ -64,6 +64,7 @@ Rails.application.routes.draw do
           put :refund
         end
       end
+      resources :payouts, only: [:index, :show]
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
