@@ -5,6 +5,10 @@ class AffiliateInvitation < ApplicationRecord
 
   belongs_to :affiliate, foreign_key: :affiliate_id
 
+  def pending?
+    affiliate.status == "pending"
+  end
+
   def accept!
     destroy!
     AffiliateMailer.affiliate_invitation_accepted(affiliate_id).deliver_later

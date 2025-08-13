@@ -46,6 +46,26 @@ describe Api::Internal::Affiliates::InvitationCancelsController do
           post :create, params: { affiliate_id: affiliate.external_id }, format: :json
         end.to raise_error(ActionController::RoutingError)
       end
+
+      it "returns unprocessable entity when invitation is no longer pending (race condition)" do
+        # Simulate the invitation no longer being pending (e.g., accepted elsewhere)
+        allow_any_instance_of(AffiliateInvitation).to receive(:pending?).and_return(false)
+
+        post :create, params: { affiliate_id: affiliate.external_id }, format: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)).to have_key("errors")
+        expect(invitation.reload).to be_present
+        expect(affiliate.reload.deleted?).to eq(false)
+      end
+
+      it "uses row-level locking to prevent race conditions" do
+        expect_any_instance_of(AffiliateInvitation).to receive(:with_lock).and_call_original
+
+        post :create, params: { affiliate_id: affiliate.external_id }, format: :json
+
+        expect(response).to have_http_status(:ok)
+      end
     end
 
     context "when logged in as a different user" do
