@@ -18,9 +18,9 @@ class AffiliateMailer < ApplicationMailer
     product = @products.first
     @product_name = @products.one? ? product[:name] : pluralize(@direct_affiliate.products.count, "product")
     @affiliate_percentage_text = if @products.many? && @products.first[:fee_percent] != @products.last[:fee_percent]
-      "#{@products.last[:fee_percent] || 0} - #{product[:fee_percent] || 0}%"
+      "#{@products.last[:fee_percent]} - #{product[:fee_percent]}%"
     else
-      "#{product[:fee_percent] || 0}%"
+      "#{product[:fee_percent]}%"
     end
     @affiliate_referral_url = affiliate_referral_url
     @final_destination_url = @products.one? ? product[:destination_url] : @direct_affiliate.final_destination_url
