@@ -24,7 +24,7 @@ class Api::Internal::Affiliates::InvitationCancelsController < Api::Internal::Ba
 
   private
     def set_affiliate!
-      @affiliate = current_seller.direct_affiliates.alive.find_by_external_id!(params[:affiliate_id])
+      @affiliate = DirectAffiliate.alive.find_by_external_id!(params[:affiliate_id])
     end
 
     def set_invitation!
