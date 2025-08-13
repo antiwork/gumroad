@@ -856,7 +856,7 @@ class User < ApplicationRecord
   end
 
   def eligible_for_instant_payouts?
-    !suspended? &&
+    compliant? &&
       !payouts_paused? &&
       payments.completed.count >= 4 &&
       alive_user_compliance_info&.legal_entity_country_code == "US"
