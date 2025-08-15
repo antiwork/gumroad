@@ -75,13 +75,7 @@ export const ShareTab = () => {
                   View
                 </a>
               </div>
-            ) : (
-              <div role="status" className="info">
-                <div>
-                  {product.name} is not listed on Gumroad Discover. To be eligible, ensure you have a category selected, ratings enabled, and have made at least one successful sale.
-                </div>
-              </div>
-            )}
+            ) : null}
             <div className="paragraphs">
               <p>
                 Gumroad Discover recommends your products to prospective customers for a flat 30% fee on each sale,
@@ -132,7 +126,7 @@ const DiscoverEligibilityPromo = () => {
       <div>
         To appear on Gumroad Discover, make sure to meet all the{" "}
         <a data-helper-prompt="What are the eligibility criteria for Gumroad Discover?">eligibility criteria</a>, which
-        includes completing the Risk Review process explained in detail{" "}
+        includes completing the Risk Review process and making at least one successful sale. Learn more{" "}
         <a data-helper-prompt="How do I complete the Risk Review process?">here</a>.
       </div>
       <button
