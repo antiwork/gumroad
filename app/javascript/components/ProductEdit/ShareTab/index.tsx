@@ -75,7 +75,13 @@ export const ShareTab = () => {
                   View
                 </a>
               </div>
-            ) : null}
+            ) : (
+              <div role="status" className="info">
+                <div>
+                  {product.name} is not listed on Gumroad Discover. To be eligible, ensure you have a category selected, ratings enabled, and have made at least one successful sale.
+                </div>
+              </div>
+            )}
             <div className="paragraphs">
               <p>
                 Gumroad Discover recommends your products to prospective customers for a flat 30% fee on each sale,
