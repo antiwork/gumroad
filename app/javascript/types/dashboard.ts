@@ -1,4 +1,4 @@
-// Dashboard SPA Type Definitions
+import type { ComponentType } from 'react';
 
 export interface DashboardProps {
   user_name?: string;
@@ -45,15 +45,12 @@ export interface LoadingState {
   error: string | null;
 }
 
-// Route definitions
 export interface RouteConfig {
   path: string;
   label: string;
   icon: string;
-  component?: React.ComponentType;
+  component?: ComponentType;
 }
-
-// API endpoints
 export const API_ENDPOINTS = {
   ANALYTICS: '/internal/dashboard/analytics',
   STATS: '/internal/dashboard/stats',
