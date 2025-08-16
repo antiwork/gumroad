@@ -476,6 +476,12 @@ Rails.application.routes.draw do
         get :paged, on: :collection
         get :statistics, on: :member
       end
+      resources :discount_collections, only: %i[index show create update destroy] do
+        get :paged, on: :collection
+        get :export_csv, on: :member
+        post :quick_create_code, on: :member
+        post :bulk_create_codes, on: :member
+      end
       resources :upsells, only: %i[index create update destroy] do
         get :paged, on: :collection
         get :cart_item, on: :collection

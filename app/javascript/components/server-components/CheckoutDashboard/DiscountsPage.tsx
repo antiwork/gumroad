@@ -65,6 +65,7 @@ export type OfferCode = {
   duration_in_billing_cycles: Duration | null;
   minimum_quantity: number | null;
   minimum_amount_cents: number | null;
+  discount_collection?: { id: string; name: string } | null;
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -72,6 +73,8 @@ export type QueryParams = {
   sort: Sort<SortKey> | null;
   query: string | null;
   page: number | null;
+  collection_filter?: string | null;
+  collection_id?: string | null;
 };
 
 const formatProducts = (offerCode: OfferCode) => {
@@ -112,10 +115,14 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
   const query = rawParams.get("query");
   const pageStr = rawParams.get("page");
   const page = pageStr ? parseInt(pageStr, 10) : 1;
+  const collection_filter = rawParams.get("collection_filter");
+  const collection_id = rawParams.get("collection_id");
   return {
     query: query ? decodeURIComponent(query) : "",
     sort,
     page,
+    collection_filter,
+    collection_id,
   };
 };
 
@@ -125,11 +132,13 @@ const DiscountsPage = ({
   offer_codes,
   pages,
   products,
+  collections,
   pagination: initialPagination,
 }: {
   pages: Page[];
   offer_codes: OfferCode[];
   products: Product[];
+  collections: { id: string; name: string }[];
   pagination: PaginationProps;
 }) => {
   const loggedInUser = useLoggedInUser();
@@ -172,10 +181,14 @@ const DiscountsPage = ({
     const newSort = params.sort;
     const newQuery = params.query;
     const page = params.page ?? 1;
+    const newCollectionFilter = params.collection_filter ?? "not_in_collections";
+    const newCollectionId = params.collection_id ?? null;
     setSort(newSort);
     setSearchQuery(newQuery);
+    setCollectionFilter(newCollectionFilter);
     setState({ offerCodes, pagination: { ...pagination, page } });
-    loadDiscounts({ page, query: newQuery, sort: newSort, keepUrl: true });
+    const collectionFilterValue = newCollectionFilter === 'all' ? 'all' : newCollectionFilter;
+    loadDiscounts({ page, query: newQuery, sort: newSort, collection_filter: collectionFilterValue, collection_id: newCollectionId, keepUrl: true });
   });
   const setUrlQueryParams = (params: QueryParams): void => {
     const currentUrl = new URL(window.location.href);
@@ -184,6 +197,8 @@ const DiscountsPage = ({
       query: params.query || null,
       sort: params.sort?.direction || null,
       column: params.sort?.key || null,
+      collection_filter: params.collection_filter || null,
+      collection_id: params.collection_id || null,
     });
     if (newUrl.toString() !== window.location.href) window.history.pushState(params, document.title, newUrl.toString());
   };
@@ -191,10 +206,12 @@ const DiscountsPage = ({
   const resetQueryState = () => {
     setSort(null);
     setSearchQuery(null);
+    setCollectionFilter("not_in_collections");
     setUrlQueryParams({
       query: null,
       sort: null,
       page: null,
+      collection_filter: "not_in_collections",
     });
   };
 
@@ -207,7 +224,9 @@ const DiscountsPage = ({
 
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(initialQueryParams.sort);
   const thProps = useSortingTableDriver<SortKey>(sort, (newSort) => {
-    loadDiscounts({ page: 1, query: searchQuery, sort: newSort });
+    const collectionId = collectionFilter.startsWith('specific_collection_') ? collectionFilter.replace('specific_collection_', '') : null;
+    const collectionFilterValue = collectionFilter === 'all' ? 'all' : collectionFilter;
+    loadDiscounts({ page: 1, query: searchQuery, sort: newSort, collection_filter: collectionFilterValue, collection_id: collectionId });
     setSort(newSort);
   });
 
@@ -215,7 +234,10 @@ const DiscountsPage = ({
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const loadDiscounts = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
+  // Collection filter - hide collection discounts by default
+  const [collectionFilter, setCollectionFilter] = React.useState<string>(initialQueryParams.collection_filter ?? "not_in_collections");
+
+  const loadDiscounts = asyncVoid(async ({ page, query, sort, collection_filter, collection_id, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
     try {
       activeRequest.current?.cancel();
       setIsLoading(true);
@@ -225,9 +247,11 @@ const DiscountsPage = ({
           query,
           sort,
           page: pagination.pages > 1 ? page : null,
+          collection_filter: collection_filter ?? null,
+          collection_id: collection_id ?? null,
         });
 
-      const request = getPagedDiscounts(page || 1, query, sort);
+      const request = getPagedDiscounts(page || 1, query, sort, collection_filter, collection_id);
       activeRequest.current = request;
 
       const { offer_codes: offerCodes, pagination: newPagination } = await request.response;
@@ -241,9 +265,17 @@ const DiscountsPage = ({
     }
   });
 
-  const reloadDiscounts = () => loadDiscounts({ page: pagination.page, query: searchQuery, sort });
+  const reloadDiscounts = () => {
+    const collectionId = collectionFilter.startsWith('specific_collection_') ? collectionFilter.replace('specific_collection_', '') : null;
+    const collectionFilterValue = collectionFilter === 'all' ? 'all' : collectionFilter;
+    loadDiscounts({ page: pagination.page, query: searchQuery, sort, collection_filter: collectionFilterValue, collection_id: collectionId });
+  };
 
-  const debouncedLoadDiscounts = useDebouncedCallback(() => loadDiscounts({ page: 1, query: searchQuery, sort }), 300);
+  const debouncedLoadDiscounts = useDebouncedCallback(() => {
+    const collectionId = collectionFilter.startsWith('specific_collection_') ? collectionFilter.replace('specific_collection_', '') : null;
+    const collectionFilterValue = collectionFilter === 'all' ? 'all' : collectionFilter;
+    loadDiscounts({ page: 1, query: searchQuery, sort, collection_filter: collectionFilterValue, collection_id: collectionId });
+  }, 300);
 
   React.useEffect(() => {
     if (isSearchPopoverOpen) searchInputRef.current?.focus();
@@ -306,6 +338,121 @@ const DiscountsPage = ({
               />
             </div>
           </Popover>
+          <Popover
+            aria-label="Collection Filter"
+            trigger={
+              <Button
+                color="primary"
+                className={cx({ active: collectionFilter !== "not_in_collections" })}
+              >
+                <Icon name="filter" />
+                Collection Filter
+              </Button>
+            }
+          >
+            <div style={{ display: "grid", gap: "var(--spacer-2)", padding: "var(--spacer-2)" }}>
+              <label>
+                <input
+                  type="radio"
+                  name="collection_filter"
+                  value="not_in_collections"
+                  checked={collectionFilter === "not_in_collections"}
+                  onChange={(e) => {
+                    setCollectionFilter(e.target.value);
+                    loadDiscounts({ page: 1, query: searchQuery, sort, collection_filter: e.target.value });
+                  }}
+                />
+                Hide Collection Discounts
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="collection_filter"
+                  value="in_collections"
+                  checked={collectionFilter === "in_collections"}
+                  onChange={(e) => {
+                    setCollectionFilter(e.target.value);
+                    loadDiscounts({ page: 1, query: searchQuery, sort, collection_filter: e.target.value });
+                  }}
+                />
+                Show Only Collection Discounts
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="collection_filter"
+                  value="all"
+                  checked={collectionFilter === "all"}
+                  onChange={(e) => {
+                    setCollectionFilter(e.target.value);
+                    loadDiscounts({ page: 1, query: searchQuery, sort, collection_filter: "all" });
+                  }}
+                />
+                Show All Discounts
+              </label>
+              {collections.length > 0 && (
+                <>
+                  <hr />
+                  <div>Specific Collections:</div>
+                  {collections.map((collection) => (
+                    <label key={collection.id}>
+                      <input
+                        type="radio"
+                        name="collection_filter"
+                        value={`specific_collection_${collection.id}`}
+                        checked={collectionFilter === `specific_collection_${collection.id}`}
+                        onChange={(e) => {
+                          setCollectionFilter(e.target.value);
+                          loadDiscounts({
+                            page: 1,
+                            query: searchQuery,
+                            sort,
+                            collection_filter: "specific_collection",
+                            collection_id: collection.id
+                          });
+                        }}
+                      />
+                      {collection.name}
+                    </label>
+                  ))}
+                </>
+              )}
+            </div>
+          </Popover>
+          <Button
+            color="primary"
+            onClick={() => {
+              const params = new URLSearchParams();
+              params.append('format', 'csv');
+              if (searchQuery) params.append('query', searchQuery);
+              if (sort) {
+                params.append('column', sort.key);
+                params.append('sort', sort.direction);
+              }
+              if (collectionFilter && collectionFilter !== 'all') {
+                params.append('collection_filter', collectionFilter);
+                if (collectionFilter.startsWith('specific_collection_')) {
+                  const collectionId = collectionFilter.replace('specific_collection_', '');
+                  params.append('collection_filter', 'specific_collection');
+                  params.append('collection_id', collectionId);
+                }
+              } else if (collectionFilter === 'all') {
+                params.append('collection_filter', 'all');
+              }
+
+              const url = `${window.location.origin}/checkout/discounts?${params.toString()}`;
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `discounts-${new Date().toISOString().split('T')[0]}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              showAlert("Discounts downloaded!", "success");
+            }}
+          >
+            <Icon name="download" />
+            Export Filtered
+          </Button>
           <Button
             color="accent"
             onClick={() => {
@@ -355,7 +502,14 @@ const DiscountsPage = ({
                             >
                               {offerCode.code.toUpperCase()}
                             </div>
-                            <b>{offerCode.name}</b>
+                            <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
+                              <b>{offerCode.name}</b>
+                              {offerCode.discount_collection && (
+                                <div className="pill small" style={{ background: "var(--blue-100)", color: "var(--blue-700)" }}>
+                                  {offerCode.discount_collection.name}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <small>
                             {formatAmount(offerCode)} off of {formatProducts(offerCode)}
@@ -421,6 +575,28 @@ const DiscountsPage = ({
                             }
                           >
                             <div role="menu">
+                              <CopyToClipboard text={offerCode.code}>
+                                <div role="menuitem">
+                                  <Icon name="outline-duplicate" />
+                                  &ensp;Copy Code
+                                </div>
+                              </CopyToClipboard>
+                              <div
+                                role="menuitem"
+                                onClick={() => {
+                                  const url = `${window.location.origin}/checkout/discounts/${offerCode.id}/statistics`;
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `${offerCode.code}-statistics.csv`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  showAlert("Statistics downloaded!", "success");
+                                }}
+                              >
+                                <Icon name="download" />
+                                &ensp;Download Statistics
+                              </div>
                               <div
                                 role="menuitem"
                                 inert={!offerCode.can_update || isLoading}
@@ -463,7 +639,11 @@ const DiscountsPage = ({
             </table>
             {pagination.pages > 1 ? (
               <Pagination
-                onChangePage={(newPage) => loadDiscounts({ page: newPage, query: searchQuery, sort })}
+                onChangePage={(newPage) => {
+                  const collectionId = collectionFilter.startsWith('specific_collection_') ? collectionFilter.replace('specific_collection_', '') : null;
+                  const collectionFilterValue = collectionFilter === 'all' ? 'all' : collectionFilter;
+                  loadDiscounts({ page: newPage, query: searchQuery, sort, collection_filter: collectionFilterValue, collection_id: collectionId });
+                }}
                 pagination={pagination}
               />
             ) : null}
@@ -759,6 +939,9 @@ const Form = ({
     ({ is_tiered_membership }) => is_tiered_membership,
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
+  const [selectedCollectionId, setSelectedCollectionId] = React.useState<string | null>(
+    offerCode?.discount_collection?.id ?? null
+  );
 
   const uid = React.useId();
 
@@ -808,6 +991,7 @@ const Form = ({
       minimum_quantity: hasMinimumQuantity ? minimumQuantity.value : null,
       duration_in_billing_cycles: canSetDuration ? durationInBillingCycles : null,
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
+      discount_collection: selectedCollectionId ? { id: selectedCollectionId, name: "" } : null,
     });
   };
 
@@ -871,6 +1055,24 @@ const Form = ({
                 <Icon name="outline-refresh" />
               </Button>
             </div>
+          </fieldset>
+          <fieldset>
+            <legend>
+              <label htmlFor={`${uid}collection`}>Add to collection (optional)</label>
+            </legend>
+            <Select
+              inputId={`${uid}collection`}
+              instanceId={`${uid}collection`}
+              options={[]} // TODO: Load collections from API
+              value={selectedCollectionId ? [{ id: selectedCollectionId, label: "Selected Collection" }] : []}
+              isClearable
+              placeholder="Choose a collection to organize this discount code"
+              onChange={(selectedIds) => {
+                const selectedArray = Array.isArray(selectedIds) ? selectedIds : selectedIds ? [selectedIds] : [];
+                setSelectedCollectionId(selectedArray[0]?.id ?? null);
+              }}
+            />
+            <small>Add this discount code to a collection to organize related codes together</small>
           </fieldset>
           <fieldset className={cx({ danger: selectedProductIds.error })}>
             <legend>

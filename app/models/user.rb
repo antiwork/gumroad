@@ -69,6 +69,7 @@ class User < ApplicationRecord
   has_many :imported_customers, foreign_key: :importing_user_id
   has_many :invites, foreign_key: :sender_id
   has_many :offer_codes
+  has_many :discount_collections
   has_many :user_compliance_infos
   has_many :user_compliance_info_requests
   has_many :workflows, foreign_key: :seller_id

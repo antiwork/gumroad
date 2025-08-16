@@ -2,6 +2,6 @@
 
 module CheckoutDashboardHelper
   def pages
-    ["discounts", "form", "upsells"]
+    ["discounts", "discount_collections", "form", "upsells"]
   end
 end

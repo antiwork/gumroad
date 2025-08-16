@@ -26,6 +26,12 @@ class Checkout::DiscountsPresenter
           is_tiered_membership: product.is_tiered_membership?,
         }
       end,
+      collections: pundit_user.seller.discount_collections.alive.map do |collection|
+        {
+          id: collection.external_id,
+          name: collection.name
+        }
+      end,
     }
   end
 
@@ -53,6 +59,10 @@ class Checkout::DiscountsPresenter
       minimum_quantity: offer_code.minimum_quantity,
       duration_in_billing_cycles: offer_code.duration_in_billing_cycles,
       minimum_amount_cents: offer_code.minimum_amount_cents,
+      discount_collection: offer_code.discount_collection ? {
+        id: offer_code.discount_collection.external_id,
+        name: offer_code.discount_collection.name
+      } : nil,
     }
   end
 end
