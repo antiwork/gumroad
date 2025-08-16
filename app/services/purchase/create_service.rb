@@ -13,10 +13,6 @@ class Purchase::CreateService < Purchase::BaseService
     @product = product
     @params = params
     @purchase_params = params[:purchase]
-    # TODO discount codes cleanup
-    if @purchase_params[:offer_code_name].present?
-      @purchase_params[:discount_code] = @purchase_params.delete(:offer_code_name)
-    end
     @gift_params = params[:gift].presence
     @buyer = buyer
   end
