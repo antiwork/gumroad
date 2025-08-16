@@ -8,6 +8,7 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
     let(:user) { create(:user, name: "Gum") }
 
     before do
+      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(true)
       login_as user
     end
 
@@ -81,6 +82,18 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
       login_as creator
       visit settings_payments_path
       expect(page).to have_link(text: "Connect with Paypal", inert: false)
+    end
+
+    it "keeps the PayPal Connect button disabled and shows the eligibility requirements when the user is not eligible" do
+      create(:user_compliance_info, user:)
+      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
+
+      visit settings_payments_path
+      expect(page).to have_link(text: "Connect with Paypal", inert: true)
+      expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
+      expect(page).to have_text("Your account must be marked as compliant")
+      expect(page).to have_text("You must have earned at least $100")
+      expect(page).to have_text("You must have received at least one successful payout")
     end
 
     context "when logged user has role admin" do

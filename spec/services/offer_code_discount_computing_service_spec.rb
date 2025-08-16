@@ -3,16 +3,17 @@
 require "spec_helper"
 
 describe OfferCodeDiscountComputingService do
-  let(:product) { create(:product, user: create(:user), price_cents: 2000, price_currency_type: "usd") }
-  let(:product2) { create(:product, user: product.user, price_cents: 2000, price_currency_type: "usd") }
-  let(:universal_offer_code) { create(:universal_offer_code, user: product.user, amount_percentage: 100, amount_cents: nil, currency_type: product.price_currency_type) }
-  let(:offer_code) { create(:offer_code, products: [product], amount_percentage: 100, amount_cents: nil, currency_type: product.price_currency_type) }
-  let(:zero_percent_discount_code) { create(:offer_code, products: [product], amount_percentage: 0, amount_cents: nil, currency_type: product.price_currency_type) }
-  let(:zero_cents_discount_code) { create(:offer_code, products: [product], amount_percentage: nil, amount_cents: 0, currency_type: product.price_currency_type) }
+  let(:seller) { create(:user) }
+  let(:product) { create(:product, user: seller, price_cents: 2000, price_currency_type: "usd") }
+  let(:product2) { create(:product, user: seller, price_cents: 2000, price_currency_type: "usd") }
+  let(:universal_offer_code) { create(:universal_offer_code, user: seller, amount_percentage: 100, amount_cents: nil, currency_type: product.price_currency_type) }
+  let(:offer_code) { create(:offer_code, user: seller, products: [product], amount_percentage: 100, amount_cents: nil, currency_type: product.price_currency_type) }
+  let(:zero_percent_discount_code) { create(:offer_code, user: seller, products: [product], amount_percentage: 0, amount_cents: nil, currency_type: product.price_currency_type) }
+  let(:zero_cents_discount_code) { create(:offer_code, user: seller, products: [product], amount_percentage: nil, amount_cents: 0, currency_type: product.price_currency_type) }
   let(:products_data) do
     {
-      product.id => { quantity: "3", permalink: product.unique_permalink },
-      product2.id => { quantity: "2", permalink: product2.unique_permalink }
+      product.unique_permalink => { quantity: "3", permalink: product.unique_permalink },
+      product2.unique_permalink => { quantity: "2", permalink: product2.unique_permalink }
     }
   end
 
@@ -45,7 +46,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq(
-      product.id => {
+      product.unique_permalink => {
         discount: {
           type: "percent",
           percents: universal_offer_code.amount,
@@ -56,7 +57,7 @@ describe OfferCodeDiscountComputingService do
           minimum_amount_cents: nil,
         },
       },
-      product2.id => {
+      product2.unique_permalink => {
         discount: {
           type: "percent",
           percents: universal_offer_code.amount,
@@ -76,7 +77,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq(
-      product2.id => {
+      product2.unique_permalink => {
         discount: {
           type: "percent",
           percents: universal_offer_code.amount,
@@ -94,7 +95,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq(
-      product.id => {
+      product.unique_permalink => {
         discount: {
           type: "percent",
           percents: offer_code.amount,
@@ -114,7 +115,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq(
-      product.id => {
+      product.unique_permalink => {
         discount: {
           type: "percent",
           percents: offer_code.amount,
@@ -134,7 +135,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq(
-      product.id => {
+      product.unique_permalink => {
         discount: {
           type: "percent",
           percents: offer_code.amount,
@@ -154,7 +155,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq(
-      product.id => {
+      product.unique_permalink => {
         discount: {
           type: "percent",
           percents: offer_code.amount,
@@ -174,7 +175,7 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(offer_code.code, products_data).process
 
     expect(result[:products_data]).to eq({})
-    expect(result[:error_code]).to eq(:exceeding_quantity)
+    expect(result[:error_code]).to eq(:insufficient_times_of_use)
   end
 
   context "when offer code is not yet valid" do
@@ -211,7 +212,7 @@ describe OfferCodeDiscountComputingService do
     it "returns insufficient quantity error code" do
       result = OfferCodeDiscountComputingService.new(offer_code.code, products_data).process
 
-      expect(result[:error_code]).to eq(:insufficient_quantity)
+      expect(result[:error_code]).to eq(:unmet_minimum_purchase_quantity)
       expect(result[:products_data]).to eq({})
     end
   end

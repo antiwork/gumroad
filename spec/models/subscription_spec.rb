@@ -2859,6 +2859,55 @@ describe Subscription, :vcr do
     end
   end
 
+  describe "#expected_completion_time", :freeze_time do
+    let(:t0) { Time.utc(2023, 1, 1, 12, 0, 0) }
+
+    it "returns nil for non fixed-length subscriptions" do
+      purchase = create(:membership_purchase)
+      subscription = purchase.subscription
+
+      expect(subscription.expected_completion_time).to be_nil
+    end
+
+    context "for fixed-length monthly memberships" do
+      it "calculates end_of_last_paid_period + period * remaining when some charges completed" do
+        travel_to(t0)
+
+        purchase = create(:membership_purchase, succeeded_at: t0)
+        subscription = purchase.subscription
+        subscription.update!(charge_occurrence_count: 3)
+
+        expected = purchase.succeeded_at + 3.months
+        expect(subscription.expected_completion_time).to eq(expected)
+      end
+
+      it "considers free_trial_ends_at during the free trial" do
+        travel_to(t0)
+
+        free_trial_purchase = create(:free_trial_membership_purchase, created_at: t0)
+        subscription = free_trial_purchase.subscription
+        subscription.update!(charge_occurrence_count: 3)
+
+        expected = subscription.free_trial_ends_at + 3.months
+        expect(subscription.expected_completion_time).to eq(expected)
+      end
+
+      it "equals end_of_last_paid_period when all required charges are completed" do
+        travel_to(t0)
+
+        purchase = create(:membership_purchase, succeeded_at: t0)
+        subscription = purchase.subscription
+        subscription.update!(charge_occurrence_count: 3)
+
+        create(:purchase, subscription:, link: subscription.link, succeeded_at: t0 + 1.month)
+        create(:purchase, subscription:, link: subscription.link, succeeded_at: t0 + 2.months)
+
+        expect(subscription.charges_completed?).to eq(true)
+        expect(subscription.expected_completion_time).to eq(subscription.end_time_of_last_paid_period)
+      end
+    end
+  end
+
   describe "#has_fixed_length?" do
     it "returns true if charge_occurrence_count is set" do
       subscription = build(:subscription, charge_occurrence_count: 1)

@@ -134,6 +134,43 @@ describe User::FeatureStatus do
     end
   end
 
+  describe "#paypal_connect_allowed?" do
+    let!(:seller) { create(:user) }
+
+    before do
+      seller.mark_compliant!(author_name: "Iffy")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+      create(:payment_completed, user: seller)
+    end
+
+    it "returns true if seller is compliant and has more than $100 in sales and a successful payout" do
+      expect(seller.paypal_connect_allowed?).to eq true
+    end
+
+    it "returns false if seller is not compliant" do
+      seller.update!(user_risk_state: "not_reviewed")
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+
+    it "returns false if seller does not have $100 in sales" do
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(99_00)
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+
+    it "returns false if seller does not have a successful payout" do
+      seller.payments.last.update!(state: "failed")
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+
+    it "returns false if seller does not meet any eligibility requirement" do
+      seller.update!(user_risk_state: "not_reviewed")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(99_00)
+      seller.payments.last.update!(state: "failed")
+
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+  end
+
   describe "#stripe_disconnect_allowed?" do
     it "returns true if there is no connected Stripe account" do
       creator = create(:user)
