@@ -352,7 +352,7 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def parse_url_parameters(url_parameters_string)
-      # Turns string into json object and removes reserved paramters
+      # Turns a URL parameter string into a JSON object.
       return nil if url_parameters_string.blank?
 
       url_parameters_string.tr!("'", "\"") if /{ *'/.match?(url_parameters_string)

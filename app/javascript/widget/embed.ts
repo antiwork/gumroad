@@ -19,7 +19,7 @@ const registerEmbed = (element: HTMLDivElement) => {
   url.searchParams.set("embed", "true");
   const gumroadParams = new URLSearchParams(element.dataset.gumroadParams);
   for (const [key, value] of gumroadParams.entries()) {
-    if (!RESERVED_URL_PARAMETERS.has(key)) {
+    if (!RESERVED_URL_PARAMETERS.has(key.toLowerCase())) {
       url.searchParams.set(key, value);
     }
   }
