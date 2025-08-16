@@ -28,6 +28,7 @@ class OfferCodeDiscountComputingService
       if eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
         products_data[link.unique_permalink] = { discount: offer_code.discount }
+        optimistically_apply_to_applicable_cross_sells(products_data, link, offer_code)
       else
         track_ineligibility(offer_code, purchase_quantity)
       end
@@ -44,6 +45,7 @@ class OfferCodeDiscountComputingService
 
     def links
       @_links ||= Link.visible
+        .includes({ cross_sells: :product })
         .where(unique_permalink: products.values.map { it[:permalink] })
     end
 
@@ -124,5 +126,19 @@ class OfferCodeDiscountComputingService
 
       PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY
         .find { @product_level_ineligibilities[it] }
+    end
+
+    # This is optimistic because additive cross-sells may not meet the minimum
+    # purchase quantity or the discount code may have been used up. The discount
+    # will still be validated and updated during checkout, where the buyer will
+    # be able to see the correct discount and adjust accordingly.
+    def optimistically_apply_to_applicable_cross_sells(products_data, link, offer_code)
+      discount = offer_code.discount
+
+      link.cross_sells
+        .filter { |cross_sell| offer_code.applicable?(cross_sell.product) }
+        .each do |cross_sell|
+          products_data[cross_sell.product.unique_permalink] = { discount: }
+        end
     end
 end
