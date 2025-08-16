@@ -1,0 +1,42 @@
+import React from "react";
+import { useLocation } from "react-router-dom";
+
+const getPageTitle = (pathname: string): string => {
+  if (pathname === "/dashboard" || pathname === "/") return "Dashboard";
+  if (pathname.includes("/sales")) return "Analytics";
+  if (pathname.includes("/audience")) return "Audience";
+  if (pathname.includes("/utm_links")) return "UTM Links";
+  if (pathname.includes("/products")) return "Products";
+  return "Dashboard";
+};
+
+export const DashboardHeader: React.FC = () => {
+  const location = useLocation();
+  const pageTitle = getPageTitle(location.pathname);
+
+  return (
+    <header className="bg-white border-b border-gray-200 px-6 py-4 ml-64">
+      <div className="flex items-center justify-between">
+        {/* Page Title */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {pageTitle === "Dashboard" && "Welcome to your creator dashboard"}
+            {pageTitle === "Analytics" && "Track your sales and performance"}
+            {pageTitle === "Audience" && "Understand your customers"}
+            {pageTitle === "UTM Links" && "Manage your marketing links"}
+            {pageTitle === "Products" && "Manage your products"}
+          </p>
+        </div>
+
+        {/* Header Actions */}
+        <div className="flex items-center space-x-4">
+          {/* Add any header actions here */}
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            New Product
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+};

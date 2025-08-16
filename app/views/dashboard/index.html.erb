@@ -1,2 +1,7 @@
 <%= load_pack("dashboard") %>
-<%= react_component "DashboardPage", props: @creator_home_props, prerender: true %>
+<div id="dashboard-spa-root"></div>
+<script>
+  // Initialize SPA with server props
+  window.DASHBOARD_PROPS = <%= @creator_home_props.to_json.html_safe %>;
+</script>
+<%= react_component "DashboardSPA", prerender: false %>

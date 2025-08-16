@@ -881,6 +881,10 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
+        # Dashboard SPA API endpoints
+        get 'dashboard/analytics', to: 'dashboard#analytics'
+        get 'dashboard/stats', to: 'dashboard#stats'
+        
         resources :affiliates, only: [:index, :show, :create, :update, :destroy] do
           collection do
             get :onboarding
