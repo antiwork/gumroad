@@ -19,16 +19,15 @@ class OfferCodeDiscountComputingService
   def process
     products_data = {}
 
-    products.each do |uid, product_info|
-      purchase_quantity = product_info[:quantity].to_i
-      link = find_link(product_info[:permalink])
+    links.each do |link|
+      purchase_quantity = products[link.unique_permalink][:quantity].to_i
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
 
       if eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
-        products_data[uid] = { discount: offer_code.discount }
+        products_data[link.unique_permalink] = { discount: offer_code.discount }
       else
         track_ineligibility(offer_code, purchase_quantity)
       end
@@ -46,11 +45,6 @@ class OfferCodeDiscountComputingService
     def links
       @_links ||= Link.visible
         .where(unique_permalink: products.values.map { it[:permalink] })
-    end
-
-    def find_link(permalink)
-      @_links_by_permalink ||= links.index_by(&:unique_permalink)
-      @_links_by_permalink[permalink]
     end
 
     def offer_codes
