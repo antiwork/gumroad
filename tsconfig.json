@@ -25,7 +25,8 @@
       "facebook-js-sdk",
       "gtag.js",
       "webpack-env",
-      "jwplayer"
+      "jwplayer",
+      "node"
     ],
     "allowJs": true,
     "resolveJsonModule": true,

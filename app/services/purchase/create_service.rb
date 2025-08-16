@@ -362,12 +362,7 @@ class Purchase::CreateService < Purchase::BaseService
                    rescue StandardError
                      nil
                    end
-      # TODO: Only filter on the frontend once the new checkout experience is rolled out
-      if url_params.present?
-        url_params.reject do |parameter_name, _parameter_value|
-          RESERVED_URL_PARAMETERS.include?(parameter_name)
-        end
-      end
+      url_params
     end
 end
 

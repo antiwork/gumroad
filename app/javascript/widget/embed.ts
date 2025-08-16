@@ -1,5 +1,5 @@
-import { is } from "ts-safe-cast";
 
+import { is } from "ts-safe-cast";
 import { HeightMessage, isValidHost, onLoad, parseProductURL } from "./utils";
 
 const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumroad-embed.js']");
@@ -17,7 +17,12 @@ const registerEmbed = (element: HTMLDivElement) => {
   if (!url) return;
   url.searchParams.set("embed", "true");
   const gumroadParams = new URLSearchParams(element.dataset.gumroadParams);
-  for (const [key, value] of gumroadParams.entries()) url.searchParams.set(key, value);
+  const RESERVED_URL_PARAMETERS = ['code', 'wanted', 'referrer', 'email', 'as_modal', 'as_embed', 'debug', 'affiliate_id'];
+  for (const [key, value] of gumroadParams.entries()) {
+    if (!RESERVED_URL_PARAMETERS.includes(key)) {
+      url.searchParams.set(key, value);
+    }
+  }
 
   iframe.src = url.toString();
   iframe.style.border = "none";
