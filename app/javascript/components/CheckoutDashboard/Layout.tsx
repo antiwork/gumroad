@@ -3,6 +3,7 @@ import * as React from "react";
 
 const pageNames = {
   discounts: "Discounts",
+  discount_collections: "Collections",
   form: "Checkout form",
   upsells: "Upsells",
 };

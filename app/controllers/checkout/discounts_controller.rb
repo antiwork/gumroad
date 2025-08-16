@@ -10,9 +10,17 @@ class Checkout::DiscountsController < Sellers::BaseController
   def index
     authorize [:checkout, OfferCode]
 
-    @title = "Discounts"
-    pagination, offer_codes = fetch_offer_codes
-    @presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
+    respond_to do |format|
+      format.html do
+        @title = "Discounts"
+        pagination, offer_codes = fetch_offer_codes
+        @presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
+      end
+      format.csv do
+        csv_data = generate_csv_with_filters
+        send_data csv_data, filename: "discounts-#{Date.current}.csv", type: 'text/csv'
+      end
+    end
   end
 
   def paged
@@ -86,11 +94,11 @@ class Checkout::DiscountsController < Sellers::BaseController
 
   private
     def offer_code_params
-      params.permit(:name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage, :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles, :minimum_amount_cents, selected_product_ids: [])
+      params.permit(:name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage, :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles, :minimum_amount_cents, :discount_collection_id, selected_product_ids: [])
     end
 
     def paged_params
-      params.permit(:page, sort: [:key, :direction])
+      params.permit(:page, :query, :collection_filter, :collection_id, :format, sort: [:key, :direction])
     end
 
     def clean_params
@@ -115,9 +123,36 @@ class Checkout::DiscountsController < Sellers::BaseController
       offer_codes = current_seller.offer_codes
                       .alive
                       .where.not(code: nil)
-                      .includes(:products)
+                      .includes(:discount_collection)
+                      .preload(:products)
                       .sorted_by(**paged_params[:sort].to_h.symbolize_keys).order(updated_at: :desc)
-      offer_codes = offer_codes.where("name LIKE :query OR code LIKE :query", query: "%#{params[:query]}%") if params[:query].present?
+      offer_codes = offer_codes.where("name LIKE :query OR code LIKE :query", query: "%#{paged_params[:query]}%") if paged_params[:query].present?
+
+      # Filter by collection - default to hiding collection discounts if no filter specified
+      if paged_params[:collection_filter].present?
+        case paged_params[:collection_filter]
+        when 'in_collections'
+          offer_codes = offer_codes.where.not(discount_collection_id: nil)
+        when 'not_in_collections'
+          offer_codes = offer_codes.where(discount_collection_id: nil)
+        when 'specific_collection'
+          if paged_params[:collection_id].present?
+            collection = DiscountCollection.find_by_external_id(paged_params[:collection_id])
+            if collection
+              offer_codes = offer_codes.where(discount_collection_id: collection.id)
+            else
+              # If collection not found, show no results
+              offer_codes = offer_codes.where(id: nil)
+            end
+          end
+        when 'all'
+          # Show all discounts (no filtering)
+        end
+      else
+        # Default behavior: hide collection discounts
+        offer_codes = offer_codes.where(discount_collection_id: nil)
+      end
+
       offer_codes_count = offer_codes.count.is_a?(Hash) ? offer_codes.count.length : offer_codes.count
 
       # Map invalid page numbers to the closest valid page number
@@ -132,5 +167,108 @@ class Checkout::DiscountsController < Sellers::BaseController
       pagination, offer_codes = pagy(offer_codes, page: page_num, limit: PER_PAGE)
 
       [PagyPresenter.new(pagination).props, offer_codes]
+    end
+
+    def generate_csv_with_filters
+      require 'csv'
+
+      # Apply the same filters as fetch_offer_codes but without pagination
+      offer_codes = current_seller.offer_codes
+                      .alive
+                      .where.not(code: nil)
+                      .includes(:discount_collection)
+                      .preload(:products)
+                      .sorted_by(**paged_params[:sort].to_h.symbolize_keys).order(updated_at: :desc)
+
+      offer_codes = offer_codes.where("name LIKE :query OR code LIKE :query", query: "%#{paged_params[:query]}%") if paged_params[:query].present?
+
+      # Filter by collection - default to hiding collection discounts if no filter specified
+      if paged_params[:collection_filter].present?
+        case paged_params[:collection_filter]
+        when 'in_collections'
+          offer_codes = offer_codes.where.not(discount_collection_id: nil)
+        when 'not_in_collections'
+          offer_codes = offer_codes.where(discount_collection_id: nil)
+        when 'specific_collection'
+          if paged_params[:collection_id].present?
+            collection = DiscountCollection.find_by_external_id(paged_params[:collection_id])
+            if collection
+              offer_codes = offer_codes.where(discount_collection_id: collection.id)
+            else
+              # If collection not found, show no results
+              offer_codes = offer_codes.where(id: nil)
+            end
+          end
+        when 'all'
+          # Show all discounts (no filtering)
+        end
+      else
+        # Default behavior: hide collection discounts
+        offer_codes = offer_codes.where(discount_collection_id: nil)
+      end
+
+      CSV.generate(headers: true) do |csv|
+        csv << [
+          'Code',
+          'Name',
+          'Discount Type',
+          'Discount Value',
+          'Products',
+          'Max Uses',
+          'Valid From',
+          'Expires At',
+          'Collection',
+          'Created At'
+        ]
+
+        offer_codes.each do |offer_code|
+          csv << [
+            offer_code.code,
+            offer_code.name,
+            offer_code.amount_cents.present? ? 'cents' : 'percent',
+            offer_code.amount_cents || offer_code.amount_percentage,
+            offer_code.universal ? 'All Products' : offer_code.products.map(&:name).join(', '),
+            offer_code.max_purchase_count,
+            offer_code.valid_at&.strftime('%Y-%m-%d'),
+            offer_code.expires_at&.strftime('%Y-%m-%d'),
+            offer_code.discount_collection&.name,
+            offer_code.created_at.strftime('%Y-%m-%d %H:%M:%S')
+          ]
+        end
+      end
+    end
+
+    def generate_csv(offer_codes)
+      require 'csv'
+
+      CSV.generate(headers: true) do |csv|
+        csv << [
+          'Code',
+          'Name',
+          'Discount Type',
+          'Discount Value',
+          'Products',
+          'Max Uses',
+          'Valid From',
+          'Expires At',
+          'Collection',
+          'Created At'
+        ]
+
+        offer_codes.each do |offer_code|
+          csv << [
+            offer_code.code,
+            offer_code.name,
+            offer_code.amount_cents.present? ? 'cents' : 'percent',
+            offer_code.amount_cents || offer_code.amount_percentage,
+            offer_code.universal ? 'All Products' : offer_code.products.map(&:name).join(', '),
+            offer_code.max_purchase_count,
+            offer_code.valid_at&.strftime('%Y-%m-%d'),
+            offer_code.expires_at&.strftime('%Y-%m-%d'),
+            offer_code.discount_collection&.name,
+            offer_code.created_at.strftime('%Y-%m-%d %H:%M:%S')
+          ]
+        end
+      end
     end
 end

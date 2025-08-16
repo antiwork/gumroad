@@ -1,0 +1,5 @@
+<%= load_pack("checkout_dashboard") %>
+<%= react_component "DiscountCollectionDetailPage", props: {
+  discount_collection: @presenter.discount_collection_props,
+  offer_codes: @presenter.offer_codes_props
+}, prerender: true %>

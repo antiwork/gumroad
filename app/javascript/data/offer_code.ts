@@ -54,14 +54,19 @@ type DiscountPayload = {
   minimumQuantity: number | null;
   durationInBillingCycles: Duration | null;
   minimumAmount: number | null;
+  discountCollectionId?: string | null;
 };
 
-export const getPagedDiscounts = (page: number, query: string | null, sort: Sort<SortKey> | null) => {
+export const getPagedDiscounts = (page: number, query: string | null, sort: Sort<SortKey> | null, collection_filter?: string | null, collection_id?: string | null) => {
   const abort = new AbortController();
+  const params: any = { page, query, sort };
+  if (collection_filter) params.collection_filter = collection_filter;
+  if (collection_id) params.collection_id = collection_id;
+
   const response = request({
     method: "GET",
     accept: "json",
-    url: Routes.paged_checkout_discounts_path({ page, query, sort }),
+    url: Routes.paged_checkout_discounts_path(params),
     abortSignal: abort.signal,
   })
     .then((res) => res.json())
@@ -86,6 +91,7 @@ export const createDiscount = async ({
   minimumQuantity,
   durationInBillingCycles,
   minimumAmount,
+  discountCollectionId,
 }: DiscountPayload) => {
   const response = await request({
     method: "POST",
@@ -105,6 +111,7 @@ export const createDiscount = async ({
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      discount_collection_id: discountCollectionId,
     },
   });
   const responseData = cast<

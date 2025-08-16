@@ -33,6 +33,7 @@ import AudiencePage from "$app/components/server-components/AudiencePage";
 import BalancePage from "$app/components/server-components/BalancePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import DiscountsPage from "$app/components/server-components/CheckoutDashboard/DiscountsPage";
+import DiscountCollectionsPage from "$app/components/server-components/CheckoutDashboard/DiscountCollectionsPage";
 import FormPage from "$app/components/server-components/CheckoutDashboard/FormPage";
 import UpsellsPage from "$app/components/server-components/CheckoutDashboard/UpsellsPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
@@ -146,6 +147,7 @@ ReactOnRails.register({
   DashboardPage,
   DeveloperWidgetsPage,
   DiscountsPage,
+  DiscountCollectionsPage,
   Discover,
   DiscoverProductPage,
   DiscoverWishlistPage,
