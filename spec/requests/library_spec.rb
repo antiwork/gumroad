@@ -157,8 +157,10 @@ describe("Library Scenario", type: :feature, js: true) do
     # Archive the purchase, which disappears from the library
     visit "/library"
     find_product_card(purchase.link).hover
-    find('[aria-label="Open product action menu"]').click
-    click_on "Archive"
+    within find_product_card(purchase.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Archive"
+    end
 
     expect(page).to_not have_product_card(purchase.link)
   end
@@ -172,14 +174,94 @@ describe("Library Scenario", type: :feature, js: true) do
 
     # Unarchive the purchase, which disappears from the archives
     find_product_card(purchase.link).hover
-    find('[aria-label="Open product action menu"]').click
-    click_on "Unarchive"
+    within find_product_card(purchase.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Unarchive"
+    end
 
     expect(page).to have_current_path("/library?sort=recently_updated")
 
     # Purchase appears again in the library
     visit "/library"
     expect(page).to have_product_card(purchase.link)
+  end
+
+  it "manages archived purchases banner and interactions" do
+    product1 = create(:product, name: "Product 1")
+    product2 = create(:product, name: "Product 2")
+    product3 = create(:product, name: "Product 3")
+
+    purchase1 = create(:purchase, purchaser: @user, link: product1)
+    purchase2 = create(:purchase, purchaser: @user, link: product2)
+    purchase3 = create(:purchase, purchaser: @user, link: product3, is_archived: true)
+    Link.import(refresh: true, force: true)
+
+    visit "/library"
+
+    expect(page).to have_product_card(purchase1.link)
+    expect(page).to have_product_card(purchase2.link)
+    expect(page).to_not have_product_card(purchase3.link)
+    expect(page).to have_status(text: "You have 1 archived purchase. Click here to view")
+
+    within find_product_card(purchase1.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Archive"
+    end
+
+    expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
+
+    click_on "Click here to view"
+    expect(page.current_url).to include("show_archived_only=true")
+    expect(page).to have_checked_field("Show archived only")
+
+    expect(page).to have_product_card(purchase1.link)
+    expect(page).to have_product_card(purchase3.link)
+    expect(page).to_not have_product_card(purchase2.link)
+    expect(page).to_not have_status(text: "You have 2 archived purchases. Click here to view")
+
+    within find_product_card(purchase1.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Unarchive"
+    end
+
+    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_product_card(purchase3.link)
+    expect(page).to_not have_product_card(purchase1.link)
+
+    visit "/library"
+    expect(page).to have_product_card(purchase1.link)
+    expect(page).to have_product_card(purchase2.link)
+    expect(page).to have_status(text: "You have 1 archived purchase. Click here to view")
+
+    find_product_card(purchase2.link).hover
+    within find_product_card(purchase2.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Archive"
+    end
+
+    find_product_card(purchase1.link).hover
+    within find_product_card(purchase1.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Archive"
+    end
+
+    expect(page).to_not have_status(text: "You have 3 archived purchases. Click here to view")
+
+    click_on "See archive"
+
+    find_product_card(purchase3.link).hover
+    within find_product_card(purchase3.link) do
+      find_and_click('[aria-label="Open product action menu"]')
+      click_on "Unarchive"
+    end
+    wait_for_ajax
+
+    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+
+    visit "/library"
+    wait_for_ajax
+    expect(page).to have_product_card(purchase3.link)
+    expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
   end
 
   it "lists the same product several times if purchased several times" do

@@ -10,7 +10,7 @@ describe OfferCodesController do
       {
         code: offer_code.code,
         products: {
-          "0" => {
+          product.unique_permalink => {
             permalink: product.unique_permalink,
             quantity: 2
           }
@@ -39,7 +39,7 @@ describe OfferCodesController do
       offer_code_params = {
         code: universal_code.code,
         products: {
-          "0" => {
+          other_product.unique_permalink => {
             permalink: other_product.unique_permalink,
             quantity: 2
           }
@@ -50,7 +50,7 @@ describe OfferCodesController do
       expect(response.parsed_body).to eq({
                                            "valid" => true,
                                            "products_data" => {
-                                             "0" => {
+                                             other_product.unique_permalink => {
                                                "cents" => 600,
                                                "type" => "fixed",
                                                "product_ids" => nil,
@@ -69,7 +69,7 @@ describe OfferCodesController do
       expect(response.parsed_body).to eq({
                                            "valid" => true,
                                            "products_data" => {
-                                             "0" => {
+                                             product.unique_permalink => {
                                                "type" => "fixed",
                                                "cents" => offer_code.amount,
                                                "product_ids" => [product.external_id],

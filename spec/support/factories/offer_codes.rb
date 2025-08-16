@@ -8,6 +8,12 @@ FactoryBot.define do
     amount_cents { 1_00 }
     currency_type { user.currency_type }
 
+    before(:create) do |offer_code|
+      if offer_code.products.present?
+        offer_code.user_id = offer_code.products.first.user_id
+      end
+    end
+
     factory :percentage_offer_code do
       products { [FactoryBot.create(:product, user:, price_cents: 2_00)] }
       amount_cents { nil }

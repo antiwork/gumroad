@@ -36,7 +36,12 @@ export const computeOfferDiscount = async (payload: ComputeDiscountRequestData):
 export type OfferCodeResponseData =
   | {
       valid: false;
-      error_code: "sold_out" | "invalid_offer" | "exceeding_quantity" | "inactive" | "insufficient_quantity";
+      error_code:
+        | "sold_out"
+        | "invalid_offer"
+        | "insufficient_times_of_use"
+        | "inactive"
+        | "unmet_minimum_purchase_quantity";
       error_message: string;
     }
   | { valid: true; products_data: Record<string, Discount> };

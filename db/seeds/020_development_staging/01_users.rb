@@ -10,6 +10,7 @@ if seller.blank?
   seller.is_team_member = true
   seller.has_payout_privilege = true
   seller.has_risk_privilege = true
+  seller.user_risk_state = "compliant"
   seller.password = SecureRandom.hex(24)
 
   # Make seller eligible for service products
@@ -39,6 +40,7 @@ TeamMembership::ROLES.excluding(TeamMembership::ROLE_OWNER).each do |role|
     name: "#{role.humanize}ForSeller",
     username: "#{role}forseller",
     confirmed_at: Time.current,
+    user_risk_state: "compliant",
     password: SecureRandom.hex(24)
   )
 
