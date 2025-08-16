@@ -3,7 +3,6 @@
 class Purchase::CreateService < Purchase::BaseService
   include CurrencyHelper
 
-  RESERVED_URL_PARAMETERS = %w[code wanted referrer email as_modal as_embed debug affiliate_id].freeze
   INVENTORY_LOCK_ACQUISITION_TIMEOUT = 50.seconds
 
   attr_reader :product, :params, :purchase_params, :gift_params, :buyer
