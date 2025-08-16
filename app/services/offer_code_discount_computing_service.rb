@@ -28,6 +28,7 @@ class OfferCodeDiscountComputingService
       if eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
         products_data[link.unique_permalink] = { discount: offer_code.discount }
+        apply_to_applicable_replacement_cross_sells(products_data, link, offer_code)
       else
         track_ineligibility(offer_code, purchase_quantity)
       end
@@ -44,6 +45,7 @@ class OfferCodeDiscountComputingService
 
     def links
       @_links ||= Link.visible
+        .includes({ cross_sells: :product })
         .where(unique_permalink: products.values.map { it[:permalink] })
     end
 
@@ -124,5 +126,16 @@ class OfferCodeDiscountComputingService
 
       PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY
         .find { @product_level_ineligibilities[it] }
+    end
+
+    def apply_to_applicable_replacement_cross_sells(products_data, link, offer_code)
+      discount = offer_code.discount
+
+      link.cross_sells
+        .filter(&:replace_selected_products)
+        .filter { |cross_sell| offer_code.applicable?(cross_sell.product) }
+        .each do |cross_sell|
+          products_data[cross_sell.product.unique_permalink] = { discount: }
+        end
     end
 end
