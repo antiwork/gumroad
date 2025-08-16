@@ -241,12 +241,16 @@ describe("Product checkout with upsells", type: :feature, js: true) do
       within_modal "Replacement cross-sell" do
         expect(page).to have_text("This offer will only last for a few weeks.")
         expect(page).to have_section("Offered product")
-        expect(page).to have_selector("[itemprop='price']", text: "$4 $3.50")
+        # The modal shows original discount that is better than the replacement
+        # cross-sell discount.
+        expect(page).to have_selector("[itemprop='price']", text: "$4 $3")
         click_on "Upgrade"
       end
 
       expect(page).to have_section("Offered product")
       expect(page).to_not have_section("Selected product 1")
+      # Cart retains the original discount code after accepting the replacement
+      # cross-sell.
       expect(page).to have_selector("[aria-label='Discount code']", text: better_discount_code.code)
       expect(page).to have_text("US$-1")
 
@@ -257,7 +261,7 @@ describe("Product checkout with upsells", type: :feature, js: true) do
 
       purchase = Purchase.last
       expect(purchase.link).to eq(product)
-      expect(purchase.price_cents).to eq(100)
+      expect(purchase.price_cents).to eq(300)
       expect(purchase.offer_code).to eq(better_discount_code)
       expect(purchase.upsell_purchase.selected_product).to eq(selected_product1)
       expect(purchase.upsell_purchase.upsell).to eq(replacement_cross_sell)

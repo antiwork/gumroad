@@ -910,6 +910,10 @@ const Form = ({
               }}
               accept={() => {}}
               decline={() => {}}
+              cart={{
+                items: [previewCartItem],
+                discountCodes: [],
+              }}
             />
           ) : (
             <UpsellModal
