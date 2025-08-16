@@ -15,12 +15,12 @@ export const DashboardHeader: React.FC = () => {
   const pageTitle = getPageTitle(location.pathname);
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4 ml-64">
+    <header className="border-gray-200 ml-64 border-b bg-white px-6 py-4">
       <div className="flex items-center justify-between">
         {/* Page Title */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-gray-900 text-2xl font-bold">{pageTitle}</h1>
+          <p className="text-gray-500 mt-1 text-sm">
             {pageTitle === "Dashboard" && "Welcome to your creator dashboard"}
             {pageTitle === "Analytics" && "Track your sales and performance"}
             {pageTitle === "Audience" && "Understand your customers"}
@@ -32,7 +32,7 @@ export const DashboardHeader: React.FC = () => {
         {/* Header Actions */}
         <div className="flex items-center space-x-4">
           {/* Add any header actions here */}
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button className="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700">
             New Product
           </button>
         </div>
