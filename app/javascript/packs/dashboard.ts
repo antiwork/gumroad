@@ -14,7 +14,7 @@ const router = createDashboardRouter();
 
 // Initialize SPA when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
-  const rootElement = document.getElementById("dashboard-spa-root");
+  const rootElement = document.getElementById("dashboard-root");
   
   if (rootElement) {
     const root = ReactDOM.createRoot(rootElement);

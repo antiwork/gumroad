@@ -16,12 +16,8 @@ class DashboardController < Sellers::BaseController
       return
     end
 
-    # Feature flag check for SPA version
-    if should_render_spa?
-      render_spa_version
-    else
-      render_traditional_version
-    end
+    # Render SPA version by default
+    render_spa_version
   end
 
   def customers_count
@@ -64,41 +60,16 @@ class DashboardController < Sellers::BaseController
   end
 
   def spa
-    authorize :dashboard
-
-    if current_seller.suspended_for_tos_violation?
-      redirect_to products_url
-      return
-    end
-
-    # Render SPA version directly
-    render_spa_version
+    # Legacy route - redirect to main dashboard
+    redirect_to dashboard_path
   end
 
   private
-
-  def should_render_spa?
-    # Don't render SPA for AJAX requests
-    return false if request.xhr?
-    
-    # Check feature flag
-    DashboardSpaFeature.should_redirect_to_spa?(current_seller)
-  end
 
   def render_spa_version
     respond_to do |format|
       format.html { render :spa }
       format.json { render json: dashboard_api_data }
-    end
-  end
-
-  def render_traditional_version
-    presenter = CreatorHomePresenter.new(pundit_user)
-    @creator_home_props = presenter.creator_home_props
-    
-    respond_to do |format|
-      format.html # Render default dashboard view
-      format.json { render json: { success: true, data: @creator_home_props } }
     end
   end
 

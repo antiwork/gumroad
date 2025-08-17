@@ -735,7 +735,7 @@ Rails.application.routes.draw do
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
 
-    # SPA Routes - conditionally render SPA version
+    # Legacy SPA route - redirect to main dashboard
     get "/dashboard/spa" => "dashboard#spa", as: :dashboard_spa
 
     # API routes for SPA
