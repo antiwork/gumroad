@@ -144,14 +144,13 @@ class OfferCodeDiscountComputingService
     # be able to see the correct discount and adjust accordingly.
     # Applies the same discount to cross-sell products if they're eligible
     # @param products_data [Hash] The current products data with discounts
-    # @param link [Link] The product link being processed
+    # @param link [Link] The product (Link) being processed
     # @param offer_code [OfferCode] The offer code being applied
     # @return [void]
     def optimistically_apply_to_applicable_cross_sells(products_data, link, offer_code)
-      return unless link&.respond_to?(:cross_sells) && offer_code
-      
+      return if link.nil? || !link.respond_to?(:cross_sells) || offer_code.nil?
+
       discount = offer_code.discount
-      return unless discount.positive?
 
       link.cross_sells.each do |cross_sell|
         next unless cross_sell&.product && offer_code.applicable?(cross_sell.product)
