@@ -17,7 +17,7 @@ class Settings::AdvancedController < Sellers::BaseController
       if @invalid_blocked_email.present?
         return render json: { success: false, error_message: "The email #{@invalid_blocked_email} cannot be blocked as it is invalid." }
       end
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify(e)
       logger.error "Couldn't block customer emails: #{e.message}"
       return render json: { success: false, error_message: "Sorry, something went wrong. Please try again." }
@@ -25,7 +25,7 @@ class Settings::AdvancedController < Sellers::BaseController
 
     begin
       current_seller.with_lock { current_seller.update(advanced_params) }
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify(e)
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
     end

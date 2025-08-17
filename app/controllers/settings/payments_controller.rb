@@ -22,7 +22,7 @@ class Settings::PaymentsController < Sellers::BaseController
         UpdateUserCountry.new(new_country_code: updated_country_code, user: current_seller).process
         flash[:notice] = "Your country has been updated!"
         return render json: { success: true }
-      rescue => e
+      rescue StandardError => e
         Bugsnag.notify("Update country failed for user #{current_seller.id} (from #{compliance_info.country_code} to #{updated_country_code}): #{e}")
         return render json: { success: false, error_message: "Country update failed" }
       end
@@ -69,7 +69,7 @@ class Settings::PaymentsController < Sellers::BaseController
     if current_seller.active_bank_account && current_seller.merchant_accounts.stripe.alive.empty? && current_seller.native_payouts_supported?
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-      rescue => e
+      rescue StandardError => e
         return render json: { success: false, error_message: e.try(:message) || "Something went wrong." }
       end
     end

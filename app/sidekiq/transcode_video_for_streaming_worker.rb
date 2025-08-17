@@ -187,7 +187,7 @@ class TranscodeVideoForStreamingWorker
         else
           Rails.logger.warn("Failed request to GRMC (#{streamable.class.name} ID #{streamable.id}): #{response.code} => #{response.body}")
         end
-      rescue => e
+      rescue StandardError => e
         Rails.logger.warn("Failed attempt to request GRMC: #{e.class} => #{e.message}")
       end
     end

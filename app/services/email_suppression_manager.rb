@@ -40,7 +40,7 @@ class EmailSuppressionManager
 
           begin
             reasons << { list:, reason:  parsed_body.first[:reason] } if parsed_body.present?
-          rescue => e
+          rescue StandardError => e
             Bugsnag.notify(e)
             Rails.logger.info "[EmailSuppressionManager] Error parsing SendGrid response: #{parsed_body}"
           end

@@ -43,7 +43,7 @@ class MergeCartsService
         end
       end
     end
-  rescue => e
+  rescue StandardError => e
     Rails.logger.error("Failed to merge source cart (#{source_cart&.id}) with target cart (#{target_cart&.id}): #{e.full_message}")
     Bugsnag.notify(e)
 

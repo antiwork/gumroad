@@ -24,7 +24,7 @@ module SslCertificates
       begin
         certificate = finalize_with_csr(order, http_challenge)
         upload_certificate_to_s3(certificate, certificate_private_key)
-      rescue => e
+      rescue StandardError => e
         log_message(domain, "SSL Certificate cannot be issued. Error: #{e.message}")
         return false
       ensure

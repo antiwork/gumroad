@@ -40,7 +40,7 @@ class SaveInstallmentService
       end
     rescue Installment::InstallmentInvalid, Installment::PreviewEmailError => e
       @error = e.message
-    rescue => e
+          rescue StandardError => e
       @error ||= e.message
       Bugsnag.notify(e)
     end

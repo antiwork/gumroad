@@ -39,7 +39,7 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
           duration_in_seconds: result[:duration_in_seconds]
         }
       }
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error "Product details generation using AI failed: #{e.full_message}"
       Bugsnag.notify(e)
       render json: {

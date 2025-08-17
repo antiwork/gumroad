@@ -19,16 +19,13 @@ module BasePrice::Shared
 
     enabled_recurrences.each do |recurrence, attributes|
       price = attributes[:price]
-      # TODO: :product_edit_react cleanup
       if price.blank? && attributes[:price_cents].blank?
         errors.add(:base, "Please provide a price for all selected payment options.")
         raise Link::LinkInvalid
       end
-      # TODO: :product_edit_react cleanup
       price_cents = attributes[:price_cents] || clean_price(price)
 
       suggested_price = attributes[:suggested_price]
-      # TODO: :product_edit_react cleanup
       suggested_price_cents = attributes[:suggested_price_cents] || (suggested_price.present? ? clean_price(suggested_price) : nil)
       create_or_update_new_price!(
         price_cents:,
@@ -87,7 +84,7 @@ module BasePrice::Shared
         changed = price.changed?
         begin
           price.save!
-        rescue => e
+        rescue ActiveRecord::RecordInvalid => e
           errors.add(:base, price.errors.full_messages.to_sentence)
           raise e
         end

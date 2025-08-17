@@ -187,7 +187,7 @@ class PaypalChargeProcessor
       raise ChargeProcessorError, build_error_message(api_response.code, api_response.response)
     end
 
-  rescue => e
+  rescue StandardError => e
     raise ChargeProcessorError, build_error_message(e.message, e.backtrace)
   end
 
@@ -202,7 +202,7 @@ class PaypalChargeProcessor
       raise ChargeProcessorError, build_error_message(api_response.code, api_response.response)
     end
 
-  rescue => e
+  rescue StandardError => e
     raise ChargeProcessorError, build_error_message(e.message, e.backtrace)
   end
 

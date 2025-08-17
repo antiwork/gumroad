@@ -21,7 +21,7 @@ class AffiliateRequests::OnboardingFormController < Sellers::BaseController
     render json: { success: true }
   rescue ActiveRecord::RecordInvalid => e
     render json: { success: false, error: e.message }
-  rescue => e
+  rescue StandardError => e
     logger.error e.full_message
     render json: { success: false }
   end

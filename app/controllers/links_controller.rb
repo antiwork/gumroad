@@ -384,7 +384,6 @@ class LinksController < ApplicationController
           @product.suggested_price_cents = product_permitted_params[:variants].map { _1[:price_difference_cents] }.max
         end
 
-        # TODO clean this up
         rich_content = product_permitted_params[:rich_content] || []
         rich_content_params = [*rich_content]
         product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if product_permitted_params[:variants].present?
@@ -473,7 +472,7 @@ class LinksController < ApplicationController
       @product.publish!
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
       return render json: { success: false, error_message: @product.errors.full_messages[0] }
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify(e)
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
     end
@@ -763,7 +762,7 @@ class LinksController < ApplicationController
         thumbnail.file.attach(thumbnail_image_blob)
         thumbnail.file.analyze
         thumbnail.save!
-      rescue => e
+      rescue StandardError => e
         Bugsnag.notify(e)
       end
     end
@@ -795,7 +794,7 @@ class LinksController < ApplicationController
           rich_content.position = index
           rich_content.save!
         end
-      rescue => e
+      rescue StandardError => e
         Bugsnag.notify(e)
       end
     end

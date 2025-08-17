@@ -48,7 +48,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       @product.publish!
     rescue Link::LinkInvalid
       return error_with_product(@product)
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify(e)
       return render_response(false, message: "Something broke. We're looking into what happened. Sorry about this!")
     end

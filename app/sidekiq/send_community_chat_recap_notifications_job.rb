@@ -55,7 +55,7 @@ class SendCommunityChatRecapNotificationsJob
         ).deliver_later
       end
     end
-  rescue => e
+      rescue StandardError => e
     Rails.logger.error("Error sending community recap notifications: #{e.full_message}")
     Bugsnag.notify(e)
   end

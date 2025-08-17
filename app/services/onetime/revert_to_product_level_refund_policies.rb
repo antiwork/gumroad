@@ -48,7 +48,7 @@ class Onetime::RevertToProductLevelRefundPolicies < Onetime::Base
       end
 
       $redis.set(LAST_PROCESSED_ID_KEY, index, ex: 1.month)
-    rescue => e
+    rescue StandardError => e
       Rails.logger.info "#{message_prefix}: error: #{e.message}"
       invalid_seller_ids << { seller_id => e.message }
     end

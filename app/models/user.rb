@@ -381,7 +381,7 @@ class User < ApplicationRecord
 
   def subscribe_preview_url
     cdn_url_for(subscribe_preview.url) if subscribe_preview.attached?
-  rescue => e
+      rescue StandardError => e
     Rails.logger.warn("User#subscribe_preview_url error (#{id}): #{e.class} => #{e.message}")
   end
 
@@ -395,7 +395,7 @@ class User < ApplicationRecord
 
     cached_variant_url = Rails.cache.fetch("attachment_#{avatar.id}_variant_url") { avatar_variant.url }
     cdn_url_for(cached_variant_url)
-  rescue => e
+      rescue StandardError => e
     Rails.logger.warn("User#avatar_url error (#{id}): #{e.class} => #{e.message}")
     avatar.url
   end

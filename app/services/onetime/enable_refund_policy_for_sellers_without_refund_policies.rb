@@ -23,7 +23,7 @@ class Onetime::EnableRefundPolicyForSellersWithoutRefundPolicies < Onetime::Base
 
         update_invalid_seller_due_to_payout_threshold_if_needed!(seller)
         seller.update!(refund_policy_enabled: true)
-      rescue => e
+      rescue StandardError => e
         invalid_seller_ids << { seller.id => e.message }
       end
 

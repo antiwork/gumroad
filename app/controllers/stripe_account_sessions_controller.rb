@@ -23,7 +23,7 @@ class StripeAccountSessionsController < Sellers::BaseController
       )
 
       render json: { success: true, client_secret: session.client_secret }
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify("Failed to create stripe account session for user #{current_seller.id}: #{e.message}")
       render json: { success: false, error_message: "Failed to create stripe account session" }
     end

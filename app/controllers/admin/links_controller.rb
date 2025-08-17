@@ -42,7 +42,7 @@ class Admin::LinksController < Admin::BaseController
       @product.publish!
     rescue Link::LinkInvalid, WithProductFilesInvalid
       return render json: { success: false, error_message: @product.errors.full_messages.join(", ") }
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify(e)
       return render json: { success: false, error_message: I18n.t(:error_500) }
     end
@@ -101,7 +101,7 @@ class Admin::LinksController < Admin::BaseController
     end
 
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, error_message: e.message }
   end
 

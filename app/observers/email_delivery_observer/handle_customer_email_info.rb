@@ -59,7 +59,7 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
       else
         raise "Unknown email provider: #{email_provider}"
       end
-    rescue => e
+    rescue StandardError => e
       raise InvalidHeaderError.new(
         "Failed to parse #{email_provider} header: #{e.message}",
         message.header.to_json

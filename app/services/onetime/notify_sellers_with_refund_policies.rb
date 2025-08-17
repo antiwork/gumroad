@@ -30,7 +30,7 @@ class Onetime::NotifySellersWithRefundPolicies < Onetime::Base
             Rails.logger.info "Seller: #{seller.id}: email sent"
           end
         end
-      rescue => e
+      rescue StandardError => e
         invalid_seller_ids << { seller.id => e.message }
       end
 

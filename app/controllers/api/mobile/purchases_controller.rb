@@ -15,7 +15,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       media_locations_scope = MediaLocation.where(product_id: purchases.pluck(:link_id))
       cache [purchases, media_locations_scope], expires_in: 10.minutes do
         purchases_to_json(purchases)
-      rescue => e
+      rescue StandardError => e
         # Cache empty array for requests that timeout to reduce the load on database.
         # TODO: Remove this once we fix the bottleneck with the purchases_json generation
         Rails.logger.info "Error generating purchases json for user: #{current_resource_owner.id}, #{e.class} => #{e.message}"

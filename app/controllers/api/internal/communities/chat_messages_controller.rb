@@ -64,7 +64,7 @@ class Api::Internal::Communities::ChatMessagesController < Api::Internal::BaseCo
         "community_#{@community.external_id}",
         { type:, message: message_props },
       )
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("Error broadcasting message to community channel: #{e.message}")
       Bugsnag.notify(e)
     end

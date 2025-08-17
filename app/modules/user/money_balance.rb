@@ -6,7 +6,7 @@ class User
       if via == :elasticsearch
         begin
           Balance.amount_cents_sum_for(self)
-        rescue => e
+        rescue StandardError => e
           Bugsnag.notify(e)
           unpaid_balance_cents(via: :sql)
         end

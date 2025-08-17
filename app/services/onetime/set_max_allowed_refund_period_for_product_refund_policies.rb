@@ -27,7 +27,7 @@ class Onetime::SetMaxAllowedRefundPeriodForProductRefundPolicies < Onetime::Base
             product_refund_policy.update!(max_refund_period_in_days:)
             Rails.logger.info "ProductRefundPolicy: #{product_refund_policy.id}: updated with max allowed refund period of #{max_refund_period_in_days} days"
           end
-        rescue => e
+        rescue StandardError => e
           invalid_policy_ids << { product_refund_policy.id => e.message }
         end
       end

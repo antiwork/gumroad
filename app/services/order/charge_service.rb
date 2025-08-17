@@ -70,7 +70,7 @@ class Order::ChargeService
       else
         create_charge_for_seller_purchases(non_free_seller_purchases, chargeable, off_session, setup_future_charges)
       end
-    rescue => e
+            rescue StandardError => e
       Rails.logger.error("Error charging order (#{order.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state

@@ -6,7 +6,7 @@ module EmailDeliveryObserver::HandleEmailEvent
   def perform(message)
     message.to.each do |email|
       EmailEvent.log_send_events(email, message.date)
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error "Error logging email event - #{email} - #{e.message}"
     end
   end

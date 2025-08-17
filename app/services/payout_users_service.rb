@@ -50,7 +50,7 @@ class PayoutUsersService
       else
         Rails.logger.info("Payouts: Create payment errors for user with id: #{user_id} #{payment_errors.inspect}")
       end
-    rescue => e
+          rescue StandardError => e
       Rails.logger.error "Error in PayoutUsersService creating payment for user ID #{user_id} => #{e.class.name}: #{e.message}"
       Rails.logger.error "Error in PayoutUsersService creating payment for user ID #{user_id} => #{e.backtrace.join("\n")}"
       Bugsnag.notify(e)

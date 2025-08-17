@@ -26,7 +26,7 @@ class Post::SocialImage
 
     def first_figure_with_image
       @_first_figure_with_image ||= Nokogiri::HTML(content).at_xpath("//figure//img/ancestor::figure")
-    rescue => e
+    rescue StandardError => e
       Bugsnag.notify(e)
       nil
     end

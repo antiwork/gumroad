@@ -297,7 +297,7 @@ class ProductFile < ApplicationRecord
 
     cached_variant_url = Rails.cache.fetch("attachment_product_file_thumbnail_#{thumbnail.id}_variant_url") { thumbnail_variant.url }
     cdn_url_for(cached_variant_url)
-  rescue => e
+        rescue StandardError => e
     Rails.logger.warn("ProductFile#thumbnail_url error (#{id}): #{e.class} => #{e.message}")
     cdn_url_for(thumbnail.url)
   end

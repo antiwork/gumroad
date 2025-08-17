@@ -38,7 +38,7 @@ class Admin::UsersController < Admin::BaseController
     @user.verified = !@user.verified
     @user.save!
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
@@ -125,7 +125,7 @@ class Admin::UsersController < Admin::BaseController
   def mark_compliant_from_iffy
     @user.mark_compliant!(author_name: "iffy")
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
@@ -143,7 +143,7 @@ class Admin::UsersController < Admin::BaseController
       end
     end
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
@@ -151,14 +151,14 @@ class Admin::UsersController < Admin::BaseController
     @user.flag_for_fraud!(author_name: "iffy") unless @user.flagged_for_fraud? || @user.on_probation? || @user.suspended?
     @user.suspend_for_fraud!(author_name: "iffy") unless @user.suspended?
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
   def flag_for_explicit_nsfw_tos_violation_from_iffy
     @user.flag_for_explicit_nsfw_tos_violation!(author_name: "iffy") unless @user.flagged_for_explicit_nsfw?
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
@@ -176,7 +176,7 @@ class Admin::UsersController < Admin::BaseController
       end
     end
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
@@ -207,7 +207,7 @@ class Admin::UsersController < Admin::BaseController
     @user.update!(custom_fee_per_thousand:)
 
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 

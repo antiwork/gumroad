@@ -19,7 +19,7 @@ class Onetime::CreateSellerRefundPolicies < Onetime::Base
 
       batch.each do |seller|
         seller.create_refund_policy!
-      rescue => e
+      rescue StandardError => e
         invalid_seller_ids << { seller.id => e.message }
       end
 

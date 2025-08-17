@@ -15,7 +15,7 @@ class CustomDomainVerificationService
 
   def process
     points_to_gumroad?
-  rescue => e
+  rescue StandardError => e
     Rails.logger.error e.full_message
 
     false
@@ -69,7 +69,7 @@ class CustomDomainVerificationService
 
     def cname_or_alias_configured?(domain_variant)
       cname_is_setup_correctly?(domain_variant) || alias_is_setup_correctly?(domain_variant)
-    rescue => e
+    rescue StandardError => e
       Rails.logger.info("CNAME/ALIAS check error for custom domain '#{domain}'. Error: #{e.inspect}")
       false
     end

@@ -99,7 +99,7 @@ module StripeMerchantAccountManager
 
     begin
       DefaultAbandonedCartWorkflowGeneratorService.new(seller: user).generate if merchant_account.is_a_stripe_connect_account?
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("Failed to generate default abandoned cart workflow for user #{user.id}: #{e.message}")
       Bugsnag.notify(e)
     end

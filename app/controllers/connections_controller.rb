@@ -10,7 +10,7 @@ class ConnectionsController < Sellers::BaseController
     current_seller.save!
 
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, error_message: e.message }
   end
 

@@ -203,7 +203,7 @@ class Ai::ProductDetailsGeneratorService
         duration = Time.now - start_time
         Rails.logger.info("Successfully completed '#{operation}' in #{duration.round(2)}s")
         [result, duration]
-      rescue => e
+      rescue StandardError => e
         duration = Time.now - start_time
         if tries < max_tries
           Rails.logger.info("Failed to perform '#{operation}', attempt #{tries}/#{max_tries}: #{context}: #{e.message}")

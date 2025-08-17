@@ -169,7 +169,7 @@ class CommunityChatRecapGeneratorService
       begin
         tries += 1
         yield
-      rescue => e
+      rescue StandardError => e
         if tries < max_tries
           Rails.logger.info("Failed to generate #{operation}, attempt #{tries}/#{max_tries} (ID: #{community_chat_recap.id}): #{e.message}")
           sleep(delay)

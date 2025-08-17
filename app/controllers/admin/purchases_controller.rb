@@ -69,7 +69,7 @@ class Admin::PurchasesController < Admin::BaseController
   def block_buyer
     @purchase.block_buyer!(blocking_user_id: current_user.id)
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 
@@ -89,7 +89,7 @@ class Admin::PurchasesController < Admin::BaseController
     end
 
     render json: { success: true }
-  rescue => e
+  rescue StandardError => e
     render json: { success: false, message: e.message }
   end
 

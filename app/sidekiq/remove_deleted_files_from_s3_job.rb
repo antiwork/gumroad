@@ -30,7 +30,7 @@ class RemoveDeletedFilesFromS3Job
       scoped_model.cdn_deletable.find_each do |file|
         next if file.has_alive_duplicate_files?
         remove_record_files(file)
-      rescue => e
+      rescue StandardError => e
         Bugsnag.notify(e) { _1.add_tab(:file, model: file.class.name, id: file.id, url: file.try(:url)) }
       end
     end

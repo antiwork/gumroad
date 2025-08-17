@@ -6,7 +6,7 @@ class DuplicateProductWorker
 
   def perform(product_id)
     ProductDuplicatorService.new(product_id).duplicate
-  rescue => e
+      rescue StandardError => e
     logger.error("Error while duplicating product id '#{product_id}': #{e.inspect}")
     Bugsnag.notify(e)
   ensure

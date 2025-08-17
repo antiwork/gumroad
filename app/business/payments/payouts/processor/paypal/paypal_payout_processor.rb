@@ -129,7 +129,7 @@ class PaypalPayoutProcessor
 
     split_mode_payments.each do |payment|
       perform_split_payment(payment)
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error "Error processing payment #{payment.id} => #{e.class.name}: #{e.message}"
       Rails.logger.error "Error processing payment #{payment.id} => #{e.backtrace.join("\n")}"
       Bugsnag.notify(e)

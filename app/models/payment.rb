@@ -291,7 +291,7 @@ class Payment < ApplicationRecord
                                                            paypal_fee: paypal_response[:paypal_fee])
         end
       end
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("Error syncing PayPal payout #{id}: #{e.message}")
       errors.add :base, e.message
     end
@@ -319,7 +319,7 @@ class Payment < ApplicationRecord
 
     def generate_default_abandoned_cart_workflow
       DefaultAbandonedCartWorkflowGeneratorService.new(seller: user).generate if user.present?
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("Failed to generate default abandoned cart workflow for user #{user.id}: #{e.message}")
       Bugsnag.notify(e)
     end

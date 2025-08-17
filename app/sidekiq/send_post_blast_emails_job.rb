@@ -32,9 +32,12 @@ class SendPostBlastEmailsJob
 
       begin
         PostEmailApi.process(post: @post, recipients:, cache:, blast: @blast)
-      rescue => e
-        # Delete the sent_post_emails records if there's an error with PostEmailApi.process
-        # We cannot use `transaction` here because it exceeds the lock timeout.
+      rescue PostEmailApi::ProcessingError => e
+        emails = members.map(&:email)
+        SentPostEmail.where(post: @post, email: emails).delete_all
+        raise e
+      rescue StandardError => e
+        Rails.logger.error("Unexpected error in PostEmailApi.process: #{e.message}")
         emails = members.map(&:email)
         SentPostEmail.where(post: @post, email: emails).delete_all
         raise e
