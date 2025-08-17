@@ -15,10 +15,12 @@ class OfferCodeDiscountComputingService
   # @param products [Hash] A hash of product data keyed by permalink
   # @raise [ArgumentError] If products is not a hash or is empty
   def initialize(code, products)
-    raise ArgumentError, 'Products must be a non-empty hash' unless products.is_a?(Hash) && products.any?
+    if !products.is_a?(Hash) || products.empty?
+      raise ArgumentError, 'Products must be a non-empty hash'
+    end
     
     @code = code.to_s.strip
-    @products = products
+    @products = products.transform_keys(&:to_s)
   end
 
   def process
