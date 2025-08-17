@@ -11,8 +11,13 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
+  # @param code [String] The offer code to apply
+  # @param products [Hash] A hash of product data keyed by permalink
+  # @raise [ArgumentError] If products is not a hash or is empty
   def initialize(code, products)
-    @code = code
+    raise ArgumentError, 'Products must be a non-empty hash' unless products.is_a?(Hash) && products.any?
+    
+    @code = code.to_s.strip
     @products = products
   end
 
@@ -43,10 +48,15 @@ class OfferCodeDiscountComputingService
   private
     attr_reader :code, :products
 
+    # Fetches visible links for the products being purchased
+    # @return [ActiveRecord::Relation] Collection of Link objects
     def links
+      permalinks = products.values.filter_map { |p| p[:permalink] if p.is_a?(Hash) }
+      return Link.none if permalinks.empty?
+      
       @_links ||= Link.visible
-        .includes({ cross_sells: :product })
-        .where(unique_permalink: products.values.map { it[:permalink] })
+        .includes(cross_sells: :product)
+        .where(unique_permalink: permalinks)
     end
 
     def offer_codes
@@ -132,13 +142,23 @@ class OfferCodeDiscountComputingService
     # purchase quantity or the discount code may have been used up. The discount
     # will still be validated and updated during checkout, where the buyer will
     # be able to see the correct discount and adjust accordingly.
+    # Applies the same discount to cross-sell products if they're eligible
+    # @param products_data [Hash] The current products data with discounts
+    # @param link [Link] The product link being processed
+    # @param offer_code [OfferCode] The offer code being applied
+    # @return [void]
     def optimistically_apply_to_applicable_cross_sells(products_data, link, offer_code)
+      return unless link&.respond_to?(:cross_sells) && offer_code
+      
       discount = offer_code.discount
+      return unless discount.positive?
 
-      link.cross_sells
-        .filter { |cross_sell| offer_code.applicable?(cross_sell.product) }
-        .each do |cross_sell|
-          products_data[cross_sell.product.unique_permalink] = { discount: }
-        end
+      link.cross_sells.each do |cross_sell|
+        next unless cross_sell&.product && offer_code.applicable?(cross_sell.product)
+        
+        product_permalink = cross_sell.product.unique_permalink
+        products_data[product_permalink] ||= {}
+        products_data[product_permalink][:discount] = discount
+      end
     end
 end
