@@ -37,14 +37,14 @@ module Purchase::Risk
     end
 
     def check_for_past_blocked_email_domains
-      return unless BlockedObject.find_active_objects(blockable_email_domains_if_fraudulent_transaction).exists?
+      return if !BlockedObject.find_active_objects(blockable_email_domains_if_fraudulent_transaction).exists?
 
       self.error_code = PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN
       errors.add :base, vague_error_message
     end
 
     def check_for_past_blocked_guids
-      return unless past_blocked_object(browser_guid)
+      return if !past_blocked_object(browser_guid)
 
       self.error_code = PurchaseErrorCode::BLOCKED_BROWSER_GUID
       errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
@@ -61,7 +61,7 @@ module Purchase::Risk
 
     def check_for_past_fraudulent_buyers
       buyer_user = User.find_by(email:)
-      return unless buyer_user.try(:suspended_for_fraud?)
+      return if !buyer_user.try(:suspended_for_fraud?)
 
       self.error_code = PurchaseErrorCode::SUSPENDED_BUYER
       errors.add :base, "Your card was not charged."

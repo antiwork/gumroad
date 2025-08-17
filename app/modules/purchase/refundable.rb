@@ -180,42 +180,77 @@ class Purchase
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false)
     funds_refunded = flow_of_funds.issued_amount.cents.abs
     partially_refunded_previously = self.stripe_partially_refunded
+
     ActiveRecord::Base.transaction do
-      self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
-      self.stripe_partially_refunded = !self.stripe_refunded
+      update_refund_status!(funds_refunded)
+      vat_already_refunded = vat_completely_refunded?
 
-      vat_already_refunded = gumroad_tax_cents > 0 && gumroad_tax_cents == gumroad_tax_refunded_cents
+      refund = create_refund_record!(funds_refunded, refunding_user_id, stripe_refund, is_for_fraud)
+      return false if refund.blank?
 
-      refund = build_refund(gross_refund_amount: funds_refunded, refunding_user_id:)
-
-      unless refund.present?
-        logger.error "Failed creating a refund: #{self.inspect} :: flow_of_funds :: #{flow_of_funds.inspect} :: stripe_refund :: #{stripe_refund}"
-        errors.add :base, "The purchase could not be refunded. Please check the refund amount."
-        return false
-      end
-
-      if stripe_refund
-        refund.status = stripe_refund.status
-        refund.processor_refund_id = stripe_refund.id
-      end
-      refund.is_for_fraud = is_for_fraud
-      refunds << refund
-      self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
-      mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
-      subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
-      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:)
+      process_refund_side_effects!(refund, vat_already_refunded)
       save!
-      reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
-      reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
-      Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
-      subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
-      send_refunded_notification_webhook
-      if partially_refunded_previously || self.stripe_partially_refunded
-        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state).deliver_later(queue: "critical")
-      else
-        CustomerMailer.refund(email, link.id, id).deliver_later(queue: "critical")
-      end
+
+      handle_post_refund_actions!(refund, vat_already_refunded)
+      send_refund_notifications!(funds_refunded, partially_refunded_previously)
+    end
+  end
+
+  private
+
+  def update_refund_status!(funds_refunded)
+    self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
+    self.stripe_partially_refunded = !self.stripe_refunded
+  end
+
+  def vat_completely_refunded?
+    gumroad_tax_cents > 0 && gumroad_tax_cents == gumroad_tax_refunded_cents
+  end
+
+  def create_refund_record!(funds_refunded, refunding_user_id, stripe_refund, is_for_fraud)
+    refund = build_refund(gross_refund_amount: funds_refunded, refunding_user_id:)
+
+    if refund.blank?
+      logger.error "Failed creating a refund: #{self.inspect} :: flow_of_funds :: #{flow_of_funds.inspect} :: stripe_refund :: #{stripe_refund}"
+      errors.add :base, "The purchase could not be refunded. Please check the refund amount."
+      return nil
+    end
+
+    configure_refund_record!(refund, stripe_refund, is_for_fraud)
+    refund
+  end
+
+  def configure_refund_record!(refund, stripe_refund, is_for_fraud)
+    if stripe_refund
+      refund.status = stripe_refund.status
+      refund.processor_refund_id = stripe_refund.id
+    end
+    refund.is_for_fraud = is_for_fraud
+    refunds << refund
+  end
+
+  def process_refund_side_effects!(refund, vat_already_refunded)
+    self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || refund.is_for_fraud
+    mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
+    subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
+    decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:)
+  end
+
+  def handle_post_refund_actions!(refund, vat_already_refunded)
+    reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
+    reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
+    debit_processor_fee_from_merchant_account!(refund) if !is_refund_chargeback_fee_waived
+    Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
+    subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
+    send_refunded_notification_webhook
+  end
+
+  def send_refund_notifications!(funds_refunded, partially_refunded_previously)
+    if partially_refunded_previously || self.stripe_partially_refunded
+      CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state).deliver_later(queue: "critical")
+    else
+      CustomerMailer.refund(email, link.id, id).deliver_later(queue: "critical")
+    end
       # Those callbacks are manually invoked because of a rails issue: https://github.com/rails/rails/issues/39972
       update_creator_analytics_cache(force: true)
       # Refunding impacts many of the ES document fields,

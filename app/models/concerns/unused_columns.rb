@@ -32,7 +32,7 @@ module UnusedColumns
 
       columns.each do |column|
         # Allow creating a custom getter that matches the column name
-        unless method_defined?(column)
+        if !method_defined?(column)
           define_method(column) do
             raise NoMethodError, "Column #{column} is deprecated and no longer used."
           end

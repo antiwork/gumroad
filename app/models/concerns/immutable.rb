@@ -17,7 +17,9 @@ module Immutable
 
     before_update do
       changed_attributes_not_excluded = changed - self.class.attr_mutable_attributes
-      raise RecordImmutable, changed_attributes_not_excluded if changed_attributes_not_excluded.present?
+      if changed_attributes_not_excluded.present?
+        raise RecordImmutable, changed_attributes_not_excluded
+      end
     end
   end
 
@@ -36,9 +38,10 @@ module Immutable
       ActiveRecord::Base.transaction do
         block.call(new_record)
         result = record.mark_deleted(validate: false)
-        raise ActiveRecord::Rollback unless result
+        raise ActiveRecord::Rollback if result == false
+
         result = raise_errors ? new_record.save! : new_record.save
-        raise ActiveRecord::Rollback unless result
+        raise ActiveRecord::Rollback if result == false
       end
       [result, new_record]
     end

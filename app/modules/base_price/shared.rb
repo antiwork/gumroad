@@ -3,7 +3,7 @@
 module BasePrice::Shared
   def clean_price(price_string)
     clean = price_string.to_s
-    unless single_unit_currency?
+    if !single_unit_currency?
       clean = clean.gsub(/[^-0-9.,]/, "")      # allow commas for now
       if clean.rindex(/,/) == clean.length - 3 # euro style!
         clean = clean.delete(".") # remove euro 1000^x delimiters
