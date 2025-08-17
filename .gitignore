@@ -61,9 +61,3 @@ lib/GeoIP2-City.mmdb
 nomad/
 docs/ssh.md
 
-# SPA demo files - do not commit
-public/spa-demo.html
-dashboard-spa-demo.html
-SPA_IMPLEMENTATION_SUMMARY.md
-dashboard-spa-implementation-plan.md
-DASHBOARD_SPA_README.md
