@@ -97,7 +97,11 @@ class Purchase::CreateService < Purchase::BaseService
             end
           end
 
-          purchase.offer_code = upsell.offer_code unless params[:is_purchasing_power_parity_discounted]
+          # The original discount is retained if it is better than the upsell
+          # discount. The client can't automatically set the upsell discount
+          # because it doesn't have a "code". Thus, upsell discount should only
+          # be applied when the purchase does not already have a discount code.
+          purchase.offer_code ||= upsell.offer_code unless params[:is_purchasing_power_parity_discounted]
         end
         purchase.build_upsell_purchase(
           upsell:,

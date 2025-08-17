@@ -353,6 +353,29 @@ describe Purchase::CreateService, :vcr do
         end
       end
     end
+
+    context "when the purchase already has an offer code" do
+      let(:existing_offer_code) { create(:offer_code, user:, products: [product], amount_cents: 200, code: "existing789") }
+
+      before do
+        params[:purchase][:offer_code] = existing_offer_code
+      end
+
+      it "retains the existing offer code instead of using the upsell offer code" do
+        purchase, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(purchase.upsell_purchase.upsell).to eq(cross_sell)
+        expect(purchase.upsell_purchase.selected_product).to eq(selected_product)
+        expect(purchase.offer_code).to eq(existing_offer_code)
+        expect(purchase.purchase_offer_code_discount.offer_code).to eq(existing_offer_code)
+        expect(purchase.purchase_offer_code_discount.offer_code_amount).to eq(200)
+        expect(error).to be_nil
+      end
+    end
   end
 
   describe "bundle purchases" do

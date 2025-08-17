@@ -19,7 +19,7 @@ class OfferCode < ApplicationRecord
   stripped_fields :code
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
-  belongs_to :user, optional: true
+  belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
   has_one :upsell
@@ -157,9 +157,16 @@ class OfferCode < ApplicationRecord
     end
   end
 
+  def applicable?(link)
+    if universal?
+      currency_type.present? ? link.price_currency_type == currency_type : true
+    else
+      products.include?(link)
+    end
+  end
+
   def inactive?
-    now = Time.current
-    (valid_at.present? && now < valid_at) || (expires_at.present? && now > expires_at)
+    !!(valid_at&.future? || expires_at&.past?)
   end
 
   def discount
