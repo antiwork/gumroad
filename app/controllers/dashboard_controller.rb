@@ -16,8 +16,8 @@ class DashboardController < Sellers::BaseController
       return
     end
 
-    # Render SPA version by default
-    render_spa_version
+    # Render dashboard
+    render_dashboard
   end
 
   def customers_count
@@ -66,9 +66,9 @@ class DashboardController < Sellers::BaseController
 
   private
 
-  def render_spa_version
+  def render_dashboard
     respond_to do |format|
-      format.html { render :spa }
+      format.html # Will render index.html.erb by default
       format.json { render json: dashboard_api_data }
     end
   end
