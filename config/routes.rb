@@ -735,6 +735,21 @@ Rails.application.routes.draw do
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
 
+    # SPA Routes - conditionally render SPA version
+    get "/dashboard/spa" => "dashboard#spa", as: :dashboard_spa
+
+    # API routes for SPA
+    namespace :api do
+      namespace :internal do
+        resources :dashboard, only: [:index] do
+          collection do
+            get :stats
+            get :quick_stats
+          end
+        end
+      end
+    end
+
     get "/products", to: "links#index", as: :products
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }, as: :short_link_offer_code

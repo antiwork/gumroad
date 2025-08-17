@@ -1,0 +1,305 @@
+<%# Dashboard SPA Version %>
+<% content_for :title, "Dashboard" %>
+<% content_for :body_id, "dashboard-spa" %>
+
+<div id="dashboard-spa-root"></div>
+
+<%= javascript_pack_tag 'dashboard', defer: true %>
+
+<style>
+  /* SPA-specific styles */
+  .dashboard-spa-container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .dashboard-spa-nav {
+    width: 260px;
+    background: var(--color-bg-secondary);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    padding: var(--spacer-4);
+  }
+
+  .dashboard-spa-nav-header {
+    margin-bottom: var(--spacer-6);
+  }
+
+  .dashboard-spa-nav-logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacer-2);
+    font-weight: 600;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .dashboard-spa-nav-items {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacer-1);
+  }
+
+  .dashboard-spa-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacer-3);
+    padding: var(--spacer-2) var(--spacer-3);
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    color: var(--color-text-secondary);
+    transition: all 0.15s ease;
+  }
+
+  .dashboard-spa-nav-item:hover,
+  .dashboard-spa-nav-item.is-active {
+    background: var(--color-bg-accent);
+    color: var(--color-text);
+  }
+
+  .dashboard-spa-nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .dashboard-spa-nav-label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .dashboard-spa-nav-badge {
+    background: var(--color-accent);
+    color: white;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+
+  .dashboard-spa-nav-footer {
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--spacer-4);
+    margin-top: var(--spacer-4);
+  }
+
+  .dashboard-spa-nav-user {
+    display: flex;
+    align-items: center;
+    gap: var(--spacer-2);
+    padding: var(--spacer-2);
+    margin-top: var(--spacer-2);
+  }
+
+  .dashboard-spa-nav-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+  }
+
+  .dashboard-spa-nav-user-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .dashboard-spa-nav-user-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dashboard-spa-nav-user-email {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dashboard-spa-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .dashboard-spa-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacer-4) var(--spacer-6);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+
+  .dashboard-spa-header-actions {
+    display: flex;
+    gap: var(--spacer-2);
+  }
+
+  .dashboard-spa-content {
+    flex: 1;
+    overflow: auto;
+    padding: var(--spacer-6);
+    transition: opacity 0.2s ease;
+  }
+
+  .dashboard-spa-content.is-navigating {
+    opacity: 0.7;
+  }
+
+  .dashboard-spa-breadcrumbs-list {
+    display: flex;
+    align-items: center;
+    gap: var(--spacer-1);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .dashboard-spa-breadcrumbs-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacer-1);
+  }
+
+  .dashboard-spa-breadcrumbs-separator {
+    width: 16px;
+    height: 16px;
+    color: var(--color-text-secondary);
+  }
+
+  .dashboard-spa-breadcrumbs-link {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  .dashboard-spa-breadcrumbs-link:hover {
+    color: var(--color-text);
+  }
+
+  .dashboard-spa-breadcrumbs-current {
+    color: var(--color-text);
+    font-weight: 500;
+  }
+
+  /* Loading states */
+  .dashboard-spa-loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: var(--spacer-6);
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--color-border);
+    border-top: 3px solid var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .dashboard-spa-loading-spinner.size-small .spinner {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+  }
+
+  .dashboard-spa-loading-spinner.size-large .spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .dashboard-spa-page-loading {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 400px;
+    gap: var(--spacer-4);
+  }
+
+  .loading-message {
+    color: var(--color-text-secondary);
+    font-size: 14px;
+  }
+
+  /* Error states */
+  .dashboard-spa-error-boundary {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 400px;
+    padding: var(--spacer-6);
+  }
+
+  .error-content {
+    text-align: center;
+    max-width: 500px;
+  }
+
+  .error-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--color-error);
+    margin: 0 auto var(--spacer-4);
+  }
+
+  .error-actions {
+    display: flex;
+    gap: var(--spacer-3);
+    justify-content: center;
+    margin-top: var(--spacer-6);
+  }
+
+  .error-details {
+    margin-top: var(--spacer-4);
+    text-align: left;
+  }
+
+  .error-stack {
+    background: var(--color-bg-secondary);
+    padding: var(--spacer-3);
+    border-radius: var(--border-radius);
+    font-size: 12px;
+    max-height: 200px;
+    overflow: auto;
+  }
+
+  /* Responsive design */
+  @media (max-width: 768px) {
+    .dashboard-spa-container {
+      flex-direction: column;
+    }
+
+    .dashboard-spa-nav {
+      width: 100%;
+      height: auto;
+      flex-direction: row;
+      padding: var(--spacer-2);
+    }
+
+    .dashboard-spa-nav-items {
+      flex-direction: row;
+      overflow-x: auto;
+    }
+
+    .dashboard-spa-nav-user {
+      display: none;
+    }
+  }
+</style>

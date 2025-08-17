@@ -9,10 +9,18 @@ class DashboardController < Sellers::BaseController
     authorize :dashboard
 
     if current_seller.suspended_for_tos_violation?
-      redirect_to products_url
+      respond_to do |format|
+        format.html { redirect_to products_url }
+        format.json { render json: { error: "Account suspended", redirect: products_url }, status: :forbidden }
+      end
+      return
+    end
+
+    # Feature flag check for SPA version
+    if should_render_spa?
+      render_spa_version
     else
-      presenter = CreatorHomePresenter.new(pundit_user)
-      @creator_home_props = presenter.creator_home_props
+      render_traditional_version
     end
   end
 
@@ -53,5 +61,59 @@ class DashboardController < Sellers::BaseController
 
     flash[:alert] = "A 1099 form for #{year} was not filed for your account."
     redirect_to dashboard_path
+  end
+
+  def spa
+    authorize :dashboard
+
+    if current_seller.suspended_for_tos_violation?
+      redirect_to products_url
+      return
+    end
+
+    # Render SPA version directly
+    render_spa_version
+  end
+
+  private
+
+  def should_render_spa?
+    # Don't render SPA for AJAX requests
+    return false if request.xhr?
+    
+    # Check feature flag
+    DashboardSpaFeature.should_redirect_to_spa?(current_seller)
+  end
+
+  def render_spa_version
+    respond_to do |format|
+      format.html { render :spa }
+      format.json { render json: dashboard_api_data }
+    end
+  end
+
+  def render_traditional_version
+    presenter = CreatorHomePresenter.new(pundit_user)
+    @creator_home_props = presenter.creator_home_props
+    
+    respond_to do |format|
+      format.html # Render default dashboard view
+      format.json { render json: { success: true, data: @creator_home_props } }
+    end
+  end
+
+  def dashboard_api_data
+    # API data structure for SPA
+    presenter = CreatorHomePresenter.new(pundit_user)
+    {
+      success: true,
+      user: {
+        id: current_seller.id,
+        name: current_seller.name,
+        email: current_seller.email,
+        avatar_url: current_seller.profile_picture_url
+      },
+      dashboard_data: presenter.creator_home_props
+    }
   end
 end
