@@ -22,6 +22,7 @@ class DashboardAPIService {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
         "X-Requested-With": "XMLHttpRequest",
         "X-CSRF-Token": this.getCSRFToken(),
         ...options.headers,
@@ -42,49 +43,12 @@ class DashboardAPIService {
   }
 
   async getDashboardData() {
-    // Convert existing dashboard controller to return JSON
-    const response = await fetch("/dashboard", {
-      headers: {
-        "Accept": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-        "X-CSRF-Token": this.getCSRFToken(),
-      },
-      credentials: "same-origin",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Dashboard API Error: ${response.status}`);
-    }
-
-    return response.json();
+    return this.fetchWithAuth(`${this.baseURL}/dashboard`);
   }
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const [customers, revenue, members, mrr] = await Promise.all([
-      fetch("/dashboard/customers_count", { 
-        credentials: "same-origin",
-        headers: { "X-CSRF-Token": this.getCSRFToken() }
-      }).then(r => r.json()),
-      fetch("/dashboard/total_revenue", { 
-        credentials: "same-origin",
-        headers: { "X-CSRF-Token": this.getCSRFToken() }
-      }).then(r => r.json()),
-      fetch("/dashboard/active_members_count", { 
-        credentials: "same-origin",
-        headers: { "X-CSRF-Token": this.getCSRFToken() }
-      }).then(r => r.json()),
-      fetch("/dashboard/monthly_recurring_revenue", { 
-        credentials: "same-origin",
-        headers: { "X-CSRF-Token": this.getCSRFToken() }
-      }).then(r => r.json()),
-    ]);
-
-    return {
-      customers_count: customers.value,
-      total_revenue: revenue.value,
-      active_members_count: members.value,
-      monthly_recurring_revenue: mrr.value,
-    };
+    const resp = await this.fetchWithAuth(`${this.baseURL}/dashboard/stats`);
+    return resp.data as DashboardStats;
   }
 
   async getAnalyticsData(startDate?: string, endDate?: string) {

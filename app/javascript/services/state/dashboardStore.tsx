@@ -52,11 +52,20 @@ const dashboardReducer = (state: DashboardState, action: DashboardAction): Dashb
     
     case "CLEAR_CACHE":
       if (action.payload) {
-        const newCache = { ...state.cache };
-        delete newCache[action.payload];
-        return { ...state, cache: newCache };
+        const key = action.payload;
+        const { [key]: _c, ...newCache } = state.cache;
+        const { [key]: _l, ...newLoading } = state.loading;
+        const { [key]: _e, ...newErrors } = state.errors;
+        const { [key]: _f, ...newLastFetch } = state.lastFetch;
+        return {
+          ...state,
+          cache: newCache,
+          loading: newLoading,
+          errors: newErrors,
+          lastFetch: newLastFetch,
+        };
       }
-      return { ...state, cache: {} };
+      return { ...state, cache: {}, loading: {}, errors: {}, lastFetch: {} };
     
     case "ADD_TO_HISTORY":
       return {

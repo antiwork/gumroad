@@ -20,18 +20,9 @@ const AudienceRoute: React.FC = () => {
     return <ErrorFallback error={new Error(error)} />;
   }
 
-  if (isLoadingAudience && !audienceData) {
+  if (isLoadingAudience) {
     return <PageLoading message="Loading audience data..." />;
   }
-
-  // For now, redirect to the existing audience page
-  // TODO: Create a React-based audience component
-  useEffect(() => {
-    if (!isLoadingAudience && !audienceData) {
-      // Fallback to server-rendered page
-      window.location.href = "/dashboard/audience";
-    }
-  }, [isLoadingAudience, audienceData]);
 
   return (
     <div className="dashboard-spa-audience">

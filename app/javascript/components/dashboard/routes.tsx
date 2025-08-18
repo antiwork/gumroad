@@ -7,11 +7,11 @@ import { ErrorFallback } from "./shared/ErrorBoundary";
 // Lazy load route components for better performance
 const DashboardRoute = React.lazy(() => import("./routes/DashboardRoute"));
 const ProductsRoute = React.lazy(() => import("./routes/ProductsRoute"));
-const AnalyticsRoute = React.lazy(() => import("./routes/AnalyticsRoute"));
 const AudienceRoute = React.lazy(() => import("./routes/AudienceRoute"));
 const SalesRoute = React.lazy(() => import("./routes/SalesRoute"));
 const BalanceRoute = React.lazy(() => import("./routes/BalanceRoute"));
 const UTMLinksRoute = React.lazy(() => import("./routes/UTMLinksRoute"));
+const SettingsRoute = React.lazy(() => import("./routes/SettingsRoute"));
 
 export const createDashboardRouter = () => {
   return createBrowserRouter([
@@ -33,7 +33,7 @@ export const createDashboardRouter = () => {
             },
             {
               path: "sales",
-              element: <AnalyticsRoute />,
+              element: <SalesRoute />,
             },
             {
               path: "audience", 
@@ -64,6 +64,10 @@ export const createDashboardRouter = () => {
         {
           path: "audience",
           element: <Navigate to="/dashboard/audience" replace />,
+        },
+        {
+          path: "settings",
+          element: <SettingsRoute />,
         },
       ],
     },

@@ -31,7 +31,14 @@ export const DashboardShell: React.FC = () => {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey) {
+      const target = e.target as HTMLElement | null;
+      const tag = (target?.tagName || "").toLowerCase();
+      const isEditable =
+        tag === "input" ||
+        tag === "textarea" ||
+        (target?.getAttribute("contenteditable") === "true");
+
+      if (!isEditable && (e.metaKey || e.ctrlKey)) {
         switch (e.key) {
           case "k":
             e.preventDefault();

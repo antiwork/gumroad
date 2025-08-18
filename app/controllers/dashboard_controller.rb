@@ -2,7 +2,7 @@
 
 class DashboardController < Sellers::BaseController
   include ActionView::Helpers::NumberHelper, CurrencyHelper
-  skip_before_action :check_suspended
+  skip_before_action :check_suspended, only: :index
   before_action :check_payment_details, only: :index
 
   def index

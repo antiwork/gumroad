@@ -20,9 +20,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const root = ReactDOM.createRoot(rootElement);
     
     root.render(
-      React.createElement(DashboardProvider, { children: 
+      React.createElement(
+        DashboardProvider,
+        null,
         React.createElement(RouterProvider, { router })
-      })
+      )
     );
   } else {
     console.error("Dashboard SPA root element not found");
