@@ -52,8 +52,7 @@ class CustomerSurchargeController < ApplicationController
           ip_address: sales_tax_info.ip_address,
           state: sales_tax_info.state_code || GeoIp.lookup(sales_tax_info.ip_address)&.region_name,
         }
-        buyer_vat_id = sales_tax_info.business_vat_id
-        buyer_vat_id = subscription.effective_business_vat_id if buyer_vat_id.blank? && subscription
+        buyer_vat_id = sales_tax_info.business_vat_id.presence || subscription&.effective_business_vat_id
         from_discover = subscription.original_purchase.was_discover_fee_charged?
       else
         buyer_location = { postal_code: params[:postal_code], country: params[:country], state: params[:state], ip_address: request.remote_ip }
