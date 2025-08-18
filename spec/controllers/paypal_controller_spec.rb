@@ -65,6 +65,9 @@ describe PaypalController, :vcr do
       @user = create(:user)
       create(:user_compliance_info, user: @user)
       sign_in(@user)
+      @user.mark_compliant!(author_name: "Iffy")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+      create(:payment_completed, user: @user)
 
       allow_any_instance_of(PaypalMerchantAccountManager)
         .to receive(:create_partner_referral).and_return(partner_referral_success_response)
@@ -96,6 +99,24 @@ describe PaypalController, :vcr do
     it "creates paypal partner-referral for the current user" do
       expect_any_instance_of(PaypalMerchantAccountManager).to receive(:create_partner_referral).and_return(partner_referral_success_response)
       get :connect
+    end
+
+    it "returns an error alert if user is from a country where PayPal Connect is not supported" do
+      create(:user_compliance_info, user: @user, country: "Egypt")
+
+      get :connect
+
+      expect(response).to redirect_to(settings_payments_path)
+      expect(flash[:alert]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
+    end
+
+    it "returns an error alert if user is not allowed to connect their PayPal account" do
+      @user.update!(user_risk_state: "not_reviewed")
+
+      get :connect
+
+      expect(response).to redirect_to(settings_payments_path)
+      expect(flash[:alert]).to eq("Your PayPal account could not be connected because you do not meet the eligibility requirements.")
     end
 
     context "when response is success" do

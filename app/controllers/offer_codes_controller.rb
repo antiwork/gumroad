@@ -5,7 +5,7 @@ class OfferCodesController < ApplicationController
     response = OfferCodeDiscountComputingService.new(params[:code], params[:products]).process
     response = if response[:error_code].present?
       error_message = case response.fetch(:error_code)
-                      when :exceeding_quantity
+                      when :insufficient_times_of_use
                         "Sorry, the discount code you are using is invalid for the quantity you have selected."
                       when :sold_out
                         "Sorry, the discount code you wish to use has expired."
@@ -13,7 +13,7 @@ class OfferCodesController < ApplicationController
                         "Sorry, the discount code you wish to use is invalid."
                       when :inactive
                         "Sorry, the discount code you wish to use is inactive."
-                      when :insufficient_quantity
+                      when :unmet_minimum_purchase_quantity
                         "Sorry, the discount code you wish to use has an unmet minimum quantity."
       end
       { valid: false, error_code: response[:error_code], error_message: }

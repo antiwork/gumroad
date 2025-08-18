@@ -43,12 +43,17 @@ describe Admin::SearchController do
 
   describe "#purchases" do
     let!(:email) { "user@example.com" }
+    let(:ip_v4) { "203.0.113.42" }
 
     it "redirects to the admin purchase page when one purchase is found" do
-      purchase = create(:purchase, email:)
+      purchase_by_email = create(:purchase, email:)
+      purchase_by_ip = create(:purchase, ip_address: ip_v4)
 
       get :purchases, params: { query: email }
-      expect(response).to redirect_to admin_purchase_path(purchase)
+      expect(response).to redirect_to admin_purchase_path(purchase_by_email)
+
+      get :purchases, params: { query: ip_v4 }
+      expect(response).to redirect_to admin_purchase_path(purchase_by_ip)
     end
 
     it "returns purchases from AdminSearchService" do

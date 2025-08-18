@@ -663,4 +663,38 @@ describe OfferCode do
       end
     end
   end
+
+  describe "#applicable?" do
+    context "when the offer code is universal and has no currency type" do
+      let(:offer_code) { create(:universal_offer_code, user: @product.user, amount_percentage: 10, currency_type: nil) }
+      let(:usd_product) { @product }
+      let(:eur_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "eur") }
+
+      it "returns true for products regardless of currency" do
+        expect(offer_code.applicable?(usd_product)).to eq(true)
+        expect(offer_code.applicable?(eur_product)).to eq(true)
+      end
+    end
+
+    context "when the offer code is universal with a currency type" do
+      let(:offer_code) { create(:universal_offer_code, user: @product.user, amount_cents: 100, currency_type: "usd") }
+      let(:usd_product) { @product }
+      let(:eur_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "eur") }
+
+      it "returns true only for products with matching currency" do
+        expect(offer_code.applicable?(usd_product)).to eq(true)
+        expect(offer_code.applicable?(eur_product)).to eq(false)
+      end
+    end
+
+    context "when the offer code applies to specific products" do
+      let(:other_product) { create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd") }
+      let(:offer_code) { create(:offer_code, products: [@product], amount_cents: 100, currency_type: "usd") }
+
+      it "returns true for the associated product and false otherwise" do
+        expect(offer_code.applicable?(@product)).to eq(true)
+        expect(offer_code.applicable?(other_product)).to eq(false)
+      end
+    end
+  end
 end

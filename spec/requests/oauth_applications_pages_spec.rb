@@ -89,7 +89,7 @@ describe "OauthApplicationsPages", type: :feature, js: true do
     expect(page).to have_field("Access Token", with: application.access_tokens.last.token)
     expect(application.access_grants.count).to eq 1
     expect(application.access_tokens.count).to eq 1
-    expect(application.access_tokens.last.scopes.to_a).to eq %w[edit_products view_sales mark_sales_as_shipped refund_sales revenue_share ifttt view_profile]
+    expect(application.access_tokens.last.scopes.to_a).to eq %w[edit_products view_sales mark_sales_as_shipped refund_sales revenue_share ifttt view_profile view_payouts]
   end
 
   it "doesn't list the application if there are no grants for it" do
