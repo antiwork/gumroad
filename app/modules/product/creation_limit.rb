@@ -29,11 +29,6 @@ module Product::CreationLimit
   private
     ISOLATED_EXECUTION_STATE_KEY = :gumroad_bypass_product_creation_limit
 
-    def daily_creation_limit
-      return 100 if user&.user_risk_state == "compliant"
-      10
-    end
-
     def validate_daily_product_creation_limit
       return if skip_daily_product_creation_limit?
 
@@ -50,5 +45,9 @@ module Product::CreationLimit
       return true if user.is_team_member?
 
       false
+    end
+
+    def daily_creation_limit
+      user&.compliant? ? 100 : 10
     end
 end
