@@ -96,8 +96,6 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
     describe "address verification confirmation prompt" do
       it "lets a buyer choose to use a verified address to complete their purchase" do
-        previous_successful_purchase_count = Purchase.successful.count
-
         visit "/l/#{@product.unique_permalink}"
         add_to_cart(@product)
         check_out(@product, address: { street: "255 King St #602" }, error: true)
@@ -107,9 +105,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
         click_on "Yes, update"
 
-        Timeout.timeout(Capybara.default_max_wait_time) do
-          loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-        end
+        expect(page).to have_alert("Your purchase was successful!")
 
         purchase = Purchase.last
         expect(purchase.street_address).to eq("255 KING ST APT 602")
@@ -119,8 +115,6 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
       end
 
       it "lets a buyer choose not to use a verified address to complete their purchase" do
-        previous_successful_purchase_count = Purchase.successful.count
-
         visit "/l/#{@product.unique_permalink}"
         add_to_cart(@product)
         check_out(@product, address: { street: "255 King St #602" }, error: true)
@@ -130,9 +124,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
         click_on "No, continue"
 
-        Timeout.timeout(Capybara.default_max_wait_time) do
-          loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-        end
+        expect(page).to have_alert("Your purchase was successful!")
 
         purchase = Purchase.last
         expect(purchase.street_address).to eq("255 King St #602")

@@ -406,10 +406,10 @@ describe "Balance Pages Scenario", js: true, type: :system do
         describe "payout-skipped notes" do
           context "when the payout was skipped because the account was suspended" do
             before do
-              seller.flag_for_tos_violation!(author_id: 1, bulk: true)
-              seller.suspend_for_tos_violation!(author_id: 1, bulk: true)
+              seller.flag_for_tos_violation!(author_name: "iffy", bulk: true)
+              seller.suspend_for_tos_violation!(author_name: "iffy", bulk: true)
               Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
-              seller.mark_compliant!(author_id: 1)
+              seller.mark_compliant!(author_name: "iffy")
             end
 
             it "shows the payout-skipped notice" do

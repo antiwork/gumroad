@@ -50,7 +50,7 @@ describe "Checkout bundles", :js, type: :system do
       click_on "Pay"
       expect(page).to have_alert(text: "Your purchase was successful!")
 
-      expect(page.current_url).to eq(library_url({ bundles: Purchase.first.external_id, host: UrlService.domain_with_protocol }))
+      expect(page.current_url).to eq(library_url({ bundles: bundle.external_id, host: UrlService.domain_with_protocol }))
     end
   end
 
