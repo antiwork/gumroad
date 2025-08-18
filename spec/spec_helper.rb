@@ -265,14 +265,6 @@ RSpec.configure do |config|
     JSErrorReporter.instance.reset!
   end
 
-  config.before(:each, type: :system) do
-    driven_by :rack_test
-  end
-
-  config.before(:each, type: :system, js: true) do
-    driven_by :selenium_chrome_headless
-  end
-
   config.before(:each) do
     # Needs to be a valid URL that returns 200 OK when accessed externally, otherwise requests to Stripe will error out.
     allow_any_instance_of(User).to receive(:business_profile_url).and_return("https://vipul.gumroad.com/")
