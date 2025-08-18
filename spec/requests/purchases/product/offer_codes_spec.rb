@@ -131,9 +131,10 @@ describe("Offer-code usage from product page", type: :feature, js: true) do
   end
 
   it "removes existing discount codes that only apply to the same products as the new discount code" do
-    product1 = create(:product, user: create(:user, display_offer_code_field: true))
-    product2 = create(:product)
-    product3 = create(:product)
+    seller = create(:user, display_offer_code_field: true)
+    product1 = create(:product, user: seller)
+    product2 = create(:product, user: seller)
+    product3 = create(:product, user: seller)
     offer_code1 = create(:offer_code, code: "code1", products: [product1, product3])
     offer_code2 = create(:offer_code, code: "code2", products: [product1, product2])
 
