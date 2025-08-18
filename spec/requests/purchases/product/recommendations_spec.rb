@@ -20,7 +20,9 @@ describe "RecommendationsScenario", type: :system, js: true do
     visit "/l/#{@recommended_product.unique_permalink}?recommended_by=discover"
 
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until EsClient.count(index: ProductPageView.index_name)["count"] == 1
+      until EsClient.count(index: ProductPageView.index_name)["count"] == 1
+        sleep 0.5
+      end
     end
 
     page_view = EsClient.search(index: ProductPageView.index_name, size: 1)["hits"]["hits"][0]["_source"]

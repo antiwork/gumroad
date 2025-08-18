@@ -160,16 +160,13 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
       # have to mock EasyPost calls because the timeout throws before EasyPost responds in testing
       exception = EasyPost::Errors::EasyPostError.new
       expect_any_instance_of(EasyPost::Services::Address).to receive(:create).and_raise(exception)
-      previous_successful_purchase_count = Purchase.successful.count
 
       visit "/l/#{@product.unique_permalink}"
 
       add_to_cart(@product)
       check_out(@product, address: { city: "Burnaby", state: "BC", zip_code: "V3N 4H4" }, country: "Canada", should_verify_address: true)
 
-      Timeout.timeout(Capybara.default_max_wait_time) do
-        loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-      end
+      expect(page).to have_alert("Your purchase was successful!")
 
       purchase = Purchase.last
       expect(purchase.street_address).to eq("1640 17th St")
@@ -197,7 +194,6 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
       @product = create(:physical_product, user: @user, require_shipping: true, price_cents: 100_00)
       @product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
       @product.save!
-      previous_successful_purchase_count = Purchase.successful.count
 
       visit "/l/#{@product.unique_permalink}"
       add_to_cart(@product)
@@ -205,9 +201,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
       expect(page).not_to have_text("We are unable to verify your shipping address. Is your address correct?")
 
-      Timeout.timeout(Capybara.default_max_wait_time) do
-        loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-      end
+      expect(page).to have_alert("Your purchase was successful!")
 
       purchase = Purchase.last
       expect(purchase.street_address).to eq("9384 CARDSTON CT")

@@ -19,9 +19,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
       expect(page).to have_text("Total US$20", normalize_ws: true)
     end
 
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-    end
+    expect(page).to have_alert("Your purchase was successful!")
 
     purchase = Purchase.last
     subscription = Subscription.last
@@ -51,9 +49,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
       expect(page).to have_text("Total US$21.07", normalize_ws: true)
     end
 
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-    end
+    expect(page).to have_alert("Your purchase was successful!")
 
     purchase = Purchase.last
     subscription = Subscription.last
@@ -84,9 +80,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
       expect(page).to have_text("Total US$37", normalize_ws: true)
     end
 
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-    end
+    expect(page).to have_alert("Your purchase was successful!")
 
     purchase = Purchase.last
 
