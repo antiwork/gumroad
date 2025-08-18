@@ -3,63 +3,83 @@
 require "spec_helper"
 
 describe Product::CreationLimit, :enforce_product_creation_limit do
-  let(:user) { create(:user) }
+  let(:non_compliant_user) { create(:user, user_risk_state: "not_reviewed") }
+  let(:compliant_user) { create(:user, user_risk_state: "compliant") }
 
-  it "allows creating up to 10 products in 24 hours" do
-    create_list(:product, 9, user: user)
-    new_product = build(:product, user: user)
-    expect(new_product).to be_valid
+  context "for non-compliant users" do
+    it "prevents creating more than 10 products in 24 hours" do
+      create_products_in_bulk(non_compliant_user, 9)
+
+      product_10 = build(:product, user: non_compliant_user)
+      expect(product_10).to be_valid
+      product_10.save!
+
+      product_11 = build(:product, user: non_compliant_user)
+      expect(product_11).not_to be_valid
+      expect(product_11.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
+
+      travel_to 25.hours.from_now
+
+      expect(product_11).to be_valid
+    end
   end
 
-  it "prevents creating more than 10 products in 24 hours" do
-    create_list(:product, 10, user: user)
+  context "for compliant users" do
+    it "allows creating up to 100 products in 24 hours" do
+      create_products_in_bulk(compliant_user, 99)
 
-    new_product = build(:product, user: user)
+      product_100 = build(:product, user: compliant_user)
+      expect(product_100).to be_valid
+      product_100.save!
 
-    expect(new_product).not_to be_valid
-    expect(new_product.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
-  end
+      product_101 = build(:product, user: compliant_user)
+      expect(product_101).not_to be_valid
+      expect(product_101.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
 
-  it "allows different users to each create 10 products in 24 hours" do
-    user1 = create(:user)
-    user2 = create(:user)
-    create_list(:product, 10, user: user1)
+      travel_to 25.hours.from_now
 
-    new_product = build(:product, user: user2)
-
-    expect(new_product).to be_valid
-  end
-
-  it "allows creating products after 24 hours have passed" do
-    create_list(:product, 10, user: user, created_at: 25.hours.ago)
-    new_product = build(:product, user: user)
-    expect(new_product).to be_valid
+      expect(product_101).to be_valid
+    end
   end
 
   context "when user is a team member" do
     it "skips the daily product creation limit" do
       admin = create(:user, is_team_member: true)
-      create_list(:product, 10, user: admin)
+      create_products_in_bulk(admin, 100)
 
-      new_product = build(:product, user: admin)
-
-      expect(new_product).to be_valid
+      product_101 = build(:product, user: admin)
+      expect(product_101).to be_valid
     end
   end
 
   describe ".bypass_product_creation_limit" do
     it "bypasses the limit within the block and restores it afterwards" do
-      user = create(:user)
-      create_list(:product, 10, user: user)
+      create_products_in_bulk(non_compliant_user, 10)
 
       Link.bypass_product_creation_limit do
-        bypassed_product = build(:product, user: user)
+        bypassed_product = build(:product, user: non_compliant_user)
         expect(bypassed_product).to be_valid
       end
 
-      blocked_product = build(:product, user: user)
+      blocked_product = build(:product, user: non_compliant_user)
       expect(blocked_product).not_to be_valid
       expect(blocked_product.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
     end
   end
+
+  private
+    def create_products_in_bulk(user, count)
+      unique_permalink_chars = ("a".."z").to_a
+      rows = Array.new(count) do
+        FactoryBot.build(
+          :product,
+          user: user,
+          created_at: Time.current,
+          updated_at: Time.current,
+          unique_permalink: SecureRandom.alphanumeric(10, chars: unique_permalink_chars),
+        ).attributes
+      end
+
+      Link.insert_all(rows)
+    end
 end
