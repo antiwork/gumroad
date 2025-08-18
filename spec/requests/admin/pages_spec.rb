@@ -106,7 +106,7 @@ describe "Admin Pages Scenario", type: :feature, js: true do
       product2 = create(:product, user: seller, name: "JavaScript Masterclass")
       email = "buyer@example.com"
       purchase1 = create(:purchase, link: product1, email:)
-      purchase2 = create(:purchase, link: product2, email:)
+      create(:purchase, link: product2, email:)
 
       # First search by email
       visit admin_purchase_path(purchase1)
