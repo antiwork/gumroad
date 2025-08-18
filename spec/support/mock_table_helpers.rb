@@ -2,7 +2,6 @@
 
 module MockTableHelpers
   def create_mock_model(name: "MockModel#{SecureRandom.hex(6)}", constantize: true, &block)
-    DatabaseCleaner[:active_record].clean_with(:transaction)
     table_name = "#{name.tableize}_#{SecureRandom.hex}"
     model = Class.new(ApplicationRecord)
     model.define_singleton_method(:name) { name }

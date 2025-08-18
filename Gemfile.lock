@@ -236,13 +236,6 @@ GEM
       addressable
     csv (3.3.0)
     dalli (3.2.8)
-    database_cleaner-active_record (2.2.0)
-      activerecord (>= 5.a)
-      database_cleaner-core (~> 2.0.0)
-    database_cleaner-core (2.0.1)
-    database_cleaner-mongoid (2.0.1)
-      database_cleaner-core (~> 2.0.0)
-      mongoid
     date (3.3.4)
     dead_end (4.0.0)
     declarative (0.0.20)
@@ -1137,8 +1130,6 @@ DEPENDENCIES
   colorize (~> 1.0)
   countries (~> 6.0)
   csv (~> 3.3)
-  database_cleaner-active_record (~> 2.0)
-  database_cleaner-mongoid (~> 2.0)
   derailed_benchmarks (~> 2.1)
   devise (~> 4.8)
   devise-pwned_password (~> 0.1)

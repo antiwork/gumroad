@@ -32,8 +32,6 @@ end
 
 group :test do
   gem "capybara", "~> 3.38"
-  gem "database_cleaner-active_record", "~> 2.0"
-  gem "database_cleaner-mongoid", "~> 2.0"
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.1"
   gem "rspec", "~> 3.12"

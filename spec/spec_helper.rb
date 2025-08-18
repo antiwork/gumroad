@@ -112,7 +112,6 @@ configure_vcr
 
 def prepare_mysql
   ActiveRecord::Base.connection.execute("SET SESSION information_schema_stats_expiry = 0")
-  DatabaseCleaner[:active_record].clean_with(:truncation, pre_count: true)
 end
 
 RSpec.configure do |config|
@@ -127,7 +126,7 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.pattern = "**/*_spec.rb"
   config.raise_errors_for_deprecations!
-  config.use_transactional_fixtures = false
+  config.use_transactional_fixtures = true
   config.filter_run_when_matching :focus
   config.example_status_persistence_file_path = Rails.root.join("tmp", "rspec_status.txt").to_s
   config.include ActiveSupport::Testing::TimeHelpers
@@ -173,7 +172,6 @@ RSpec.configure do |config|
   # tldr: before/after will share state with the example, needed for some plugins
   config.before(:each) do
     Rails.application.load_seed
-    DatabaseCleaner.start
     Sidekiq.redis(&:flushdb)
     $redis.flushdb
     %i[
@@ -192,7 +190,6 @@ RSpec.configure do |config|
   config.after(:each) do |example|
     capture_state_on_failure(example)
     Capybara.reset_sessions!
-    DatabaseCleaner.clean
     WebMock.allow_net_connect!
   end
 
@@ -333,11 +330,9 @@ def setup_js(val = false)
     VCR.turn_off!
     # See also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
-    DatabaseCleaner[:active_record].strategy = :truncation, { pre_count: true, except: %w(taxonomies taxonomy_hierarchies) }
   else
     VCR.turn_on!
     WebMock.disable_net_connect!(allow_localhost: true, allow: ["api.knapsackpro.com"])
-    DatabaseCleaner[:active_record].strategy = :transaction
   end
 end
 
