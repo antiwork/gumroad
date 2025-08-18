@@ -425,6 +425,7 @@ const DiscountsPage = ({
                                 role="menuitem"
                                 inert={!offerCode.can_update || isLoading}
                                 onClick={() => {
+                                  setPopoverOfferCodeId(null);
                                   setSelectedOfferCodeId(offerCode.id);
                                   setView("create");
                                 }}
@@ -439,6 +440,7 @@ const DiscountsPage = ({
                                 onClick={asyncVoid(async () => {
                                   try {
                                     setIsLoading(true);
+                                    setPopoverOfferCodeId(null);
                                     await deleteOfferCode(offerCode.id);
                                   } catch (e) {
                                     assertResponseError(e);
