@@ -28,10 +28,15 @@ module StripeMerchantAccountHelper
       if !VCR.turned_on? || VCR.current_cassette.recording?
         sleep 10
         puts "*" * 100
+        puts RSpec.current_example.full_description
+        puts RSpec.current_example.location
         puts "VCR off: sleeping for 10 seconds"
         puts "*" * 100
       else
+        sleep 0.5
         puts "*" * 100
+        puts RSpec.current_example.full_description
+        puts RSpec.current_example.location
         puts "VCR on: fast-forwarding through the recorded cassette"
         puts VCR.current_cassette&.name
         puts "*" * 100
