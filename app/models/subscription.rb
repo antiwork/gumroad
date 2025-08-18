@@ -889,19 +889,16 @@ class Subscription < ApplicationRecord
   end
 
   def effective_business_vat_id
-    @effective_business_vat_id ||= begin
-       if original_purchase&.purchase_sales_tax_info&.business_vat_id.present?
-         return original_purchase.purchase_sales_tax_info.business_vat_id
-       end
-
-       scope = original_purchase&.refunds
-                 &.where("gumroad_tax_cents > 0")
-                 &.where("amount_cents = 0")
-                 &.reorder(id: :desc)
-
-       refund_with_id = scope&.detect { |r| r.business_vat_id.present? }
-       refund_with_id&.business_vat_id
-     end
+    @effective_business_vat_id ||= if original_purchase&.purchase_sales_tax_info&.business_vat_id.present?
+      original_purchase.purchase_sales_tax_info.business_vat_id
+    else
+      scope = original_purchase&.refunds
+                &.where("gumroad_tax_cents > 0")
+                &.where("amount_cents = 0")
+                &.reorder(id: :desc)
+      refund_with_id = scope&.detect { |r| r.business_vat_id.present? }
+      refund_with_id&.business_vat_id
+    end
   end
 
   def free_trial_end_date_formatted
