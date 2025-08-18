@@ -263,8 +263,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
-  const hasArchivedProducts = results.some((result) => result.purchase.is_archived);
-  const showArchivedNotice = !state.search.showArchivedOnly && !results.some((result) => !result.purchase.is_archived);
+  const archivedCount = state.results.filter((result) => result.purchase.is_archived).length;
+  const showArchivedNotice =
+    !state.search.showArchivedOnly && !state.results.some((result) => !result.purchase.is_archived);
   const hasParams =
     state.search.showArchivedOnly || state.search.query || state.search.creators.length || state.search.bundles.length;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
@@ -315,12 +316,12 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
       followingWishlistsEnabled={following_wishlists_enabled}
     >
       <section className="products-section__container">
-        {results.length === 0 || showArchivedNotice ? (
+        {state.results.length === 0 || showArchivedNotice ? (
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
             </figure>
-            {results.length === 0 ? (
+            {state.results.length === 0 ? (
               <>
                 <h2 className="library-header">You haven't bought anything... yet!</h2>
                 Once you do, it'll show up here so you can download, watch, read, or listen to all your purchases.
@@ -344,8 +345,22 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             )}
           </div>
         ) : null}
+        {archivedCount > 0 && !state.search.showArchivedOnly && !showArchivedNotice ? (
+          <div role="status" className="info mb-5">
+            <span>
+              You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
+              <button
+                type="button"
+                className="link"
+                onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
+              >
+                Click here to view
+              </button>
+            </span>
+          </div>
+        ) : null}
         <div className="with-sidebar">
-          {!showArchivedNotice && (hasParams || hasArchivedProducts || results.length > 9) ? (
+          {!showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9) ? (
             <div className="stack">
               <header>
                 <div>
@@ -460,7 +475,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                       </div>
                     </fieldset>
                   </div>
-                  {hasArchivedProducts ? (
+                  {archivedCount > 0 ? (
                     <div className="archived">
                       <fieldset role="group">
                         <label className="filter-archived">

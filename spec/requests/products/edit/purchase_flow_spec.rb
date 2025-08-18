@@ -11,20 +11,17 @@ describe("ProductPurchaseFlowScenario", type: :feature, js: true) do
 
   include_context "with switching account to user as admin for seller"
 
-  it "only shows the Require shipping information toggle if enabled for non-physical products" do
+  it "always shows the Require shipping information toggle for all product types" do
     product.update!(require_shipping: true)
     visit edit_link_path(product.unique_permalink)
 
+    expect(page).to have_field("Require shipping information")
     uncheck("Require shipping information")
 
     save_change
     visit current_path
-    expect(page).to_not have_field("Require shipping information")
+    expect(page).to have_field("Require shipping information")
 
     expect(product.reload.require_shipping).to be false
-
-    product2 = create(:physical_product)
-    visit edit_link_path(product2.unique_permalink)
-    expect(page).to_not have_field("Require shipping information")
   end
 end

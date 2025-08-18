@@ -41,5 +41,9 @@ class Purchase::CreateBundleProductPurchaseService
     @purchase.purchase_custom_fields.where(bundle_product: @bundle_product).each { _1.update!(purchase: product_purchase, bundle_product: nil) }
     BundleProductPurchase.create!(bundle_purchase: @purchase, product_purchase:)
     product_purchase.update_balance_and_mark_successful!
+
+    Purchase::AssociateBundleProductLevelGiftService
+      .new(bundle_purchase: @purchase, bundle_product: @bundle_product)
+      .perform
   end
 end

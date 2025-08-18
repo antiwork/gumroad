@@ -88,8 +88,8 @@ describe "RecommendationsScenario", type: :feature, js: true do
 
   context "when a custom fee is set for the seller" do
     before do
-      @recommended_product.user.update!(custom_fee_per_thousand: 50)
-      @recommended_product.update!(taxonomy: create(:taxonomy))
+      @recommended_product.user.update!(custom_fee_per_thousand: 50, user_risk_state: "compliant")
+      @recommended_product.update!(taxonomy: Taxonomy.find_by!(slug: "design"))
     end
 
     it "charges the regular discover fee and not custom fee" do
@@ -111,7 +111,7 @@ describe "RecommendationsScenario", type: :feature, js: true do
   end
 
   describe "more like this" do
-    let(:seller1) { create(:named_user) }
+    let(:seller1) { create(:recommendable_user) }
     let(:seller2) { create(:named_user, recommendation_type: User::RecommendationType::NO_RECOMMENDATIONS) }
     let(:buyer) { create(:buyer_user) }
 

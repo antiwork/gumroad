@@ -385,4 +385,297 @@ describe Payment do
       end
     end
   end
+
+  describe "#successful_sales" do
+    let(:user) { create(:user) }
+    let(:product) { create(:product, user: user) }
+    let(:balance) { create(:balance, user: user) }
+    let(:payment) { create(:payment, user: user, balances: [balance], payout_period_end_date: 3.days.ago) }
+
+    it "includes all successful sales" do
+      successful_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance)
+      refunded_sale = create(:purchase, :refunded, seller: user, link: product, purchase_success_balance: balance)
+      chargedback_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance, chargeback_date: 1.day.ago)
+
+      sales = payment.successful_sales
+
+      expect(sales).to include(successful_sale)
+      expect(sales).to include(refunded_sale)
+      expect(sales).to include(chargedback_sale)
+      expect(sales.length).to eq(3)
+    end
+
+    it "returns sales sorted by created_at desc" do
+      older_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance, created_at: 3.days.ago)
+      newer_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance, created_at: 1.day.ago)
+      middle_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance, created_at: 2.days.ago)
+
+      sales = payment.successful_sales
+
+      expect(sales).to eq([newer_sale, middle_sale, older_sale])
+    end
+
+    it "returns empty array when no successful sales" do
+      sales = payment.successful_sales
+      expect(sales).to be_empty
+    end
+  end
+
+  describe "#refunded_sales" do
+    let(:user) { create(:user) }
+    let(:product) { create(:product, user: user) }
+    let(:balance) { create(:balance, user: user) }
+    let(:payment) { create(:payment, user: user, balances: [balance], payout_period_end_date: 3.days.ago) }
+
+    it "includes only refunded sales from associated balances" do
+      successful_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance)
+      refunded_sale = create(:purchase, :refunded, seller: user, link: product, purchase_refund_balance: balance)
+
+      sales = payment.refunded_sales
+
+      expect(sales).to include(refunded_sale)
+      expect(sales).not_to include(successful_sale)
+      expect(sales.length).to eq(1)
+    end
+
+    it "returns sales sorted by created_at desc" do
+      older_refunded = create(:purchase, :refunded, seller: user, link: product, purchase_refund_balance: balance, created_at: 3.days.ago)
+      newer_refunded = create(:purchase, :refunded, seller: user, link: product, purchase_refund_balance: balance, created_at: 1.day.ago)
+
+      sales = payment.refunded_sales
+
+      expect(sales).to eq([newer_refunded, older_refunded])
+    end
+
+    it "returns empty array when no refunded sales" do
+      sales = payment.refunded_sales
+      expect(sales).to be_empty
+    end
+  end
+
+  describe "#disputed_sales" do
+    let(:user) { create(:user) }
+    let(:product) { create(:product, user: user) }
+    let(:balance) { create(:balance, user: user) }
+    let(:payment) { create(:payment, user: user, balances: [balance], payout_period_end_date: 3.days.ago) }
+
+    it "includes only chargedback sales from associated balances" do
+      successful_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance)
+      chargedback_sale = create(:purchase, seller: user, link: product, purchase_chargeback_balance: balance, chargeback_date: 1.day.ago)
+
+      sales = payment.disputed_sales
+
+      expect(sales).to include(chargedback_sale)
+      expect(sales).not_to include(successful_sale)
+      expect(sales.length).to eq(1)
+    end
+
+    it "returns sales sorted by created_at desc" do
+      older_chargeback = create(:purchase, seller: user, link: product, purchase_chargeback_balance: balance, chargeback_date: 3.days.ago, created_at: 3.days.ago)
+      newer_chargeback = create(:purchase, seller: user, link: product, purchase_chargeback_balance: balance, chargeback_date: 1.day.ago, created_at: 1.day.ago)
+
+      sales = payment.disputed_sales
+
+      expect(sales).to eq([newer_chargeback, older_chargeback])
+    end
+
+    it "returns empty array when no chargedback sales" do
+      sales = payment.disputed_sales
+      expect(sales).to be_empty
+    end
+  end
+
+  describe "#as_json" do
+    before do
+      allow(ObfuscateIds).to receive(:encrypt).and_return("mocked_external_id")
+
+      @payment = create(:payment,
+                        amount_cents: 2500,
+                        currency: "USD",
+                        processor: PayoutProcessorType::STRIPE,
+                        processor_fee_cents: 25)
+    end
+
+    it "has the right keys" do
+      %i[id amount currency status created_at processed_at payment_processor bank_account_visual paypal_email].each do |key|
+        expect(@payment.as_json.key?(key)).to be(true)
+      end
+    end
+
+    it "returns external_id for the id field" do
+      json = @payment.as_json
+      expect(json[:id]).to eq("mocked_external_id")
+    end
+
+    it "returns the correct values for basic fields" do
+      json = @payment.as_json
+
+      expect(json[:amount]).to eq("25.00")
+      expect(json[:currency]).to eq("USD")
+      expect(json[:status]).to eq(@payment.state)
+      expect(json[:created_at]).to eq(@payment.created_at)
+      expect(json[:payment_processor]).to eq(PayoutProcessorType::STRIPE)
+    end
+
+    it "returns correct formatted amount" do
+      @payment.update!(amount_cents: 12345)
+      expect(@payment.as_json[:amount]).to eq("123.45")
+
+      @payment.update!(amount_cents: 100)
+      expect(@payment.as_json[:amount]).to eq("1.00")
+
+      @payment.update!(amount_cents: 99)
+      expect(@payment.as_json[:amount]).to eq("0.99")
+    end
+
+    context "when payment is not completed" do
+      it "returns nil for processed_at in processing state" do
+        @payment.update!(state: Payment::PROCESSING)
+        expect(@payment.as_json[:processed_at]).to be_nil
+      end
+
+      it "returns nil for processed_at in failed state" do
+        @payment.update!(state: Payment::FAILED)
+        expect(@payment.as_json[:processed_at]).to be_nil
+      end
+
+      it "returns nil for processed_at in creating state" do
+        @payment.update!(state: Payment::CREATING)
+        expect(@payment.as_json[:processed_at]).to be_nil
+      end
+    end
+
+    context "when payment is completed" do
+      it "returns correct processed_at timestamp" do
+        # Set required fields for state transition
+        @payment.update!(
+          txn_id: "test_txn_123",
+          processor_fee_cents: 25,
+          stripe_transfer_id: "tr_123",
+          stripe_connect_account_id: "acct_123"
+        )
+        @payment.mark_completed!
+
+        json = @payment.as_json
+        expect(json[:processed_at]).to eq(@payment.updated_at)
+        expect(json[:status]).to eq(Payment::COMPLETED)
+      end
+    end
+
+    it "works with different payment processors" do
+      paypal_payment = create(:payment, processor: PayoutProcessorType::PAYPAL)
+      expect(paypal_payment.as_json[:payment_processor]).to eq(PayoutProcessorType::PAYPAL)
+
+      stripe_payment = create(:payment, processor: PayoutProcessorType::STRIPE)
+      expect(stripe_payment.as_json[:payment_processor]).to eq(PayoutProcessorType::STRIPE)
+    end
+
+    it "works with different currencies" do
+      eur_payment = create(:payment, currency: "EUR", amount_cents: 5000)
+
+      expect(eur_payment.as_json[:currency]).to eq("EUR")
+      expect(eur_payment.as_json[:amount]).to eq("50.00")
+    end
+
+    it "handles zero amount correctly" do
+      @payment.update!(amount_cents: 0)
+      expect(@payment.as_json[:amount]).to eq("0.00")
+    end
+
+    context "bank_account_visual field" do
+      it "includes bank_account_visual when payment has bank account" do
+        bank_account = create(:ach_account, user: @payment.user)
+        bank_account.update!(account_number_last_four: "1234")
+        @payment.update!(bank_account: bank_account)
+
+        json = @payment.as_json
+        expect(json[:bank_account_visual]).to eq("******1234")
+      end
+
+      it "returns nil when payment has no bank account" do
+        json = @payment.as_json
+        expect(json[:bank_account_visual]).to be_nil
+      end
+    end
+
+    context "paypal_email field" do
+      it "includes paypal_email when payment has payment_address" do
+        @payment.update!(payment_address: "seller@example.com")
+
+        json = @payment.as_json
+        expect(json[:paypal_email]).to eq("seller@example.com")
+      end
+
+      it "returns nil when payment has no payment_address" do
+        json = @payment.as_json
+        expect(json[:paypal_email]).to be_nil
+      end
+    end
+
+    context "with include_sales option" do
+      let(:user) { create(:user) }
+      let(:product) { create(:product, user: user) }
+      let(:balance) { create(:balance, user: user) }
+      let(:payment) { create(:payment, user: user, balances: [balance]) }
+
+      before do
+        allow(ObfuscateIds).to receive(:encrypt).and_return("mocked_external_id")
+      end
+
+      context "when include_sales is true" do
+        it "includes sales, refunded_sales, and disputed_sales ids" do
+          successful_sale = create(:purchase, seller: user, link: product, purchase_success_balance: balance)
+          refunded_sale = create(:purchase, :refunded, seller: user, link: product, purchase_refund_balance: balance)
+          chargedback_sale = create(:purchase, seller: user, link: product, purchase_chargeback_balance: balance, chargeback_date: 1.day.ago)
+
+          json = payment.as_json(include_sales: true)
+
+          expect(json[:sales]).to be_an(Array)
+          expect(json[:refunded_sales]).to be_an(Array)
+          expect(json[:disputed_sales]).to be_an(Array)
+
+          expect(json[:sales].length).to eq(1)
+          expect(json[:refunded_sales].length).to eq(1)
+          expect(json[:disputed_sales].length).to eq(1)
+
+          expect(json[:sales].first).to be_a(String)
+          expect(json[:sales].first).to eq(successful_sale.external_id)
+
+          expect(json[:refunded_sales].first).to be_a(String)
+          expect(json[:refunded_sales].first).to eq(refunded_sale.external_id)
+
+          expect(json[:disputed_sales].first).to be_a(String)
+          expect(json[:disputed_sales].first).to eq(chargedback_sale.external_id)
+        end
+
+        it "includes empty arrays when no sales of each type exist" do
+          json = payment.as_json(include_sales: true)
+
+          expect(json[:sales]).to eq([])
+          expect(json[:refunded_sales]).to eq([])
+          expect(json[:disputed_sales]).to eq([])
+        end
+      end
+
+      context "when include_sales is false" do
+        it "does not include sales keys in the response" do
+          json = payment.as_json(include_sales: false)
+
+          expect(json).not_to have_key(:sales)
+          expect(json).not_to have_key(:refunded_sales)
+          expect(json).not_to have_key(:disputed_sales)
+        end
+      end
+
+      context "when include_sales option is not provided" do
+        it "does not include sales keys in the response" do
+          json = payment.as_json
+
+          expect(json).not_to have_key(:sales)
+          expect(json).not_to have_key(:refunded_sales)
+          expect(json).not_to have_key(:disputed_sales)
+        end
+      end
+    end
+  end
 end
