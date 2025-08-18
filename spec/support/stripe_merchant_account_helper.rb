@@ -33,7 +33,6 @@ module StripeMerchantAccountHelper
         puts "VCR off: sleeping for 10 seconds"
         puts "*" * 100
       else
-        sleep 0.5
         puts "*" * 100
         puts RSpec.current_example.full_description
         puts RSpec.current_example.location
