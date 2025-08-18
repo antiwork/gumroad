@@ -216,4 +216,101 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data]).to eq({})
     end
   end
+
+  context "when product has cross-sells" do
+    let(:cross_sell_product1) { create(:product, user: seller, price_cents: 3000) }
+    let(:cross_sell_product2) { create(:product, user: seller, price_cents: 4000) }
+    let(:additive_cross_sell_product) { create(:product, user: seller, price_cents: 5000) }
+    let!(:replacement_cross_sell1) do
+      create(:upsell,
+             seller: seller,
+             product: cross_sell_product1,
+             cross_sell: true,
+             replace_selected_products: true,
+             selected_products: [product]
+      )
+    end
+    let!(:replacement_cross_sell2) do
+      create(:upsell,
+             seller: seller,
+             product: cross_sell_product2,
+             cross_sell: true,
+             replace_selected_products: true,
+             selected_products: [product]
+      )
+    end
+    let!(:additive_cross_sell) do
+      create(:upsell,
+             seller: seller,
+             product: additive_cross_sell_product,
+             cross_sell: true,
+             replace_selected_products: false,
+             selected_products: [product]
+      )
+    end
+
+    context "universal offer code" do
+      let(:universal_offer_code_for_cross_sells) { create(:universal_offer_code, user: seller, amount_percentage: 50, amount_cents: nil, currency_type: "usd") }
+
+      it "applies discount to main product and all applicable cross-sells" do
+        result = OfferCodeDiscountComputingService.new(universal_offer_code_for_cross_sells.code, products_data).process
+
+        expect(result[:products_data]).to include(
+          product.unique_permalink => {
+            discount: hash_including(
+              type: "percent",
+              percents: 50
+            )
+          },
+          cross_sell_product1.unique_permalink => {
+            discount: hash_including(
+              type: "percent",
+              percents: 50
+            )
+          },
+          cross_sell_product2.unique_permalink => {
+            discount: hash_including(
+              type: "percent",
+              percents: 50
+            )
+          }
+        )
+        expect(result[:products_data]).to include(
+          additive_cross_sell.product.unique_permalink => {
+            discount: hash_including(
+              type: "percent",
+              percents: 50
+            )
+          }
+        )
+        expect(result[:error_code]).to be_nil
+      end
+    end
+
+    context "product-specific offer code" do
+      let(:specific_offer_code) { create(:offer_code, user: seller, products: [product, cross_sell_product1], amount_percentage: 25, amount_cents: nil, currency_type: "usd") }
+
+      it "applies discount only to applicable products including cross-sells" do
+        result = OfferCodeDiscountComputingService.new(specific_offer_code.code, products_data).process
+
+        expect(result[:products_data]).to include(
+          product.unique_permalink => {
+            discount: hash_including(
+              type: "percent",
+              percents: 25
+            )
+          },
+          cross_sell_product1.unique_permalink => {
+            discount: hash_including(
+              type: "percent",
+              percents: 25
+            )
+          }
+        )
+        expect(result[:products_data]).not_to include(cross_sell_product2.unique_permalink)
+        expect(result[:products_data]).not_to include(additive_cross_sell_product.unique_permalink)
+        expect(result[:error_code]).to be_nil
+      end
+    end
+  end
 end
