@@ -106,8 +106,8 @@ const WishlistsPage = ({
                       <small>{wishlist.url}</small>
                     </a>
                   </td>
-                  <td>{wishlist.product_count}</td>
-                  <td>
+                  <td data-label="Products">{wishlist.product_count}</td>
+                  <td data-label="Discoverable">
                     <Toggle
                       value={!wishlist.discover_opted_out}
                       onChange={(checked) => void updateDiscoverOptOut(wishlist.id, !checked)}
