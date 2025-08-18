@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "RecommendationsScenario", type: :feature, js: true do
+describe "RecommendationsScenario", type: :system, js: true do
   before do
     @original_product = create(:product)
     @recommended_product = create(:product,

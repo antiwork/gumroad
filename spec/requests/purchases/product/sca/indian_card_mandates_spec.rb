@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-describe("Successful purchases from a product page with SCA and mandate creation for Indian cards", type: :feature, js: true) do
+describe("Successful purchases from a product page with SCA and mandate creation for Indian cards", type: :system, js: true) do
   let(:creator) { create(:named_user) }
   let(:product) { create(:product, user: creator) }
   let(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: creator) }

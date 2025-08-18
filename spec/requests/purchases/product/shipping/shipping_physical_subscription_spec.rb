@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping physical subscription", type: :feature, js: true, shipping: true) do
+describe("Product Page - Shipping physical subscription", type: :system, js: true, shipping: true) do
   before do
     @creator = create(:user_with_compliance_info)
     Feature.deactivate_user(:merchant_migration, @creator)

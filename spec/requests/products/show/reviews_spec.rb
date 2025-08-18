@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product page reviews", js: true, type: :feature) do
+describe("Product page reviews", js: true, type: :system) do
   include ActionView::Helpers::TextHelper
 
   def create_review(index, rating)

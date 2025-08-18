@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "DiscoverDomainScenario", type: :feature, js: true do
+describe "DiscoverDomainScenario", type: :system, js: true do
   let(:films_best_selling_section) do
     find("section", text: "Best selling products")
   end

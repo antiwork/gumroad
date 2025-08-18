@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout bundles", :js, type: :feature do
+describe "Checkout bundles", :js, type: :system do
   let(:seller) { create(:named_seller) }
   let(:bundle) { create(:product, user: seller, is_bundle: true, price_cents: 1000) }
 

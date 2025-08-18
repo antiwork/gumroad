@@ -4,7 +4,7 @@ require "spec_helper"
 require "ostruct"
 require "shared_examples/authorize_called"
 
-describe "Balance Pages Scenario", js: true, type: :feature do
+describe "Balance Pages Scenario", js: true, type: :system do
   include CollabProductHelper
 
   let(:seller) { create(:named_seller) }
@@ -16,7 +16,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
 
   include_context "with switching account to user as admin for seller"
 
-  describe "index page", type: :feature do
+  describe "index page", type: :system do
     it "shows empty notice if creator hasn't reached balance" do
       visit balance_path
       expect(page).to have_content "Let's get you paid."

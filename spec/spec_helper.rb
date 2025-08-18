@@ -151,7 +151,7 @@ RSpec.configure do |config|
   config.before(:suite) do
     examples = RSpec.world.filtered_examples.values.flatten
 
-    if examples.any? { |ex| ex.metadata[:type] == :feature }
+    if examples.any? { |ex| ex.metadata[:type] == :system }
       begin
         StripeBalanceEnforcer.ensure_sufficient_balance
       rescue StandardError => e
@@ -264,9 +264,17 @@ RSpec.configure do |config|
     end
   end
 
-  config.after(:each, type: :feature, js: true) do
+  config.after(:each, type: :system, js: true) do
     JSErrorReporter.instance.report_errors!(self)
     JSErrorReporter.instance.reset!
+  end
+
+  config.before(:each, type: :system) do
+    driven_by :rack_test
+  end
+
+  config.before(:each, type: :system, js: true) do
+    driven_by :selenium_chrome_headless
   end
 
   config.before(:each) do
@@ -399,20 +407,20 @@ def with_real_pwned_password_check
 end
 
 RSpec.configure do |config|
-  config.include Devise::Test::IntegrationHelpers, type: :feature
-  config.include CapybaraHelpers, type: :feature
-  config.include ProductFileListHelpers, type: :feature
-  config.include ProductCardHelpers, type: :feature
-  config.include ProductRowHelpers, type: :feature
-  config.include ProductVariantsHelpers, type: :feature
-  config.include PreviewBoxHelpers, type: :feature
-  config.include ProductWantThisHelpers, type: :feature
-  config.include PayWorkflowHelpers, type: :feature
-  config.include CheckoutHelpers, type: :feature
-  config.include RichTextEditorHelpers, type: :feature
-  config.include DiscoverHelpers, type: :feature
+  config.include Devise::Test::IntegrationHelpers, type: :system
+  config.include CapybaraHelpers, type: :system
+  config.include ProductFileListHelpers, type: :system
+  config.include ProductCardHelpers, type: :system
+  config.include ProductRowHelpers, type: :system
+  config.include ProductVariantsHelpers, type: :system
+  config.include PreviewBoxHelpers, type: :system
+  config.include ProductWantThisHelpers, type: :system
+  config.include PayWorkflowHelpers, type: :system
+  config.include CheckoutHelpers, type: :system
+  config.include RichTextEditorHelpers, type: :system
+  config.include DiscoverHelpers, type: :system
   config.include MockTableHelpers
-  config.include SecureHeadersHelpers, type: :feature
+  config.include SecureHeadersHelpers, type: :system
   config.include ElasticsearchHelpers
   config.include ProductPageViewHelpers
   config.include SalesRelatedProductsInfosHelpers

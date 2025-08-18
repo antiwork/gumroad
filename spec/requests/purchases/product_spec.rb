@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Purchase product page", type: :feature, js: true) do
+describe("Purchase product page", type: :system, js: true) do
   let(:purchase) { create(:purchase) }
   let(:product) { purchase.link }
 

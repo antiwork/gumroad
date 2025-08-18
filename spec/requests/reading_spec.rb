@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe "Reading Scenario", type: :feature, js: true do
+describe "Reading Scenario", type: :system, js: true do
   before do
     @url_redirect = create(:readable_url_redirect)
     @product = @url_redirect.referenced_link
@@ -162,7 +162,7 @@ describe "Reading Scenario", type: :feature, js: true do
     end
   end
 
-  describe "readable document consumption analytics", type: :feature, js: true do
+  describe "readable document consumption analytics", type: :system, js: true do
     it "does not record media_location if purchase is nil" do
       readable_url = "https://s3.amazonaws.com/gumroad-specs/specs/billion-dollar-company-chapter-0.pdf"
       installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: @product.user)

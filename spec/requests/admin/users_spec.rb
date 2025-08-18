@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Admin::UsersController Scenario", type: :feature, js: true do
+describe "Admin::UsersController Scenario", type: :system, js: true do
   let(:admin) { create(:admin_user, has_risk_privilege: true, has_payout_privilege: true) }
   let(:user) { create(:user) }
   let!(:user_compliance_info) { create(:user_compliance_info, user:) }

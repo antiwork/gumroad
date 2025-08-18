@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Secure Redirect", js: true, type: :feature) do
+describe("Secure Redirect", js: true, type: :system) do
   let(:user) { create(:user) }
   let(:destination_url) { api_url(host: UrlService.domain_with_protocol) }
   let(:confirmation_text_1) { "example@example.com" }

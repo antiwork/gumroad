@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Third-party Analytics Settings Scenario", type: :feature, js: true) do
+describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
   let!(:snippet) { create(:third_party_analytic, user: seller, name: "Snippet 1") }
 

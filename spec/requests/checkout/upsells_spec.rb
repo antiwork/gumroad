@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe("Checkout upsells page", type: :feature, js: true) do
+describe("Checkout upsells page", type: :system, js: true) do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
   let(:product1) { create(:product_with_digital_versions, user: seller, price_cents: 1000, name: "Product 1") }
   let(:product2) { create(:product_with_digital_versions, user: seller, price_cents: 500, name: "Product 2") }

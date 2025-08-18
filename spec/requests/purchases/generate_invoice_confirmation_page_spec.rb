@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Generate invoice confirmation page", type: :feature, js: true do
+describe "Generate invoice confirmation page", type: :system, js: true do
   before :each do
     @purchase = create(:purchase)
   end

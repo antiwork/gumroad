@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Installment Plans", type: :feature, js: true do
+describe "Installment Plans", type: :system, js: true do
   include ManageSubscriptionHelpers
 
   let(:seller) { create(:user) }

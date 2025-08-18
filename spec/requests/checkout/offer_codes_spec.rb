@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout offer codes", :js, type: :feature do
+describe "Checkout offer codes", :js, type: :system do
   before do
     @product = create(:product, price_cents: 1000)
     @product2 = create(:product, price_cents: 1000)

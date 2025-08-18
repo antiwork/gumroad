@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe DisputeEvidence::GenerateRefundPolicyImageService, type: :feature, js: true do
+describe DisputeEvidence::GenerateRefundPolicyImageService, type: :system, js: true do
   let(:purchase) { create(:purchase) }
   let(:url) do
     Rails.application.routes.url_helpers.purchase_product_url(

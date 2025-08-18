@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Purchasing a multi-recurrence subscription product from product page", type: :feature, js: true) do
+describe("Purchasing a multi-recurrence subscription product from product page", type: :system, js: true) do
   before do
     @product = create(:subscription_product_with_versions, price_cents: 10_00)
     @price_yearly = create(:price, link: @product, price_cents: 70_00, recurrence: BasePrice::Recurrence::YEARLY)

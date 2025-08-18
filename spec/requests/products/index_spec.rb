@@ -5,7 +5,7 @@ require "shared_examples/authorize_called"
 require "shared_examples/products_navigation"
 require "shared_examples/with_sorting_and_pagination"
 
-describe "Products Page Scenario", type: :feature, js: true do
+describe "Products Page Scenario", type: :system, js: true do
   include ProductEditPageHelpers
 
   def find_product_row(product, hover: false)

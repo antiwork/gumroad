@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Payments Settings Scenario", type: :feature, js: true) do
+describe("Payments Settings Scenario", type: :system, js: true) do
   describe "PayPal section" do
     let(:user) { create(:user, name: "Gum") }
 
@@ -128,7 +128,7 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
     end
   end
 
-  describe("Payout Information Collection", type: :feature, js: true) do
+  describe("Payout Information Collection", type: :system, js: true) do
     before do
       @user = create(:named_user, payment_address: nil)
       user_compliance_info = @user.fetch_or_build_user_compliance_info

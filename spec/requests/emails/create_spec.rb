@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Email Creation Flow", :js, type: :feature) do
+describe("Email Creation Flow", :js, type: :system) do
   include EmailHelpers
 
   let(:seller) { create(:named_seller) }
