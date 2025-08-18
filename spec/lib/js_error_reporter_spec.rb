@@ -4,16 +4,16 @@ require "spec_helper"
 
 describe JSErrorReporter do
   before(:all) do
-    caps = [
-      "goog:loggingPrefs": { driver: "DEBUG" },
-      "goog:chromeOptions": {
-        args: %w(headless=new disable-gpu no-sandbox disable-dev-shm-usage user-data-dir=/tmp/chrome)
-      }
-    ]
+    options = Selenium::WebDriver::Chrome::Options.new.tap do |opts|
+      opts.add_argument("--headless=new")
+      opts.add_argument("--disable-gpu")
+      opts.add_argument("--no-sandbox")
+      opts.add_argument("--disable-dev-shm-usage")
+      opts.add_argument("--user-data-dir=/tmp/chrome")
+      opts.add_option("goog:loggingPrefs", { driver: "DEBUG" })
+    end
 
-    @driver = Selenium::WebDriver.for :chrome, {
-      capabilities: caps,
-    }
+    @driver = Selenium::WebDriver.for(:chrome, options: options)
 
     @html_tempfiles = []
   end
