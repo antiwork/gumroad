@@ -171,7 +171,6 @@ RSpec.configure do |config|
   # Differences between before/after and around: https://relishapp.com/rspec/rspec-core/v/3-0/docs/hooks/around-hooks
   # tldr: before/after will share state with the example, needed for some plugins
   config.before(:each) do
-    Rails.application.load_seed
     Sidekiq.redis(&:flushdb)
     $redis.flushdb
     %i[
