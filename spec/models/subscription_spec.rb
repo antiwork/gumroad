@@ -435,40 +435,6 @@ describe Subscription, :vcr do
   end
 
   describe "#charge!" do
-    # before do
-    #   # Replace helper methods used by the credit_card factory so they never call Stripe
-    #   StripePaymentMethodHelper::ExtensionMethods.module_eval do
-    #     def to_stripejs_payment_method
-    #       OpenStruct.new(id: "pm_test_123")
-    #     end
-    #     def to_stripejs_payment_method_id
-    #       "pm_test_123"
-    #     end
-    #   end
-    #
-    #   # Belt & suspenders: stub Stripe SDK entry points used in charge flow
-    #   allow(Stripe::PaymentMethod).to receive(:create).and_return(OpenStruct.new(id: "pm_test_123"))
-    #   allow(Stripe::PaymentMethod).to receive(:attach).and_return(true)
-    #   allow(Stripe::Customer).to receive(:create).and_return(OpenStruct.new(id: "cus_test_123"))
-    #   allow(Stripe::Customer).to receive(:update).and_return(true)
-    #   allow(Stripe::PaymentIntent).to receive(:create)
-    #                                     .and_return(OpenStruct.new(id: "pi_test_123", status: "succeeded", charges: OpenStruct.new(data: [])))
-    #
-    #   allow(CreditCard).to receive(:create) do |attrs = {}|
-    #     CreditCard.new(
-    #       stripe_payment_method_id: "pm_test_123",
-    #       stripe_payment_method_type: "card",
-    #       stripe_fingerprint: "fp_test_123",
-    #       visual: "4242",
-    #       card_type: "visa",
-    #       stripe_customer: "cus_test_123",
-    #       expiry_month: 12,
-    #       expiry_year: 2030,
-    #       **attrs
-    #     ).tap { |cc| cc.save!(validate: false) }
-    #     end
-    # end
-
     before do
       @subscription.user.update!(credit_card: create(:credit_card))
     end
