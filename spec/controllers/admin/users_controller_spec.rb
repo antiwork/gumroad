@@ -116,58 +116,6 @@ describe Admin::UsersController do
         expect(response.body).to have_text("example.com blocked")
       end
     end
-
-    describe "purchase history search" do
-      let(:seller) { create(:user) }
-      let(:product1) { create(:product, user: seller, name: "Amazing Course") }
-      let(:product2) { create(:product, user: seller, name: "Great Ebook") }
-
-      before do
-        @purchase1 = create(:purchase, link: product1, purchaser: user, email: user.email, purchase_state: "successful")
-        @purchase2 = create(:purchase, link: product2, purchaser: user, email: user.email, purchase_state: "successful")
-      end
-
-      it "shows search form but no purchases by default" do
-        get :show, params: { id: user.id }
-
-        expect(response).to be_successful
-        expect(response.body).to have_text("Search purchase history")
-        expect(response.body).not_to have_text(product1.name)
-        expect(response.body).not_to have_text(product2.name)
-      end
-
-      it "filters purchases by product title when search term provided" do
-        get :show, params: { id: user.id, product_title: "Amazing" }
-
-        expect(response).to be_successful
-        expect(response.body).to have_text(product1.name)
-        expect(response.body).not_to have_text(product2.name)
-      end
-
-      it "shows empty state when no purchases match search" do
-        get :show, params: { id: user.id, product_title: "Nonexistent" }
-
-        expect(response).to be_successful
-        expect(response.body).to have_text('No purchases found matching "Nonexistent"')
-      end
-
-      it "limits purchases to 10 and shows info message when there are more" do
-        15.times do |i|
-          product = create(:product, user: seller, name: "Product #{i}")
-          create(:purchase,
-                 link: product,
-                 purchaser: user,
-                 email: user.email,
-                 purchase_state: "successful",
-                 created_at: i.seconds.ago)
-        end
-
-        get :show, params: { id: user.id, product_title: "Product" }
-
-        expect(response).to be_successful
-        expect(response.body).to have_text("Showing first 10 results")
-      end
-    end
   end
 
   describe "refund balance logic", :vcr, :sidekiq_inline do

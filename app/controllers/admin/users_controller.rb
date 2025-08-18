@@ -19,19 +19,6 @@ class Admin::UsersController < Admin::BaseController
   def show
     @title = "#{@user.display_name} on Gumroad"
     @pagy, @products = pagy(@user.links.order(Arel.sql(PRODUCTS_ORDER)), limit: PRODUCTS_PER_PAGE)
-
-    # Purchase history data - only fetch when searching
-    @search_query = params[:product_title]
-    if @search_query.present?
-      @purchases = @user.purchases.includes(:link)
-                       .left_joins(:link)
-                       .where("links.name LIKE :query", query: "%#{@search_query.strip}%")
-                       .order(created_at: :desc)
-                       .limit(10)
-    else
-      @purchases = []
-    end
-
     respond_to do |format|
       format.html
       format.json { render json: @user }
