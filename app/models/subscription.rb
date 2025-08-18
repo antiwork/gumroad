@@ -220,8 +220,13 @@ class Subscription < ApplicationRecord
   end
 
   def vat_id_for(purchase)
+    return purchase.business_vat_id if purchase.respond_to?(:business_vat_id) && purchase.business_vat_id.present?
     return purchase.vat_id if purchase.respond_to?(:vat_id) && purchase.vat_id.present?
     return purchase.tax_id if purchase.respond_to?(:tax_id) && purchase.tax_id.present?
+    if purchase.respond_to?(:purchase_sales_tax_info)
+      sti = purchase.purchase_sales_tax_info
+      return sti.business_vat_id if sti&.respond_to?(:business_vat_id) && sti.business_vat_id.present?
+    end
     if purchase.respond_to?(:tax_refund) && purchase.tax_refund&.respond_to?(:vat_id)
       return purchase.tax_refund.vat_id
     end
@@ -513,7 +518,8 @@ class Subscription < ApplicationRecord
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
       new_purchase.business_vat_id = original_purchase.purchase_sales_tax_info&.business_vat_id
-      new_purchase.business_vat_id = effective_business_vat_id if new_purchase.business_vat_id.blank?
+      new_purchase.business_vat_id ||= effective_business_vat_id
+      new_purchase.business_vat_id = nil if seller_responsible_for_vat?(new_purchase)
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
@@ -1005,7 +1011,9 @@ class Subscription < ApplicationRecord
 
     def get_vat_id_from_original_purchase(purchase)
       vat_id = effective_business_vat_id
-      purchase.business_vat_id = vat_id if vat_id.present?
+      return if vat_id.blank?
+      return if seller_responsible_for_vat?(purchase)
+      purchase.business_vat_id = vat_id
     end
 
     def schedule_member_cancellation_workflow_jobs
