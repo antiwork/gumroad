@@ -15,7 +15,9 @@ const ProductsRoute: React.FC = () => {
 
   // Extract page from URL params or default to 1
   const searchParams = new URLSearchParams(location.search);
-  const currentPage = parseInt(searchParams.get("page") || "1", 10);
+  const pageParam = Number(searchParams.get("page"));
+  const currentPage =
+    Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
 
   useEffect(() => {
     fetchProductsData(currentPage);

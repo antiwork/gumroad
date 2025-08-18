@@ -123,12 +123,11 @@ export const useDashboardAPI = () => {
     ),
 
     fetchAnalyticsData: useCallback(
-      (startDate?: string, endDate?: string, options?: APIOptions) =>
-        fetchWithCache(
-          `analytics_${startDate}_${endDate}`,
-          () => dashboardAPI.getAnalyticsData(startDate, endDate),
-          options
-        ),
+      (startDate?: string, endDate?: string, options?: APIOptions) => {
+        const hasRange = Boolean(startDate || endDate);
+        const key = hasRange ? `analytics_${startDate}_${endDate}` : "analytics";
+        return fetchWithCache(key, () => dashboardAPI.getAnalyticsData(startDate, endDate), options);
+      },
       [fetchWithCache]
     ),
 
