@@ -577,7 +577,8 @@ const DiscountsPage = ({
               </section>
             ) : null}
             <section
-              style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}
+              className="grid grid-flow-row sm:grid-flow-col auto-cols-fr"
+              style={{ gap: "var(--spacer-4)" }}
             >
               <Button onClick={() => setView("create")} disabled={!selectedOfferCode.can_update || isLoading}>
                 Duplicate
