@@ -1,7 +1,34 @@
 <%= load_pack("admin_review") %>
 
+<form action="<%= admin_search_purchases_path %>" method="get" class="input-with-button" style="margin-bottom: 1rem;">
+  <% if @raw_query.present? %>
+    <%= hidden_field_tag :query, @raw_query %>
+  <% end %>
+  <div class="input">
+    <input
+      name="product_title"
+      placeholder="<%= @raw_query.present? ? 'Filter by product title' : 'Search by product title' %>"
+      type="text"
+      value="<%= @product_title_query %>"
+    />
+  </div>
+  <button type="submit" class="button primary">
+    <span class="icon icon-solid-search"></span>
+  </button>
+  <% if @product_title_query.present? %>
+    <% clear_url = @raw_query.present? ? admin_search_purchases_path(query: @raw_query) : admin_search_purchases_path %>
+    <a href="<%= clear_url %>" class="button secondary">
+      Clear filter
+    </a>
+  <% end %>
+</form>
+
 <% if @purchases&.exists? %>
   <%= render("purchases", purchases: @purchases) %>
 <% else %>
-  <%= render("admin/empty_state", message: "No purchases found.") %>
+  <% if @raw_query.present? || @product_title_query.present? %>
+    <%= render("admin/empty_state", message: "No purchases found matching your search criteria.") %>
+  <% else %>
+    <%= render("admin/empty_state", message: "Enter search criteria to find purchases.") %>
+  <% end %>
 <% end %>

@@ -50,6 +50,71 @@ describe AdminSearchService do
       expect(purchases.size).to eq(0)
     end
 
+    describe "searching by product title" do
+      let(:seller) { create(:user) }
+      let(:product1) { create(:product, user: seller, name: "Amazing Ruby Course") }
+      let(:product2) { create(:product, user: seller, name: "JavaScript Masterclass") }
+      let(:product3) { create(:product, user: seller, name: "Python Basics") }
+      let!(:purchase1) { create(:purchase, link: product1, email: "buyer1@example.com") }
+      let!(:purchase2) { create(:purchase, link: product2, email: "buyer2@example.com") }
+      let!(:purchase3) { create(:purchase, link: product3, email: "buyer3@example.com") }
+
+      it "returns purchases matching product title" do
+        purchases = AdminSearchService.new.search_purchases(product_title: "Ruby")
+        expect(purchases).to eq([purchase1])
+      end
+
+      it "performs case-insensitive search" do
+        purchases = AdminSearchService.new.search_purchases(product_title: "ruby")
+        expect(purchases).to eq([purchase1])
+      end
+
+      it "performs partial matching" do
+        purchases = AdminSearchService.new.search_purchases(product_title: "Script")
+        expect(purchases).to eq([purchase2])
+      end
+
+      it "returns multiple purchases when multiple products match" do
+        product4 = create(:product, user: seller, name: "Advanced Ruby Course")
+        purchase4 = create(:purchase, link: product4, email: "buyer4@example.com")
+
+        purchases = AdminSearchService.new.search_purchases(product_title: "Course")
+        expect(purchases).to contain_exactly(purchase1, purchase4)
+      end
+
+      it "returns empty result when no products match" do
+        purchases = AdminSearchService.new.search_purchases(product_title: "Nonexistent")
+        expect(purchases.size).to eq(0)
+      end
+
+      it "handles whitespace in search term" do
+        purchases = AdminSearchService.new.search_purchases(product_title: "  Ruby  ")
+        expect(purchases).to eq([purchase1])
+      end
+
+      it "can combine with email search" do
+        purchases = AdminSearchService.new.search_purchases(
+          query: "buyer1@example.com",
+          product_title: "Ruby"
+        )
+        expect(purchases).to eq([purchase1])
+      end
+
+      it "returns empty when email matches but product title doesn't" do
+        purchases = AdminSearchService.new.search_purchases(
+          query: "buyer1@example.com",
+          product_title: "JavaScript"
+        )
+        expect(purchases.size).to eq(0)
+      end
+
+      it "handles purchases with deleted products gracefully" do
+        product1.update!(deleted_at: 1.hour.ago)
+        purchases = AdminSearchService.new.search_purchases(product_title: "Ruby")
+        expect(purchases).to eq([purchase1])
+      end
+    end
+
     describe "searching by card" do
       let(:purchase_visa) do
         create(:purchase,

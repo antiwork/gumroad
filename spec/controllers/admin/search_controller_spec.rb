@@ -67,5 +67,59 @@ describe Admin::SearchController do
       assert_response :success
       expect(assigns(:purchases)).to include(purchase_1, purchase_2, purchase_3)
     end
+
+    describe "with product title filtering" do
+      let(:seller) { create(:user) }
+      let(:product1) { create(:product, user: seller, name: "Amazing Ruby Course") }
+      let(:product2) { create(:product, user: seller, name: "JavaScript Masterclass") }
+      let!(:purchase1) { create(:purchase, link: product1, email: "buyer1@example.com") }
+      let!(:purchase2) { create(:purchase, link: product2, email: "buyer2@example.com") }
+
+      it "searches by product title only" do
+        expect_any_instance_of(AdminSearchService).to receive(:search_purchases)
+          .with(query: "", product_title: "Ruby")
+          .and_call_original
+
+        get :purchases, params: { query: "", product_title: "Ruby" }
+
+        expect(response).to redirect_to admin_purchase_path(purchase1)
+      end
+
+      it "searches by email and product title combined" do
+        expect_any_instance_of(AdminSearchService).to receive(:search_purchases)
+          .with(query: "buyer1@example.com", product_title: "Ruby")
+          .and_call_original
+
+        get :purchases, params: { query: "buyer1@example.com", product_title: "Ruby" }
+
+        expect(response).to redirect_to admin_purchase_path(purchase1)
+      end
+
+      it "assigns product_title_query for the view" do
+        get :purchases, params: { query: "buyer1@example.com", product_title: "  Ruby  " }
+
+        expect(assigns(:product_title_query)).to eq("Ruby")
+      end
+
+      it "handles empty product title parameter" do
+        expect_any_instance_of(AdminSearchService).to receive(:search_purchases)
+          .with(query: "buyer1@example.com")
+          .and_call_original
+
+        get :purchases, params: { query: "buyer1@example.com", product_title: "" }
+
+        expect(response).to redirect_to admin_purchase_path(purchase1)
+      end
+
+      it "shows multiple results when multiple purchases match" do
+        product3 = create(:product, user: seller, name: "Advanced Ruby Course")
+        purchase3 = create(:purchase, link: product3, email: "buyer3@example.com")
+
+        get :purchases, params: { query: "", product_title: "Course" }
+
+        assert_response :success
+        expect(assigns(:purchases)).to contain_exactly(purchase1, purchase3)
+      end
+    end
   end
 end

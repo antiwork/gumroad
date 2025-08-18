@@ -100,6 +100,32 @@ describe "Admin Pages Scenario", type: :feature, js: true do
       expect(page).to have_selector("h2.purchase-title", text: "€6 + €1.32 VAT for #{product.name}")
     end
 
+    it "allows admins to filter purchase results by product title" do
+      seller = create(:user)
+      product1 = create(:product, user: seller, name: "Amazing Ruby Course")
+      product2 = create(:product, user: seller, name: "JavaScript Masterclass")
+      email = "buyer@example.com"
+      purchase1 = create(:purchase, link: product1, email:)
+      purchase2 = create(:purchase, link: product2, email:)
+
+      # First search by email
+      visit admin_purchase_path(purchase1)
+      select_disclosure "Toggle Search"
+      fill_in "Search purchases (email, IP, card, external ID)", with: "#{email}\n"
+
+      # Should see both purchases
+      expect(page).to have_content("Amazing Ruby Course")
+      expect(page).to have_content("JavaScript Masterclass")
+
+      # Then filter by product title
+      fill_in "product_title", with: "Ruby"
+      find('button[type="submit"]').click
+
+      # Should only see the Ruby course
+      expect(page).to have_content("Amazing Ruby Course")
+      expect(page).to have_no_content("JavaScript Masterclass")
+    end
+
     it "allows admins to search purchases by credit card fingerprint" do
       purchase = create(:purchase, email: "foo@example.com", stripe_fingerprint: "FINGERPRINT_ONE")
       create(:purchase, email: "bar@example.com", stripe_fingerprint: "FINGERPRINT_ONE")
