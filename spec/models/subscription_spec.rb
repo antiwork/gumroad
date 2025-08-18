@@ -702,8 +702,6 @@ describe Subscription, :vcr do
         end
       end
 
-      after(:all) { Stripe.api_version = @prev_api_version }
-
       it "zeros VAT when the buyer has a valid VAT ID at renewal time" do
         create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil,
                               combined_rate: 0.22, is_seller_responsible: false)
