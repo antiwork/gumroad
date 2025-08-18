@@ -40,8 +40,7 @@ end
 
 def docker_browser_args
   args = [
-    "--headless=new",
-    "--remote-debugging-pipe",
+    "--headless",
     "--no-sandbox",
     "--start-maximized",
     "--disable-setuid-sandbox",
