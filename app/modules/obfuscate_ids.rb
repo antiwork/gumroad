@@ -10,7 +10,7 @@ module ObfuscateIds
   def self.encrypt(id)
     c = cipher.encrypt
     c.key = Digest::SHA256.digest(CIPHER_KEY)
-    Base64.urlsafe_encode64(c.update(id.to_s) + c.final)
+    Base64.urlsafe_encode64(c.update(id.to_s) + c.final, padding: false)
   end
 
   def self.cipher
