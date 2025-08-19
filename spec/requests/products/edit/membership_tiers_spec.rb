@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit Memberships", type: :feature, js: true) do
+describe("Product Edit Memberships", type: :system, js: true) do
   include ProductTieredPricingHelpers
   include ProductEditPageHelpers
 

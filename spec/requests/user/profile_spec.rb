@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "User profile page", type: :feature, js: true do
+describe "User profile page", type: :system, js: true do
   include FillInUserProfileHelpers
 
   describe "viewing profile", :sidekiq_inline, :elasticsearch_wait_for_refresh do

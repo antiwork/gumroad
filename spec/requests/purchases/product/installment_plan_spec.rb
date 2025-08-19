@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Product with installment plan", type: :feature, js: true do
+describe "Product with installment plan", type: :system, js: true do
   let!(:seller) { create(:user, tipping_enabled: true) }
   let!(:product) { create(:product, name: "Awesome product", user: seller, price_cents: 1000) }
   let!(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3) }

@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit Rich Text Editor", type: :feature, js: true) do
+describe("Product Edit Rich Text Editor", type: :system, js: true) do
   include ProductEditPageHelpers
 
   let(:seller) { create(:named_seller, :eligible_for_service_products) }

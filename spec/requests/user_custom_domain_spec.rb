@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "UserCustomDomainScenario", type: :feature, js: true do
+describe "UserCustomDomainScenario", type: :system, js: true do
   include FillInUserProfileHelpers
 
   before do

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "User favicons", type: :feature, js: true do
+describe "User favicons", type: :system, js: true do
   before do
     @product = create(:product, name: "product name", user: create(:named_user))
     @purchase = create(:purchase, link: @product)

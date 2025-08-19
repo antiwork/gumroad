@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Settings > Team Scenario", type: :feature, js: true) do
+describe("Settings > Team Scenario", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
 
   shared_examples_for "leaves the team" do

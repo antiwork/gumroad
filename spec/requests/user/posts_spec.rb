@@ -3,7 +3,7 @@
 require("spec_helper")
 require "shared_examples/authorize_called"
 
-describe("Posts on seller profile", type: :feature, js: true) do
+describe("Posts on seller profile", type: :system, js: true) do
   include FillInUserProfileHelpers
 
   let(:seller) { create(:named_seller, :with_avatar) }

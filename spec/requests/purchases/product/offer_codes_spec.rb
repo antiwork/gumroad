@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Offer-code usage from product page", type: :feature, js: true) do
+describe("Offer-code usage from product page", type: :system, js: true) do
   it "accepts an offer code that's larger than the price of the product" do
     product = create(:product, price_cents: 300)
     offer_code = create(:offer_code, products: [product], amount_cents: 500)

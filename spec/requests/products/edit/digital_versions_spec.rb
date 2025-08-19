@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit Digital Versions", type: :feature, js: true) do
+describe("Product Edit Digital Versions", type: :system, js: true) do
   include ProductEditPageHelpers
 
   let(:seller) { create(:named_seller) }

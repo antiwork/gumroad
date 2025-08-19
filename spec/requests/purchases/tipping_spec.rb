@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product checkout with tipping", type: :feature, js: true) do
+describe("Product checkout with tipping", type: :system, js: true) do
   let(:seller) { create(:named_seller, :eligible_for_service_products, tipping_enabled: true) }
 
   let(:product1) { create(:product, name: "Product 1", user: seller, price_cents: 1000, quantity_enabled: true) }

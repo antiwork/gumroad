@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Third party analytics", type: :feature, js: true) do
+describe("Third party analytics", type: :system, js: true) do
   before do
     @user = create(:user)
     @product = create(:product, user: @user)

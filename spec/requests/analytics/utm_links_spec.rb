@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe "UTM links", :js, type: :feature do
+describe "UTM links", :js, type: :system do
   let(:seller) { create(:user) }
 
   before do

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Admin::SalesReportsController", type: :feature, js: true do
+describe "Admin::SalesReportsController", type: :system, js: true do
   let(:admin) { create(:admin_user) }
 
   before do

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Collaborations", type: :feature, js: true do
+describe "Collaborations", type: :system, js: true do
   let(:seller_1) { create(:user) }
   let(:seller_2) { create(:user) }
   let(:seller_3) { create(:user) }

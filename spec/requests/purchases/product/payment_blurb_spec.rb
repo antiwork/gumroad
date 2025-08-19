@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-describe("Payment Blurb for Purchases from the product page", type: :feature, js: true) do
+describe("Payment Blurb for Purchases from the product page", type: :system, js: true) do
   before do
     @user = create(:user)
 
@@ -25,7 +25,7 @@ describe("Payment Blurb for Purchases from the product page", type: :feature, js
   end
 end
 
-describe "payment blurb with merchant account hides merchant account currency with merchant migration disabled", type: :feature, js: true do
+describe "payment blurb with merchant account hides merchant account currency with merchant migration disabled", type: :system, js: true do
   before do
     @user = create(:user)
     @merchant_account = create(:merchant_account, user: @user)

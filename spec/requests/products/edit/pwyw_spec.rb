@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit pay what you want setting", type: :feature, js: true) do
+describe("Product Edit pay what you want setting", type: :system, js: true) do
   include ProductEditPageHelpers
 
   let(:seller) { create(:named_seller) }

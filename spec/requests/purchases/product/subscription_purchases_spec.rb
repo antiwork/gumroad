@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-describe("Subscription Purchases from the product page", type: :feature, js: true) do
+describe("Subscription Purchases from the product page", type: :system, js: true) do
   context "purchasing memberships with multiple tiers" do
     before do
       @membership_product = create(:membership_product_with_preset_tiered_pricing)
