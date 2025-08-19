@@ -33,4 +33,3 @@ describe Onetime::DisableRecurringSubscriptionNotifications do
     expect(user3.enable_recurring_subscription_charge_push_notification).to be(false)
   end
 end
-

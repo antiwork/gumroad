@@ -35,4 +35,3 @@ class Onetime::DisableRecurringSubscriptionNotifications
     true
   end
 end
-
