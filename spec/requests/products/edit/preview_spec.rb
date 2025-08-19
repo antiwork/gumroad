@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit Previews", type: :feature, js: true) do
+describe("Product Edit Previews", type: :system, js: true) do
   include ProductEditPageHelpers
 
   def nth(index, selector)

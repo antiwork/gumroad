@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Widget Page scenario", js: true, type: :feature do
+describe "Widget Page scenario", js: true, type: :system do
   context "when no user is logged in" do
     before do
       @demo_product = create(:product, user: create(:named_user), unique_permalink: "demo")

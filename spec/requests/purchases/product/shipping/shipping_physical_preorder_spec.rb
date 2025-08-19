@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping physical preoder", type: :feature, js: true, shipping: true) do
+describe("Product Page - Shipping physical preoder", type: :system, js: true, shipping: true) do
   before do
     @creator = create(:user_with_compliance_info)
     @product = create(:physical_product, user: @creator, name: "physical preorder", price_cents: 16_00, require_shipping: true, is_in_preorder_state: true)

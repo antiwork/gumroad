@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Invalid offer-code usage from product page", type: :feature, js: true) do
+describe("Invalid offer-code usage from product page", type: :system, js: true) do
   describe "manually entered" do
     it "shows an error message when entering an invalid offer code and prevents purchase" do
       product = create(:product, price_cents: 300, user: create(:user, display_offer_code_field: true))

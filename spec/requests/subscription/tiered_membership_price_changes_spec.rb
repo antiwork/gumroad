@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Tiered Membership Price Changes Spec", type: :feature, js: true do
+describe "Tiered Membership Price Changes Spec", type: :system, js: true do
   include ManageSubscriptionHelpers
   include ProductWantThisHelpers
   include CurrencyHelper

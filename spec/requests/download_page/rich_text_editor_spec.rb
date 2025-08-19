@@ -3,7 +3,7 @@
 require("spec_helper")
 require "shared_examples/file_group_download_all"
 
-describe("Download Page – Rich Text Editor Content", type: :feature, js: true) do
+describe("Download Page – Rich Text Editor Content", type: :system, js: true) do
   def embed_files_for_product(product:, files:)
     product_rich_content = product.alive_rich_contents.first_or_initialize
     description = []

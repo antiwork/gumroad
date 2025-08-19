@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Generate invoice for purchase", type: :feature, js: true) do
+describe("Generate invoice for purchase", type: :system, js: true) do
   context "when purchasing from a product page" do
     before do
       @product = create(:product)

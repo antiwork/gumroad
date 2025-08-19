@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Rentals from product page", type: :feature, js: true) do
+describe("Rentals from product page", type: :system, js: true) do
   describe "rentals" do
     before do
       @product = create(:product_with_video_file, purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 200, name: "rental test")

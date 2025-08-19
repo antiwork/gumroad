@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-describe("Purchases from the product page", type: :feature, js: true) do
+describe("Purchases from the product page", type: :system, js: true) do
   before do
     @user = create(:named_user)
     @product = create(:product, user: @user, custom_receipt: "<h1>Hello</h1>")
@@ -292,32 +292,42 @@ describe("Purchases from the product page", type: :feature, js: true) do
     click_on "I want this!", match: :first
 
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Event.where(event_name: "i_want_this", link_id: product.id).count == 1
+      until Event.where(event_name: "i_want_this", link_id: product.id).count == 1 do
+        sleep 0.5
+      end
     end
 
     visit product2.long_url
     add_to_cart(product2)
 
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Event.where(event_name: "i_want_this", link_id: product2.id).count == 1
+      until Event.where(event_name: "i_want_this", link_id: product2.id).count == 1 do
+        sleep 0.5
+      end
     end
 
-    product2.update(price_cents: 500)
+    product2.update!(price_cents: 500)
 
     check_out(product2, logged_in_user: user, error: "The price just changed! Refresh the page for the updated price.")
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Event.where(event_name: "process_payment", link_id: product.id).count == 1
+      until Event.where(event_name: "process_payment", link_id: product.id).count == 1 do
+        sleep 0.5
+      end
     end
 
     click_on "View content"
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Event.where(event_name: "receipt_view_content", link_id: product.id).count == 1
+      until Event.where(event_name: "receipt_view_content", link_id: product.id).count == 1 do
+        sleep 0.5
+      end
     end
 
     visit product.long_url
     click_on "View content"
     Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Event.where(event_name: "product_information_view_product", link_id: product.id).count == 1
+      until Event.where(event_name: "product_information_view_product", link_id: product.id).count == 1 do
+        sleep 0.5
+      end
     end
   end
 

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Tiered Membership Spec for a PWYW tier", type: :feature, js: true do
+describe "Tiered Membership Spec for a PWYW tier", type: :system, js: true do
   include ManageSubscriptionHelpers
   include ProductWantThisHelpers
   include CurrencyHelper

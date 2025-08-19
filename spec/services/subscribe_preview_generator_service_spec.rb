@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe SubscribePreviewGeneratorService, type: :feature, js: true do
+describe SubscribePreviewGeneratorService, type: :system, js: true do
   describe "#generate_pngs" do
     before do
       @user1 = create(:user, name: "User 1", username: "user1")

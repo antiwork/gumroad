@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product checkout with upsells", type: :feature, js: true) do
+describe("Product checkout with upsells", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
 
   let(:upsell_product) { create(:product_with_digital_versions, name: "Upsell product", user: seller) }

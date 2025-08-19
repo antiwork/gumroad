@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Account Confirmation", js: true, type: :feature do
+describe "Account Confirmation", js: true, type: :system do
   let(:user) { create(:user) }
 
   it "confirms the unconfirmed email and signs out from all other active sessions" do

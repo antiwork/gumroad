@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/file_group_download_all"
 
-describe("File embeds in product content editor", type: :feature, js: true) do
+describe("File embeds in product content editor", type: :system, js: true) do
   include ProductEditPageHelpers
 
   let(:seller) { create(:named_seller) }

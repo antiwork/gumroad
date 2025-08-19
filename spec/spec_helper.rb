@@ -112,7 +112,6 @@ configure_vcr
 
 def prepare_mysql
   ActiveRecord::Base.connection.execute("SET SESSION information_schema_stats_expiry = 0")
-  DatabaseCleaner[:active_record].clean_with(:truncation, pre_count: true)
 end
 
 RSpec.configure do |config|
@@ -127,7 +126,7 @@ RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
   config.pattern = "**/*_spec.rb"
   config.raise_errors_for_deprecations!
-  config.use_transactional_fixtures = false
+  config.use_transactional_fixtures = true
   config.filter_run_when_matching :focus
   config.example_status_persistence_file_path = Rails.root.join("tmp", "rspec_status.txt").to_s
   config.include ActiveSupport::Testing::TimeHelpers
@@ -151,13 +150,33 @@ RSpec.configure do |config|
   config.before(:suite) do
     examples = RSpec.world.filtered_examples.values.flatten
 
-    if examples.any? { |ex| ex.metadata[:type] == :feature }
+    if examples.any? { |ex| ex.metadata[:type] == :system }
       begin
         StripeBalanceEnforcer.ensure_sufficient_balance
       rescue StandardError => e
         warn "Stripe balance check failed: #{e.class} #{e.message}"
       end
     end
+  end
+
+  config.before(:suite) do
+    examples = RSpec.world.filtered_examples.values.flatten
+    feature_specs = examples.select { |ex| ex.metadata[:type] == :feature }
+
+    next if feature_specs.empty?
+
+    feature_spec_files = feature_specs.map { |ex| ex.metadata[:example_group][:file_path] }.uniq
+
+    raise <<~ERROR
+      FEATURE SPECS ARE NO LONGER ALLOWED
+
+      Found #{feature_specs.count} feature spec(s) in #{feature_spec_files.count} file(s):
+      #{feature_spec_files.map { |file| "  • #{file}" }.join("\n")}
+
+      ACTION REQUIRED:
+      Please convert these to system specs by changing:
+        type: :feature  ->  type: :system
+    ERROR
   end
 
   config.before(:all) do |example|
@@ -172,8 +191,6 @@ RSpec.configure do |config|
   # Differences between before/after and around: https://relishapp.com/rspec/rspec-core/v/3-0/docs/hooks/around-hooks
   # tldr: before/after will share state with the example, needed for some plugins
   config.before(:each) do
-    Rails.application.load_seed
-    DatabaseCleaner.start
     Sidekiq.redis(&:flushdb)
     $redis.flushdb
     %i[
@@ -192,7 +209,6 @@ RSpec.configure do |config|
   config.after(:each) do |example|
     capture_state_on_failure(example)
     Capybara.reset_sessions!
-    DatabaseCleaner.clean
     WebMock.allow_net_connect!
   end
 
@@ -248,6 +264,13 @@ RSpec.configure do |config|
     vcr_turned_on do
       only_matching_vcr_request_from(["easypost", "taxjar"]) do
         VCR.use_cassette("ShippingScenarios/#{example.description}", record: :once) do
+          # Debug flaky specs.
+          puts "*" * 100
+          puts example.full_description
+          puts example.location
+          puts "VCR recording: #{VCR.current_cassette&.recording?}"
+          puts "VCR name: #{VCR.current_cassette&.name}"
+          puts "*" * 100
           example.run
         end
       end
@@ -264,7 +287,7 @@ RSpec.configure do |config|
     end
   end
 
-  config.after(:each, type: :feature, js: true) do
+  config.after(:each, type: :system, js: true) do
     JSErrorReporter.instance.report_errors!(self)
     JSErrorReporter.instance.reset!
   end
@@ -325,11 +348,9 @@ def setup_js(val = false)
     VCR.turn_off!
     # See also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
-    DatabaseCleaner[:active_record].strategy = :truncation, { pre_count: true, except: %w(taxonomies taxonomy_hierarchies) }
   else
     VCR.turn_on!
     WebMock.disable_net_connect!(allow_localhost: true, allow: ["api.knapsackpro.com"])
-    DatabaseCleaner[:active_record].strategy = :transaction
   end
 end
 
@@ -399,20 +420,20 @@ def with_real_pwned_password_check
 end
 
 RSpec.configure do |config|
-  config.include Devise::Test::IntegrationHelpers, type: :feature
-  config.include CapybaraHelpers, type: :feature
-  config.include ProductFileListHelpers, type: :feature
-  config.include ProductCardHelpers, type: :feature
-  config.include ProductRowHelpers, type: :feature
-  config.include ProductVariantsHelpers, type: :feature
-  config.include PreviewBoxHelpers, type: :feature
-  config.include ProductWantThisHelpers, type: :feature
-  config.include PayWorkflowHelpers, type: :feature
-  config.include CheckoutHelpers, type: :feature
-  config.include RichTextEditorHelpers, type: :feature
-  config.include DiscoverHelpers, type: :feature
+  config.include Devise::Test::IntegrationHelpers, type: :system
+  config.include CapybaraHelpers, type: :system
+  config.include ProductFileListHelpers, type: :system
+  config.include ProductCardHelpers, type: :system
+  config.include ProductRowHelpers, type: :system
+  config.include ProductVariantsHelpers, type: :system
+  config.include PreviewBoxHelpers, type: :system
+  config.include ProductWantThisHelpers, type: :system
+  config.include PayWorkflowHelpers, type: :system
+  config.include CheckoutHelpers, type: :system
+  config.include RichTextEditorHelpers, type: :system
+  config.include DiscoverHelpers, type: :system
   config.include MockTableHelpers
-  config.include SecureHeadersHelpers, type: :feature
+  config.include SecureHeadersHelpers, type: :system
   config.include ElasticsearchHelpers
   config.include ProductPageViewHelpers
   config.include SalesRelatedProductsInfosHelpers

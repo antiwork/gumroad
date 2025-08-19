@@ -2996,9 +2996,6 @@ describe Purchase::CreateService, :vcr do
   describe "inventory protection" do
     let(:price) { 0 }
     let(:max_purchase_count) { 1 }
-    after do
-      DatabaseCleaner[:active_record].clean_with(:truncation)
-    end
 
     it "prevents several parallel purchases to take more than the available inventory" do
       purchase_1, error_1, purchase_2, error_2 = Array.new(4)

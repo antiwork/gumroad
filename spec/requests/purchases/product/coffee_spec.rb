@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Coffee", type: :feature, js: true do
+describe "Coffee", type: :system, js: true do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
   let(:coffee) do
     create(

@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe "OauthApplicationsPages", type: :feature, js: true do
+describe "OauthApplicationsPages", type: :system, js: true do
   context "On /settings/advanced page" do
     let(:user) { create(:named_user) }
 
