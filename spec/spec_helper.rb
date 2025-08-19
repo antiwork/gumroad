@@ -159,6 +159,26 @@ RSpec.configure do |config|
     end
   end
 
+  config.before(:suite) do
+    examples = RSpec.world.filtered_examples.values.flatten
+    feature_specs = examples.select { |ex| ex.metadata[:type] == :feature }
+
+    next if feature_specs.empty?
+
+    feature_spec_files = feature_specs.map { |ex| ex.metadata[:example_group][:file_path] }.uniq
+
+    raise <<~ERROR
+      FEATURE SPECS ARE NO LONGER ALLOWED
+
+      Found #{feature_specs.count} feature spec(s) in #{feature_spec_files.count} file(s):
+      #{feature_spec_files.map { |file| "  • #{file}" }.join("\n")}
+
+      ACTION REQUIRED:
+      Please convert these to system specs by changing:
+        type: :feature  ->  type: :system
+    ERROR
+  end
+
   config.before(:all) do |example|
     $spec_example_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     print "#{example.class.description}: "
