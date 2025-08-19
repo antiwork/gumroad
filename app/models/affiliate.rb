@@ -97,7 +97,7 @@ class Affiliate < ApplicationRecord
   end
 
   def cookie_key
-    "#{AFFILIATE_COOKIE_NAME_PREFIX}#{external_id}"
+    "#{AFFILIATE_COOKIE_NAME_PREFIX}#{ObfuscateIds.encrypt(id, padding: false)}"
   end
 
   def collaborator?
