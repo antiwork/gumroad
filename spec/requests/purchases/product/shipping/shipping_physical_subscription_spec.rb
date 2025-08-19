@@ -10,7 +10,6 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
   end
 
   it "charges the proper amount and stores shipping without taxes" do
-    Purchase.successful.count
     visit "/l/#{@sub_link.unique_permalink}"
 
     add_to_cart(@sub_link)
@@ -38,8 +37,6 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
   end
 
   it "charges the proper amount with taxes" do
-    Purchase.successful.count
-
     visit "/l/#{@sub_link.unique_permalink}"
     add_to_cart(@sub_link)
     check_out(@sub_link, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
@@ -71,7 +68,6 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
   end
 
   it "charges the proper shipping amount for 2x quantity" do
-    Purchase.successful.count
     visit "/l/#{@sub_link.unique_permalink}"
 
     add_to_cart(@sub_link, quantity: 2)

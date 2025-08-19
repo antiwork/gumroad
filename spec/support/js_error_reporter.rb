@@ -22,6 +22,7 @@ class JSErrorReporter
 
   class << self
     attr_reader :instance, :global_patterns
+    attr_writer :enabled
 
     def set_global_ignores(array_of_patterns)
       @global_patterns = array_of_patterns
@@ -30,8 +31,6 @@ class JSErrorReporter
     def enabled?
       @enabled.nil? ? ENV["ENABLE_RAISE_JS_ERROR"] == "1" : @enabled
     end
-
-    attr_writer :enabled
   end
 
   # ignore, once, an error matching the pattern (exact string or regex)
