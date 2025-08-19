@@ -15,9 +15,14 @@
     "noUnusedParameters": true,
     "jsx": "react",
     "paths": {
-      "$app/*": ["./app/javascript/*"]
+      "$app/*": [
+        "./app/javascript/*"
+      ]
     },
-    "typeRoots": ["./node_modules/@types", "./app/javascript/types"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./app/javascript/types"
+    ],
     "types": [
       "grecaptcha",
       "facebook-pixel",
@@ -32,6 +37,13 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["app/javascript"],
-  "exclude": ["**/*.spec.ts", "node_modules", "vendor", "public"]
+  "include": [
+    "app/javascript"
+  ],
+  "exclude": [
+    "**/*.spec.ts",
+    "node_modules",
+    "vendor",
+    "public"
+  ]
 }

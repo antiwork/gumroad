@@ -6,14 +6,31 @@ class DashboardController < Sellers::BaseController
   before_action :check_payment_details, only: :index
 
   def index
-    authorize :dashboard
+  authorize :dashboard
 
-    if current_seller.suspended_for_tos_violation?
-      redirect_to products_url
-    else
-      presenter = CreatorHomePresenter.new(pundit_user)
-      @creator_home_props = presenter.creator_home_props
+  if current_seller.suspended_for_tos_violation?
+    redirect_to products_url
+  else
+    respond_to do |format|
+      format.html do
+        presenter = CreatorHomePresenter.new(pundit_user)
+        @creator_home_props = presenter.creator_home_props
+      end
+      format.json do
+        presenter = CreatorHomePresenter.new(pundit_user)
+        render json: presenter.creator_home_props
+      end
     end
+  end
+
+  def spa
+  authorize :dashboard
+
+  if current_seller.suspended_for_tos_violation?
+    redirect_to products_url
+  else
+    # Just render the SPA shell
+    render :spa
   end
 
   def customers_count

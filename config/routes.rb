@@ -727,13 +727,16 @@ Rails.application.routes.draw do
 
     post "/products/:id/release_preorder", to: "links#release_preorder", as: :release_preorder
 
-
+    get "/dashboard/spa" => "dashboard#spa", as: :dashboard_spa
     get "/dashboard" => "dashboard#index", as: :dashboard
     get "/dashboard/customers_count" => "dashboard#customers_count", as: :dashboard_customers_count
     get "/dashboard/total_revenue" => "dashboard#total_revenue", as: :dashboard_total_revenue
     get "/dashboard/active_members_count" => "dashboard#active_members_count", as: :dashboard_active_members_count
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
+    get "/dashboard/sales" => "dashboard#spa"
+    get "/dashboard/audience" => "dashboard#spa"
+    get "/dashboard/utm_links" => "dashboard#spa"
 
     get "/products", to: "links#index", as: :products
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
