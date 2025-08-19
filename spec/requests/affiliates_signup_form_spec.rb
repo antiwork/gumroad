@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Affiliate Signup Form", type: :feature, js: true do
+describe "Affiliate Signup Form", type: :system, js: true do
   let(:seller) { create(:named_seller) }
 
   include_context "with switching account to user as admin for seller"

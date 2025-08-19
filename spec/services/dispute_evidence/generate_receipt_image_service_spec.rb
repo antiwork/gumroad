@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe DisputeEvidence::GenerateReceiptImageService, type: :feature, js: true do
+describe DisputeEvidence::GenerateReceiptImageService, type: :system, js: true do
   let(:purchase) { create(:purchase) }
 
   describe ".perform" do

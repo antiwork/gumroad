@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product Page - Tax Scenarios", type: :feature, js: true) do
+describe("Product Page - Tax Scenarios", type: :system, js: true) do
   describe "sales tax", shipping: true do
     before do
       @creator = create(:user_with_compliance_info)

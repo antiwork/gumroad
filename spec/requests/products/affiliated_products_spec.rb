@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/products_navigation"
 
-describe "Affiliated Products", type: :feature, js: true do
+describe "Affiliated Products", type: :system, js: true do
   let(:affiliate_user) { create(:affiliate_user) }
 
   include_context "with switching account to user as admin for seller" do

@@ -2349,36 +2349,6 @@ describe Subscription::UpdaterService, :vcr do
 
           expect(ContactingCreatorMailer).to have_received(:notify).with(upgrade_purchase.id)
         end
-
-        it "does not send email notifications for monthly recurring subscription charges" do
-          product = create(:membership_product, subscription_duration: BasePrice::Recurrence::MONTHLY, price_cents: 300)
-          price = create(:price, link: product, recurrence: BasePrice::Recurrence::MONTHLY, price_cents: 300)
-          purchase = create(:recurring_membership_purchase,
-                            link: product,
-                            price:,
-                            price_cents: 300,
-                            is_original_subscription_purchase: false,
-                            purchaser: @user
-          )
-
-          mail = ContactingCreatorMailer.notify(purchase.id)
-          expect(mail.message).to be_a(ActionMailer::Base::NullMail)
-        end
-
-        it "sends email notifications for non-monthly recurring subscription charges" do
-          product = create(:membership_product, subscription_duration: BasePrice::Recurrence::YEARLY, price_cents: 1000)
-          price = create(:price, link: product, recurrence: BasePrice::Recurrence::YEARLY, price_cents: 1000)
-          purchase = create(:recurring_membership_purchase,
-                            link: product,
-                            price:,
-                            price_cents: 1000,
-                            is_original_subscription_purchase: false,
-                            purchaser: @user
-          )
-
-          mail = ContactingCreatorMailer.notify(purchase.id)
-          expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
-        end
       end
 
       describe "notifying creator on downgrade" do

@@ -6,7 +6,7 @@ require "timeout"
 # In March 2021 we migrated from Stripe's Charges API to Payment Intents API.
 # Many customers have stored their credit cards on file using the old Charges API (via a credit card token).
 # This spec ensures that those legacy credit cards keep working under the new Payment Intents API.
-describe("Purchase using a saved card created under the old Charges API", type: :feature, js: true) do
+describe("Purchase using a saved card created under the old Charges API", type: :system, js: true) do
   before do
     @creator = create(:named_user)
     # We create a card via a CC token which is how things were done under the legacy Charges API

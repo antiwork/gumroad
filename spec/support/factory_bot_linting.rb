@@ -2,16 +2,14 @@
 
 class FactoryBotLinting
   def process
-    DatabaseCleaner.cleaning do
-      Rails.application.load_seed
+    Rails.application.load_seed
 
-      VCR.turn_on!
-      cassette_options = { match_requests_on: [:method, uri_matcher] }
+    VCR.turn_on!
+    cassette_options = { match_requests_on: [:method, uri_matcher] }
 
-      FactoryBot.factories.each do |factory|
-        VCR.use_cassette("factory_linting/factories/#{factory.name}/all_requests", cassette_options) do
-          FactoryBot.lint [factory]
-        end
+    FactoryBot.factories.each do |factory|
+      VCR.use_cassette("factory_linting/factories/#{factory.name}/all_requests", cassette_options) do
+        FactoryBot.lint [factory]
       end
     end
   end

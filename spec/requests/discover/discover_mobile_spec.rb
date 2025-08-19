@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Discover - Nav - Mobile", :js, :mobile_view, type: :feature) do
+describe("Discover - Nav - Mobile", :js, :mobile_view, type: :system) do
   let(:discover_host) { UrlService.discover_domain_with_protocol }
 
   before do

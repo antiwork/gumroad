@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe "Analytics date range", :js, :sidekiq_inline, type: :feature do
+describe "Analytics date range", :js, :sidekiq_inline, type: :system do
   let(:seller) { create(:user, created_at: Date.new(2023, 1, 1)) }
   let(:test_date) { Date.today }
 

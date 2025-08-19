@@ -36,6 +36,7 @@ class CreatorHomePresenter
     products_by_permalink = seller.products
       .where(unique_permalink: product_permalinks)
       .includes(thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
+      .select(&:alive?)
       .index_by(&:unique_permalink)
 
     sales = top_sales_data.map do |p|

@@ -414,7 +414,7 @@ class Purchase < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions, :offer_code_name,
+  attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
                 :discount_code, :url_parameters, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,

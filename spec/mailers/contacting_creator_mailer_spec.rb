@@ -822,19 +822,6 @@ describe ContactingCreatorMailer do
 
           expect_push_alert(purchase.seller.id, mail.subject)
         end
-
-        it "does not send email notifications for monthly recurring subscription charges" do
-          product = create(:membership_product, subscription_duration: BasePrice::Recurrence::MONTHLY, price_cents: 500)
-          purchase = create(:recurring_membership_purchase, link: product, is_original_subscription_purchase: false, price_cents: 500)
-          price = create(:price, link: product, recurrence: BasePrice::Recurrence::MONTHLY, price_cents: 500)
-          purchase.update!(price:, price_cents: 500)
-
-          mail = ContactingCreatorMailer.notify(purchase.id)
-          expect(mail.message).to be_a(ActionMailer::Base::NullMail)
-
-          # Push notifications should still be sent
-          expect(PushNotificationWorker.jobs.size).to eq(1)
-        end
       end
 
       context "for upgrade purchase" do

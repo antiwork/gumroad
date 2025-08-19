@@ -126,7 +126,7 @@ const DiscoverEligibilityPromo = () => {
       <div>
         To appear on Gumroad Discover, make sure to meet all the{" "}
         <a data-helper-prompt="What are the eligibility criteria for Gumroad Discover?">eligibility criteria</a>, which
-        includes completing the Risk Review process explained in detail{" "}
+        includes making at least one successful sale and completing the Risk Review process explained in detail{" "}
         <a data-helper-prompt="How do I complete the Risk Review process?">here</a>.
       </div>
       <button
