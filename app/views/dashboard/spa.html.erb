@@ -1,0 +1,14 @@
+<%# SPA Shell for Dashboard %>
+<%= load_pack("dashboard") %>
+<div id="dashboard-spa-root"></div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Mount the SPA after the DOM is ready
+    const root = document.getElementById('dashboard-spa-root');
+    if (root && window.ReactOnRails) {
+      // Render the SPA
+      window.ReactOnRails.render('DashboardSPA', {}, 'dashboard-spa-root');
+    }
+  });
+</script>
