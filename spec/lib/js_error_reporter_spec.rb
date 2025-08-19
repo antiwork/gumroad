@@ -22,6 +22,13 @@ describe JSErrorReporter do
     @html_tempfiles.shift.close(true) while @html_tempfiles.size > 0
   end
 
+  around do |example|
+    JSErrorReporter.enabled = true
+    example.run
+  ensure
+    JSErrorReporter.enabled = nil
+  end
+
   def create_html_file(content)
     tempfile = Tempfile.new(["", ".html"])
     tempfile.write(content)

@@ -26,6 +26,14 @@ class JSErrorReporter
     def set_global_ignores(array_of_patterns)
       @global_patterns = array_of_patterns
     end
+
+    def enabled?
+      @enabled.nil? ? ENV["ENABLE_RAISE_JS_ERROR"] == "1" : @enabled
+    end
+
+    def enabled=(value)
+      @enabled = value
+    end
   end
 
   # ignore, once, an error matching the pattern (exact string or regex)
@@ -48,7 +56,7 @@ class JSErrorReporter
   end
 
   def read_errors!(driver)
-    return [] if ENV["DISABLE_RAISE_JS_ERROR"] == "1"
+    return [] unless self.class.enabled?
 
     # print the messages of console.error logs / unhandled exceptions, and fail the spec
     # (ignoring the error messages from a pattern specified above)
