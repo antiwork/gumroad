@@ -264,6 +264,13 @@ RSpec.configure do |config|
     vcr_turned_on do
       only_matching_vcr_request_from(["easypost", "taxjar"]) do
         VCR.use_cassette("ShippingScenarios/#{example.description}", record: :once) do
+          # Debug flaky specs.
+          puts "*" * 100
+          puts example.full_description
+          puts example.location
+          puts "VCR recording: #{VCR.current_cassette&.recording?}"
+          puts "VCR name: #{VCR.current_cassette&.name}"
+          puts "*" * 100
           example.run
         end
       end
