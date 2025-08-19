@@ -70,7 +70,7 @@ RSpec.shared_examples_for "AffiliateCookie concern" do
                         when Array then set_cookie
                         else
                           raise TypeError, "Invalid set-cookie header: #{set_cookie}"
-                        end
+      end
 
       parsable_cookie.each do |cookie_string|
         HTTP::Cookie.parse(cookie_string, origin_url).each do |cookie|
