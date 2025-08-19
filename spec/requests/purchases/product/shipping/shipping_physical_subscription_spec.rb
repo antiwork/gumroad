@@ -10,7 +10,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
   end
 
   it "charges the proper amount and stores shipping without taxes" do
-    previous_successful_purchase_count = Purchase.successful.count
+    Purchase.successful.count
     visit "/l/#{@sub_link.unique_permalink}"
 
     add_to_cart(@sub_link)
@@ -38,7 +38,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
   end
 
   it "charges the proper amount with taxes" do
-    previous_successful_purchase_count = Purchase.successful.count
+    Purchase.successful.count
 
     visit "/l/#{@sub_link.unique_permalink}"
     add_to_cart(@sub_link)
@@ -71,7 +71,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
   end
 
   it "charges the proper shipping amount for 2x quantity" do
-    previous_successful_purchase_count = Purchase.successful.count
+    Purchase.successful.count
     visit "/l/#{@sub_link.unique_permalink}"
 
     add_to_cart(@sub_link, quantity: 2)

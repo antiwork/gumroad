@@ -31,9 +31,7 @@ class JSErrorReporter
       @enabled.nil? ? ENV["ENABLE_RAISE_JS_ERROR"] == "1" : @enabled
     end
 
-    def enabled=(value)
-      @enabled = value
-    end
+    attr_writer :enabled
   end
 
   # ignore, once, an error matching the pattern (exact string or regex)
