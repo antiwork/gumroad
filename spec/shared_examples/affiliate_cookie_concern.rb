@@ -65,19 +65,11 @@ RSpec.shared_examples_for "AffiliateCookie concern" do
     # value - the alternative is to actually retrieve the cookie from the Set-Cookie response header
     #
     def parse_cookie(set_cookie, origin_url, cookie_name)
-      parsable_cookie = case set_cookie
-                        when String then set_cookie.split("\n")
-                        when Array then set_cookie
-                        else
-                          raise TypeError, "Invalid set-cookie header: #{set_cookie}"
-      end
-
-      parsable_cookie.each do |cookie_string|
+      Array.wrap(set_cookie).each do |cookie_string|
         HTTP::Cookie.parse(cookie_string, origin_url).each do |cookie|
           return cookie if CGI.unescape(cookie.name) == cookie_name
         end
       end
-
       nil
     end
 
