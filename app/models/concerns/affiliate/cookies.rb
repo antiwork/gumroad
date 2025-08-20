@@ -8,8 +8,13 @@ module Affiliate::Cookies
   end
 
   module ClassMethods
-    def by_cookies(cookies)
-      by_cookie_ids(cookie_ids_from_cookies(cookies))
+    def by_cookies(cookies, sort_by_recency: false)
+      cookie_ids = cookie_ids_from_cookies(cookies)
+      if sort_by_recency
+        by_cookie_ids(cookie_ids).sort_by { |a| cookie_ids.index(a.to_encrypted_cookie_id) }
+      else
+        by_cookie_ids(cookie_ids)
+      end
     end
 
     def cookie_ids_from_cookies(cookies)

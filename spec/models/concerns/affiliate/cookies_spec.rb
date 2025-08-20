@@ -71,6 +71,25 @@ describe Affiliate::Cookies do
         result = Affiliate.by_cookies({})
         expect(result).to be_empty
       end
+
+      context "with sort_by_recency: false (default)" do
+        it "does not sort affiliates by recency" do
+          result = Affiliate.by_cookies(cookies)
+          # Order is not guaranteed when not sorting by recency
+          expect(result).to contain_exactly(affiliate, another_affiliate)
+        end
+      end
+
+      context "with sort_by_recency: true" do
+        it "sorts affiliates by cookie recency (newest first)" do
+          # affiliate has newer timestamp, another_affiliate has older timestamp
+          result = Affiliate.by_cookies(cookies, sort_by_recency: true)
+
+          # Should return affiliate first (newer cookie)
+          expect(result.first).to eq(affiliate)
+          expect(result.second).to eq(another_affiliate)
+        end
+      end
     end
 
     describe ".cookie_ids_from_cookies" do
@@ -175,6 +194,35 @@ describe Affiliate::Cookies do
       it "returns nil for invalid encrypted IDs" do
         result = Affiliate.decrypt_cookie_id("invalid_id")
         expect(result).to be_nil
+      end
+    end
+
+    describe ".decrypt_cookie_ids" do
+      it "decrypts multiple encrypted cookie IDs" do
+        encrypted_ids = [affiliate.to_encrypted_cookie_id, another_affiliate.to_encrypted_cookie_id]
+        decrypted_ids = Affiliate.decrypt_cookie_ids(encrypted_ids)
+
+        expect(decrypted_ids).to contain_exactly(affiliate.id, another_affiliate.id)
+      end
+
+      it "handles single cookie ID (wrapped in array)" do
+        encrypted_id = affiliate.to_encrypted_cookie_id
+        decrypted_ids = Affiliate.decrypt_cookie_ids(encrypted_id)
+
+        expect(decrypted_ids).to eq([affiliate.id])
+      end
+
+      it "returns empty array for empty input" do
+        result = Affiliate.decrypt_cookie_ids([])
+        expect(result).to eq([])
+      end
+
+      it "handles mixed padded and unpadded formats" do
+        padded_id = ObfuscateIds.encrypt(affiliate.id, padding: true)
+        unpadded_id = ObfuscateIds.encrypt(another_affiliate.id, padding: false)
+
+        decrypted_ids = Affiliate.decrypt_cookie_ids([padded_id, unpadded_id])
+        expect(decrypted_ids).to contain_exactly(affiliate.id, another_affiliate.id)
       end
     end
   end

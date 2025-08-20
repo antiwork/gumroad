@@ -358,7 +358,7 @@ class ApplicationController < ActionController::Base
 
     def affiliate_from_cookies(product)
       # 1. Fetch all users have an affiliate cookie set, sorted by affiliate cookie recency
-      affiliates_from_cookies = Affiliate.by_cookies(cookies).sort_by { |a| cookies.index(a.to_encrypted_cookie_id) }
+      affiliates_from_cookies = Affiliate.by_cookies(cookies, sort_by_recency: true)
       affiliate_user_ids = affiliates_from_cookies.map(&:affiliate_user_id).uniq
       if affiliate_user_ids.present?
         # 2. Fetch those users' direct affiliate records that apply to this product
