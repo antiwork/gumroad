@@ -84,7 +84,7 @@
     <h3 id="Custom-domains-for-profiles-0pt96">Custom domains for profiles</h3>
     <p>To set up a custom domain for your profile:</p>
     <ol>
-      <li>Navigate to your Gumroad <a href="https://app.gumroad.com/settings/advanced">Advanced settings</a></li>
+      <li>Navigate to your Gumroad <a href="https://gumroad.com/settings/advanced">Advanced settings</a></li>
       <li>Enter your domain name in the “Custom domain” section and click “Verify” on the right. </li>
       <li>If you see a failure message, recheck your DNS settings and wait for 24-48 hours for them to propagate. </li>
       <li>Click “Update settings” to save your changes.</li>
@@ -102,7 +102,7 @@
     <h3 id="ip-issues">IP address issues </h3>
     <p>Some providers may ask you to enter an IP address to set up a custom domain. You can enter  <strong>34.198.93.169</strong>.</p>
     <h3 id="cloudflare-issues">Cloudflare issues</h3>
-    <p>Unfortunately, we don't support Cloudflare Proxies for custom domain verification. In the case you have Cloudflare Proxy enabled, you will have to disable it and then click the "Update settings" button on your <a href="https://app.gumroad.com/settings/advanced" target="_blank">Advanced Settings</a> page. </p>
+    <p>Unfortunately, we don't support Cloudflare Proxies for custom domain verification. In the case you have Cloudflare Proxy enabled, you will have to disable it and then click the "Update settings" button on your <a href="https://gumroad.com/settings/advanced" target="_blank">Advanced Settings</a> page. </p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/61ad9ab548287b457880922d/file-JTL1q5JvuV.png" %></figure>
     <br>
     <p>Also, the "URL Redirect" record type is just to ensure that <em>example.com</em> is redirected to <a href="http://www.example.com"><em>www.example.com</em></a>. For Cloudflare, you can point the CNAME of both <code class="inline-code">@</code> and <code class="inline-code">www</code> records to <code class="inline-code">domains.gumroad.com</code> .</p>
