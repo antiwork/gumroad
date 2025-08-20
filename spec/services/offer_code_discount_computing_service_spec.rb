@@ -251,9 +251,11 @@ describe OfferCodeDiscountComputingService do
     end
 
     it "returns no discount" do
-      result = OfferCodeDiscountComputingService.new(offer_code_for_product2.code, {
-        product.unique_permalink => { quantity: "3", permalink: product.unique_permalink },
-      }).process
+      result = OfferCodeDiscountComputingService
+        .new(offer_code_for_product2.code, {
+               product.unique_permalink => { quantity: "3", permalink: product.unique_permalink },
+             })
+        .process
 
       expect(result).to eq(error_code: :invalid_offer, products_data: {})
     end
