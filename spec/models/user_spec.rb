@@ -2564,8 +2564,14 @@ describe User, :vcr do
 
       user = create(:user)
 
-      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+      # Enabled by default
+      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification}.each do |notification_key|
         expect(user.public_send(notification_key)).to be(true)
+      end
+
+      # Disabled by default
+      %i{enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+        expect(user.public_send(notification_key)).to be(false)
       end
     end
   end
