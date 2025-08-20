@@ -450,13 +450,14 @@ describe Payouts do
         create(:user_compliance_info, user: seller)
         create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
         seller.update!(payouts_paused_internally: true)
+        seller.set_payout_pause_source("admin")
 
         expect do
           described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
         end.to change { seller.comments.with_type_payout_note.count }.by(1)
 
         date = Time.current.to_fs(:formatted_date_full_month)
-        content = "Payout on #{date} was skipped because payouts on the account were paused by the admin."
+        content = "Payout on #{date} was skipped because payouts have been paused by Gumroad support."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
     end

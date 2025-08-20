@@ -362,6 +362,10 @@ GEM
     faraday_middleware (1.2.0)
       faraday (~> 1.0)
     ffi (1.17.0)
+    ffi (1.17.0-arm64-darwin)
+    ffi (1.17.0-x86_64-darwin)
+    ffi (1.17.0-x86_64-linux-gnu)
+    ffi (1.17.0-x86_64-linux-musl)
     ffi-compiler (1.3.2)
       ffi (>= 1.15.5)
       rake
@@ -598,6 +602,12 @@ GEM
     nokogiri (1.16.7)
       mini_portile2 (~> 2.8.2)
       racc (~> 1.4)
+    nokogiri (1.16.7-arm64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.16.7-x86_64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.16.7-x86_64-linux)
+      racc (~> 1.4)
     oauth (1.1.0)
       oauth-tty (~> 1.0, >= 1.0.1)
       snaky_hash (~> 2.0)
@@ -799,7 +809,7 @@ GEM
       execjs (~> 2.5)
       rails (>= 5.2)
       rainbow (~> 3.0)
-    redcarpet (3.6.0)
+    redcarpet (3.6.1)
     redis (5.2.0)
       redis-client (>= 0.22.0)
     redis-client (0.22.2)
@@ -987,7 +997,7 @@ GEM
       activesupport (>= 6.1)
       sprockets (>= 3.0.0)
     ssrf_filter (1.2.0)
-    stackprof (0.2.26)
+    stackprof (0.2.27)
     state_machines (0.6.0)
     state_machines-activemodel (0.9.0)
       activemodel (>= 6.0)
@@ -1281,7 +1291,7 @@ DEPENDENCIES
   zip-zip (~> 0.3)
 
 RUBY VERSION
-   ruby 3.4.3p32
+   ruby 3.2.9p265
 
 BUNDLED WITH
    2.5.10

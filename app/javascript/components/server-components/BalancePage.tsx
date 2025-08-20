@@ -856,6 +856,9 @@ const BalancePage = ({
             <p>
               <strong>Your payouts have been paused.</strong>
             </p>
+            {next_payout_period_data?.payout_note ? (
+              <p>{next_payout_period_data.payout_note}</p>
+            ) : null}
           </div>
         ) : null}
         {next_payout_period_data != null ? (

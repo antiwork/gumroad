@@ -748,8 +748,10 @@ module StripeMerchantAccountManager
 
     if stripe_account["payouts_enabled"]
       user.update!(payouts_paused_internally: false)
+      user.clear_payout_pause_source if user.payout_pause_source_stripe?
     elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
       user.update!(payouts_paused_internally: true)
+      user.set_payout_pause_source("stripe")
       if stripe_account["payouts_enabled"] == false && stripe_previous_attributes["payouts_enabled"] == true &&
         stripe_fields_needed.present? &&
         requirements["disabled_reason"].in?(%w(action_required.requested_capabilities requirements.past_due))

@@ -81,13 +81,18 @@ class Admin::Users::PayoutsController < Admin::BaseController
   end
 
   def pause
+    reason = params[:reason].presence || "Manual pause by admin"
     @user.update!(payouts_paused_internally: true)
+    @user.set_payout_pause_source("admin")
+    @user.add_payout_note(content: "Payouts paused by admin (#{current_user.email}): #{reason}")
 
     render json: { success: true, message: "User's payouts paused" }
   end
 
   def resume
     @user.update!(payouts_paused_internally: false)
+    @user.clear_payout_pause_source
+    @user.add_payout_note(content: "Payouts resumed by admin (#{current_user.email})")
 
     render json: { success: true, message: "User's payouts resumed" }
   end

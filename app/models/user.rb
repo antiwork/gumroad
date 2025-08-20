@@ -870,6 +870,48 @@ class User < ApplicationRecord
     payouts_paused_internally? || payouts_paused_by_user?
   end
 
+  def payout_pause_source
+    json_data["payout_pause_source"]
+  end
+
+  def set_payout_pause_source(source)
+    self.json_data = json_data.merge("payout_pause_source" => source)
+    save!
+  end
+
+  def clear_payout_pause_source
+    updated_data = json_data.dup
+    updated_data.delete("payout_pause_source")
+    self.json_data = updated_data
+    save!
+  end
+
+  def payout_pause_source_stripe?
+    payout_pause_source == "stripe"
+  end
+
+  def payout_pause_source_admin?
+    payout_pause_source == "admin"
+  end
+
+  def payout_pause_source_user?
+    payout_pause_source == "user"
+  end
+
+  def payout_pause_source_system?
+    payout_pause_source == "system"
+  end
+
+  def pause_payouts_by_user!
+    update!(payouts_paused_by_user: true)
+    set_payout_pause_source("user")
+  end
+
+  def resume_payouts_by_user!
+    update!(payouts_paused_by_user: false)
+    clear_payout_pause_source if payout_pause_source_user?
+  end
+
   def made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
     ids = merchant_accounts
       .stripe_connect

@@ -3552,3 +3552,60 @@ describe User, :vcr do
     end
   end
 end
+
+  describe "payout pause source tracking" do
+    let(:user) { create(:user) }
+
+    describe "#payout_pause_source" do
+      it "returns nil when no source is set" do
+        user.json_data = {}
+        expect(user.payout_pause_source).to be_nil
+      end
+
+      it "returns the source when set" do
+        user.json_data = { "payout_pause_source" => "stripe" }
+        expect(user.payout_pause_source).to eq("stripe")
+      end
+    end
+
+    describe "#set_payout_pause_source" do
+      it "sets the pause source in json_data" do
+        user.set_payout_pause_source("admin")
+        expect(user.reload.json_data["payout_pause_source"]).to eq("admin")
+      end
+    end
+
+    describe "#clear_payout_pause_source" do
+      it "removes the pause source from json_data" do
+        user.set_payout_pause_source("stripe")
+        user.clear_payout_pause_source
+        expect(user.reload.json_data["payout_pause_source"]).to be_nil
+      end
+    end
+
+    describe "pause source type methods" do
+      it "correctly identifies stripe pause" do
+        user.set_payout_pause_source("stripe")
+        expect(user.payout_pause_source_stripe?).to be_truthy
+        expect(user.payout_pause_source_admin?).to be_falsey
+      end
+
+      it "correctly identifies admin pause" do
+        user.set_payout_pause_source("admin") 
+        expect(user.payout_pause_source_admin?).to be_truthy
+        expect(user.payout_pause_source_stripe?).to be_falsey
+      end
+
+      it "correctly identifies user pause" do
+        user.set_payout_pause_source("user")
+        expect(user.payout_pause_source_user?).to be_truthy
+        expect(user.payout_pause_source_admin?).to be_falsey
+      end
+
+      it "correctly identifies system pause" do
+        user.set_payout_pause_source("system")
+        expect(user.payout_pause_source_system?).to be_truthy
+        expect(user.payout_pause_source_user?).to be_falsey
+      end
+    end
+  end

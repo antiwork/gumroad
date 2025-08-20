@@ -783,6 +783,13 @@ const PaymentsPage = (props: Props) => {
     ? props.countries[complianceInfo.updated_country_code]
     : null;
 
+  const getPayoutPauseMessage = () => {
+    if (props.payouts_paused_internally) {
+      return "Your payouts were paused by our payment processor. Please update your information above.";
+    }
+    return "By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in your account until then.";
+  };
+
   const payoutsPausedToggle = (
     <fieldset>
       <Toggle
@@ -793,10 +800,7 @@ const PaymentsPage = (props: Props) => {
       >
         Pause payouts
       </Toggle>
-      <small>
-        By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
-        your account until then.
-      </small>
+      <small>{getPayoutPauseMessage()}</small>
     </fieldset>
   );
 

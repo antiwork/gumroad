@@ -26,7 +26,10 @@
         <% if user.payouts_paused? %>
           <%= admin_action label: "Resume payouts", url: resume_admin_user_payouts_path(user), loading: "Resuming payouts...", done: "Payouts resumed!", success_message: "Payouts resumed!" %>
         <% else %>
-          <%= admin_action label: "Pause payouts", url: pause_admin_user_payouts_path(user), loading: "Pausing payouts...", done: "Payouts paused!", success_message: "Payouts paused!", outline: true, color: "warning" %>
+          <%= form_with url: pause_admin_user_payouts_path(user), method: :patch, local: false, class: "admin-pause-form" do |form| %>
+            <%= form.text_field :reason, placeholder: "Reason for pausing (optional)", class: "input", style: "margin-bottom: 8px;" %>
+            <%= form.submit "Pause payouts", class: "button button-warning button-outline", data: { confirm: "Are you sure you want to pause this user's payouts?" } %>
+          <% end %>
         <% end %>
       </div>
 

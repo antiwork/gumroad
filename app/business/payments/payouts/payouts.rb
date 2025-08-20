@@ -16,8 +16,22 @@ class Payouts
     end
 
     if user.payouts_paused?
-      paused_by = user.payouts_paused_internally? ? "admin" : "creator"
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by #{paused_by == 'admin' ? 'the admin' : 'you'}.") if add_comment
+      source = user.payout_pause_source
+      message = case source
+        when "stripe"
+          "payouts are currently paused by our payment processor. Please check your Payment Settings for verification requirements."
+        when "admin"
+          "payouts have been paused by Gumroad support."
+        when "user"
+          "you have paused your payouts."
+        when "system"
+          "payouts were paused due to system requirements."
+        else
+          paused_by = user.payouts_paused_internally? ? "admin" : "creator"
+          "payouts on the account were paused by #{paused_by == 'admin' ? 'the admin' : 'you'}."
+      end
+
+      user.add_payout_note(content: "Payout on #{payout_date} was skipped because #{message}") if add_comment
       return false
     end
 

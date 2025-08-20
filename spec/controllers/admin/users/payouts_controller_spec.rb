@@ -42,3 +42,66 @@ describe Admin::Users::PayoutsController do
     end
   end
 end
+
+  describe "payout pause/resume with reasons" do
+    let(:admin_user) { create(:user, has_payout_privilege: true) }
+    let(:target_user) { create(:user) }
+
+    before do
+      sign_in admin_user
+    end
+
+    describe "#pause" do
+      it "pauses payouts and sets admin source" do
+        patch :pause, params: { user_id: target_user.id, reason: "Verification required" }
+        
+        target_user.reload
+        expect(target_user.payouts_paused_internally?).to be_truthy
+        expect(target_user.payout_pause_source).to eq("admin")
+      end
+
+      it "uses default reason when none provided" do
+        patch :pause, params: { user_id: target_user.id }
+        
+        target_user.reload
+        expect(target_user.payout_pause_source).to eq("admin")
+        # Check that a note was added with default reason
+        expect(target_user.comments.with_type_payout_note.last.content).to include("Manual pause by admin")
+      end
+
+      it "adds payout note with admin email and reason" do
+        expect {
+          patch :pause, params: { user_id: target_user.id, reason: "Account review needed" }
+        }.to change { target_user.comments.with_type_payout_note.count }.by(1)
+        
+        note = target_user.comments.with_type_payout_note.last
+        expect(note.content).to include("Account review needed")
+        expect(note.content).to include(admin_user.email)
+      end
+    end
+
+    describe "#resume" do
+      before do
+        target_user.update!(payouts_paused_internally: true)
+        target_user.set_payout_pause_source("admin")
+      end
+
+      it "resumes payouts and clears pause source" do
+        patch :resume, params: { user_id: target_user.id }
+        
+        target_user.reload
+        expect(target_user.payouts_paused_internally?).to be_falsey
+        expect(target_user.payout_pause_source).to be_nil
+      end
+
+      it "adds payout note with admin email" do
+        expect {
+          patch :resume, params: { user_id: target_user.id }
+        }.to change { target_user.comments.with_type_payout_note.count }.by(1)
+        
+        note = target_user.comments.with_type_payout_note.last
+        expect(note.content).to include("resumed by admin")
+        expect(note.content).to include(admin_user.email)
+      end
+    end
+  end
