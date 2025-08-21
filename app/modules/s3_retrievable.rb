@@ -1,11 +1,9 @@
 # frozen_string_literal: true
 
 module S3Retrievable
-  GUID_LENGTH = 32
+  extend ActiveSupport::Concern
 
-  def self.included(base)
-    base.extend(ClassMethods)
-  end
+  GUID_LENGTH = 32
 
   # Use the guid if it can be found, otherwise use self.url
   # Assumes guid is a 32-character alphanumeric sequence preceding "/original/" in the url
@@ -33,7 +31,7 @@ module S3Retrievable
     tempfile&.close!
   end
 
-  module ClassMethods
+  class_methods do
     def has_s3_fields(column)
       scope :s3, -> { where("#{column} LIKE ?", "#{S3_BASE_URL}%") }
       scope :with_s3_key, ->(key) { where("#{column} = ?", "#{S3_BASE_URL}#{key}") }
