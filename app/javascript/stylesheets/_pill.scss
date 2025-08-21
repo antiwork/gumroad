@@ -37,6 +37,13 @@ $pill-icons: (
       width: 100%;
       opacity: 0;
       cursor: pointer;
+      color: var(--color);
+      background-color: full-color(filled);
+      
+      option {
+        color: var(--color);
+        background-color: full-color(filled);
+      }
     }
   }
 
