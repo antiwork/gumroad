@@ -247,7 +247,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                 ) : null}
                 <p>
                   or{" "}
-                  <a data-helper-prompt="How can I learn more about the audience dashboard?">
+                  <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
                     learn more about the audience dashboard
                   </a>
                 </p>

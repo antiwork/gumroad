@@ -52,7 +52,7 @@ export const CoverEditor = ({
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
-          <a href="#" data-helper-prompt="What image dimensions should I use for my cover?">
+          <a href="/help/article/60-adding-a-cover-image" target="_blank" rel="noreferrer">
             Learn more
           </a>
         </div>

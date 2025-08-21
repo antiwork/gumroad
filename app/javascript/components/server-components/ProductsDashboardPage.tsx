@@ -90,7 +90,7 @@ export const ProductsDashboardPage = ({
             </div>
             <span>
               or{" "}
-              <a data-helper-prompt="Can you tell me more about the products dashboard?">
+              <a href="/help/article/304-products-dashboard" target="_blank" rel="noreferrer">
                 learn more about the products dashboard
               </a>
             </span>

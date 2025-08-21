@@ -24,7 +24,7 @@ describe "UTM links", :js, type: :system do
 
         expect(page).to have_text("No links yet")
         expect(page).to have_text("Use UTM links to track which sources are driving the most conversions and revenue")
-        expect(find("a", text: "Learn more about UTM tracking")["data-helper-prompt"]).to eq("How can I use UTM link tracking in Gumroad?")
+        expect(find("a", text: "Learn more about UTM tracking")[:href]).to include("/help/article/74-the-analytics-dashboard")
       end
 
       it "shows UTM links" do
@@ -387,7 +387,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_link("Cancel", href: utm_links_dashboard_path)
         expect(page).to have_text("Create UTM links to track where your traffic is coming from")
         expect(page).to have_text("Once set up, simply share the links to see which sources are driving more conversions and revenue")
-        expect(find("a", text: "Learn more")["data-helper-prompt"]).to eq("How can I use UTM link tracking in Gumroad?")
+        expect(find("a", text: "Learn more")[:href]).to include("/help/article/74-the-analytics-dashboard")
 
         expect(page).to have_input_labelled("Title", with: "")
         find(:label, "Destination").click
@@ -644,7 +644,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_current_path("#{utm_links_dashboard_path}/#{utm_link.external_id}/edit")
         expect(page).to have_text("Edit link")
         expect(page).to have_link("Cancel", href: utm_links_dashboard_path)
-        expect(find("a", text: "Learn more")["data-helper-prompt"]).to eq("How can I use UTM link tracking in Gumroad?")
+        expect(find("a", text: "Learn more")["href"]).to include("/help/")
 
         # Check that the form is pre-filled with the existing UTM link's values
         expect(page).to have_input_labelled("Title", with: utm_link.title)

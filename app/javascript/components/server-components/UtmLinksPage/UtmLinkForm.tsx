@@ -249,7 +249,9 @@ export const UtmLinkForm = () => {
           <header>
             <p>Create UTM links to track where your traffic is coming from. </p>
             <p>Once set up, simply share the links to see which sources are driving more conversions and revenue.</p>
-            <a data-helper-prompt="How can I use UTM link tracking in Gumroad?">Learn more</a>
+            <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
           </header>
           <fieldset className={cx({ danger: errorInfo?.attrName === "title" })}>
             <legend>

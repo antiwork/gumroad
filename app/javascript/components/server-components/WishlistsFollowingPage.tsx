@@ -100,7 +100,9 @@ const WishlistsFollowingPage = ({
             </figure>
             <h2>Follow wishlists that inspire you</h2>
             Bookmark and organize your desired products with ease
-            <a data-helper-prompt="How do wishlists work?">Learn more about wishlists</a>
+            <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
+              Learn more about wishlists
+            </a>
           </div>
         )}
       </section>

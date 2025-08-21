@@ -512,7 +512,9 @@ const MainPage = (props: Props) => {
             />
             <small>
               Charge customers different amounts depending on the cost of living in their country.{" "}
-              <a data-helper-prompt="Can you explain more about purchasing power parity?">Learn more</a>
+              <a href="/help/article/327-purchasing-power-parity" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
             </small>
           </fieldset>
         </section>
