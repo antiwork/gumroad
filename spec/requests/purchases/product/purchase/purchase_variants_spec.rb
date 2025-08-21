@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-describe("Variant Purchases from product page", type: :feature, js: true) do
+describe("Variant Purchases from product page", type: :system, js: true) do
   before do
     @user = create(:named_user)
     @product = create(:product, user: @user, custom_receipt: "<h1>Hello</h1>")

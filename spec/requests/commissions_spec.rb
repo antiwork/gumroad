@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Commissions", type: :feature, js: true do
+describe "Commissions", type: :system, js: true do
   let(:seller) { create(:user, :eligible_for_service_products) }
   let(:commission1) { create(:product, user: seller, name: "Commission 1", native_type: Link::NATIVE_TYPE_COMMISSION, price_cents: 200) }
   let(:commission2) { create(:product, user: seller, name: "Commission 2", native_type: Link::NATIVE_TYPE_COMMISSION, price_cents: 1000) }

@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/discover_layout"
 
-describe("ProductShowScenario", type: :feature, js: true) do
+describe("ProductShowScenario", type: :system, js: true) do
   it("sets the quantity and price based on the parameters in the query string and allows purchase") do
     product = create(:product, customizable_price: true, quantity_enabled: true)
     quantity = 3

@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product checkout with upsells", type: :feature, js: true) do
+describe("Product checkout with upsells", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
 
   let(:upsell_product) { create(:product_with_digital_versions, name: "Upsell product", user: seller) }
@@ -152,6 +152,57 @@ describe("Product checkout with upsells", type: :feature, js: true) do
       expect(purchase.upsell_purchase).to be_nil
       expect(purchase.variant_attributes.first).to eq(selected_product.alive_variants.first)
     end
+
+    context "when the buyer has a better discount code" do
+      let!(:cross_sell) { nil }  # Override global cross_sell to avoid conflicts
+      let!(:additive_cross_sell) { create(:upsell, text: "Cross-sell", description: "Check out this awesome cross-sell!", seller:, product:, variant: product.alive_variants.first, selected_products: [selected_product], cross_sell: true, replace_selected_products: false) }
+      let(:better_discount_code) { create(:offer_code, code: "betterdiscount", user: seller, universal: true, amount_cents: 100) }
+
+      before do
+        product.update!(price_cents: 400)
+        selected_product.update!(price_cents: 200)
+      end
+
+      it "applies applicable discount codes to non-replacement cross-sells" do
+        visit "#{selected_product.long_url}/#{better_discount_code.code}"
+        add_to_cart(selected_product, offer_code: better_discount_code)
+
+        fill_checkout_form(selected_product)
+        click_on "Pay"
+
+        within_modal "Cross-sell" do
+          expect(page).to have_text("Check out this awesome cross-sell!")
+          expect(page).to have_section("Offered product")
+          # The modal shows the original discount applied to the cross-sell
+          expect(page).to have_selector("[itemprop='price']", text: "$4 $3")
+          click_on "Add to cart"
+        end
+
+        expect(page).to have_section("Offered product")
+        expect(page).to have_section("Product")
+        # Cart retains the original discount code and applies it to both products
+        expect(page).to have_selector("[aria-label='Discount code']", text: better_discount_code.code)
+        # $1 off each product
+        expect(page).to have_text("US$-2")
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+        expect(page).to have_section("Offered product")
+        expect(page).to have_section("Product")
+
+        selected_purchase = selected_product.sales.last
+        offered_purchase = product.sales.last
+
+        expect(selected_purchase.price_cents).to eq(100) # $200 - $100 discount
+        expect(selected_purchase.offer_code).to eq(better_discount_code)
+        expect(selected_purchase.upsell_purchase).to be_nil
+
+        expect(offered_purchase.price_cents).to eq(300) # $400 - $100 discount
+        expect(offered_purchase.offer_code).to eq(better_discount_code)
+        expect(offered_purchase.upsell_purchase.selected_product).to eq(selected_product)
+        expect(offered_purchase.upsell_purchase.upsell).to eq(additive_cross_sell)
+      end
+    end
   end
 
   context "when the product has a universal cross-sell" do
@@ -187,10 +238,10 @@ describe("Product checkout with upsells", type: :feature, js: true) do
   end
 
   context "when the product has a replacement cross-sell" do
-    let(:product) { create(:product, user: seller, name: "Offered product", price_cents: 200) }
-    let(:selected_product1) { create(:product, user: seller, name: "Selected product 1") }
-    let(:selected_product2) { create(:product, user: seller, name: "Selected product 2") }
-    let!(:replacement_cross_sell) { create(:upsell, text: "Replacement cross-sell", seller:, product:, variant: product.alive_variants.first, selected_products: [selected_product1, selected_product2], offer_code: build(:offer_code, user: seller, products: [product], amount_cents: 100), cross_sell: true, replace_selected_products: true) }
+    let(:product) { create(:product, user: seller, name: "Offered product", price_cents: 400) }
+    let(:selected_product1) { create(:product, user: seller, name: "Selected product 1", price_cents: 200) }
+    let(:selected_product2) { create(:product, user: seller, name: "Selected product 2", price_cents: 200) }
+    let!(:replacement_cross_sell) { create(:upsell, text: "Replacement cross-sell", seller:, product:, variant: product.alive_variants.first, selected_products: [selected_product1, selected_product2], offer_code: build(:offer_code, user: seller, products: [product], amount_cents: 50), cross_sell: true, replace_selected_products: true) }
 
     it "removes the selected products when the buyer accepts the cross-sell" do
       visit selected_product1.long_url
@@ -205,13 +256,15 @@ describe("Product checkout with upsells", type: :feature, js: true) do
       within_modal "Replacement cross-sell" do
         expect(page).to have_text("This offer will only last for a few weeks.")
         expect(page).to have_section("Offered product")
-        expect(page).to have_selector("[itemprop='price']", text: "$2 $1")
+        expect(page).to have_selector("[itemprop='price']", text: "$4 $3.50")
         click_on "Upgrade"
       end
 
       expect(page).to have_section("Offered product")
       expect(page).to_not have_section("Selected product 1")
       expect(page).to_not have_section("Selected product 2")
+      expect(page).to_not have_selector("[aria-label='Discount code']")
+      expect(page).to have_text("US$-0.50")
 
       expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
 
@@ -221,10 +274,50 @@ describe("Product checkout with upsells", type: :feature, js: true) do
 
       purchase = Purchase.last
       expect(purchase.link).to eq(product)
-      expect(purchase.price_cents).to eq(100)
+      expect(purchase.price_cents).to eq(350)
       expect(purchase.offer_code).to eq(replacement_cross_sell.offer_code)
       expect(purchase.upsell_purchase.selected_product).to eq(selected_product2)
       expect(purchase.upsell_purchase.upsell).to eq(replacement_cross_sell)
+    end
+
+    context "when the buyer has a better discount code" do
+      let(:better_discount_code) { create(:offer_code, code: "betterdiscount", user: seller, universal: true, amount_cents: 100) }
+
+      it "retains the original discount code if it's better than the replacement cross-sell discount" do
+        visit "#{selected_product1.long_url}/#{better_discount_code.code}"
+        add_to_cart(selected_product1, offer_code: better_discount_code)
+
+        fill_checkout_form(selected_product1)
+        click_on "Pay"
+
+        within_modal "Replacement cross-sell" do
+          expect(page).to have_text("This offer will only last for a few weeks.")
+          expect(page).to have_section("Offered product")
+          # The modal shows original discount that is better than the replacement
+          # cross-sell discount.
+          expect(page).to have_selector("[itemprop='price']", text: "$4 $3")
+          click_on "Upgrade"
+        end
+
+        expect(page).to have_section("Offered product")
+        expect(page).to_not have_section("Selected product 1")
+        # Cart retains the original discount code after accepting the replacement
+        # cross-sell.
+        expect(page).to have_selector("[aria-label='Discount code']", text: better_discount_code.code)
+        expect(page).to have_text("US$-1")
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+        expect(page).to have_section("Offered product")
+        expect(page).to_not have_section("Selected product 1")
+
+        purchase = Purchase.last
+        expect(purchase.link).to eq(product)
+        expect(purchase.price_cents).to eq(300)
+        expect(purchase.offer_code).to eq(better_discount_code)
+        expect(purchase.upsell_purchase.selected_product).to eq(selected_product1)
+        expect(purchase.upsell_purchase.upsell).to eq(replacement_cross_sell)
+      end
     end
 
     context "selected product is free and offered product is paid" do

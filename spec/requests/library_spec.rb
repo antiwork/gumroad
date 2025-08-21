@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Library Scenario", type: :feature, js: true) do
+describe("Library Scenario", type: :system, js: true) do
   include ManageSubscriptionHelpers
 
   before :each do

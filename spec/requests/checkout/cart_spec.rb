@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout cart", :js, type: :feature do
+describe "Checkout cart", :js, type: :system do
   before do
     @product = create(:product, price_cents: 1000, quantity_enabled: true)
     @pwyw_product = create(:product, price_cents: 1000, customizable_price: true, thumbnail: create(:thumbnail))

@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Dashboard", js: true, type: :feature do
+describe "Dashboard", js: true, type: :system do
   let(:seller) { create(:named_seller) }
 
   before do

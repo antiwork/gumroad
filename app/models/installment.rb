@@ -864,7 +864,7 @@ class Installment < ApplicationRecord
       return if abandoned_cart_type?
 
       if audience_members_count(SENDING_LIMIT + 1) > SENDING_LIMIT && user.sales_cents_total < MINIMUM_SALES_CENTS_VALUE
-        errors.add(:base, "<a data-helper-prompt='How much have I made in total earnings?'>Sorry, you cannot send out more than #{SENDING_LIMIT} emails until you have $#{MINIMUM_SALES_CENTS_VALUE / 100} in total earnings.</a>".html_safe)
+        errors.add(:base, "<a href='/help/article/269-balance-page' target='_blank' rel='noreferrer'>Sorry, you cannot send out more than #{SENDING_LIMIT} emails until you have $#{MINIMUM_SALES_CENTS_VALUE / 100} in total earnings.</a>".html_safe)
       end
     end
 

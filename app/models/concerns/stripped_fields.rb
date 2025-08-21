@@ -14,7 +14,7 @@
 module StrippedFields
   extend ActiveSupport::Concern
 
-  module ClassMethods
+  class_methods do
     def stripped_fields(*fields, remove_duplicate_spaces: true, transform: nil, nilify_blanks: true, **options)
       before_validation(options) do |object|
         fields.each do |field|

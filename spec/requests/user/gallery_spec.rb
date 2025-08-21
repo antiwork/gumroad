@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe "User Gallery Page Scenario", :elasticsearch_wait_for_refresh, type: :feature, js: true do
+describe "User Gallery Page Scenario", :elasticsearch_wait_for_refresh, type: :system, js: true do
   describe "Product thumbnails", :sidekiq_inline do
     before do
       @creator = create(:user, username: "creatorgal")

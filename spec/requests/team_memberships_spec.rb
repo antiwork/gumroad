@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Team Memberships", type: :feature, js: true do
+describe "Team Memberships", type: :system, js: true do
   describe "Account switch" do
     context "with logged in user" do
       let(:user) { create(:user, name: "Gum") }

@@ -152,7 +152,7 @@ export type Purchase = {
   membership: { tier_name: string | null; tier_description: string | null; manage_url: string } | null;
 };
 export type ProductDiscount =
-  | { valid: false; error_code: "sold_out" | "invalid_offer" | "inactive" | "insufficient_quantity" }
+  | { valid: false; error_code: "sold_out" | "invalid_offer" | "inactive" | "unmet_minimum_purchase_quantity" }
   | { valid: true; code: string; discount: Discount }
   | null;
 

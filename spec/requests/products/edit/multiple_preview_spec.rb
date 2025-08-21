@@ -10,7 +10,7 @@ def upload_image
   end
 end
 
-describe("Product edit multiple-preview Scenario", type: :feature, js: true) do
+describe("Product edit multiple-preview Scenario", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
 

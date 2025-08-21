@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Download Page Audio files", type: :feature, js: true) do
+describe("Download Page Audio files", type: :system, js: true) do
   before do
     @url_redirect = create(:listenable_url_redirect)
     @product = @url_redirect.referenced_link

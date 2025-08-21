@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Impersonate", type: :feature, js: true do
+describe "Impersonate", type: :system, js: true do
   let(:admin) { create(:admin_user, name: "Gumlord") }
   let(:seller) do
     user = create(:named_seller)

@@ -12,7 +12,7 @@ def load_products
       username: "gumbo#{i}",
       email: "gumbo#{i}@gumroad.com",
       password: SecureRandom.hex(24),
-      user_risk_state: "not_reviewed",
+      user_risk_state: "compliant",
       confirmed_at: Time.current
     )
     # Skip validations to set a pwned but easy password
@@ -41,7 +41,7 @@ def load_products
       username: "gumbuyer#{i}",
       email: "gumbuyer#{i}@gumroad.com",
       password: SecureRandom.hex(24),
-      user_risk_state: "not_reviewed",
+      user_risk_state: "compliant",
       confirmed_at: Time.current
     )
     # Skip validations to set a pwned but easy password

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Two-Factor Authentication", js: true, type: :feature do
+describe "Two-Factor Authentication", js: true, type: :system do
   include FillInUserProfileHelpers
 
   let(:user) { create(:named_user, skip_enabling_two_factor_authentication: false) }

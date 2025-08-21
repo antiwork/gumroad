@@ -623,7 +623,10 @@ class LinksController < ApplicationController
     def paginated_products(page:, query: nil)
       products = current_seller
         .products
-        .includes(thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
+        .includes([
+                    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                  ])
         .non_membership
         .visible_and_not_archived
       products = products.where("links.name like ?", "%#{query}%") if query.present?

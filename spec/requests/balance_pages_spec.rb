@@ -4,7 +4,7 @@ require "spec_helper"
 require "ostruct"
 require "shared_examples/authorize_called"
 
-describe "Balance Pages Scenario", js: true, type: :feature do
+describe "Balance Pages Scenario", js: true, type: :system do
   include CollabProductHelper
 
   let(:seller) { create(:named_seller) }
@@ -16,7 +16,7 @@ describe "Balance Pages Scenario", js: true, type: :feature do
 
   include_context "with switching account to user as admin for seller"
 
-  describe "index page", type: :feature do
+  describe "index page", type: :system do
     it "shows empty notice if creator hasn't reached balance" do
       visit balance_path
       expect(page).to have_content "Let's get you paid."
@@ -406,10 +406,10 @@ describe "Balance Pages Scenario", js: true, type: :feature do
         describe "payout-skipped notes" do
           context "when the payout was skipped because the account was suspended" do
             before do
-              seller.flag_for_tos_violation!(author_id: 1, bulk: true)
-              seller.suspend_for_tos_violation!(author_id: 1, bulk: true)
+              seller.flag_for_tos_violation!(author_name: "iffy", bulk: true)
+              seller.suspend_for_tos_violation!(author_name: "iffy", bulk: true)
               Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
-              seller.mark_compliant!(author_id: 1)
+              seller.mark_compliant!(author_name: "iffy")
             end
 
             it "shows the payout-skipped notice" do

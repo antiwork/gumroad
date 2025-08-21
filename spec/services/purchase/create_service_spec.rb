@@ -353,6 +353,29 @@ describe Purchase::CreateService, :vcr do
         end
       end
     end
+
+    context "when the purchase already has an offer code" do
+      let(:existing_offer_code) { create(:offer_code, user:, products: [product], amount_cents: 200, code: "existing789") }
+
+      before do
+        params[:purchase][:offer_code] = existing_offer_code
+      end
+
+      it "retains the existing offer code instead of using the upsell offer code" do
+        purchase, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(purchase.upsell_purchase.upsell).to eq(cross_sell)
+        expect(purchase.upsell_purchase.selected_product).to eq(selected_product)
+        expect(purchase.offer_code).to eq(existing_offer_code)
+        expect(purchase.purchase_offer_code_discount.offer_code).to eq(existing_offer_code)
+        expect(purchase.purchase_offer_code_discount.offer_code_amount).to eq(200)
+        expect(error).to be_nil
+      end
+    end
   end
 
   describe "bundle purchases" do
@@ -433,7 +456,7 @@ describe Purchase::CreateService, :vcr do
             price_cents: 100,
           }
         ]
-        params[:purchase][:offer_code_name] = offer_code.code
+        params[:purchase][:discount_code] = offer_code.code
       end
 
       it "creates the purchase" do
@@ -462,7 +485,7 @@ describe Purchase::CreateService, :vcr do
             price_cents: 100,
           }
         ]
-        params[:purchase][:offer_code_name] = offer_code.code
+        params[:purchase][:discount_code] = offer_code.code
       end
 
       it "creates the purchase" do
@@ -1185,7 +1208,6 @@ describe Purchase::CreateService, :vcr do
     it "counts a successful preorder towards the offer code's max purchase count" do
       offer_code = create(:offer_code, products: [product_in_preorder], amount_cents: 200, max_purchase_count: 1)
       preorder_params[:purchase][:discount_code] = offer_code.code
-      preorder_params[:purchase][:offer_code_name] = offer_code.name
       preorder_params[:purchase][:perceived_price_cents] = 400
 
       purchase, _ = Purchase::CreateService.new(
@@ -2059,7 +2081,7 @@ describe Purchase::CreateService, :vcr do
     context "with offer codes" do
       let(:offer_code) { create(:offer_code, products: [product], amount_cents: 200, max_purchase_count: 1) }
       before :each do
-        gift_params[:purchase].merge!(offer_code_name: offer_code.name, discount_code: offer_code.code, perceived_price_cents: price - 200)
+        gift_params[:purchase].merge!(discount_code: offer_code.code, perceived_price_cents: price - 200)
       end
 
       it "allows gifting until the offer code is used up" do
@@ -2415,7 +2437,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price,
       )
@@ -2437,7 +2458,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:universal_offer_code, code: "uni", user:, amount_cents: discount_cents)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price,
       )
@@ -2453,7 +2473,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents, code: "ÕËëæç")
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price,
       )
@@ -2471,7 +2490,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:offer_code, products: [product], amount_cents: 151)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: 350 - 151,
         price_range: 1.99
@@ -2494,7 +2512,6 @@ describe Purchase::CreateService, :vcr do
         product.update!(price_currency_type: currency, price_cents: 15_000)
         offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
-          offer_code_name: offer_code.name,
           discount_code: offer_code.code,
           perceived_price_cents: 12_000,
           price_range: 120,
@@ -2518,7 +2535,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price
       )
@@ -2532,7 +2548,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents, deleted_at: Time.current)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price
       )
@@ -2548,7 +2563,6 @@ describe Purchase::CreateService, :vcr do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price
       )
@@ -2569,7 +2583,6 @@ describe Purchase::CreateService, :vcr do
         product.update!(price_currency_type: currency, price_cents: 15_000)
         offer_code = create(:offer_code, code: currency, currency_type: currency, products: [product], amount_cents: 3_000)
         params[:purchase].merge!(
-          offer_code_name: offer_code.name,
           discount_code: offer_code.code,
           perceived_price_cents: 12_000,
           price_range: 119.99
@@ -2587,7 +2600,6 @@ describe Purchase::CreateService, :vcr do
       create(:purchase, offer_code:)
 
       params[:purchase].merge!(
-        offer_code_name: offer_code.name,
         discount_code: offer_code.code,
         perceived_price_cents: discounted_price,
         price_range: 1,
@@ -2984,9 +2996,6 @@ describe Purchase::CreateService, :vcr do
   describe "inventory protection" do
     let(:price) { 0 }
     let(:max_purchase_count) { 1 }
-    after do
-      DatabaseCleaner[:active_record].clean_with(:truncation)
-    end
 
     it "prevents several parallel purchases to take more than the available inventory" do
       purchase_1, error_1, purchase_2, error_2 = Array.new(4)

@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Password Reset", type: :feature, js: true) do
+describe("Password Reset", type: :system, js: true) do
   include FillInUserProfileHelpers
 
   before(:each) do

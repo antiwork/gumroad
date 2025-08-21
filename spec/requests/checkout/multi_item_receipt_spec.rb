@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Multi-item receipt", :js, type: :feature do
+describe "Multi-item receipt", :js, type: :system do
   include ActiveJob::TestHelper
 
   let(:seller_one) { create(:user) }

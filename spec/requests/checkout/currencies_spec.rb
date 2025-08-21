@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout currency conversions", :js, type: :feature do
+describe "Checkout currency conversions", :js, type: :system do
   before do
     $currency_namespace = Redis::Namespace.new(:currencies, redis: $redis)
     $currency_namespace.set("GBP", 5.1651)

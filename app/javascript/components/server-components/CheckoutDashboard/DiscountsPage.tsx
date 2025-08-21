@@ -425,6 +425,7 @@ const DiscountsPage = ({
                                 role="menuitem"
                                 inert={!offerCode.can_update || isLoading}
                                 onClick={() => {
+                                  setPopoverOfferCodeId(null);
                                   setSelectedOfferCodeId(offerCode.id);
                                   setView("create");
                                 }}
@@ -439,6 +440,7 @@ const DiscountsPage = ({
                                 onClick={asyncVoid(async () => {
                                   try {
                                     setIsLoading(true);
+                                    setPopoverOfferCodeId(null);
                                     await deleteOfferCode(offerCode.id);
                                   } catch (e) {
                                     assertResponseError(e);
@@ -475,7 +477,9 @@ const DiscountsPage = ({
               <h2>No discounts yet</h2>
               <p>Use discounts to create sweet deals for your customers</p>
               <p>
-                <a data-helper-prompt="How can I create a discount code?">Learn more about discount codes</a>
+                <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
+                  Learn more about discount codes
+                </a>
               </p>
             </div>
           </div>
@@ -576,9 +580,7 @@ const DiscountsPage = ({
                 })}
               </section>
             ) : null}
-            <section
-              style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}
-            >
+            <section className="grid auto-cols-fr grid-flow-row sm:grid-flow-col" style={{ gap: "var(--spacer-4)" }}>
               <Button onClick={() => setView("create")} disabled={!selectedOfferCode.can_update || isLoading}>
                 Duplicate
               </Button>
@@ -834,7 +836,11 @@ const Form = ({
                 Once the code is created, you can share it or copy a unique link per product that automatically applies
                 the discount.
               </div>
-              <a data-helper-prompt="How do I create discount codes?">Learn more</a>
+              <div>
+                <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
+                  Learn more
+                </a>
+              </div>
             </div>
           </header>
           <fieldset className={cx({ danger: name.error })}>

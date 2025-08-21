@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit Thumbnail Scenario", type: :feature, js: true) do
+describe("Product Edit Thumbnail Scenario", type: :system, js: true) do
   include ManageSubscriptionHelpers
 
   let(:seller) { create(:named_seller) }

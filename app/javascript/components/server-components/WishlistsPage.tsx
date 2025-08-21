@@ -106,8 +106,8 @@ const WishlistsPage = ({
                       <small>{wishlist.url}</small>
                     </a>
                   </td>
-                  <td>{wishlist.product_count}</td>
-                  <td>
+                  <td data-label="Products">{wishlist.product_count}</td>
+                  <td data-label="Discoverable">
                     <Toggle
                       value={!wishlist.discover_opted_out}
                       onChange={(checked) => void updateDiscoverOptOut(wishlist.id, !checked)}
@@ -136,7 +136,9 @@ const WishlistsPage = ({
             </figure>
             <h2>Save products you are wishing for</h2>
             Bookmark and organize your desired products with ease
-            <a data-helper-prompt="How do wishlists work on Gumroad?">Learn more about wishlists</a>
+            <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
+              Learn more about wishlists
+            </a>
           </div>
         )}
 

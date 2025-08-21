@@ -5,7 +5,7 @@ require "shared_examples/authorize_called"
 require "shared_examples/products_navigation"
 require "shared_examples/with_sorting_and_pagination"
 
-describe "Collabs", type: :feature, js: true do
+describe "Collabs", type: :system, js: true do
   let(:user) { create(:user) }
 
   include_context "with switching account to user as admin for seller" do

@@ -525,7 +525,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
           }}
         />
         <div style={{ marginTop: "20px", textAlign: "center" }}>
-          <a data-helper-prompt="I need help with one of my past purchases">Need help with your Library?</a>
+          <a href="/help/article/198-your-gumroad-library" target="_blank" rel="noreferrer">
+            Need help with your Library?
+          </a>
         </div>
       </section>
     </Layout>

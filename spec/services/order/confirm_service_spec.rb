@@ -104,7 +104,7 @@ describe Order::ConfirmService, :vcr do
 
     it "returns purchase error responses and offer codes in case of SCA failure with offer codes applied" do
       offer_code = create(:offer_code, user: seller, products: [product_1, product_2])
-      params[:purchase][:offer_code_name] = offer_code.code
+      params[:purchase][:discount_code] = offer_code.code
       params[:line_items].each { _1[:perceived_price_cents] -= 100 }
 
       expect(Purchase::ConfirmService).to receive(:new).exactly(2).times.and_call_original

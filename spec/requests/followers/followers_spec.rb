@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe("Followers", js: true, type: :feature) do
+describe("Followers", js: true, type: :system) do
   let(:seller) { create(:named_seller) }
 
   before do

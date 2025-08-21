@@ -13,7 +13,6 @@ import { assert } from "$app/utils/assert";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
-import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -633,7 +632,7 @@ export const CheckoutPage = ({
       {currentOffer && surchargesIfAccepted ? (
         <Modal open onClose={completeOffer} title={currentOffer.text}>
           {currentOffer.type === "cross-sell" ? (
-            <CrossSellModal crossSell={currentOffer} accept={acceptOffer} decline={completeOffer} />
+            <CrossSellModal crossSell={currentOffer} accept={acceptOffer} decline={completeOffer} cart={cart} />
           ) : (
             <UpsellModal cart={cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />
           )}
@@ -647,14 +646,26 @@ export const CrossSellModal = ({
   crossSell,
   decline,
   accept,
+  cart,
 }: {
   crossSell: CrossSell;
   accept: () => void;
   decline: () => void;
+  cart: CartState;
 }) => {
   const product = crossSell.offered_product.product;
   const option = product.options.find(({ id }) => id === crossSell.offered_product.option_id);
-  const discountedPrice = applyOfferCodeToCents(crossSell.discount, crossSell.offered_product.price);
+
+  const crossSellCartItem: CartItem = {
+    ...crossSell.offered_product,
+    quantity: crossSell.offered_product.quantity || 1,
+    url_parameters: {},
+    referrer: "",
+    recommender_model_name: null,
+    accepted_offer: crossSell.discount ? { id: crossSell.id, discount: crossSell.discount } : null,
+  };
+  const { price: discountedPrice } = getDiscountedPrice(cart, crossSellCartItem);
+
   return (
     <>
       <div style={{ display: "grid", gap: "var(--spacer-4)" }}>

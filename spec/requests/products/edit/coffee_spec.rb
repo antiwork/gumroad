@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Coffee Edit", type: :feature, js: true do
+describe "Coffee Edit", type: :system, js: true do
   let(:seller) { create(:user, :eligible_for_service_products, name: "Caffeine Addict") }
   let(:coffee) do
     create(

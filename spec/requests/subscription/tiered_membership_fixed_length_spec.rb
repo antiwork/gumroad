@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Tiered Memberships Fixed Length Spec", type: :feature, js: true do
+describe "Tiered Memberships Fixed Length Spec", type: :system, js: true do
   include ManageSubscriptionHelpers
 
   before :each do
