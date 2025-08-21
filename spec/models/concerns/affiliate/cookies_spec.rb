@@ -72,23 +72,13 @@ describe Affiliate::Cookies do
         expect(result).to be_empty
       end
 
-      context "with sort_by_recency: false (default)" do
-        it "does not sort affiliates by recency" do
-          result = Affiliate.by_cookies(cookies)
-          # Order is not guaranteed when not sorting by recency
-          expect(result).to contain_exactly(affiliate, another_affiliate)
-        end
-      end
+      it "sorts affiliates by cookie recency (newest first)" do
+        # affiliate has newer timestamp, another_affiliate has older timestamp
+        result = Affiliate.by_cookies(cookies)
 
-      context "with sort_by_recency: true" do
-        it "sorts affiliates by cookie recency (newest first)" do
-          # affiliate has newer timestamp, another_affiliate has older timestamp
-          result = Affiliate.by_cookies(cookies, sort_by_recency: true)
-
-          # Should return affiliate first (newer cookie)
-          expect(result.first).to eq(affiliate)
-          expect(result.second).to eq(another_affiliate)
-        end
+        # Should return affiliate first (newer cookie)
+        expect(result.first).to eq(affiliate)
+        expect(result.second).to eq(another_affiliate)
       end
     end
 
