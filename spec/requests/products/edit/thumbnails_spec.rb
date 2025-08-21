@@ -62,6 +62,49 @@ describe("Product Edit Thumbnail Scenario", type: :feature, js: true) do
     expect(@product.reload.thumbnail).to be_present
   end
 
+  it "allows uploading WebP images as thumbnails" do
+    visit("/products/#{@product.unique_permalink}/edit")
+
+    within_section "Thumbnail", section_element: :section do
+      page.attach_file("Upload", file_fixture("test.webp"), visible: false)
+      expect(page).to have_selector("[role=progressbar]")
+      wait_for_ajax
+      expect(page).to_not have_selector("[role=progressbar]")
+      expect(page).to have_image("Thumbnail image", src: @product.reload.thumbnail.url)
+    end
+    expect(page).to have_no_alert
+
+    expect(@product.reload.thumbnail).to be_present
+  end
+
+  it "allows uploading WebM videos as thumbnails when they have no audio" do
+    visit("/products/#{@product.unique_permalink}/edit")
+
+    within_section "Thumbnail", section_element: :section do
+      page.attach_file("Upload", file_fixture("test.webm"), visible: false)
+      expect(page).to have_selector("[role=progressbar]")
+      wait_for_ajax
+      expect(page).to_not have_selector("[role=progressbar]")
+      expect(page).to have_image("Thumbnail image", src: @product.reload.thumbnail.url)
+    end
+    expect(page).to have_no_alert
+
+    expect(@product.reload.thumbnail).to be_present
+  end
+
+  it "rejects WebM videos with audio for thumbnails" do
+    visit("/products/#{@product.unique_permalink}/edit")
+
+    # Create a WebM file with audio for testing
+    allow_any_instance_of(Thumbnail).to receive(:check_video_has_audio).and_return(true)
+
+    within_section "Thumbnail", section_element: :section do
+      page.attach_file("Upload", file_fixture("test.webm"), visible: false)
+    end
+    expect(page).to have_alert(text: "WebM files must not contain audio.")
+    expect(page).to have_no_alert
+  end
+
   context "when product has a saved thumbnail" do
     before do
       create(:thumbnail, product: @product)

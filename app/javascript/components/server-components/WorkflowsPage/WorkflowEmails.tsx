@@ -651,7 +651,19 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
                 <section>
                   <figure style={{ margin: 0 }}>
                     {product.thumbnail_url ? (
-                      <img src={product.thumbnail_url} style={{ objectFit: "initial", borderRadius: 0 }} />
+                      product.thumbnail_url.includes('.webm') || product.thumbnail_url.includes('.mp4') || product.thumbnail_url.includes('.mov') ? (
+                        <video
+                          src={product.thumbnail_url}
+                          controls={false}
+                          muted
+                          loop
+                          autoPlay
+                          playsInline
+                          style={{ objectFit: "initial", borderRadius: 0, width: '100%', height: 'auto' }}
+                        />
+                      ) : (
+                        <img src={product.thumbnail_url} style={{ objectFit: "initial", borderRadius: 0 }} />
+                      )
                     ) : null}
                   </figure>
                   <section>

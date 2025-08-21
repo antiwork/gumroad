@@ -90,7 +90,19 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
               <td className="icon-cell">
                 {product.thumbnail ? (
                   <a href={product.can_edit ? product.edit_url : product.url}>
-                    <img alt={product.name} src={product.thumbnail.url} />
+                    {product.thumbnail.url.includes('.webm') || product.thumbnail.url.includes('.mp4') || product.thumbnail.url.includes('.mov') ? (
+                      <video
+                        src={product.thumbnail.url}
+                        controls={false}
+                        muted
+                        loop
+                        autoPlay
+                        playsInline
+                        style={{ width: '100%', height: 'auto' }}
+                      />
+                    ) : (
+                      <img alt={product.name} src={product.thumbnail.url} />
+                    )}
                   </a>
                 ) : (
                   <Icon name="card-image-fill" />

@@ -31,6 +31,11 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
 
     if params[:signed_blob_id].present?
       @application.file.attach(params[:signed_blob_id])
+
+      # If it's a WebM file, remove audio in background
+      if @application.file.content_type == "video/webm"
+        RemoveAudioFromWebmWorker.perform_async(@application.id, "OauthApplication")
+      end
     end
 
     if @application.save
@@ -62,6 +67,11 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     @application.redirect_uri = @application_params[:redirect_uri] if @application_params[:redirect_uri].present?
     if params[:signed_blob_id].present?
       @application.file.attach(params[:signed_blob_id])
+
+      # If it's a WebM file, remove audio in background
+      if @application.file.content_type == "video/webm"
+        RemoveAudioFromWebmWorker.perform_async(@application.id, "OauthApplication")
+      end
     end
 
     if @application.save

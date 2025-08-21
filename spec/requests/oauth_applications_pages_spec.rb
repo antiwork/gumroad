@@ -35,6 +35,64 @@ describe "OauthApplicationsPages", type: :feature, js: true do
       end
     end
 
+    it "creates an OAuth application with WebP icon" do
+      expect do
+        within_section "Applications", section_element: :section do
+          fill_in("Application name", with: "test")
+          fill_in("Redirect URI", with: "http://l.h:9292/callback")
+          page.attach_file(file_fixture("test.webp")) do
+            click_on "Upload icon"
+          end
+          expect(page).to have_button("Upload icon")
+          expect(page).to have_selector("img[src*='s3_utility/cdn_url_for_blob?key=#{ActiveStorage::Blob.last.key}']")
+          click_button("Create application")
+        end
+        wait_for_ajax
+      end.to change { OauthApplication.count }.by(1)
+
+      OauthApplication.last.tap do |app|
+        expect(app.name).to eq "test"
+        expect(app.redirect_uri).to eq "http://l.h:9292/callback"
+        expect(app.file.filename.to_s).to eq "test.webp"
+        expect(app.owner).to eq user
+      end
+    end
+
+    it "creates an OAuth application with WebM icon (no audio)" do
+      expect do
+        within_section "Applications", section_element: :section do
+          fill_in("Application name", with: "test")
+          fill_in("Redirect URI", with: "http://l.h:9292/callback")
+          page.attach_file(file_fixture("test.webm")) do
+            click_on "Upload icon"
+          end
+          expect(page).to have_button("Upload icon")
+          expect(page).to have_selector("img[src*='s3_utility/cdn_url_for_blob?key=#{ActiveStorage::Blob.last.key}']")
+          click_button("Create application")
+        end
+        wait_for_ajax
+      end.to change { OauthApplication.count }.by(1)
+
+      OauthApplication.last.tap do |app|
+        expect(app.name).to eq "test"
+        expect(app.redirect_uri).to eq "http://l.h:9292/callback"
+        expect(app.file.filename.to_s).to eq "test.webm"
+        expect(app.owner).to eq user
+      end
+    end
+
+    it "rejects WebM files with audio for OAuth application icons" do
+      # Mock the audio check to return true (has audio)
+      allow_any_instance_of(OauthApplication).to receive(:check_video_has_audio).and_return(true)
+
+      within_section "Applications", section_element: :section do
+        page.attach_file(file_fixture("test.webm")) do
+          click_on "Upload icon"
+        end
+      end
+      expect(page).to have_alert(text: "WebM files must not contain audio.")
+    end
+
     it "does not allow adding an icon of invalid type" do
       within_section "Applications", section_element: :section do
         page.attach_file(file_fixture("disguised_html_script.png")) do

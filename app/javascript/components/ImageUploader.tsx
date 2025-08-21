@@ -2,6 +2,11 @@ import * as React from "react";
 
 import FileUtils from "$app/utils/file";
 
+const isVideoFile = (url: string): boolean => {
+  const extension = FileUtils.getFileExtension(url).toLowerCase();
+  return extension === 'webm' || extension === 'mp4' || extension === 'mov';
+};
+
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Progress } from "$app/components/Progress";
@@ -64,7 +69,19 @@ export const ImageUploader = ({
         </div>
       ) : (
         <figure>
-          <img alt={imageAlt} src={imageUrl} />
+          {imageUrl && isVideoFile(imageUrl) ? (
+            <video
+              src={imageUrl}
+              controls={false}
+              muted
+              loop
+              autoPlay
+              playsInline
+              style={{ width: '100%', height: 'auto', maxWidth: '600px', maxHeight: '600px' }}
+            />
+          ) : (
+            <img alt={imageAlt} src={imageUrl} />
+          )}
           <Button color="primary" small className="remove" aria-label="Remove" onClick={onRemove} disabled={disabled}>
             <Icon name="trash2" />
           </Button>

@@ -222,7 +222,19 @@ export const FileRow = ({
       <div className="content" onClick={() => setIsExpanded(!isExpanded)}>
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
-            <img src={file.thumbnail_url} />
+            {file.thumbnail_url.includes('.webm') || file.thumbnail_url.includes('.mp4') || file.thumbnail_url.includes('.mov') ? (
+              <video
+                src={file.thumbnail_url}
+                controls={false}
+                muted
+                loop
+                autoPlay
+                playsInline
+                style={{ width: '100%', height: 'auto' }}
+              />
+            ) : (
+              <img src={file.thumbnail_url} />
+            )}
           </div>
         ) : null}
         <FileRowContent
@@ -675,15 +687,32 @@ const VideoEmbedPreview = ({
     </div>
   ) : (
     <figure className="preview">
-      <img
-        src={file.thumbnail_url ?? thumbnailPlaceholder}
-        style={{
-          position: "absolute",
-          height: "100%",
-          objectFit: "cover",
-          borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
-        }}
-      />
+      {file.thumbnail_url && (file.thumbnail_url.includes('.webm') || file.thumbnail_url.includes('.mp4') || file.thumbnail_url.includes('.mov')) ? (
+        <video
+          src={file.thumbnail_url}
+          controls={false}
+          muted
+          loop
+          autoPlay
+          playsInline
+          style={{
+            position: "absolute",
+            height: "100%",
+            objectFit: "cover",
+            borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
+          }}
+        />
+      ) : (
+        <img
+          src={file.thumbnail_url ?? thumbnailPlaceholder}
+          style={{
+            position: "absolute",
+            height: "100%",
+            objectFit: "cover",
+            borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
+          }}
+        />
+      )}
       <TrackClick eventName="watch" resourceId={file.id}>
         <button
           className="link"

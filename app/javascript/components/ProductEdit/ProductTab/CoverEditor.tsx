@@ -9,6 +9,7 @@ import { between } from "$app/utils/math";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
+
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
@@ -20,7 +21,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_PREVIEW_COUNT = 8;
 
-const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
+const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "webp", "webm", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
 
 export const CoverEditor = ({
   covers,
@@ -168,6 +169,9 @@ const CoverUploader = ({
                     showAlert("Invalid file type.", "error");
                     continue;
                   }
+
+
+
                   // TODO change the relevant endpoint(s) to allow uploading multiple files at once
                   await new Promise<void>((resolve) => {
                     new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {

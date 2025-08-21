@@ -180,7 +180,19 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
       <td className="icon-cell">
         <a href={review.product.url}>
           {review.product.thumbnail_url ? (
-            <img alt={review.product.name} src={review.product.thumbnail_url} />
+            review.product.thumbnail_url.includes('.webm') || review.product.thumbnail_url.includes('.mp4') || review.product.thumbnail_url.includes('.mov') ? (
+              <video
+                src={review.product.thumbnail_url}
+                controls={false}
+                muted
+                loop
+                autoPlay
+                playsInline
+                style={{ width: '100%', height: 'auto' }}
+              />
+            ) : (
+              <img alt={review.product.name} src={review.product.thumbnail_url} />
+            )
           ) : (
             <img src={cast(nativeTypeThumbnails(`./${review.product.native_type}.svg`))} />
           )}

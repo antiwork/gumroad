@@ -660,7 +660,23 @@ export const CrossSellModal = ({
       <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
         <h4 dangerouslySetInnerHTML={{ __html: crossSell.description }} />
         <article className="product-card horizontal">
-          <figure>{product.thumbnail_url ? <img src={product.thumbnail_url} /> : null}</figure>
+          <figure>
+            {product.thumbnail_url ? (
+              product.thumbnail_url.includes('.webm') || product.thumbnail_url.includes('.mp4') || product.thumbnail_url.includes('.mov') ? (
+                <video
+                  src={product.thumbnail_url}
+                  controls={false}
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                  style={{ width: '100%', height: 'auto' }}
+                />
+              ) : (
+                <img src={product.thumbnail_url} />
+              )
+            ) : null}
+          </figure>
           <section>
             <header>
               <a className="stretched-link" href={product.url} target="_blank" rel="noreferrer">

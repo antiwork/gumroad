@@ -19,7 +19,7 @@ class Thumbnail < ApplicationRecord
     return unless alive? && unsplash_url.blank?
 
     if file.attached?
-      if !file.image? || !file.content_type.match?(ALLOW_CONTENT_TYPES)
+      if !file.content_type.match?(ALLOW_CONTENT_TYPES)
         errors.add(:base, "Could not process your thumbnail, please try again.")
       elsif file.byte_size > MAX_FILE_SIZE
         errors.add(:base, "Could not process your thumbnail, please upload an image with size smaller than 5 MB.")

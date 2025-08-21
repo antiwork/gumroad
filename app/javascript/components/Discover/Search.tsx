@@ -107,7 +107,19 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
             </div>
           ) : (
             <a {...props} href={item.url} className={cx("flex items-center gap-4 no-underline", props.className)}>
-              <img src={item.thumbnail_url ?? thumbnailPlaceholder} alt={item.name} />
+              {item.thumbnail_url && (item.thumbnail_url.includes('.webm') || item.thumbnail_url.includes('.mp4') || item.thumbnail_url.includes('.mov')) ? (
+                <video
+                  src={item.thumbnail_url}
+                  controls={false}
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                  style={{ width: '100%', height: 'auto' }}
+                />
+              ) : (
+                <img src={item.thumbnail_url ?? thumbnailPlaceholder} alt={item.name} />
+              )}
               <div>
                 {highlightQuery(item.name)}
                 <small>{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>

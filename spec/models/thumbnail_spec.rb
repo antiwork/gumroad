@@ -23,6 +23,24 @@ describe Thumbnail do
       expect(thumbnail.errors.full_messages).to be_empty
     end
 
+    it "saves with a valid WebP file attached" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.webp"), filename: "test.webp")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      expect(thumbnail.save).to eq(true)
+      expect(thumbnail.errors.full_messages).to be_empty
+    end
+
+    it "saves with a valid WebM file attached (no audio)" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.webm"), filename: "test.webm")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      expect(thumbnail.save).to eq(true)
+      expect(thumbnail.errors.full_messages).to be_empty
+    end
+
     it "errors with invalid file attached" do
       thumbnail = Thumbnail.new(product: @product)
       thumbnail.file.attach(fixture_file_upload("blah.txt"))
@@ -91,6 +109,24 @@ describe Thumbnail do
     it "returns original file instead of variant for gifs" do
       thumbnail = Thumbnail.new(product: @product)
       blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.gif"), filename: "test.gif")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+      expect(thumbnail.url).to eq(thumbnail.file.url)
+    end
+
+    it "returns original file instead of variant for WebP files" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.webp"), filename: "test.webp")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+      expect(thumbnail.url).to eq(thumbnail.file.url)
+    end
+
+    it "returns original file instead of variant for WebM files" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.webm"), filename: "test.webm")
       blob.analyze
       thumbnail.file.attach(blob)
       thumbnail.save!

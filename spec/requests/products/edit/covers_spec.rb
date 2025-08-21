@@ -42,6 +42,37 @@ describe "Product Edit Covers", type: :feature, js: true do
     end
   end
 
+  it "supports attaching WebP covers" do
+    visit edit_link_path(product.unique_permalink)
+    upload_image(["test.webp"])
+    wait_for_ajax
+    sleep 1
+
+    within_section "Cover", section_element: :section do
+      expect(page).to have_selector("button[role='tab']", count: 1)
+    end
+  end
+
+  it "supports attaching WebM covers (no audio)" do
+    visit edit_link_path(product.unique_permalink)
+    upload_image(["test.webm"])
+    wait_for_ajax
+    sleep 1
+
+    within_section "Cover", section_element: :section do
+      expect(page).to have_selector("button[role='tab']", count: 1)
+    end
+  end
+
+  it "rejects WebM files with audio for covers" do
+    # Mock the audio check to return true (has audio)
+    allow_any_instance_of(Cover).to receive(:check_video_has_audio).and_return(true)
+
+    visit edit_link_path(product.unique_permalink)
+    upload_image(["test.webm"])
+    expect(page).to have_alert(text: "WebM files must not contain audio.")
+  end
+
   it "instantly previews product cover changes" do
     visit edit_link_path(product.unique_permalink)
 
@@ -88,6 +119,15 @@ describe "Product Edit Covers", type: :feature, js: true do
     wait_for_ajax
     within_section "Cover", section_element: :section do
       expect(page).to have_selector("button[role='tab']", count: 2)
+    end
+  end
+
+  it("allows multiple images including WebP and WebM to be uploaded simultaneously") do
+    visit edit_link_path(product.unique_permalink)
+    upload_image(["test-small.jpg", "test.webp", "test.webm"])
+    wait_for_ajax
+    within_section "Cover", section_element: :section do
+      expect(page).to have_selector("button[role='tab']", count: 3)
     end
   end
 

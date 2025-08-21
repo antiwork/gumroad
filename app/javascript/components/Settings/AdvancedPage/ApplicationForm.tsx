@@ -5,14 +5,14 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import FileUtils from "$app/utils/file";
-import { getImageDimensionsFromFile } from "$app/utils/image";
+import { getImageDimensionsFromFile, getVideoDimensionsFromFile } from "$app/utils/image";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Application } from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Application } from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
 
 const ALLOWED_ICON_EXTENSIONS = ["jpeg", "jpg", "png", "webm", "webp"];
 
@@ -97,26 +97,46 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
   const handleIconChange = asyncVoid(async () => {
     const file = iconInputRef.current?.files?.[0];
     if (!file) return;
-    const dimensions = await getImageDimensionsFromFile(file).catch(() => null);
-    if (!dimensions || !FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_ICON_EXTENSIONS)) {
-      showAlert("Invalid file type.", "error");
+
+    const ext = FileUtils.getFileExtension(file.name).toLowerCase();
+    const isWebM = ext === "webm" || file.type === "video/webm";
+
+    try {
+      const dimensions = await (isWebM ? getVideoDimensionsFromFile(file) : getImageDimensionsFromFile(file));
+      if (!dimensions || !FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_ICON_EXTENSIONS)) {
+        showAlert("Invalid file type.", "error");
+        return;
+      }
+
+
+    } catch (error) {
+      showAlert("Could not validate file. Please try again.", "error");
       return;
     }
+
     setIsUploadingIcon(true);
 
-    const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
-    upload.create((error, blob) => {
-      if (error) {
-        showAlert(error.message, "error");
-      } else {
-        setIcon({
-          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-          signedBlobId: blob.signed_id,
-        });
-      }
+    try {
+      const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
+      upload.create((error, blob) => {
+        if (error) {
+          showAlert(error.message || "Upload failed. Please try again.", "error");
+        } else if (blob) {
+          setIcon({
+            url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+            signedBlobId: blob.signed_id,
+          });
+        } else {
+          showAlert("Upload failed. Please try again.", "error");
+        }
+        setIsUploadingIcon(false);
+        if (iconInputRef.current) iconInputRef.current.value = "";
+      });
+    } catch (error) {
+      showAlert("Could not start upload. Please try again.", "error");
       setIsUploadingIcon(false);
       if (iconInputRef.current) iconInputRef.current.value = "";
-    });
+    }
   });
 
   return (

@@ -110,7 +110,19 @@ export const ProductsPageMembershipsTable = (props: {
               <td className="icon-cell">
                 {membership.thumbnail ? (
                   <a href={membership.can_edit ? membership.edit_url : membership.url}>
-                    <img alt={membership.name} src={membership.thumbnail.url} />
+                    {membership.thumbnail.url.includes('.webm') || membership.thumbnail.url.includes('.mp4') || membership.thumbnail.url.includes('.mov') ? (
+                      <video
+                        src={membership.thumbnail.url}
+                        controls={false}
+                        muted
+                        loop
+                        autoPlay
+                        playsInline
+                        style={{ width: '100%', height: 'auto' }}
+                      />
+                    ) : (
+                      <img alt={membership.name} src={membership.thumbnail.url} />
+                    )}
                   </a>
                 ) : (
                   <Icon name="card-image-fill" />

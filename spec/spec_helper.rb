@@ -18,6 +18,13 @@ KnapsackPro::Adapters::RSpecAdapter.bind
 
 ActiveRecord::Migration.maintain_test_schema!
 
+# Configure ActiveStorage URL options for tests
+RSpec.configure do |config|
+  config.before(:each) do
+    ActiveStorage::Current.url_options = { host: 'localhost', port: 3000, protocol: 'http' }
+  end
+end
+
 # Capybara settings
 Capybara.test_id = "data-testid"
 Capybara.default_max_wait_time = 25

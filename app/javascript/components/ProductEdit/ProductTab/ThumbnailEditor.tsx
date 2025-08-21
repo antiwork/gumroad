@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { Thumbnail, ThumbnailPayload, createThumbnail, deleteThumbnail } from "$app/data/thumbnails";
 import { AssetPreview, ProductNativeType } from "$app/parsers/product";
 import FileUtils, { ALLOWED_EXTENSIONS } from "$app/utils/file";
-import { getImageDimensionsFromFile } from "$app/utils/image";
+import { getImageDimensionsFromFile, getVideoDimensionsFromFile } from "$app/utils/image";
 import { assertResponseError } from "$app/utils/request";
 
 import { ImageUploader } from "$app/components/ImageUploader";
@@ -23,16 +23,36 @@ export class ValidationError extends Error {
 }
 
 const validateFile = async (file: File) => {
-  if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) throw new ValidationError();
+  if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
+    throw new ValidationError(`File type not allowed. Allowed types: ${ALLOWED_EXTENSIONS.join(", ")}`);
+  }
 
-  if (file.size > MAX_FILE_SIZE)
+  if (file.size > MAX_FILE_SIZE) {
     throw new ValidationError("Could not process your thumbnail, please upload an image with size smaller than 5 MB.");
+  }
 
-  const dimensions = await getImageDimensionsFromFile(file).catch(() => null);
-  if (!dimensions) throw new ValidationError();
-  if (dimensions.height !== dimensions.width) throw new ValidationError("Image must be square.");
+  const ext = FileUtils.getFileExtension(file.name).toLowerCase();
+  const isWebM = ext === "webm" || file.type === "video/webm";
 
-  if (dimensions.height < MIN_SIDE_DIMENSION) throw new ValidationError("Image must be at least 600x600px.");
+  try {
+    const dimensions = await (isWebM ? getVideoDimensionsFromFile(file) : getImageDimensionsFromFile(file));
+    if (!dimensions) {
+      throw new ValidationError("Could not read file dimensions. Please try a different file.");
+    }
+    if (dimensions.height !== dimensions.width) {
+      throw new ValidationError("Image must be square.");
+    }
+    if (dimensions.height < MIN_SIDE_DIMENSION) {
+      throw new ValidationError("Image must be at least 600x600px.");
+    }
+
+
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    throw new ValidationError("Could not validate file. Please try again.");
+  }
 };
 
 export const coverUrlForThumbnail = (covers: AssetPreview[]) =>
@@ -84,7 +104,7 @@ export const ThumbnailEditor = ({
         imageAlt="Thumbnail image"
         imageUrl={thumbnail?.url ?? null}
         allowedExtensions={ALLOWED_EXTENSIONS}
-        helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG, GIF, WebM, or WebP format."
+        helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG, GIF, WebM, or WebP format. WebM files must not contain audio."
         onRemove={() => void removeThumbnail(thumbnail?.guid ?? "")}
         defaultImageUrl={coverUrlForThumbnail(covers) ?? cast<string>(nativeTypeThumbnails(`./${nativeType}.svg`))}
         onSelectFile={(file) =>

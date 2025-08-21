@@ -12,6 +12,11 @@ class ThumbnailsController < Sellers::BaseController
       thumbnail.file.attach(permitted_params[:signed_blob_id])
       thumbnail.file.analyze
       thumbnail.unsplash_url = nil
+
+      # If it's a WebM file, remove audio in background
+      if thumbnail.file.content_type == "video/webm"
+        RemoveAudioFromWebmWorker.perform_async(thumbnail.id, "Thumbnail")
+      end
     end
 
     # Mark alive if previously deleted
