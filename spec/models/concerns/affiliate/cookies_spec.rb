@@ -9,7 +9,7 @@ describe Affiliate::Cookies do
   describe "instance methods" do
     describe "#cookie_key" do
       it "generates cookie key with proper prefix and encrypted ID" do
-        expected_key = "#{Affiliate::AFFILIATE_COOKIE_NAME_PREFIX}#{affiliate.to_encrypted_cookie_id}"
+        expected_key = "#{Affiliate::AFFILIATE_COOKIE_NAME_PREFIX}#{affiliate.cookie_id}"
         expect(affiliate.cookie_key).to eq(expected_key)
       end
 
@@ -18,22 +18,22 @@ describe Affiliate::Cookies do
       end
     end
 
-    describe "#to_encrypted_cookie_id" do
+    describe "#cookie_id" do
       it "returns encrypted ID without padding" do
-        encrypted_id = affiliate.to_encrypted_cookie_id
+        encrypted_id = affiliate.cookie_id
         expect(encrypted_id).not_to include("=")
         expect(encrypted_id).to be_present
       end
 
       it "can be decrypted back to original ID" do
-        encrypted_id = affiliate.to_encrypted_cookie_id
+        encrypted_id = affiliate.cookie_id
         decrypted_id = ObfuscateIds.decrypt(encrypted_id)
         expect(decrypted_id).to eq(affiliate.id)
       end
 
       it "generates deterministic IDs for the same affiliate" do
-        id1 = affiliate.to_encrypted_cookie_id
-        id2 = affiliate.to_encrypted_cookie_id
+        id1 = affiliate.cookie_id
+        id2 = affiliate.cookie_id
         expect(id1).to eq(id2)
       end
     end
@@ -82,7 +82,7 @@ describe Affiliate::Cookies do
       end
     end
 
-    describe ".cookie_ids_from_cookies" do
+    describe ".ids_from_cookies" do
       let(:cookies) do
         {
           affiliate.cookie_key => "1234567890",
@@ -91,12 +91,9 @@ describe Affiliate::Cookies do
         }
       end
 
-      it "extracts encrypted cookie IDs from affiliate cookies" do
-        result = Affiliate.cookie_ids_from_cookies(cookies)
-        expect(result).to contain_exactly(
-          affiliate.to_encrypted_cookie_id,
-          another_affiliate.to_encrypted_cookie_id
-        )
+      it "extracts decrypted affiliate IDs from affiliate cookies" do
+        result = Affiliate.ids_from_cookies(cookies)
+        expect(result).to contain_exactly(affiliate.id, another_affiliate.id)
       end
 
       it "sorts cookies by timestamp descending" do
@@ -108,18 +105,18 @@ describe Affiliate::Cookies do
           another_affiliate.cookie_key => newer_time.to_s
         }
 
-        result = Affiliate.cookie_ids_from_cookies(sorted_cookies)
+        result = Affiliate.ids_from_cookies(sorted_cookies)
         # Should return newer cookie first
-        expect(result.first).to eq(another_affiliate.to_encrypted_cookie_id)
-        expect(result.second).to eq(affiliate.to_encrypted_cookie_id)
+        expect(result.first).to eq(another_affiliate.id)
+        expect(result.second).to eq(affiliate.id)
       end
 
       it "handles URL-encoded cookie names" do
         encoded_cookie_name = CGI.escape(affiliate.cookie_key)
         cookies = { encoded_cookie_name => "1234567890" }
 
-        result = Affiliate.cookie_ids_from_cookies(cookies)
-        expect(result).to contain_exactly(affiliate.to_encrypted_cookie_id)
+        result = Affiliate.ids_from_cookies(cookies)
+        expect(result).to contain_exactly(affiliate.id)
       end
 
       it "ignores non-affiliate cookies" do
@@ -129,40 +126,28 @@ describe Affiliate::Cookies do
           "_gumroad_guid" => "guid-value"
         }
 
-        result = Affiliate.cookie_ids_from_cookies(cookies)
-        expect(result).to contain_exactly(affiliate.to_encrypted_cookie_id)
+        result = Affiliate.ids_from_cookies(cookies)
+        expect(result).to contain_exactly(affiliate.id)
       end
     end
 
-    describe ".by_cookie_ids" do
-      it "finds affiliates by encrypted cookie IDs" do
-        cookie_ids = [affiliate.to_encrypted_cookie_id, another_affiliate.to_encrypted_cookie_id]
-        result = Affiliate.by_cookie_ids(cookie_ids)
-        expect(result).to contain_exactly(affiliate, another_affiliate)
+    describe ".extract_cookie_id_from_cookie_name" do
+      it "extracts cookie ID from valid affiliate cookie names" do
+        cookie_name = affiliate.cookie_key
+        result = Affiliate.extract_cookie_id_from_cookie_name(cookie_name)
+        expect(result).to eq(affiliate.cookie_id)
       end
 
-      it "handles single cookie ID" do
-        result = Affiliate.by_cookie_ids(affiliate.to_encrypted_cookie_id)
-        expect(result).to contain_exactly(affiliate)
-      end
-
-      it "handles empty array" do
-        result = Affiliate.by_cookie_ids([])
-        expect(result).to be_empty
-      end
-
-      it "ignores invalid/non-existent IDs" do
-        valid_id = affiliate.to_encrypted_cookie_id
-        invalid_id = "invalid_encrypted_id"
-
-        result = Affiliate.by_cookie_ids([valid_id, invalid_id])
-        expect(result).to contain_exactly(affiliate)
+      it "handles URL-encoded cookie names" do
+        encoded_cookie_name = CGI.escape(affiliate.cookie_key)
+        result = Affiliate.extract_cookie_id_from_cookie_name(encoded_cookie_name)
+        expect(result).to eq(affiliate.cookie_id)
       end
     end
 
     describe ".decrypt_cookie_id" do
       it "decrypts encrypted cookie ID back to raw affiliate ID" do
-        encrypted_id = affiliate.to_encrypted_cookie_id
+        encrypted_id = affiliate.cookie_id
         decrypted_id = Affiliate.decrypt_cookie_id(encrypted_id)
         expect(decrypted_id).to eq(affiliate.id)
       end
@@ -184,35 +169,6 @@ describe Affiliate::Cookies do
       it "returns nil for invalid encrypted IDs" do
         result = Affiliate.decrypt_cookie_id("invalid_id")
         expect(result).to be_nil
-      end
-    end
-
-    describe ".decrypt_cookie_ids" do
-      it "decrypts multiple encrypted cookie IDs" do
-        encrypted_ids = [affiliate.to_encrypted_cookie_id, another_affiliate.to_encrypted_cookie_id]
-        decrypted_ids = Affiliate.decrypt_cookie_ids(encrypted_ids)
-
-        expect(decrypted_ids).to contain_exactly(affiliate.id, another_affiliate.id)
-      end
-
-      it "handles single cookie ID (wrapped in array)" do
-        encrypted_id = affiliate.to_encrypted_cookie_id
-        decrypted_ids = Affiliate.decrypt_cookie_ids(encrypted_id)
-
-        expect(decrypted_ids).to eq([affiliate.id])
-      end
-
-      it "returns empty array for empty input" do
-        result = Affiliate.decrypt_cookie_ids([])
-        expect(result).to eq([])
-      end
-
-      it "handles mixed padded and unpadded formats" do
-        padded_id = ObfuscateIds.encrypt(affiliate.id, padding: true)
-        unpadded_id = ObfuscateIds.encrypt(another_affiliate.id, padding: false)
-
-        decrypted_ids = Affiliate.decrypt_cookie_ids([padded_id, unpadded_id])
-        expect(decrypted_ids).to contain_exactly(affiliate.id, another_affiliate.id)
       end
     end
   end
@@ -247,7 +203,23 @@ describe Affiliate::Cookies do
       affiliate_ids = found_affiliates.map(&:id)
 
       # Both cookies resolve to the same affiliate
-      expect(affiliate_ids.uniq).to eq([affiliate.id])
+      expect(affiliate_ids).to eq([affiliate.id])
+    end
+
+    it "handles sorting with mismatched cookie formats without errors" do
+      # Create a padded cookie ID that won't match the affiliate's current cookie_id format
+      old_cookie_key = "#{Affiliate::AFFILIATE_COOKIE_NAME_PREFIX}#{ObfuscateIds.encrypt(affiliate.id, padding: true)}"
+
+      cookies = {
+        old_cookie_key => 1.hour.ago.to_i.to_s,
+        another_affiliate.cookie_key => 2.hours.ago.to_i.to_s
+      }
+
+      # This should not raise an exception even though affiliate.cookie_id won't match the old_cookie_key format
+      expect { Affiliate.by_cookies(cookies) }.not_to raise_error
+
+      found_affiliates = Affiliate.by_cookies(cookies)
+      expect(found_affiliates.map(&:id)).to contain_exactly(affiliate.id, another_affiliate.id)
     end
   end
 end

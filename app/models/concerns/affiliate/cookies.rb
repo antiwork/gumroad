@@ -3,50 +3,40 @@
 module Affiliate::Cookies
   extend ActiveSupport::Concern
 
-  included do
-    AFFILIATE_COOKIE_NAME_PREFIX = "_gumroad_affiliate_id_"
-  end
+  AFFILIATE_COOKIE_NAME_PREFIX = "_gumroad_affiliate_id_"
 
-  module ClassMethods
-    def by_cookies(cookies, sort_by_recency: false)
-      cookie_ids = cookie_ids_from_cookies(cookies)
-      if sort_by_recency
-        by_cookie_ids(cookie_ids).sort_by { |a| cookie_ids.index(a.to_encrypted_cookie_id) }
-      else
-        by_cookie_ids(cookie_ids)
-      end
+  class_methods do
+    def by_cookies(cookies)
+      in_order_of(:id, ids_from_cookies(cookies))
     end
 
-    def cookie_ids_from_cookies(cookies)
+    def ids_from_cookies(cookies)
       cookies
         .sort_by { |cookie| -cookie[1].to_i }.map(&:first)
         .filter_map do |cookie_name|
-          next unless cookie_name.starts_with?(AFFILIATE_COOKIE_NAME_PREFIX)
+          next unless cookie_name&.starts_with?(AFFILIATE_COOKIE_NAME_PREFIX)
+          next unless (cookie_id = extract_cookie_id_from_cookie_name(cookie_name))
 
-          CGI.unescape(cookie_name).delete_prefix(AFFILIATE_COOKIE_NAME_PREFIX)
+          decrypt_cookie_id(cookie_id)
         end
     end
 
-    def by_cookie_ids(cookie_ids)
-      where(id: decrypt_cookie_ids(cookie_ids))
-    end
-
-    def decrypt_cookie_ids(cookie_ids)
-      Array.wrap(cookie_ids).map { |encrypted_cookie_id| decrypt_cookie_id(encrypted_cookie_id) }
+    def extract_cookie_id_from_cookie_name(cookie_name)
+      CGI.unescape(cookie_name).delete_prefix(AFFILIATE_COOKIE_NAME_PREFIX)
     end
 
     # Decrypts cookie ID back to raw affiliate ID
     # Handles both padded (ABC123==) and unpadded (ABC123) base64 formats for backward compatibility
-    def decrypt_cookie_id(encrypted_cookie_id)
-      ObfuscateIds.decrypt(encrypted_cookie_id)
+    def decrypt_cookie_id(cookie_id)
+      ObfuscateIds.decrypt(cookie_id)
     end
   end
 
   def cookie_key
-    "#{AFFILIATE_COOKIE_NAME_PREFIX}#{to_encrypted_cookie_id}"
+    "#{AFFILIATE_COOKIE_NAME_PREFIX}#{cookie_id}"
   end
 
-  def to_encrypted_cookie_id
+  def cookie_id
     ObfuscateIds.encrypt(id, padding: false)
   end
 end
