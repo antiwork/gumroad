@@ -22,7 +22,7 @@ const ChargePage = () => (
       <section>
         <header>
           <h2>
-            <a data-helper-prompt="I need a refund for an unknown charge">
+            <a href="/help/article/214-why-was-i-charged-by-gumroad" target="_blank" rel="noreferrer">
               Can I get a refund?
             </a>
           </h2>

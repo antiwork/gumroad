@@ -12,7 +12,7 @@
     <div id="user-agent-info" data-settings="<%= custom_context[:user_agent_info].to_json %>" style="display: none;"></div>
     <%= render("layouts/shared/flash") %>
     <% if show_nav %>
-      <%= react_component "Nav", props: { title: @title }, prerender: true %>
+      <%= react_component "Nav", props: { helper_host: helper_widget_host, helper_session:, title: @title }, prerender: true %>
     <% end %>
     <%= content_for?(:content) ? yield(:content) : yield %>
     <% if content_for? :footer %>
@@ -23,6 +23,5 @@
     <%= javascript_include_tag "application" %>
     <%= load_pack("base") unless @hide_layouts %>
     <%= yield :script %>
-    <%= render("layouts/shared/helper_widget") %>
   </body>
 </html>

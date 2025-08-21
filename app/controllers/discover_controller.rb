@@ -7,8 +7,6 @@ class DiscoverController < ApplicationController
   include ActionView::Helpers::NumberHelper, RecommendationType, CreateDiscoverSearch,
           DiscoverCuratedProducts, SearchProducts, AffiliateCookie
 
-  allow_anonymous_access_to_helper_widget only: [:index]
-
   before_action :set_affiliate_cookie, only: [:index]
 
   def index

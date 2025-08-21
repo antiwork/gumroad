@@ -561,7 +561,7 @@ const CustomersPage = ({
                 </div>
                 <p>
                   or{" "}
-                  <a data-helper-prompt="Can you tell me more about the audience dashboard?">
+                  <a href="/help/article/268-customer-dashboard" target="_blank" rel="noreferrer">
                     learn more about the audience dashboard
                   </a>
                 </p>
@@ -2179,7 +2179,9 @@ const RefundForm = ({
           <div role="status" className="info">
             <p>
               Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
-              <a data-helper-prompt="How do I refund a customer?">Learn more</a>
+              <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
             </p>
           </div>
         ) : null}

@@ -37,10 +37,7 @@ const AccountDeletionSection = (props: Props) => {
         <h2>Danger Zone</h2>
       </header>
       <p>
-        <a
-          href="#"
-          data-helper-prompt="What happens when I delete my Gumroad account and will I be able to reactivate it? Can I delete my Gumroad account if I have a balance? Can I reuse my delted email address to create a new account?"
-        >
+        <a href="/help/article/37-how-to-delete-your-gumroad-account" target="_blank" rel="noreferrer">
           Deleting your account
         </a>{" "}
         will permanently delete all of your products and product files, as well as any credit card and payout
@@ -78,7 +75,11 @@ const AccountDeletionSection = (props: Props) => {
           </span>
         </p>
         <p>
-          For more information, see <a data-helper-prompt="How do I delete my Gumroad account?">here</a>.
+          For more information, see{" "}
+          <a href="/help/article/37-how-to-delete-your-gumroad-account" target="_blank" rel="noreferrer">
+            here
+          </a>
+          .
         </p>
       </Modal>
     </section>
