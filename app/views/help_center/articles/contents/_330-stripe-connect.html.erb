@@ -14,7 +14,7 @@
     <p>This is valid for all purchases made via a credit card or Apple/Google Pay. Gumroad will still retain its 10% <a href="66-gumroads-fees.html" target="_blank">fee</a>, any VAT/GST charged, and any affiliate commission.</p>
     <p>When you connect your own Stripe account, you pay Stripe directly for the card processing fees. You can learn about Stripe's <a href="https://stripe.com/pricing">card processing fees here</a>. </p>
     <h3 id="connect">Connect with Stripe</h3>
-    <p>Go to your <a href="https://app.gumroad.com/settings/payments">payment settings</a> and select “Stripe”.</p>
+    <p>Go to your <a href="https://gumroad.com/settings/payments">payment settings</a> and select “Stripe”.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/640178950064af3c7159eae7/file-91Y4crv2gM.png" %></figure>
     <p>Clicking the “Connect with Stripe” button will open a Stripe window, giving you the option to connect an existing Stripe account or create a new one.</p>
     <p>Alternatively, you can also login/signup to Gumroad with your Stripe account!</p>
@@ -22,7 +22,7 @@
     <p>Once connected, all sales via a credit card or Apple/Google pay will be credited to your Stripe account at the time of sale. Gumroad will only retain its 10% fee, any VAT/GST charged, and any affiliate commission.</p>
     <p>As always, <a href="46-what-currency-does-gumroad-use.html">we will charge the customer in USD</a>, but if you do not have a USD bank account connected to your Stripe account, Stripe will convert the payments to your default currency based on <a href="https://dashboard.stripe.com/currency_conversion">their exchange rates</a>. If you have multiple currency support in your Stripe account and a USD bank account, then the amount will remain in USD.</p>
     <p>You will also find the Stripe transaction ID, fee amount, and fee currency for these sales in the <a href="74-the-analytics-dashboard.html#sales-csv">sales CSV export</a>. </p>
-    <p>These payouts will be listed on your <a href="https://app.gumroad.com/payouts">payouts page</a> under “Stripe Connect Payouts”. This is not a debit, but the amount that has already been paid to your Stripe at the time of sale. Any unpaid balance collected before you connect your Stripe account will still get paid out via the previous payment method.</p>
+    <p>These payouts will be listed on your <a href="https://gumroad.com/payouts">payouts page</a> under “Stripe Connect Payouts”. This is not a debit, but the amount that has already been paid to your Stripe at the time of sale. Any unpaid balance collected before you connect your Stripe account will still get paid out via the previous payment method.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/640178aec490cd5d5b96ab00/file-QgUQvI4tsq.png" %></figure>
     <p>You can control your payout bank, currency, and schedule from your Stripe account.</p>
     <p>You will also be able to customize the charge description that customers see on their bank statements. It is important to use a recognizable name that will not lead to unintended disputes. More on that <a href="https://support.stripe.com/questions/update-business-name-shown-on-customer-bank-statements">here</a>.</p>
@@ -31,9 +31,9 @@
     <p>Due to certain API restrictions, if a customer claims a VAT/GST refund with a valid tax ID, part of the refund will be deducted from the connected Stripe account’s balance. To compensate for that, we will auto-credit the same amount to your Gumroad balance that gets paid weekly.</p>
     <h3 id="disputes">Manage disputes</h3>
     <p>Stripe Connect gives you greater control over fighting disputes (aka chargebacks). Once connected, Gumroad will no longer fight disputes on your behalf. Instead, you can respond and submit evidence via <a href="https://support.stripe.com/topics/disputes">Stripe’s dispute resolution process</a>. </p>
-    <p>The purchase status in your <a href="https://app.gumroad.com/customers/" target="_self">sales dashboard</a> and sales CSV will automatically sync with the dispute status in your Stripe account.</p>
+    <p>The purchase status in your <a href="https://gumroad.com/customers/" target="_self">sales dashboard</a> and sales CSV will automatically sync with the dispute status in your Stripe account.</p>
     <h3 id="disconnect">Disconnect your Stripe account</h3>
-    <p>To change your payout method or connect to a different Stripe account, you can disconnect your existing Stripe account from the <a href="https://app.gumroad.com/settings/payments">payment settings</a> page.</p>
+    <p>To change your payout method or connect to a different Stripe account, you can disconnect your existing Stripe account from the <a href="https://gumroad.com/settings/payments">payment settings</a> page.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/640178bc188a9d242a7d655c/file-C9OPo20qtm.png" %></figure>
     <p>However, you cannot disconnect your Stripe account if you have a membership product with active recurring credit card payments. You have to cancel all existing memberships first, or wait until those memberships expire, then proceed to disconnect. You can identify Stripe-paid memberships in your <a href="74-the-analytics-dashboard.html#sales-csv"> CSV sales file</a>, they will have a Stripe transaction ID.</p>
     <p class="font-medium">Please note that once you disconnect your Stripe account, you will not be able to reconnect it anymore.</p>

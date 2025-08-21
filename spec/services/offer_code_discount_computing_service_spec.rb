@@ -191,6 +191,76 @@ describe OfferCodeDiscountComputingService do
     end
   end
 
+  context "when the user has multiple offer codes with the same name" do
+    let(:shared_code_name) { "MULTIPRODUCT" }
+    let!(:offer_code_for_product1) do
+      create(
+        :offer_code,
+        user: seller,
+        code: shared_code_name,
+        products: [product],
+        amount_percentage: 30,
+        amount_cents: nil,
+        currency_type: product.price_currency_type
+      )
+    end
+    let!(:offer_code_for_product2) do
+      create(
+        :offer_code,
+        user: seller,
+        code: shared_code_name,
+        products: [product2],
+        amount_percentage: 50,
+        amount_cents: nil,
+        currency_type: product2.price_currency_type
+        )
+    end
+
+    it "applies the correct offer code to each product based on product applicability" do
+      result = OfferCodeDiscountComputingService.new(shared_code_name, products_data).process
+
+      expect(result[:products_data]).to eq(
+        product.unique_permalink => {
+          discount: {
+            product_ids: [product.external_id],
+            **offer_code_for_product1.discount,
+          },
+        },
+        product2.unique_permalink => {
+          discount: {
+            product_ids: [product2.external_id],
+            **offer_code_for_product2.discount,
+          },
+        },
+      )
+      expect(result[:error_code]).to be_nil
+    end
+  end
+
+  context "when the code exists but doesn't apply to this product" do
+    let!(:offer_code_for_product2) do
+      create(
+        :offer_code,
+        user: seller,
+        code: "PRODUCT2",
+        products: [product2],
+        amount_percentage: 30,
+        amount_cents: nil,
+        currency_type: product.price_currency_type
+      )
+    end
+
+    it "returns no discount" do
+      result = OfferCodeDiscountComputingService
+        .new(offer_code_for_product2.code, {
+               product.unique_permalink => { quantity: "3", permalink: product.unique_permalink },
+             })
+        .process
+
+      expect(result).to eq(error_code: :invalid_offer, products_data: {})
+    end
+  end
+
   context "when offer code is expired" do
     before do
       offer_code.update!(valid_at: 2.years.ago, expires_at: 1.year.ago)
@@ -288,10 +358,32 @@ describe OfferCodeDiscountComputingService do
     end
 
     context "product-specific offer code" do
-      let(:specific_offer_code) { create(:offer_code, user: seller, products: [product, cross_sell_product1], amount_percentage: 25, amount_cents: nil, currency_type: "usd") }
+      let(:shared_code_name) { "SHAREDCODE" }
+      let!(:offer_for_product) do
+        create(
+          :offer_code,
+          user: seller,
+          code: shared_code_name,
+          products: [product],
+          amount_percentage: 25,
+          amount_cents: nil,
+          currency_type: "usd"
+        )
+      end
+      let!(:offer_for_cross_sell1) do
+        create(
+          :offer_code,
+          user: seller,
+          code: shared_code_name,
+          products: [cross_sell_product1],
+          amount_percentage: 50,
+          amount_cents: nil,
+          currency_type: "usd"
+        )
+      end
 
-      it "applies discount only to applicable products including cross-sells" do
-        result = OfferCodeDiscountComputingService.new(specific_offer_code.code, products_data).process
+      it "applies corresponding offer code to applicable products including cross-sells" do
+        result = OfferCodeDiscountComputingService.new(shared_code_name, products_data).process
 
         expect(result[:products_data]).to include(
           product.unique_permalink => {
@@ -303,7 +395,7 @@ describe OfferCodeDiscountComputingService do
           cross_sell_product1.unique_permalink => {
             discount: hash_including(
               type: "percent",
-              percents: 25
+              percents: 50
             )
           }
         )

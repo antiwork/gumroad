@@ -10,11 +10,10 @@ module JsonData
   extend ActiveSupport::Concern
 
   included do
-    extend ClassMethods
     serialize :json_data, coder: JSON
   end
 
-  module ClassMethods
+  class_methods do
     # Public: Defines both reader and writer methods for an attributes
     # stored within json_data.
     # Can be used with a single attribute at a time.

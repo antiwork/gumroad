@@ -24,11 +24,12 @@ class OfferCodeDiscountComputingService
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
+      track_applicable_offer_code(offer_code)
 
       if eligible?(offer_code, purchase_quantity)
         track_usage(offer_code, purchase_quantity)
         products_data[link.unique_permalink] = { discount: offer_code.discount }
-        optimistically_apply_to_applicable_cross_sells(products_data, link, offer_code)
+        optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity)
       end
@@ -59,12 +60,12 @@ class OfferCodeDiscountComputingService
     end
 
     def offer_codes_by_user_id
-      @_offer_codes_by_user_id ||= offer_codes.index_by(&:user_id)
+      @_offer_codes_by_user_id ||= offer_codes.group_by(&:user_id)
     end
 
     def find_applicable_offer_code_for(link)
-      offer_code = offer_codes_by_user_id[link.user_id]
-      offer_code&.applicable?(link) ? offer_code : nil
+      offer_codes_by_user_id[link.user_id]
+        &.find { |offer_code| offer_code.applicable?(link) }
     end
 
     def eligible?(offer_code, purchase_quantity)
@@ -88,6 +89,11 @@ class OfferCodeDiscountComputingService
     def remaining_times_of_use(offer_code)
       @remaining_times_of_use ||= {}
       @remaining_times_of_use[offer_code.id] ||= offer_code.quantity_left
+    end
+
+    def track_applicable_offer_code(offer_code)
+      @applicable_offer_codes ||= []
+      @applicable_offer_codes << offer_code
     end
 
     def track_usage(offer_code, purchase_quantity)
@@ -119,8 +125,8 @@ class OfferCodeDiscountComputingService
     ]
 
     def error_code
-      return :invalid_offer if offer_codes.blank?
-      return :inactive if offer_codes.all?(&:inactive?)
+      return :invalid_offer if @applicable_offer_codes.blank?
+      return :inactive if @applicable_offer_codes.all?(&:inactive?)
 
       return nil if @product_level_ineligibilities.blank?
 
@@ -132,13 +138,12 @@ class OfferCodeDiscountComputingService
     # purchase quantity or the discount code may have been used up. The discount
     # will still be validated and updated during checkout, where the buyer will
     # be able to see the correct discount and adjust accordingly.
-    def optimistically_apply_to_applicable_cross_sells(products_data, link, offer_code)
-      discount = offer_code.discount
+    def optimistically_apply_to_applicable_cross_sells(products_data, link)
+      link.cross_sells.each do |cross_sell|
+        offer_code = find_applicable_offer_code_for(cross_sell.product)
+        next unless offer_code
 
-      link.cross_sells
-        .filter { |cross_sell| offer_code.applicable?(cross_sell.product) }
-        .each do |cross_sell|
-          products_data[cross_sell.product.unique_permalink] = { discount: }
-        end
+        products_data[cross_sell.product.unique_permalink] = { discount: offer_code.discount }
+      end
     end
 end

@@ -321,12 +321,17 @@ const CollaboratorForm = () => {
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = React.useState(false);
   const [isConfirmed, setIsConfirmed] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [showIneligibleProducts, setShowIneligibleProducts] = React.useState(false);
+  const formData = cast<CollaboratorFormData>(useLoaderData());
+  const isEditing = "id" in formData;
+
+  const hasEnabledUnpublishedOrIneligibleProducts =
+    isEditing &&
+    formData.products.some((product) => product.enabled && (!product.published || product.has_another_collaborator));
+
+  const [showIneligibleProducts, setShowIneligibleProducts] = React.useState(hasEnabledUnpublishedOrIneligibleProducts);
   const [collaboratorEmail, setCollaboratorEmail] = React.useState<{ value: string; error?: string }>({
     value: "",
   });
-  const formData = cast<CollaboratorFormData>(useLoaderData());
-  const isEditing = "id" in formData;
 
   const [applyToAllProducts, setApplyToAllProducts] = React.useState(isEditing ? formData.apply_to_all_products : true);
   const [defaultPercentCommission, setDefaultPercentCommission] = React.useState<{

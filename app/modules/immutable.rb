@@ -21,7 +21,7 @@ module Immutable
     end
   end
 
-  module ClassMethods
+  class_methods do
     def attr_mutable_attributes
       @attr_mutable_attributes ||= []
     end

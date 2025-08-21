@@ -2,7 +2,7 @@
 <div class="scoped-tailwind-preflight help-center-article">
   <div>
     <div class="callout-yellow">
-      <p>⚠️ <strong>Important:</strong> Our <a href="https://app.gumroad.com/api#licenses">license key verification API</a> requires the <code class="inline-code">product_id</code> parameter instead of <code class="inline-code">product_permalink</code> for all products created on or after Jan 9, 2023.</p>
+      <p>⚠️ <strong>Important:</strong> Our <a href="https://gumroad.com/api#licenses">license key verification API</a> requires the <code class="inline-code">product_id</code> parameter instead of <code class="inline-code">product_permalink</code> for all products created on or after Jan 9, 2023.</p>
     </div>
     <p><strong>In this article:</strong></p>
     <ul>
@@ -38,12 +38,12 @@
     <p>Expand the License key module on your content page and toggle on "Allow customers to choose number of seats per license purchased"</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9e3495d8fe340f3481960/file-MYl4EnL4Of.png" %></figure>
     <p>If you'd like to prepopulate the number of seats for a given customer, you can use the quantity <a href="270-url-parameters.html">URL parameter</a> (Example: <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)</a></p>
-    <p>You will be able to view and manage the number of seats linked with a license key from the customer’s drawer in the <a href="https://app.gumroad.com/customers/">Audience dashboard</a>, while your customers can do this from their “Manage membership” page.</p>
+    <p>You will be able to view and manage the number of seats linked with a license key from the customer’s drawer in the <a href="https://gumroad.com/customers/">Audience dashboard</a>, while your customers can do this from their “Manage membership” page.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif" %></figure>
     <p>Customers will immediately be charged a prorated amount if the number of seats increases. However, for a decrease in seats, their membership will get updated at the end of the current billing cycle. After that, they will be charged the reduced amount starting from the next renewal.</p>
     <p>For such purchases, the is_multiseat_license field will be set to true in our API response, and the value of quantity will indicate the number of seats.</p>
     <h3 id="enforcement">How license key enforcement works</h3>
-    <p>License key enforcement is completely up to the creator. You can decide how many uses each key gets depending on your “verify” <a href="https://app.gumroad.com/api#licenses">license API calls</a>. Gumroad performs no additional license key verification.</p>
+    <p>License key enforcement is completely up to the creator. You can decide how many uses each key gets depending on your “verify” <a href="https://gumroad.com/api#licenses">license API calls</a>. Gumroad performs no additional license key verification.</p>
     <p>Remember that checking for a valid license on each launch will increment the usage count unless you set the “increment_uses_count” flag to false. You can also check if a purchase has been refunded or disputed by checking the refunded/disputed fields of the API call response.</p>
     <h3 id="verification"> Verifying a license key in your application</h3>
     <p>Use these parameters to verify a license key:</p>
@@ -60,7 +60,7 @@
     <p>You will receive a 404 response code with an error message if verification fails.</p>
     <h3 id="Managing-licenses-and-subscriptions-iiiW4">Managing licenses and subscriptions</h3>
     <br>
-    <p>Our <a href="https://app.gumroad.com/api#licenses">Licenses API</a> will continue to return the key state as enabled until you disable it; however, we set the following fields with the appropriate timestamps so you can know if and when the membership has ended:</p>
+    <p>Our <a href="https://gumroad.com/api#licenses">Licenses API</a> will continue to return the key state as enabled until you disable it; however, we set the following fields with the appropriate timestamps so you can know if and when the membership has ended:</p>
     <ol>
       <li><code class="inline-code">subscription_ended_at</code> : Timestamp of a membership's end for a fixed-length membership, i.e. if the "Automatically end memberships after a number of months" setting is enabled on the product.</li>
       <li><code class="inline-code">subscription_cancelled_at</code> : Timestamp of a membership's end if it was cancelled by the customer or creator.</li>

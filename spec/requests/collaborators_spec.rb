@@ -325,6 +325,16 @@ describe "Collaborators", type: :system, js: true do
 
         collaborator = seller.collaborators.last
         expect(collaborator.products).to match_array [product2, product3, product5]
+
+        visit collaborators_path
+        within :table_row, { "Name" => collaborator.affiliate_user.display_name } do
+          click_on "Edit"
+        end
+
+        expect(page).to have_checked_field("Show unpublished and ineligible products")
+        within find(:table_row, { "Product" => product5.name }) do
+          expect(page).to have_checked_field(product5.name)
+        end
       end
 
       it "disables affiliates when adding a collaborator to a product with affiliates" do
