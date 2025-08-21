@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Collaborators", type: :feature, js: true do
+describe "Collaborators", type: :system, js: true do
   describe "seller view" do
     let(:seller) { create(:user) }
     before { login_as seller }

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Password Settings Scenario", type: :feature, js: true) do
+describe("Password Settings Scenario", type: :system, js: true) do
   let(:compromised_password) { "password" }
   let(:not_compromised_password) { SecureRandom.hex(24) }
 

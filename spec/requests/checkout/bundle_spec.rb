@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout bundles", :js, type: :feature do
+describe "Checkout bundles", :js, type: :system do
   let(:seller) { create(:named_seller) }
   let(:bundle) { create(:product, user: seller, is_bundle: true, price_cents: 1000) }
 
@@ -50,7 +50,7 @@ describe "Checkout bundles", :js, type: :feature do
       click_on "Pay"
       expect(page).to have_alert(text: "Your purchase was successful!")
 
-      expect(page.current_url).to eq(library_url({ bundles: Purchase.first.external_id, host: UrlService.domain_with_protocol }))
+      expect(page.current_url).to eq(library_url({ bundles: bundle.external_id, host: UrlService.domain_with_protocol }))
     end
   end
 

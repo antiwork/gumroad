@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Offer-code usage from product page", type: :feature, js: true) do
+describe("Offer-code usage from product page", type: :system, js: true) do
   it "accepts an offer code that's larger than the price of the product" do
     product = create(:product, price_cents: 300)
     offer_code = create(:offer_code, products: [product], amount_cents: 500)
@@ -131,9 +131,10 @@ describe("Offer-code usage from product page", type: :feature, js: true) do
   end
 
   it "removes existing discount codes that only apply to the same products as the new discount code" do
-    product1 = create(:product, user: create(:user, display_offer_code_field: true))
-    product2 = create(:product)
-    product3 = create(:product)
+    seller = create(:user, display_offer_code_field: true)
+    product1 = create(:product, user: seller)
+    product2 = create(:product, user: seller)
+    product3 = create(:product, user: seller)
     offer_code1 = create(:offer_code, code: "code1", products: [product1, product3])
     offer_code2 = create(:offer_code, code: "code2", products: [product1, product2])
 

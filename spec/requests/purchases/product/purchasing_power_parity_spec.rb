@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe "Purchasing power parity", type: :feature, js: true do
+describe "Purchasing power parity", type: :system, js: true do
   before do
     @user = create(:user, purchasing_power_parity_enabled: true, display_offer_code_field: true)
     @product = create(:product, price_cents: 999, user: @user)

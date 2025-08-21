@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_08_15_232626) do
+ActiveRecord::Schema[7.1].define(version: 2025_08_16_055312) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -706,25 +706,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_15_232626) do
     t.index ["user_id"], name: "index_devices_on_user_id"
   end
 
-  create_table "discount_collections", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "name"
-    t.bigint "user_id", null: false
-    t.text "description"
-    t.string "external_id"
-    t.datetime "deleted_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.string "default_discount_type"
-    t.decimal "default_discount_value", precision: 10, scale: 2
-    t.integer "default_max_purchase_count"
-    t.date "default_valid_at"
-    t.date "default_expires_at"
-    t.integer "default_minimum_quantity"
-    t.integer "default_duration_in_billing_cycles"
-    t.integer "default_minimum_amount_cents"
-    t.index ["user_id"], name: "index_discount_collections_on_user_id"
-  end
-
   create_table "discover_search_suggestions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "discover_search_id"
     t.datetime "deleted_at"
@@ -1229,7 +1210,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_15_232626) do
     t.datetime "created_at", precision: nil, null: false
     t.datetime "updated_at", precision: nil, null: false
     t.integer "amount_percentage"
-    t.integer "user_id"
+    t.integer "user_id", null: false
     t.string "currency_type"
     t.string "code"
     t.boolean "universal", default: false, null: false
@@ -1239,9 +1220,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_15_232626) do
     t.integer "duration_in_months"
     t.integer "minimum_amount_cents"
     t.bigint "flags", default: 0, null: false
-    t.bigint "discount_collection_id"
     t.index ["code", "link_id"], name: "index_offer_codes_on_code_and_link_id"
-    t.index ["discount_collection_id"], name: "index_offer_codes_on_discount_collection_id"
     t.index ["link_id"], name: "index_offer_codes_on_link_id"
     t.index ["name", "link_id"], name: "index_offer_codes_on_name_and_link_id", length: { name: 191 }
     t.index ["universal"], name: "index_offer_codes_on_universal"
@@ -2738,6 +2717,4 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_15_232626) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "discount_collections", "users"
-  add_foreign_key "offer_codes", "discount_collections"
 end

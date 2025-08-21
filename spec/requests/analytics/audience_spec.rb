@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe "Audience analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, type: :feature do
+describe "Audience analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, type: :system do
   let(:seller) { create(:user, created_at: 1.year.ago) }
 
   include_context "with switching account to user as admin for seller"

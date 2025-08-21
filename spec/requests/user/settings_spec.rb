@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "User profile settings page", type: :feature, js: true do
+describe "User profile settings page", type: :system, js: true do
   before do
     @user = create(:named_user, :with_bio)
     time = Time.current

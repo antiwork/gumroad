@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("ProductMoreOptionScenario", type: :feature, js: true) do
+describe("ProductMoreOptionScenario", type: :system, js: true) do
   include ProductEditPageHelpers
 
   def visit_product_edit(link)

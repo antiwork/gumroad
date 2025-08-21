@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("The supporter count", js: true, type: :feature) do
+describe("The supporter count", js: true, type: :system) do
   before do
     recreate_model_indices(Purchase)
     @user = create(:user)

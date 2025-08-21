@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "User Follow Page Scenario", type: :feature, js: true do
+describe "User Follow Page Scenario", type: :system, js: true do
   include FillInUserProfileHelpers
 
   let(:seller) { create(:named_seller) }

@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Product Edit Covers", type: :feature, js: true do
+describe "Product Edit Covers", type: :system, js: true do
   include ProductEditPageHelpers
 
   def upload_image(filenames)

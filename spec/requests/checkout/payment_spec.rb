@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Checkout payment", :js, type: :feature do
+describe "Checkout payment", :js, type: :system do
   before do
     @product = create(:product, price_cents: 1000)
   end

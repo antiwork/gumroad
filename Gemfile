@@ -19,11 +19,11 @@ group :development, :test do
   gem "knapsack_pro", "~> 7.0"
   gem "pry-byebug", "~> 3.10"
   gem "pry-rails", "~> 0.3", require: "pry-rails/console"
-  gem "rubocop", "~> 1.65.0", require: false
-  gem "rubocop-rspec", "~> 3.0.0", require: false
-  gem "rubocop-performance", "~> 1.21.0", require: false
-  gem "rubocop-rake", "~> 0.6.0", require: false
-  gem "rubocop-rails", "~> 2.26.0", require: false
+  gem "rubocop", "~> 1.79", require: false
+  gem "rubocop-rails", "~> 2.32", require: false
+  gem "rubocop-performance", "~> 1.25", require: false
+  gem "rubocop-rspec", "~> 3.6", require: false
+  gem "rubocop-rake", "~> 0.7", require: false
   gem "active_record_query_trace", "~> 1.8"
   gem "shoulda-matchers", "~> 6.0"
   gem "spring", "~> 4.0"
@@ -32,8 +32,6 @@ end
 
 group :test do
   gem "capybara", "~> 3.38"
-  gem "database_cleaner-active_record", "~> 2.0"
-  gem "database_cleaner-mongoid", "~> 2.0"
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.1"
   gem "rspec", "~> 3.12"
@@ -147,6 +145,9 @@ gem "private_address_check", "~> 0.5"
 gem "puma", "6.4.2"
 gem "pundit", "~> 2.3"
 gem "public_suffix", "~> 5.0"
+# Rack 3.2+ updates are blocked by
+# https://github.com/antiwork/gumroad/issues/884
+gem "rack", "~> 3.1.0"
 gem "rack-attack", "~> 6.6"
 gem "rack-cors", "~> 2.0"
 gem "rack-mini-profiler", "~> 4.0", require: false
@@ -166,7 +167,7 @@ gem "ruby-oembed", "~> 0.16", require: "oembed"
 gem "rubyzip", "~> 2.3"
 gem "sass-rails", "~> 6.0"
 gem "secure_headers", "~> 6.5"
-gem "selenium-webdriver", "~> 4.7"
+gem "selenium-webdriver", "~> 4.35"
 gem "sendgrid-ruby", "~> 6.6"
 gem "shakapacker", "~> 8.0"
 gem "sidekiq-cron", "~> 1.9"
@@ -189,7 +190,6 @@ gem "twitter", "~> 8.0"
 gem "typhoeus", "~> 1.4"
 gem "valvat", "~> 1.2"
 gem "warden", "~> 1.2"
-gem "webdrivers", "~> 5.2"
 gem "zip-zip", "~> 0.3"
 gem "rouge", "~> 4.0"
 gem "ruby-openai", "~> 7.0"

@@ -531,7 +531,6 @@ class ContactingCreatorMailer < ApplicationMailer
       if @purchase.price_cents == 0
         @seller.enable_free_downloads_email?
       elsif @purchase.is_recurring_subscription_charge && !@purchase.is_upgrade_purchase?
-        return false if @purchase.subscription&.recurrence == BasePrice::Recurrence::MONTHLY
         @seller.enable_recurring_subscription_charge_email?
       else
         @seller.enable_payment_email?

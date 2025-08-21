@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Authentication Scenario", type: :feature, js: true) do
+describe("Authentication Scenario", type: :system, js: true) do
   include FillInUserProfileHelpers
 
   before(:each) do

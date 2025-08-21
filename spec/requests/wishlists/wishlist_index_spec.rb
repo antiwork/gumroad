@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Wishlist index page", :js, type: :feature do
+describe "Wishlist index page", :js, type: :system do
   let(:wishlist) { create(:wishlist, name: "My Wishlist", user: create(:user, name: "Wishlist User")) }
   let(:quantity_item) { create(:wishlist_product, :with_quantity, wishlist:) }
   let(:variant_item) { create(:wishlist_product, :with_recurring_variant, wishlist:) }

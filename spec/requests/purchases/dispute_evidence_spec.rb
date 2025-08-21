@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Dispute evidence page", type: :feature, js: true) do
+describe("Dispute evidence page", type: :system, js: true) do
   let(:dispute) { create(:dispute_formalized, reason: Dispute::REASON_FRAUDULENT) }
   let(:dispute_evidence) { create(:dispute_evidence, dispute:) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }

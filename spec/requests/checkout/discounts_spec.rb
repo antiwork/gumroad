@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe("Checkout discounts page", type: :feature, js: true) do
+describe("Checkout discounts page", type: :system, js: true) do
   include CurrencyHelper
 
   let(:seller) { create(:named_seller) }

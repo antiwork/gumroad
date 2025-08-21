@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Admin Pages Scenario", type: :feature, js: true do
+describe "Admin Pages Scenario", type: :system, js: true do
   let(:admin) { create(:named_user, :admin, has_risk_privilege: true) }
 
   before do

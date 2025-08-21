@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Discover - Filtering scenarios", js: true, type: :feature) do
+describe("Discover - Filtering scenarios", js: true, type: :system) do
   let(:discover_host) { UrlService.discover_domain_with_protocol }
 
   before do

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Communities", :js, type: :feature do
+describe "Communities", :js, type: :system do
   let(:seller) { create(:user, name: "Bob") }
 
   before do

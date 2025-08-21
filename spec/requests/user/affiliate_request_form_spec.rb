@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Public affiliate request onboarding form", type: :feature, js: true do
+describe "Public affiliate request onboarding form", type: :system, js: true do
   let(:creator) { create(:named_user) }
   let!(:product) { create(:product, user: creator) }
   let!(:enabled_self_service_affiliate_product) { create(:self_service_affiliate_product, enabled: true, seller: creator, product:) }

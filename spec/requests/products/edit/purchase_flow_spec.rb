@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("ProductPurchaseFlowScenario", type: :feature, js: true) do
+describe("ProductPurchaseFlowScenario", type: :system, js: true) do
   include ProductEditPageHelpers
 
   let(:seller) { create(:named_seller) }
