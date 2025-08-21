@@ -17,7 +17,7 @@ import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Toggle } from "$app/components/Toggle";
 
-type ReplyToEmail = {
+type ProductLevelSupportEmail = {
   email: string;
   product_ids: string[];
 };
@@ -60,7 +60,7 @@ type Props = {
       fine_print_enabled: boolean;
       fine_print: string | null;
     };
-    reply_to_emails: ReplyToEmail[];
+    product_level_support_emails: ProductLevelSupportEmail[];
   };
 };
 
@@ -69,54 +69,59 @@ type UserSettings = Props["user"] & {
   support_email: string;
 };
 
-const AddReplyToEmailButton = ({ addNewReplyToEmail }: { addNewReplyToEmail: () => void }) => (
-  <Button color="primary" onClick={() => addNewReplyToEmail()}>
+const AddProductLevelSupportEmailButton = ({
+  addNewProductLevelSupportEmail,
+}: {
+  addNewProductLevelSupportEmail: () => void;
+}) => (
+  <Button color="primary" onClick={() => addNewProductLevelSupportEmail()}>
     <Icon name="plus" />
     Add a product specific email
   </Button>
 );
 
-const ReplyToEmailRow = ({
+const ProductLevelSupportEmailRow = ({
   idx,
-  replyToEmail,
+  productLevelSupportEmail,
   userSettings,
   updateUserSettings,
 }: {
   idx: number;
-  replyToEmail: ReplyToEmail;
+  productLevelSupportEmail: ProductLevelSupportEmail;
   userSettings: UserSettings;
   updateUserSettings: (user: UserSettings) => void;
 }) => {
   const uid = React.useId();
-  const [expanded, setExpanded] = React.useState(!replyToEmail.email); // Expand newly added rows
-  const updateReplyToEmail = (update: Partial<ReplyToEmail>) => {
+  const [expanded, setExpanded] = React.useState(!productLevelSupportEmail.email); // Expand newly added rows
+  const updateProductLevelSupportEmail = (update: Partial<ProductLevelSupportEmail>) => {
     updateUserSettings({
       ...userSettings,
-      reply_to_emails: [
-        ...userSettings.reply_to_emails.slice(0, idx),
-        { ...replyToEmail, ...update },
-        ...userSettings.reply_to_emails.slice(idx + 1),
+      product_level_support_emails: [
+        ...userSettings.product_level_support_emails.slice(0, idx),
+        { ...productLevelSupportEmail, ...update },
+        ...userSettings.product_level_support_emails.slice(idx + 1),
       ],
     });
   };
   const tagList = React.useMemo(() => {
-    const otherEmails = userSettings.reply_to_emails.filter((_value, index) => index !== idx);
+    const otherEmails = userSettings.product_level_support_emails.filter((_value, index) => index !== idx);
 
     const unavailableProductIds = otherEmails.map(({ product_ids }) => product_ids).flat();
 
     return userSettings.products
       .filter(({ id }) => !unavailableProductIds.includes(id))
       .map(({ id, name }) => ({ id, label: name }));
-  }, [userSettings.products, userSettings.reply_to_emails, idx]);
+  }, [userSettings.products, userSettings.product_level_support_emails, idx]);
 
   return (
     <div role="listitem">
       <div className="content">
         <Icon name="envelope-fill" className="type-icon" />
         <div className="ml-1">
-          <h4>{replyToEmail.email || "No email set"}</h4>
+          <h4>{productLevelSupportEmail.email || "No email set"}</h4>
           <span>
-            {replyToEmail.product_ids.length} {replyToEmail.product_ids.length === 1 ? "product" : "products"}
+            {productLevelSupportEmail.product_ids.length}{" "}
+            {productLevelSupportEmail.product_ids.length === 1 ? "product" : "products"}
           </span>
         </div>
       </div>
@@ -128,7 +133,9 @@ const ReplyToEmailRow = ({
           onClick={() =>
             updateUserSettings({
               ...userSettings,
-              reply_to_emails: userSettings.reply_to_emails.filter((_value, index) => index !== idx),
+              product_level_support_emails: userSettings.product_level_support_emails.filter(
+                (_value, index) => index !== idx,
+              ),
             })
           }
           aria-label="Delete email"
@@ -143,8 +150,8 @@ const ReplyToEmailRow = ({
             <input
               id={`${uid}email`}
               type="email"
-              value={replyToEmail.email}
-              onChange={(evt) => updateReplyToEmail({ email: evt.target.value })}
+              value={productLevelSupportEmail.email}
+              onChange={(evt) => updateProductLevelSupportEmail({ email: evt.target.value })}
             />
             <small>This reply-to email will appear on receipts for selected products.</small>
           </fieldset>
@@ -154,9 +161,9 @@ const ReplyToEmailRow = ({
             </legend>
             <TagInput
               inputId={`${uid}-products`}
-              tagIds={replyToEmail.product_ids}
+              tagIds={productLevelSupportEmail.product_ids}
               tagList={tagList}
-              onChangeTagIds={(productIds) => updateReplyToEmail({ product_ids: productIds })}
+              onChangeTagIds={(productIds) => updateProductLevelSupportEmail({ product_ids: productIds })}
             />
           </fieldset>
         </div>
@@ -180,9 +187,9 @@ const MainPage = (props: Props) => {
   const updateUserSettings = (settings: Partial<typeof userSettings>) =>
     setUserSettings((prev) => ({ ...prev, ...settings }));
 
-  const addNewReplyToEmail = React.useCallback(() => {
+  const addNewProductLevelSupportEmail = React.useCallback(() => {
     updateUserSettings({
-      reply_to_emails: [...userSettings.reply_to_emails, { email: "", product_ids: [] }],
+      product_level_support_emails: [...userSettings.product_level_support_emails, { email: "", product_ids: [] }],
     });
   }, [userSettings]);
 
@@ -232,9 +239,9 @@ const MainPage = (props: Props) => {
         data: {
           user: {
             ...userSettings,
-            reply_to_emails: userSettings.reply_to_emails.map((replyToEmail) => ({
-              email: replyToEmail.email,
-              product_ids: replyToEmail.product_ids,
+            product_level_support_emails: userSettings.product_level_support_emails.map((productLevelSupportEmail) => ({
+              email: productLevelSupportEmail.email,
+              product_ids: productLevelSupportEmail.product_ids,
             })),
           },
         },
@@ -433,24 +440,24 @@ const MainPage = (props: Props) => {
             />
             <small>This email is listed on the receipt of every sale.</small>
           </fieldset>
-          {userSettings.reply_to_emails.length ? (
+          {userSettings.product_level_support_emails.length ? (
             <>
               <div className="rows" role="list">
-                {userSettings.reply_to_emails.map((reply_to_email, idx) => (
-                  <ReplyToEmailRow
+                {userSettings.product_level_support_emails.map((support_email, idx) => (
+                  <ProductLevelSupportEmailRow
                     key={idx}
                     idx={idx}
-                    replyToEmail={reply_to_email}
+                    productLevelSupportEmail={support_email}
                     userSettings={userSettings}
                     updateUserSettings={updateUserSettings}
                   />
                 ))}
               </div>
-              <AddReplyToEmailButton addNewReplyToEmail={addNewReplyToEmail} />
+              <AddProductLevelSupportEmailButton addNewProductLevelSupportEmail={addNewProductLevelSupportEmail} />
             </>
           ) : (
             <div className="placeholder">
-              <AddReplyToEmailButton addNewReplyToEmail={addNewReplyToEmail} />
+              <AddProductLevelSupportEmailButton addNewProductLevelSupportEmail={addNewProductLevelSupportEmail} />
               <div>Use a different reply-to email for specific products.</div>
             </div>
           )}

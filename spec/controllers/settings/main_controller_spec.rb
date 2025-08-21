@@ -299,102 +299,102 @@ describe Settings::MainController do
         end
       end
 
-      context "reply to emails" do
+      context "support emails" do
         let(:product1) { create(:product, user: seller) }
         let(:product2) { create(:product, user: seller) }
         let(:other_seller) { create(:user) }
         let(:other_product) { create(:product, user: other_seller) }
 
-        it "creates new reply to emails with associated products" do
-          reply_to_emails_params = [
+        it "creates new support emails with associated products" do
+          product_level_support_emails_params = [
             { email: "contact@example.com", product_ids: [product1.external_id, product2.external_id] },
             { email: "support@example.com", product_ids: [] }
           ]
 
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(true)
 
-          expect(product1.reload.reply_to_email).to eq("contact@example.com")
-          expect(product2.reload.reply_to_email).to eq("contact@example.com")
+          expect(product1.reload.support_email).to eq("contact@example.com")
+          expect(product2.reload.support_email).to eq("contact@example.com")
         end
 
         it "fails when email isn't valid" do
-          reply_to_emails_params = [
+          product_level_support_emails_params = [
             { email: "invalid-email", product_ids: [product1.external_id] }
           ]
 
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(false)
           expect(response.parsed_body["error_message"]).to eq("Invalid email format: invalid-email")
         end
 
-        it "updates existing reply to emails" do
-          product1.update!(reply_to_email: "contact@example.com")
+        it "updates existing support emails" do
+          product1.update!(support_email: "contact@example.com")
 
-          reply_to_emails_params = [
+          product_level_support_emails_params = [
             { email: "contact@example.com", product_ids: [product2.external_id] }
           ]
 
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(true)
-          expect(product1.reload.reply_to_email).to be_nil
-          expect(product2.reload.reply_to_email).to eq("contact@example.com")
+          expect(product1.reload.support_email).to be_nil
+          expect(product2.reload.support_email).to eq("contact@example.com")
         end
 
         it "only associates products belonging to current seller" do
-          reply_to_emails_params = [
+          product_level_support_emails_params = [
             { email: "contact@example.com", product_ids: [product1.external_id, other_product.external_id] }
           ]
 
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(true)
 
-          expect(product1.reload.reply_to_email).to eq("contact@example.com")
-          expect(other_product.reload.reply_to_email).to be_nil
+          expect(product1.reload.support_email).to eq("contact@example.com")
+          expect(other_product.reload.support_email).to be_nil
         end
 
-        it "clears all existing reply to emails if param is empty" do
-          product1.update!(reply_to_email: "contact@example.com")
-          product2.update!(reply_to_email: "support@example.com")
+        it "clears all existing support emails if param is empty" do
+          product1.update!(support_email: "contact@example.com")
+          product2.update!(support_email: "support@example.com")
 
-          reply_to_emails_params = []
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          product_level_support_emails_params = []
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(true)
-          expect(product1.reload.reply_to_email).to be_nil
-          expect(product2.reload.reply_to_email).to be_nil
+          expect(product1.reload.support_email).to be_nil
+          expect(product2.reload.support_email).to be_nil
         end
 
-        it "clears existing reply to emails if provided email is blank" do
-          product1.update!(reply_to_email: "contact@example.com")
-          product2.update!(reply_to_email: "support@example.com")
+        it "clears existing support emails if provided email is blank" do
+          product1.update!(support_email: "contact@example.com")
+          product2.update!(support_email: "support@example.com")
 
-          reply_to_emails_params = [
+          product_level_support_emails_params = [
             { email: "", product_ids: [product1.external_id, product2.external_id] }
           ]
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(true)
-          expect(product1.reload.reply_to_email).to be_nil
-          expect(product2.reload.reply_to_email).to be_nil
+          expect(product1.reload.support_email).to be_nil
+          expect(product2.reload.support_email).to be_nil
         end
 
         it "returns error message if provided email is not valid" do
-          product1.update!(reply_to_email: "contact@example.com")
+          product1.update!(support_email: "contact@example.com")
 
-          reply_to_emails_params = [
+          product_level_support_emails_params = [
             { email: "invalid_email", product_ids: [product2.external_id] }
           ]
-          put :update, params: { user: user_params.merge(reply_to_emails: reply_to_emails_params) }, format: :json
+          put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(false)
           expect(response.parsed_body["error_message"]).to eq("Invalid email format: invalid_email")
-          expect(product1.reload.reply_to_email).to eq("contact@example.com") # not changed, as the transaction has failed
-          expect(product2.reload.reply_to_email).to be_nil
+          expect(product1.reload.support_email).to eq("contact@example.com") # not changed, as the transaction has failed
+          expect(product2.reload.support_email).to be_nil
         end
       end
     end

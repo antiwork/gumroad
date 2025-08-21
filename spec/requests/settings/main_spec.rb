@@ -270,43 +270,43 @@ describe("Main Settings Scenario", type: :system, js: true) do
     end
   end
 
-  context "Reply to email" do
+  context "Product level support email" do
     let!(:product_1) { create(:product, user:, name: "Product 1") }
     let!(:product_2) { create(:product, user:, name: "Product 2") }
 
-    it "adds new reply to email" do
+    it "adds new support email" do
       email = "support@example.com"
       visit settings_main_path
       click_on "Add a product specific email"
-      within find_reply_to_email_row(name: "No email set") do
+      within find_product_level_support_email_row(name: "No email set") do
         fill_in "Email", with: email
         select_combo_box_option "Product 1", from: "Products"
       end
       click_on "Update settings"
       expect(page).to have_alert(text: "Your account has been updated!")
 
-      expect(product_1.reload.reply_to_email).to eq email
+      expect(product_1.reload.support_email).to eq email
     end
 
-    it "deletes reply to email" do
+    it "deletes support email" do
       email = "support@example.com"
-      product_1.update!(reply_to_email: email)
+      product_1.update!(support_email: email)
       visit settings_main_path
-      within find_reply_to_email_row(name: email) do
+      within find_product_level_support_email_row(name: email) do
         click_on "Delete email"
       end
       click_on "Update settings"
       expect(page).to have_alert(text: "Your account has been updated!")
 
-      expect(product_1.reload.reply_to_email).to be_nil
+      expect(product_1.reload.support_email).to be_nil
     end
 
-    it "updates existing reply to email" do
+    it "updates existing support email" do
       email = "support@example.com"
-      product_1.update!(reply_to_email: email)
+      product_1.update!(support_email: email)
 
       visit settings_main_path
-      within find_reply_to_email_row(name: email) do
+      within find_product_level_support_email_row(name: email) do
         click_on "Edit email"
         fill_in "Email", with: "new_support@example.com"
         select_combo_box_option "Product 2", from: "Products"
@@ -314,22 +314,22 @@ describe("Main Settings Scenario", type: :system, js: true) do
       click_on "Update settings"
       expect(page).to have_alert(text: "Your account has been updated!")
 
-      expect(product_1.reload.reply_to_email).to eq("new_support@example.com")
-      expect(product_2.reload.reply_to_email).to eq("new_support@example.com")
+      expect(product_1.reload.support_email).to eq("new_support@example.com")
+      expect(product_2.reload.support_email).to eq("new_support@example.com")
     end
 
     it "does not allow same product to be selected for multiple emails" do
-      product_1.update!(reply_to_email: "support@example.com")
-      product_2.update!(reply_to_email: "other@example.com")
+      product_1.update!(support_email: "support@example.com")
+      product_2.update!(support_email: "other@example.com")
       visit settings_main_path
-      within find_reply_to_email_row(name: "support@example.com") do
+      within find_product_level_support_email_row(name: "support@example.com") do
         click_on "Edit email"
         expect(page).not_to have_combo_box("Products", options: ["Product 2"])
       end
     end
   end
 
-  def find_reply_to_email_row(name:)
+  def find_product_level_support_email_row(name:)
     find("[role=listitem] h4", text: name).ancestor("[role=listitem]")
   end
 end

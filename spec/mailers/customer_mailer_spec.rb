@@ -26,10 +26,10 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
-    context "when reply to email exists" do
+    context "when support email exists" do
       subject(:mail) do
         user = create(:user, email: "bob@gumroad.com", name: "bob walsh")
-        link = create(:product, user:, reply_to_email: "support@example.com")
+        link = create(:product, user:, support_email: "support@example.com")
 
         @purchase = create(:purchase, link:, seller: link.user, email: "to@example.org")
         @purchase.create_url_redirect!
@@ -37,7 +37,7 @@ describe CustomerMailer do
         CustomerMailer.receipt(@purchase.id)
       end
 
-      it "uses correct reply to email" do
+      it "uses correct support email" do
         expect(mail[:reply_to].value).to eq("support@example.com")
       end
     end
@@ -921,17 +921,17 @@ describe CustomerMailer do
       expect(mailer[:reply_to].value).to eq(charge.seller.email)
     end
 
-    context "when reply to email is set" do
-      let(:product) { create(:product, user: seller, name: "Product One", reply_to_email: "reply_to@example.com") }
-      let(:product_two) { create(:product, user: seller, name: "Product Two", reply_to_email: "reply_to@example.com") }
+    context "when support email is set" do
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: "reply_to@example.com") }
 
-      it "uses correct reply to email" do
+      it "uses correct support email" do
         expect(mailer[:reply_to].value).to eq("reply_to@example.com")
       end
 
-      context "when products have different reply to emails" do
-        let(:product) { create(:product, user: seller, name: "Product One", reply_to_email: "reply_to@example.com") }
-        let(:product_two) { create(:product, user: seller, name: "Product Two", reply_to_email: "support@example.com") }
+      context "when products have different support emails" do
+        let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
+        let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: "support@example.com") }
 
         it "uses seller's default email" do
           expect(mailer[:reply_to].value).to eq(charge.seller.email)

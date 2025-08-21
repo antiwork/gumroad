@@ -494,27 +494,27 @@ class User < ApplicationRecord
     end
   end
 
-  def reply_to_emails
-    products.where.not(reply_to_email: nil)
-            .group_by(&:reply_to_email)
+  def product_level_support_emails
+    products.where.not(support_email: nil)
+            .group_by(&:support_email)
             .map do |email, products|
               { email: email, product_ids: products.map(&:external_id) }
             end
   end
 
-  def update_reply_to_emails!(reply_to_emails_data)
-    reply_to_emails_data = (reply_to_emails_data || []).reject { |data| data[:email]&.strip&.blank? }
+  def update_product_level_support_emails!(product_level_support_emails_data)
+    product_level_support_emails_data = (product_level_support_emails_data || []).reject { |data| data[:email]&.strip&.blank? }
 
     ActiveRecord::Base.transaction do
-      all_product_external_ids = reply_to_emails_data.flat_map { |data| data[:product_ids] }.compact
-      products.where.not(reply_to_email: nil)
+      all_product_external_ids = product_level_support_emails_data.flat_map { |data| data[:product_ids] }.compact
+      products.where.not(support_email: nil)
               .where.not(id: all_product_external_ids.map { |id| ObfuscateIds.decrypt(id) })
-              .update_all(reply_to_email: nil)
+              .update_all(support_email: nil)
 
-      reply_to_emails_data.each do |email_data|
+      product_level_support_emails_data.each do |email_data|
         raise ArgumentError, "Invalid email format: #{email_data[:email]}" if !email_data[:email].match?(URI::MailTo::EMAIL_REGEXP)
 
-        products.by_external_ids(email_data[:product_ids]).update_all(reply_to_email: email_data[:email])
+        products.by_external_ids(email_data[:product_ids]).update_all(support_email: email_data[:email])
       end
     end
   end

@@ -94,7 +94,7 @@ describe SettingsPresenter do
           disable_comments_email: false,
           disable_reviews_email: false,
           show_nsfw_products: false,
-          reply_to_emails: [],
+          product_level_support_emails: [],
           seller_refund_policy: {
             enabled: true,
             allowed_refund_periods_in_days: [
@@ -127,14 +127,14 @@ describe SettingsPresenter do
       )
     end
 
-    context "when reply to emails exist" do
+    context "when support emails exist" do
       before do
-        product.reply_to_email = "support@example.com"
+        product.support_email = "support@example.com"
         product.save!
       end
 
-      it "includes reply_to_emails in main_props" do
-        expect(presenter.main_props[:user][:reply_to_emails]).to include(
+      it "includes product_level_support_emails in main_props" do
+        expect(presenter.main_props[:user][:product_level_support_emails]).to include(
           {
             email: "support@example.com",
             product_ids: [

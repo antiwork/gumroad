@@ -168,7 +168,7 @@ class Link < ApplicationRecord
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
-  validates :reply_to_email, format: URI::MailTo::EMAIL_REGEXP, allow_nil: true
+  validates :support_email, format: URI::MailTo::EMAIL_REGEXP, allow_nil: true
   validates :default_price_cents, presence: true
   validates :unique_permalink, presence: true, uniqueness: { case_sensitive: false }, format: { with: /\A[a-zA-Z_]+\z/ }
   validates :custom_permalink, format: { with: /\A[a-zA-Z0-9_-]+\z/ }, uniqueness: { scope: :user_id, case_sensitive: false }, allow_nil: true, allow_blank: true
@@ -1202,8 +1202,8 @@ class Link < ApplicationRecord
     end
   end
 
-  def support_email
-    reply_to_email || user.support_or_form_email
+  def support_email_or_default
+    support_email || user.support_or_form_email
   end
 
   protected

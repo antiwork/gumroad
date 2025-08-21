@@ -12,7 +12,7 @@ class Settings::MainController < Sellers::BaseController
 
   def update
     begin
-      current_seller.with_lock { current_seller.update(user_params.except(:seller_refund_policy, :reply_to_emails)) }
+      current_seller.with_lock { current_seller.update(user_params.except(:seller_refund_policy, :product_level_support_emails)) }
     rescue StandardError => e
       Bugsnag.notify(e)
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
@@ -33,7 +33,7 @@ class Settings::MainController < Sellers::BaseController
 
     begin
       current_seller.update_purchasing_power_parity_excluded_products!(params[:user][:purchasing_power_parity_excluded_product_ids])
-      current_seller.update_reply_to_emails!(params[:user][:reply_to_emails])
+      current_seller.update_product_level_support_emails!(params[:user][:product_level_support_emails])
       render json: { success: true }
     rescue StandardError => e
       Bugsnag.notify(e)
@@ -70,7 +70,7 @@ class Settings::MainController < Sellers::BaseController
         :purchasing_power_parity_limit,
         :purchasing_power_parity_payment_verification_disabled,
         :show_nsfw_products,
-        { reply_to_emails: [:email, { product_ids: [] }] },
+        { product_level_support_emails: [:email, { product_ids: [] }] },
         { seller_refund_policy: [:max_refund_period_in_days, :fine_print] }
       ]
 
