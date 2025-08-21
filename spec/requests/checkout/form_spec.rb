@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe("Checkout form page", type: :feature, js: true) do
+describe("Checkout form page", type: :system, js: true) do
   let(:seller) { create(:named_seller, recommendation_type: User::RecommendationType::OWN_PRODUCTS) }
 
   include_context "with switching account to user as admin for seller"

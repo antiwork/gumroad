@@ -26,10 +26,10 @@ Layout/EmptyLineBetweenDefs:
   AllowAdjacentOneLineDefs: true
   # DefLikeMacros: []
 
-require:
-  - rubocop-performance
+plugins:
   - rubocop-rails
   - rubocop-rspec
+  - rubocop-performance
   - rubocop-rake
 
 AllCops:

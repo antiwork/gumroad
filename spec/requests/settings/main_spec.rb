@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Main Settings Scenario", type: :feature, js: true) do
+describe("Main Settings Scenario", type: :system, js: true) do
   let(:user) { create(:user, name: "Gum") }
 
   before do

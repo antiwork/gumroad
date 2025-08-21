@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Discover recommendations", js: true, type: :feature) do
+describe("Discover recommendations", js: true, type: :system) do
   let(:host) { UrlService.discover_domain_with_protocol }
   let(:user) { create(:buyer_user) }
   let(:product) { create(:product) }

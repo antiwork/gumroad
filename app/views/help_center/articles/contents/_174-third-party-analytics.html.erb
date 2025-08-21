@@ -23,9 +23,9 @@
     </div>
     <p>Watch this Google Analytics setup video by our engineer, Connor:</p>
     <div data-html-block><iframe width="560" height="315" src="https://www.youtube.com/embed/xc_QJ5H4a8M" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
-    <p>The easiest way to set up Google Analytics on your Gumroad account is to paste your GA-4 measurement ID  into the Google Analytics Property ID field on the <a href="https://app.gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics Settings page</a>. Your GA4 measurement ID will look like this: G-P2AB123Z3D</p>
+    <p>The easiest way to set up Google Analytics on your Gumroad account is to paste your GA-4 measurement ID  into the Google Analytics Property ID field on the <a href="https://gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics Settings page</a>. Your GA4 measurement ID will look like this: G-P2AB123Z3D</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816b2174c2142995f91831/file-emVO51HGYj.png" %></figure>
-    <p><a href="https://support.google.com/analytics/answer/9304153" target="_blank">Here’s how</a> to create a new GA4 property. Please provide your Gumroad profile URL while you are setting up your data stream, which you can find in the username section of the <a href="https://app.gumroad.com/settings/profile" target="_blank">Profile settings</a>.</p>
+    <p><a href="https://support.google.com/analytics/answer/9304153" target="_blank">Here’s how</a> to create a new GA4 property. Please provide your Gumroad profile URL while you are setting up your data stream, which you can find in the username section of the <a href="https://gumroad.com/settings/profile" target="_blank">Profile settings</a>.</p>
     <p>For each product, we currently send three events and three pageviews:</p>
     <ol>
       <li>view_item: A product page view</li>
@@ -47,7 +47,7 @@
     <p>You can <a href="290-facebook-domain-verification.html" target="_blank">verify your Facebook domain</a> by entering the meta tag containing the Facebook domain verification code generated from <a href="https://business.facebook.com/settings/owned-domains/" target="_blank">Facebook Business Manager</a>.</p>
     <h3 id="Meta-Pixel-Yisi6">Meta Pixel</h3>
     <p>A Meta (Facebook) pixel provides key data to optimize your ads on Facebook. </p>
-    <p>Gumroad doesn’t support FB Conversion API (server side). One possible way is to do it through our <a href="https://app.gumroad.com/ping" target="_blank">Gumroad Ping</a>. With Gumroad Ping, you'll receive the product_permalink (among other payloads) to your specified endpoint when you make a sale. You can handle that permalink from your backend and send the appropriate FB Conversion API. The same product_permalink is sent client-side as part of FB Pixel's content_ids.</p>
+    <p>Gumroad doesn’t support FB Conversion API (server side). One possible way is to do it through our <a href="https://gumroad.com/ping" target="_blank">Gumroad Ping</a>. With Gumroad Ping, you'll receive the product_permalink (among other payloads) to your specified endpoint when you make a sale. You can handle that permalink from your backend and send the appropriate FB Conversion API. The same product_permalink is sent client-side as part of FB Pixel's content_ids.</p>
     <p>For a full in-depth view of how to use the Facebook Pixel, check out this interview with Gumroad creator Jimmy Xia:</p>
     <div data-html-block><iframe width="560" height="315" src="https://www.youtube.com/embed/VjCyGEaSTPE" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
     <p><b>Step 1: Set up a pixel</b></p>
@@ -56,7 +56,7 @@
     </ul>
     <p><b>Step 2: Add your pixel to Gumroad</b></p>
     <ul>
-      <li>Go to the <a href="https://app.gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics tab</a></li>
+      <li>Go to the <a href="https://gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics tab</a></li>
       <li>Paste the Pixel ID in the Facebook Pixel field </li>
     </ul>
     <p><b>Step 3: Go back to Meta Events Manager</b></p>
@@ -115,7 +115,7 @@
     <p>If you want a custom conversion event to show up in both Google Analytics and Google Ads, you should set it up in Google Analytics (see <a href="https://support.google.com/analytics/answer/12966437" target="_blank">here</a>) and then link it to Google Ads (see <a href="https://support.google.com/analytics/answer/10632359?hl=en" target="_blank">here</a>).</p>
     <h3 id="Twitter-nU6Nz">𝕏 / Twitter</h3>
     <p>After creating a campaign, go to  "Events Manager" and get the id from "Universal Website Tag". If it doesn't appear, you can click "Add event source" to create it.</p>
-    <p>In your Gumroad <a href="https://app.gumroad.com/settings/third_party_analytics">Third-party analytics settings</a>, click on 'Add snippet', set location to 'Receipt', and add the following code in the Code area (with your specific Pixel ID and Event ID):</p>
+    <p>In your Gumroad <a href="https://gumroad.com/settings/third_party_analytics">Third-party analytics settings</a>, click on 'Add snippet', set location to 'Receipt', and add the following code in the Code area (with your specific Pixel ID and Event ID):</p>
     <pre>&lt;!-- Twitter conversion tracking base code --&gt; &lt;script&gt; !function(e,t,n,s,u,a){e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments); },s.version='1.1',s.queue=[],u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js', a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))}(window,document,'script'); twq('config','REPLACE_WITH_YOUR_TWITTER_PIXEL_ID'); // Twitter Pixel ID &lt;/script&gt; &lt;!-- End Twitter conversion tracking base code --&gt; &lt;!-- Twitter conversion tracking event code --&gt; &lt;script type="text/javascript"&gt; // Insert Twitter Event ID twq('event', 'REPLACE_WITH_YOUR_EVENT_ID', { value: $VALUE, currency: '$CURRENCY', conversion_id: '$ORDER' }); &lt;/script&gt; &lt;!-- End Twitter conversion tracking event code --&gt; </pre>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b8fd5cd0b6de7e3be2a86c/file-dAnYDRZjYu.png" %></figure>
     <p>You can learn more about Twitter Conversion tracking <a href="https://business.twitter.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites.html" target="_blank">here</a>.</p>

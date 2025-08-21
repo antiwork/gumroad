@@ -15,13 +15,14 @@
       <p>Please only issue refunds from your Gumroad dashboard. Our system does not support refunds issued directly from Stripe or PayPal accounts.</p>
     </div>
     <h3 id="full">Full refund</h3>
-    <p>Go to your <a href="https://app.gumroad.com/customers">Sales dashboard</a> and click on the sale to open the customer drawer. Then scroll down and click the <strong>Refund fully</strong> button:</p>
+    <p>Go to your <a href="https://gumroad.com/customers">Sales dashboard</a> and click on the sale to open the customer drawer. Then scroll down and click the <strong>Refund fully</strong> button:</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/6385991eb3261c24b49eda78/file-v3dx5aMJjS.png" %></figure>
     <p>We charge and refund customers in USD. The amount customers receive back in their local currency may be different than what they initially paid due to differences in exchange rates.</p>
     <br>
     <h3 id="partial">Partial refund</h3>
     <p>To issue a partial refund, enter the amount to be refunded in the ‘Refund’ box and click <strong>Issue partial refund</strong>.  </p>
     <p>Your customer will still have access to their content after a partial refund.</p>
+    <p>If it is a Membership that is pending cancellation and has 'Members will lose access when their Membership ends' toggled on, issuing a partial refund will end the Membership and revoke the customer's access.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62469f0eab585b230a8a7601/file-nnUgqbE3pw.gif" %></figure>
     <h3 id="paypal">PayPal refund</h3>
     <p>If you refund a <a href="275-paypal-connect.html">PayPal Connect</a> purchase, PayPal keeps its fees on the sale but refunds 100% of the amount to the customer. In this case, you would be responsible for Gumroad and PayPal’s fees.</p>

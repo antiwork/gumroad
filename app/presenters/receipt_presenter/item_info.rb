@@ -219,8 +219,12 @@ class ReceiptPresenter::ItemInfo
     end
 
     def refund_policy_attribute
-      # gift.giftee_purchase doesn't have a copy of the refund policy, so it needs to be retrieved from the gifter_purchase
-      refund_policy = purchase.is_gift_receiver_purchase ? purchase.gift.gifter_purchase.purchase_refund_policy : purchase.purchase_refund_policy
+      # Bundle product purchases' refund policy is on the bundle purchase, not the individual product purchases.
+      with_refund_policy = purchase.is_bundle_product_purchase ? purchase.bundle_purchase : purchase
+      # Gift purchases' refund policy is on the gift sender's purchase, not the giftee's purchase.
+      with_refund_policy = with_refund_policy.is_gift_receiver_purchase ? with_refund_policy.gift.gifter_purchase : with_refund_policy
+      refund_policy = with_refund_policy.purchase_refund_policy
+
       return unless refund_policy.present?
 
       {
@@ -252,20 +256,44 @@ class ReceiptPresenter::ItemInfo
     end
 
     def manage_subscription_note
-      @_subscription_note ||= begin
-        return if subscription.blank?
-        return if purchase.is_gift_receiver_purchase && subscription.credit_card_id.blank?
-        return gift_subscription_renewal_note if subscription.gift? && subscription.credit_card_id.blank?
+      return if subscription.blank?
 
-        "You will be charged once #{recurrence_long_indicator(subscription.recurrence)}. If you would like to manage your membership you can visit #{link_to(
-            "subscription settings",
-            Rails.application.routes.url_helpers.manage_subscription_url(
-              subscription.external_id,
-              { host: UrlService.domain_with_protocol },
-            ),
-            target: "_blank"
-          )}.".html_safe
-      end
+      @_manage_subscription_note ||=
+        if subscription.is_installment_plan?
+          manage_installment_plan_note
+        else
+          manage_membership_note
+        end
+    end
+
+    def manage_membership_note
+      return if purchase.is_gift_receiver_purchase && subscription.credit_card_id.blank?
+      return gift_subscription_renewal_note if subscription.gift? && subscription.credit_card_id.blank?
+
+      <<~HTML.squish.html_safe
+        You will be charged once #{recurrence_long_indicator(subscription.recurrence)}.
+        If you would like to manage your membership you can visit
+        #{link_to("subscription settings", manage_subscription_href, target: "_blank")}.
+      HTML
+    end
+
+    def manage_installment_plan_note
+      timezone = subscription.user&.timezone
+      started_at = subscription.created_at.in_time_zone(timezone)
+      expected_ends_at = subscription.expected_completion_time.in_time_zone(timezone)
+
+      <<~HTML.squish.html_safe
+        Installment plan initiated on #{started_at.to_fs(:formatted_date_abbrev_month)}.
+        Your final charge will be on #{expected_ends_at.to_fs(:formatted_date_abbrev_month)}.
+        You can manage your payment settings #{link_to("here", manage_subscription_href, target: "_blank")}.
+      HTML
+    end
+
+    def manage_subscription_href
+      Rails.application.routes.url_helpers.manage_subscription_url(
+        subscription.external_id,
+        { host: UrlService.domain_with_protocol },
+      )
     end
 
     def gift_subscription_renewal_note

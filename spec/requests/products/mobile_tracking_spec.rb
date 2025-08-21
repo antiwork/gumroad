@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Mobile tracking", type: :feature, js: true do
+describe "Mobile tracking", type: :system, js: true do
   let(:product) { create(:product) }
 
   before do

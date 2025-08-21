@@ -2624,8 +2624,14 @@ describe User, :vcr do
 
       user = create(:user)
 
-      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+      # Enabled by default
+      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification}.each do |notification_key|
         expect(user.public_send(notification_key)).to be(true)
+      end
+
+      # Disabled by default
+      %i{enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+        expect(user.public_send(notification_key)).to be(false)
       end
     end
   end
@@ -3053,12 +3059,11 @@ describe User, :vcr do
   end
 
   describe "#eligible_for_instant_payouts?" do
-    let(:user) { create(:user) }
+    let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }
     let!(:payments) { create_list(:payment_completed, 4, user:) }
 
     before do
-      allow(user).to receive(:compliant?).and_return(true)
       allow(user).to receive(:payouts_paused?).and_return(false)
     end
 
@@ -3066,9 +3071,16 @@ describe User, :vcr do
       expect(user.eligible_for_instant_payouts?).to eq(true)
     end
 
-    it "returns false when user is suspended" do
-      allow(user).to receive(:suspended?).and_return(true)
-      expect(user.eligible_for_instant_payouts?).to eq(false)
+    it "returns false when user is not compliant" do
+      [:not_reviewed,
+       :on_probation,
+       :flagged_for_fraud,
+       :flagged_for_tos_violation,
+       :suspended_for_fraud,
+       :suspended_for_tos_violation].each do |non_compliant_risk_state|
+        user.update!(user_risk_state: non_compliant_risk_state)
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
     end
 
     it "returns false when payouts are paused" do

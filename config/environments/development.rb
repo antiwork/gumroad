@@ -85,7 +85,7 @@ Rails.application.configure do
   # Bullet configuration for N+1 query detection
   config.after_initialize do
     Bullet.enable = true
-    Bullet.alert = true
+    Bullet.alert = false
     Bullet.bullet_logger = true
     Bullet.rails_logger = true
     Bullet.add_footer = true

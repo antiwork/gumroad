@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Sign up after purchase", type: :feature, js: true do
+describe "Sign up after purchase", type: :system, js: true do
   before do
     product = create(:product)
     product2 = create(:product)

@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Non Tiered Membership Subscriptions", type: :feature, js: true do
+describe "Non Tiered Membership Subscriptions", type: :system, js: true do
   include ManageSubscriptionHelpers
   include ProductWantThisHelpers
 

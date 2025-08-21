@@ -354,6 +354,7 @@
     <% if purchase.successful? && !purchase.stripe_refunded %>
       <%= admin_action label: "Refund", url: refund_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase?", success_message: "Refunded!" %>
       <%= admin_action label: "Refund for Fraud", url: refund_for_fraud_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase for fraud?", success_message: "Refunded!" %>
+      <%= admin_action label: "Refund taxes only", url: refund_taxes_only_admin_purchase_path(purchase), loading: "Refunding taxes...", done: "Taxes refunded!", confirm_message: "Are you sure you want to refund only the taxes for this purchase?", success_message: "Taxes refunded!" %>
       <%= admin_action label: "Refund Card for Fraud", url: refund_admin_cards_path(stripe_fingerprint: purchase.stripe_fingerprint), loading: "Refunding...", done: "Refunding purchases!", confirm_message: "Are you sure you want to Mass-refund for fraud all purchases associated with this purchase's card?", success_message: "Refunding purchases!" %>
     <% end %>
     <% if purchase.subscription.present? && !purchase.subscription.cancelled_or_failed? && !purchase.subscription.ended? %>

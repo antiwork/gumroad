@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Affiliates", type: :feature, js: true do
+describe "Affiliates", type: :system, js: true do
   it "redirects to the product page and applies discount based on the offer_code parameter in the query string" do
     user = create(:user)
     product = create(:product, user:, price_cents: 2000)

@@ -367,6 +367,7 @@ describe CustomerMailer do
 
           context "when purchase is in EUR" do
             before do
+              purchase.link.default_price.update!(currency: Currency::EUR)
               purchase.link.update!(price_currency_type: Currency::EUR)
               purchase.update!(
                 displayed_price_currency_type: Currency::EUR,
@@ -418,7 +419,7 @@ describe CustomerMailer do
           it "renders upcoming payment information" do
             mail = CustomerMailer.receipt(purchase.id)
 
-            expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein $19.98 on Feb 1, 2023")
+            expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein: 2 of 2 $19.98 on Feb 1, 2023")
           end
         end
 

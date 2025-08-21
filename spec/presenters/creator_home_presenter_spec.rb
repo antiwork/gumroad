@@ -131,6 +131,20 @@ describe CreatorHomePresenter do
       expect(product2_data["thumbnail"]).to eq(thumbnail2.url)
     end
 
+    it "excludes deleted products from the Best Selling section", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      active_product = create(:product, user: seller, price_cents: 1000)
+      deleted_product = create(:product, user: seller, price_cents: 2000)
+
+      create_list(:purchase, 3, link: active_product, price_cents: active_product.price_cents, created_at: 1.day.ago)
+      create_list(:purchase, 5, link: deleted_product, price_cents: deleted_product.price_cents, created_at: 2.days.ago)
+
+      deleted_product.update!(deleted_at: Time.current)
+
+      sales_data = presenter.creator_home_props[:sales]
+      expect(sales_data.map { |p| p["id"] }).to contain_exactly(active_product.unique_permalink)
+      expect(sales_data).not_to include(hash_including("id" => deleted_product.unique_permalink))
+    end
+
     it "shows the 3 most sold products in past 30 days", :sidekiq_inline, :elasticsearch_wait_for_refresh do
       product1 = create(:product, user: seller)
       product2 = create(:product, user: seller)
@@ -284,6 +298,50 @@ describe CreatorHomePresenter do
           expect(balances[:last_28_days_sales_total]).to eq "$150 USD"
           expect(balances[:total]).to eq "$500 USD"
         end
+      end
+    end
+
+    describe "tax forms" do
+      download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+
+      before do
+        seller.update!(created_at: 2.years.ago)
+        allow(seller).to receive(:eligible_for_1099?).and_return(true)
+        allow(seller).to receive(:tax_form_1099_download_url).and_return(download_url)
+      end
+
+      it "includes tax forms since the seller's account was created" do
+        expect(presenter.creator_home_props[:tax_forms]).to eq(
+          {
+            2022 => download_url,
+            2021 => download_url,
+            2020 => download_url,
+          }
+        )
+      end
+
+      it "only includes years where the seller is eligible for a 1099" do
+        allow(seller).to receive(:eligible_for_1099?) do |year|
+          [2022, 2021].include?(year)
+        end
+
+        expect(presenter.creator_home_props[:tax_forms]).to eq(
+          {
+            2022 => download_url,
+            2021 => download_url,
+          })
+      end
+
+      it "only includes years that have downloadable tax forms" do
+        allow(seller).to receive(:tax_form_1099_download_url) do |year:|
+          year == 2021 ? download_url : nil
+        end
+
+        expect(presenter.creator_home_props[:tax_forms]).to eq(
+          {
+            2021 => download_url,
+          }
+        )
       end
     end
   end

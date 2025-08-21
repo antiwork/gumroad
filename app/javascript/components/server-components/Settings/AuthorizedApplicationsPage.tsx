@@ -34,6 +34,7 @@ type Scope =
   | "view_profile"
   | "view_public"
   | "view_sales"
+  | "view_payouts"
   | "revenue_share"
   | "mobile_api"
   | "creator_api";
@@ -47,6 +48,7 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   view_profile: "See your profile data.",
   view_public: "See your public information (name, Facebook profile, bio, Twitter handle).",
   view_sales: "See your sales data.",
+  view_payouts: "See your payouts data.",
   revenue_share: "Revenue Share",
   mobile_api: "Mobile API",
   creator_api: "Creator API",

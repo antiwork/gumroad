@@ -117,30 +117,24 @@ Capybara.register_driver :docker_headless_mobile_chrome do |app|
                                  options:)
 end
 
-Capybara.javascript_driver = (ENV["IN_DOCKER"] == "true" ? :docker_headless_chrome : :chrome)
-
 RSpec.configure do |config|
-  config.before(:each, :mobile_view) do |example|
-    Capybara.current_driver = (ENV["IN_DOCKER"] == "true" ? :docker_headless_mobile_chrome : :mobile_chrome)
+  config.before(:each, type: :system) do
+    driven_by :rack_test
   end
 
-  config.after(:each, :mobile_view) do |example|
-    Capybara.use_default_driver
+  config.before(:each, type: :system, js: true) do
+    driven_by ENV["IN_DOCKER"] == "true" ? :docker_headless_chrome : :chrome
+  end
+
+  config.before(:each, :mobile_view) do |example|
+    driven_by ENV["IN_DOCKER"] == "true" ? :docker_headless_mobile_chrome : :mobile_chrome
   end
 
   config.before(:each, billy: true) do |example|
-    Capybara.current_driver = (ENV["IN_DOCKER"] == "true" ? :selenium_chrome_headless_billy_custom : :selenium_chrome_billy)
-  end
-
-  config.after(:each, billy: true) do |example|
-    Capybara.use_default_driver
+    driven_by ENV["IN_DOCKER"] == "true" ? :selenium_chrome_headless_billy_custom : :selenium_chrome_billy
   end
 
   config.before(:each, :tablet_view) do |example|
-    Capybara.current_driver = (ENV["IN_DOCKER"] == "true" ? :docker_headless_tablet_chrome : :tablet_chrome)
-  end
-
-  config.after(:each, :tablet_view) do |example|
-    Capybara.use_default_driver
+    driven_by ENV["IN_DOCKER"] == "true" ? :docker_headless_tablet_chrome : :tablet_chrome
   end
 end

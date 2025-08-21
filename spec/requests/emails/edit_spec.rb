@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :feature) do
+describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :system) do
   include EmailHelpers
 
   let(:seller) { create(:named_seller) }

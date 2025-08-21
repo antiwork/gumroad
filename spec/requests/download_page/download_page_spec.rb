@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Download Page", type: :feature, js: true) do
+describe("Download Page", type: :system, js: true) do
   describe "open in app" do
     before do
       @product = create(:product, user: create(:user))

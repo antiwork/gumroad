@@ -191,7 +191,9 @@ const FormPage = ({
                         aria-invalid={errors.get(field.key)?.has("products") ?? false}
                         isMulti
                         isClearable
-                        onChange={(items) => updateCustomField(i, { products: items.map(({ id }) => id) })}
+                        onChange={(items) =>
+                          updateCustomField(i, { global: false, products: items.map(({ id }) => id) })
+                        }
                       />
                       <label>
                         <input

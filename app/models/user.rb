@@ -881,7 +881,7 @@ class User < ApplicationRecord
   end
 
   def eligible_for_instant_payouts?
-    !suspended? &&
+    compliant? &&
       !payouts_paused? &&
       payments.completed.count >= 4 &&
       alive_user_compliance_info&.legal_entity_country_code == "US"
@@ -1092,8 +1092,6 @@ class User < ApplicationRecord
       enable_payment_push_notification
       enable_free_downloads_email
       enable_free_downloads_push_notification
-      enable_recurring_subscription_charge_email
-      enable_recurring_subscription_charge_push_notification
     }
     private_constant :FLAGS_TO_ENABLE_BY_DEFAULT
 

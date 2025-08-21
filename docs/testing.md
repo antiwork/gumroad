@@ -5,7 +5,6 @@
   - [Reproduce Buildkite test failures locally](#reproduce-buildkite-test-failures-locally)
   - [Preventing flaky specs in Capybara](#preventing-flaky-specs-in-capybara)
   - [Troubleshooting](#troubleshooting)
-- [QA Wolf](#qa-wolf)
 - [Previewing emails](#previewing-emails)
 - [Custom domains](#custom-domains)
 - [Purchases](#purchases)
@@ -20,17 +19,19 @@
 
 ## Ruby Tests
 
+The whole test suite:
+
 ```bash
 $ bin/rspec
 ```
 
-You almost certainly don't want to run the entire test suite locally, that's best left to [CI](https://buildkite.com/gumroad-inc/web), but when wanting to test your local changes, it can be useful to run the tests in a specific file...
+A single file:
 
 ```bash
 $ bin/rspec spec/requests/dashboard_spec.rb
 ```
 
-...or a specific test...
+A specific test:
 
 ```bash
 $ bin/rspec spec/requests/dashboard_spec.rb:75
@@ -134,10 +135,6 @@ DISABLE_RACK_TIMEOUT="1"
 ```
 
 For the new env variables to take effect, you might need to run `bin/spring stop` before running the tests again.
-
-## QA Wolf
-
-[QA Wolf](https://gumroad.slack.com/archives/C03Q53RAMEE) writes and manages automated tests for us. They should be notified when we release new features or change existing ones so they can adjust existing specs and/or write new ones.
 
 ## Previewing Emails
 

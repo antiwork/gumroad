@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Sales page", type: :feature, js: true do
+describe "Sales page", type: :system, js: true do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
   let(:product1) { create(:product, user: seller, name: "Product 1", price_cents: 100) }
   let(:membership) { create(:membership_product_with_preset_tiered_pricing, user: seller, name: "Membership", is_multiseat_license: true, is_licensed: true) }
@@ -1419,7 +1419,7 @@ describe "Sales page", type: :feature, js: true do
       context "for non-USD purchases" do
         before do
           purchase1.update!(purchase_state: "in_progress", chargeable: create(:chargeable))
-          purchase1.link.update!(price_currency_type: Currency::EUR)
+          purchase1.link.update!(price_currency_type: Currency::EUR, price_cents: 100)
           purchase1.process!
           purchase1.mark_successful!
         end

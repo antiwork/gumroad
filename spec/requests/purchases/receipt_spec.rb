@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Viewing a purchase receipt", type: :feature, js: true) do
+describe("Viewing a purchase receipt", type: :system, js: true) do
   # Shared context for all tests
   let(:purchase) { create(:membership_purchase) }
   let(:manage_membership_url) { Rails.application.routes.url_helpers.manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}") }

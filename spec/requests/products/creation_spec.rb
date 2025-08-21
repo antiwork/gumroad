@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Product creation", type: :feature, js: true do
+describe "Product creation", type: :system, js: true do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
   let(:user_with_admin_role) { create(:user, name: "Admin") }

@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe "Reading Scenario", type: :feature, js: true do
+describe "Reading Scenario", type: :system, js: true do
   before do
     @url_redirect = create(:readable_url_redirect)
     @product = @url_redirect.referenced_link
@@ -92,7 +92,7 @@ describe "Reading Scenario", type: :feature, js: true do
 
     it "uses cookie if media_location only available in cookie" do
       visit("/read/fake_url_redirect_id/fake_read_id")
-      cookie_id = CGI.escape(@url_redirect.external_id)
+      cookie_id = CGI.escape(@product.product_files.first.external_id)
       browser = Capybara.current_session.driver.browser
       browser.manage.delete_cookie(cookie_id)
       browser.manage.add_cookie(name: cookie_id, value: { location: 3, timestamp: Time.current }.to_json)
@@ -131,7 +131,7 @@ describe "Reading Scenario", type: :feature, js: true do
         visit("/read/fake_url_redirect_id/fake_read_id")
         create(:media_location, url_redirect_id: @url_redirect.id, purchase_id: @url_redirect.purchase.id, consumed_at: timestamp,
                                 product_file_id: @product.product_files.first.id, product_id: @product.id, location: 2)
-        cookie_id = CGI.escape(@url_redirect.external_id)
+        cookie_id = CGI.escape(@product.product_files.first.external_id)
         browser = Capybara.current_session.driver.browser
         browser.manage.delete_cookie(cookie_id)
         browser.manage.add_cookie(name: cookie_id, value: { location: 3, timestamp: timestamp + 1.second }.to_json)
@@ -162,7 +162,7 @@ describe "Reading Scenario", type: :feature, js: true do
     end
   end
 
-  describe "readable document consumption analytics", type: :feature, js: true do
+  describe "readable document consumption analytics", type: :system, js: true do
     it "does not record media_location if purchase is nil" do
       readable_url = "https://s3.amazonaws.com/gumroad-specs/specs/billion-dollar-company-chapter-0.pdf"
       installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: @product.user)

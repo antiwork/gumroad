@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Discover - Search scenarios", js: true, type: :feature) do
+describe("Discover - Search scenarios", js: true, type: :system) do
   let(:discover_host) { UrlService.discover_domain_with_protocol }
 
   before do
@@ -73,6 +73,25 @@ describe("Discover - Search scenarios", js: true, type: :feature) do
         check_out(recommendable_product)
       end.to change { recommendable_product.sales.successful.select(&:was_discover_fee_charged?).count }.by(1)
          .and change { RecommendedPurchaseInfo.where(recommendation_type: "search").count }.by(1)
+    end
+
+    it "does not show product in search results if seller is not compliant" do
+      recommendable_product_title = "Nothing but pine martens"
+      recommendable_product = create(:product, :recommendable, name: recommendable_product_title, price_cents: 3378)
+      index_model_records(Link)
+      expect(recommendable_product.recommendable?).to be(true)
+
+      visit discover_url(host: discover_host)
+      fill_in "Search products", with: "pine martens\n"
+      expect_product_cards_in_order([recommendable_product])
+
+      recommendable_product.user.update!(user_risk_state: "not_reviewed")
+      recommendable_product.enqueue_index_update_for(%w[is_recommendable])
+      expect(recommendable_product.recommendable?).to be(false)
+
+      visit discover_url(host: discover_host)
+      fill_in "Search products", with: "pine martens\n"
+      expect(page).not_to have_selector(".product-card")
     end
 
     it "shows autocomplete results for products" do

@@ -2,28 +2,33 @@
 
 require "spec_helper"
 
-describe "MySQL missing table handler" do
-  before(:all) do
-    @connection = ActiveRecord::Base.connection
-    @connection.execute("create table foo (id int)")
-    @connection.execute("insert into foo(id) values (1),(2),(3)")
-  end
-
-  after(:all) do
-    @connection.execute("drop table if exists foo, bar")
-  end
-
+RSpec.describe "MySQL missing table handler" do
   it "retries query if table is missing" do
-    @connection.execute("rename table foo to bar")
+    client = ActiveRecord::Base.connection_db_config
+      .configuration_hash
+      .slice(*%i[host username password database port socket encoding])
+      .then { |conf| Mysql2::Client.new(conf) }
+
+    stub_const("Mysql2::Client::MISSING_TABLE_GRACE_PERIOD", 2)
+
+    client.query("DROP TABLE IF EXISTS `foo`, `bar`")
+    client.query("CREATE TABLE `bar` (id int)")
+    client.query("INSERT INTO `bar`(id) VALUES (1),(2),(3)")
 
     Thread.new do
-      sleep 2
-      ActiveRecord::Base.connection.execute("rename table bar to foo")
+      sleep 1
+      client.query("RENAME TABLE `bar` TO `foo`")
     end
 
+    values = nil
     expect do
-      result = @connection.execute("select * from foo")
-      expect(result.to_a.flatten).to match_array([1, 2, 3])
-    end.not_to raise_error
+      result = client.query("SELECT id FROM `foo`")
+      values = result.map { |row| row["id"].to_i }
+    end.to output(/Error: missing table, retrying in/).to_stderr
+
+    expect(values).to contain_exactly(1, 2, 3)
+  ensure
+    client.query("DROP TABLE IF EXISTS `foo`, `bar`")
+    client.close rescue nil
   end
 end
