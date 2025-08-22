@@ -81,6 +81,7 @@ const ProductLevelSupportEmailRow = React.memo(
                 type="email"
                 value={supportEmail.email}
                 disabled={isDisabled}
+                required={supportEmail.product_ids.length > 0}
                 onChange={handleEmailChange}
               />
               <small>This reply-to email will appear on receipts for selected products.</small>

@@ -38,16 +38,19 @@ describe("Main Settings Scenario", type: :system, js: true) do
   end
 
   context "when email is empty" do
-    before do
-      user.email = nil
-      user.save(validate: false)
-    end
-
-    it "shows an error flash message on save" do
+    it "shows a validation error on save" do
       visit settings_main_path
+
+      within_section "User details", section_element: :section do
+        fill_in("Email", with: '')
+      end
+
       click_on("Update settings")
 
-      expect(page).to have_alert(text: "Please enter an email address!")
+      within_section "User details", section_element: :section do
+        validation_message = find_field("Email").native.attribute("validationMessage")
+        expect(validation_message).to eq "Please fill out this field."
+      end
     end
   end
 

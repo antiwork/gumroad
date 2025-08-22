@@ -66,9 +66,6 @@ type Props = {
 
 const MainPage = (props: Props) => {
   const uid = React.useId();
-  const [formErrors, setFormErrors] = React.useState<Record<"email", boolean>>({
-    email: false,
-  });
   const [userSettings, setUserSettings] = React.useState({
     ...props.user,
     email: props.user.email ?? "",
@@ -84,7 +81,7 @@ const MainPage = (props: Props) => {
   const [isResendingConfirmationEmail, setIsResendingConfirmationEmail] = React.useState(false);
   const [resentConfirmationEmail, setResentConfirmationEmail] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
-  const emailInputRef = React.useRef<HTMLInputElement>(null);
+  const formRef = React.useRef<HTMLFormElement>(null);
 
   const resendConfirmationEmail = async () => {
     setIsResendingConfirmationEmail(true);
@@ -109,13 +106,7 @@ const MainPage = (props: Props) => {
 
   const onSave = asyncVoid(async () => {
     if (props.is_form_disabled) return;
-
-    if (userSettings.email === "") {
-      showAlert("Please enter an email address!", "error");
-      setFormErrors((prev) => ({ ...prev, email: true }));
-      emailInputRef.current?.focus();
-      return;
-    }
+    if (!formRef.current?.reportValidity()) return;
 
     setIsSaving(true);
 
@@ -147,7 +138,7 @@ const MainPage = (props: Props) => {
       onSave={onSave}
       canUpdate={!props.is_form_disabled && !isSaving}
     >
-      <form>
+      <form ref={formRef}>
         <section>
           <header>
             <h2>User details</h2>
@@ -159,10 +150,9 @@ const MainPage = (props: Props) => {
             <input
               type="email"
               id={`${uid}-email`}
-              ref={emailInputRef}
               value={userSettings.email}
               disabled={props.is_form_disabled}
-              aria-invalid={formErrors.email}
+              required
               onChange={(e) => updateUserSettings({ email: e.target.value })}
             />
             {props.user.has_unconfirmed_email && !props.is_form_disabled ? (
