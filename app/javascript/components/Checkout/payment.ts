@@ -85,6 +85,8 @@ export type State = {
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
+  emailTypoSuggestion: string | null;
+  acknowledgedEmails: Set<string>;
 };
 
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
@@ -103,7 +105,8 @@ type SimpleValue =
   | "gift"
   | "payLabel"
   | "warning"
-  | "tip";
+  | "tip"
+  | "emailTypoSuggestion";
 
 type PublicAction =
   | ({ type: "set-value" } & Partial<{ [key in SimpleValue]?: State[key] | undefined }>)
@@ -114,6 +117,7 @@ type PublicAction =
   | { type: "start-payment" }
   | { type: "set-recaptcha-response"; recaptchaResponse: string }
   | { type: "set-payment-method"; paymentMethod: PurchasePaymentMethod }
+  | { type: "acknowledge-email-typo"; email: string }
   | {
       type: "update-products";
       products: Product[];
@@ -145,7 +149,7 @@ export function isProcessing(state: State) {
 }
 
 export function isSubmitDisabled(state: State) {
-  return isProcessing(state) || state.surcharges.type !== "loaded";
+  return isProcessing(state) || state.surcharges.type !== "loaded" || state.emailTypoSuggestion !== null;
 }
 
 const getTotalPriceFromProducts = (state: State) => state.products.reduce((sum, item) => sum + item.price, 0);
@@ -282,6 +286,9 @@ export function createReducer(initial: {
           if (state.status.type === "input") {
             for (const key in action) state.status.errors.delete(key);
           }
+          if ("email" in action && action.email !== state.email) {
+            state.emailTypoSuggestion = null;
+          }
           Object.assign(state, action);
           break;
         case "set-custom-field":
@@ -305,6 +312,10 @@ export function createReducer(initial: {
         }
         case "start-payment":
           state.status = { type: "starting" };
+          break;
+        case "acknowledge-email-typo":
+          state.acknowledgedEmails.add(action.email);
+          state.emailTypoSuggestion = null;
           break;
         case "cancel":
           if (state.status.type === "input") return;
@@ -364,6 +375,8 @@ export function createReducer(initial: {
         tip: { type: "percentage", percentage: initial.defaultTipOption },
         status: { type: "input", errors: new Set() },
         availablePaymentMethods: [],
+        emailTypoSuggestion: null,
+        acknowledgedEmails: new Set<string>(),
       };
     },
   );

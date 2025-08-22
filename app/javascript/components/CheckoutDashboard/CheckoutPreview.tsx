@@ -40,6 +40,8 @@ export const CheckoutPreview = ({
         savedCreditCard: null,
         availablePaymentMethods: [],
         tip: { type: "percentage", percentage: 0 },
+        emailTypoSuggestion: null,
+        acknowledgedEmails: new Set<string>(),
         products: [
           {
             permalink: cartItem.product.permalink,
