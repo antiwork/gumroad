@@ -19,20 +19,7 @@
 <% content_for :content do %>
   <main>
     <header>
-      <h1 class="group-[.sidebar-nav]/body:block hidden">Help</h1>
-      <h1 class="group-[.sidebar-nav]/body:hidden">
-        <%= link_to root_path, class: "flex items-center" do %>
-          <%= image_tag "logo.svg", alt: "Gumroad", class: "dark:invert h-8" %>
-        <% end %>
-      </h1>
-
-      <div class="actions">
-        <% unless current_page?(help_center_root_path) %>
-          <%= link_to help_center_root_path, class: "button",
-            aria: { label: "Search" }, title: "Search" do %>
-            <span class="icon icon-solid-search"></span>
-          <% end %>
-        <% end %>
+      <%= react_component "SupportHeader", props: { host: helper_widget_host, session: helper_session, new_ticket_url: support_index_path(new_ticket: true) }, prerender: true %>
     </header>
     <section class="paragraphs">
       <%= yield %>

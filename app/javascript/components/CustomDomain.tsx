@@ -74,7 +74,11 @@ const CustomDomain = ({
     >
       <legend>
         <label htmlFor={uid}>{label}</label>
-        {includeLearnMoreLink ? <a data-helper-prompt="How do I set up a custom domain?">Learn more</a> : null}
+        {includeLearnMoreLink ? (
+          <a href="/help/article/153-setting-up-a-custom-domain" target="_blank" rel="noreferrer">
+            Learn more
+          </a>
+        ) : null}
       </legend>
       <div className="input input-wrapper">
         <input

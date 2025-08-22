@@ -48,7 +48,9 @@ const PayPalConnectSection = ({
     <section>
       <header>
         <h2>PayPal</h2>
-        <a data-helper-prompt="How do I connect my PayPal account?">Learn more</a>
+        <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
+          Learn more
+        </a>
       </header>
       <div className="paragraphs">
         {!paypalConnect.charge_processor_merchant_id ? (

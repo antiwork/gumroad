@@ -878,7 +878,10 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
           {hasProducts ? "Enable community chat for your products" : "Create a product with community"}
         </NavigationButton>
         <p>
-          or <a data-helper-prompt="How do I enable community chat for my product?">learn more about community chats</a>
+          or{" "}
+          <a href="/help/article/347-gumroad-community" target="_blank" rel="noreferrer">
+            learn more about community chats
+          </a>
         </p>
       </div>
     </section>

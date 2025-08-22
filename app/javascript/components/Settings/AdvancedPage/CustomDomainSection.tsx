@@ -14,7 +14,9 @@ const CustomDomainSection = ({
   <section>
     <header>
       <h2>Custom domain</h2>
-      <a data-helper-prompt="How do I set up a custom domain?">Learn more</a>
+      <a href="/help/article/153-setting-up-a-custom-domain" target="_blank" rel="noreferrer">
+        Learn more
+      </a>
     </header>
 
     <CustomDomain
