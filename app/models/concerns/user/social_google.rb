@@ -39,7 +39,7 @@ module User::SocialGoogle
 
       if user.nil?
         email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
-        user = User.where(email:).first if email&.match(User::EMAIL_REGEX)
+        user = User.where(email:).first if EmailFormatValidator.valid?(email)
 
         if user.nil?
           user = User.new
@@ -78,7 +78,7 @@ module User::SocialGoogle
       # Always update user's email upon log in as it may have changed
       # on google's side
       # https://support.google.com/accounts/answer/19870?hl=en
-      if email&.match(User::EMAIL_REGEX) && user.email&.downcase != email.downcase
+      if EmailFormatValidator.valid?(email) && user.email&.downcase != email.downcase
         user.email = email
       end
 

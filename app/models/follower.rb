@@ -16,7 +16,7 @@ class Follower < ApplicationRecord
   validates_presence_of :user
   validates_presence_of :email
 
-  validates_format_of :email, with: User::EMAIL_REGEX, if: :email_changed?, message: "invalid."
+  validates :email, email_format: { message: "invalid." }, if: :email_changed?
 
   validate :not_confirmed_and_deleted
   validate :follower_user_id_exists

@@ -1407,7 +1407,7 @@ describe User, :vcr do
       end
     end
 
-    describe "#support_email_domain_is_not_reserved" do
+    describe "reserved domain validation for support_email" do
       it "allows support_email to be nil" do
         @user.support_email = nil
         expect(@user).to be_valid
@@ -1416,7 +1416,7 @@ describe User, :vcr do
       it "fails the validation when domain is reserved" do
         @user.support_email = "something@gumroad.com"
         expect(@user).to be_invalid
-        expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
+        expect(@user.errors[:support_email]).to eq ["is reserved"]
       end
     end
 

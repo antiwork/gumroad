@@ -10,7 +10,7 @@ class OneOffMailer < ApplicationMailer
   # param `reply_to`, e.g. reply_to: ApplicationMailer::NOREPLY_EMAIL_WITH_NAME
   def email(user_id: nil, email: nil, subject:, body:, reply_to: nil)
     email ||= User.alive.not_suspended.find_by(id: user_id)&.form_email
-    return if email.blank? || !email.match?(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(email)
 
     @subject = subject
     @body = body
