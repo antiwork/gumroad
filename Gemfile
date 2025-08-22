@@ -145,9 +145,9 @@ gem "private_address_check", "~> 0.5"
 gem "puma", "6.4.2"
 gem "pundit", "~> 2.3"
 gem "public_suffix", "~> 5.0"
-# Rack 3.2+ updates are blocked by
-# https://github.com/antiwork/gumroad/issues/884
-gem "rack", "~> 3.1.0"
+# Rack 3.2+ updates were blocked by cookie-name RFC compliance (see #884).
+# Tests added in PR #972 enforce token-safe cookie names; bumping Rack accordingly.
+gem "rack", "~> 3.2.0"
 gem "rack-attack", "~> 6.6"
 gem "rack-cors", "~> 2.0"
 gem "rack-mini-profiler", "~> 4.0", require: false
