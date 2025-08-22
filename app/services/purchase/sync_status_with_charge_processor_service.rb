@@ -46,10 +46,6 @@ class Purchase::SyncStatusWithChargeProcessorService
         false
       end
     end
-  rescue ChargeProcessorError, ActiveRecord::ActiveRecordError => e
-    Bugsnag.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
-    purchase.mark_failed! if mark_as_failed
-    false
   rescue StandardError => e
     Bugsnag.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
     purchase.mark_failed! if mark_as_failed
