@@ -5813,6 +5813,49 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       login_as user
     end
 
+    describe "payouts paused notice" do
+      it "shows the warning notice when payouts are paused internally by admin" do
+        user.update!(payouts_paused_internally: true)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin.")
+      end
+
+      it "shows the warning notice when payouts are paused internally by admin with a reason" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+        user.comments.create!(
+          author_id: User.last.id,
+          content: "Chargeback rate is too high.",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+        )
+
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+      end
+
+      it "shows the warning notice when payouts are paused internally by Stripe" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements below.")
+      end
+
+      it "shows the warning notice when payouts are paused internally by the system" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
+      end
+
+      it "shows the warning notice when payouts are paused by the user" do
+        user.update!(payouts_paused_by_user: true)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "You have paused your payouts.")
+      end
+    end
+
     describe "pausing payouts" do
       it "allows enabling and disabling payouts" do
         visit settings_payments_path
@@ -5836,14 +5879,53 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(user.reload.payouts_paused_by_user?).to be false
       end
 
-      it "disables the toggle when payouts are paused internally" do
+      it "disables the toggle when payouts are paused internally by admin" do
         user.update!(payouts_paused_internally: true)
         visit settings_payments_path
 
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts were paused by our payment processor. Please update your information below.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad admin.")
+        end
+      end
+
+      it "disables the toggle when payouts are paused internally by admin with a reason" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+        user.comments.create!(
+          author_id: User.last.id,
+          content: "Chargeback rate is too high.",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+        )
+
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+        end
+      end
+
+      it "disables the toggle when payouts are paused internally by Stripe" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements above.")
+        end
+      end
+
+      it "disables the toggle when payouts are paused internally by the system" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
         end
       end
     end

@@ -579,6 +579,7 @@ describe Purchase::Blockable do
           purchase.mark_failed!
 
           expect(seller.reload.payouts_paused_internally).to be(false)
+          expect(seller.payouts_paused_by_source).to be nil
         end
       end
 
@@ -589,6 +590,7 @@ describe Purchase::Blockable do
           purchase.mark_failed!
 
           expect(seller.reload.payouts_paused_internally).to be(false)
+          expect(seller.payouts_paused_by_source).to be nil
         end
       end
 
@@ -602,6 +604,7 @@ describe Purchase::Blockable do
           old_purchase.mark_failed!
 
           expect(old_seller.reload.payouts_paused_internally).to be(false)
+          expect(old_seller.payouts_paused_by_source).to be nil
         end
 
         it "does not create a comment" do
@@ -622,6 +625,7 @@ describe Purchase::Blockable do
           newer_purchase.mark_failed!
 
           expect(newer_seller.reload.payouts_paused_internally).to be(true)
+          expect(newer_seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
         end
       end
 
@@ -631,6 +635,7 @@ describe Purchase::Blockable do
           purchase.mark_failed!
 
           expect(seller.reload.payouts_paused_internally).to be(false)
+          expect(seller.payouts_paused_by_source).to be nil
         end
       end
 
@@ -640,6 +645,7 @@ describe Purchase::Blockable do
           purchase.mark_failed!
 
           expect(seller.reload.payouts_paused_internally).to be(true)
+          expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
         end
 
         it "creates a comment with the failed amount" do
@@ -659,6 +665,7 @@ describe Purchase::Blockable do
               create_list(:failed_purchase, 3, link: product, price_cents: 250, created_at: 61.minutes.ago)
               purchase.mark_failed!
               expect(seller.reload.payouts_paused_internally).to be(false)
+              expect(seller.payouts_paused_by_source).to be nil
             end
           end
         end
@@ -677,6 +684,7 @@ describe Purchase::Blockable do
             purchase.mark_failed!
 
             expect(seller.reload.payouts_paused_internally).to be(false)
+            expect(seller.payouts_paused_by_source).to be nil
           end
         end
 
@@ -687,6 +695,7 @@ describe Purchase::Blockable do
             purchase.mark_failed!
 
             expect(seller.reload.payouts_paused_internally).to be(true)
+            expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
           end
         end
       end
