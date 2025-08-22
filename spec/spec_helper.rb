@@ -145,7 +145,7 @@ RSpec.configure do |config|
   config.before(:suite) do
     # Setup external service mocks if enabled
     ExternalServiceMocks.setup! unless ENV["DISABLE_SERVICE_MOCKS"] == "true"
-    
+
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
     [
