@@ -15,7 +15,7 @@ module User::StripeConnect
           user = User.new
           user.provider = :stripe_connect
           email = data["info"]["email"]
-          user.email = email if email&.match(User::EMAIL_REGEX)
+          user.email = email if EmailFormatValidator.valid?(email)
           user.name = data["info"]["name"]
           user.password = Devise.friendly_token[0, 20]
           user.skip_confirmation!
