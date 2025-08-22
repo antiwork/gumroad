@@ -116,60 +116,52 @@ describe Charge::Chargeable do
   end
 
   describe "#support_email" do
-    context "when purchase" do
-      let(:chargeable) { create(:purchase, link: product) }
+    let(:user_level_support_email) { "user-level-support@example.com" }
+    let(:product_level_support_email) { "product-level-support@example.com" }
+    let(:seller) { create(:named_seller, support_email: user_level_support_email) }
+
+    context "on a purchase" do
+      let(:chargeable) { create(:purchase, link: product, seller:) }
+
       context "when link's support email is set" do
-        let(:product) { create(:product, support_email: "support@example.com") }
+        let(:product) { create(:product, support_email: product_level_support_email, user: seller) }
 
         it "returns support_email of the link" do
-          expect(chargeable.support_email).to eq("support@example.com")
+          expect(chargeable.support_email).to eq(product_level_support_email)
         end
       end
 
       context "when link's support email is not set" do
-        let(:product) { create(:product, support_email: nil) }
-        it "returns seller.support_or_form_email" do
-          allow(chargeable.seller).to receive(:support_or_form_email).and_return("seller@example.com")
+        let(:product) { create(:product, support_email: nil, user: seller) }
 
-          expect(chargeable.support_email).to eq("seller@example.com")
+        it "returns seller.support_or_form_email" do
+          expect(chargeable.support_email).to eq(user_level_support_email)
         end
       end
     end
 
-    context "when charge" do
-      let(:chargeable) { create(:charge) }
-
+    context "on a charge" do
       context "when all purchases links have the same support email" do
-        let(:product1) { create(:product, support_email: "support@example.com") }
-        let(:product2) { create(:product, support_email: "support@example.com") }
-        let(:purchase1) { create(:purchase, link: product1) }
-        let(:purchase2) { create(:purchase, link: product2) }
+        let(:chargeable) { create(:charge, purchases: [purchase1, purchase2], seller:) }
+        let(:product1) { create(:product, support_email: product_level_support_email, user: seller) }
+        let(:product2) { create(:product, support_email: product_level_support_email, user: seller) }
+        let(:purchase1) { create(:purchase, link: product1, seller:) }
+        let(:purchase2) { create(:purchase, link: product2, seller:) }
 
-        before do
-          chargeable.purchases << purchase1
-          chargeable.purchases << purchase2
-        end
-
-        it "returns the common support email" do
-          expect(chargeable.support_email).to eq("support@example.com")
+        it "returns the product level support email" do
+          expect(chargeable.support_email).to eq(product_level_support_email)
         end
       end
 
-      context "when purchases links have different support emails" do
-        let(:product1) { create(:product, support_email: "support@example.com") }
-        let(:product2) { create(:product, support_email: "sales@example.com") }
-        let(:purchase1) { create(:purchase, link: product1) }
-        let(:purchase2) { create(:purchase, link: product2) }
+      context "when not all purchases links have the same support email" do
+        let(:chargeable) { create(:charge, purchases: [purchase1, purchase2], seller:) }
+        let(:product1) { create(:product, support_email: product_level_support_email, user: seller) }
+        let(:product2) { create(:product, support_email: nil, user: seller) }
+        let(:purchase1) { create(:purchase, link: product1, seller:) }
+        let(:purchase2) { create(:purchase, link: product2, seller:) }
 
-        before do
-          chargeable.purchases << purchase1
-          chargeable.purchases << purchase2
-        end
-
-        it "returns seller's support email" do
-          allow(chargeable.seller).to receive(:support_or_form_email).and_return("seller@example.com")
-
-          expect(chargeable.support_email).to eq("seller@example.com")
+        it "returns the user level support email" do
+          expect(chargeable.support_email).to eq(user_level_support_email)
         end
       end
     end

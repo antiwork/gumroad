@@ -73,11 +73,13 @@ module Charge::Chargeable
   end
 
   def support_email
-    return link.support_email || seller.support_or_form_email if is_a?(Purchase)
+    unique_support_emails = successful_purchases.joins(:link).pluck("links.support_email").uniq
 
-    product_level_support_emails = successful_purchases.includes(:link).map(&:link).uniq.filter_map(&:support_email).uniq
-
-    product_level_support_emails.size == 1 ? product_level_support_emails.first : seller.support_or_form_email
+    if unique_support_emails.size == 1 && unique_support_emails.first.present?
+      unique_support_emails.first
+    else
+      seller.support_or_form_email
+    end
   end
 
   def unbundled_purchases
