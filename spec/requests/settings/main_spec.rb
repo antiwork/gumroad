@@ -42,7 +42,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
       visit settings_main_path
 
       within_section "User details", section_element: :section do
-        fill_in("Email", with: '')
+        fill_in("Email", with: "")
       end
 
       click_on("Update settings")
