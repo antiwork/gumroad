@@ -176,8 +176,31 @@ export const deleteDiscountCollection = async (id: string, deleteCodes: boolean 
             },
           });
 
+          // Check if response is JSON
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Server returned non-JSON response:', {
+              status: response.status,
+              statusText: response.statusText,
+              contentType,
+              text: text.substring(0, 500) // First 500 chars for debugging
+            });
+            throw new Error(`Server returned ${response.status} ${response.statusText}. Expected JSON but got ${contentType}`);
+          }
+
           const responseData = cast<
-            { success: true; message: string; created_count: number } | { success: false; error_message: string; failed_codes?: { name: string; error: string }[] }
+            {
+              success: true;
+              message: string;
+              created_count: number;
+              discount_collections: DiscountCollection[];
+              pagination: PaginationProps;
+            } | {
+              success: false;
+              error_message: string;
+              failed_codes?: { name: string; error: string }[]
+            }
           >(await response.json());
 
           if (!responseData.success) throw new Error(responseData.error_message);

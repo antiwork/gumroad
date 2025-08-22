@@ -128,10 +128,10 @@ const DiscountCollectionsPage = ({
     if (isSearchPopoverOpen) searchInputRef.current?.focus();
   }, [isSearchPopoverOpen]);
 
-  const deleteCollection = async (id: string) => {
+  const deleteCollection = async (id: string, deleteCodes: boolean = false) => {
     try {
       setIsLoading(true);
-      await deleteDiscountCollection(id);
+      await deleteDiscountCollection(id, deleteCodes);
 
       // Remove the deleted collection from the local state immediately
       setDiscountCollections(prev => prev.filter(collection => collection.id !== id));
@@ -142,12 +142,19 @@ const DiscountCollectionsPage = ({
         count: Math.max(0, prev.count - 1)
       }));
 
-      showAlert("Successfully deleted discount collection!", "success");
+      // Close the aside panel if the deleted collection was selected
+      if (selectedCollectionId === id) {
+        setSelectedCollectionId(null);
+      }
+
+      const action = deleteCodes ? "deleted the collection and all its discount codes" : "deleted the collection (discount codes were kept)";
+      showAlert(`Successfully ${action}!`, "success");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
     } finally {
       setIsLoading(false);
+      setDeleteConfirmation(null);
     }
   };
 
@@ -177,230 +184,278 @@ const DiscountCollectionsPage = ({
   const selectedCollection = selectedCollectionId ? discountCollections.find(c => c.id === selectedCollectionId) : null;
 
   return view === "list" ? (
-    <Layout
-      currentPage="discount_collections"
-      pages={pages}
-      actions={
-        <>
-          <Popover
-            open={isSearchPopoverOpen}
-            onToggle={setIsSearchPopoverOpen}
-            aria-label="Search"
-            trigger={
-              <div className="button">
-                <Icon name="solid-search" />
-              </div>
-            }
-          >
-            <div className="input">
-              <Icon name="solid-search" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search"
-                value={searchQuery ?? ""}
-                onChange={(evt) => {
-                  setSearchQuery(evt.target.value);
-                  debouncedLoadDiscountCollections();
-                }}
-              />
-            </div>
-          </Popover>
-          <Button
-            color="accent"
-            onClick={() => {
-              setSelectedCollectionId(null);
-              setView("create");
-            }}
-            disabled={false}
-          >
-            New collection
-          </Button>
-        </>
-      }
-    >
-      <section className="paragraphs">
-        {discountCollections.length > 0 ? (
+    <>
+      <Layout
+        currentPage="discount_collections"
+        pages={pages}
+        actions={
           <>
-            <table aria-live="polite" aria-busy={isLoading}>
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Collection</th>
-                  <th {...thProps("offer_codes_count")}>Discount Codes</th>
-                  <th>Total Uses</th>
-                  <th>Total Revenue</th>
-                  <th {...thProps("created_at")}>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discountCollections.map((collection) => {
-                  const createdDate = new Date(collection.created_at);
-
-                  return (
-                    <tr
-                      key={collection.id}
-                      aria-selected={collection.id === selectedCollectionId}
-                      onClick={() => setSelectedCollectionId(collection.id)}
-                    >
-                      <td>
-                        <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
-                          <div>
-                            <b>{collection.name}</b>
-                          </div>
-                          {collection.description && (
-                            <small>{collection.description}</small>
-                          )}
-                        </div>
-                      </td>
-                      <td>{collection.offer_codes_count}</td>
-                      <td>{collection.total_uses}</td>
-                      <td>{formatRevenue(collection.total_revenue_cents)}</td>
-                      <td>{formatDateTime(createdDate)}</td>
-                      <td>
-                        <div className="actions">
-                          <Button
-                            aria-label="View collection"
-                            onClick={() => {
-                              window.location.href = `/checkout/discount_collections/${collection.id}`;
-                            }}
-                          >
-                            <Icon name="arrow-right" />
-                          </Button>
-                          <Button
-                            aria-label="Edit"
-                            disabled={!collection.can_update || isLoading}
-                            onClick={() => {
-                              setSelectedCollectionId(collection.id);
-                              setView("edit");
-                            }}
-                          >
-                            <Icon name="pencil" />
-                          </Button>
-                          <Button
-                            aria-label="Bulk create codes"
-                            disabled={!collection.can_update || isLoading}
-                            onClick={() => {
-                              setSelectedCollectionId(collection.id);
-                              setView("bulk_create");
-                            }}
-                          >
-                            <Icon name="plus" />
-                          </Button>
-                          <Popover
-                            open={popoverCollectionId === collection.id}
-                            onToggle={(open) => setPopoverCollectionId(open ? collection.id : null)}
-                            aria-label="Open collection action menu"
-                            trigger={
-                              <div className="button">
-                                <Icon name="three-dots" />
-                              </div>
-                            }
-                          >
-                            <div role="menu">
-                              <div
-                                role="menuitem"
-                                className="danger"
-                                inert={!collection.can_destroy || isLoading}
-                                onClick={asyncVoid(async () => {
-                                  try {
-                                    setIsLoading(true);
-                                    await deleteCollection(collection.id);
-                                  } catch (e) {
-                                    assertResponseError(e);
-                                    showAlert(e.message, "error");
-                                  }
-                                  setIsLoading(false);
-                                })}
-                              >
-                                <Icon name="trash2" />
-                                &ensp;Delete
-                              </div>
-                            </div>
-                          </Popover>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {pagination.pages > 1 ? (
-              <Pagination
-                onChangePage={(newPage) => loadDiscountCollections({ page: newPage, query: searchQuery, sort })}
-                pagination={pagination}
-              />
-            ) : null}
-          </>
-        ) : (
-          <div className="placeholder">
-            <figure>
-              <img src={placeholder} alt="" />
-            </figure>
-            <div>
-              <h2>No discount collections yet</h2>
-              <p>Create collections to organize your discount codes and generate multiple codes at once</p>
-              <p>
-                <a data-helper-prompt="How can I create discount collections?">Learn more about discount collections</a>
-              </p>
-            </div>
-          </div>
-        )}
-        {selectedCollection ? (
-          <aside>
-            <header>
-              <h2>{selectedCollection.name}</h2>
-              <button className="close" aria-label="Close" onClick={() => setSelectedCollectionId(null)} />
-            </header>
-            <section className="stack">
-              <h3>Details</h3>
-              {selectedCollection.description && (
-                <div>
-                  <h5>Description</h5>
-                  <p>{selectedCollection.description}</p>
+            <Popover
+              open={isSearchPopoverOpen}
+              onToggle={setIsSearchPopoverOpen}
+              aria-label="Search"
+              trigger={
+                <div className="button">
+                  <Icon name="solid-search" />
                 </div>
-              )}
-              <div>
-                <h5>Discount Codes</h5>
-                {selectedCollection.offer_codes_count}
-              </div>
-              <div>
-                <h5>Total Uses</h5>
-                {selectedCollection.total_uses}
-              </div>
-              <div>
-                <h5>Total Revenue</h5>
-                {formatRevenue(selectedCollection.total_revenue_cents)}
-              </div>
-              <div>
-                <h5>Created</h5>
-                {formatDateTime(new Date(selectedCollection.created_at))}
-              </div>
-            </section>
-            <section
-              style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}
+              }
             >
-              <Button onClick={() => setView("edit")} disabled={!selectedCollection.can_update || isLoading}>
-                Edit
-              </Button>
-              <Button onClick={() => setView("bulk_create")} disabled={!selectedCollection.can_update || isLoading}>
-                Bulk Create Codes
+              <div className="input">
+                <Icon name="solid-search" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search"
+                  value={searchQuery ?? ""}
+                  onChange={(evt) => {
+                    setSearchQuery(evt.target.value);
+                    debouncedLoadDiscountCollections();
+                  }}
+                />
+              </div>
+            </Popover>
+            <Button
+              color="accent"
+              onClick={() => {
+                setSelectedCollectionId(null);
+                setView("create");
+              }}
+              disabled={false}
+            >
+              New collection
+            </Button>
+          </>
+        }
+      >
+        <section className="paragraphs">
+          {discountCollections.length > 0 ? (
+            <>
+              <table aria-live="polite" aria-busy={isLoading}>
+                <thead>
+                  <tr>
+                    <th {...thProps("name")}>Collection</th>
+                    <th {...thProps("offer_codes_count")}>Discount Codes</th>
+                    <th>Total Uses</th>
+                    <th>Total Revenue</th>
+                    <th {...thProps("created_at")}>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {discountCollections.map((collection) => {
+                    const createdDate = new Date(collection.created_at);
+
+                    return (
+                      <tr
+                        key={collection.id}
+                        aria-selected={collection.id === selectedCollectionId}
+                        onClick={() => setSelectedCollectionId(collection.id)}
+                      >
+                        <td>
+                          <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+                            <div>
+                              <b>{collection.name}</b>
+                            </div>
+                            {collection.description && (
+                              <small>{collection.description}</small>
+                            )}
+                          </div>
+                        </td>
+                        <td>{collection.offer_codes_count}</td>
+                        <td>{collection.total_uses}</td>
+                        <td>{formatRevenue(collection.total_revenue_cents)}</td>
+                        <td>{formatDateTime(createdDate)}</td>
+                        <td>
+                          <div className="actions">
+                            <Button
+                              aria-label="View collection"
+                              onClick={() => {
+                                window.location.href = `/checkout/discount_collections/${collection.id}`;
+                              }}
+                            >
+                              <Icon name="arrow-right" />
+                            </Button>
+                            <Button
+                              aria-label="Edit"
+                              disabled={!collection.can_update || isLoading}
+                              onClick={() => {
+                                setSelectedCollectionId(collection.id);
+                                setView("edit");
+                              }}
+                            >
+                              <Icon name="pencil" />
+                            </Button>
+                            <Button
+                              aria-label="Bulk create codes"
+                              disabled={!collection.can_update || isLoading}
+                              onClick={() => {
+                                setSelectedCollectionId(collection.id);
+                                setView("bulk_create");
+                              }}
+                            >
+                              <Icon name="plus" />
+                            </Button>
+                            <Popover
+                              open={popoverCollectionId === collection.id}
+                              onToggle={(open) => setPopoverCollectionId(open ? collection.id : null)}
+                              aria-label="Open collection action menu"
+                              trigger={
+                                <div className="button">
+                                  <Icon name="three-dots" />
+                                </div>
+                              }
+                            >
+                              <div role="menu">
+                                <div
+                                  role="menuitem"
+                                  className="danger"
+                                  inert={!collection.can_destroy || isLoading}
+                                  onClick={() => {
+                                    setDeleteConfirmation({
+                                      collectionId: collection.id,
+                                      collectionName: collection.name,
+                                      offerCodesCount: collection.offer_codes_count
+                                    });
+                                  }}
+                                >
+                                  <Icon name="trash2" />
+                                  &ensp;Delete
+                                </div>
+                              </div>
+                            </Popover>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {pagination.pages > 1 ? (
+                <Pagination
+                  onChangePage={(newPage) => loadDiscountCollections({ page: newPage, query: searchQuery, sort })}
+                  pagination={pagination}
+                />
+              ) : null}
+            </>
+          ) : (
+            <div className="placeholder">
+              <figure>
+                <img src={placeholder} alt="" />
+              </figure>
+              <div>
+                <h2>No discount collections yet</h2>
+                <p>Create collections to organize your discount codes and generate multiple codes at once</p>
+                <p>
+                  <a data-helper-prompt="How can I create discount collections?">Learn more about discount collections</a>
+                </p>
+              </div>
+            </div>
+          )}
+          {selectedCollection ? (
+            <aside>
+              <header>
+                <h2>{selectedCollection.name}</h2>
+                <button className="close" aria-label="Close" onClick={() => setSelectedCollectionId(null)} />
+              </header>
+              <section className="stack">
+                <h3>Details</h3>
+                {selectedCollection.description && (
+                  <div>
+                    <h5>Description</h5>
+                    <p>{selectedCollection.description}</p>
+                  </div>
+                )}
+                <div>
+                  <h5>Discount Codes</h5>
+                  {selectedCollection.offer_codes_count}
+                </div>
+                <div>
+                  <h5>Total Uses</h5>
+                  {selectedCollection.total_uses}
+                </div>
+                <div>
+                  <h5>Total Revenue</h5>
+                  {formatRevenue(selectedCollection.total_revenue_cents)}
+                </div>
+                <div>
+                  <h5>Created</h5>
+                  {formatDateTime(new Date(selectedCollection.created_at))}
+                </div>
+              </section>
+              <section
+                style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}
+              >
+                <Button onClick={() => setView("edit")} disabled={!selectedCollection.can_update || isLoading}>
+                  Edit
+                </Button>
+                <Button onClick={() => setView("bulk_create")} disabled={!selectedCollection.can_update || isLoading}>
+                  Bulk Create Codes
+                </Button>
+                <Button
+                  color="danger"
+                  onClick={() => {
+                    if (!selectedCollectionId) return;
+                    setDeleteConfirmation({
+                      collectionId: selectedCollectionId,
+                      collectionName: selectedCollection.name,
+                      offerCodesCount: selectedCollection.offer_codes_count
+                    });
+                  }}
+                  disabled={!selectedCollection.can_destroy || isLoading}
+                >
+                  Delete
+                </Button>
+              </section>
+            </aside>
+          ) : null}
+        </section>
+      </Layout>
+
+      {/* Confirmation dialog for deleting collections */}
+      {deleteConfirmation && (
+        <Modal
+          open
+          title="Delete Collection"
+          onClose={() => setDeleteConfirmation(null)}
+          footer={
+            <>
+              <Button onClick={() => setDeleteConfirmation(null)} disabled={isLoading}>
+                Cancel
               </Button>
               <Button
                 color="danger"
-                onClick={asyncVoid(async () => {
-                  if (!selectedCollectionId) return;
-                  await deleteCollection(selectedCollectionId);
-                  setSelectedCollectionId(null);
-                })}
-                disabled={!selectedCollection.can_destroy || isLoading}
+                onClick={() => deleteCollection(deleteConfirmation.collectionId, false)}
+                disabled={isLoading}
               >
-                {isLoading ? "Deleting..." : "Delete"}
+                {isLoading ? "Deleting..." : "Keep Codes"}
               </Button>
-            </section>
-          </aside>
-        ) : null}
-      </section>
-    </Layout>
+              {deleteConfirmation.offerCodesCount > 0 && (
+                <Button
+                  color="danger"
+                  onClick={() => deleteCollection(deleteConfirmation.collectionId, true)}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Deleting..." : "Delete Codes Too"}
+                </Button>
+              )}
+            </>
+          }
+        >
+          <div className="stack">
+            <p>
+              Are you sure you want to delete <strong>{deleteConfirmation.collectionName}</strong>?
+            </p>
+            {deleteConfirmation.offerCodesCount > 0 && (
+              <div className="warning">
+                <p>
+                  This collection has <strong>{deleteConfirmation.offerCodesCount}</strong> discount code{deleteConfirmation.offerCodesCount === 1 ? '' : 's'}.
+                </p>
+                <p>What would you like to do with them?</p>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </>
   ) : view === "edit" ? (
     <DiscountCollectionForm
       title="Edit collection"
@@ -436,6 +491,11 @@ const DiscountCollectionsPage = ({
           setIsLoading(true);
           const result = await bulkCreateCodes(selectedCollection.id, payload);
           showAlert(result.message, "success");
+
+          // Update the local state with the returned data
+          setDiscountCollections(result.discount_collections);
+          setPagination(result.pagination);
+
           setView("list");
         } catch (e) {
           assertResponseError(e);

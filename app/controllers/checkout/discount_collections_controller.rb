@@ -144,7 +144,7 @@ class Checkout::DiscountCollectionsController < Sellers::BaseController
 
             count.times do |i|
               code_name = name_template.gsub('{n}', (i + 1).to_s)
-              code_value = generate_unique_code(current_seller)
+              code_value = discount_collection.generate_unique_code
 
               offer_code = current_seller.offer_codes.build(
                 name: code_name,
@@ -170,10 +170,14 @@ class Checkout::DiscountCollectionsController < Sellers::BaseController
             end
 
             if failed_codes.empty?
+              pagination, discount_collections = fetch_discount_collections
+              presenter = Checkout::DiscountCollectionsPresenter.new(pundit_user:)
               render json: {
                 success: true,
                 message: "Successfully created #{created_codes.count} discount codes",
-                created_count: created_codes.count
+                created_count: created_codes.count,
+                discount_collections: discount_collections.map { presenter.discount_collection_props(_1) },
+                pagination: pagination
               }
             else
               render json: {
@@ -236,12 +240,5 @@ class Checkout::DiscountCollectionsController < Sellers::BaseController
 
       pagination, discount_collections = pagy(scope, items: PER_PAGE, page: paged_params[:page] || 1)
       [PagyPresenter.new(pagination).metadata, discount_collections]
-    end
-
-    def generate_unique_code(user)
-      loop do
-        code = SecureRandom.alphanumeric(8).upcase
-        break code unless user.offer_codes.alive.exists?(code: code)
-      end
     end
 end

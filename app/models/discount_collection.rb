@@ -74,12 +74,12 @@ class DiscountCollection < ApplicationRecord
     )
   end
 
-  private
-
   def generate_unique_code
     loop do
       code = SecureRandom.alphanumeric(8).upcase
       break code unless user.offer_codes.alive.exists?(code: code)
     end
   end
+
+  private
 end
