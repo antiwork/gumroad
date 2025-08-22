@@ -8,10 +8,10 @@ import { ResponseError, request, assertResponseError } from "$app/utils/request"
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ProductLevelSupportEmailsForm } from "$app/components/server-components/Settings/ProductLevelSupportEmailsForm";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
@@ -64,114 +64,6 @@ type Props = {
   };
 };
 
-type UserSettings = Props["user"] & {
-  email: string;
-  support_email: string;
-};
-
-const AddProductLevelSupportEmailButton = ({
-  addNewProductLevelSupportEmail,
-}: {
-  addNewProductLevelSupportEmail: () => void;
-}) => (
-  <Button color="primary" onClick={() => addNewProductLevelSupportEmail()}>
-    <Icon name="plus" />
-    Add a product specific email
-  </Button>
-);
-
-const ProductLevelSupportEmailRow = ({
-  idx,
-  productLevelSupportEmail,
-  userSettings,
-  updateUserSettings,
-}: {
-  idx: number;
-  productLevelSupportEmail: ProductLevelSupportEmail;
-  userSettings: UserSettings;
-  updateUserSettings: (user: UserSettings) => void;
-}) => {
-  const uid = React.useId();
-  const [expanded, setExpanded] = React.useState(!productLevelSupportEmail.email); // Expand newly added rows
-  const updateProductLevelSupportEmail = (update: Partial<ProductLevelSupportEmail>) => {
-    updateUserSettings({
-      ...userSettings,
-      product_level_support_emails: [
-        ...userSettings.product_level_support_emails.slice(0, idx),
-        { ...productLevelSupportEmail, ...update },
-        ...userSettings.product_level_support_emails.slice(idx + 1),
-      ],
-    });
-  };
-  const tagList = React.useMemo(() => {
-    const otherEmails = userSettings.product_level_support_emails.filter((_value, index) => index !== idx);
-
-    const unavailableProductIds = otherEmails.map(({ product_ids }) => product_ids).flat();
-
-    return userSettings.products
-      .filter(({ id }) => !unavailableProductIds.includes(id))
-      .map(({ id, name }) => ({ id, label: name }));
-  }, [userSettings.products, userSettings.product_level_support_emails, idx]);
-
-  return (
-    <div role="listitem">
-      <div className="content">
-        <Icon name="envelope-fill" className="type-icon" />
-        <div className="ml-1">
-          <h4>{productLevelSupportEmail.email || "No email set"}</h4>
-          <span>
-            {productLevelSupportEmail.product_ids.length}{" "}
-            {productLevelSupportEmail.product_ids.length === 1 ? "product" : "products"}
-          </span>
-        </div>
-      </div>
-      <div className="actions">
-        <Button onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit email">
-          {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
-        </Button>
-        <Button
-          onClick={() =>
-            updateUserSettings({
-              ...userSettings,
-              product_level_support_emails: userSettings.product_level_support_emails.filter(
-                (_value, index) => index !== idx,
-              ),
-            })
-          }
-          aria-label="Delete email"
-        >
-          <Icon name="trash2" />
-        </Button>
-      </div>
-      {expanded ? (
-        <div className="paragraphs">
-          <fieldset>
-            <label htmlFor={`${uid}email`}>Email</label>
-            <input
-              id={`${uid}email`}
-              type="email"
-              value={productLevelSupportEmail.email}
-              onChange={(evt) => updateProductLevelSupportEmail({ email: evt.target.value })}
-            />
-            <small>This reply-to email will appear on receipts for selected products.</small>
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-products`}>Products</label>
-            </legend>
-            <TagInput
-              inputId={`${uid}-products`}
-              tagIds={productLevelSupportEmail.product_ids}
-              tagList={tagList}
-              onChangeTagIds={(productIds) => updateProductLevelSupportEmail({ product_ids: productIds })}
-            />
-          </fieldset>
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 const MainPage = (props: Props) => {
   const uid = React.useId();
   const [formErrors, setFormErrors] = React.useState<Record<"email", boolean>>({
@@ -186,12 +78,8 @@ const MainPage = (props: Props) => {
   });
   const updateUserSettings = (settings: Partial<typeof userSettings>) =>
     setUserSettings((prev) => ({ ...prev, ...settings }));
-
-  const addNewProductLevelSupportEmail = React.useCallback(() => {
-    updateUserSettings({
-      product_level_support_emails: [...userSettings.product_level_support_emails, { email: "", product_ids: [] }],
-    });
-  }, [userSettings]);
+  const handleProductLevelSupportEmailsChange = (emails: ProductLevelSupportEmail[]) =>
+    updateUserSettings({ product_level_support_emails: emails });
 
   const [isResendingConfirmationEmail, setIsResendingConfirmationEmail] = React.useState(false);
   const [resentConfirmationEmail, setResentConfirmationEmail] = React.useState(false);
@@ -236,15 +124,7 @@ const MainPage = (props: Props) => {
         url: Routes.settings_main_path(),
         method: "PUT",
         accept: "json",
-        data: {
-          user: {
-            ...userSettings,
-            product_level_support_emails: userSettings.product_level_support_emails.map((productLevelSupportEmail) => ({
-              email: productLevelSupportEmail.email,
-              product_ids: productLevelSupportEmail.product_ids,
-            })),
-          },
-        },
+        data: { user: userSettings },
       });
       const responseData = cast<{ success: true } | { success: false; error_message: string }>(await response.json());
       if (responseData.success) {
@@ -440,27 +320,12 @@ const MainPage = (props: Props) => {
             />
             <small>This email is listed on the receipt of every sale.</small>
           </fieldset>
-          {userSettings.product_level_support_emails.length ? (
-            <>
-              <div className="rows" role="list">
-                {userSettings.product_level_support_emails.map((support_email, idx) => (
-                  <ProductLevelSupportEmailRow
-                    key={idx}
-                    idx={idx}
-                    productLevelSupportEmail={support_email}
-                    userSettings={userSettings}
-                    updateUserSettings={updateUserSettings}
-                  />
-                ))}
-              </div>
-              <AddProductLevelSupportEmailButton addNewProductLevelSupportEmail={addNewProductLevelSupportEmail} />
-            </>
-          ) : (
-            <div className="placeholder">
-              <AddProductLevelSupportEmailButton addNewProductLevelSupportEmail={addNewProductLevelSupportEmail} />
-              <div>Use a different reply-to email for specific products.</div>
-            </div>
-          )}
+          <ProductLevelSupportEmailsForm
+            productLevelSupportEmails={userSettings.product_level_support_emails}
+            products={props.user.products}
+            isDisabled={props.is_form_disabled}
+            onChange={handleProductLevelSupportEmailsChange}
+          />
         </section>
         {props.user.seller_refund_policy.enabled ? (
           <section>
