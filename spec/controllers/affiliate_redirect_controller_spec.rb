@@ -23,6 +23,19 @@ describe AffiliateRedirectController do
       expect(response.location).not_to include("affiliate_id=")
     end
 
+    it "sets an RFC-compliant (token-safe) cookie name" do
+      get :set_cookie_and_redirect, params: { affiliate_id: direct_affiliate.external_id_numeric }
+
+      # Parse cookies from Set-Cookie header and locate the affiliate cookie
+      set_cookie = response.header["Set-Cookie"]
+      cookies = Array.wrap(set_cookie).flat_map { |cookie_string| HTTP::Cookie.parse(cookie_string, request.url) }
+      cookie = cookies.find { |c| CGI.unescape(c.name) == direct_affiliate.cookie_key }
+
+      expect(cookie).to be_present
+      expect(cookie.name).to match(/\A[a-zA-Z0-9_\-]+\z/)
+      expect(cookie.name).not_to include("=")
+    end
+
     context "when a custom destination URL is not set" do
       it "does not append anything to the redirect URL if there are no URL params" do
         get :set_cookie_and_redirect, params: { affiliate_id: direct_affiliate.external_id_numeric }

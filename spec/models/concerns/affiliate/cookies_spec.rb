@@ -16,6 +16,12 @@ describe Affiliate::Cookies do
       it "generates different keys for different affiliates" do
         expect(affiliate.cookie_key).not_to eq(another_affiliate.cookie_key)
       end
+
+      it "is RFC-compliant (token-safe characters only)" do
+        # RFC 6265 token: one or more characters excluding control chars and separators.
+        # We enforce a conservative subset: letters, digits, underscore, and hyphen.
+        expect(affiliate.cookie_key).to match(/\A[a-zA-Z0-9_\-]+\z/)
+      end
     end
 
     describe "#cookie_id" do
