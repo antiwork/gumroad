@@ -495,6 +495,8 @@ class User < ApplicationRecord
   end
 
   def product_level_support_emails
+    return unless product_level_support_emails_enabled?
+
     products
       .where.not(support_email: nil)
       .group_by(&:support_email)
@@ -504,6 +506,8 @@ class User < ApplicationRecord
   end
 
   def update_product_level_support_emails!(entries)
+    return unless product_level_support_emails_enabled?
+
     entries = Array.wrap(entries)
       .reject { |entry| entry[:email]&.blank? || entry[:product_ids]&.blank? }
 

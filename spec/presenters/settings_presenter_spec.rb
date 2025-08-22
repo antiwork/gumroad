@@ -62,6 +62,10 @@ describe SettingsPresenter do
   end
 
   describe "#main_props" do
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
+
     it "returns correct props" do
       expect(presenter.main_props).to eq(
         settings_pages: presenter.pages,
@@ -142,6 +146,27 @@ describe SettingsPresenter do
             ]
           }
         )
+      end
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before do
+        Feature.deactivate(:product_level_support_emails)
+      end
+
+      it "returns nil for product_level_support_emails" do
+        expect(presenter.main_props[:user][:product_level_support_emails]).to be_nil
+      end
+
+      context "when products have support emails" do
+        before do
+          product.support_email = "support@example.com"
+          product.save!
+        end
+
+        it "still returns nil for product_level_support_emails" do
+          expect(presenter.main_props[:user][:product_level_support_emails]).to be_nil
+        end
       end
     end
 

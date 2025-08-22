@@ -306,6 +306,10 @@ describe Settings::MainController do
         let(:other_seller) { create(:user) }
         let(:other_product) { create(:product, user: other_seller) }
 
+        before do
+          Feature.activate(:product_level_support_emails)
+        end
+
         it "creates new support emails with associated products" do
           product_level_support_emails_params = [
             { email: "contact@example.com", product_ids: [product1.external_id, product2.external_id] },
@@ -396,6 +400,23 @@ describe Settings::MainController do
           expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
           expect(product1.reload.support_email).to eq("contact@example.com") # not changed, as the transaction has failed
           expect(product2.reload.support_email).to be_nil
+        end
+
+        context "when product_level_support_emails feature is disabled" do
+          before do
+            Feature.deactivate(:product_level_support_emails)
+          end
+
+          it "does not update product support emails" do
+            product_level_support_emails_params = [
+              { email: "contact@example.com", product_ids: [product1.external_id] }
+            ]
+
+            put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
+
+            expect(response.parsed_body["success"]).to be(true)
+            expect(product1.reload.support_email).to be_nil
+          end
         end
       end
     end

@@ -60,7 +60,7 @@ type Props = {
       fine_print_enabled: boolean;
       fine_print: string | null;
     };
-    product_level_support_emails: ProductLevelSupportEmail[];
+    product_level_support_emails: ProductLevelSupportEmail[] | null;
   };
 };
 
@@ -72,6 +72,7 @@ const MainPage = (props: Props) => {
     support_email: props.user.support_email ?? "",
     tax_id: null,
     purchasing_power_parity_excluded_product_ids: props.user.purchasing_power_parity_excluded_product_ids,
+    product_level_support_emails: props.user.product_level_support_emails ?? [],
   });
   const updateUserSettings = (settings: Partial<typeof userSettings>) =>
     setUserSettings((prev) => ({ ...prev, ...settings }));
@@ -310,12 +311,14 @@ const MainPage = (props: Props) => {
             />
             <small>This email is listed on the receipt of every sale.</small>
           </fieldset>
-          <ProductLevelSupportEmailsForm
-            productLevelSupportEmails={userSettings.product_level_support_emails}
-            products={props.user.products}
-            isDisabled={props.is_form_disabled}
-            onChange={handleProductLevelSupportEmailsChange}
-          />
+          {props.user.product_level_support_emails !== null && (
+            <ProductLevelSupportEmailsForm
+              productLevelSupportEmails={userSettings.product_level_support_emails}
+              products={props.user.products}
+              isDisabled={props.is_form_disabled}
+              onChange={handleProductLevelSupportEmailsChange}
+            />
+          )}
         </section>
         {props.user.seller_refund_policy.enabled ? (
           <section>

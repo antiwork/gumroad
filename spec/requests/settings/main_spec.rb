@@ -277,6 +277,10 @@ describe("Main Settings Scenario", type: :system, js: true) do
     let!(:product_1) { create(:product, user:, name: "Product 1") }
     let!(:product_2) { create(:product, user:, name: "Product 2") }
 
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
+
     it "adds new support email" do
       email = "support@example.com"
       visit settings_main_path
@@ -328,6 +332,17 @@ describe("Main Settings Scenario", type: :system, js: true) do
       within find_product_level_support_email_row(name: "support@example.com") do
         click_on "Edit email"
         expect(page).not_to have_combo_box("Products", options: ["Product 2"])
+      end
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before do
+        Feature.deactivate(:product_level_support_emails)
+      end
+
+      it "does not show product level support email form" do
+        visit settings_main_path
+        expect(page).not_to have_button("Add a product specific email")
       end
     end
   end

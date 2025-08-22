@@ -410,10 +410,24 @@ describe User, :vcr do
     let!(:product3) { create(:product, user: user, support_email: "help@example.com") }
     let!(:product4) { create(:product, user: user, support_email: nil) }
 
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
+
     it "returns the user's product support emails" do
       result = user.product_level_support_emails
 
       expect(result).to match_array([{ email: "support@example.com", product_ids: [product1.external_id, product2.external_id] }, { email: "help@example.com", product_ids: [product3.external_id] }])
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before do
+        Feature.deactivate(:product_level_support_emails)
+      end
+
+      it "returns nil" do
+        expect(user.product_level_support_emails).to be_nil
+      end
     end
   end
 
@@ -422,6 +436,10 @@ describe User, :vcr do
     let!(:product1) { create(:product, user: user, support_email: "support@example.com") }
     let!(:product2) { create(:product, user: user, support_email: "support@example.com") }
     let!(:product3) { create(:product, user: user, support_email: "help@example.com") }
+
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
 
     it "updates products support emails" do
       user.update_product_level_support_emails!([
@@ -459,6 +477,20 @@ describe User, :vcr do
         expect do
           user.update_product_level_support_emails!(nil)
         end.to change { [product1.reload.support_email, product2.reload.support_email, product3.reload.support_email] }.to([nil, nil, nil])
+      end
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before do
+        Feature.deactivate(:product_level_support_emails)
+      end
+
+      it "does not update products support emails" do
+        user.update_product_level_support_emails!([{ email: "new@example.com", product_ids: [product1.external_id] }])
+
+        expect(product1.reload.support_email).to eq("support@example.com")
+        expect(product2.reload.support_email).to eq("support@example.com")
+        expect(product3.reload.support_email).to eq("help@example.com")
       end
     end
   end
