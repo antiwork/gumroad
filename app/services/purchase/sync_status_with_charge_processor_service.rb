@@ -45,9 +45,10 @@ class Purchase::SyncStatusWithChargeProcessorService
         purchase.mark_failed! if mark_as_failed
         false
       end
-    rescue
-      purchase.mark_failed! if mark_as_failed
-      false
     end
+  rescue StandardError => e
+    Bugsnag.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
+    purchase.mark_failed! if mark_as_failed
+    false
   end
 end
