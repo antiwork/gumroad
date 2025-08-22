@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "securerandom"
+require "openssl"
+
 # TestSecretsManager provides automatic detection and mocking of missing secrets
 # This allows tests to run without requiring real environment variables
 module TestSecretsManager
@@ -227,7 +230,9 @@ module TestSecretsManager
       end
 
       def generate_test_rsa_key
-        "-----BEGIN PRIVATE KEY-----\nMIIEvQtest#{generate_test_key(700)}\n-----END PRIVATE KEY-----"
+        # Generate a valid unencrypted RSA private key for test use
+        # Memoize so we don't generate multiple times
+        @__test_rsa_key__ ||= OpenSSL::PKey::RSA.new(1024).to_pem
       end
 
       def generate_test_strongbox_key
