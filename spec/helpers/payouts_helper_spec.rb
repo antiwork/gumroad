@@ -358,6 +358,42 @@ describe PayoutsHelper do
         expect(purchase.fee_cents).to eq(93)
         expect(payment.gumroad_fee_cents).to eq(30)
         expect(payout_data[:fees_cents]).to eq(123) # 93 cents fee on purchase + 30 cents on instant payout
+        expect(payout_data[:direct_fees_cents]).to eq(123) # 93 cents fee on purchase + 30 cents on instant payout
+        expect(payout_data[:discover_fees_cents]).to eq(0)
+      end
+    end
+
+    it "shows the payout fee for instant payout under the direct fees head even if there is no other fee" do
+      travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
+        user = create(:user)
+        payment = create(:payment,
+                         user:,
+                         amount_cents: 10_00,
+                         arrival_date: 1.week.ago.to_i,
+                         payout_type: Payouts::PAYOUT_TYPE_INSTANT,
+                         gumroad_fee_cents: 30)
+        balance = create(:balance, user:, amount_cents: 10_00, date: 30.days.ago, state: "paid")
+        payment.balances << balance
+        bank_account = create(:ach_account)
+        bank_account.payments << payment
+        create(:bank, routing_number: "110000000", name: "Bank of America")
+
+        payout_data = self.payout_period_data(user, payment)
+        expect(payout_data[:is_user_payable]).to eq(nil)
+        expect(payout_data[:displayable_payout_period_range]).to eq("Activity up to February 28th, 2015")
+        expect(payout_data[:payout_date_formatted]).to eq("March 1st, 2015")
+        expect(payout_data[:payout_currency]).to eq(Currency::USD)
+        expect(payout_data[:payout_cents]).to eq(1000)
+        expect(payout_data[:payout_displayed_amount]).to eq("$10")
+        expect(payout_data[:bank_number]).to eq("110000000")
+        expect(payout_data[:account_number]).to eq("******1234")
+        expect(payout_data[:bank_account_type]).to eq("ACH")
+        expect(payout_data[:bank_name]).to eq("Bank of America")
+        expect(payout_data[:arrival_date]).to eq(1.week.ago.strftime("%B #{1.week.ago.day.ordinalize}, %Y"))
+        expect(payment.gumroad_fee_cents).to eq(30)
+        expect(payout_data[:fees_cents]).to eq(30) # 30 cents on instant payout
+        expect(payout_data[:direct_fees_cents]).to eq(30) # 30 cents on instant payout
+        expect(payout_data[:discover_fees_cents]).to eq(0)
       end
     end
   end

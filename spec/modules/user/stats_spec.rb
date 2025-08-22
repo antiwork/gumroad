@@ -601,16 +601,20 @@ describe User::Stats, :vcr do
         it "returns overall sales stats from paypal direct sales during the duration" do
           paypal_sales_data = @creator.paypal_sales_data_for_duration(start_date: @payout_start_date, end_date: @payout_end_date)
 
-          expect(paypal_sales_data).to eq ({
-            sales_cents: 325_00,
-            refunds_cents: 155_00,
-            chargebacks_cents: 160_00,
-            credits_cents: 0,
-            fees_cents: 126,
-            taxes_cents: 0,
-            affiliate_credits_cents: 0,
-            affiliate_fees_cents: -1_06
-          })
+          expect(paypal_sales_data).to eq({
+                                            sales_cents: 325_00,
+                                            refunds_cents: 155_00,
+                                            chargebacks_cents: 160_00,
+                                            credits_cents: 0,
+                                            fees_cents: 126,
+                                            direct_fees_cents: 126,
+                                            discover_fees_cents: 0,
+                                            direct_sales_count: 4,
+                                            discover_sales_count: 0,
+                                            taxes_cents: 0,
+                                            affiliate_credits_cents: 0,
+                                            affiliate_fees_cents: -1_06
+                                          })
         end
       end
 
@@ -827,18 +831,22 @@ describe User::Stats, :vcr do
 
       describe "#stripe_connect_sales_data_for_duration" do
         it "returns overall sales stats from Stripe Connect direct sales during the duration" do
-          paypal_sales_data = @creator.stripe_connect_sales_data_for_duration(start_date: @payout_start_date, end_date: @payout_end_date)
+          stripe_connect_sales_data = @creator.stripe_connect_sales_data_for_duration(start_date: @payout_start_date, end_date: @payout_end_date)
 
-          expect(paypal_sales_data).to eq ({
-            sales_cents: 325_00,
-            refunds_cents: 155_00,
-            chargebacks_cents: 160_00,
-            credits_cents: 0,
-            fees_cents: 126,
-            taxes_cents: 0,
-            affiliate_credits_cents: 0,
-            affiliate_fees_cents: -1_06
-          })
+          expect(stripe_connect_sales_data).to eq({
+                                                    sales_cents: 325_00,
+                                                    refunds_cents: 155_00,
+                                                    chargebacks_cents: 160_00,
+                                                    credits_cents: 0,
+                                                    fees_cents: 126,
+                                                    direct_fees_cents: 126,
+                                                    discover_fees_cents: 0,
+                                                    direct_sales_count: 4,
+                                                    discover_sales_count: 0,
+                                                    taxes_cents: 0,
+                                                    affiliate_credits_cents: 0,
+                                                    affiliate_fees_cents: -1_06
+                                                  })
         end
       end
 

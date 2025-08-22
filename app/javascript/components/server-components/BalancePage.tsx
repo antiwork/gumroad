@@ -351,10 +351,12 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                       fees
                     </a>
                   </h4>
-                  <small>
-                    on {payoutPeriodData.discover_sales_count}{" "}
-                    {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
-                  </small>
+                  {payoutPeriodData.discover_sales_count > 0 ? (
+                    <small>
+                      on {payoutPeriodData.discover_sales_count}{" "}
+                      {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
+                    </small>
+                  ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.discover_fees_cents)}</div>
               </div>
@@ -368,10 +370,12 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                       fees
                     </a>
                   </h4>
-                  <small>
-                    on {payoutPeriodData.direct_sales_count}{" "}
-                    {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
-                  </small>
+                  {payoutPeriodData.direct_sales_count > 0 ? (
+                    <small>
+                      on {payoutPeriodData.direct_sales_count}{" "}
+                      {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
+                    </small>
+                  ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.direct_fees_cents)}</div>
               </div>

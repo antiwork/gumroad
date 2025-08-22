@@ -644,7 +644,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           expect(page).to have_text("Payout initiated on #{current_date} Instant", normalize_ws: true)
           expect(page).to have_text("Sales $0.00", normalize_ws: true)
           expect(page).to have_text("Credits $10.00", normalize_ws: true)
-          expect(page).to have_text("Fees - $0.29", normalize_ws: true)
+          expect(page).to have_text("Direct sales fees - $0.29", normalize_ws: true)
           expect(page).to have_text("Expected deposit to Bank of America on #{current_date} Routing number: 110000000 Account: ******6789 $9.70", normalize_ws: true)
         end
       end
@@ -844,7 +844,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         expect(latest_payout).to have_text("Refunds - $15.00", normalize_ws: true)
         expect(latest_payout).to have_text("Chargebacks - $10.00", normalize_ws: true)
         expect(latest_payout).not_to have_text("Discover sales fees", normalize_ws: true)
-        expect(latest_payout).to have_text("Direct sales fees on 4 sales - $4.77", normalize_ws: true)
+        expect(latest_payout).to have_text("Direct sales fees on 6 sales - $7.02", normalize_ws: true)
         expect(latest_payout).to have_text("Loan repayments - $1.50", normalize_ws: true)
         expect(latest_payout).to have_text("Affiliate or collaborator fees paid - $2.55", normalize_ws: true)
         expect(latest_payout).to have_text("PayPal payouts - $10.20", normalize_ws: true) # Remove (?) from this line

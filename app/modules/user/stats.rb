@@ -350,6 +350,40 @@ module User::Stats
     refunded_fee + disputed_fee
   end
 
+  def paypal_discover_fees_cents_for_duration(start_date:, end_date:)
+    revenue_fee_cents = paypal_sales_in_duration(start_date:, end_date:).was_discover_fee_charged.sum(:fee_cents)
+    revenue_fee_cents - paypal_returned_discover_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+  end
+
+  def paypal_returned_discover_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+    refunded_fee = paypal_refunds_in_duration(start_date:, end_date:)
+                     .where("purchases.flags & ? > 0", Purchase.flag_mapping["flags"][:was_discover_fee_charged])
+                     .sum(:fee_cents)
+    disputed_fee = paypal_sales_chargebacked_in_duration(start_date:, end_date:).was_discover_fee_charged.sum(:fee_cents)
+    refunded_fee + disputed_fee
+  end
+
+  def paypal_discover_sales_count_for_duration(start_date:, end_date:)
+    paypal_sales_in_duration(start_date:, end_date:).was_discover_fee_charged.count
+  end
+
+  def paypal_direct_fees_cents_for_duration(start_date:, end_date:)
+    revenue_fee_cents = paypal_sales_in_duration(start_date:, end_date:).not_was_discover_fee_charged.sum(:fee_cents)
+    revenue_fee_cents - paypal_returned_direct_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+  end
+
+  def paypal_returned_direct_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+    refunded_fee = paypal_refunds_in_duration(start_date:, end_date:)
+                     .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:was_discover_fee_charged])
+                     .sum(:fee_cents)
+    disputed_fee = paypal_sales_chargebacked_in_duration(start_date:, end_date:).not_was_discover_fee_charged.sum(:fee_cents)
+    refunded_fee + disputed_fee
+  end
+
+  def paypal_direct_sales_count_for_duration(start_date:, end_date:)
+    paypal_sales_in_duration(start_date:, end_date:).not_was_discover_fee_charged.count
+  end
+
   def paypal_taxes_cents_for_duration(start_date:, end_date:)
     tax_cents = paypal_sales_in_duration(start_date:, end_date:).sum(:tax_cents)
     tax_cents - paypal_returned_taxes_due_to_refunds_and_chargebacks(start_date:, end_date:)
@@ -382,6 +416,10 @@ module User::Stats
       chargebacks_cents: paypal_chargebacked_cents_for_duration(start_date:, end_date:),
       credits_cents: 0,
       fees_cents: paypal_fees_cents_for_duration(start_date:, end_date:),
+      discover_fees_cents: paypal_discover_fees_cents_for_duration(start_date:, end_date:),
+      direct_fees_cents: paypal_direct_fees_cents_for_duration(start_date:, end_date:),
+      discover_sales_count: paypal_discover_sales_count_for_duration(start_date:, end_date:),
+      direct_sales_count: paypal_direct_sales_count_for_duration(start_date:, end_date:),
       taxes_cents: paypal_taxes_cents_for_duration(start_date:, end_date:),
       affiliate_credits_cents: 0,
       affiliate_fees_cents: paypal_affiliate_fee_cents_for_duration(start_date:, end_date:),
@@ -470,6 +508,40 @@ module User::Stats
     refunded_fee + disputed_fee
   end
 
+  def stripe_connect_discover_fees_cents_for_duration(start_date:, end_date:)
+    revenue_fee_cents = stripe_connect_sales_in_duration(start_date:, end_date:).was_discover_fee_charged.sum(:fee_cents)
+    revenue_fee_cents - stripe_connect_returned_discover_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+  end
+
+  def stripe_connect_returned_discover_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+    refunded_fee = stripe_connect_refunds_in_duration(start_date:, end_date:)
+                     .where("purchases.flags & ? > 0", Purchase.flag_mapping["flags"][:was_discover_fee_charged])
+                     .sum(:fee_cents)
+    disputed_fee = stripe_connect_sales_chargebacked_in_duration(start_date:, end_date:).was_discover_fee_charged.sum(:fee_cents)
+    refunded_fee + disputed_fee
+  end
+
+  def stripe_connect_discover_sales_count_for_duration(start_date:, end_date:)
+    stripe_connect_sales_in_duration(start_date:, end_date:).was_discover_fee_charged.count
+  end
+
+  def stripe_connect_direct_fees_cents_for_duration(start_date:, end_date:)
+    revenue_fee_cents = stripe_connect_sales_in_duration(start_date:, end_date:).not_was_discover_fee_charged.sum(:fee_cents)
+    revenue_fee_cents - stripe_connect_returned_direct_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+  end
+
+  def stripe_connect_returned_direct_fees_due_to_refunds_and_chargebacks(start_date:, end_date:)
+    refunded_fee = stripe_connect_refunds_in_duration(start_date:, end_date:)
+                     .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:was_discover_fee_charged])
+                     .sum(:fee_cents)
+    disputed_fee = stripe_connect_sales_chargebacked_in_duration(start_date:, end_date:).not_was_discover_fee_charged.sum(:fee_cents)
+    refunded_fee + disputed_fee
+  end
+
+  def stripe_connect_direct_sales_count_for_duration(start_date:, end_date:)
+    stripe_connect_sales_in_duration(start_date:, end_date:).not_was_discover_fee_charged.count
+  end
+
   def stripe_connect_taxes_cents_for_duration(start_date:, end_date:)
     tax_cents = stripe_connect_sales_in_duration(start_date:, end_date:).sum(:tax_cents)
     tax_cents - stripe_connect_returned_taxes_due_to_refunds_and_chargebacks(start_date:, end_date:)
@@ -502,6 +574,10 @@ module User::Stats
       chargebacks_cents: stripe_connect_chargebacked_cents_for_duration(start_date:, end_date:),
       credits_cents: 0,
       fees_cents: stripe_connect_fees_cents_for_duration(start_date:, end_date:),
+      discover_fees_cents: stripe_connect_discover_fees_cents_for_duration(start_date:, end_date:),
+      direct_fees_cents: stripe_connect_direct_fees_cents_for_duration(start_date:, end_date:),
+      discover_sales_count: stripe_connect_discover_sales_count_for_duration(start_date:, end_date:),
+      direct_sales_count: stripe_connect_direct_sales_count_for_duration(start_date:, end_date:),
       taxes_cents: stripe_connect_taxes_cents_for_duration(start_date:, end_date:),
       affiliate_credits_cents: 0,
       affiliate_fees_cents: stripe_connect_affiliate_fee_cents_for_duration(start_date:, end_date:),

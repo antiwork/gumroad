@@ -119,6 +119,7 @@ module PayoutsHelper
 
     if payment.gumroad_fee_cents.present?
       payout_period_data[:fees_cents] = payout_period_data[:fees_cents].to_i + payment.gumroad_fee_cents
+      payout_period_data[:direct_fees_cents] = payout_period_data[:direct_fees_cents].to_i + payment.gumroad_fee_cents
     end
 
     payout_period_data.merge(payout_method_details(payment:))
