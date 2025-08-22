@@ -143,7 +143,8 @@ RSpec.configure do |config|
     config.default_retry_count = 3
   end
   config.before(:suite) do
-    # Setup external service mocks if enabled
+    # Setup external service mocks by default to prevent boot-time HTTP calls
+    # (e.g., Stripe balance check) from requiring VCR cassettes.
     ExternalServiceMocks.setup! unless ENV["DISABLE_SERVICE_MOCKS"] == "true"
 
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
@@ -213,6 +214,21 @@ RSpec.configure do |config|
     PostSendgridApi.mails.clear
   end
 
+  # Avoid system dependencies (Chrome, ImageMagick) in most tests by stubbing
+  # dispute image generation to return a minimal valid JPEG. Keep real behavior
+  # in the dedicated service specs.
+  config.before(:each) do |example|
+    image_stub = "\xFF\xD8\xFF\xD9".b
+    file_path = (example.metadata[:example_group] || {})[:file_path] rescue nil
+    unless file_path&.end_with?(
+      "spec/services/dispute_evidence/generate_receipt_image_service_spec.rb",
+      "spec/services/dispute_evidence/generate_refund_policy_image_service_spec.rb"
+    )
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(image_stub)
+      allow(DisputeEvidence::GenerateRefundPolicyImageService).to receive(:perform).and_return(image_stub)
+    end
+  end
+
   config.after(:each) do |example|
     capture_state_on_failure(example)
     Capybara.reset_sessions!
@@ -261,6 +277,7 @@ RSpec.configure do |config|
     options = %w[caching js] # delegate all the before- and after- hooks for these values to metaprogramming "setup" and "teardown" methods, below
     options.each { |opt| send(:"setup_#{ opt }", example.metadata[opt.to_sym]) }
     stub_webmock
+
     example.run
     options.each { |opt| send(:"teardown_#{ opt }", example.metadata[opt.to_sym]) }
     Rails.cache.clear

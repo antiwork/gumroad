@@ -60,16 +60,16 @@ module ExternalServiceMocks
         setup_tax_id_pro_mocks
       end
 
-      def setup_third_party_mocks
-        setup_discord_mocks
-        setup_zoom_mocks
-        setup_google_mocks
-        setup_openai_mocks
-        setup_unsplash_mocks
-        setup_dropbox_mocks
-        setup_easypost_mocks
-        setup_exchange_rates_mocks
-      end
+    def setup_third_party_mocks
+      setup_discord_mocks
+      setup_zoom_mocks
+      setup_google_mocks
+      setup_openai_mocks
+      setup_unsplash_mocks
+      setup_dropbox_mocks
+      setup_easypost_mocks
+      setup_exchange_rates_mocks
+    end
 
       def setup_braintree_mocks
         # Braintree gateway mocks
@@ -219,7 +219,7 @@ module ExternalServiceMocks
         )
       end
 
-      def log_mock_status
+    def log_mock_status
         puts "\n" + "=" * 80
         puts "EXTERNAL SERVICE MOCKS ACTIVE"
         puts "=" * 80
