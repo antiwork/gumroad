@@ -11,15 +11,10 @@ class Settings::MainController < Sellers::BaseController
   end
 
   def update
-    begin
-      current_seller.with_lock { current_seller.update(user_params.except(:seller_refund_policy, :product_level_support_emails)) }
-    rescue StandardError => e
-      Bugsnag.notify(e)
-      return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
-    end
+    current_seller.with_lock { current_seller.update!(user_params) }
 
     if params[:user][:email] == current_seller.email
-      current_seller.unconfirmed_email = nil
+      current_seller.update!(unconfirmed_email: nil)
     end
 
     if current_seller.account_level_refund_policy_enabled?
@@ -29,16 +24,15 @@ class Settings::MainController < Sellers::BaseController
       )
     end
 
-    return render json: { success: false, error_message: current_seller.errors.full_messages.to_sentence } unless current_seller.save
+    current_seller.update_purchasing_power_parity_excluded_products!(params[:user][:purchasing_power_parity_excluded_product_ids])
+    current_seller.update_product_level_support_emails!(params[:user][:product_level_support_emails])
 
-    begin
-      current_seller.update_purchasing_power_parity_excluded_products!(params[:user][:purchasing_power_parity_excluded_product_ids])
-      current_seller.update_product_level_support_emails!(params[:user][:product_level_support_emails])
-      render json: { success: true }
-    rescue StandardError => e
-      Bugsnag.notify(e)
-      render json: { success: false, error_message: e.message }
-    end
+    render json: { success: true }
+  rescue StandardError => e
+    Bugsnag.notify(e)
+    error_message = current_seller.errors.full_messages.to_sentence.presence ||
+      "Something broke. We're looking into what happened. Sorry about this!"
+    render json: { success: false, error_message: }
   end
 
   def resend_confirmation_email
@@ -70,8 +64,6 @@ class Settings::MainController < Sellers::BaseController
         :purchasing_power_parity_limit,
         :purchasing_power_parity_payment_verification_disabled,
         :show_nsfw_products,
-        { product_level_support_emails: [:email, { product_ids: [] }] },
-        { seller_refund_policy: [:max_refund_period_in_days, :fine_print] }
       ]
 
       params.require(:user).permit(permitted_params)
@@ -79,6 +71,10 @@ class Settings::MainController < Sellers::BaseController
 
     def seller_refund_policy_params
       params[:user][:seller_refund_policy]&.permit(:max_refund_period_in_days, :fine_print)
+    end
+
+    def product_level_support_emails_params
+      params[:user][:product_level_support_emails]&.permit(:email, { product_ids: [] })
     end
 
     def fetch_discover_sales(seller)

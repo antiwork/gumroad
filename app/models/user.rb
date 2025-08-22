@@ -516,9 +516,7 @@ class User < ApplicationRecord
         .update_all(support_email: nil)
 
       entries.each do |entry|
-        unless entry[:email].match?(URI::MailTo::EMAIL_REGEXP)
-          raise ArgumentError, "Invalid support email format: #{entry[:email]}"
-        end
+        raise ArgumentError, "Invalid email format: #{entry[:email]}" if !entry[:email].match?(URI::MailTo::EMAIL_REGEXP)
 
         products.by_external_ids(entry[:product_ids]).update_all(support_email: entry[:email])
       end

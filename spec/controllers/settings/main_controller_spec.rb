@@ -42,7 +42,7 @@ describe Settings::MainController do
     end
 
     it "returns error message when StandardError is raised" do
-      allow_any_instance_of(User).to receive(:update).and_raise(StandardError)
+      allow_any_instance_of(User).to receive(:update!).and_raise(StandardError)
       put :update, params: { user: user_params.merge(email: "hello@example.com") }, format: :json
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
@@ -52,6 +52,7 @@ describe Settings::MainController do
       let(:product) { create(:product, user: seller) }
 
       before do
+        product.user.update!(enable_recurring_subscription_charge_email: true)
         Rails.cache.write(product.scoped_cache_key("en"), "<html>Hello</html>")
         product.product_cached_values.create!
       end
@@ -327,7 +328,7 @@ describe Settings::MainController do
           put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(false)
-          expect(response.parsed_body["error_message"]).to eq("Invalid email format: invalid-email")
+          expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
         end
 
         it "updates existing support emails" do
@@ -392,7 +393,7 @@ describe Settings::MainController do
           put :update, params: { user: user_params.merge(product_level_support_emails: product_level_support_emails_params) }, format: :json
 
           expect(response.parsed_body["success"]).to be(false)
-          expect(response.parsed_body["error_message"]).to eq("Invalid email format: invalid_email")
+          expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
           expect(product1.reload.support_email).to eq("contact@example.com") # not changed, as the transaction has failed
           expect(product2.reload.support_email).to be_nil
         end
