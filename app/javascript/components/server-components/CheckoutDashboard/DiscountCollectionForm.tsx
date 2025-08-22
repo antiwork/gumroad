@@ -105,7 +105,7 @@ const DiscountCollectionForm = ({
               <div>
                 Collections help you manage related discount codes together, making it easier to track performance and create bulk codes for events or campaigns.
               </div>
-              <a data-helper-prompt="How do I create discount collections?">Learn more</a>
+              <a href="/help/article/348-discount-collections" target="_blank" rel="noreferrer">Learn more</a>
             </div>
           </header>
           <fieldset className={cx({ danger: name.error })}>

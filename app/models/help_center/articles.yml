@@ -488,3 +488,7 @@
   slug: "347-gumroad-community"
   title: "Gumroad Community"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 348
+  slug: "348-discount-collections"
+  title: "Discount Collections"
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>

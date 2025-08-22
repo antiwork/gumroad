@@ -153,7 +153,7 @@ const BulkCreateCodesForm = ({
               <div>
                 Each code will be unique and can be used independently. Use {nameTemplate.value} to automatically number your codes.
               </div>
-              <a data-helper-prompt="How do I bulk create discount codes?">Learn more</a>
+              <a href="/help/article/348-discount-collections#bulk-create" target="_blank" rel="noreferrer">Learn more</a>
             </div>
           </header>
 

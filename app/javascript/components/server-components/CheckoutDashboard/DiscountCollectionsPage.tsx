@@ -345,7 +345,7 @@ const DiscountCollectionsPage = ({
                 <h2>No discount collections yet</h2>
                 <p>Create collections to organize your discount codes and generate multiple codes at once</p>
                 <p>
-                  <a data-helper-prompt="How can I create discount collections?">Learn more about discount collections</a>
+                  <a href="/help/article/348-discount-collections" target="_blank" rel="noreferrer">Learn more about discount collections</a>
                 </p>
               </div>
             </div>
