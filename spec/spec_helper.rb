@@ -3,6 +3,10 @@
 ENV["RAILS_ENV"] = "test"
 BUILDING_ON_CI = !ENV["CI"].nil?
 
+# Load test secrets manager BEFORE loading Rails environment
+# This ensures all secrets are available when Rails initializes
+require_relative "support/test_secrets_manager" unless ENV["DISABLE_TEST_SECRETS"] == "true"
+
 require File.expand_path("../config/environment", __dir__)
 
 require "capybara/rails"
@@ -139,6 +143,9 @@ RSpec.configure do |config|
     config.default_retry_count = 3
   end
   config.before(:suite) do
+    # Setup external service mocks if enabled
+    ExternalServiceMocks.setup! unless ENV["DISABLE_SERVICE_MOCKS"] == "true"
+    
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
     [
