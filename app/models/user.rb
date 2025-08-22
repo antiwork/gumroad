@@ -505,25 +505,7 @@ class User < ApplicationRecord
   end
 
   def update_product_level_support_emails!(entries)
-    return unless product_level_support_emails_enabled?
-
-    entries = Array.wrap(entries)
-      .reject { |entry| entry[:email]&.blank? || entry[:product_ids]&.blank? }
-
-    products_with_custom_support_email = entries.flat_map { |entry| entry[:product_ids] }.compact
-
-    ActiveRecord::Base.transaction do
-      products
-        .by_external_ids(products_with_custom_support_email).invert_where
-        .where.not(support_email: nil)
-        .update_all(support_email: nil)
-
-      entries.each do |entry|
-        raise ArgumentError, "Invalid email format: #{entry[:email]}" if !entry[:email].match?(URI::MailTo::EMAIL_REGEXP)
-
-        products.by_external_ids(entry[:product_ids]).update_all(support_email: entry[:email])
-      end
-    end
+    Product::BulkUpdateSupportEmailService.new(self, entries).perform
   end
 
   def save_external_id

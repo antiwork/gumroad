@@ -433,65 +433,24 @@ describe User, :vcr do
 
   describe "#update_product_level_support_emails!" do
     let(:user) { create(:user) }
-    let!(:product1) { create(:product, user: user, support_email: "support@example.com") }
-    let!(:product2) { create(:product, user: user, support_email: "support@example.com") }
-    let!(:product3) { create(:product, user: user, support_email: "help@example.com") }
+    let!(:product1) { create(:product, user:, support_email: "old1@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
 
     before do
       Feature.activate(:product_level_support_emails)
     end
 
     it "updates products support emails" do
-      user.update_product_level_support_emails!([
-                                                  { email: "new_email@example.com", product_ids: [product1.external_id, product2.external_id] }
-                                                ])
+      user.update_product_level_support_emails!(
+        [
+          { email: "new1+2@example.com", product_ids: [product1.external_id, product2.external_id] }
+        ]
+      )
 
-      expect(product1.reload.support_email).to eq("new_email@example.com")
-      expect(product2.reload.support_email).to eq("new_email@example.com")
-      expect(product3.reload.support_email).to be_nil
-    end
-
-    context "when provided email is blank" do
-      it "sets support_email to nil for the specified products" do
-        user.update_product_level_support_emails!([
-                                                    { email: "", product_ids: [product1.external_id, product2.external_id] },
-                                                    { email: "admin@example.com", product_ids: [product3.external_id] }
-                                                  ])
-
-        expect(product1.reload.support_email).to be_nil
-        expect(product2.reload.support_email).to be_nil
-        expect(product3.reload.support_email).to eq("admin@example.com")
-      end
-    end
-
-    context "when empty array is provided" do
-      it "clears all user emails" do
-        expect do
-          user.update_product_level_support_emails!([])
-        end.to change { [product1.reload.support_email, product2.reload.support_email, product3.reload.support_email] }.to([nil, nil, nil])
-      end
-    end
-
-    context "when nil is provided" do
-      it "clears all user emails" do
-        expect do
-          user.update_product_level_support_emails!(nil)
-        end.to change { [product1.reload.support_email, product2.reload.support_email, product3.reload.support_email] }.to([nil, nil, nil])
-      end
-    end
-
-    context "when product_level_support_emails feature is disabled" do
-      before do
-        Feature.deactivate(:product_level_support_emails)
-      end
-
-      it "does not update products support emails" do
-        user.update_product_level_support_emails!([{ email: "new@example.com", product_ids: [product1.external_id] }])
-
-        expect(product1.reload.support_email).to eq("support@example.com")
-        expect(product2.reload.support_email).to eq("support@example.com")
-        expect(product3.reload.support_email).to eq("help@example.com")
-      end
+      expect(product1.reload.support_email).to eq("new1+2@example.com")
+      expect(product2.reload.support_email).to eq("new1+2@example.com")
+      expect(product3.reload.support_email).to eq(nil)
     end
   end
 
