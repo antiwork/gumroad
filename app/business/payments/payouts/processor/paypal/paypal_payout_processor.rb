@@ -72,7 +72,7 @@ class PaypalPayoutProcessor
     payout_email = user.paypal_payout_email
 
     # User is payable on PayPal if they've provided an email address.
-    return false if !EmailFormatValidator.valid?(payout_email)
+    return false unless EmailFormatValidator.valid?(payout_email)
     # Email address contains non-ascii characters
     return false unless payout_email.ascii_only?
     # User hasn't given us their compliance info.

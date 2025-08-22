@@ -3599,7 +3599,7 @@ class Purchase < ApplicationRecord
     def must_have_valid_email
       return if email && !email_changed?
 
-      errors.add(:base, "valid email required") if email.blank? || !EmailFormatValidator.valid?(email)
+      errors.add(:base, "valid email required") unless EmailFormatValidator.valid?(email)
     end
 
     def seller_is_link_user
