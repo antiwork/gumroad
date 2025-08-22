@@ -94,6 +94,7 @@ import SubscribePage from "$app/components/server-components/SubscribePage";
 import SubscribePreview from "$app/components/server-components/SubscribePreview";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
 import SubscriptionManagerMagicLink from "$app/components/server-components/SubscriptionManagerMagicLink";
+import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
 import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
@@ -132,6 +133,7 @@ ReactOnRails.register({
   ApplicationEditPage,
   ArchivedProductsPage,
   HelpCenterArticlesIndexPage,
+  SupportHeader,
   AudienceCustomersPage,
   AudiencePage,
   AuthorizedApplicationsSettingsPage,
