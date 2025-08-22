@@ -4,6 +4,14 @@ describe Checkout::DiscountsPresenter do
   include CurrencyHelper
 
   let(:seller) { create(:named_seller) }
+
+  before do
+    # Allow all GlobalConfig calls to pass through by default
+    allow(GlobalConfig).to receive(:get).and_call_original
+    # Override specific keys for obfuscate_ids
+    allow(GlobalConfig).to receive(:get).with("OBFUSCATE_IDS_CIPHER_KEY").and_return("test_cipher_key_for_obfuscation")
+    allow(GlobalConfig).to receive(:get).with("OBFUSCATE_IDS_NUMERIC_CIPHER_KEY").and_return("12345")
+  end
   let(:product1) { create(:product, user: seller, price_cents: 1000, price_currency_type: Currency::EUR) }
   let(:product2) { create(:product, user: seller, price_cents: 500) }
   let!(:product3) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
@@ -128,8 +136,44 @@ describe Checkout::DiscountsPresenter do
                      is_tiered_membership: false,
                    },
                  ],
+                 collections: [],
                })
     end
+
+    context "when seller has discount collections" do
+      let!(:collection1) { create(:discount_collection, user: seller, name: "Summer Sale") }
+      let!(:collection2) { create(:discount_collection, user: seller, name: "Holiday Promo") }
+
+      it "includes collections in the props" do
+        create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+
+        props = presenter.discounts_props
+        expect(props[:collections]).to contain_exactly(
+          {
+            id: collection1.external_id,
+            name: "Summer Sale"
+          },
+          {
+            id: collection2.external_id,
+            name: "Holiday Promo"
+          }
+        )
+      end
+
+      it "only includes alive collections" do
+        collection2.update!(deleted_at: Time.current)
+        create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+
+        props = presenter.discounts_props
+        expect(props[:collections]).to contain_exactly(
+          {
+            id: collection1.external_id,
+            name: "Summer Sale"
+          }
+        )
+      end
+    end
+  end
   end
 
   describe "#offer_code_props" do
@@ -173,6 +217,28 @@ describe Checkout::DiscountsPresenter do
             ],
           }
         )
+      end
+
+      context "when offer code belongs to a collection" do
+        let!(:collection) { create(:discount_collection, user: seller, name: "Test Collection") }
+        let!(:offer_code_with_collection) { create(:offer_code, user: seller, discount_collection: collection, name: "Collection Code", code: "COL123") }
+
+        it "includes discount_collection information" do
+          props = presenter.offer_code_props(offer_code_with_collection)
+          expect(props[:discount_collection]).to eq(
+            {
+              id: collection.external_id,
+              name: "Test Collection"
+            }
+          )
+        end
+      end
+
+      context "when offer code does not belong to a collection" do
+        it "does not include discount_collection information" do
+          props = presenter.offer_code_props(offer_code1)
+          expect(props[:discount_collection]).to be_nil
+        end
       end
     end
 
