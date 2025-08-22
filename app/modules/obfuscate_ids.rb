@@ -6,11 +6,12 @@ require "base64"
 module ObfuscateIds
   CIPHER_KEY = GlobalConfig.get("OBFUSCATE_IDS_CIPHER_KEY")
   NUMERIC_CIPHER_KEY = GlobalConfig.get("OBFUSCATE_IDS_NUMERIC_CIPHER_KEY").to_i
+  MAX_BYTES_FOR_NUMERIC_ENCRYPTION = 30
 
-  def self.encrypt(id)
+  def self.encrypt(id, padding: true)
     c = cipher.encrypt
     c.key = Digest::SHA256.digest(CIPHER_KEY)
-    Base64.urlsafe_encode64(c.update(id.to_s) + c.final)
+    Base64.urlsafe_encode64(c.update(id.to_s) + c.final, padding:)
   end
 
   def self.cipher
@@ -39,7 +40,9 @@ module ObfuscateIds
   #
   # Returns encrypted numeric id
   def self.encrypt_numeric(id)
-    extended_and_reversed_binary_id = id.to_s(2).rjust(30, "0")
+    raise ArgumentError, "Numeric encryption does not support ids greater than #{max_numeric_id}" if id > max_numeric_id
+
+    extended_and_reversed_binary_id = id.to_s(2).rjust(MAX_BYTES_FOR_NUMERIC_ENCRYPTION, "0")
     binary_id = xor(extended_and_reversed_binary_id, NUMERIC_CIPHER_KEY.to_s(2), 30).reverse
     binary_id.to_i(2)
   end
@@ -55,10 +58,19 @@ module ObfuscateIds
   #
   # Returns decrypted numeric id
   def self.decrypt_numeric(encrypted_id)
-    binary_id = encrypted_id.to_s(2).rjust(30, "0").reverse
-    extended_binary_id = xor(binary_id, NUMERIC_CIPHER_KEY.to_s(2), 30)
+    binary_id = encrypted_id.to_s(2).rjust(MAX_BYTES_FOR_NUMERIC_ENCRYPTION, "0").reverse
+    extended_binary_id = xor(binary_id, NUMERIC_CIPHER_KEY.to_s(2), MAX_BYTES_FOR_NUMERIC_ENCRYPTION)
     extended_binary_id.to_i(2)
   end
+
+  # Private: Maximum numeric id that can be encrypted
+  #
+  # Returns integer
+  def self.max_numeric_id
+    (2**MAX_BYTES_FOR_NUMERIC_ENCRYPTION) - 1
+  end
+
+  private_class_method :max_numeric_id
 
   # Private: Bitwise xor of two binary strings of length n
   #

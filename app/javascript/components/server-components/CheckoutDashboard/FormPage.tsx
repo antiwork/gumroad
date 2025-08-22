@@ -117,7 +117,9 @@ const FormPage = ({
         <section className="paragraphs">
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2>Custom fields</h2>
-            <a data-helper-prompt="How can I add custom fields to my product page?">Learn more</a>
+            <a href="/help/article/101-designing-your-product-page" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
           </header>
           You can add custom fields in your checkout form to get more information from your customers, such as their
           name or more specific instructions.
@@ -253,7 +255,9 @@ const FormPage = ({
         <section className="paragraphs">
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2>Discounts</h2>
-            <a data-helper-prompt="How can I create offer codes?">Learn more</a>
+            <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
           </header>
           <fieldset>
             <legend>Add discount code field to purchase form</legend>
@@ -280,7 +284,9 @@ const FormPage = ({
         <section className="paragraphs">
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2>More like this recommendations</h2>
-            <a data-helper-prompt="How can I use more like this recommendations?">Learn more</a>
+            <a href="/help/article/334-more-like-this" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
           </header>
           <fieldset>
             <legend>Product recommendations during checkout</legend>
@@ -324,7 +330,9 @@ const FormPage = ({
               />
               <span>
                 Recommend all products and earn a commission with{" "}
-                <a data-helper-prompt="How can I earn a commission with Gumroad Affiliates?">Gumroad Affiliates</a>
+                <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
+                  Gumroad Affiliates
+                </a>
               </span>
             </label>
           </fieldset>
@@ -332,7 +340,9 @@ const FormPage = ({
         <section className="paragraphs">
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2>Tipping</h2>
-            <a data-helper-prompt="How can I allow customers to add tips to their orders?">Learn more</a>
+            <a href="/help/article/345-tipping" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
           </header>
           <Toggle value={tippingEnabled} onChange={setTippingEnabled}>
             Allow customers to add tips to their orders

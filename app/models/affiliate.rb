@@ -5,10 +5,11 @@ class Affiliate < ApplicationRecord
   include Deletable
   include CurrencyHelper
   include FlagShihTzu
-  include Affiliate::AudienceMember
+
+  include AudienceMember, Cookies
+
   self.ignored_columns = %w(archived_at)
 
-  AFFILIATE_COOKIE_NAME_PREFIX = "_gumroad_affiliate_id_"
   QUERY_PARAM = "affiliate_id"
   SHORT_QUERY_PARAM = "a"
   QUERY_PARAMS = [QUERY_PARAM, SHORT_QUERY_PARAM]
@@ -94,10 +95,6 @@ class Affiliate < ApplicationRecord
 
   def basis_points(*)
     affiliate_basis_points
-  end
-
-  def cookie_key
-    "#{AFFILIATE_COOKIE_NAME_PREFIX}#{external_id}"
   end
 
   def collaborator?

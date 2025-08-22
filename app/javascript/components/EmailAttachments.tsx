@@ -217,7 +217,9 @@ export const EmailAttachments = ({
       {hasStreamableFiles ? (
         <Toggle value={isStreamOnly} onChange={setIsStreamOnly}>
           Disable file downloads (stream only)
-          <a data-helper-prompt="How do I stream videos instead of downloading them?">Learn more</a>
+          <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+            Learn more
+          </a>
         </Toggle>
       ) : null}
     </>

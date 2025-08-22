@@ -5,7 +5,7 @@ module WithCdnUrl
 
   extend ActiveSupport::Concern
 
-  module ClassMethods
+  class_methods do
     def has_cdn_url(*attributes)
       attributes.each do |attribute|
         define_method attribute do

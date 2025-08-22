@@ -65,11 +65,10 @@ RSpec.shared_examples_for "AffiliateCookie concern" do
     # value - the alternative is to actually retrieve the cookie from the Set-Cookie response header
     #
     def parse_cookie(set_cookie, origin_url, cookie_name)
-      set_cookie
-        .split("\n")
-        .map { |cookie_string| HTTP::Cookie.parse(cookie_string, origin_url) }
-        .flatten
-        .find { |cookie| CGI.unescape(cookie.name) == cookie_name }
+      Array.wrap(set_cookie)
+           .lazy
+           .flat_map { |cookie_string| HTTP::Cookie.parse(cookie_string, origin_url) }
+           .find { |cookie| CGI.unescape(cookie.name) == cookie_name }
     end
 
     def determine_domain(url)

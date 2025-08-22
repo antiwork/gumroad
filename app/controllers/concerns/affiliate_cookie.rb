@@ -8,7 +8,7 @@ module AffiliateCookie
       affiliate_id = fetch_affiliate_id(params)
       return unless affiliate_id.present?
       affiliate = Affiliate.find_by_external_id_numeric(affiliate_id)
-      create_affiliate_id_cookie(affiliate) if affiliate.present?
+      create_affiliate_id_cookie(affiliate)
     end
 
     def create_affiliate_id_cookie(affiliate)
