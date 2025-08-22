@@ -3,6 +3,12 @@
 ENV["RAILS_ENV"] = "test"
 BUILDING_ON_CI = !ENV["CI"].nil?
 
+# Set critical environment variables before Rails loads to ensure they're available
+# for initializers like Stripe configuration
+ENV["STRIPE_API_KEY"] = "sk_test_mock_stripe_key"
+ENV["STRIPE_PLATFORM_ACCOUNT_ID"] = "acct_mock_platform"
+ENV["STRIPE_CONNECT_CLIENT_ID"] = "ca_mock_connect_client"
+
 require File.expand_path("../config/environment", __dir__)
 
 require "capybara/rails"

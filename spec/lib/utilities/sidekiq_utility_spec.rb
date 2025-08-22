@@ -4,10 +4,7 @@ require "spec_helper"
 
 describe SidekiqUtility do
   before do
-    ENV["SIDEKIQ_GRACEFUL_SHUTDOWN_TIMEOUT"] = "3"
-    ENV["SIDEKIQ_LIFECYCLE_HOOK_NAME"] = "sample_hook_name"
-    ENV["SIDEKIQ_ASG_NAME"] = "sample_asg_name"
-
+    # Environment variables are already mocked by TestEnvMocks
     uri_double = double("uri_double")
     allow(URI).to receive(:parse).with(described_class::INSTANCE_ID_ENDPOINT).and_return(uri_double)
     allow(Net::HTTP).to receive(:get).with(uri_double).and_return("sample_instance_id")
@@ -21,12 +18,6 @@ describe SidekiqUtility do
     travel_to(@current_time) do
       @sidekiq_utility = described_class.new
     end
-  end
-
-  after do
-    ENV.delete("SIDEKIQ_GRACEFUL_SHUTDOWN_TIMEOUT")
-    ENV.delete("SIDEKIQ_LIFECYCLE_HOOK_NAME")
-    ENV.delete("SIDEKIQ_ASG_NAME")
   end
 
   describe "#initialize" do

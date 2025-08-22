@@ -189,11 +189,7 @@ describe SslCertificates::LetsEncrypt do
       @pkey_double = double("pkey_double")
       @private_key = "private_key"
       allow(OpenSSL::PKey::RSA).to receive(:new).and_return(@pkey_double)
-      ENV["LETS_ENCRYPT_ACCOUNT_PRIVATE_KEY"] = @private_key
-    end
-
-    after do
-      ENV["LETS_ENCRYPT_ACCOUNT_PRIVATE_KEY"] = nil
+      TestEnvMocks.mock_env_var("LETS_ENCRYPT_ACCOUNT_PRIVATE_KEY", @private_key)
     end
 
     it "returns account private key" do

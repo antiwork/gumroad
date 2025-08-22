@@ -22,12 +22,11 @@ describe HelperWidget, type: :controller do
 
   describe "#helper_widget_host" do
     it "returns the default host when environment variable is not set" do
-      expect(ENV["HELPER_WIDGET_HOST"]).to be_nil
       expect(controller.helper_widget_host).to eq("https://help.gumroad.com")
     end
 
     it "returns the environment variable value when set" do
-      allow(ENV).to receive(:fetch).with("HELPER_WIDGET_HOST", "https://help.gumroad.com").and_return("https://custom.helper.ai")
+      TestEnvMocks.mock_env_var("HELPER_WIDGET_HOST", "https://custom.helper.ai")
       expect(controller.helper_widget_host).to eq("https://custom.helper.ai")
     end
   end
