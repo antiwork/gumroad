@@ -554,7 +554,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
       recipient = @recipient || @seller
       email = recipient.form_email
-      return unless email.present? && email.match(User::EMAIL_REGEX)
+      return unless EmailFormatValidator.valid?(email)
 
       mailer_args = { to: email, subject: @subject }
       mailer_args[:reply_to] = @reply_to if @reply_to.present?

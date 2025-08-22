@@ -7,7 +7,7 @@ class User::PasswordsController < Devise::PasswordsController
 
   def create
     email = params[:user][:email]
-    if email.present? && email.match(User::EMAIL_REGEX)
+    if EmailFormatValidator.valid?(email)
       @user = User.alive.by_email(email).first
       return head :no_content if @user&.send_reset_password_instructions
     end

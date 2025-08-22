@@ -12,7 +12,7 @@ module Purchase::AudienceMember
     result = can_contact?
     result &= purchase_state.in?(%w[successful gift_receiver_purchase_successful not_charged])
     result &= !is_gift_sender_purchase?
-    result &= !!email&.match?(User::EMAIL_REGEX)
+    result &= EmailFormatValidator.valid?(email)
     if subscription_id.nil?
       result &= !stripe_refunded?
       result &= chargeback_date.blank? || chargeback_reversed?

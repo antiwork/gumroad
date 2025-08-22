@@ -7,7 +7,7 @@ class AudienceMember < ApplicationRecord
   after_initialize :assign_default_details_value
   before_validation :compact_details
   before_validation :normalize_email, if: :email?
-  validates_format_of :email, with: User::EMAIL_REGEX, allow_blank: false
+  validates :email, email_format: true, presence: true
   validate :details_json_has_valid_format
   before_save :assign_derived_columns
 

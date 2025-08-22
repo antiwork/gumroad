@@ -20,7 +20,7 @@ class ServiceMailer < ApplicationMailer
       return if @do_not_send
 
       email = @user.form_email
-      return unless email.present? && email.match(User::EMAIL_REGEX)
+      return unless EmailFormatValidator.valid?(email)
 
       mailer_args = { to: email, subject: @subject }
       mailer_args[:from] = @from if @from.present?

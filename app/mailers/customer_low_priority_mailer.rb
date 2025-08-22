@@ -20,7 +20,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @payment = Payment.find(payment_id)
     @user = @payment.user
     email = @user.form_email
-    return unless email.present? && email.match(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(email)
 
     @payment_currency = @payment.currency
     @payment_display_amount = @payment.displayed_amount
@@ -228,7 +228,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   def rental_expiring_soon(purchase_id, time_till_rental_expiration_in_seconds)
     purchase = Purchase.find(purchase_id)
-    return unless purchase.email.present? && purchase.email.match(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(purchase.email)
 
     url_redirect = purchase.url_redirect
     if time_till_rental_expiration_in_seconds > 1.day
@@ -254,7 +254,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @preorder_link = @preorder.preorder_link
     @product = @preorder_link.link
     authorization_purchase = @preorder.authorization_purchase
-    return unless authorization_purchase.email.present? && authorization_purchase.email.match(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(authorization_purchase.email)
 
     mail(
       to: authorization_purchase.email,
@@ -268,7 +268,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
   def preorder_cancelled(preorder_id)
     @preorder = Preorder.find_by(id: preorder_id)
     authorization_purchase = @preorder.authorization_purchase
-    return unless authorization_purchase.email.present? && authorization_purchase.email.match(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(authorization_purchase.email)
 
     mail(
       to: authorization_purchase.email,
@@ -280,7 +280,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
   def order_shipped(shipment_id)
     @shipment = Shipment.find(shipment_id)
     purchase = @shipment.purchase
-    return unless purchase.email.present? && purchase.email.match(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(purchase.email)
 
     @product = purchase.link
     @tracking_url = @shipment.calculated_tracking_url

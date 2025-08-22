@@ -9,7 +9,7 @@ class Admin::SearchController < Admin::BaseController
   def users
     @title = "User results"
 
-    @users = User.where(email: @raw_query).order("created_at DESC").limit(25) if @raw_query.match(User::EMAIL_REGEX)
+    @users = User.where(email: @raw_query).order("created_at DESC").limit(25) if EmailFormatValidator.valid?(@raw_query)
     @users ||= User.where("external_id = ? or email like ? or name like ?",
                           @raw_query, @query, @query).order("created_at DESC").limit(RECORDS_PER_PAGE)
 
