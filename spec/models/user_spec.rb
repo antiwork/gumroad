@@ -446,10 +446,10 @@ describe User, :vcr do
       end
     end
 
-    context "when empty hash is provided" do
+    context "when empty array is provided" do
       it "clears all user emails" do
         expect do
-          user.update_product_level_support_emails!({})
+          user.update_product_level_support_emails!([])
         end.to change { [product1.reload.support_email, product2.reload.support_email, product3.reload.support_email] }.to([nil, nil, nil])
       end
     end

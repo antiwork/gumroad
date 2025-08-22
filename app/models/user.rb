@@ -495,26 +495,32 @@ class User < ApplicationRecord
   end
 
   def product_level_support_emails
-    products.where.not(support_email: nil)
-            .group_by(&:support_email)
-            .map do |email, products|
-              { email: email, product_ids: products.map(&:external_id) }
-            end
+    products
+      .where.not(support_email: nil)
+      .group_by(&:support_email)
+      .map do |email, products|
+        { email:, product_ids: products.map(&:external_id) }
+      end
   end
 
-  def update_product_level_support_emails!(product_level_support_emails_data)
-    product_level_support_emails_data = (product_level_support_emails_data || []).reject { |data| data[:email]&.strip&.blank? }
+  def update_product_level_support_emails!(entries)
+    entries = Array.wrap(entries)
+      .reject { |entry| entry[:email]&.blank? || entry[:product_ids]&.blank? }
+
+    products_with_custom_support_email = entries.flat_map { |entry| entry[:product_ids] }.compact
 
     ActiveRecord::Base.transaction do
-      all_product_external_ids = product_level_support_emails_data.flat_map { |data| data[:product_ids] }.compact
-      products.where.not(support_email: nil)
-              .where.not(id: all_product_external_ids.map { |id| ObfuscateIds.decrypt(id) })
-              .update_all(support_email: nil)
+      products
+        .by_external_ids(products_with_custom_support_email).invert_where
+        .where.not(support_email: nil)
+        .update_all(support_email: nil)
 
-      product_level_support_emails_data.each do |email_data|
-        raise ArgumentError, "Invalid email format: #{email_data[:email]}" if !email_data[:email].match?(URI::MailTo::EMAIL_REGEXP)
+      entries.each do |entry|
+        unless entry[:email].match?(URI::MailTo::EMAIL_REGEXP)
+          raise ArgumentError, "Invalid support email format: #{entry[:email]}"
+        end
 
-        products.by_external_ids(email_data[:product_ids]).update_all(support_email: email_data[:email])
+        products.by_external_ids(entry[:product_ids]).update_all(support_email: entry[:email])
       end
     end
   end
