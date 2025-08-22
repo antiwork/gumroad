@@ -1,4 +1,6 @@
 import * as React from "react";
+import { register } from "$app/utils/serverComponentUtil";
+import { createCast } from "ts-safe-cast";
 
 import { Layout } from "$app/components/CheckoutDashboard/Layout";
 import { Button } from "$app/components/Button";
@@ -240,4 +242,4 @@ const DiscountCollectionDetailPage = ({
   );
 };
 
-export default DiscountCollectionDetailPage;
+export default register({ component: DiscountCollectionDetailPage, propParser: createCast() });

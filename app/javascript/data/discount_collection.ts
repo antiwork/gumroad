@@ -137,11 +137,14 @@ export const updateDiscountCollection = async (
   return responseData;
 };
 
-export const deleteDiscountCollection = async (id: string) => {
+export const deleteDiscountCollection = async (id: string, deleteCodes: boolean = false) => {
   const response = await request({
     method: "DELETE",
     accept: "json",
     url: Routes.checkout_discount_collection_path(id),
+    data: {
+      delete_codes: deleteCodes,
+    },
   });
 
   const responseData = cast<{ success: boolean; error_message?: string }>(await response.json());

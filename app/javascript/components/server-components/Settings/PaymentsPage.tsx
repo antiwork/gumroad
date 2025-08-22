@@ -18,6 +18,36 @@ import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CountrySelectionModal } from "$app/components/server-components/CountrySelectionModal";
 import { StripeConnectEmbeddedNotificationBanner } from "$app/components/server-components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
+
+// Error boundary for Stripe Connect components
+class StripeConnectErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    // Log the error for debugging
+    console.warn("Stripe Connect Error Boundary caught error:", error);
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.warn("Stripe Connect Error Boundary error details:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      // Don't render anything if there's an error to prevent further issues
+      return null;
+    }
+
+    return this.props.children;
+  }
+}
 import { CreditCardForm } from "$app/components/server-components/Settings/CreditCardForm";
 import { UpdateCountryConfirmationModal } from "$app/components/server-components/UpdateCountryConfirmationModal";
 import { Layout } from "$app/components/Settings/Layout";
@@ -825,7 +855,11 @@ const PaymentsPage = (props: Props) => {
             <h2>Verification</h2>
           </header>
           {props.show_verification_section ? (
-            <StripeConnectEmbeddedNotificationBanner />
+            <React.Suspense fallback={<div className="dummy" style={{ height: "10rem" }} />}>
+              <StripeConnectErrorBoundary>
+                <StripeConnectEmbeddedNotificationBanner />
+              </StripeConnectErrorBoundary>
+            </React.Suspense>
           ) : (
             <div className="flex flex-col">
               <div role="status" className="success">

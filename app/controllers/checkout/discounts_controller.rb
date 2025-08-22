@@ -56,7 +56,15 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, OfferCode]
 
     parse_date_times
-    offer_code = current_seller.offer_codes.build(products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]), **offer_code_params.except(:selected_product_ids))
+    params = offer_code_params.except(:selected_product_ids)
+
+    # Convert external collection ID to internal ID
+    if params[:discount_collection_id].present?
+      collection = DiscountCollection.find_by_external_id(params[:discount_collection_id])
+      params[:discount_collection_id] = collection&.id
+    end
+
+    offer_code = current_seller.offer_codes.build(products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]), **params)
 
     if offer_code.save
       pagination, offer_codes = fetch_offer_codes
@@ -72,7 +80,15 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, offer_code]
 
     parse_date_times
-    if offer_code.update(**offer_code_params.except(:selected_product_ids, :code), products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]))
+    params = offer_code_params.except(:selected_product_ids, :code)
+
+    # Convert external collection ID to internal ID
+    if params[:discount_collection_id].present?
+      collection = DiscountCollection.find_by_external_id(params[:discount_collection_id])
+      params[:discount_collection_id] = collection&.id
+    end
+
+    if offer_code.update(**params, products: current_seller.products.by_external_ids(offer_code_params[:selected_product_ids]))
       pagination, offer_codes = fetch_offer_codes
       presenter = Checkout::DiscountsPresenter.new(pundit_user:)
       render json: { success: true, offer_codes: offer_codes.map { presenter.offer_code_props(_1) }, pagination: }
@@ -176,8 +192,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       offer_codes = current_seller.offer_codes
                       .alive
                       .where.not(code: nil)
-                      .includes(:discount_collection)
-                      .preload(:products)
+                      .includes(:discount_collection, :products)
                       .sorted_by(**paged_params[:sort].to_h.symbolize_keys).order(updated_at: :desc)
 
       offer_codes = offer_codes.where("name LIKE :query OR code LIKE :query", query: "%#{paged_params[:query]}%") if paged_params[:query].present?

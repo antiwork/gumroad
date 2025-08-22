@@ -814,6 +814,7 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            discountCollectionId: offerCode.discount_collection?.id ?? null,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -827,6 +828,7 @@ const DiscountsPage = ({
         }
       })}
       products={products}
+      collections={collections}
       isLoading={isLoading}
     />
   ) : (
@@ -851,6 +853,7 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            discountCollectionId: offerCode.discount_collection?.id ?? null,
           });
           resetQueryState();
           setState({ offerCodes, pagination });
@@ -865,6 +868,7 @@ const DiscountsPage = ({
         }
       })}
       products={products}
+      collections={collections}
       isLoading={isLoading}
     />
   );
@@ -879,6 +883,7 @@ const Form = ({
   cancel,
   save,
   products,
+  collections,
   isLoading,
 }: {
   title: string;
@@ -888,6 +893,7 @@ const Form = ({
   cancel: () => void;
   save: (offerCode: Omit<OfferCode, "id" | "can_update">) => void;
   products: Product[];
+  collections: { id: string; name: string }[];
   isLoading: boolean;
 }) => {
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: offerCode?.name ?? "" });
@@ -1069,8 +1075,8 @@ const Form = ({
             <Select
               inputId={`${uid}collection`}
               instanceId={`${uid}collection`}
-              options={[]} // TODO: Load collections from API
-              value={selectedCollectionId ? [{ id: selectedCollectionId, label: "Selected Collection" }] : []}
+              options={collections.map((collection) => ({ id: collection.id, label: collection.name }))}
+              value={selectedCollectionId ? [{ id: selectedCollectionId, label: collections.find(c => c.id === selectedCollectionId)?.name || "Selected Collection" }] : []}
               isClearable
               placeholder="Choose a collection to organize this discount code"
               onChange={(selectedIds) => {

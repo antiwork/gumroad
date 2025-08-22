@@ -6,6 +6,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { Pagination } from "$app/components/Pagination";
+import { Modal } from "$app/components/Modal";
 import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -30,6 +31,7 @@ import {
 import { DiscountCollectionForm } from "./DiscountCollectionForm";
 // @ts-ignore
 import { BulkCreateCodesForm } from "./BulkCreateCodesForm";
+import placeholder from "$assets/images/placeholders/DiscountCollections.png";
 
 type QueryParams = {
   page?: number;
@@ -83,6 +85,13 @@ const DiscountCollectionsPage = ({
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
 
+  // Confirmation dialog state
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState<{
+    collectionId: string;
+    collectionName: string;
+    offerCodesCount: number;
+  } | null>(null);
+
   const loadDiscountCollections = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
     try {
       activeRequest.current?.cancel();
@@ -111,7 +120,7 @@ const DiscountCollectionsPage = ({
     }
   });
 
-  const reloadDiscountCollections = () => loadDiscountCollections({ page: pagination.page, query: searchQuery, sort });
+  // Removed unused function
 
   const debouncedLoadDiscountCollections = useDebouncedCallback(() => loadDiscountCollections({ page: 1, query: searchQuery, sort }), 300);
 
@@ -120,9 +129,26 @@ const DiscountCollectionsPage = ({
   }, [isSearchPopoverOpen]);
 
   const deleteCollection = async (id: string) => {
-    await deleteDiscountCollection(id);
-    reloadDiscountCollections();
-    showAlert("Successfully deleted discount collection!", "success");
+    try {
+      setIsLoading(true);
+      await deleteDiscountCollection(id);
+
+      // Remove the deleted collection from the local state immediately
+      setDiscountCollections(prev => prev.filter(collection => collection.id !== id));
+
+      // Also update the pagination count
+      setPagination(prev => ({
+        ...prev,
+        count: Math.max(0, prev.count - 1)
+      }));
+
+      showAlert("Successfully deleted discount collection!", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const currentSeller = useCurrentSeller();
@@ -308,7 +334,7 @@ const DiscountCollectionsPage = ({
         ) : (
           <div className="placeholder">
             <figure>
-              <img src="/assets/images/placeholder-discount-collections.svg" alt="" />
+              <img src={placeholder} alt="" />
             </figure>
             <div>
               <h2>No discount collections yet</h2>
@@ -363,15 +389,8 @@ const DiscountCollectionsPage = ({
                 color="danger"
                 onClick={asyncVoid(async () => {
                   if (!selectedCollectionId) return;
-                  try {
-                    setIsLoading(true);
-                    await deleteCollection(selectedCollectionId);
-                    setSelectedCollectionId(null);
-                  } catch (e) {
-                    assertResponseError(e);
-                    showAlert(e.message, "error");
-                  }
-                  setIsLoading(false);
+                  await deleteCollection(selectedCollectionId);
+                  setSelectedCollectionId(null);
                 })}
                 disabled={!selectedCollection.can_destroy || isLoading}
               >

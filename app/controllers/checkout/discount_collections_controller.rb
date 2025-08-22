@@ -53,7 +53,21 @@ class Checkout::DiscountCollectionsController < Sellers::BaseController
     discount_collection = DiscountCollection.find_by_external_id!(params[:id])
     authorize [:checkout, discount_collection]
 
-    if discount_collection.mark_deleted(validate: false)
+    # Check if user wants to delete associated discount codes
+    delete_codes = params[:delete_codes] == 'true'
+
+    if delete_codes
+      # Delete the collection and all associated offer codes
+      ActiveRecord::Base.transaction do
+        discount_collection.offer_codes.alive.each(&:mark_deleted!)
+        discount_collection.mark_deleted(validate: false)
+      end
+    else
+      # Just delete the collection (offer codes will be nullified due to dependent: :nullify)
+      discount_collection.mark_deleted(validate: false)
+    end
+
+    if discount_collection.deleted?
       render json: { success: true }
     else
       render json: { success: false, error_message: discount_collection.errors.full_messages.first }
@@ -183,6 +197,19 @@ class Checkout::DiscountCollectionsController < Sellers::BaseController
                 :default_minimum_quantity,
                 :default_duration_in_billing_cycles,
                 :default_minimum_amount_cents
+              ).merge(
+                params[:discount_collection]&.permit(
+                  :name,
+                  :description,
+                  :default_discount_type,
+                  :default_discount_value,
+                  :default_max_purchase_count,
+                  :default_valid_at,
+                  :default_expires_at,
+                  :default_minimum_quantity,
+                  :default_duration_in_billing_cycles,
+                  :default_minimum_amount_cents
+                ) || {}
               )
             end
 
@@ -191,7 +218,7 @@ class Checkout::DiscountCollectionsController < Sellers::BaseController
     end
 
     def fetch_discount_collections
-      scope = current_seller.discount_collections.alive.order(created_at: :desc)
+      scope = current_seller.discount_collections.alive.includes(:offer_codes).order(created_at: :desc)
 
       if paged_params[:sort].present?
         sort_key = paged_params[:sort][:key]

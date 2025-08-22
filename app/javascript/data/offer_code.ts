@@ -141,6 +141,7 @@ export const updateDiscount = async (
     minimumQuantity,
     durationInBillingCycles,
     minimumAmount,
+    discountCollectionId,
   }: DiscountPayload,
 ) => {
   const response = await request({
@@ -161,6 +162,7 @@ export const updateDiscount = async (
       minimum_quantity: minimumQuantity,
       duration_in_billing_cycles: durationInBillingCycles,
       minimum_amount_cents: minimumAmount,
+      discount_collection_id: discountCollectionId,
     },
   });
   const responseData = cast<
