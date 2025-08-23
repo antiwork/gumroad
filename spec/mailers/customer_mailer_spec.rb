@@ -921,21 +921,22 @@ describe CustomerMailer do
       expect(mailer[:reply_to].value).to eq(charge.seller.email)
     end
 
-    context "when support email is set" do
-      let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
-      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: "reply_to@example.com") }
+    context "products have the same support emails" do
+      let(:product_support_email) { "product_support_email@example.com" }
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: product_support_email) }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: product_support_email) }
 
-      it "uses correct support email" do
-        expect(mailer[:reply_to].value).to eq("reply_to@example.com")
+      it "use the product support email" do
+        expect(mailer[:reply_to].value).to eq(product_support_email)
       end
+    end
 
-      context "when products have different support emails" do
-        let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
-        let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: "support@example.com") }
+    context "when products have different support emails" do
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: nil) }
 
-        it "uses seller's default email" do
-          expect(mailer[:reply_to].value).to eq(charge.seller.email)
-        end
+      it "uses seller's default email" do
+        expect(mailer[:reply_to].value).to eq(charge.seller.support_or_form_email)
       end
     end
   end

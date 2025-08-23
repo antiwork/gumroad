@@ -405,25 +405,30 @@ describe User, :vcr do
 
   describe "#product_level_support_emails" do
     let(:user) { create(:user) }
-    let!(:product1) { create(:product, user: user, support_email: "support@example.com") }
-    let!(:product2) { create(:product, user: user, support_email: "support@example.com") }
-    let!(:product3) { create(:product, user: user, support_email: "help@example.com") }
-    let!(:product4) { create(:product, user: user, support_email: nil) }
+    let!(:product1) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "3@example.com") }
+    let!(:product4) { create(:product, user:, support_email: nil) }
 
-    before do
-      Feature.activate(:product_level_support_emails)
-    end
+    before { Feature.activate(:product_level_support_emails) }
 
     it "returns the user's product support emails" do
       result = user.product_level_support_emails
 
-      expect(result).to match_array([{ email: "support@example.com", product_ids: [product1.external_id, product2.external_id] }, { email: "help@example.com", product_ids: [product3.external_id] }])
+      expect(result).to contain_exactly(
+        {
+          email: "1+2@example.com",
+          product_ids: [product1.external_id, product2.external_id],
+        },
+        {
+          email: "3@example.com",
+          product_ids: [product3.external_id],
+        }
+      )
     end
 
     context "when product_level_support_emails feature is disabled" do
-      before do
-        Feature.deactivate(:product_level_support_emails)
-      end
+      before { Feature.deactivate(:product_level_support_emails) }
 
       it "returns nil" do
         expect(user.product_level_support_emails).to be_nil

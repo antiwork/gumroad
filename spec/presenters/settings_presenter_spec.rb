@@ -62,9 +62,7 @@ describe SettingsPresenter do
   end
 
   describe "#main_props" do
-    before do
-      Feature.activate(:product_level_support_emails)
-    end
+    before { Feature.activate(:product_level_support_emails) }
 
     it "returns correct props" do
       expect(presenter.main_props).to eq(
@@ -132,41 +130,24 @@ describe SettingsPresenter do
     end
 
     context "when support emails exist" do
-      before do
-        product.support_email = "support@example.com"
-        product.save!
-      end
+      before { product.update!(support_email: "support@example.com") }
 
       it "includes product_level_support_emails in main_props" do
-        expect(presenter.main_props[:user][:product_level_support_emails]).to include(
+        expect(presenter.main_props[:user][:product_level_support_emails]).to contain_exactly(
           {
             email: "support@example.com",
-            product_ids: [
-              product.external_id,
-            ]
+            product_ids: [product.external_id]
           }
         )
       end
     end
 
     context "when product_level_support_emails feature is disabled" do
-      before do
-        Feature.deactivate(:product_level_support_emails)
-      end
+      before { Feature.deactivate(:product_level_support_emails) }
+      before { product.update!(support_email: "support@example.com") }
 
       it "returns nil for product_level_support_emails" do
         expect(presenter.main_props[:user][:product_level_support_emails]).to be_nil
-      end
-
-      context "when products have support emails" do
-        before do
-          product.support_email = "support@example.com"
-          product.save!
-        end
-
-        it "still returns nil for product_level_support_emails" do
-          expect(presenter.main_props[:user][:product_level_support_emails]).to be_nil
-        end
       end
     end
 
