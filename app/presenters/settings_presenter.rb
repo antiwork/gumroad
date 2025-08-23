@@ -84,6 +84,7 @@ class SettingsPresenter
         disable_reviews_email: seller.disable_reviews_email,
         show_nsfw_products: seller.show_nsfw_products?,
         seller_refund_policy:,
+        product_level_support_emails: seller.product_level_support_emails_enabled? ? seller.product_level_support_emails : nil
       }
     }
   end

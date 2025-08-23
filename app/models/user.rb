@@ -493,6 +493,21 @@ class User < ApplicationRecord
     end
   end
 
+  def product_level_support_emails
+    return unless product_level_support_emails_enabled?
+
+    products
+      .where.not(support_email: nil)
+      .group_by(&:support_email)
+      .map do |email, products|
+        { email:, product_ids: products.map(&:external_id) }
+      end
+  end
+
+  def update_product_level_support_emails!(entries)
+    Product::BulkUpdateSupportEmailService.new(self, entries).perform
+  end
+
   def save_external_id
     return if external_id.present?
 
