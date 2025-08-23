@@ -42,6 +42,7 @@ export const CheckoutPreview = ({
         tip: { type: "percentage", percentage: 0 },
         emailTypoSuggestion: null,
         acknowledgedEmails: new Set<string>(),
+        requireEmailTypoAcknowledgment: false,
         products: [
           {
             permalink: cartItem.product.permalink,

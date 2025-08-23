@@ -45,6 +45,7 @@ import {
 } from "$app/components/Checkout/payment";
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
+import { useFeatureFlags } from "$app/components/FeatureFlags";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
@@ -206,6 +207,7 @@ export const CheckoutPage = ({
     }
     return initialCart;
   });
+  const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
     country,
     email,
@@ -221,6 +223,7 @@ export const CheckoutPage = ({
     recaptchaKey: recaptcha_key,
     paypalClientId: paypal_client_id,
     gift,
+    requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
   });
   const [state, dispatch] = reducer;
   const [results, setResults] = React.useState<Result[] | null>(null);

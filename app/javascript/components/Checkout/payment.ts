@@ -87,6 +87,7 @@ export type State = {
   warning?: string | null;
   emailTypoSuggestion: string | null;
   acknowledgedEmails: Set<string>;
+  requireEmailTypoAcknowledgment: boolean;
 };
 
 export const addressFields = ["address", "city", "state", "zipCode", "fullName", "country"] as const;
@@ -149,7 +150,8 @@ export function isProcessing(state: State) {
 }
 
 export function isSubmitDisabled(state: State) {
-  return isProcessing(state) || state.surcharges.type !== "loaded" || state.emailTypoSuggestion !== null;
+  const emailTypoBlocking = state.requireEmailTypoAcknowledgment && state.emailTypoSuggestion !== null;
+  return isProcessing(state) || state.surcharges.type !== "loaded" || emailTypoBlocking;
 }
 
 const getTotalPriceFromProducts = (state: State) => state.products.reduce((sum, item) => sum + item.price, 0);
@@ -235,6 +237,7 @@ export function createReducer(initial: {
   recaptchaKey: string;
   paypalClientId: string;
   gift: Gift | null;
+  requireEmailTypoAcknowledgment: boolean;
 }): readonly [State, React.Dispatch<PublicAction>] {
   const url = new URL(useOriginalLocation());
   function validatePaymentMethodIndependentFields(state: State) {
@@ -377,6 +380,7 @@ export function createReducer(initial: {
         availablePaymentMethods: [],
         emailTypoSuggestion: null,
         acknowledgedEmails: new Set<string>(),
+        requireEmailTypoAcknowledgment: initial.requireEmailTypoAcknowledgment,
       };
     },
   );
