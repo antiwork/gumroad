@@ -498,9 +498,13 @@ class User < ApplicationRecord
 
     products
       .where.not(support_email: nil)
-      .group_by(&:support_email)
-      .map do |email, products|
-        { email:, product_ids: products.map(&:external_id) }
+      .pluck(:support_email, :id)
+      .group_by { |support_email, _| support_email }
+      .map do |email, pairs|
+        {
+          email:,
+          product_ids: pairs.map { |_, id| Link.to_external_id(id) }
+        }
       end
   end
 

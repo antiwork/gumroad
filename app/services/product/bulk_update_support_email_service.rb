@@ -42,7 +42,7 @@ class Product::BulkUpdateSupportEmailService
 
     def clear_existing_support_emails!
       @user.products
-        .by_external_ids(affected_product_ids).invert_where
+        .where.not(id: affected_product_ids.map { Link.from_external_id(it) })
         .where.not(support_email: nil)
         .update_all(support_email: nil)
     end

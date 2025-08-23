@@ -9,7 +9,7 @@ describe Product::BulkUpdateSupportEmailService do
   let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
   let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
 
-  let(:other_user_product) { create(:product) }
+  let(:other_user_product) { create(:product, support_email: "other@example.com") }
 
   before { Feature.activate_user(:product_level_support_emails, user) }
 
@@ -81,10 +81,10 @@ describe Product::BulkUpdateSupportEmailService do
       ]
 
       service = described_class.new(user, entries)
-      service.perform
 
-      expect(product1.reload.support_email).to eq("new1@example.com")
-      expect(other_user_product.reload.support_email).to be_nil
+      expect { service.perform }
+        .to change { product1.reload.support_email }.to("new1@example.com")
+        .and not_change { other_user_product.reload.support_email }
     end
 
     context "when user does not have product_level_support_emails enabled" do
