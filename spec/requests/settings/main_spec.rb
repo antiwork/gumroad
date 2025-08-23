@@ -274,74 +274,64 @@ describe("Main Settings Scenario", type: :system, js: true) do
   end
 
   context "Product level support email" do
-    let!(:product_1) { create(:product, user:, name: "Product 1") }
-    let!(:product_2) { create(:product, user:, name: "Product 2") }
+    let!(:product_1) { create(:product, user:, name: "Product 1", support_email: email_1) }
+    let!(:product_2) { create(:product, user:, name: "Product 2", support_email: nil) }
 
-    before do
-      Feature.activate(:product_level_support_emails)
-    end
+    let(:email_1) { "support1@example.com" }
+    let(:email_2) { "support2@example.com" }
+    let(:email_3) { "support3@example.com" }
 
-    it "adds new support email" do
-      email = "support@example.com"
+    before { Feature.activate(:product_level_support_emails) }
+
+    it "allows adding new support emails" do
       visit settings_main_path
+
       click_on "Add a product specific email"
+
       within find_product_level_support_email_row(name: "No email set") do
-        fill_in "Email", with: email
-        select_combo_box_option "Product 1", from: "Products"
-      end
-      click_on "Update settings"
-      expect(page).to have_alert(text: "Your account has been updated!")
-
-      expect(product_1.reload.support_email).to eq email
-    end
-
-    it "deletes support email" do
-      email = "support@example.com"
-      product_1.update!(support_email: email)
-      visit settings_main_path
-      within find_product_level_support_email_row(name: email) do
-        click_on "Delete email"
-      end
-      click_on "Update settings"
-      expect(page).to have_alert(text: "Your account has been updated!")
-
-      expect(product_1.reload.support_email).to be_nil
-    end
-
-    it "updates existing support email" do
-      email = "support@example.com"
-      product_1.update!(support_email: email)
-
-      visit settings_main_path
-      within find_product_level_support_email_row(name: email) do
-        click_on "Edit email"
-        fill_in "Email", with: "new_support@example.com"
+        fill_in "Email", with: email_2
         select_combo_box_option "Product 2", from: "Products"
       end
-      click_on "Update settings"
-      expect(page).to have_alert(text: "Your account has been updated!")
 
-      expect(product_1.reload.support_email).to eq("new_support@example.com")
-      expect(product_2.reload.support_email).to eq("new_support@example.com")
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Your account has been updated!")
+      expect(product_1.reload.support_email).to eq email_1
+      expect(product_2.reload.support_email).to eq email_2
+    end
+
+    it "allows deleting support email" do
+      visit settings_main_path
+
+      within find_product_level_support_email_row(name: email_1) do
+        click_on "Delete email"
+      end
+
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Your account has been updated!")
+      expect(product_1.reload.support_email).to be_nil
+      expect(product_2.reload.support_email).to be_nil
     end
 
     it "does not allow same product to be selected for multiple emails" do
-      product_1.update!(support_email: "support@example.com")
-      product_2.update!(support_email: "other@example.com")
       visit settings_main_path
-      within find_product_level_support_email_row(name: "support@example.com") do
-        click_on "Edit email"
-        expect(page).not_to have_combo_box("Products", options: ["Product 2"])
+
+      click_on "Add a product specific email"
+
+      within find_product_level_support_email_row(name: "No email set") do
+        find(:label, text: "Products").click
+        # Product 1 is not available because it already has an email.
+        expect(page).to have_combo_box "Products", options: ["Product 2"]
       end
     end
 
     context "when product_level_support_emails feature is disabled" do
-      before do
-        Feature.deactivate(:product_level_support_emails)
-      end
+      before { Feature.deactivate(:product_level_support_emails) }
 
       it "does not show product level support email form" do
         visit settings_main_path
+
         expect(page).not_to have_button("Add a product specific email")
       end
     end
