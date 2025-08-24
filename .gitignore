@@ -60,3 +60,8 @@ docker/local-nginx/certs/*.key
 lib/GeoIP2-City.mmdb
 nomad/
 docs/ssh.md
+
+# Environment files (ignore all, allow examples)
+.env.*
+!.env.example
+!.env.*.example
