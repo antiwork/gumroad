@@ -41,7 +41,7 @@ class PaypalPayoutProcessor
     payout_email = user.paypal_payout_email
 
     # User is payable on PayPal if they've provided an email address.
-    if payout_email.blank? || !payout_email.match(User::EMAIL_REGEX)
+    if !EmailFormatValidator.valid?(payout_email)
       user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the account does not have a valid PayPal payment address") if add_comment
       return false
     end
@@ -72,7 +72,7 @@ class PaypalPayoutProcessor
     payout_email = user.paypal_payout_email
 
     # User is payable on PayPal if they've provided an email address.
-    return false if payout_email.blank? || !payout_email.match(User::EMAIL_REGEX)
+    return false unless EmailFormatValidator.valid?(payout_email)
     # Email address contains non-ascii characters
     return false unless payout_email.ascii_only?
     # User hasn't given us their compliance info.

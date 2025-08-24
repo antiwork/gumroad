@@ -32,7 +32,7 @@ module Affiliate::AudienceMember
   end
 
   def should_be_audience_member?
-    type == "DirectAffiliate" && alive? && send_posts && seller.present? && !!affiliate_user&.email&.match?(User::EMAIL_REGEX)
+    type == "DirectAffiliate" && alive? && send_posts && seller.present? && EmailFormatValidator.valid?(affiliate_user&.email)
   end
 
   def audience_member_details(product_id:)

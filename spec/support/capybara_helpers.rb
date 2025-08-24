@@ -57,4 +57,8 @@ module CapybaraHelpers
   def get_client_time_zone
     page.evaluate_script("Intl.DateTimeFormat().resolvedOptions().timeZone")
   end
+
+  def unfocus
+    find("body").click
+  end
 end
