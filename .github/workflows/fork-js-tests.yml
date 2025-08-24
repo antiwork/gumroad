@@ -34,15 +34,10 @@ jobs:
           npm -v
           git rev-parse --short HEAD
       - name: Run JS tests
-        run: npm test -- --ci --reporters=default --reporters=junit --outputFile=junit-js-tests.xml || true
-      - name: Fail if tests failed
-        run: |
-          # If previous step failed, exit non-zero here so job is marked failed.
-          last_status=$(tail -n 1 "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "0")
-          test -f junit-js-tests.xml || exit 1
-      - name: Upload JUnit report
+        run: npm test -- --ci | tee js_tests_output.txt
+      - name: Upload test output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: junit-js-tests
-          path: junit-js-tests.xml
+          name: js-tests-output
+          path: js_tests_output.txt
