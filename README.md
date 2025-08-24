@@ -247,7 +247,11 @@ This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
 
 You can now access the application at `https://gumroad.dev`.
 
-## Development
+## Development on Windows
+
+See TESTING.md for running focused product editor specs and the available test toggles (REACT_ON_RAILS_PRERENDER, DISABLE_ACCOUNT_SWITCH_UI, PRODUCT_EDITOR_SAVE_SHORTCUT). A helper script is also available:
+
+- scripts/run_product_editor_matrix.sh
 
 ### Logging in
 
