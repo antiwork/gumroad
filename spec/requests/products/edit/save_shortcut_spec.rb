@@ -68,4 +68,54 @@ describe("Product Edit Save Shortcut", type: :system, js: true) do
     sleep 0.5
     expect(product.reload.name).not_to eq(tentative_name)
   end
+
+  context "Meta key behavior" do
+    it "saves via Meta+S when not typing in a text field" do
+      visit edit_link_path(product.unique_permalink)
+
+      new_name = "Saved via meta shortcut"
+      fill_in("Name", with: new_name)
+
+      # Ensure focus is not in a text input so the shortcut triggers save
+      unfocus
+
+      # Dispatch a synthetic keydown with metaKey=true to simulate Cmd+S
+      page.execute_script(<<~JS)
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 's',
+          code: 'KeyS',
+          metaKey: true,
+          ctrlKey: false,
+          bubbles: true,
+          cancelable: true
+        }));
+      JS
+
+      wait_for_ajax
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(product.reload.name).to eq(new_name)
+    end
+
+    it "does not save via Meta+S while focus is in a text input" do
+      visit edit_link_path(product.unique_permalink)
+
+      not_saved_name = "Typing but not saved (meta)"
+      fill_in("Name", with: not_saved_name)
+
+      # Keep focus in the input and dispatch Meta+S; handler should prevent save
+      page.execute_script(<<~JS)
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 's',
+          code: 'KeyS',
+          metaKey: true,
+          ctrlKey: false,
+          bubbles: true,
+          cancelable: true
+        }));
+      JS
+
+      sleep 0.5
+      expect(product.reload.name).not_to eq(not_saved_name)
+    end
+  end
 end
