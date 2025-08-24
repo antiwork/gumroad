@@ -2,6 +2,7 @@ name: Tests
 
 on:
   push:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -396,6 +397,99 @@ jobs:
               -e IN_DOCKER=true \
               $WEB_REPO:test-${{ github.sha }} \
               /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
+  product_editor_matrix:
+    name: Product Editor Focused Matrix
+    runs-on: self-hosted
+    needs: pull_images
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_product_editor
+      WEB_REPO: quay.io/gumroad/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+          logout: false
+      - name: Start services
+        env:
+          COMPOSE_HTTP_TIMEOUT: 300
+        run: docker compose -f docker/docker-compose-test-and-ci.yml up -d
+      - name: Wait for services
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh db_test 3306
+        timeout-minutes: 5
+      - name: Setup test database
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_ENV=test \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            $WEB_REPO:test-${{ github.sha }} \
+            bundle exec rake db:setup
+      - name: Run focused matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "### Product Editor Focused Matrix" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Case | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
+
+          run_case() {
+            local title="$1"; shift
+            echo
+            echo "====================================="
+            echo "CASE: $title"
+            echo "====================================="
+            if docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+              -e CI=true \
+              -e IN_DOCKER=true \
+              "$@" \
+              $WEB_REPO:test-${{ github.sha }} \
+              bundle exec rspec \
+                spec/requests/products/edit/edit_spec.rb:591 \
+                spec/requests/products/edit/rich_text_editor_spec.rb:289 \
+                --format progress --no-profile; then
+              echo "| $title | PASS |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| $title | FAIL |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+
+          run_case "Baseline (bypass account switch UI)" \
+            -e DISABLE_ACCOUNT_SWITCH_UI=true \
+            -e RAILS_ENV=test
+
+          run_case "SSR ON (global) + bypass" \
+            -e REACT_ON_RAILS_PRERENDER=true \
+            -e DISABLE_ACCOUNT_SWITCH_UI=true \
+            -e RAILS_ENV=test
+
+          run_case "Shortcut Flag OFF + bypass" \
+            -e PRODUCT_EDITOR_SAVE_SHORTCUT=false \
+            -e DISABLE_ACCOUNT_SWITCH_UI=true \
+            -e RAILS_ENV=test
+
+          run_case "SSR ON + Shortcut OFF + bypass" \
+            -e REACT_ON_RAILS_PRERENDER=true \
+            -e PRODUCT_EDITOR_SAVE_SHORTCUT=false \
+            -e DISABLE_ACCOUNT_SWITCH_UI=true \
+            -e RAILS_ENV=test
+
+          # Optional control: run once without the UI bypass
+          run_case "Control (no bypass)" \
+            -e RAILS_ENV=test
       - name: Clean up
         if: always()
         run: |
