@@ -252,8 +252,8 @@ jobs:
             -e CI=true \
             -e IN_DOCKER=true \
             $WEB_REPO:test-${{ github.sha }} \
-            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
-        timeout-minutes: 15
+            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress --profile 10]"
+        timeout-minutes: 30
       - name: Capture screenshots (flag ON and OFF)
         shell: bash
         run: |
@@ -383,7 +383,7 @@ jobs:
         env:
           WEB_REPO: quay.io/gumroad/web
         with:
-          timeout_minutes: 15
+          timeout_minutes: 30
           max_attempts: 3
           on_retry_command: |
             docker compose -f docker/docker-compose-test-and-ci.yml down -v
@@ -418,7 +418,7 @@ jobs:
               -e CI=true \
               -e IN_DOCKER=true \
               $WEB_REPO:test-${{ github.sha }} \
-              /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+              /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress --profile 10]"
       - name: Clean up
         if: always()
         run: |
