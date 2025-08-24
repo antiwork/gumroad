@@ -1,0 +1,48 @@
+name: Fork JS Tests
+
+on:
+  push:
+    branches:
+      - feat/save-shortcut-product-editor
+  pull_request:
+
+concurrency:
+  group: fork-js-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+
+jobs:
+  js_tests_fork:
+    name: JS tests (fork-only)
+    if: github.repository_owner != 'antiwork'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Print environment
+        run: |
+          node -v
+          npm -v
+          git rev-parse --short HEAD
+      - name: Run JS tests
+        run: npm test -- --ci --reporters=default --reporters=junit --outputFile=junit-js-tests.xml || true
+      - name: Fail if tests failed
+        run: |
+          # If previous step failed, exit non-zero here so job is marked failed.
+          last_status=$(tail -n 1 "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "0")
+          test -f junit-js-tests.xml || exit 1
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-js-tests
+          path: junit-js-tests.xml
