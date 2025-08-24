@@ -34,7 +34,10 @@ jobs:
           npm -v
           git rev-parse --short HEAD
       - name: Run JS tests
-        run: npm test -- --ci | tee js_tests_output.txt
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test -- --ci | tee js_tests_output.txt
       - name: Upload test output
         if: always()
         uses: actions/upload-artifact@v4
