@@ -2318,7 +2318,8 @@ describe Purchase, :vcr do
           purchase.process!
           expect(purchase.errors).to be_empty
           expect(purchase.merchant_account).not_to eq(nil)
-          expect(purchase.merchant_account).to eq(merchant_account)
+          # When Gumroad collects and remits as the merchant, we should charge via Gumroad’s merchant account
+          expect(purchase.merchant_account).to eq(MerchantAccount.gumroad(purchase.charge_processor_id))
         end
       end
     end

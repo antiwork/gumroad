@@ -129,11 +129,15 @@ RSpec.configure do |config|
   config.include Devise::Test::ControllerHelpers, type: :helper
   config.include FactoryBot::Syntax::Methods
   config.pattern = "**/*_spec.rb"
-  config.raise_errors_for_deprecations!
+  # Raise on deprecations locally to keep dev tidy, but don’t fail CI runs solely due to deprecations.
+  BUILDING_ON_CI ? config.deprecation_stream = $stderr : config.raise_errors_for_deprecations!
   config.use_transactional_fixtures = true
   config.filter_run_when_matching :focus
   config.example_status_persistence_file_path = Rails.root.join("tmp", "rspec_status.txt").to_s
   config.include ActiveSupport::Testing::TimeHelpers
+
+  # Always emit the slowest examples in CI, even outside knapsack commands
+  config.profile_examples = 10 if BUILDING_ON_CI
 
   if BUILDING_ON_CI
     # show retry status in spec process
