@@ -28,4 +28,5 @@ Test Plan
 
 Docs
 - Add a short note in README Development section about the new shortcut.
+- Feature flag: To disable at build time, set PRODUCT_EDITOR_SAVE_SHORTCUT=false before building assets.
 

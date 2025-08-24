@@ -195,7 +195,10 @@ const config = {
       async: false,
     }),
     process.env.WEBPACK_ANALYZE === "1" && new BundleAnalyzerPlugin(),
-    new webpack.DefinePlugin({ SSR: false }),
+    new webpack.DefinePlugin({
+      SSR: false,
+      "process.env.PRODUCT_EDITOR_SAVE_SHORTCUT": JSON.stringify(process.env.PRODUCT_EDITOR_SAVE_SHORTCUT ?? "true"),
+    }),
   ].filter(Boolean),
 
   output,

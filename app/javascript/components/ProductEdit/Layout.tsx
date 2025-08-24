@@ -183,9 +183,36 @@ export const Layout = ({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [isUploadingFilesOrImages]);
 
+  // Build-time feature flag (defaults to enabled) for save shortcut
+  const saveShortcutEnabled =
+    // @ts-expect-error process is injected by webpack DefinePlugin
+    (typeof process !== "undefined" && process?.env?.PRODUCT_EDITOR_SAVE_SHORTCUT !== "false") || true;
+
+  // Keyboard shortcut: Cmd/Ctrl+S to save
+  React.useEffect(() => {
+    if (!saveShortcutEnabled) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        if (!isBusy) void save();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [saveShortcutEnabled, isBusy, save]);
+
+  const defaultSaveShortcutTip = saveShortcutEnabled
+    ? "Press Cmd+S (macOS) or Ctrl+S (Windows/Linux) to save"
+    : undefined;
+
   const saveButton = (
-    <WithTooltip tip={saveButtonTooltip}>
-      <Button color="primary" disabled={isBusy} onClick={() => void save()}>
+    <WithTooltip tip={saveButtonTooltip ?? defaultSaveShortcutTip}>
+      <Button
+        color="primary"
+        disabled={isBusy}
+        aria-keyshortcuts={saveShortcutEnabled ? "Control+S Meta+S" : undefined}
+        onClick={() => void save()}
+      >
         {saving ? "Saving changes..." : "Save changes"}
       </Button>
     </WithTooltip>

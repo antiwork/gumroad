@@ -295,3 +295,5 @@ If you'd like, you can run `git config --local core.hooksPath .githooks` to chec
 ### Keyboard shortcuts
 
 - In the product editor, you can press Cmd+S (macOS) or Ctrl+S (Windows/Linux) to Save changes. The shortcut is disabled while saving or uploading files/images.
+- To disable this shortcut at build time (e.g., for integration testing), set PRODUCT_EDITOR_SAVE_SHORTCUT=false before building assets. Example:
+  - macOS/Linux: `PRODUCT_EDITOR_SAVE_SHORTCUT=false npm run build`
