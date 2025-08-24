@@ -184,9 +184,9 @@ export const Layout = ({
   }, [isUploadingFilesOrImages]);
 
   // Build-time feature flag (defaults to enabled) for save shortcut
-  const saveShortcutEnabled =
-    // @ts-expect-error process is injected by webpack DefinePlugin
-    (typeof process !== "undefined" && process?.env?.PRODUCT_EDITOR_SAVE_SHORTCUT !== "false") || true;
+  // NOTE: Value is injected at build time by Webpack DefinePlugin in config/webpack/common.js
+  // @ts-expect-error injected at build time by webpack DefinePlugin
+  const saveShortcutEnabled = process.env.PRODUCT_EDITOR_SAVE_SHORTCUT !== "false";
 
   // Keyboard shortcut: Cmd/Ctrl+S to save
   React.useEffect(() => {
