@@ -254,6 +254,28 @@ jobs:
             $WEB_REPO:test-${{ github.sha }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         timeout-minutes: 15
+      - name: Capture screenshots (flag ON and OFF)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Run the screenshot spec twice: once with flag ON (default), once with flag OFF after rebuild within the spec
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
+            -e CI=true \
+            -e IN_DOCKER=true \
+            -e SCREENSHOT_OUT=/app/tmp/artifacts \
+            $WEB_REPO:test-${{ github.sha }} \
+            bundle exec rspec spec/requests/products/edit/save_shortcut_screenshots_spec.rb --format progress --no-profile
+
+          # Upload artifacts
+          echo "Screenshots saved under tmp/artifacts" 
+        
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-editor-screenshots
+          path: tmp/artifacts
+
       - name: Clean up
         if: always()
         run: |
