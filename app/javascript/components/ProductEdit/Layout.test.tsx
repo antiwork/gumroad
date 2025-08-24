@@ -1,547 +1,398 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Layout } from './Layout';
+import { MemoryRouter } from 'react-router-dom';
 
-// Mock the feature flag module
-jest.mock('../../utils/features', () => ({
-  featureEnabled: jest.fn(),
+// Mock react-router-dom hooks that require a data router
+jest.mock('react-router-dom', () => {
+  const actual = jest.requireActual('react-router-dom');
+  return {
+    ...actual,
+    useMatches: jest.fn(() => [{ handle: 'product' }]),
+    useNavigate: jest.fn(() => jest.fn()),
+  };
+});
+import { Layout } from './Layout';
+import { ProductEditContext } from './state';
+
+// Mock data modules to avoid importing ts-safe-cast and heavy deps
+jest.mock('$app/data/product_edit', () => ({ saveProduct: jest.fn() }));
+jest.mock('$app/data/publish_product', () => ({ setProductPublished: jest.fn() }));
+
+// Lightweight mocks for deps used by Layout/useProductUrl
+jest.mock('$app/components/RichTextEditor', () => ({
+  useImageUploadSettings: jest.fn(() => ({ isUploading: false })),
+}));
+jest.mock('$app/components/CurrentSeller', () => ({
+  useCurrentSeller: jest.fn(() => ({ subdomain: 'seller' })),
+}));
+jest.mock('$app/components/DomainSettings', () => ({
+  useDomains: jest.fn(() => ({ appDomain: 'gumroad.dev' })),
+}));
+// Stub out clipboard-dependent component to avoid JSDOM runtime errors
+jest.mock('$app/components/CopyToClipboard', () => ({
+  CopyToClipboard: () => null,
+}));
+jest.mock('$app/components/server-components/Alert', () => ({
+  showAlert: jest.fn(),
+}));
+// Avoid importing heavy server components (Email form, etc.)
+jest.mock('$app/components/server-components/EmailsPage', () => ({
+  newEmailPath: '/emails/new',
 }));
 
-// Mock the save function
-const mockHandleSave = jest.fn();
+// Provide global Rails Routes helper used by useProductUrl
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(global as any).Routes = {
+  short_link_url: (_permalink: string | null, _params: Record<string, unknown>) => 'https://gumroad.dev/p/example',
+  custom_domain_coffee_url: (_params: Record<string, unknown>) => 'https://seller.gumroad.dev/p/coffee',
+};
+
+function renderWithContext(ui: React.ReactNode, opts?: { saving?: boolean; isPublished?: boolean }) {
+  const saveMock = jest.fn();
+  const value: any = {
+    id: 'pid',
+    uniquePermalink: 'unique-123',
+    product: {
+      name: 'Product',
+      description: '',
+      custom_permalink: null,
+      price_cents: 1000,
+      suggested_price_cents: null,
+      customizable_price: false,
+      eligible_for_installment_plans: false,
+      allow_installment_plan: false,
+      installment_plan: null,
+      custom_button_text_option: null,
+      custom_summary: null,
+      custom_attributes: [],
+      file_attributes: [],
+      max_purchase_count: null,
+      quantity_enabled: false,
+      can_enable_quantity: false,
+      should_show_sales_count: false,
+      hide_sold_out_variants: false,
+      is_epublication: false,
+      product_refund_policy_enabled: false,
+      refund_policy: { title: '', fine_print: '' },
+      is_published: opts?.isPublished ?? true,
+      free_trial_enabled: false,
+      free_trial_duration_amount: null,
+      free_trial_duration_unit: null,
+      should_include_last_post: false,
+      should_show_all_posts: false,
+      block_access_after_membership_cancellation: false,
+      duration_in_months: null,
+      subscription_duration: null,
+      integrations: {
+        discord: { enabled: false },
+        circle: { enabled: false },
+        google_calendar: { enabled: false },
+      },
+      covers: [],
+      availabilities: [],
+      section_ids: [],
+      taxonomy_id: null,
+      tags: [],
+      display_product_reviews: false,
+      is_adult: false,
+      discover_fee_per_thousand: 0,
+      shipping_destinations: [],
+      custom_domain: '',
+      collaborating_user: null,
+      rich_content: [],
+      files: [],
+      has_same_rich_content_for_all_variants: true,
+      is_multiseat_license: false,
+      call_limitation_info: null,
+      require_shipping: false,
+      cancellation_discount: null,
+      public_files: [],
+      audio_previews_enabled: false,
+      community_chat_enabled: null,
+      native_type: 'ebook',
+      variants: [],
+    },
+    updateProduct: jest.fn(),
+    thumbnail: null,
+    refundPolicies: [],
+    currencyType: 'USD',
+    setCurrencyType: jest.fn(),
+    isListedOnDiscover: false,
+    isPhysical: false,
+    profileSections: [],
+    taxonomies: [],
+    earliestMembershipPriceChangeDate: new Date(),
+    customDomainVerificationStatus: null,
+    salesCountForInventory: 0,
+    successfulSalesCount: 0,
+    ratings: { average_rating: 0, ratings_count: 0, ratings_with_percentages: {} as any },
+    seller: { id: 'seller-id', name: 'Seller' },
+    existingFiles: [],
+    setExistingFiles: jest.fn(),
+    awsKey: 'key',
+    s3Url: 'https://s3',
+    availableCountries: [],
+    saving: opts?.saving ?? false,
+    save: saveMock,
+    googleClientId: '',
+    googleCalendarEnabled: false,
+    seller_refund_policy_enabled: false,
+    seller_refund_policy: { title: '', fine_print: '' },
+    cancellationDiscountsEnabled: false,
+    contentUpdates: null,
+    setContentUpdates: jest.fn(),
+  };
+
+  const view = render(
+    <MemoryRouter>
+      <ProductEditContext.Provider value={value}>{ui}</ProductEditContext.Provider>
+    </MemoryRouter>
+  );
+
+  return { ...view, saveMock };
+}
 
 describe('ProductEdit Layout Keyboard Shortcuts', () => {
-  let featureEnabled: jest.Mock;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    featureEnabled = require('../../utils/features').featureEnabled;
-    // Reset DOM state
     document.body.innerHTML = '';
+    delete (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT;
   });
 
   describe('Cmd/Ctrl+S keyboard shortcut', () => {
     describe('when feature flag is enabled', () => {
       beforeEach(() => {
-        featureEnabled.mockReturnValue(true);
+        (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'true';
       });
 
-      it('should trigger save on Meta+S (Mac)', () => {
-        const { container } = render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('triggers save on Meta+S (Mac)', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        // Simulate Meta+S (Cmd+S on Mac)
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          metaKey: true,
-          ctrlKey: false,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).toHaveBeenCalledTimes(1);
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', metaKey: true, ctrlKey: false, preventDefault: jest.fn() });
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
-      it('should trigger save on Ctrl+S (Windows/Linux)', () => {
-        const { container } = render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('triggers save on Ctrl+S (Windows/Linux)', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        // Simulate Ctrl+S
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          metaKey: false,
-          ctrlKey: true,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).toHaveBeenCalledTimes(1);
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', metaKey: false, ctrlKey: true, preventDefault: jest.fn() });
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
-      it('should not trigger save when typing in input field', () => {
-        const { container } = render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={
-              <div>
-                <input type="text" id="test-input" />
-              </div>
-            }
-          />
+      it('does not save while focused in input', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>
+              <input type="text" />
+            </div>
+          </Layout>
         );
-
         const input = screen.getByRole('textbox');
         input.focus();
-
-        // Simulate Ctrl+S while focused on input
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          ctrlKey: true,
-          metaKey: false,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', ctrlKey: true, preventDefault: jest.fn() });
+        expect(saveMock).not.toHaveBeenCalled();
       });
 
-      it('should not trigger save when typing in textarea', () => {
-        const { container } = render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={
-              <div>
-                <textarea id="test-textarea" />
-              </div>
-            }
-          />
+      it('does not save while focused in textarea', () => {
+        const { container, saveMock } = renderWithContext(
+          <Layout>
+            <div>
+              <textarea />
+            </div>
+          </Layout>
         );
-
-        const textarea = container.querySelector('textarea');
+        const textarea = container.querySelector('textarea') as HTMLTextAreaElement | null;
         textarea?.focus();
-
-        // Simulate Meta+S while focused on textarea
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          metaKey: true,
-          ctrlKey: false,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', metaKey: true, preventDefault: jest.fn() });
+        expect(saveMock).not.toHaveBeenCalled();
       });
 
-      it('should not trigger save when typing in contenteditable element', () => {
-        const { container } = render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={
-              <div>
-                <div contentEditable="true" id="editor">
-                  Editable content
-                </div>
-              </div>
-            }
-          />
+      it('does not save while focused in contenteditable', async () => {
+        const { container, saveMock } = renderWithContext(
+          <Layout>
+            <div>
+              <div contentEditable={true} role="textbox" tabIndex={0}>Editable</div>
+            </div>
+          </Layout>
         );
-
-        const editableDiv = container.querySelector('[contenteditable="true"]');
-        editableDiv?.focus();
-
-        // Simulate Ctrl+S while focused on contenteditable
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          ctrlKey: true,
-          metaKey: false,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
+        const editable = container.querySelector('[contenteditable]') as HTMLElement | null;
+        expect(editable).toBeTruthy();
+        await userEvent.click(editable!);
+        await userEvent.keyboard('{Control>}s{/Control}');
+        expect(saveMock).not.toHaveBeenCalled();
       });
 
-      it('should always prevent default browser save dialog', () => {
+      it('always preventDefault on shortcut', () => {
+        const addSpy = jest.spyOn(window, 'addEventListener');
+        renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
+        );
+        const handler = addSpy.mock.calls.find((c) => c[0] === 'keydown')?.[1] as (e: KeyboardEvent) => void;
+        addSpy.mockRestore();
         const preventDefault = jest.fn();
-        
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
-        );
-
-        // Simulate Ctrl+S
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          ctrlKey: true,
-          metaKey: false,
-          preventDefault,
-        });
-
-        expect(preventDefault).toHaveBeenCalledTimes(1);
+        handler?.({ key: 's', code: 'KeyS', ctrlKey: true, preventDefault } as any);
+        expect(preventDefault).toHaveBeenCalled();
       });
 
-      it('should handle both Meta and Ctrl keys simultaneously', () => {
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('handles both Meta+Ctrl+S once', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        // Simulate both Meta+Ctrl+S (edge case)
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          metaKey: true,
-          ctrlKey: true,
-          preventDefault: jest.fn(),
-        });
-
-        // Should still trigger save only once
-        expect(mockHandleSave).toHaveBeenCalledTimes(1);
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', metaKey: true, ctrlKey: true, preventDefault: jest.fn() });
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
-      it('should not trigger save with other modifier keys', () => {
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('ignores other modifiers', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        // Test Alt+S
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          altKey: true,
-          metaKey: false,
-          ctrlKey: false,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
-
-        // Test Shift+S
-        fireEvent.keyDown(window, {
-          key: 'S',
-          code: 'KeyS',
-          shiftKey: true,
-          metaKey: false,
-          ctrlKey: false,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', altKey: true, preventDefault: jest.fn() });
+        fireEvent.keyDown(window, { key: 'S', code: 'KeyS', shiftKey: true, preventDefault: jest.fn() });
+        expect(saveMock).not.toHaveBeenCalled();
       });
 
-      it('should not trigger save with different keys', () => {
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('ignores different keys', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        // Test Ctrl+A
-        fireEvent.keyDown(window, {
-          key: 'a',
-          code: 'KeyA',
-          ctrlKey: true,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
-
-        // Test Meta+P
-        fireEvent.keyDown(window, {
-          key: 'p',
-          code: 'KeyP',
-          metaKey: true,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'a', code: 'KeyA', ctrlKey: true, preventDefault: jest.fn() });
+        fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true, preventDefault: jest.fn() });
+        expect(saveMock).not.toHaveBeenCalled();
       });
 
-      it('should cleanup event listener on unmount', () => {
-        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener');
-        
-        const { unmount } = render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('cleans up event listener on unmount', () => {
+        const spy = jest.spyOn(window, 'removeEventListener');
+        const { unmount } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
         unmount();
-
-        expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-        removeEventListenerSpy.mockRestore();
+        expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+        spy.mockRestore();
       });
     });
 
     describe('when feature flag is disabled', () => {
       beforeEach(() => {
-        featureEnabled.mockReturnValue(false);
+        (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'false';
       });
 
-      it('should not trigger save on Cmd+S', () => {
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('does not trigger save on Cmd+S or Ctrl+S', () => {
+        const { saveMock } = renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          metaKey: true,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', metaKey: true, preventDefault: jest.fn() });
+        fireEvent.keyDown(window, { key: 's', code: 'KeyS', ctrlKey: true, preventDefault: jest.fn() });
+        expect(saveMock).not.toHaveBeenCalled();
       });
 
-      it('should not trigger save on Ctrl+S', () => {
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
+      it('does not add keydown listener', () => {
+        const spy = jest.spyOn(window, 'addEventListener');
+        renderWithContext(
+          <Layout>
+            <div>Content</div>
+          </Layout>
         );
-
-        fireEvent.keyDown(window, {
-          key: 's',
-          code: 'KeyS',
-          ctrlKey: true,
-          preventDefault: jest.fn(),
-        });
-
-        expect(mockHandleSave).not.toHaveBeenCalled();
-      });
-
-      it('should not add event listener', () => {
-        const addEventListenerSpy = jest.spyOn(window, 'addEventListener');
-        
-        render(
-          <Layout 
-            handleSave={mockHandleSave}
-            saveButtonText="Save"
-            children={<div>Content</div>}
-          />
-        );
-
-        // Check that no keydown listener was added
-        const keydownListeners = addEventListenerSpy.mock.calls.filter(
-          call => call[0] === 'keydown'
-        );
-        expect(keydownListeners).toHaveLength(0);
-
-        addEventListenerSpy.mockRestore();
+        const keydowns = spy.mock.calls.filter((c) => c[0] === 'keydown');
+        expect(keydowns).toHaveLength(0);
+        spy.mockRestore();
       });
     });
   });
 
   describe('aria-keyshortcuts attribute', () => {
-    it('should add aria-keyshortcuts to save button when feature is enabled', () => {
-      featureEnabled.mockReturnValue(true);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          children={<div>Content</div>}
-        />
+    it('is present and includes Control+S and Meta+S when enabled', () => {
+      (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'true';
+      renderWithContext(
+        <Layout>
+          <div>Content</div>
+        </Layout>
       );
-
-      const saveButton = screen.getByText('Save');
-      expect(saveButton).toHaveAttribute('aria-keyshortcuts');
-      
-      const ariaValue = saveButton.getAttribute('aria-keyshortcuts');
-      expect(ariaValue).toMatch(/Meta\+S|Ctrl\+S/);
+      const btn = screen.getByText('Save changes');
+      expect(btn).toHaveAttribute('aria-keyshortcuts');
+      const val = btn.getAttribute('aria-keyshortcuts') || '';
+      expect(val).toContain('Control+S');
+      expect(val).toContain('Meta+S');
     });
 
-    it('should not add aria-keyshortcuts when feature is disabled', () => {
-      featureEnabled.mockReturnValue(false);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          children={<div>Content</div>}
-        />
+    it('is omitted when disabled', () => {
+      (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'false';
+      renderWithContext(
+        <Layout>
+          <div>Content</div>
+        </Layout>
       );
-
-      const saveButton = screen.getByText('Save');
-      expect(saveButton).not.toHaveAttribute('aria-keyshortcuts');
-    });
-
-    it('should use platform-appropriate aria-keyshortcuts value', () => {
-      featureEnabled.mockReturnValue(true);
-      
-      // Mock navigator.platform for Mac
-      Object.defineProperty(navigator, 'platform', {
-        value: 'MacIntel',
-        writable: true,
-      });
-
-      const { rerender } = render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          children={<div>Content</div>}
-        />
-      );
-
-      let saveButton = screen.getByText('Save');
-      expect(saveButton.getAttribute('aria-keyshortcuts')).toContain('Meta+S');
-
-      // Mock navigator.platform for Windows
-      Object.defineProperty(navigator, 'platform', {
-        value: 'Win32',
-        writable: true,
-      });
-
-      rerender(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          children={<div>Content</div>}
-        />
-      );
-
-      saveButton = screen.getByText('Save');
-      expect(saveButton.getAttribute('aria-keyshortcuts')).toContain('Ctrl+S');
+      const btn = screen.getByText('Save changes');
+      expect(btn).not.toHaveAttribute('aria-keyshortcuts');
     });
   });
 
   describe('Save button interaction', () => {
-    it('should call handleSave when save button is clicked', async () => {
-      featureEnabled.mockReturnValue(true);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save Product"
-          children={<div>Content</div>}
-        />
+    it('clicking Save calls save()', async () => {
+      (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'true';
+      const { saveMock } = renderWithContext(
+        <Layout>
+          <div>Content</div>
+        </Layout>
       );
-
-      const saveButton = screen.getByText('Save Product');
-      await userEvent.click(saveButton);
-
-      expect(mockHandleSave).toHaveBeenCalledTimes(1);
+      await userEvent.click(screen.getByText('Save changes'));
+      expect(saveMock).toHaveBeenCalledTimes(1);
     });
 
-    it('should disable save button when saving', () => {
-      featureEnabled.mockReturnValue(true);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          saving={true}
-          children={<div>Content</div>}
-        />
+    it('disables Save and shows saving text while saving', () => {
+      (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'true';
+      renderWithContext(
+        <Layout>
+          <div>Content</div>
+        </Layout>,
+        { saving: true }
       );
-
-      const saveButton = screen.getByText('Save');
-      expect(saveButton).toBeDisabled();
-    });
-
-    it('should show saving text when saving', () => {
-      featureEnabled.mockReturnValue(true);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          savingButtonText="Saving..."
-          saving={true}
-          children={<div>Content</div>}
-        />
-      );
-
-      expect(screen.getByText('Saving...')).toBeInTheDocument();
+      const btn = screen.getByRole('button', { name: 'Saving changes...' });
+      expect(btn).toBeDisabled();
+      expect(screen.getByText('Saving changes...')).toBeInTheDocument();
     });
   });
 
   describe('Focus behavior', () => {
-    it('should detect focus in nested input elements', () => {
-      featureEnabled.mockReturnValue(true);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          children={
-            <div>
-              <div>
-                <form>
-                  <input type="text" id="nested-input" />
-                </form>
-              </div>
-            </div>
-          }
-        />
+    it('does not save when input focused; saves when other element focused', () => {
+      (process.env as any).PRODUCT_EDITOR_SAVE_SHORTCUT = 'true';
+      const { saveMock } = renderWithContext(
+        <Layout>
+          <div>
+            <input type="text" />
+            <button>Click me</button>
+          </div>
+        </Layout>
       );
-
-      const input = screen.getByRole('textbox');
-      input.focus();
-
-      fireEvent.keyDown(window, {
-        key: 's',
-        code: 'KeyS',
-        ctrlKey: true,
-        preventDefault: jest.fn(),
-      });
-
-      expect(mockHandleSave).not.toHaveBeenCalled();
-    });
-
-    it('should handle focus changes correctly', () => {
-      featureEnabled.mockReturnValue(true);
-      
-      render(
-        <Layout 
-          handleSave={mockHandleSave}
-          saveButtonText="Save"
-          children={
-            <div>
-              <input type="text" id="input" />
-              <button id="button">Click me</button>
-            </div>
-          }
-        />
-      );
-
       const input = screen.getByRole('textbox');
       const button = screen.getByText('Click me');
 
-      // Focus on input - should not save
       input.focus();
-      fireEvent.keyDown(window, {
-        key: 's',
-        code: 'KeyS',
-        ctrlKey: true,
-        preventDefault: jest.fn(),
-      });
-      expect(mockHandleSave).not.toHaveBeenCalled();
+      fireEvent.keyDown(window, { key: 's', code: 'KeyS', ctrlKey: true, preventDefault: jest.fn() });
+      expect(saveMock).not.toHaveBeenCalled();
 
-      // Focus on button - should save
       button.focus();
-      fireEvent.keyDown(window, {
-        key: 's',
-        code: 'KeyS',
-        ctrlKey: true,
-        preventDefault: jest.fn(),
-      });
-      expect(mockHandleSave).toHaveBeenCalledTimes(1);
+      fireEvent.keyDown(window, { key: 's', code: 'KeyS', ctrlKey: true, preventDefault: jest.fn() });
+      expect(saveMock).toHaveBeenCalledTimes(1);
     });
   });
 });

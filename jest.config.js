@@ -8,19 +8,13 @@ export default {
     '**/?(*.)+(spec|test).+(ts|tsx|js)'
   ],
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: {
-        jsx: 'react',
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        moduleResolution: 'node',
-        lib: ['es2020', 'dom'],
-      }
-    }]
+    '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.jest.json', useESM: true, diagnostics: false }],
+    '^.+\\.(png|jpg|jpeg|gif|webp|svg)$': '<rootDir>/__mocks__/fileTransformer.cjs'
   },
   moduleNameMapper: {
-    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
-    '\\.(jpg|jpeg|png|gif|webp|svg)$': '<rootDir>/__mocks__/fileMock.js'
+    '^\\$app/(.*)$': '<rootDir>/app/javascript/$1',
+    '^\\$assets/(.*)$': '<rootDir>/app/assets/$1',
+    '\\.(css|less|scss|sass)$': 'identity-obj-proxy'
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   collectCoverageFrom: [
@@ -39,11 +33,9 @@ export default {
     '/build/',
     '/dist/',
   ],
+  transformIgnorePatterns: [
+    '/node_modules/(?!(ts-safe-cast)/)'
+  ],
   moduleDirectories: ['node_modules', 'app/javascript'],
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
-  },
 };

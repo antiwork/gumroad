@@ -15,6 +15,8 @@ require "rspec/rails"
 require "paper_trail/frameworks/rspec"
 require "pundit/rspec"
 Dir.glob(Rails.root.join("spec", "support", "**", "*.rb")).each { |f| require f }
+# Also load shared examples/contexts used in request/system specs
+Dir.glob(Rails.root.join("spec", "shared_examples", "**", "*.rb")).each { |f| require f }
 
 JsonMatchers.schema_root = "spec/support/schemas"
 

@@ -25,3 +25,13 @@ global.IntersectionObserver = class IntersectionObserver {
     return [];
   }
 };
+
+// Polyfill TextEncoder/TextDecoder for libraries expecting them in JSDOM
+const { TextEncoder, TextDecoder } = require('util');
+if (!global.TextEncoder) {
+  global.TextEncoder = TextEncoder;
+}
+if (!global.TextDecoder) {
+  // @ts-ignore
+  global.TextDecoder = TextDecoder;
+}
