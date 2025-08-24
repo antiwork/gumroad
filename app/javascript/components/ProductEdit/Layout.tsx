@@ -193,8 +193,19 @@ export const Layout = ({
     if (!saveShortcutEnabled) return;
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        const activeEl = document.activeElement;
+        let isTextInput = false;
+        if (activeEl && activeEl instanceof HTMLElement) {
+          isTextInput =
+            activeEl.tagName === "TEXTAREA" ||
+            activeEl.isContentEditable ||
+            activeEl.getAttribute("role") === "textbox" ||
+            (activeEl instanceof HTMLInputElement &&
+              ["text", "search", "url", "tel", "email", "password", "number"].includes(activeEl.type));
+        }
+        // Always prevent the default browser Save dialog, but avoid saving while typing
         e.preventDefault();
-        if (!isBusy) void save();
+        if (!isTextInput && !isBusy) void save();
       }
     };
     window.addEventListener("keydown", handler);

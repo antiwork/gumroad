@@ -173,12 +173,15 @@ module ReactOnRails::Helper
     opts[:html_options][:style] = "display:contents"
     opts[:request] = request
 
-    # In test, selectively disable server-side rendering only for known-problematic components
-    # to avoid SSR bundle issues during system/request specs. Keep SSR elsewhere so markup is present.
+    # In test, selectively disable server-side rendering to avoid unrelated SSR bundle issues
+    # during system/request specs. Keep SSR enabled for specific components where we want coverage.
     # Set REACT_ON_RAILS_PRERENDER=true to override and re-enable SSR for all components in test.
     if Rails.env.test? && ENV["REACT_ON_RAILS_PRERENDER"] != "true"
-      # Disable server-side rendering for all components in test unless explicitly re-enabled.
-      opts[:prerender] = false
+      # Allowlist components that should keep SSR in test
+      allowlist = %w[ProductEditPage]
+      unless allowlist.include?(name)
+        opts[:prerender] = false
+      end
     end
 
     original_react_component(name, opts)

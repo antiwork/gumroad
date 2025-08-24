@@ -1,0 +1,7 @@
+ESLint: ran on changed files in PR #988
+- Node: 20.17.0 (asdf)
+- eslint version: 9.12.0
+- Command: DISABLE_TYPE_CHECKED=1 npx eslint --max-warnings 0 --fix --no-warn-ignored app/javascript/components/ProductEdit/Layout.tsx config/webpack/common.js
+
+Result: Clean (0 errors, 0 warnings)
+

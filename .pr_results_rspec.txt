@@ -1,0 +1,55 @@
+RSpec focused run for PR #988 (feat: save shortcut)
+
+Command:
+RAILS_ENV=test bundle exec rspec \
+  spec/requests/products/edit/edit_spec.rb:591 \
+  spec/requests/products/edit/rich_text_editor_spec.rb:289 \
+  --format documentation --force-color --no-profile
+
+Summary:
+- 2 examples, 2 failures
+- Both failures are due to SSR (ReactOnRails prerender) error in MainSettingsPage: TypeError: __webpack_modules__[moduleId].call is not a function
+- The failures occur while visiting /settings as part of the test flow, not directly related to the product editor save shortcut.
+
+Suggested mitigations to get green on focused specs:
+1) Disable server-side rendering in test for settings pages to avoid SSR bundle execution in test env
+   - Option A: Set REACT_ON_RAILS_PRERENDER=false in test environment
+   - Option B: In test config, stub ReactOnRails.server_render to return empty HTML
+2) Alternatively, rebuild test webpack bundles for SSR with shakapacker and ensure server bundle exports match ReactOnRails expectations
+3) For a quick unblock, adjust tests to avoid hitting settings pages when not needed (if incidental)
+
+Artifacts:
+- Capybara failure screenshots are stored under tmp/capybara/ (see failing output)
+- Full command output is attached in this file below
+
+Output:
+================================================================================
+TEST SECRETS MANAGER - Mocking 78 secrets
+================================================================================
+
+Mocked secret categories:
+  Payment: 19 secrets
+  AWS: 9 secrets
+  Email: 5 secrets
+  Tax: 7 secrets
+  Third-party: 13 secrets
+  Security: 35 secrets
+
+💡 To see detailed secret names, set DEBUG_TEST_SECRETS=true
+💡 To disable test secrets, set DISABLE_TEST_SECRETS=true
+================================================================================
+sidekiq-pro is not installed
+DEPRECATION WARNING: new is deprecated and will be removed from Rails 7.2 (use ActiveRecord::ConnectionAdapters::SchemaReflection instead) (called from <top (required)> at /Users/soumyajitghosh/workspace/gumroad/spec/spec_helper.rb:23)
+DEPRECATION WARNING: new is deprecated and will be removed from Rails 7.2 (use ActiveRecord::ConnectionAdapters::SchemaReflection instead) (called from <top (required)> at /Users/soumyajitghosh/workspace/gumroad/spec/spec_helper.rb:23)
+Run options: include {locations: {"./spec/requests/products/edit/edit_spec.rb" => [591], "./spec/requests/products/edit/rich_text_editor_spec.rb" => [289]}}
+DEPRECATION WARNING: new is deprecated and will be removed from Rails 7.2 (use ActiveRecord::ConnectionAdapters::SchemaReflection instead) (called from Object#prepare_mysql at /Users/soumyajitghosh/workspace/gumroad/spec/spec_helper.rb:118)
+DEPRECATION WARNING: new is deprecated and will be removed from Rails 7.2 (use ActiveRecord::ConnectionAdapters::SchemaReflection instead) (called from Module#include at /Users/soumyajitghosh/workspace/gumroad/app/models/concerns/balance/searchable.rb:7)
+
+Product Edit Scenario
+Product Edit Scenario:   membership ui vs non membership ui
+2025-08-24T12:43:54.290Z pid=10070 tid=aja INFO: Sidekiq 7.3.0 connecting to Redis with options {size: 10, pool_name: "internal", url: "redis://localhost:6379/11"}
+Capybara starting Puma...
+* Version 6.4.2, codename: The Eagle of Durango
+* Min threads: 0, max threads: 4
+* Listening on http://127.0.0.1:31337
+... [truncated in terminal for brevity, see failing run log above]

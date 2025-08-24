@@ -1,0 +1,14 @@
+Focused spec run (save-related) for PR #988: green
+
+Command:
+RAILS_ENV=test bundle exec rspec \
+  spec/requests/products/edit/edit_spec.rb:379 \
+  --format documentation --force-color --no-profile
+
+Result:
+- 1 example, 0 failures (green)
+
+Notes:
+- This scenario exercises the save workflow in the product editor and is not affected by SSR prerender.
+- SSR is disabled by default in test via a helper override; can be re-enabled by setting REACT_ON_RAILS_PRERENDER=true.
+

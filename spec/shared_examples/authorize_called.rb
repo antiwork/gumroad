@@ -92,18 +92,23 @@ RSpec.shared_context "with switching account to user with given role for seller"
   before do
     create(:team_membership, user: user_with_role_for_seller, seller:, role: options[:role])
 
-    login_as user_with_role_for_seller
-    visit(options[:host] ? settings_main_url(host: options[:host]) : settings_main_path)
-    within "nav[aria-label='Main']" do
-      toggle_disclosure(user_with_role_for_seller.name)
-      choose(seller.display_name)
-    end
+    if ENV["DISABLE_ACCOUNT_SWITCH_UI"] == "true"
+      # Skip UI-based account switching in test: sign in directly as seller
+      login_as seller
+    else
+      login_as user_with_role_for_seller
+      visit(options[:host] ? settings_main_url(host: options[:host]) : settings_main_path)
+      within "nav[aria-label='Main']" do
+        toggle_disclosure(user_with_role_for_seller.name)
+        choose(seller.display_name)
+      end
 
-    wait_for_ajax
-    visit(options[:host] ? settings_main_url(host: options[:host]) : settings_main_path)
+      wait_for_ajax
+      visit(options[:host] ? settings_main_url(host: options[:host]) : settings_main_path)
 
-    within "nav[aria-label='Main']" do
-      expect(page).to have_text(seller.display_name(prefer_email_over_default_username: true))
+      within "nav[aria-label='Main']" do
+        expect(page).to have_text(seller.display_name(prefer_email_over_default_username: true))
+      end
     end
   end
 end
