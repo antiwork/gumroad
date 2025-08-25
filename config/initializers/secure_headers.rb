@@ -22,6 +22,8 @@ SecureHeaders::Configuration.default do |config|
   config.x_content_type_options = "nosniff"
   config.x_xss_protection = "1; mode=block"
 
+  # Report-only CSP to measure potential breakage before enforcement
+  # To enable report-only, we duplicate the current policy into report_only_csp and keep enforcement permissive for now.
   config.csp = {
     default_src: ["https", "'self'"],
 
@@ -185,6 +187,10 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:script_src] << Rails.application.config.asset_host
     config.csp[:style_src] << Rails.application.config.asset_host
   end
+
+  # Start with report-only mode to observe violations without breaking users
+  # Maintainers: switch to enforcement by moving directives into config.csp and removing report_only_csp once stable
+  config.report_only_csp = config.csp.deep_dup
 
   if Rails.env.test?
     config.csp[:default_src] = ["'self'"]
