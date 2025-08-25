@@ -424,11 +424,11 @@ class User < ApplicationRecord
   end
 
   def stripe_and_paypal_merchant_accounts_exist?
-    merchant_account(StripeChargeProcessor.charge_processor_id) && merchant_account(PaypalChargeProcessor.charge_processor_id)
+    merchant_account(StripeChargeProcessor.charge_processor_id) && paypal_connect_account
   end
 
   def stripe_or_paypal_merchant_accounts_exist?
-    merchant_account(StripeChargeProcessor.charge_processor_id) || merchant_account(PaypalChargeProcessor.charge_processor_id)
+    merchant_account(StripeChargeProcessor.charge_processor_id) || paypal_connect_account
   end
 
   def stripe_connect_account
@@ -452,9 +452,7 @@ class User < ApplicationRecord
             .find { |ma| ma.can_accept_charges? && !ma.is_a_stripe_connect_account? }
       end
     else
-      merchant_accounts.alive.charge_processor_alive
-          .where(charge_processor_id:)
-          .find { |ma| ma.can_accept_charges? }
+      merchant_accounts.alive.charge_processor_alive.where(charge_processor_id:).find(&:can_accept_charges?)
     end
   end
 
