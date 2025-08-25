@@ -272,7 +272,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
         visit admin_user_path(affiliate_user.id)
 
         click_on "Purchases"
-        
+
         expect(page).to have_text("All purchases")
       end
     end
