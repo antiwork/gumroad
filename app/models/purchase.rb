@@ -9,7 +9,7 @@ class Purchase < ApplicationRecord
           Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
-          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns, SecureExternalId
+          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Paypal, Receipt, UnusedColumns, SecureExternalId
 
   extend PreorderHelper
   extend ProductsHelper
@@ -511,14 +511,8 @@ class Purchase < ApplicationRecord
   }
   scope :created_after, ->(start_at) { where("purchases.created_at > ?", start_at) if start_at.present? }
   scope :created_before, ->(end_at) { where("purchases.created_at < ?", end_at) if end_at.present? }
-  scope :paypal_orders, -> { where.not(paypal_order_id: nil) }
-  scope :unsuccessful_paypal_orders, lambda { |created_after_timestamp, created_before_timestamp|
-    not_successful.paypal_orders
-                  .created_after(created_after_timestamp)
-                  .created_before(created_before_timestamp)
-  }
 
-  scope :with_credit_card_id, -> { where("credit_card_id IS NOT NULL") }
+  scope :with_credit_card_id, -> { where.not(credit_card_id: nil) }
   scope :not_rental_expired, -> { where(rental_expired: [nil, false]) }
   scope :rentals_to_expire, -> {
     time_now = Time.current
@@ -579,7 +573,6 @@ class Purchase < ApplicationRecord
       .where(purchaser_id:)
   }
 
-  scope :paypal, -> { where(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
   scope :stripe, -> { where(charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
   scope :not_access_revoked_or_is_paid, -> { not_is_access_revoked.or(paid) }
@@ -844,10 +837,6 @@ class Purchase < ApplicationRecord
     merchant_account&.is_a_stripe_connect_account?
   end
 
-  def charged_using_paypal_connect_account?
-    merchant_account&.is_a_paypal_connect_account?
-  end
-
   def update_user_balance_in_transaction_for_affiliate
     if charged_using_gumroad_merchant_account? && using_gumroad_merchant_account_for_affiliate_user?
       true
@@ -869,10 +858,6 @@ class Purchase < ApplicationRecord
 
   def seller_merchant_migration_enabled?
     seller&.merchant_migration_enabled?
-  end
-
-  def seller_native_paypal_payment_enabled?
-    seller&.native_paypal_payment_enabled?
   end
 
   def using_gumroad_merchant_account_for_affiliate_user?
@@ -1525,10 +1510,6 @@ class Purchase < ApplicationRecord
 
   def amount_refundable_cents_in_currency
     usd_cents_to_currency(link.price_currency_type, amount_refundable_cents, rate_converted_to_usd)
-  end
-
-  def paypal_refund_expired?
-    created_at < 6.months.ago && card_type == CardType::PAYPAL
   end
 
   def refunding_amount_cents(amount)
@@ -2362,13 +2343,6 @@ class Purchase < ApplicationRecord
 
   def true_original_purchase
     subscription_id.present? ? subscription.true_original_purchase : self
-  end
-
-  def paypal_fee_usd_cents
-    return 0 if charge_processor_id != PaypalChargeProcessor.charge_processor_id ||
-      processor_fee_cents_currency.blank? ||
-      processor_fee_cents.to_i == 0
-    get_usd_cents(processor_fee_cents_currency, processor_fee_cents)
   end
 
   def total_fee_cents
