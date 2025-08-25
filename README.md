@@ -26,7 +26,8 @@
   - [Resetting Elasticsearch indices](#resetting-elasticsearch-indices)
   - [Push Notifications](#push-notifications)
   - [Common Development Tasks](#common-development-tasks)
-  - [Linting](#linting)
+- [Linting](#linting)
+- [Dev Container (optional)](#dev-container-optional)
 
 ## Getting Started
 
@@ -226,6 +227,11 @@ If you are on Linux, or installed Docker via a package manager on a mac, you may
 
 This command will not terminate. You run this in one tab and start the application in another tab.
 If you want to run Docker services in the background, use `LOCAL_DETACHED=true make local` instead.
+
+#### Dev Container (optional)
+
+- Open the repository in VS Code and run "Dev Containers: Reopen in Container".
+- The container includes Ruby and Node toolchains plus common extensions. You’ll still run services via `make local` on your host.
 
 #### Set up the database
 

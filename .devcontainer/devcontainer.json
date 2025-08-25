@@ -1,0 +1,13 @@
+{
+  "name": "Gumroad",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["rebornix.ruby", "Shopify.ruby-lsp", "esbenp.prettier-vscode", "dbaeumer.vscode-eslint"]
+    }
+  },
+  "forwardPorts": [3000, 3001, 6379, 9200, 27017, 3306],
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
+}
