@@ -23,6 +23,9 @@
   <a href="https://github.com/antiwork/gumroad/actions/workflows/tests.yml">
     <img src="https://github.com/antiwork/gumroad/actions/workflows/tests.yml/badge.svg" alt="Tests (upstream)" />
   </a>
+  <a href="https://github.com/antiwork/gumroad/actions/workflows/codeql.yml">
+    <img src="https://github.com/antiwork/gumroad/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" />
+  </a>
 </p>
 
 <p align="center">

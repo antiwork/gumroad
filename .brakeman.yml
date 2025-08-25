@@ -1,0 +1,13 @@
+# Brakeman configuration
+# Exclude non-runtime directories to reduce noise.
+# See: https://brakemanscanner.org/docs/configuration/
+
+skip_files:
+  - ^spec/
+  - ^test/
+  - ^vendor/
+  - ^node_modules/
+  - ^docs/
+
+# You can also exclude specific warnings or libraries here as needed.
+# ignore_files: []

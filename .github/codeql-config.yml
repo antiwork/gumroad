@@ -1,0 +1,13 @@
+# CodeQL config
+# Use security-and-quality queries and ignore non-runtime paths
+# https://docs.github.com/code-security/code-scanning
+
+name: gumroad-codeql-config
+queries:
+  - uses: security-and-quality
+paths-ignore:
+  - spec/**
+  - test/**
+  - vendor/**
+  - node_modules/**
+  - docs/**
