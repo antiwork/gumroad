@@ -23,7 +23,5 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
 
       expect(page).not_to have_button("Undelete")
     end
-
   end
-
 end

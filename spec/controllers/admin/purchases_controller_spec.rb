@@ -142,7 +142,7 @@ describe Admin::PurchasesController, :vcr do
 
     it "handles purchase that is already undeleted" do
       @purchase.update!(is_deleted_by_buyer: false)
-      
+
       expect do
         post :undelete, params: { id: @purchase.id }
 
@@ -155,7 +155,7 @@ describe Admin::PurchasesController, :vcr do
     it "handles purchase without purchaser" do
       @purchase.update!(purchaser: nil)
       comment_content = "Purchase undeleted by Admin (#{@admin_user.email})"
-      
+
       expect do
         post :undelete, params: { id: @purchase.id }
 
