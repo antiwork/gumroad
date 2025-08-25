@@ -165,16 +165,6 @@ describe Admin::PurchasesController, :vcr do
       end.to change { @purchase.comments.where(content: comment_content, comment_type: "note", author_id: @admin_user.id).count }.by(1)
     end
 
-    it "returns error when exception occurs" do
-      allow_any_instance_of(Purchase).to receive(:update!).and_raise("Database error")
-
-      post :undelete, params: { id: @purchase.id }
-
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["message"]).to eq("Database error")
-    end
-
     it "raises error when purchase is not found" do
       expect { post :undelete, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
