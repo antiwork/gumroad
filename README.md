@@ -179,6 +179,7 @@ npm install
 - Do not commit secrets. All `.env.*` files are ignored. Use `.env.example` as a template for local development.
 - A pre-commit hook is provided to block committing env files and private keys. It is enabled via `git config core.hooksPath .githooks`.
 - CI runs a Secret Scan workflow on pushes and pull requests to catch high-risk patterns. The workflow fails builds only for critical matches outside tests/specs; potential tokens in tests/specs are surfaced as informational.
+- You can run the same scan locally via: `make secret_scan`.
 - For more details, see SECURITY.md.
 
 #### Set up Custom credentials

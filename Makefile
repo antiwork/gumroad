@@ -208,6 +208,10 @@ stop:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml down
 
+.PHONY: secret_scan
+secret_scan:
+	@bash scripts/security/scan_secrets.sh
+
 .PHONY: shortest
 shortest:
 	@./scripts/shortest.sh || true
