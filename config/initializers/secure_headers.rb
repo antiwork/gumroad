@@ -191,6 +191,7 @@ SecureHeaders::Configuration.default do |config|
   # Start with report-only mode to observe violations without breaking users
   # Maintainers: switch to enforcement by moving directives into config.csp and removing report_only_csp once stable
   config.report_only_csp = config.csp.deep_dup
+  config.report_only_csp[:report_uri] = ["/csp-report"]
 
   if Rails.env.test?
     config.csp[:default_src] = ["'self'"]

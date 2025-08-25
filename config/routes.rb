@@ -19,6 +19,9 @@ Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
 
+  # CSP violation reporting
+  post "/csp-report", to: "csp_reports#create"
+
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
