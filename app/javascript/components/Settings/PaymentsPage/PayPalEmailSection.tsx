@@ -55,21 +55,21 @@ const PayPalEmailSection = ({
             onChange={(evt) => setPaypalEmailAddress(evt.target.value)}
           />
         </fieldset>
-        {user.country_code === "UA" ? (
-          <div role="status" className="danger">
-            <div>
-              PayPal blocks commercial payments to Ukraine, which will prevent payouts to your PayPal account until
-              further notice. Your balance will remain in your Gumroad account until this restriction is lifted or
-              payouts are directed to a PayPal account outside of Ukraine.
-            </div>
-          </div>
-        ) : null}
         {hasConnectedStripe ? (
           <div role="alert" className="warning">
             You cannot change your payout method to PayPal because you have a stripe account connected.
           </div>
         ) : null}
       </div>
+      {user.country_code === "UA" ? (
+        <div role="alert" className="warning">
+          <div>
+            PayPal blocks commercial payments to Ukraine, which will prevent payouts to your PayPal account until
+            further notice. Your balance will remain in your Gumroad account until this restriction is lifted or
+            payouts are directed to a PayPal account outside of Ukraine.
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };
