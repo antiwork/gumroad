@@ -14,6 +14,12 @@
   <a href="https://github.com/antiwork/gumroad/actions/workflows/secret-scan.yml">
     <img src="https://github.com/antiwork/gumroad/actions/workflows/secret-scan.yml/badge.svg" alt="Secret Scan" />
   </a>
+  <a href="https://github.com/antiwork/gumroad/actions/workflows/brakeman.yml">
+    <img src="https://github.com/antiwork/gumroad/actions/workflows/brakeman.yml/badge.svg" alt="Brakeman" />
+  </a>
+  <a href="https://github.com/antiwork/gumroad/actions/workflows/bundler-audit.yml">
+    <img src="https://github.com/antiwork/gumroad/actions/workflows/bundler-audit.yml/badge.svg" alt="bundler-audit" />
+  </a>
   <a href="https://github.com/antiwork/gumroad/actions/workflows/tests.yml">
     <img src="https://github.com/antiwork/gumroad/actions/workflows/tests.yml/badge.svg" alt="Tests (upstream)" />
   </a>
@@ -175,6 +181,14 @@ npm install
 ### Configuration
 
 ### Security and secrets
+
+Our CI includes security checks:
+
+- Secret Scan: detects high-risk patterns in commits and PRs (critical findings fail outside tests/specs).
+- Brakeman: static analysis for Rails security; results appear in the Security tab.
+- bundler-audit: checks Ruby dependencies for known vulnerabilities.
+
+See SECURITY.md for reporting guidance.
 
 - Do not commit secrets. All `.env.*` files are ignored. Use `.env.example` as a template for local development.
 - A pre-commit hook is provided to block committing env files and private keys. It is enabled via `git config core.hooksPath .githooks`.

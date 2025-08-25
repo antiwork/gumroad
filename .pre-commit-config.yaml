@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        args: ["protect", "--verbose", "--redact"]
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        additional_dependencies:
+          - prettier@3.3.3
+          - prettier-plugin-tailwindcss@0.6.6
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.6.0
+    hooks:
+      - id: eslint
+        additional_dependencies:
+          - eslint@9.6.0
+          - eslint-config-prettier@9.1.0
+          - eslint-plugin-prettier@5.1.3
+          - @eslint/js@9.6.0
+          - typescript-eslint@8.0.0
+  - repo: https://github.com/rubocop/rubocop
+    rev: v1.79.0
+    hooks:
+      - id: rubocop
+        args: ["--force-exclusion", "-a"]
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint

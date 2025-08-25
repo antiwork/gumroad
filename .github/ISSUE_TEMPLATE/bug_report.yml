@@ -1,0 +1,41 @@
+name: Bug report
+description: Create a report to help us improve
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Provide steps and minimal repro if possible.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error '...'
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Ruby, Node, Browser versions (if applicable)
+      placeholder: macOS 14, Ruby 3.2.x, Node 20.x, Chrome 128
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any relevant logs (sanitize secrets)
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and discussions.
+          required: true
+        - label: I can reproduce this on the latest main branch.
+          required: true

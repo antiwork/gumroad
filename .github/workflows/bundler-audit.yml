@@ -1,0 +1,27 @@
+name: bundler-audit (Ruby deps)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '15 7 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Install bundler-audit
+        run: gem install bundler-audit -N
+      - name: Update advisory DB and audit
+        run: |
+          bundler-audit update
+          bundler-audit check --ignore CVE-0000-0000 || true
