@@ -111,10 +111,11 @@
     "webpack-assets-manifest": "^5.0.6",
     "webpack-bundle-analyzer": "^4.7.0",
     "webpack-cli": "^5.0.0",
-    "webpack-dev-server": "^5.0.0",
+    "webpack-dev-server": "^5.2.1",
     "webpack-merge": "^6.0.0"
   },
   "overrides": {
+    "@eslint/plugin-kit": ">=0.3.4",
     "@tiptap/extension-blockquote": "$@tiptap/starter-kit",
     "@tiptap/extension-bold": "$@tiptap/starter-kit",
     "@tiptap/extension-bubble-menu": "$@tiptap/react",
