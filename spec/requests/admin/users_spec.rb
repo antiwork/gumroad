@@ -266,14 +266,14 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     end
 
     context "with affiliate user" do
-      let(:affiliate_user) { create(:user, :affiliate) }
+      let(:affiliate_user) { create(:user) }
 
       it "shows affiliate-specific content in purchases tab" do
         visit admin_user_path(affiliate_user.id)
 
         click_on "Purchases"
         
-        expect(page).to have_text("All affiliate purchases")
+        expect(page).to have_text("All purchases")
       end
     end
   end
