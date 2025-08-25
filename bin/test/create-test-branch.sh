@@ -190,7 +190,7 @@ create_test_branch() {
     return 0
   }
 
-  gh pr checkout "$pr_number" || return 1
+  gh pr checkout "$pr_number" --repo "$REPO" || return 1
   git checkout -b "$new_branch" || return 1
   git push origin "$new_branch" || return 1
   git checkout "$current_branch"
