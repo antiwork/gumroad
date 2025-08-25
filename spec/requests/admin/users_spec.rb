@@ -226,9 +226,9 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     it "shows account tab content by default" do
       visit admin_user_path(user.id)
 
-      expect(page).to have_css('#account-content', visible: true)
-      expect(page).to have_css('#products-content', visible: false)
-      expect(page).to have_css('#purchases-content', visible: false)
+      expect(page).to have_css("#account-content", visible: true)
+      expect(page).to have_css("#products-content", visible: false)
+      expect(page).to have_css("#purchases-content", visible: false)
       expect(page).to have_css('[role="tab"][aria-selected="true"]', text: "Account")
     end
 
@@ -237,10 +237,10 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       visit admin_user_path(user.id)
 
       click_on "Products"
-      
-      expect(page).to have_css('#products-content', visible: true)
-      expect(page).to have_css('#account-content', visible: false)
-      expect(page).to have_css('#purchases-content', visible: false)
+
+      expect(page).to have_css("#products-content", visible: true)
+      expect(page).to have_css("#account-content", visible: false)
+      expect(page).to have_css("#purchases-content", visible: false)
       expect(page).to have_css('[role="tab"][aria-selected="true"]', text: "Products")
       expect(page).to have_text("Test Product")
     end
@@ -249,10 +249,10 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       visit admin_user_path(user.id)
 
       click_on "Purchases"
-      
-      expect(page).to have_css('#purchases-content', visible: true)
-      expect(page).to have_css('#account-content', visible: false)
-      expect(page).to have_css('#products-content', visible: false)
+
+      expect(page).to have_css("#purchases-content", visible: true)
+      expect(page).to have_css("#account-content", visible: false)
+      expect(page).to have_css("#products-content", visible: false)
       expect(page).to have_css('[role="tab"][aria-selected="true"]', text: "Purchases")
       expect(page).to have_text("All purchases")
     end
@@ -272,7 +272,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
         visit admin_user_path(affiliate_user.id)
 
         click_on "Purchases"
-        
+
         expect(page).to have_text("All affiliate purchases")
       end
     end
