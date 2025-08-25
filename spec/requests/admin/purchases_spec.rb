@@ -23,5 +23,28 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
 
       expect(page).not_to have_button("Undelete")
     end
+
+    it "allows undeleting purchase" do
+      expect(purchase.reload.is_deleted_by_buyer).to be(true)
+
+      visit admin_purchase_path(purchase.id)
+      click_on "Undelete"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(purchase.reload.is_deleted_by_buyer).to be(false)
+      expect(page).not_to have_button("Undelete")
+    end
+  end
+
+  def accept_browser_dialog
+    wait = Selenium::WebDriver::Wait.new(timeout: 30)
+    wait.until do
+      page.driver.browser.switch_to.alert
+      true
+    rescue Selenium::WebDriver::Error::NoAlertPresentError
+      false
+    end
+    page.driver.browser.switch_to.alert.accept
   end
 end
