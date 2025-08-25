@@ -1,0 +1,16 @@
+# See https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# Require review from security/infra on CI/workflow and security-related areas
+
+# Workflows and security scripts
+.github/workflows/* @antiwork/security @antiwork/infra
+scripts/security/* @antiwork/security @antiwork/infra
+
+# Credentials-related config
+config/credentials* @antiwork/security
+config/environments/* @antiwork/security
+
+# Default owners for repo health files
+SECURITY.md @antiwork/security
+CODE_OF_CONDUCT.md @antiwork/maintainers
+CONTRIBUTING.md @antiwork/maintainers
+
