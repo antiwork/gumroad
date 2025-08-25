@@ -9,8 +9,8 @@ class Gift < ApplicationRecord
   belongs_to :giftee_purchase, class_name: "Purchase", optional: true
   belongs_to :link, optional: true
 
-  validates :giftee_email, presence: true, format: { with: User::EMAIL_REGEX }
-  validates :gifter_email, presence: true, format: { with: User::EMAIL_REGEX }
+  validates :giftee_email, presence: true, email_format: true
+  validates :gifter_email, presence: true, email_format: true
 
   has_flags 1 => :is_recipient_hidden
 

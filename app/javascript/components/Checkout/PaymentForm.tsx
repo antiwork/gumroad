@@ -28,7 +28,7 @@ import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
 import { formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
-import { checkEmailForTypos } from "$app/utils/email";
+import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
@@ -195,7 +195,23 @@ const EmailAddress = () => {
   const loggedInUser = useLoggedInUser();
   const [state, dispatch] = useState();
   const errors = getErrors(state);
-  const [typoTooltipSuggestion, setTypoTooltipSuggestion] = React.useState<null | string>(null);
+
+  const checkForEmailTypos = () => {
+    if (state.acknowledgedEmails.has(state.email)) return;
+    checkEmailForTyposUtil(state.email, (suggestion) => {
+      dispatch({ type: "set-value", emailTypoSuggestion: suggestion.full });
+    });
+  };
+
+  const rejectEmailTypoSuggestion = () => {
+    dispatch({ type: "acknowledge-email-typo", email: state.email });
+  };
+
+  const acceptEmailTypoSuggestion = () => {
+    if (!state.emailTypoSuggestion) return;
+    dispatch({ type: "set-value", email: state.emailTypoSuggestion });
+    dispatch({ type: "acknowledge-email-typo", email: state.emailTypoSuggestion });
+  };
 
   return (
     <div>
@@ -206,7 +222,7 @@ const EmailAddress = () => {
               <h4>Email address</h4>
             </label>
           </legend>
-          <div className={cx("popover", { expanded: !!typoTooltipSuggestion })} style={{ width: "100%" }}>
+          <div className={cx("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
             <input
               id={`${uid}email`}
               type="email"
@@ -215,23 +231,16 @@ const EmailAddress = () => {
               onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
               placeholder="Your email address"
               disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
-              onBlur={() => checkEmailForTypos(state.email, (suggestion) => setTypoTooltipSuggestion(suggestion.full))}
+              onBlur={checkForEmailTypos}
             />
 
-            {typoTooltipSuggestion ? (
+            {state.emailTypoSuggestion ? (
               <div className="dropdown" style={{ display: "grid", gap: "var(--spacer-2)" }}>
-                <div>Did you mean {typoTooltipSuggestion}?</div>
+                <div>Did you mean {state.emailTypoSuggestion}?</div>
 
                 <div className="button-group">
-                  <Button onClick={() => setTypoTooltipSuggestion(null)}>No</Button>
-                  <Button
-                    onClick={() => {
-                      dispatch({ type: "set-value", email: typoTooltipSuggestion });
-                      setTypoTooltipSuggestion(null);
-                    }}
-                  >
-                    Yes
-                  </Button>
+                  <Button onClick={rejectEmailTypoSuggestion}>No</Button>
+                  <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
                 </div>
               </div>
             ) : null}

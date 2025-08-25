@@ -19,12 +19,6 @@ module User::Validations
       errors.add(:base, "An account already exists with this email.")
     end
 
-    def support_email_domain_is_not_reserved
-      return if support_email.blank? || !support_email_changed? || !email_domain_reserved?(support_email)
-
-      errors.add(:base, "Sorry, that support email is reserved. Please use another email.")
-    end
-
     def account_created_email_domain_is_not_blocked
       return if self.errors[:email].present?
 

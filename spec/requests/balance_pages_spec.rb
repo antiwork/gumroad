@@ -693,6 +693,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             expect(page).to have_text("You'll receive $14,563.10", normalize_ws: true)
             expect(page).to have_status(text: "Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split your balance into multiple payouts.")
             select "January 2, 2025", from: "Pay out balance up to"
+            click_on "Cancel"
           end
           click_on "Get paid!"
           within_modal "Instant payout" do
@@ -701,6 +702,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             expect(page).to have_text("You'll receive $8,737.86", normalize_ws: true)
             expect(page).to_not have_status(text: "Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split your balance into multiple payouts.")
             select "January 1, 2025", from: "Pay out balance up to"
+            click_on "Cancel"
           end
           click_on "Get paid!"
           within_modal "Instant payout" do

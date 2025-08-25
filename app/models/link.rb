@@ -168,6 +168,8 @@ class Link < ApplicationRecord
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
+  # Keep in sync with Product::BulkUpdateSupportEmailService.
+  validates :support_email, email_format: true, not_reserved_email_domain: true, allow_nil: true
   validates :default_price_cents, presence: true
   validates :unique_permalink, presence: true, uniqueness: { case_sensitive: false }, format: { with: /\A[a-zA-Z_]+\z/ }
   validates :custom_permalink, format: { with: /\A[a-zA-Z0-9_-]+\z/ }, uniqueness: { scope: :user_id, case_sensitive: false }, allow_nil: true, allow_blank: true
@@ -1199,6 +1201,12 @@ class Link < ApplicationRecord
         communities.alive.each(&:mark_deleted!)
       end
     end
+  end
+
+  def support_email_or_default
+    return user.support_or_form_email unless user.product_level_support_emails_enabled?
+
+    support_email || user.support_or_form_email
   end
 
   protected

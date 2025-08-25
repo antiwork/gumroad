@@ -33,7 +33,10 @@ describe "RenderingExtension" do
             logged_in_user: nil,
             current_seller: nil,
             csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
-            locale: "en-US"
+            locale: "en-US",
+            feature_flags: {
+              require_email_typo_acknowledgment: false
+            }
           }
         )
       end
@@ -134,7 +137,10 @@ describe "RenderingExtension" do
               },
               current_seller: UserPresenter.new(user: seller).as_current_seller,
               csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
-              locale: "en-US"
+              locale: "en-US",
+              feature_flags: {
+                require_email_typo_acknowledgment: false
+              }
             }
           )
         end

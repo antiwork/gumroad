@@ -82,5 +82,9 @@ class User
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
     end
+
+    def product_level_support_emails_enabled?
+      Feature.active?(:product_level_support_emails, self)
+    end
   end
 end
