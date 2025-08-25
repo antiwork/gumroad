@@ -17,6 +17,17 @@ FileUtils.chdir APP_ROOT do
   system! 'gem install bundler --conservative'
   system('bundle check') || system!('bundle install')
 
+  # Enable core.hooksPath for pre-commit guardrails
+  begin
+    current_hooks = `git config --local core.hooksPath`.strip
+    if current_hooks != '.githooks'
+      system 'git config --local core.hooksPath .githooks'
+      puts 'Configured core.hooksPath to .githooks'
+    end
+  rescue => e
+    warn "Warning: could not set core.hooksPath: #{e}"
+  end
+
   system! 'npm install'
 
   # puts "\n== Copying sample files =="
@@ -32,4 +43,8 @@ FileUtils.chdir APP_ROOT do
 
   puts "\n== Restarting application server =="
   system! 'bin/rails restart'
+
+  puts "\n== Next steps =="
+  puts "Start services: make local (use LOCAL_DETACHED=true for background)"
+  puts "Start app:     bin/dev"
 end
