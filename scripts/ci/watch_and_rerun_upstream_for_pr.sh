@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 # Watch for an upstream CI run tied to a PR and attempt to rerun it when it exists.

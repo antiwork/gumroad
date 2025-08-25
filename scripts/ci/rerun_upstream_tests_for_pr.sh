@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 # Attempt to rerun upstream CI for a given PR when a run exists.
