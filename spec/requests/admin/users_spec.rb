@@ -213,6 +213,71 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     end
   end
 
+  describe "pill navigation" do
+    it "renders all three navigation tabs" do
+      visit admin_user_path(user.id)
+
+      expect(page).to have_css('[role="tablist"].tab-pills')
+      expect(page).to have_css('[role="tab"]', text: "Account")
+      expect(page).to have_css('[role="tab"]', text: "Products")
+      expect(page).to have_css('[role="tab"]', text: "Purchases")
+    end
+
+    it "shows account tab content by default" do
+      visit admin_user_path(user.id)
+
+      expect(page).to have_css('#account-content', visible: true)
+      expect(page).to have_css('#products-content', visible: false)
+      expect(page).to have_css('#purchases-content', visible: false)
+      expect(page).to have_css('[role="tab"][aria-selected="true"]', text: "Account")
+    end
+
+    it "switches to products tab when clicked" do
+      create(:product, user:, name: "Test Product")
+      visit admin_user_path(user.id)
+
+      click_on "Products"
+      
+      expect(page).to have_css('#products-content', visible: true)
+      expect(page).to have_css('#account-content', visible: false)
+      expect(page).to have_css('#purchases-content', visible: false)
+      expect(page).to have_css('[role="tab"][aria-selected="true"]', text: "Products")
+      expect(page).to have_text("Test Product")
+    end
+
+    it "switches to purchases tab when clicked" do
+      visit admin_user_path(user.id)
+
+      click_on "Purchases"
+      
+      expect(page).to have_css('#purchases-content', visible: true)
+      expect(page).to have_css('#account-content', visible: false)
+      expect(page).to have_css('#products-content', visible: false)
+      expect(page).to have_css('[role="tab"][aria-selected="true"]', text: "Purchases")
+      expect(page).to have_text("All purchases")
+    end
+
+    it "maintains existing admin functionality in account tab" do
+      visit admin_user_path(user.id)
+
+      expect(page).to have_button("Reset password")
+      expect(page).to have_button("Mark as adult")
+      expect(page).to have_text("Custom fee")
+    end
+
+    context "with affiliate user" do
+      let(:affiliate_user) { create(:user, :affiliate) }
+
+      it "shows affiliate-specific content in purchases tab" do
+        visit admin_user_path(affiliate_user.id)
+
+        click_on "Purchases"
+        
+        expect(page).to have_text("All affiliate purchases")
+      end
+    end
+  end
+
   def accept_browser_dialog
     wait = Selenium::WebDriver::Wait.new(timeout: 30)
     wait.until do
