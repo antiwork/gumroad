@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Luciferai04/gumroad/actions/workflows/secret-scan.yml">
-    <img src="https://github.com/Luciferai04/gumroad/actions/workflows/secret-scan.yml/badge.svg" alt="Secret Scan" />
+  <a href="https://github.com/antiwork/gumroad/actions/workflows/secret-scan.yml">
+    <img src="https://github.com/antiwork/gumroad/actions/workflows/secret-scan.yml/badge.svg" alt="Secret Scan" />
   </a>
   <a href="https://github.com/antiwork/gumroad/actions/workflows/tests.yml">
     <img src="https://github.com/antiwork/gumroad/actions/workflows/tests.yml/badge.svg" alt="Tests (upstream)" />
