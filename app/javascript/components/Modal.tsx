@@ -30,8 +30,10 @@ export const Modal = ({
   const id = React.useId();
 
   const handleCancel = (event: React.SyntheticEvent<HTMLDialogElement>) => {
-    event.preventDefault();
-    dispatchClose();
+    if (event.target === ref.current) {
+      event.preventDefault();
+      dispatchClose();
+    }
   };
 
   return (
@@ -40,6 +42,7 @@ export const Modal = ({
       ref={ref}
       onClick={(e) => {
         if (!ref.current) return;
+        if (!e.nativeEvent.isTrusted) return; // Indicates a synthetic event
         const bounds = ref.current.getBoundingClientRect();
         if (e.clientX < bounds.x || e.clientY < bounds.y || e.clientX > bounds.right || e.clientY > bounds.bottom)
           dispatchClose();

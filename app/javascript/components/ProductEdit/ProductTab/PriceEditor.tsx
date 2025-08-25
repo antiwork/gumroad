@@ -53,7 +53,7 @@ export const PriceEditor = ({
         open={isPWYW}
         summary={
           <Toggle value={isPWYW} onChange={setIsPWYW}>
-            <a data-helper-prompt="What is the pay-what-you-want feature and how does it work?">
+            <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
               Allow customers to pay what they want
             </a>
           </Toggle>

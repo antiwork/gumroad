@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 module ExternalId
-  def self.included(base)
-    base.extend(ClassMethods)
-  end
+  extend ActiveSupport::Concern
 
   def external_id
     ObfuscateIds.encrypt(id)
@@ -13,13 +11,21 @@ module ExternalId
     ObfuscateIds.encrypt_numeric(id)
   end
 
-  module ClassMethods
-    def find_by_external_id(id)
-      find_by(id: ObfuscateIds.decrypt(id))
+  class_methods do
+    def to_external_id(id)
+      ObfuscateIds.encrypt(id)
     end
 
-    def find_by_external_id!(id)
-      find_by!(id: ObfuscateIds.decrypt(id))
+    def from_external_id(external_id)
+      ObfuscateIds.decrypt(external_id)
+    end
+
+    def find_by_external_id(external_id)
+      find_by(id: from_external_id(external_id))
+    end
+
+    def find_by_external_id!(external_id)
+      find_by!(id: from_external_id(external_id))
     end
 
     def find_by_external_id_numeric(id)
@@ -30,8 +36,8 @@ module ExternalId
       find_by!(id: ObfuscateIds.decrypt_numeric(id))
     end
 
-    def by_external_ids(ids)
-      where(id: Array.wrap(ids).map { |id| ObfuscateIds.decrypt(id) })
+    def by_external_ids(external_ids)
+      where(id: Array.wrap(external_ids).map { from_external_id(it) })
     end
   end
 end

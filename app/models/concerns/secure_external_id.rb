@@ -33,7 +33,7 @@ module SecureExternalId
     self.class.encrypt_id(id, scope: scope, expires_at: expires_at)
   end
 
-  module ClassMethods
+  class_methods do
     # Finds a record by its secure external ID.
     #
     # @param token [String] The token to decrypt and use for finding the record.

@@ -26,6 +26,22 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    context "when support email exists" do
+      subject(:mail) do
+        user = create(:user, email: "bob@gumroad.com", name: "bob walsh")
+        link = create(:product, user:, support_email: "support@example.com")
+
+        @purchase = create(:purchase, link:, seller: link.user, email: "to@example.org")
+        @purchase.create_url_redirect!
+
+        CustomerMailer.receipt(@purchase.id)
+      end
+
+      it "uses correct support email" do
+        expect(mail[:reply_to].value).to eq("support@example.com")
+      end
+    end
+
     it "renders the headers with UrlRedirect" do
       user = create(:user, email: "bob@gumroad.com", name: "bob walsh, LLC")
       link = create(:product, user:)
@@ -903,6 +919,25 @@ describe CustomerMailer do
       expect(mailer.to).to eq([order.email])
       expect(mailer[:from].value).to eq("#{charge.seller.name} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>")
       expect(mailer[:reply_to].value).to eq(charge.seller.email)
+    end
+
+    context "products have the same support emails" do
+      let(:product_support_email) { "product_support_email@example.com" }
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: product_support_email) }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: product_support_email) }
+
+      it "use the product support email" do
+        expect(mailer[:reply_to].value).to eq(product_support_email)
+      end
+    end
+
+    context "when products have different support emails" do
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: nil) }
+
+      it "uses seller's default email" do
+        expect(mailer[:reply_to].value).to eq(charge.seller.support_or_form_email)
+      end
     end
   end
 

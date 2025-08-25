@@ -282,7 +282,9 @@ const NewProductPage = ({
                   to start selling. Whether it's digital downloads, online courses, or memberships — see what sticks.
                   <br />
                   <br />
-                  <a data-helper-prompt="What kind of products can I sell on Gumroad?">Need help adding a product?</a>
+                  <a href="/help/article/64-is-gumroad-for-me" target="_blank" rel="noreferrer">
+                    Need help adding a product?
+                  </a>
                 </p>
               </header>
 
@@ -296,7 +298,9 @@ const NewProductPage = ({
                     <strong>New.</strong> You can create your product using AI now. Click the sparks button in the
                     header to get started.
                     <br />
-                    <a data-helper-prompt="How do I create a product using AI?">Learn more</a>
+                    <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
+                      Learn more
+                    </a>
                   </div>
                   <button className="link !col-start-3 self-center" onClick={() => void dismissAiPromo()}>
                     close

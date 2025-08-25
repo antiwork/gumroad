@@ -63,6 +63,7 @@
     <%= admin_action label: "Reset password", url: reset_password_admin_user_path(user), confirm_message: "Are you sure you want to reset the password of user #{user.id}?", loading: "Resetting...", done: "Password reset.", show_message_in_alert: true %>
     <%= admin_action label: "Confirm email", url: confirm_email_admin_user_path(user), confirm_message: "Are you sure you want to confirm the email address for #{user.id}?", success_message: "Confirmed email.", done: "Confirmed email." %>
     <%= admin_action label: "Sign out from all active sessions", url: invalidate_active_sessions_admin_user_path(user), confirm_message: "Are you sure you want to sign out user #{user.id} from all active sessions?", loading: "Signing out from all active sessions...", success_message: "Signed out from all active sessions", done: "Signed out from all active sessions" %>
+    <%= admin_action label: (user.all_adult_products? ? "Unmark as adult" : "Mark as adult"), url: toggle_adult_products_admin_user_path(user), confirm_message: "Are you sure you want to #{user.all_adult_products? ? 'unmark' : 'mark'} user #{user.id} as adult?", done: (user.all_adult_products? ? "Mark as adult" : "Unmark as adult"), success_message: (user.all_adult_products? ? "Unmarked as adult." : "Marked as adult.") %>
   </div>
 
   <%= render("admin/users/user_memberships", user: user) %>

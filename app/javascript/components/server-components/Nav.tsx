@@ -1,3 +1,4 @@
+import { HelperClientProvider } from "@helperai/react";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
@@ -11,11 +12,24 @@ import { useLoggedInUser, TeamMembership } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavLink, NavLinkDropdownItem, UnbecomeDropdownItem } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
   title: string;
   compact?: boolean;
+  helper_host: string;
+  helper_session?: {
+    email?: string | null;
+    emailHash?: string | null;
+    timestamp?: number | null;
+    customerMetadata?: {
+      name?: string | null;
+      value?: number | null;
+      links?: Record<string, string> | null;
+    } | null;
+    currentToken?: string | null;
+  };
 };
 
 const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembership: TeamMembership }) => {
@@ -89,7 +103,19 @@ export const Nav = (props: Props) => {
             <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
           ) : null}
           <NavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
-          <NavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
+
+          <NavLink
+            text="Help"
+            icon="book"
+            href={Routes.help_center_root_url(routeParams)}
+            badge={
+              props.helper_session ? (
+                <HelperClientProvider host={props.helper_host} session={props.helper_session}>
+                  <UnreadTicketsBadge />
+                </HelperClientProvider>
+              ) : null
+            }
+          />
           <Popover
             position="top"
             trigger={

@@ -591,7 +591,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   onChange={(e) => updateFile({ pdf_stamp_enabled: e.target.checked })}
                 />
                 Stamp this PDF with buyer information
-                <a data-helper-prompt="How does PDF stamping work?">Learn more</a>
+                <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
+                  Learn more
+                </a>
               </label>
             ) : null}
 
@@ -623,7 +625,9 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     onChange={(e) => updateFile({ stream_only: e.target.checked })}
                   />
                   Disable file downloads (stream only)
-                  <a data-helper-prompt="How does streaming work?">Learn more</a>
+                  <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
                 </label>
               </>
             ) : null}

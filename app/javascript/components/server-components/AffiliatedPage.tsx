@@ -328,7 +328,10 @@ const AffiliatedPage = ({
                 </Button>
               </WithTooltip>
               <p>
-                or <a data-helper-prompt="How do I get started as an affiliate?">learn more to get started</a>
+                or{" "}
+                <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
+                  learn more to get started
+                </a>
               </p>
             </div>
           ) : (

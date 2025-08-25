@@ -82,6 +82,9 @@ Rails.application.configure do
 
   config.action_controller.raise_on_missing_callback_actions = true
 
+  # Debug mongoid queries in development
+  config.mongoid.logger.level = Logger::DEBUG
+
   # Bullet configuration for N+1 query detection
   config.after_initialize do
     Bullet.enable = true

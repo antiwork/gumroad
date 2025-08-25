@@ -27,6 +27,7 @@ import {
   getTotalPrice,
 } from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
+import { useFeatureFlags } from "$app/components/FeatureFlags";
 import {
   Option,
   PriceSelection,
@@ -207,6 +208,7 @@ const SubscriptionManager = ({
     canGift: false,
   };
   const payLabel = cancelled ? `Restart ${subscriptionEntity}` : `Update ${subscriptionEntity}`;
+  const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
     country: contact_info.country,
     email: contact_info.email,
@@ -224,6 +226,7 @@ const SubscriptionManager = ({
     recaptchaKey: recaptcha_key,
     paypalClientId: paypal_client_id,
     gift: null,
+    requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
   });
   const [state, dispatchAction] = reducer;
   React.useEffect(

@@ -7,6 +7,7 @@ import { cast } from "ts-safe-cast";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
+import { FeatureFlagsProvider } from "$app/components/FeatureFlags";
 import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
@@ -30,6 +31,9 @@ export type GlobalProps = {
   href: string;
   csp_nonce: string;
   locale: string;
+  feature_flags: {
+    require_email_typo_acknowledgment: boolean;
+  };
 };
 
 // Use this function to wrap a React component for server-side rendering.
@@ -74,7 +78,9 @@ export const register =
                   <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
                     <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
                       <SSRLocationProvider value={global.href}>
-                        <Component {...parsedProps} />
+                        <FeatureFlagsProvider value={global.feature_flags}>
+                          <Component {...parsedProps} />
+                        </FeatureFlagsProvider>
                       </SSRLocationProvider>
                     </CurrentSellerProvider>
                   </LoggedInUserProvider>

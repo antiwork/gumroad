@@ -6,13 +6,7 @@ describe HelperWidget, type: :controller do
   controller(ApplicationController) do
     include HelperWidget
 
-    allow_anonymous_access_to_helper_widget only: :anonymous_access_allowed
-
     def action
-      head :ok
-    end
-
-    def anonymous_access_allowed
       head :ok
     end
   end
@@ -38,128 +32,30 @@ describe HelperWidget, type: :controller do
     end
   end
 
-  describe "#show_helper_widget?" do
-    context "when conditions are met" do
-      before do
-        allow(Rails.env).to receive(:test?).and_return(false)
-        stub_const("DOMAIN", "gumroad.com")
-        sign_in(user)
-        request.host = "gumroad.com"
-      end
-
-      it "returns true" do
-        get :action
-        expect(controller.show_helper_widget?).to be true
-      end
+  describe "#helper_session" do
+    it "returns nil when no seller is signed in" do
+      expect(controller.helper_session).to be_nil
     end
 
-    context "when in test environment" do
-      before do
-        allow(Rails.env).to receive(:test?).and_return(true)
-      end
-
-      it "returns false" do
-        get :action
-        expect(controller.show_helper_widget?).to be false
-      end
-    end
-
-    context "when domain is not gumroad.com" do
-      before do
-        allow(Rails.env).to receive(:test?).and_return(false)
-        sign_in(user)
-        request.host = "seller.gumroad.com"
-      end
-
-      it "returns false" do
-        get :action
-        expect(controller.show_helper_widget?).to be false
-      end
-    end
-
-    describe "anonymous access" do
-      before do
-        allow(Rails.env).to receive(:test?).and_return(false)
-        stub_const("DOMAIN", "gumroad.com")
-        request.host = "gumroad.com"
-      end
-
-      context "feature is globally enabled" do
-        before do
-          Feature.activate(:anonymous_helper_widget_access)
-        end
-
-        it "returns true if anonymous access is allowed" do
-          get :anonymous_access_allowed
-          expect(controller.show_helper_widget?).to be true
-
-          get :action
-          expect(controller.show_helper_widget?).to be false
-        end
-      end
-
-      context "feature is enabled via query param" do
-        it "returns true" do
-          get :action, params: { anonymous_helper_widget_access: true }
-          expect(controller.show_helper_widget?).to be false
-
-          get :action
-          expect(controller.show_helper_widget?).to be false
-
-          get :anonymous_access_allowed, params: { anonymous_helper_widget_access: true }
-          expect(controller.show_helper_widget?).to be true
-
-          get :anonymous_access_allowed
-          expect(controller.show_helper_widget?).to be false
-        end
-      end
-    end
-  end
-
-  describe "#helper_widget_email_hmac" do
-    before do
+    it "returns email, emailHash, timestamp, and customerMetadata when signed in" do
       sign_in(seller)
-    end
 
-    it "generates the correct HMAC" do
-      timestamp = "1234567890"
-      expected_hmac = OpenSSL::HMAC.hexdigest("sha256", "test_secret", "#{seller.email}:#{timestamp}")
-      expect(controller.helper_widget_email_hmac(timestamp)).to eq(expected_hmac)
-    end
-  end
+      fixed_time = Time.zone.parse("2024-01-01 00:00:00 UTC")
+      allow(Time).to receive(:current).and_return(fixed_time)
+      timestamp_ms = (fixed_time.to_f * 1000).to_i
 
-  describe "#helper_widget_init_data", :freeze_time do
-    context "for signed-in users" do
-      before { sign_in(seller) }
+      metadata = { name: "Test User", email: seller.email, value: 123 }
+      service_double = instance_double(HelperUserInfoService, metadata: metadata)
+      allow(HelperUserInfoService).to receive(:new).with(email: seller.email).and_return(service_double)
 
-      it "includes user metadata" do
-        timestamp = (Time.current.to_f * 1000).to_i
+      expected_hmac = OpenSSL::HMAC.hexdigest("sha256", "test_secret", "#{seller.email}:#{timestamp_ms}")
 
-        expect(controller.helper_widget_init_data).to eq(
-          title: "Support",
-          mailboxSlug: "gumroad",
-          iconColor: "#FF90E8",
-          enableGuide: true,
-          timestamp: timestamp,
-          email: seller.email,
-          emailHash: controller.helper_widget_email_hmac(timestamp),
-          customerMetadata: HelperUserInfoService.new(email: seller.email).metadata
-        )
-      end
-    end
+      session = controller.helper_session
 
-    context "for anonymous users" do
-      it "does not include user metadata" do
-        timestamp = (Time.current.to_f * 1000).to_i
-
-        expect(controller.helper_widget_init_data).to eq(
-          title: "Support",
-          mailboxSlug: "gumroad",
-          iconColor: "#FF90E8",
-          enableGuide: true,
-          timestamp: timestamp,
-        )
-      end
+      expect(session[:email]).to eq(seller.email)
+      expect(session[:emailHash]).to eq(expected_hmac)
+      expect(session[:timestamp]).to eq(timestamp_ms)
+      expect(session[:customerMetadata]).to eq(metadata)
     end
   end
 end

@@ -13,7 +13,9 @@ const CreateApplication = () => (
   <>
     <header id="application-form">
       <h2>Applications</h2>
-      <a data-helper-prompt="How do I create an application?">Learn more</a>
+      <a href="/help/article/280-create-application-api" target="_blank" rel="noreferrer">
+        Learn more
+      </a>
     </header>
     <h3>Create application</h3>
     <ApplicationForm />

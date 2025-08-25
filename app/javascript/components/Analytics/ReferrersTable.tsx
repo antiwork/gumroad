@@ -36,10 +36,7 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
     <section className="paragraphs">
       <table style={{ tableLayout: "fixed" }}>
         <caption>
-          <a
-            href="#"
-            data-helper-prompt="What does the 'Direct' or 'Gumroad' referrer in the analytics dashboard mean?"
-          >
+          <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
             Referrer
           </a>
         </caption>

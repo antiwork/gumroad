@@ -32,6 +32,18 @@ describe Purchase::Blockable do
       end
     end
 
+    context "when the purchase's paypal email is blocked" do
+      let(:purchase) { create(:purchase, link: product, email: "gumbot@gumroad.com", purchaser: buyer, charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
+
+      before do
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], purchase.paypal_email, nil)
+      end
+
+      it "returns true" do
+        expect(purchase.buyer_blocked?).to eq(true)
+      end
+    end
+
     context "when the buyer's email address is blocked" do
       before do
         BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], buyer.email, nil)

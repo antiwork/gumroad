@@ -357,16 +357,8 @@ class ApplicationController < ActionController::Base
     end
 
     def affiliate_from_cookies(product)
-      affiliate_ids = cookies
-        .sort_by { |cookie| -cookie[1].to_i }.map(&:first)
-        .filter_map do |cookie_name|
-          next unless cookie_name.starts_with?(Affiliate::AFFILIATE_COOKIE_NAME_PREFIX)
-
-          CGI.unescape(cookie_name).gsub(Affiliate::AFFILIATE_COOKIE_NAME_PREFIX, "")
-        end
-
       # 1. Fetch all users have an affiliate cookie set, sorted by affiliate cookie recency
-      affiliates_from_cookies = Affiliate.by_external_ids(affiliate_ids).sort_by { |a| affiliate_ids.index(a.external_id) }
+      affiliates_from_cookies = Affiliate.by_cookies(cookies)
       affiliate_user_ids = affiliates_from_cookies.map(&:affiliate_user_id).uniq
       if affiliate_user_ids.present?
         # 2. Fetch those users' direct affiliate records that apply to this product

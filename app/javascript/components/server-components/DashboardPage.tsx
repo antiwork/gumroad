@@ -150,7 +150,7 @@ const Greeter = () => (
     <NavigationButton href={Routes.new_product_path()} color="accent">
       Create your first product
     </NavigationButton>
-    <a href="#" data-helper-prompt="How can I create my first product?">
+    <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
       Learn more about creating products.
     </a>
   </div>
@@ -217,11 +217,11 @@ const ProductsTable = ({ sales }: TableProps) => {
         <div className="placeholder">
           <p>
             You haven't made any sales yet. Learn how to{" "}
-            <a href="#" data-helper-prompt="How can I build a following?">
+            <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
               build a following
             </a>{" "}
             and{" "}
-            <a href="#" data-helper-prompt="How can I sell on Gumroad Discover?">
+            <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
               sell on Gumroad Discover
             </a>
           </p>

@@ -38,16 +38,19 @@ describe("Main Settings Scenario", type: :system, js: true) do
   end
 
   context "when email is empty" do
-    before do
-      user.email = nil
-      user.save(validate: false)
-    end
-
-    it "shows an error flash message on save" do
+    it "shows a validation error on save" do
       visit settings_main_path
+
+      within_section "User details", section_element: :section do
+        fill_in("Email", with: "")
+      end
+
       click_on("Update settings")
 
-      expect(page).to have_alert(text: "Please enter an email address!")
+      within_section "User details", section_element: :section do
+        validation_message = find_field("Email").native.attribute("validationMessage")
+        expect(validation_message).to eq "Please fill out this field."
+      end
     end
   end
 
@@ -268,5 +271,73 @@ describe("Main Settings Scenario", type: :system, js: true) do
         expect(page).to_not have_field("Refund policy")
       end
     end
+  end
+
+  context "Product level support email" do
+    let!(:product_1) { create(:product, user:, name: "Product 1", support_email: email_1) }
+    let!(:product_2) { create(:product, user:, name: "Product 2", support_email: nil) }
+
+    let(:email_1) { "support1@example.com" }
+    let(:email_2) { "support2@example.com" }
+    let(:email_3) { "support3@example.com" }
+
+    before { Feature.activate(:product_level_support_emails) }
+
+    it "allows adding new support emails" do
+      visit settings_main_path
+
+      click_on "Add a product specific email"
+
+      within find_product_level_support_email_row(name: "No email set") do
+        fill_in "Email", with: email_2
+        select_combo_box_option "Product 2", from: "Products"
+      end
+
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Your account has been updated!")
+      expect(product_1.reload.support_email).to eq email_1
+      expect(product_2.reload.support_email).to eq email_2
+    end
+
+    it "allows deleting support email" do
+      visit settings_main_path
+
+      within find_product_level_support_email_row(name: email_1) do
+        click_on "Delete email"
+      end
+
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Your account has been updated!")
+      expect(product_1.reload.support_email).to be_nil
+      expect(product_2.reload.support_email).to be_nil
+    end
+
+    it "does not allow same product to be selected for multiple emails" do
+      visit settings_main_path
+
+      click_on "Add a product specific email"
+
+      within find_product_level_support_email_row(name: "No email set") do
+        find(:label, text: "Products").click
+        # Product 1 is not available because it already has an email.
+        expect(page).to have_combo_box "Products", options: ["Product 2"]
+      end
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before { Feature.deactivate(:product_level_support_emails) }
+
+      it "does not show product level support email form" do
+        visit settings_main_path
+
+        expect(page).not_to have_button("Add a product specific email")
+      end
+    end
+  end
+
+  def find_product_level_support_email_row(name:)
+    find("[role=listitem] h4", text: name).ancestor("[role=listitem]")
   end
 end

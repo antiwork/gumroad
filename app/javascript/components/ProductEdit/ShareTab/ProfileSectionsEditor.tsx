@@ -25,7 +25,9 @@ export const ProfileSectionsEditor = ({
       <header>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2>Profile</h2>
-          <a data-helper-prompt="How can I learn more about my Gumroad profile page?">Learn more</a>
+          <a href="/help/article/124-your-gumroad-profile-page" target="_blank" rel="noreferrer">
+            Learn more
+          </a>
         </div>
         Choose the sections where you want this product to be displayed on your profile.
       </header>
