@@ -9,7 +9,7 @@ module Follower::AudienceMember
   end
 
   def should_be_audience_member?
-    confirmed_at.present? && !!email&.match?(User::EMAIL_REGEX)
+    confirmed_at.present? && EmailFormatValidator.valid?(email)
   end
 
   def audience_member_details

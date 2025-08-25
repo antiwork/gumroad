@@ -403,6 +403,62 @@ describe User, :vcr do
     end
   end
 
+  describe "#product_level_support_emails" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "3@example.com") }
+    let!(:product4) { create(:product, user:, support_email: nil) }
+
+    before { Feature.activate(:product_level_support_emails) }
+
+    it "returns the user's product support emails" do
+      result = user.product_level_support_emails
+
+      expect(result).to contain_exactly(
+        {
+          email: "1+2@example.com",
+          product_ids: [product1.external_id, product2.external_id],
+        },
+        {
+          email: "3@example.com",
+          product_ids: [product3.external_id],
+        }
+      )
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before { Feature.deactivate(:product_level_support_emails) }
+
+      it "returns nil" do
+        expect(user.product_level_support_emails).to be_nil
+      end
+    end
+  end
+
+  describe "#update_product_level_support_emails!" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user:, support_email: "old1@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
+
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
+
+    it "updates products support emails" do
+      user.update_product_level_support_emails!(
+        [
+          { email: "new1+2@example.com", product_ids: [product1.external_id, product2.external_id] }
+        ]
+      )
+
+      expect(product1.reload.support_email).to eq("new1+2@example.com")
+      expect(product2.reload.support_email).to eq("new1+2@example.com")
+      expect(product3.reload.support_email).to eq(nil)
+    end
+  end
+
   describe "#has_valid_payout_info?" do
     let(:user) { create(:user) }
 
@@ -1407,7 +1463,7 @@ describe User, :vcr do
       end
     end
 
-    describe "#support_email_domain_is_not_reserved" do
+    describe "reserved domain validation for support_email" do
       it "allows support_email to be nil" do
         @user.support_email = nil
         expect(@user).to be_valid
@@ -1416,7 +1472,7 @@ describe User, :vcr do
       it "fails the validation when domain is reserved" do
         @user.support_email = "something@gumroad.com"
         expect(@user).to be_invalid
-        expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
+        expect(@user.errors[:support_email]).to eq ["is reserved"]
       end
     end
 

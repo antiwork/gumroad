@@ -41,7 +41,7 @@ class Admin::AffiliatesController < Admin::BaseController
     end
 
     def fetch_users_from_query
-      @users = User.where(email: @raw_query).order(created_at: :desc, id: :desc) if @raw_query.match(User::EMAIL_REGEX)
+      @users = User.where(email: @raw_query).order(created_at: :desc, id: :desc) if EmailFormatValidator.valid?(@raw_query)
       @users ||= User.where("external_id = ? or email like ? or name like ?",
                             @raw_query, @query, @query).order(created_at: :desc, id: :desc)
     end

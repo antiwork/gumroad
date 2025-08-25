@@ -11,10 +11,16 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ProductLevelSupportEmailsForm } from "$app/components/server-components/Settings/ProductLevelSupportEmailsForm";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Toggle } from "$app/components/Toggle";
+
+type ProductLevelSupportEmail = {
+  email: string;
+  product_ids: string[];
+};
 
 type Props = {
   settings_pages: SettingPage[];
@@ -54,28 +60,29 @@ type Props = {
       fine_print_enabled: boolean;
       fine_print: string | null;
     };
+    product_level_support_emails: ProductLevelSupportEmail[] | null;
   };
 };
 
 const MainPage = (props: Props) => {
   const uid = React.useId();
-  const [formErrors, setFormErrors] = React.useState<Record<"email", boolean>>({
-    email: false,
-  });
   const [userSettings, setUserSettings] = React.useState({
     ...props.user,
     email: props.user.email ?? "",
     support_email: props.user.support_email ?? "",
     tax_id: null,
     purchasing_power_parity_excluded_product_ids: props.user.purchasing_power_parity_excluded_product_ids,
+    product_level_support_emails: props.user.product_level_support_emails ?? [],
   });
   const updateUserSettings = (settings: Partial<typeof userSettings>) =>
     setUserSettings((prev) => ({ ...prev, ...settings }));
+  const handleProductLevelSupportEmailsChange = (emails: ProductLevelSupportEmail[]) =>
+    updateUserSettings({ product_level_support_emails: emails });
 
   const [isResendingConfirmationEmail, setIsResendingConfirmationEmail] = React.useState(false);
   const [resentConfirmationEmail, setResentConfirmationEmail] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
-  const emailInputRef = React.useRef<HTMLInputElement>(null);
+  const formRef = React.useRef<HTMLFormElement>(null);
 
   const resendConfirmationEmail = async () => {
     setIsResendingConfirmationEmail(true);
@@ -100,13 +107,7 @@ const MainPage = (props: Props) => {
 
   const onSave = asyncVoid(async () => {
     if (props.is_form_disabled) return;
-
-    if (userSettings.email === "") {
-      showAlert("Please enter an email address!", "error");
-      setFormErrors((prev) => ({ ...prev, email: true }));
-      emailInputRef.current?.focus();
-      return;
-    }
+    if (!formRef.current?.reportValidity()) return;
 
     setIsSaving(true);
 
@@ -138,7 +139,7 @@ const MainPage = (props: Props) => {
       onSave={onSave}
       canUpdate={!props.is_form_disabled && !isSaving}
     >
-      <form>
+      <form ref={formRef}>
         <section>
           <header>
             <h2>User details</h2>
@@ -150,10 +151,9 @@ const MainPage = (props: Props) => {
             <input
               type="email"
               id={`${uid}-email`}
-              ref={emailInputRef}
               value={userSettings.email}
               disabled={props.is_form_disabled}
-              aria-invalid={formErrors.email}
+              required
               onChange={(e) => updateUserSettings({ email: e.target.value })}
             />
             {props.user.has_unconfirmed_email && !props.is_form_disabled ? (
@@ -311,6 +311,14 @@ const MainPage = (props: Props) => {
             />
             <small>This email is listed on the receipt of every sale.</small>
           </fieldset>
+          {props.user.product_level_support_emails !== null && (
+            <ProductLevelSupportEmailsForm
+              productLevelSupportEmails={userSettings.product_level_support_emails}
+              products={props.user.products}
+              isDisabled={props.is_form_disabled}
+              onChange={handleProductLevelSupportEmailsChange}
+            />
+          )}
         </section>
         {props.user.seller_refund_policy.enabled ? (
           <section>

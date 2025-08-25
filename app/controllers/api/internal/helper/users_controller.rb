@@ -182,7 +182,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     }
   }.freeze
   def send_reset_password_instructions
-    if params[:email].present? && params[:email].match(User::EMAIL_REGEX)
+    if EmailFormatValidator.valid?(params[:email])
       user = User.alive.by_email(params[:email]).first
       if user
         user.send_reset_password_instructions
@@ -250,7 +250,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return
     end
 
-    if !params[:new_email].match(User::EMAIL_REGEX)
+    if !EmailFormatValidator.valid?(params[:new_email])
       render json: { error_message: "Invalid new email format." }, status: :unprocessable_entity
       return
     end
