@@ -212,11 +212,11 @@
 
   <div class="relative bg-gray w-full">
     <div class="flex flex-col justify-center gap-8 px-8 text-center py-20 md:items-center md:gap-16 md:pt-40">
-      <h1 class="text-left md:text-center text-7xl sm:text-7xl md:text-9xl lg:text-[12rem] md:leading-[0.9] font-medium">
+      <h1 class="text-center text-6xl sm:text-7xl md:text-9xl lg:text-[12rem] md:leading-[0.9] font-medium">
         <% prev_week_payout = $redis.get(RedisKey.prev_week_payout_usd).presence || "3129297" %>
         $<%= number_with_delimiter(prev_week_payout) %>
       </h1>
-      <div class="text-left md:text-center text-2xl md:text-3xl max-w-screen-sm">
+      <div class="text-center text-balance text-2xl md:text-3xl max-w-screen-sm">
         The amount of income earned by Gumroad digital entrepreneurs last week.
       </div>
     </div>

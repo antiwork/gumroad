@@ -134,6 +134,85 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     end
   end
 
+  describe "toggle adult products" do
+    context "when the user is not marked as adult" do
+      before do
+        user.update!(all_adult_products: false)
+      end
+
+      it "shows 'Mark as adult' button" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_button("Mark as adult")
+        expect(page).not_to have_button("Unmark as adult")
+      end
+
+      it "allows marking user as adult" do
+        expect(user.reload.all_adult_products).to be(false)
+
+        visit admin_user_path(user.id)
+        click_on "Mark as adult"
+        accept_browser_dialog
+        wait_for_ajax
+
+        expect(user.reload.all_adult_products).to be(true)
+        expect(page).to have_button("Unmark as adult")
+        expect(page).not_to have_button("Mark as adult")
+      end
+    end
+
+    context "when the user is marked as adult" do
+      before do
+        user.update!(all_adult_products: true)
+      end
+
+      it "shows 'Unmark as adult' button" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_button("Unmark as adult")
+        expect(page).not_to have_button("Mark as adult")
+      end
+
+      it "allows unmarking user as adult" do
+        expect(user.reload.all_adult_products).to be(true)
+
+        visit admin_user_path(user.id)
+        click_on "Unmark as adult"
+        accept_browser_dialog
+        wait_for_ajax
+
+        expect(user.reload.all_adult_products).to be(false)
+        expect(page).to have_button("Mark as adult")
+        expect(page).not_to have_button("Unmark as adult")
+      end
+    end
+
+    context "when the user's all_adult_products is nil" do
+      before do
+        user.all_adult_products = nil
+        user.save!
+      end
+
+      it "shows 'Mark as adult' button" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_button("Mark as adult")
+        expect(page).not_to have_button("Unmark as adult")
+      end
+
+      it "allows marking user as adult" do
+        visit admin_user_path(user.id)
+        click_on "Mark as adult"
+        accept_browser_dialog
+        wait_for_ajax
+
+        expect(user.reload.all_adult_products).to be(true)
+        expect(page).to have_button("Unmark as adult")
+        expect(page).not_to have_button("Mark as adult")
+      end
+    end
+  end
+
   def accept_browser_dialog
     wait = Selenium::WebDriver::Wait.new(timeout: 30)
     wait.until do
