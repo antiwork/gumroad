@@ -175,11 +175,8 @@ describe Admin::PurchasesController, :vcr do
       expect(response.parsed_body["message"]).to eq("Database error")
     end
 
-    it "handles purchase not found gracefully" do
-      post :undelete, params: { id: "invalid-id" }
-
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to be(true)
+    it "raises error when purchase is not found" do
+      expect { post :undelete, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
   end
 end

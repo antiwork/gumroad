@@ -94,6 +94,8 @@ class Admin::PurchasesController < Admin::BaseController
   end
 
   def undelete
+    e404 if @purchase.nil?
+
     if @purchase.is_deleted_by_buyer?
       @purchase.update!(is_deleted_by_buyer: false)
 
