@@ -115,7 +115,12 @@ const WishlistsPage = ({
                   </td>
                   <td>
                     <div className="actions">
-                      <Button color="danger" outline aria-label="Delete wishlist" onClick={() => setConfirmingDeleteWishlist(wishlist)}>
+                      <Button
+                        color="danger"
+                        outline
+                        aria-label="Delete wishlist"
+                        onClick={() => setConfirmingDeleteWishlist(wishlist)}
+                      >
                         <Icon name="trash2" />
                       </Button>
                     </div>
