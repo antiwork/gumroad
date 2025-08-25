@@ -103,7 +103,7 @@ module Purchase::Blockable
     end
 
     def blockable_emails_if_fraudulent_transaction
-      [purchaser&.email, email, gifter_email].compact_blank.uniq
+      [purchaser&.email, paypal_email, email, gifter_email].compact_blank.uniq
     end
 
     def blockable_email_domains_if_fraudulent_transaction
