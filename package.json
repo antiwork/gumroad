@@ -116,6 +116,9 @@
   },
   "overrides": {
     "@eslint/plugin-kit": ">=0.3.4",
+    "patch-package": {
+      "tmp": "0.2.5"
+    },
     "@tiptap/extension-blockquote": "$@tiptap/starter-kit",
     "@tiptap/extension-bold": "$@tiptap/starter-kit",
     "@tiptap/extension-bubble-menu": "$@tiptap/react",
