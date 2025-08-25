@@ -247,4 +247,74 @@ describe Admin::UsersController do
       expect(user.reload.custom_fee_per_thousand).to eq 50
     end
   end
+
+  describe "POST #toggle_adult_products" do
+    let(:user) { create(:user) }
+
+    context "when all_adult_products is false" do
+      before do
+        user.update!(all_adult_products: false)
+      end
+
+      it "toggles all_adult_products to true" do
+        post :toggle_adult_products, params: { id: user.id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+
+    context "when all_adult_products is true" do
+      before do
+        user.update!(all_adult_products: true)
+      end
+
+      it "toggles all_adult_products to false" do
+        post :toggle_adult_products, params: { id: user.id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(false)
+      end
+    end
+
+    context "when all_adult_products is nil" do
+      before do
+        user.update!(all_adult_products: nil)
+      end
+
+      it "toggles all_adult_products to true" do
+        post :toggle_adult_products, params: { id: user.id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+
+    context "when user is found by email" do
+      it "toggles all_adult_products successfully" do
+        user.update!(all_adult_products: false)
+
+        post :toggle_adult_products, params: { id: user.email }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+
+    context "when user is found by username" do
+      it "toggles all_adult_products successfully" do
+        user.update!(all_adult_products: false, username: "testuser")
+
+        post :toggle_adult_products, params: { id: user.username }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+  end
 end
