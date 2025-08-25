@@ -42,13 +42,6 @@ const DiscoverLinkSection = ({
           </CopyToClipboard>
         </div>
         <small>
-          By sharing an affiliate link, you agree to our{" "}
-          <a className="text-muted" target="_blank" href="https://gumroad.com/affiliates" rel="noreferrer">
-            Affiliate Terms
-          </a>
-          .
-        </small>
-        <small>
           You will be attributed any sales you referred within {cookieExpiryDays} days, even if they're for different
           products you linked to.
         </small>

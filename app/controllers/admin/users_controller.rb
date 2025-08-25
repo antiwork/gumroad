@@ -211,6 +211,14 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }
   end
 
+  def toggle_adult_products
+    @user.all_adult_products = !@user.all_adult_products
+    @user.save!
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
   private
     def fetch_user
       if params[:id].include?("@")
