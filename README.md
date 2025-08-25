@@ -11,6 +11,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Luciferai04/gumroad/actions/workflows/secret-scan.yml">
+    <img src="https://github.com/Luciferai04/gumroad/actions/workflows/secret-scan.yml/badge.svg" alt="Secret Scan" />
+  </a>
+  <a href="https://github.com/antiwork/gumroad/actions/workflows/tests.yml">
+    <img src="https://github.com/antiwork/gumroad/actions/workflows/tests.yml/badge.svg" alt="Tests (upstream)" />
+  </a>
+</p>
+
+<p align="center">
   <a href="https://gumroad.com">Gumroad</a> is an e-commerce platform that enables creators to sell products directly to consumers. This repository contains the source code for the Gumroad web application.
 </p>
 
@@ -164,6 +173,13 @@ npm install
 ```
 
 ### Configuration
+
+### Security and secrets
+
+- Do not commit secrets. All `.env.*` files are ignored. Use `.env.example` as a template for local development.
+- A pre-commit hook is provided to block committing env files and private keys. It is enabled via `git config core.hooksPath .githooks`.
+- CI runs a Secret Scan workflow on pushes and pull requests to catch high-risk patterns. The workflow fails builds only for critical matches outside tests/specs; potential tokens in tests/specs are surfaced as informational.
+- For more details, see SECURITY.md.
 
 #### Set up Custom credentials
 
