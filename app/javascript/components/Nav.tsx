@@ -13,6 +13,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 export const NavLink = ({
   text,
   icon,
+  badge,
   href,
   exactHrefMatch,
   additionalPatterns = [],
@@ -20,6 +21,7 @@ export const NavLink = ({
 }: {
   text: string;
   icon?: IconName;
+  badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
@@ -34,9 +36,15 @@ export const NavLink = ({
     : undefined;
 
   return (
-    <a aria-current={ariaCurrent} href={href} title={text} onClick={onClick}>
+    <a aria-current={ariaCurrent} href={href} title={text} onClick={onClick} className="flex items-center">
       {icon ? <Icon name={icon} /> : null}
       {text}
+      {badge ? (
+        <>
+          <span className="flex-1" />
+          {badge}
+        </>
+      ) : null}
     </a>
   );
 };

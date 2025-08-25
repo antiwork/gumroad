@@ -833,6 +833,8 @@ Rails.application.routes.draw do
 
     resources :reviews, only: [:index]
 
+    resources :support, only: [:index]
+
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :url_redirect_expired_page
     get "/r/:id/rental_expired", to: "url_redirects#rental_expired_page", as: :url_redirect_rental_expired_page

@@ -66,7 +66,9 @@ export const ShareTab = () => {
           <section>
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h2>Gumroad Discover</h2>
-              <a data-helper-prompt="What is Gumroad Discover?">Learn more</a>
+              <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
             </header>
             {isListedOnDiscover ? (
               <div role="status" className="success">
@@ -98,7 +100,7 @@ export const ShareTab = () => {
               </Toggle>
               <Toggle value={product.is_adult} onChange={(newValue) => updateProduct({ is_adult: newValue })}>
                 This product contains content meant{" "}
-                <a data-helper-prompt="What does 'only for adults' mean in terms of content and how does that compare with Gumroad's NSFW policy?">
+                <a href="/help/article/156-gumroad-and-adult-content" target="_blank" rel="noreferrer">
                   only for adults,
                 </a>{" "}
                 including the preview
@@ -125,9 +127,14 @@ const DiscoverEligibilityPromo = () => {
       <img src={hands} />
       <div>
         To appear on Gumroad Discover, make sure to meet all the{" "}
-        <a data-helper-prompt="What are the eligibility criteria for Gumroad Discover?">eligibility criteria</a>, which
-        includes making at least one successful sale and completing the Risk Review process explained in detail{" "}
-        <a data-helper-prompt="How do I complete the Risk Review process?">here</a>.
+        <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
+          eligibility criteria
+        </a>
+        , which includes making at least one successful sale and completing the Risk Review process explained in detail{" "}
+        <a href="/help/article/13-getting-paid" target="_blank" rel="noreferrer">
+          here
+        </a>
+        .
       </div>
       <button
         className="link close"

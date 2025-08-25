@@ -319,7 +319,9 @@ const UtmLinkList = () => {
             <h2>No links yet</h2>
             <h4>Use UTM links to track which sources are driving the most conversions and revenue</h4>
 
-            <a data-helper-prompt="How can I use UTM link tracking in Gumroad?">Learn more about UTM tracking</a>
+            <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
+              Learn more about UTM tracking
+            </a>
           </div>
         </div>
       )}

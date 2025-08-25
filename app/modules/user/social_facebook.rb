@@ -21,7 +21,7 @@ module User::SocialFacebook
       user = User.where(facebook_uid: data["uid"]).first
       if user.nil?
         email = data["info"]["email"] || data["extra"]["raw_info"]["email"]
-        user = User.where(email:).first if email.present? && email.match(User::EMAIL_REGEX)
+        user = User.where(email:).first if EmailFormatValidator.valid?(email)
         if user.nil?
           user = User.new
           user.provider = :facebook

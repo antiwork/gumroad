@@ -477,7 +477,9 @@ const DiscountsPage = ({
               <h2>No discounts yet</h2>
               <p>Use discounts to create sweet deals for your customers</p>
               <p>
-                <a data-helper-prompt="How can I create a discount code?">Learn more about discount codes</a>
+                <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
+                  Learn more about discount codes
+                </a>
               </p>
             </div>
           </div>
@@ -834,7 +836,11 @@ const Form = ({
                 Once the code is created, you can share it or copy a unique link per product that automatically applies
                 the discount.
               </div>
-              <a data-helper-prompt="How do I create discount codes?">Learn more</a>
+              <div>
+                <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
+                  Learn more
+                </a>
+              </div>
             </div>
           </header>
           <fieldset className={cx({ danger: name.error })}>

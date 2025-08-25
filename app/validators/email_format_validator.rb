@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module User::Email
+class EmailFormatValidator < ActiveModel::EachValidator
   # To reduce invalid email address errors, we enforcing the same email regex as the front end
   EMAIL_REGEX = /\A(?=.{3,255}$)(                                         # between 3 and 255 characters
                 ([^@\s()\[\],.<>;:\\"]+(\.[^@\s()\[\],.<>;:\\"]+)*)       # cannot start with or have consecutive .
@@ -12,9 +12,19 @@ module User::Email
                 (([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,})                         # domain can only alphabets and . -
                 )\z/x
 
-  RESERVED_EMAIL_DOMAINS = %w[gumroad.com gumroad.org gumroad.dev]
+  class << self
+    def valid?(email)
+      return false if email.blank?
+      email.to_s.match?(EMAIL_REGEX)
+    end
+  end
 
-  def email_domain_reserved?(email)
-    Mail::Address.new(email).domain.try(:in?, RESERVED_EMAIL_DOMAINS)
+  def validate_each(record, attribute, value)
+    return if value.nil? && options[:allow_nil]
+    return if value.blank? && options[:allow_blank]
+
+    unless self.class.valid?(value)
+      record.errors.add(attribute, options[:message] || :invalid)
+    end
   end
 end

@@ -214,6 +214,24 @@ describe User::FeatureStatus do
     end
   end
 
+  describe "#product_level_support_emails_enabled?" do
+    let(:user) { create(:user) }
+
+    it "returns true if product_level_support_emails feature flag is enabled for user" do
+      Feature.activate_user(:product_level_support_emails, user)
+      expect(user.product_level_support_emails_enabled?).to eq true
+
+      Feature.deactivate_user(:product_level_support_emails, user)
+      expect(user.product_level_support_emails_enabled?).to eq false
+
+      Feature.activate(:product_level_support_emails)
+      expect(user.product_level_support_emails_enabled?).to eq true
+
+      Feature.deactivate(:product_level_support_emails)
+      expect(user.product_level_support_emails_enabled?).to eq false
+    end
+  end
+
   describe "#waive_gumroad_fee_on_new_sales?" do
     it "returns true if waive_gumroad_fee_on_new_sales feature flag is set for seller" do
       seller = create(:user)

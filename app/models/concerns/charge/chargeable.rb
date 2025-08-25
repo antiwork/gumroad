@@ -72,6 +72,16 @@ module Charge::Chargeable
     is_a?(Charge) ? order : self
   end
 
+  def support_email
+    unique_support_emails = successful_purchases.joins(:link).pluck("links.support_email").uniq
+
+    if unique_support_emails.size == 1 && unique_support_emails.first.present?
+      unique_support_emails.first
+    else
+      seller.support_or_form_email
+    end
+  end
+
   def unbundled_purchases
     @_unbundled_purchases ||=
       successful_purchases.map do |purchase|

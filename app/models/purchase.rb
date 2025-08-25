@@ -692,7 +692,7 @@ class Purchase < ApplicationRecord
       expiry_year: nil
     }
 
-    if options[:query] && options[:query].to_s == card_visual && card_visual.match?(User::EMAIL_REGEX)
+    if options[:query] && options[:query].to_s == card_visual && EmailFormatValidator.valid?(card_visual)
       json[:paypal_email] = card_visual
     end
 
@@ -3599,7 +3599,7 @@ class Purchase < ApplicationRecord
     def must_have_valid_email
       return if email && !email_changed?
 
-      errors.add(:base, "valid email required") if email.blank? || !email.match(User::EMAIL_REGEX)
+      errors.add(:base, "valid email required") unless EmailFormatValidator.valid?(email)
     end
 
     def seller_is_link_user
