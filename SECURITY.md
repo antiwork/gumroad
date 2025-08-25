@@ -30,3 +30,16 @@ When we receive a security bug report, we will:
 - Audit code to find any potential similar problems
 - Prepare fixes for all affected versions
 - Release new security fix versions
+
+## Secret scanning
+
+We run a repository secret scan in CI on push/PR and weekly. The scan:
+
+- Fails only for CRITICAL patterns found outside tests/specs (e.g., private keys, AWS access keys, Stripe live keys, webhook secrets)
+- Surfaces findings in tests/specs as informational to avoid blocking on synthetic fixtures
+
+You can run the same scan locally before pushing:
+
+```sh
+make secret_scan
+```
