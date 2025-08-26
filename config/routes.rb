@@ -729,6 +729,7 @@ Rails.application.routes.draw do
 
 
     get "/dashboard" => "dashboard#index", as: :dashboard
+    get "/dashboard/spa" => "dashboard#spa", as: :dashboard_spa
     get "/dashboard/customers_count" => "dashboard#customers_count", as: :dashboard_customers_count
     get "/dashboard/total_revenue" => "dashboard#total_revenue", as: :dashboard_total_revenue
     get "/dashboard/active_members_count" => "dashboard#active_members_count", as: :dashboard_active_members_count

@@ -1,0 +1,224 @@
+// Dashboard SPA Styles
+.dashboard-spa-layout {
+  display: flex;
+  min-height: 100vh;
+  
+  .dashboard-main-content {
+    flex: 1;
+    padding: 2rem;
+    background: #f8f9fa;
+    
+    .dashboard-content-wrapper {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+  }
+  
+  .dashboard-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    
+    .dashboard-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      text-decoration: none;
+      color: #6c757d;
+      border-radius: 0.5rem;
+      transition: all 0.2s ease;
+      
+      &:hover {
+        background: #e9ecef;
+        color: #495057;
+      }
+      
+      &.active {
+        background: #007bff;
+        color: white;
+      }
+      
+      span {
+        font-weight: 500;
+      }
+    }
+  }
+  
+  .dashboard-nav-footer {
+    margin-top: auto;
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    
+    a {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      text-decoration: none;
+      color: #6c757d;
+      border-radius: 0.5rem;
+      transition: all 0.2s ease;
+      
+      &:hover {
+        background: #e9ecef;
+        color: #495057;
+      }
+    }
+  }
+}
+
+// Page-specific styles
+.dashboard-page,
+.sales-dashboard,
+.products-page,
+.new-product-page,
+.discover-page,
+.library-page {
+  header {
+    margin-bottom: 2rem;
+    
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #212529;
+    }
+    
+    p {
+      font-size: 1.1rem;
+      color: #6c757d;
+      margin-bottom: 1.5rem;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+  }
+  
+  .sales-content,
+  .products-content,
+  .new-product-content,
+  .discover-content,
+  .library-content {
+    .sales-overview,
+    .products-overview,
+    .product-types,
+    .discover-overview,
+    .library-overview {
+      h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #212529;
+      }
+      
+      p {
+        font-size: 1rem;
+        color: #6c757d;
+        margin-bottom: 1.5rem;
+      }
+    }
+  }
+}
+
+// Sales dashboard specific styles
+.sales-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+  
+  .stat-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #6c757d;
+      margin-bottom: 0.5rem;
+    }
+    
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #007bff;
+    }
+  }
+}
+
+// Product types selection
+.product-type-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+  
+  .product-type-option {
+    background: white;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    
+    &:hover {
+      border-color: #007bff;
+      transform: translateY(-2px);
+    }
+    
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: #212529;
+    }
+    
+    p {
+      color: #6c757d;
+      line-height: 1.5;
+    }
+  }
+}
+
+// Fallback styles
+.dashboard-spa-fallback,
+.sales-dashboard-fallback,
+.products-page-fallback,
+.new-product-page-fallback,
+.discover-page-fallback,
+.library-page-fallback {
+  text-align: center;
+  padding: 3rem;
+  background: #f8f9fa;
+  border-radius: 0.5rem;
+  margin: 2rem;
+  
+  p {
+    font-size: 1.1rem;
+    color: #6c757d;
+  }
+}
+
+// Loading states
+.loading-placeholder {
+  background: #e9ecef;
+  border-radius: 0.25rem;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

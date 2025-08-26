@@ -16,6 +16,18 @@ class DashboardController < Sellers::BaseController
     end
   end
 
+  def spa
+    authorize :dashboard
+
+    if Feature.active?(:dashboard_spa_enabled, current_seller)
+      # Render the SPA view
+      render :spa
+    else
+      # Fallback to regular dashboard
+      redirect_to dashboard_path
+    end
+  end
+
   def customers_count
     authorize :dashboard
 
