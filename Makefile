@@ -24,7 +24,7 @@ build_base:
 	cp Gemfile* .ruby-version docker/base
 	cd docker/base \
 		&& $(DOCKER_CMD) build -t $(NEW_BASE_REPO):latest \
-			--build-arg CONTRIBSYS_CREDENTIALS \
+			--build-arg BUNDLE_GEMS__CONTRIBSYS__COM \
 			--build-arg WEB_BASE_DOCKERFILE_FROM=$(WEB_BASE_DOCKERFILE_FROM) \
 			--cache-from $(NEW_BASE_REPO):latest \
 			--compress . \
@@ -47,7 +47,7 @@ build:
 	echo $(NEW_WEB_TAG) > revision
 	WEB_DOCKERFILE_FROM=$(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
 	$(DOCKER_CMD) build -t $(NEW_WEB_REPO):latest \
-		--build-arg CONTRIBSYS_CREDENTIALS \
+		--build-arg BUNDLE_GEMS__CONTRIBSYS__COM \
 		--cache-from $(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
 		--cache-from $(NEW_WEB_REPO):web-$(NEW_WEB_TAG) \
 		--build-arg WEB_DOCKERFILE_FROM \
