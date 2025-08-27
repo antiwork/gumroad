@@ -22,7 +22,8 @@
               <% states << "(refunded)" if purchase.stripe_refunded? %>
               <% states << "(partially refunded)" if purchase.stripe_partially_refunded? %>
               <% if purchase.chargedback_not_reversed? && (most_recent_chargeback = Purchase.chargedback.where(email: purchase.email).order(chargeback_date: :desc).first) %>
-                <% states << "(Buyer Has Charged Back - #{link_to(most_recent_chargeback.id, admin_purchase_path(most_recent_chargeback))})" %>
+                <% chargeback_link = link_to(most_recent_chargeback.id, admin_purchase_path(most_recent_chargeback)) %>
+                <% states << "(Buyer Has Charged Back - #{chargeback_link})" %>
               <% end %>
               <% states << "(chargeback reversed)" if purchase.chargeback_reversed? %>
               <% states << "(#{purchase.formatted_error_code})" if purchase.failed? %>
