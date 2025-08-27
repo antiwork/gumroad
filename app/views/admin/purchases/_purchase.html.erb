@@ -90,7 +90,7 @@
         <%= purchase.purchase_state.capitalize %>
         <%= "(refunded)" if purchase.stripe_refunded %>
         <%= "(partially refunded)" if purchase.stripe_partially_refunded %>
-        <%= "(chargeback)" if purchase.chargedback_not_reversed? %>
+        <%= "(Buyer Has Charged Back - #{link_to(most_recent_chargeback.id, admin_purchase_path(most_recent_chargeback))})" if purchase.chargedback_not_reversed? && (most_recent_chargeback = Purchase.chargedback.where(email: purchase.email).order(chargeback_date: :desc).first) %>
         <%= "(chargeback reversed)" if purchase.chargeback_reversed? %>
         <%= "(#{purchase.formatted_error_code})" if purchase.failed? %>
       </dd>
