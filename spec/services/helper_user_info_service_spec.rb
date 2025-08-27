@@ -119,5 +119,22 @@ describe HelperUserInfoService do
         expect(result[:prompt]).to include("License Key: #{license.serial}")
       end
     end
+
+    context "when user has compliance info with country" do
+      it "includes country in the prompt" do
+        compliance_info = create(:user_compliance_info, user: user, country: "United States")
+        user.user_compliance_infos << compliance_info
+        
+        result = described_class.new(email: user.email).user_info
+        expect(result[:prompt]).to include("Country: United States")
+      end
+    end
+
+    context "when user has no compliance info" do
+      it "does not include country in the prompt" do
+        result = described_class.new(email: user.email).user_info
+        expect(result[:prompt]).not_to include("Country:")
+      end
+    end
   end
 end
