@@ -60,3 +60,5 @@ docker/local-nginx/certs/*.key
 lib/GeoIP2-City.mmdb
 nomad/
 docs/ssh.md
+test-branch-creation.log
+.vercel
