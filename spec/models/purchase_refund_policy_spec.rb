@@ -30,4 +30,33 @@ describe PurchaseRefundPolicy do
       expect(refund_policy.fine_print).to be_nil
     end
   end
+
+  describe "#different_than_product_refund_policy?" do
+    let(:purchase) { create(:purchase) }
+    let(:refund_policy) { create(:purchase_refund_policy, purchase: purchase) }
+
+    describe "#product_refund_policy_title" do
+      it "returns the product refund policy title" do
+        expect(refund_policy.product_refund_policy_title).to eq purchase.link.product_refund_policy.title
+      end
+    end
+
+    describe "#different_than_product_refund_policy?" do
+      context "when title matches product refund policy title" do
+        it "returns false" do
+          expect(refund_policy.different_than_product_refund_policy?).to be false
+        end
+      end
+
+      context "when title differs from product refund policy title" do
+        before do
+          purchase.link.product_refund_policy.update!(title: "Different Title")
+        end
+
+        it "returns true" do
+          expect(refund_policy.different_than_product_refund_policy?).to be true
+        end
+      end
+    end
+  end
 end
