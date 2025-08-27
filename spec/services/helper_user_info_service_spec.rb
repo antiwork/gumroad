@@ -126,7 +126,7 @@ describe HelperUserInfoService do
         user.user_compliance_infos << compliance_info
         
         result = described_class.new(email: user.email).user_info
-        expect(result[:prompt]).to include("Country: United States")
+        expect(result[:prompt]).to include("Country: US")
       end
     end
 

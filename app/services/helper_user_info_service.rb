@@ -82,7 +82,7 @@ class HelperUserInfoService
       @info << "User Email: #{user.email}"
       @info << "Account Created: #{user.created_at.to_fs(:formatted_date_full_month)}"
       @info << "Account Status: #{user.suspended? ? 'Suspended' : 'Active'}"
-      @info << "Country: #{user.alive_user_compliance_info&.legal_entity_country}" if user.alive_user_compliance_info&.legal_entity_country.present?
+      @info << "Country: #{user.compliance_country_code}" if user.compliance_country_code.present?
     end
 
     def add_payout_notes
