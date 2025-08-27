@@ -483,7 +483,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   return (
     <>
-      <main className="product-content" style={{ height: "100%" }}>
+      <main className="product-content h-screen sm:h-full">
         {editor ? (
           <RichTextEditorToolbar
             editor={editor}

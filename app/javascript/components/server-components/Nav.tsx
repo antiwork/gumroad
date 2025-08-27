@@ -18,7 +18,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type Props = {
   title: string;
   compact?: boolean;
-  helper_host: string;
+  helper_host?: string | null;
   helper_session?: {
     email?: string | null;
     emailHash?: string | null;
@@ -109,7 +109,7 @@ export const Nav = (props: Props) => {
             icon="book"
             href={Routes.help_center_root_url(routeParams)}
             badge={
-              props.helper_session ? (
+              props.helper_host && props.helper_session ? (
                 <HelperClientProvider host={props.helper_host} session={props.helper_session}>
                   <UnreadTicketsBadge />
                 </HelperClientProvider>
