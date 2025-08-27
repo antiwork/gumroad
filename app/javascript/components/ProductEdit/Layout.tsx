@@ -149,6 +149,8 @@ export const Layout = ({
       if (tab === "share") {
         if (product.native_type === "coffee") navigate.current(rootPath);
         else navigate.current(`${rootPath}/content`);
+      } else {
+        navigate.current(`${rootPath}/share`)
       }
     } catch (e) {
       assertResponseError(e);
@@ -249,7 +251,7 @@ export const Layout = ({
                 <Button
                   color="accent"
                   disabled={isBusy}
-                  onClick={() => void setPublished(true).then(() => navigate.current(`${rootPath}/share`))}
+                  onClick={() => void setPublished(true)}
                 >
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
