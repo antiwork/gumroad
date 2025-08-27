@@ -32,37 +32,39 @@ export function SupportHeader({
           <a href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
             <span className="icon icon-solid-search"></span>
           </a>
-        ) : (
+        ) : hasHelperSession ? (
           <Button color="accent" onClick={onOpenNewTicket}>
             New ticket
           </Button>
-        )}
+        ) : null}
       </div>
-      <div role="tablist">
-        <a
-          href={Routes.help_center_root_path()}
-          role="tab"
-          aria-selected={pathname.startsWith(Routes.help_center_root_path())}
-          className="pb-2"
-        >
-          Articles
-        </a>
-        <a
-          href={Routes.support_index_path()}
-          role="tab"
-          aria-selected={pathname.startsWith(Routes.support_index_path())}
-          className="flex items-center gap-2 border-b-2 pb-2"
-        >
-          Support tickets
-          {hasHelperSession ? <UnreadTicketsBadge /> : null}
-        </a>
-      </div>
+      {hasHelperSession ? (
+        <div role="tablist">
+          <a
+            href={Routes.help_center_root_path()}
+            role="tab"
+            aria-selected={pathname.startsWith(Routes.help_center_root_path())}
+            className="pb-2"
+          >
+            Articles
+          </a>
+          <a
+            href={Routes.support_index_path()}
+            role="tab"
+            aria-selected={pathname.startsWith(Routes.support_index_path())}
+            className="flex items-center gap-2 border-b-2 pb-2"
+          >
+            Support tickets
+            <UnreadTicketsBadge />
+          </a>
+        </div>
+      ) : null}
     </>
   );
 }
 
 type WrapperProps = {
-  host: string;
+  host?: string | null;
   session?: {
     email?: string | null;
     emailHash?: string | null;
@@ -78,7 +80,7 @@ type WrapperProps = {
 };
 
 const Wrapper = ({ host, session, new_ticket_url }: WrapperProps) =>
-  session ? (
+  host && session ? (
     <HelperClientProvider host={host} session={session}>
       <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} />
     </HelperClientProvider>
