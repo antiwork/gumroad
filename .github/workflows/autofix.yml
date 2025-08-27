@@ -13,12 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-        env:
-          BUNDLE_WITHOUT: production:staging
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
@@ -26,6 +20,10 @@ jobs:
           cache: "npm"
 
       - run: npm ci
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
 
       - run: npm run setup
 
