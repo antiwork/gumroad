@@ -234,7 +234,7 @@ export const Layout = ({
           className="text-singleline"
         >
           <a style={{ textDecoration: "none" }} href={Routes.library_url()} title="Back to Library">
-            <Icon name="arrow-left" />
+            <Icon name="arrow-left" className="mr-1.5" />
             {headerVisible ? "Back to Library" : null}
           </a>
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}

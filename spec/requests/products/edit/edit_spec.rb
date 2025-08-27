@@ -467,6 +467,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     within :alert, text: "To publish a product, we need you to have an email. Set an email to continue." do
       expect(page).to have_link("Set an email", href: settings_main_url(host: UrlService.domain_with_protocol))
     end
+    expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
     expect(page).to have_button "Publish and continue"
     expect(product.reload.alive?).to be(false)
   end
