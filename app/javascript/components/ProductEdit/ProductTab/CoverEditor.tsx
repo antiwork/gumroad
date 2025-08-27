@@ -17,6 +17,7 @@ import { Progress } from "$app/components/Progress";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const MAX_PREVIEW_COUNT = 8;
 
@@ -263,6 +264,7 @@ const CoverTab = ({
   onClick: () => void;
   onRemove: () => void;
 }) => {
+  const isDesktop = useIsAboveBreakpoint("lg");
   const [showDelete, setShowDelete] = React.useState(false);
 
   const hasThumbnail = cover.type !== "video" && (cover.type !== "oembed" || cover.thumbnail != null);
@@ -289,7 +291,7 @@ const CoverTab = ({
         <span>{cover.type === "oembed" ? "📺" : cover.type === "video" ? "📼" : "📦"}</span>
       )}
 
-      {showDelete ? (
+      {(showDelete || !isDesktop) ? (
         <RemoveButton
           onClick={(evt) => {
             evt.stopPropagation();
