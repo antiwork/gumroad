@@ -3,7 +3,7 @@
 class AdminSearchService
   class InvalidDateError < StandardError; end
 
-  def search_purchases(query: nil, product_title_query: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nill)
+  def search_purchases(query: nil, product_title_query: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
     purchases = Purchase.order(created_at: :desc)
 
     if query.present?
@@ -22,10 +22,12 @@ class AdminSearchService
         ) via_gifts_and_purchases
       SQL
       purchases = purchases.where("purchases.id IN (#{union_sql})")
-    end
 
-    if product_title_query.present?
-      purchases = purchases.joins(:link).where("links.name LIKE ?", "%#{product_title_query}%")
+      # To be used only when query is set, as that uses an index to select purchases
+      if product_title_query.present?
+        raise ArgumentError, "product_title_query requires query parameter to be set" unless query.present?
+        purchases = purchases.joins(:link).where("links.name LIKE ?", "%#{product_title_query}%")
+      end
     end
 
     if creator_email.present?
