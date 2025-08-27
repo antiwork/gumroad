@@ -137,20 +137,22 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
         end.to change { @purchase.reload.refunded? }.from(false).to(true)
 
         expect(response).to have_http_status(:success)
-        expect(response.parsed_body).to eq({ success: true, message: "Successfully refunded purchase ID #{@purchase.id}" }.as_json)
+        expect(response.parsed_body).to eq({ success: true, message: "Successfully refunded purchase number #{@purchase.external_id_numeric}" }.as_json)
       end
     end
 
     context "when the purchase cannot be refunded" do
       before do
         @error_message = "There is a temporary problem. Try to refund later."
-        allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_raise(ChargeProcessorUnavailableError, @error_message)
+        errors_double = double(full_messages: double(to_sentence: @error_message))
+        allow_any_instance_of(Purchase).to receive(:refund_and_save!).and_return(false)
+        allow_any_instance_of(Purchase).to receive(:errors).and_return(errors_double)
       end
 
       it "returns error response" do
         post :refund_last_purchase, params: @params
 
-        expect(response).to have_http_status(:unprocessable_content)
+        expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body).to eq({ success: false, message: @error_message }.as_json)
       end
     end
@@ -169,7 +171,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       post :resend_last_receipt, params: @params
 
       expect(response).to have_http_status(:success)
-      expect(response.parsed_body).to eq({ success: true, message: "Successfully resent receipt for purchase ID #{@purchase.id}" }.as_json)
+      expect(response.parsed_body).to eq({ success: true, message: "Successfully resent receipt for purchase number #{@purchase.external_id_numeric}" }.as_json)
       expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@purchase.id).on("critical")
     end
   end
@@ -184,7 +186,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       post :resend_receipt_by_number, params: { purchase_number: @purchase.external_id_numeric }
 
       expect(response).to have_http_status(:success)
-      expect(response.parsed_body).to eq({ success: true, message: "Successfully resent receipt for purchase ID #{@purchase.id} to #{@purchase.email}" }.as_json)
+      expect(response.parsed_body).to eq({ success: true, message: "Successfully resent receipt for purchase number #{@purchase.external_id_numeric} to #{@purchase.email}" }.as_json)
       expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@purchase.id).on("critical")
     end
 
@@ -327,7 +329,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST auto_refund_purchase" do
-    let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com") }
+    let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com", external_id_numeric: 1) }
     let(:params) { { purchase_id: "12345", email: "test@example.com" } }
     let(:purchase_refund_policy) { double("PurchaseRefundPolicy", fine_print: nil) }
 
@@ -346,7 +348,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         expect(response).to have_http_status(:success)
         expect(JSON.parse(response.body)["success"]).to eq(true)
-        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded purchase ID 1")
+        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded purchase number 1")
       end
 
       it "returns an error when outside refund policy timeframe" do
@@ -380,7 +382,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(JSON.parse(response.body)["success"]).to eq(false)
-        expect(JSON.parse(response.body)["message"]).to eq("Refund failed for purchase ID 1")
+        expect(JSON.parse(response.body)["message"]).to eq("Refund failed for purchase number 1")
       end
     end
 
@@ -409,7 +411,8 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
   end
 
   describe "POST refund_taxes_only" do
-    let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com") }
+    let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com", external_id_numeric: 1) }
+    let(:purchase) { instance_double(Purchase, id: 1, email: "test@example.com", external_id_numeric: 1) }
     let(:params) { { purchase_id: "12345", email: "test@example.com" } }
 
     before do
@@ -429,7 +432,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         expect(response).to have_http_status(:success)
         expect(JSON.parse(response.body)["success"]).to eq(true)
-        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded taxes for purchase ID 1")
+        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded taxes for purchase number 1")
       end
 
       it "includes note and business_vat_id when provided" do
@@ -445,7 +448,7 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
 
         expect(response).to have_http_status(:success)
         expect(JSON.parse(response.body)["success"]).to eq(true)
-        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded taxes for purchase ID 1")
+        expect(JSON.parse(response.body)["message"]).to eq("Successfully refunded taxes for purchase number 1")
       end
 
       it "returns an error when no refundable taxes are available" do

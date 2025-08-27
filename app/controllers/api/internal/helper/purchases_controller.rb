@@ -55,7 +55,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def refund_last_purchase
     if @purchase.present? && @purchase.refund_and_save!(GUMROAD_ADMIN_ID)
-      render json: { success: true, message: "Successfully refunded purchase ID #{@purchase.id}" }
+      render json: { success: true, message: "Successfully refunded purchase number #{@purchase.external_id_numeric}" }
     else
       render json: { success: false, message: @purchase.present? ? @purchase.errors.full_messages.to_sentence : "Purchase not found" }, status: :unprocessable_entity
     end
@@ -112,7 +112,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def resend_last_receipt
     @purchase.resend_receipt
-    render json: { success: true, message: "Successfully resent receipt for purchase ID #{@purchase.id}" }
+    render json: { success: true, message: "Successfully resent receipt for purchase number #{@purchase.external_id_numeric}" }
   end
 
   RESEND_ALL_RECEIPTS_OPENAPI = {
@@ -354,7 +354,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     return e404_json unless purchase.present?
 
     purchase.resend_receipt
-    render json: { success: true, message: "Successfully resent receipt for purchase ID #{purchase.id} to #{purchase.email}" }
+    render json: { success: true, message: "Successfully resent receipt for purchase number #{purchase.external_id_numeric} to #{purchase.email}" }
   end
 
   REFRESH_LIBRARY_OPENAPI = {
@@ -615,9 +615,9 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     end
 
     if purchase.refund_and_save!(GUMROAD_ADMIN_ID)
-      render json: { success: true, message: "Successfully refunded purchase ID #{purchase.id}" }
+      render json: { success: true, message: "Successfully refunded purchase number #{purchase.external_id_numeric}" }
     else
-      render json: { success: false, message: "Refund failed for purchase ID #{purchase.id}" }, status: :unprocessable_entity
+      render json: { success: false, message: "Refund failed for purchase number #{purchase.external_id_numeric}" }, status: :unprocessable_entity
     end
   end
 
@@ -701,7 +701,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     end
 
     if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: params[:note], business_vat_id: params[:business_vat_id])
-      render json: { success: true, message: "Successfully refunded taxes for purchase ID #{purchase.id}" }
+      render json: { success: true, message: "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}" }
     else
       error_message = purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available"
       render json: { success: false, message: error_message }, status: :unprocessable_entity
