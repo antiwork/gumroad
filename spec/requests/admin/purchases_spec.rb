@@ -33,7 +33,7 @@ describe "Admin::PurchasesController Scenario", type: :system, js: true do
       wait_for_ajax
 
       expect(purchase.reload.is_deleted_by_buyer).to be(false)
-      expect(page).not_to have_button("Undelete")
+      expect(page).to have_button("Undeleted!")
     end
   end
 end
