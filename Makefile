@@ -108,6 +108,7 @@ build_staging:
 	: $${GUM_AWS_ACCESS_KEY_ID?"Need to set GUM_AWS_ACCESS_KEY_ID"}
 	: $${GUM_AWS_SECRET_ACCESS_KEY?"Need to set GUM_AWS_SECRET_ACCESS_KEY"}
 	: $${RAILS_STAGING_MASTER_KEY?"Need to set RAILS_STAGING_MASTER_KEY"}
+	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test mongo memcached redis
 	$(DOCKER_CMD) run \
@@ -149,6 +150,7 @@ build_production:
 	: $${GUM_AWS_ACCESS_KEY_ID?"Need to set GUM_AWS_ACCESS_KEY_ID"}
 	: $${GUM_AWS_SECRET_ACCESS_KEY?"Need to set GUM_AWS_SECRET_ACCESS_KEY"}
 	: $${RAILS_PRODUCTION_MASTER_KEY?"Need to set RAILS_PRODUCTION_MASTER_KEY"}
+	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test mongo memcached redis
 	$(DOCKER_CMD) run \
