@@ -8,7 +8,7 @@ module HelperWidget
   end
 
   def helper_widget_host
-    ENV.fetch("HELPER_WIDGET_HOST", "https://help.gumroad.com")
+    GlobalConfig.get("HELPER_WIDGET_HOST")
   end
 
   def helper_session
