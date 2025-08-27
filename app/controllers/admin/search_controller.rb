@@ -21,7 +21,7 @@ class Admin::SearchController < Admin::BaseController
 
     @purchases = AdminSearchService.new.search_purchases(
       query: @raw_query,
-      product_title_query: params[:product_title_query].strip,
+      product_title_query: params[:product_title_query].to_s.strip,
     )
     @purchases = @purchases.page_with_kaminari(params[:page]).per(RECORDS_PER_PAGE) if @purchases.present?
 
