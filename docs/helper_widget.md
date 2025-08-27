@@ -4,7 +4,7 @@ We've embedded a support portal using the Helper API to assist Gumroad creators 
 
 Once you have Helper working, you can run it alongside Gumroad by doing the following:
 
-1. Add the following to your `.env` file:
+1. Create or update your `.env` file with the following:
    ```
    HELPER_WIDGET_HOST=https://helperai.dev
    # If you aren't using the default seeds for Helper, change this to your own widgetHMACSecret.
