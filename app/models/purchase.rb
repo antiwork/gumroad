@@ -329,7 +329,7 @@ class Purchase < ApplicationRecord
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
   validates :custom_fee_per_thousand, allow_nil: true, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }
-  validates :perceived_price_cents, presence: true, if: -> { is_commission_completion_purchase || is_installment_payment }
+  validates :perceived_price_cents, presence: { if: -> { is_commission_completion_purchase || is_installment_payment } }
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
