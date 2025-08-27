@@ -16,8 +16,8 @@ import { Covers } from "$app/components/Product/Covers";
 import { Progress } from "$app/components/Progress";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
-import { WithTooltip } from "$app/components/WithTooltip";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_PREVIEW_COUNT = 8;
 
@@ -291,7 +291,7 @@ const CoverTab = ({
         <span>{cover.type === "oembed" ? "📺" : cover.type === "video" ? "📼" : "📦"}</span>
       )}
 
-      {(showDelete || !isDesktop) ? (
+      {showDelete || !isDesktop ? (
         <RemoveButton
           onClick={(evt) => {
             evt.stopPropagation();
