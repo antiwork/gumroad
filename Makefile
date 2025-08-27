@@ -20,6 +20,7 @@ LOCAL_DETACHED ?= false
 LOCAL_DOCKER_COMPOSE_CONFIG = docker-compose-local.yml
 
 build_base:
+	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	rm -f docker/base/Gemfile* docker/base/.ruby-version
 	cp Gemfile* .ruby-version docker/base
 	cd docker/base \
@@ -44,6 +45,7 @@ build_base_test:
 		&& ./generate_tag_for_web_base_test.sh | xargs -I{} $(DOCKER_CMD) tag $(NEW_BASE_REPO)_test:latest $(NEW_WEB_BASE_TEST_REPO):{}
 
 build:
+	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	echo $(NEW_WEB_TAG) > revision
 	WEB_DOCKERFILE_FROM=$(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
 	$(DOCKER_CMD) build -t $(NEW_WEB_REPO):latest \
@@ -108,7 +110,6 @@ build_staging:
 	: $${GUM_AWS_ACCESS_KEY_ID?"Need to set GUM_AWS_ACCESS_KEY_ID"}
 	: $${GUM_AWS_SECRET_ACCESS_KEY?"Need to set GUM_AWS_SECRET_ACCESS_KEY"}
 	: $${RAILS_STAGING_MASTER_KEY?"Need to set RAILS_STAGING_MASTER_KEY"}
-	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test mongo memcached redis
 	$(DOCKER_CMD) run \
@@ -150,7 +151,6 @@ build_production:
 	: $${GUM_AWS_ACCESS_KEY_ID?"Need to set GUM_AWS_ACCESS_KEY_ID"}
 	: $${GUM_AWS_SECRET_ACCESS_KEY?"Need to set GUM_AWS_SECRET_ACCESS_KEY"}
 	: $${RAILS_PRODUCTION_MASTER_KEY?"Need to set RAILS_PRODUCTION_MASTER_KEY"}
-	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test mongo memcached redis
 	$(DOCKER_CMD) run \
