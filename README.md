@@ -131,8 +131,6 @@ We use Bundler to install Ruby gems.
 gem install bundler
 ```
 
-
-
 Install gems:
 
 ```shell
