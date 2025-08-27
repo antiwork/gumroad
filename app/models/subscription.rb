@@ -204,7 +204,7 @@ class Subscription < ApplicationRecord
 
       next_installment_index = purchases.successful.count
       installment_plan = last_payment_option&.installment_plan || link.installment_plan
-            installment_amounts = installment_plan.calculate_installment_payment_price_cents(base_price_cents)
+      installment_amounts = installment_plan.calculate_installment_payment_price_cents(base_price_cents)
       installment_amounts[next_installment_index] || installment_amounts.last
     else
       discount_applies_to_next_charge? ?
