@@ -212,15 +212,4 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       end
     end
   end
-
-  def accept_browser_dialog
-    wait = Selenium::WebDriver::Wait.new(timeout: 30)
-    wait.until do
-      page.driver.browser.switch_to.alert
-      true
-    rescue Selenium::WebDriver::Error::NoAlertPresentError
-      false
-    end
-    page.driver.browser.switch_to.alert.accept
-  end
 end

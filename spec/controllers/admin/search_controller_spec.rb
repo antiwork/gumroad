@@ -61,11 +61,46 @@ describe Admin::SearchController do
       purchase_2 = create(:gift, gifter_email: email, gifter_purchase: create(:purchase)).gifter_purchase
       purchase_3 = create(:gift, giftee_email: email, giftee_purchase: create(:purchase)).giftee_purchase
 
-      expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email).and_call_original
+      expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query: nil).and_call_original
       get :purchases, params: { query: email }
 
       assert_response :success
       expect(assigns(:purchases)).to include(purchase_1, purchase_2, purchase_3)
+    end
+
+    describe "product_title_query" do
+      let(:product_title_query) { "design" }
+      let!(:product) { create(:product, name: "Graphic Design Course") }
+      let!(:purchase) { create(:purchase, link: product, email: email) }
+
+      before do
+        create(:purchase, link: create(:product, name: "Different Product"))
+      end
+
+      context "when query is set" do
+        it "filters by product title" do
+          # Create another purchase with same email and same product to avoid redirect
+          create(:purchase, email: email, link: product)
+
+          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: email, product_title_query: product_title_query).and_call_original
+
+          get :purchases, params: { query: email, product_title_query: product_title_query }
+
+          assert_response :success
+          expect(assigns(:purchases)).to include(purchase)
+        end
+      end
+
+      context "when query is not set" do
+        it "ignores product_title_query" do
+          expect_any_instance_of(AdminSearchService).to receive(:search_purchases).with(query: "", product_title_query: product_title_query).and_call_original
+
+          get :purchases, params: { query: "", product_title_query: product_title_query }
+
+          assert_response :success
+          expect(assigns(:purchases)).to include(purchase)
+        end
+      end
     end
   end
 end

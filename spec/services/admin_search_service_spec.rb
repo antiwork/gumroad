@@ -130,5 +130,32 @@ describe AdminSearchService do
         expect(purchases).to be_empty
       end
     end
+
+    describe "product_title_query" do
+      let(:product_title_query) { "design" }
+      let!(:product) { create(:product, name: "Graphic Design Course") }
+      let!(:purchase) { create(:purchase, link: product, email: "user@example.com") }
+      let(:query) { "user@example.com" }
+
+      before do
+        create(:purchase, link: create(:product, name: "Different Product"))
+      end
+
+      context "when query is set" do
+        it "filters by product title" do
+          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
+          expect(purchases).to eq [purchase]
+        end
+      end
+
+      context "when query is not set" do
+        let(:query) { nil }
+
+        it "ignores product_title_query" do
+          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
+          expect(purchases).to include(purchase)
+        end
+      end
+    end
   end
 end

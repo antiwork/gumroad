@@ -45,6 +45,7 @@ services:
     image: nginx:1.23.3
     volumes:
       - ./local-nginx/gumroad_dev.conf:/etc/nginx/conf.d/default.conf:Z
+      - ./local-nginx/helperai_dev.conf:/etc/nginx/conf.d/helperai_dev.conf:Z
       - ./local-nginx/certs:/etc/ssl/certs/:Z
     ports:
       - 80:80
@@ -52,6 +53,8 @@ services:
       - 443:443
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    labels:
+      com.antiwork.helper.proxy: "true"
 
 volumes:
   elasticsearch7data:

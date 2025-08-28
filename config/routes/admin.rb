@@ -102,6 +102,7 @@ namespace :admin do
       post :update_giftee_email
       post :block_buyer
       post :unblock_buyer
+      post :undelete
     end
   end
 

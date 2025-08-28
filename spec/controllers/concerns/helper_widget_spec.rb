@@ -21,13 +21,13 @@ describe HelperWidget, type: :controller do
   end
 
   describe "#helper_widget_host" do
-    it "returns the default host when environment variable is not set" do
-      expect(ENV["HELPER_WIDGET_HOST"]).to be_nil
-      expect(controller.helper_widget_host).to eq("https://help.gumroad.com")
+    it "returns nil when config is not set" do
+      allow(GlobalConfig).to receive(:get).with("HELPER_WIDGET_HOST").and_return(nil)
+      expect(controller.helper_widget_host).to be_nil
     end
 
-    it "returns the environment variable value when set" do
-      allow(ENV).to receive(:fetch).with("HELPER_WIDGET_HOST", "https://help.gumroad.com").and_return("https://custom.helper.ai")
+    it "returns the config value when set" do
+      allow(GlobalConfig).to receive(:get).with("HELPER_WIDGET_HOST").and_return("https://custom.helper.ai")
       expect(controller.helper_widget_host).to eq("https://custom.helper.ai")
     end
   end
