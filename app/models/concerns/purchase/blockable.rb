@@ -293,10 +293,6 @@ module Purchase::Blockable
       "product_#{link_id}"
     end
 
-    def failed_purchases_count_redis_namespace
-      @_failed_purchases_count_redis_namespace ||= Redis::Namespace.new(:failed_purchases_count, redis: $redis)
-    end
-
     def pause_payouts_for_seller_based_on_chargeback_rate!
       return unless seller.present?
       return if seller.payouts_paused_internally?
@@ -315,6 +311,12 @@ module Purchase::Blockable
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
         author_name: "pause_payouts_for_seller_based_on_chargeback_rate"
       )
+    end
+
+    private
+
+    def failed_purchases_count_redis_namespace
+      @_failed_purchases_count_redis_namespace ||= Redis::Namespace.new(:failed_purchases_count, redis: $redis)
     end
 
     def create_blocked_buyer_comments!(blocking_user: nil, comment_content:)
