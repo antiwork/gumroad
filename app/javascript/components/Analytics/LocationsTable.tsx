@@ -106,7 +106,7 @@ export const AnalyticsCountriesTable = ({
           ))}
         </tbody>
       </table>
-      {!items.length ? <div className="input">Nothing yet </div> : null}
+      {!items.length ? <div className="input mt-4 lg:mt-0">Nothing yet </div> : null}
     </>
   );
 };
@@ -171,7 +171,7 @@ export const AnalyticsStatesTable = ({ locationData, selectedProducts, locations
         </tbody>
       </table>
 
-      {!items.length ? <div className="input">Nothing yet </div> : null}
+      {!items.length ? <div className="input mt-4 lg:mt-0">Nothing yet </div> : null}
     </>
   );
 };
