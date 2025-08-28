@@ -218,27 +218,58 @@ const CtaBar = ({
   const ref = React.useRef<null | HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
 
+  // Enhanced Safari detection - more reliable than just checking window.safari
+  const isSafari = React.useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || 
+           (window as any).safari !== undefined;
+  }, []);
+
   React.useEffect(() => {
     if (!ctaButtonRef.current) return;
-    new IntersectionObserver(
+    
+    // Use a more robust intersection observer configuration
+    const observerOptions = {
+      threshold: 0.5,
+      // Add root margin to prevent edge case flickering
+      rootMargin: isSafari ? '-1px 0px -1px 0px' : '0px'
+    };
+
+    const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
-        // @ts-expect-error: Fixes issue on Safari where the page gets scrolled up/down by the height of the CTA bar when it disappears/appears, resulting on an infinite loop of the CTA bar being shown/hidden.
-        if (window.safari !== undefined && isDesktop) {
+        
+        // Enhanced Safari scroll correction with better bounds checking
+        if (isSafari && isDesktop) {
           const main = document.querySelector("main");
-          if (ref.current && ctaButtonRef.current && main && entry.rootBounds) {
-            if (entry.boundingClientRect.top < main.getBoundingClientRect().top)
-              // We use 1.9 here (instead of 2) because it empirically does a better job of eliminating
-              // the infinite scroll jumping described above.
-              main.scrollBy(0, ((entry.isIntersecting ? -1 : 1) * entry.boundingClientRect.height) / 1.9);
+          const ctaSection = ref.current;
+          
+          if (ctaSection && ctaButtonRef.current && main && entry.rootBounds) {
+            // More precise boundary detection to prevent over-correction
+            const ctaRect = ctaSection.getBoundingClientRect();
+            const mainRect = main.getBoundingClientRect();
+            const isNearIntersection = Math.abs(entry.boundingClientRect.top - mainRect.top) < ctaRect.height;
+            
+            if (isNearIntersection && entry.boundingClientRect.top < mainRect.top) {
+              // Use requestAnimationFrame for smoother scroll correction
+              requestAnimationFrame(() => {
+                const scrollOffset = ((entry.isIntersecting ? -1 : 1) * ctaRect.height) / 2;
+                main.scrollBy({ top: scrollOffset, behavior: 'auto' });
+              });
+            }
           }
         }
 
         setVisible(!entry.isIntersecting);
       },
-      { threshold: 0.5 },
-    ).observe(ctaButtonRef.current);
-  }, [ctaButtonRef.current]);
+      observerOptions
+    );
+    
+    observer.observe(ctaButtonRef.current);
+    
+    // Return cleanup function
+    return () => observer.disconnect();
+  }, [ctaButtonRef.current, isSafari, isDesktop]);
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
 
@@ -258,9 +289,18 @@ const CtaBar = ({
         boxShadow: visible
           ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
           : undefined,
-        position: "sticky",
+        // Enhanced positioning strategy for Safari compatibility
+        position: isSafari && isDesktop ? "fixed" : "sticky",
         top: isDesktop ? 0 : undefined,
         bottom: isDesktop ? undefined : 0,
+        // Safari-specific: Ensure full width when fixed
+        left: isSafari && isDesktop ? 0 : undefined,
+        right: isSafari && isDesktop ? 0 : undefined,
+        width: isSafari && isDesktop ? "100%" : undefined,
+        // CSS containment for better performance and isolation
+        contain: "layout style paint",
+        // Better layer management for Safari
+        willChange: visible ? "transform, opacity" : "auto",
         // Render above the product edit button
         zIndex: "var(--z-index-menubar)",
         marginTop: hasHero ? "var(--border-width)" : undefined,
