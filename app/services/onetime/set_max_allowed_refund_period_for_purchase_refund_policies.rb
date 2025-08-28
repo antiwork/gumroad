@@ -24,18 +24,19 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
         next if max_refund_period_in_days.nil?
 
         begin
-          purchase_refund_policy.update!(max_refund_period_in_days: max_refund_period_in_days)
-          Rails.logger.info "PurchaseRefundPolicy: #{purchase_refund_policy.id}: updated with #{max_refund_period_in_days} days"
+          purchase_refund_policy.with_lock do
+            purchase_refund_policy.update!(max_refund_period_in_days: max_refund_period_in_days)
+            Rails.logger.info "PurchaseRefundPolicy: #{purchase_refund_policy.id}: updated with max allowed refund period of #{max_refund_period_in_days} days"
+          end
         rescue => e
           invalid_policy_ids << { purchase_refund_policy.id => e.message }
-          Rails.logger.error "PurchaseRefundPolicy: #{purchase_refund_policy.id}: failed - #{e.message}"
         end
       end
 
       $redis.set(LAST_PROCESSED_ID_KEY, batch.last.id, ex: 1.month)
     end
 
-    Rails.logger.info "Invalid policy ids: #{invalid_policy_ids}" if invalid_policy_ids.any?
+    Rails.logger.info "Invalid purchase refund policy ids: #{invalid_policy_ids}" if invalid_policy_ids.any?
   end
 
   private
