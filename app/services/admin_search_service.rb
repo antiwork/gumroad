@@ -58,8 +58,6 @@ class AdminSearchService
       purchases = purchases.where(id: license.purchase_id)
     end
 
-
-
     if [transaction_date, last_4, card_type, price, expiry_date].any?
       purchases = purchases.where.not(stripe_fingerprint: nil)
 
