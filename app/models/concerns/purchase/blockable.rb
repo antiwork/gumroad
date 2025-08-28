@@ -314,25 +314,24 @@ module Purchase::Blockable
     end
 
     private
-
-    def failed_purchases_count_redis_namespace
-      @_failed_purchases_count_redis_namespace ||= Redis::Namespace.new(:failed_purchases_count, redis: $redis)
-    end
-
-    def create_blocked_buyer_comments!(blocking_user: nil, comment_content:)
-      comment_params = { content: comment_content, comment_type: "note", author_id: blocking_user&.id || GUMROAD_ADMIN_ID }
-
-      if comment_params[:content].blank?
-        if blocking_user&.is_team_member?
-          comment_params[:content] = "Buyer blocked by Admin (#{blocking_user.email})"
-        elsif blocking_user.present?
-          comment_params[:content] = "Buyer blocked by #{blocking_user.email}"
-        else
-          comment_params[:content] = "Buyer blocked"
-        end
+      def failed_purchases_count_redis_namespace
+        @_failed_purchases_count_redis_namespace ||= Redis::Namespace.new(:failed_purchases_count, redis: $redis)
       end
 
-      purchaser.comments.create!(comment_params.merge(purchase: self)) if purchaser.present?
-      comments.create!(comment_params)
-    end
+      def create_blocked_buyer_comments!(blocking_user: nil, comment_content:)
+        comment_params = { content: comment_content, comment_type: "note", author_id: blocking_user&.id || GUMROAD_ADMIN_ID }
+
+        if comment_params[:content].blank?
+          if blocking_user&.is_team_member?
+            comment_params[:content] = "Buyer blocked by Admin (#{blocking_user.email})"
+          elsif blocking_user.present?
+            comment_params[:content] = "Buyer blocked by #{blocking_user.email}"
+          else
+            comment_params[:content] = "Buyer blocked"
+          end
+        end
+
+        purchaser.comments.create!(comment_params.merge(purchase: self)) if purchaser.present?
+        comments.create!(comment_params)
+      end
 end
