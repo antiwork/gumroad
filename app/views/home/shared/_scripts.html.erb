@@ -8,18 +8,31 @@
     const line1 = document.querySelector('[data-menu-line="1"]');
     const line2 = document.querySelector('[data-menu-line="2"]');
 
-    mobileMenuToggle.addEventListener('click', function() {
-      mobileMenu.classList.toggle('lg:hidden');
-      mobileMenu.classList.toggle('hidden');
+    if (mobileMenuToggle && mobileMenu && line1 && line2) {
+      const setExpanded = (expanded) => {
+        mobileMenuToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        mobileMenuToggle.setAttribute('aria-label', expanded ? 'Close menu' : 'Open menu');
+      };
 
-      if (!mobileMenu.classList.contains('hidden')) {
-        line1.classList.add('translate-y-[5px]', '-rotate-45', 'transform-gpu');
-        line2.classList.add('-translate-y-[5px]', 'rotate-45', 'transform-gpu');
-      } else {
-        line1.classList.remove('translate-y-[5px]', '-rotate-45', 'transform-gpu');
-        line2.classList.remove('-translate-y-[5px]', 'rotate-45', 'transform-gpu');
-      }
-    });
+      mobileMenuToggle.addEventListener('click', function() {
+        mobileMenu.classList.toggle('lg:hidden');
+        mobileMenu.classList.toggle('hidden');
+
+        const isOpen = !mobileMenu.classList.contains('hidden');
+        setExpanded(isOpen);
+
+        if (isOpen) {
+          line1.classList.add('translate-y-[5px]', '-rotate-45', 'transform-gpu');
+          line2.classList.add('-translate-y-[5px]', 'rotate-45', 'transform-gpu');
+        } else {
+          line1.classList.remove('translate-y-[5px]', '-rotate-45', 'transform-gpu');
+          line2.classList.remove('-translate-y-[5px]', 'rotate-45', 'transform-gpu');
+        }
+      });
+
+      // Ensure initial state reflects DOM
+      setExpanded(!mobileMenu.classList.contains('hidden'));
+    }
 
     // Accordion functionality
     const accordionItems = document.querySelectorAll('.accordion-item')
@@ -67,22 +80,35 @@
 
     const githubStars = document.querySelector('[data-github-stars]');
     if (githubStars) {
-      fetch('/github_stars')
-        .then(response => response.json())
-        .then(data => {
-          const countContainerElement = githubStars.querySelector('[data-github-stars-count]');
-          const countElement = countContainerElement.querySelector('[data-github-stars-count-value]');
-          const arrowElement = githubStars.querySelector('[data-github-stars-arrow]');
+      const loadGithubStars = () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          fetch('/github_stars', { signal: controller.signal })
+            .then(response => response.ok ? response.json() : Promise.reject(new Error('Bad response')))
+            .then(data => {
+              const countContainerElement = githubStars.querySelector('[data-github-stars-count]');
+              const countElement = countContainerElement?.querySelector('[data-github-stars-count-value]');
+              const arrowElement = githubStars.querySelector('[data-github-stars-arrow]');
+              if (!countContainerElement || !countElement || !arrowElement) return;
 
-          countElement.textContent = new Intl.NumberFormat("en-US", {
-            notation: 'compact',
-          }).format(data.stars);
-          countContainerElement.classList.remove('hidden');
-          arrowElement.classList.add('hidden');
-        })
-        .catch(error => {
-          console.error('Error fetching GitHub stars:', error);
-        })
+              countElement.textContent = new Intl.NumberFormat('en-US', { notation: 'compact' }).format(data.stars);
+              countContainerElement.classList.remove('hidden');
+              arrowElement.classList.add('hidden');
+            })
+            .catch(() => { /* silent fail to avoid blocking UI */ })
+            .finally(() => clearTimeout(timeoutId));
+        } catch (_) { /* noop */ }
+      };
+
+      if ('requestIdleCallback' in window) {
+        const idleId = window.requestIdleCallback(loadGithubStars, { timeout: 1500 });
+        // Fallback if idle never fires
+        setTimeout(() => { try { window.cancelIdleCallback?.(idleId); } catch(_){} loadGithubStars(); }, 1600);
+      } else {
+        // Old browsers: defer slightly
+        setTimeout(loadGithubStars, 1500);
+      }
     }
 
 
