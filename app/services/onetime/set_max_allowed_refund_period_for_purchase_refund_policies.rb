@@ -21,7 +21,10 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
         next if purchase_refund_policy.max_refund_period_in_days.present?
 
         max_refund_period_in_days = purchase_refund_policy.determine_max_refund_period_in_days
-        next if max_refund_period_in_days.nil?
+        if max_refund_period_in_days.nil?
+          Rails.logger.debug("No exact match found for title '#{purchase_refund_policy.title}', skipping")
+          next
+        end
 
         begin
           purchase_refund_policy.with_lock do

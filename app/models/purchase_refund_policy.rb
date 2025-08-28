@@ -22,7 +22,6 @@ class PurchaseRefundPolicy < ApplicationRecord
       return days if title == expected_title
     end
 
-    Rails.logger.debug("No exact match found for title '#{title}', skipping")
     nil
   end
 end
