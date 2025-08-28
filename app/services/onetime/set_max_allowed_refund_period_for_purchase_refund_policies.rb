@@ -52,11 +52,12 @@ class Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies < Onetime::Bas
     end
 
     def determine_max_refund_period_from_title(title)
+      # Return only values from ALLOWED_REFUND_PERIODS_IN_DAYS or nil for unmatched titles
       RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.each do |days, expected_title|
         return days if title == expected_title
       end
 
-      Rails.logger.warn "No exact match found for title: '#{title}', skipping"
+      Rails.logger.debug("No exact match found for title '#{title}', skipping")
       nil
     end
 end
