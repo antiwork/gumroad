@@ -831,11 +831,11 @@ describe Purchase::Blockable do
 
     context "when seller is not present" do
       it "does not pause payouts" do
-        purchase.update!(seller: nil)
-
-        expect(purchase.seller).to be_nil
-        purchase.pause_payouts_for_seller_based_on_chargeback_rate!
-
+        purchase_without_seller = build(:purchase, seller: nil, link: nil)
+        
+        expect(purchase_without_seller.seller).to be_nil
+        purchase_without_seller.pause_payouts_for_seller_based_on_chargeback_rate!
+        
         expect(seller.reload.payouts_paused_internally).to be(false)
       end
     end
