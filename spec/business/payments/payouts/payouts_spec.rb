@@ -459,6 +459,54 @@ describe Payouts do
         content = "Payout on #{date} was skipped because payouts on the account were paused by the admin."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
+
+      it "adds a comment if payout is skipped because payouts are paused by stripe" do
+        seller = create(:compliant_user)
+        create(:ach_account, user: seller)
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        content = "Payout on #{date} was skipped because payouts on the account were paused by the payout processor."
+        expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
+
+      it "adds a comment if payout is skipped because payouts are paused by the system" do
+        seller = create(:compliant_user)
+        create(:ach_account, user: seller)
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        content = "Payout on #{date} was skipped because payouts on the account were paused by the system."
+        expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
+
+      it "adds a comment if payout is skipped because payouts are paused by the seller" do
+        seller = create(:compliant_user)
+        create(:ach_account, user: seller)
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.update!(payouts_paused_by_user: true)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        content = "Payout on #{date} was skipped because payouts on the account were paused by the user."
+        expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
     end
 
     describe "slack notification" do

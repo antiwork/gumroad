@@ -23,6 +23,8 @@ class PayoutsPresenter
         item.merge(has_stripe_connect: seller.stripe_connect_account.present?)
       end,
       payouts_status: seller.payouts_status,
+      payouts_paused_by: seller.payouts_paused_by_source,
+      payouts_paused_for_reason: seller.payouts_paused_for_reason,
       past_payout_period_data: past_payouts.map { payout_period_data(seller, _1) },
       instant_payout: seller.instant_payouts_supported? ? {
         payable_amount_cents: seller.instantly_payable_unpaid_balance_cents,

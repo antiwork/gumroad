@@ -3154,6 +3154,89 @@ describe User, :vcr do
     end
   end
 
+  describe "#payouts_paused_by_source" do
+    let!(:seller) { create(:user) }
+
+    it "returns source as admin if payouts are paused internally by an admin" do
+      seller.update!(payouts_paused_internally: true)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: 1)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "returns source as stripe if payouts are paused internally by stripe" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+    end
+
+    it "returns source as system if payouts are automatically paused internally" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    end
+
+    it "returns source as user if payouts are paused by seller" do
+      seller.update!(payouts_paused_internally: false, payouts_paused_by_user: true, payouts_paused_by: nil)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_USER)
+    end
+
+    it "returns source as admin if payouts are paused by seller as well as admin" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User.last.id)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "returns source as stripe if payouts are paused by seller as well as stripe" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+    end
+
+    it "returns source as system if payouts are paused by seller as well as system" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    end
+  end
+
+  describe "#payouts_paused_for_reason" do
+    let!(:seller) { create(:user) }
+
+    it "returns nil if payouts are not paused internally" do
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns nil if payouts are paused by admin but there are no corresponding comments" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns the content of the last comment of payouts_paused type if payouts are paused by admin" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+      seller.comments.create!(
+        author_id: User.last.id,
+        content: "Chargeback rate too high.",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to eq("Chargeback rate too high.")
+    end
+
+    it "returns nil if payouts are not paused by admin" do
+      seller.comments.create!(
+        author_id: User.last.id,
+        content: "Chargeback rate too high.",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+  end
+
   describe "#minimum_payout_amount_cents" do
     let(:user) { create(:user) }
 
