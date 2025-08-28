@@ -297,6 +297,73 @@ article {
         }
       }
 
+      &:first-of-type {
+        > header {
+          position: sticky;
+          top: 0;
+          z-index: z-index(header);
+          background-color: var(--body-bg);
+          margin: 0;
+          border-radius: 1px;
+          transition: box-shadow 0.2s ease-out, background-color 0.2s ease-out;
+
+          @media (max-width: 767px) {
+            padding: spacer(4);
+          }
+        }
+
+        > .details {
+          position: sticky;
+          top: calc(var(--spacer-5) * 2 + 1.5lh + var(--spacer-4));
+          z-index: calc(z-index(header) - 1);
+          background-color: var(--body-bg);
+          margin: 0;
+          border-radius: 0;
+          transition: box-shadow 0.2s ease-out, background-color 0.2s ease-out;
+
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+          @media (max-width: 1275px) {
+            top: calc(var(--spacer-5) * 4 + 1.42lh + var(--spacer-4));
+
+          }
+          @media (max-width: 1023px) {
+            top: calc(var(--spacer-5) * 2 + 1.42lh + var(--spacer-4));
+
+        }
+
+
+          @media (max-width: 767px) {
+            top: calc(var(--spacer-5) * 3 + 1.80lh + var(--spacer-4));
+
+          }
+
+          @media (max-width: 446px) {
+            top: calc(var(--spacer-5) * 5 + 1.80lh + var(--spacer-4));
+
+          }
+        }
+      }
+
+      .cta-section {
+        position: sticky;
+        top: 0;
+        z-index: z-index(header);
+        align-self: start;
+        background-color: var(--body-bg);
+        border-bottom: $border;
+
+        @include breakpoint-up(lg) {
+          max-height: 100vh;
+          overflow-y: auto;
+        }
+
+        @media (max-width: 1023px) {
+          position: static;
+          border-bottom: none;
+        }
+      }
+
       & > section {
         & > header {
           display: flex;

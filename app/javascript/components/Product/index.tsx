@@ -426,7 +426,7 @@ export const Product = ({
         </section>
       </section>
       <section>
-        <section>
+        <section className="cta-section">
           {notForSaleMessage ? (
             <div role="status" className="warning">
               {notForSaleMessage}

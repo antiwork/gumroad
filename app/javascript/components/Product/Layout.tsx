@@ -6,22 +6,8 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
-import {
-  Product,
-  ProductDiscount,
-  Purchase,
-  RatingsSummary,
-  useSelectionFromUrl,
-  Props as ProductProps,
-  getStandalonePrice,
-} from "$app/components/Product";
-import {
-  applySelection,
-  ConfigurationSelectorHandle,
-  PriceSelection,
-} from "$app/components/Product/ConfigurationSelector";
-import { CtaButton } from "$app/components/Product/CtaButton";
-import { PriceTag } from "$app/components/Product/PriceTag";
+import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/components/Product";
+import { ConfigurationSelectorHandle } from "$app/components/Product/ConfigurationSelector";
 import {
   Action,
   AddSectionButton,
@@ -34,7 +20,7 @@ import {
 import { Section, PageProps as SectionsProps } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -135,7 +121,7 @@ export const Layout = (
     hasHero?: boolean;
   },
 ) => {
-  const { product, purchase, discount_code: discountCode, cart, hasHero, wishlists, main_section_index } = props;
+  const { product, purchase, discount_code: discountCode, cart, wishlists, main_section_index } = props;
   const [selection, setSelection] = useSelectionFromUrl(product);
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
   const ctaLabel = cart ? "Add to cart" : undefined;
@@ -163,16 +149,6 @@ export const Layout = (
 
   return (
     <>
-      <CtaBar
-        product={product}
-        purchase={purchase}
-        discountCode={discountCode ?? null}
-        ctaLabel={ctaLabel}
-        selection={selection}
-        ctaButtonRef={ctaButtonRef}
-        configurationSelectorRef={configurationSelectorRef}
-        hasHero={!!hasHero}
-      />
       {"products" in props ? (
         <SectionEditor props={props}>{productView}</SectionEditor>
       ) : props.sections.length > 0 ? (
@@ -187,127 +163,6 @@ export const Layout = (
         mainSection
       )}
     </>
-  );
-};
-
-const CtaBar = ({
-  product,
-  purchase,
-  discountCode,
-  ctaButtonRef,
-  configurationSelectorRef,
-  ctaLabel,
-  selection,
-  hasHero,
-}: {
-  product: Product;
-  purchase: Purchase | null;
-  discountCode?: ProductDiscount | null;
-  ctaButtonRef: React.RefObject<HTMLAnchorElement>;
-  configurationSelectorRef: React.RefObject<ConfigurationSelectorHandle>;
-  ctaLabel?: string | undefined;
-  selection: PriceSelection;
-  hasHero: boolean;
-}) => {
-  const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
-  let { priceCents } = selectionAttributes;
-  const { discountedPriceCents, isPWYW, hasRentOption, hasMultipleRecurrences, hasConfigurableQuantity } =
-    selectionAttributes;
-
-  const [visible, setVisible] = React.useState(false);
-  const ref = React.useRef<null | HTMLDivElement>(null);
-  const isDesktop = useIsAboveBreakpoint("lg");
-
-  React.useEffect(() => {
-    if (!ctaButtonRef.current) return;
-    new IntersectionObserver(
-      ([entry]) => {
-        if (!entry) return;
-
-        setVisible(!entry.isIntersecting);
-      },
-      { threshold: 0.5 },
-    ).observe(ctaButtonRef.current);
-  }, [ctaButtonRef.current]);
-
-  const height = ref.current?.getBoundingClientRect().height ?? 0;
-
-  if (product.bundle_products.length) priceCents = getStandalonePrice(product);
-
-  return (
-    <section
-      aria-label="Product information bar"
-      style={{
-        overflow: "hidden",
-        padding: 0,
-        border: "none",
-        height: visible ? height : 0,
-        transition: "var(--transition-duration)",
-        flexShrink: 0,
-        order: isDesktop ? undefined : 1,
-        boxShadow: visible
-          ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
-          : undefined,
-        position: "fixed",
-        top: isDesktop ? 0 : undefined,
-        bottom: isDesktop ? undefined : 0,
-        left: 0,
-        right: 0,
-        // Render above the product edit button
-        zIndex: "var(--z-index-menubar)",
-        marginTop: hasHero ? "var(--border-width)" : undefined,
-      }}
-    >
-      <div
-        ref={ref}
-        className="product-cta"
-        style={{
-          transition: "var(--transition-duration)",
-          marginTop: visible || !isDesktop ? undefined : -height,
-        }}
-      >
-        <PriceTag
-          currencyCode={product.currency_code}
-          oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
-          price={discountedPriceCents}
-          url={product.long_url}
-          recurrence={
-            product.recurrences
-              ? {
-                  id: selection.recurrence ?? product.recurrences.default,
-                  duration_in_months: product.duration_in_months,
-                }
-              : undefined
-          }
-          isPayWhatYouWant={isPWYW}
-          isSalesLimited={product.is_sales_limited}
-          creatorName={product.seller?.name}
-        />
-        <h3>{product.name}</h3>
-        {product.ratings != null && product.ratings.count > 0 ? <RatingsSummary ratings={product.ratings} /> : null}
-        <CtaButton
-          product={product}
-          purchase={purchase}
-          discountCode={discountCode ?? null}
-          selection={selection}
-          label={ctaLabel}
-          onClick={(evt) => {
-            if (
-              isPWYW ||
-              product.options.length > 1 ||
-              hasRentOption ||
-              hasMultipleRecurrences ||
-              hasConfigurableQuantity
-            ) {
-              evt.preventDefault();
-              ctaButtonRef.current?.scrollIntoView(false);
-              configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
-            }
-          }}
-        />
-      </div>
-    </section>
   );
 };
 
