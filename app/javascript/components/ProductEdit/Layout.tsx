@@ -149,6 +149,8 @@ export const Layout = ({
       if (tab === "share") {
         if (product.native_type === "coffee") navigate.current(rootPath);
         else navigate.current(`${rootPath}/content`);
+      } else {
+        navigate.current(`${rootPath}/share`);
       }
     } catch (e) {
       assertResponseError(e);
@@ -246,11 +248,7 @@ export const Layout = ({
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button
-                  color="accent"
-                  disabled={isBusy}
-                  onClick={() => void setPublished(true).then(() => navigate.current(`${rootPath}/share`))}
-                >
+                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>

@@ -2,20 +2,20 @@
 <div class="scoped-tailwind-preflight help-center-article">
   <div>
     <p> Many Gumroad creators using <a href="44-build-gumroad-into-your-website.html#overlay" target="_blank">Overlay</a> or linking to their product page from their websites find it useful to have the Gumroad payment form open up automatically, rather than their product description.</p>
-    <p> To link directly to a payment form on a product with a set price, simply add <code>?wanted=true</code> to the end of your product's <a href="136-find-your-products-url.html" target="_blank">URL</a>.</p>
+    <p> To link directly to a payment form on a product with a set price, simply add <code>?wanted=true</code> to the end of your product's <a href="136-find-your-products-url" target="_blank">URL</a>.</p>
     <p> For example, compare the experience when clicking: <a href="https://annagreen.gumroad.com/l/phrjT" target="_blank">annagreen.gumroad.com/l/phrjT</a> versus <a href="https://annagreen.gumroad.com/l/phrjT?wanted=true" target="_blank">annagreen.gumroad.com/l/phrjT?wanted=true</a>.</p>
     <p> If you are using the Overlay feature and have multiple products listed on your website, then you will also have to use the <code>data-gumroad-single-product="true"</code> attribute for <code>?wanted=true</code> to work correctly. <a href="https://jsfiddle.net/g5jdzh1u/" target="_blank">Here's an example</a> of what that looks like.</p>
     <p> In the words of Ben Franklin, "Now you're cooking with gas!"</p>
-    <p> You can learn more about using URL Parameters in <a href="270-url-parameters.html">this article</a>, but here are some quick tips while you're here: </p>
+    <p> You can learn more about using URL Parameters in <a href="270-url-parameters">this article</a>, but here are some quick tips while you're here: </p>
     <h3>Versions and Tiers</h3>
-    <p> When you create a product with <a href="126-setting-up-versions-on-a-digital-product.html" target="_blank">versions</a>, you'll see "Share" buttons next to each option. You can click that to copy the URL, and then add <code>?wanted=true</code> to the end when you share it. </p>
+    <p> When you create a product with <a href="126-setting-up-versions-on-a-digital-product" target="_blank">versions</a>, you'll see "Share" buttons next to each option. You can click that to copy the URL, and then add <code>?wanted=true</code> to the end when you share it. </p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62457dd7c1e53608cf9eed35/file-ypU9FiLt24.png" %></figure>
     <p> For example on this product URL: <a href="https://annagreen.gumroad.com/l/QaSmj" target="_blank">annagreen.gumroad.com/l/QaSmj</a></p>
     <p> I can link to the direct URL of the product to the URL of a specific tier (note the changes in bold): <a href="https://annagreen.gumroad.com/l/QaSmj?tier=Coaching%20Package%3A" target="_blank">annagreen.gumroad.com/l/QaSmj?tier=Coaching%20Package%3A</a></p>
     <p> And the payment form, with that specific tier chosen: <a href="https://annagreen.gumroad.com/l/QaSmj?tier=Coaching%20Package%3A&amp;wanted=true" target="_blank">annagreen.gumroad.com/l/QaSmj?tier=Coaching%20Package%3A&amp;wanted=true</a></p>
     <p><strong>Note: </strong>When you are using multiple URL parameters, you'll have to separate them with an ampersand '&amp;' symbol and not another '?'. See the example above again. </p>
     <h3>Different payment frequencies</h3>
-    <p> If you are selling a <a href="82-membership-products.html">membership product</a>, and want to link a customer to a specific recurring purchase rate, you have to first add that rate into the URL. </p>
+    <p> If you are selling a <a href="82-membership-products">membership product</a>, and want to link a customer to a specific recurring purchase rate, you have to first add that rate into the URL. </p>
     <p> So for <a href="https://annagreen.gumroad.com/l/QaSmj">this product</a>, the default rate is "Monthly," as you can see:</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62457e8042ba434a7afe1c6c/file-O5IJU1hkmt.png" %></figure>
     <p> To change that to annual, you'd add <code>?yearly=true</code> to the URL, followed by <code>&amp;wanted=true</code>, thus we go from:</p>
@@ -27,7 +27,7 @@
     <p> You can use the following four frequency parameters: "monthly", "quarterly", "biannually", or "yearly".</p>
     <p> Make sense? It seems a little daunting at first but once you get the hang of it, it's weirdly fun! Or maybe that's just my now very-easily-amused Quarantine Brain talking... </p>
     <h3>Pay What You Want Products</h3>
-    <p> Please note that this function will not as easily work with <a href="133-pay-what-you-want-pricing.html">Pay What You Want</a> products - i.e. products with a "+" in the price. That's because customers have to confirm the price that they want to pay before they are sent to the payment form. </p>
+    <p> Please note that this function will not as easily work with <a href="133-pay-what-you-want-pricing">Pay What You Want</a> products - i.e. products with a "+" in the price. That's because customers have to confirm the price that they want to pay before they are sent to the payment form. </p>
     <p> In order to send people to the payment form on a PWYW product, you would have to <strong>assign a price</strong> in the URL on behalf of your customers. </p>
     <p> You do that by first adding <code>?price=[price]</code> then adding <code>&amp;wanted=true</code>. You are effectively telling the customer's browser to first enter a price into the price field, then click the "Pay" button. <br>
       <br>
@@ -38,7 +38,7 @@
   <div>
     <h3>Related Articles</h3>
     <ul>
-      <li><a href="136-find-your-products-url.html"><span>Find a product’s URL</span></a></li>
+      <li><a href="136-find-your-products-url"><span>Find a product's URL</span></a></li>i>
     </ul>
   </div>
 </div>

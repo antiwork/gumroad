@@ -181,7 +181,7 @@ module Purchase::Blockable
 
       failed_price_cents = failed_seller_purchases.sum(:price_cents)
       if failed_price_cents > max_seller_failed_purchases_price_cents
-        seller.update!(payouts_paused_internally: true)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
 
         failed_price_amount = MoneyFormatter.format(failed_price_cents, :usd, no_cents_if_whole: true, symbol: true)
         seller.comments.create(

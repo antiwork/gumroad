@@ -1,4 +1,17 @@
 <div class="paragraphs">
+  <%= form_with url: admin_search_purchases_path, method: :get, class: "input-with-button", style: "margin-bottom: 1rem;" do |form| %>
+    <%= form.hidden_field :query, value: params[:query] %>
+    <div class="input">
+      <%= form.text_field :product_title_query, placeholder: "Filter by product title", value: params[:product_title_query] %>
+    </div>
+    <button type="submit" class="button primary">
+      <span class="icon icon-solid-search"></span>
+    </button>
+    <% if params[:product_title_query].present? %>
+      <%= link_to "Clear", admin_search_purchases_path(query: params[:query]), class: "button secondary" %>
+    <% end %>
+  <% end %>
+
   <table>
     <thead>
       <tr>
@@ -28,6 +41,21 @@
                 <li><%= state %></li>
               <% end %>
             </ul>
+            <div class="text-sm">
+              <ul class="inline">
+                <% purchase_refund_policy = purchase.purchase_refund_policy %>
+                <% if purchase_refund_policy.present? %>
+                  <li>Refund policy: <%= purchase_refund_policy.title %>
+                    <% if purchase_refund_policy.different_than_product_refund_policy? %>
+                      <%= with_tooltip(tip: "Current refund policy: #{purchase_refund_policy.product_refund_policy_title}") do %>
+                        <%= icon("solid-shield-exclamation", style: "color: rgb(var(--warning))") %>
+                      <% end %>
+                    <% end %>
+                  </li>
+                <% end %>
+                <li>Seller: <%= copy_to_clipboard(purchase.seller.email) %></li>
+              </ul>
+            </div>
           </td>
           <td data-label="By">
             <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>
