@@ -37,6 +37,8 @@ $pill-icons: (
       width: 100%;
       opacity: 0;
       cursor: pointer;
+      color: full-color(color);
+      background-color: full-color(filled);
     }
   }
 

@@ -49,6 +49,11 @@ describe CreatorHomePresenter do
       )
     end
 
+    it "doesn't consider workflow installments for first_email" do
+      create(:installment, seller:, workflow_id: 1)
+      expect(presenter.creator_home_props[:getting_started_stats]["first_email"]).to eq(false)
+    end
+
     it "doesn't consider bundle product purchases for first_sale" do
       create(:purchase, :from_seller, seller:, is_bundle_product_purchase: true)
       expect(presenter.creator_home_props[:getting_started_stats]["first_sale"]).to eq(false)
