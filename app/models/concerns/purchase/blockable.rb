@@ -297,6 +297,26 @@ module Purchase::Blockable
       @_failed_purchases_count_redis_namespace ||= Redis::Namespace.new(:failed_purchases_count, redis: $redis)
     end
 
+    def pause_payouts_for_seller_based_on_chargeback_rate!
+      return unless seller.present?
+      return if seller.payouts_paused_internally?
+
+      chargeback_stats = seller.lost_chargebacks
+      chargeback_volume_percentage = chargeback_stats[:volume]
+      
+      return if chargeback_volume_percentage == "NA"
+      
+      volume_rate = chargeback_volume_percentage.to_f
+      return if volume_rate <= 3.0
+
+      seller.update!(payouts_paused_internally: true)
+      seller.comments.create(
+        content: "Payouts paused due to chargeback rate exceeding 3% volume (#{chargeback_volume_percentage}).",
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+        author_name: "pause_payouts_for_seller_based_on_chargeback_rate"
+      )
+    end
+
     def create_blocked_buyer_comments!(blocking_user: nil, comment_content:)
       comment_params = { content: comment_content, comment_type: "note", author_id: blocking_user&.id || GUMROAD_ADMIN_ID }
 
