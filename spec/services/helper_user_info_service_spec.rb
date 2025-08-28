@@ -194,7 +194,7 @@ describe HelperUserInfoService do
           )
           create(:comment,
                  commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_COMPLIANT,
+                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
                  content: "Newer risk note",
                  created_at: 1.hour.ago
           )
@@ -210,7 +210,7 @@ describe HelperUserInfoService do
 
       context "when user has suspension notes" do
         context "when user is suspended" do
-          before { allow(user).to receive(:suspended?).and_return(true) }
+          let(:user) { create(:tos_user) }
 
           it "includes suspension notes" do
             create(:comment,
@@ -244,7 +244,7 @@ describe HelperUserInfoService do
         it "includes general comments" do
           create(:comment,
                  commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
+                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
                  content: "General user comment"
           )
 
@@ -281,7 +281,7 @@ describe HelperUserInfoService do
           )
           create(:comment,
                  commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
+                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
                  content: "General note",
                  created_at: 1.hour.ago
           )
