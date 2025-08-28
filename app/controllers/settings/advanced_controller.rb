@@ -76,7 +76,7 @@ class Settings::AdvancedController < Sellers::BaseController
     end
 
     def set_invalid_blocked_email_if_exists
-      @invalid_blocked_email = @emails_to_block.detect { |email| !email.match?(User::EMAIL_REGEX) }
+      @invalid_blocked_email = @emails_to_block.detect { |email| !EmailFormatValidator.valid?(email) }
     end
 
     def authorize

@@ -24,7 +24,7 @@ class TeamInvitation < ApplicationRecord
 
   belongs_to :seller, class_name: "User", foreign_key: :seller_id
 
-  validates_format_of :email, with: User::EMAIL_REGEX
+  validates :email, email_format: true
   with_options if: :not_deleted? do
     validates_uniqueness_of :email, scope: %i[seller_id deleted_at], message: "has already been invited"
     validate :email_cannot_belong_to_existing_member

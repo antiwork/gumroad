@@ -84,6 +84,7 @@ class SettingsPresenter
         disable_reviews_email: seller.disable_reviews_email,
         show_nsfw_products: seller.show_nsfw_products?,
         seller_refund_policy:,
+        product_level_support_emails: seller.product_level_support_emails_enabled? ? seller.product_level_support_emails : nil
       }
     }
   end
@@ -220,6 +221,8 @@ class SettingsPresenter
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
       formatted_balance_to_forfeit: seller.formatted_balance_to_forfeit(:country_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
+      payouts_paused_by: seller.payouts_paused_by_source,
+      payouts_paused_for_reason: seller.payouts_paused_for_reason,
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.minimum_payout_amount_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
@@ -376,7 +379,8 @@ class SettingsPresenter
       end
 
       {
-        allow_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        show_paypal_connect: Pundit.policy!(pundit_user, [:settings, :payments, seller]).paypal_connect? && seller.paypal_connect_enabled?,
+        allow_paypal_connect: seller.paypal_connect_allowed?,
         unsupported_countries: PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.map { |code| ISO3166::Country[code].common_name },
         email: paypal_merchant_account_email,
         charge_processor_merchant_id: paypal_merchant_account&.charge_processor_merchant_id,

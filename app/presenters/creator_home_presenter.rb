@@ -22,7 +22,7 @@ class CreatorHomePresenter
       "first_product" => seller.links.visible.exists?,
       "first_sale" => has_sale,
       "first_payout" => seller.has_payout_information?,
-      "first_email" => seller.installments.send_emails.exists?,
+      "first_email" => seller.installments.not_workflow_installment.send_emails.exists?,
       "purchased_small_bets" => seller.purchased_small_bets?,
     }
 
@@ -36,6 +36,7 @@ class CreatorHomePresenter
     products_by_permalink = seller.products
       .where(unique_permalink: product_permalinks)
       .includes(thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
+      .select(&:alive?)
       .index_by(&:unique_permalink)
 
     sales = top_sales_data.map do |p|

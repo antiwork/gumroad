@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product checkout - custom fields", type: :feature, js: true) do
+describe("Product checkout - custom fields", type: :system, js: true) do
   before do
     @product = create(:product)
   end

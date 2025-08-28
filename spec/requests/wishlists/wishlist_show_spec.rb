@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/discover_layout"
 
-describe "Wishlist show page", :js, type: :feature do
+describe "Wishlist show page", :js, type: :system do
   include Rails.application.routes.url_helpers
 
   let(:physical_product) { create(:product, :recommendable, name: "Quantity Product", price_cents: 1000, quantity_enabled: true) }

@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Zero-discount offer-code usage from product page", type: :feature, js: true) do
+describe("Zero-discount offer-code usage from product page", type: :system, js: true) do
   context "manually set" do
     it "does not error when entering a $0 offer code and allows purchase" do
       product = create(:product, price_cents: 300, user: create(:user, display_offer_code_field: true))

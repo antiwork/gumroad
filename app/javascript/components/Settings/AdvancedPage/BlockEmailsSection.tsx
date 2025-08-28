@@ -42,7 +42,9 @@ const BlockEmailsSection = ({ blockedEmails, setBlockedEmails }: Props) => {
     <section>
       <header>
         <h2>Mass-block emails</h2>
-        <a data-helper-prompt="How can I manage customer moderation?">Learn more</a>
+        <a href="/help/article/329-customer-moderation" target="_blank" rel="noreferrer">
+          Learn more
+        </a>
       </header>
       <fieldset>
         <legend>

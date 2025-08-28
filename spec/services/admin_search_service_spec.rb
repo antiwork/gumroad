@@ -110,5 +110,52 @@ describe AdminSearchService do
         expect(purchases).to eq [purchase_visa]
       end
     end
+
+    describe "searching by ip_address" do
+      let(:ip_v4) { "203.0.113.42" }
+      let(:ip_v6) { "2001:db8::1" }
+      let(:other_ip) { "198.51.100.10" }
+
+      it "returns purchases matching ip_address" do
+        purchase_from_ip_v4 = create(:purchase, ip_address: ip_v4)
+        purchase_from_ip_v6 = create(:purchase, ip_address: ip_v6)
+
+        purchases = AdminSearchService.new.search_purchases(query: ip_v4)
+        expect(purchases).to contain_exactly(purchase_from_ip_v4)
+
+        purchases = AdminSearchService.new.search_purchases(query: ip_v6)
+        expect(purchases).to contain_exactly(purchase_from_ip_v6)
+
+        purchases = AdminSearchService.new.search_purchases(query: other_ip)
+        expect(purchases).to be_empty
+      end
+    end
+
+    describe "product_title_query" do
+      let(:product_title_query) { "design" }
+      let!(:product) { create(:product, name: "Graphic Design Course") }
+      let!(:purchase) { create(:purchase, link: product, email: "user@example.com") }
+      let(:query) { "user@example.com" }
+
+      before do
+        create(:purchase, link: create(:product, name: "Different Product"))
+      end
+
+      context "when query is set" do
+        it "filters by product title" do
+          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
+          expect(purchases).to eq [purchase]
+        end
+      end
+
+      context "when query is not set" do
+        let(:query) { nil }
+
+        it "ignores product_title_query" do
+          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
+          expect(purchases).to include(purchase)
+        end
+      end
+    end
   end
 end

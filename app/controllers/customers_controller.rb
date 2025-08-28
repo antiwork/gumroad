@@ -166,6 +166,7 @@ class CustomersController < Sellers::BaseController
           :purchase_offer_code_discount,
           :tip,
           :upsell_purchase,
+          :variant_attributes,
           product_review: [:response, { alive_videos: [:video_file] }],
           utm_link: [target_resource: [:seller, :user]]
         )

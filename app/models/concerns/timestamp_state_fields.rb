@@ -32,7 +32,7 @@
 module TimestampStateFields
   extend ActiveSupport::Concern
 
-  module ClassMethods
+  class_methods do
     def timestamp_state_fields(*names, default_state: :created, states_excluded_from_default: [])
       names.map(&:to_s).each do |name|
         column_name = "#{name}_at"

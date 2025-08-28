@@ -16,6 +16,7 @@ import { Covers } from "$app/components/Product/Covers";
 import { Progress } from "$app/components/Progress";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_PREVIEW_COUNT = 8;
@@ -52,7 +53,7 @@ export const CoverEditor = ({
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
-          <a href="#" data-helper-prompt="What image dimensions should I use for my cover?">
+          <a href="/help/article/60-adding-a-cover-image" target="_blank" rel="noreferrer">
             Learn more
           </a>
         </div>
@@ -263,6 +264,7 @@ const CoverTab = ({
   onClick: () => void;
   onRemove: () => void;
 }) => {
+  const isDesktop = useIsAboveBreakpoint("lg");
   const [showDelete, setShowDelete] = React.useState(false);
 
   const hasThumbnail = cover.type !== "video" && (cover.type !== "oembed" || cover.thumbnail != null);
@@ -289,7 +291,7 @@ const CoverTab = ({
         <span>{cover.type === "oembed" ? "📺" : cover.type === "video" ? "📼" : "📦"}</span>
       )}
 
-      {showDelete ? (
+      {showDelete || !isDesktop ? (
         <RemoveButton
           onClick={(evt) => {
             evt.stopPropagation();

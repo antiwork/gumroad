@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Main Navigation", type: :feature, js: true do
+describe "Main Navigation", type: :system, js: true do
   context "with logged in user" do
     let(:user) { create(:user, name: "Gum") }
 

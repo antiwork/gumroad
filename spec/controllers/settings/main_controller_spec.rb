@@ -42,7 +42,7 @@ describe Settings::MainController do
     end
 
     it "returns error message when StandardError is raised" do
-      allow_any_instance_of(User).to receive(:update).and_raise(StandardError)
+      allow_any_instance_of(User).to receive(:update!).and_raise(StandardError)
       put :update, params: { user: user_params.merge(email: "hello@example.com") }, format: :json
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
@@ -52,6 +52,7 @@ describe Settings::MainController do
       let(:product) { create(:product, user: seller) }
 
       before do
+        product.user.update!(enable_recurring_subscription_charge_email: true)
         Rails.cache.write(product.scoped_cache_key("en"), "<html>Hello</html>")
         product.product_cached_values.create!
       end
@@ -296,6 +297,90 @@ describe Settings::MainController do
 
           expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(0)
           expect(seller.refund_policy.fine_print).to be_nil
+        end
+      end
+
+      context "product level support emails" do
+        let(:product1) { create(:product, user: seller) }
+        let(:product2) { create(:product, user: seller) }
+        let(:other_seller) { create(:user) }
+        let(:other_product) { create(:product, user: other_seller) }
+
+        before do
+          Feature.activate(:product_level_support_emails)
+        end
+
+        it "creates new support emails with associated products" do
+          product_level_support_emails = [
+            {
+              email: "contact@example.com",
+              product_ids: [product1.external_id, product2.external_id]
+            },
+            {
+              email: "support@example.com",
+              product_ids: []
+            }
+          ]
+
+          put :update, params: { user: user_params.merge(product_level_support_emails:) }, format: :json
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(product1.reload.support_email).to eq("contact@example.com")
+          expect(product2.reload.support_email).to eq("contact@example.com")
+        end
+
+        it "fails when email isn't valid" do
+          product_level_support_emails = [
+            { email: "invalid-email", product_ids: [product1.external_id] }
+          ]
+          put :update, params: { user: user_params.merge(product_level_support_emails:) }, format: :json
+
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["error_message"])
+            .to eq("Something broke. We're looking into what happened. Sorry about this!")
+        end
+
+        it "only associates products belonging to current seller" do
+          product_level_support_emails = [
+            {
+              email: "contact@example.com",
+              product_ids: [product1.external_id, other_product.external_id]
+            }
+          ]
+
+          put :update, params: { user: user_params.merge(product_level_support_emails:) }, format: :json
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(product1.reload.support_email).to eq("contact@example.com")
+          expect(other_product.reload.support_email).to be_nil
+        end
+
+        it "clears all existing support emails if param is empty" do
+          product1.update!(support_email: "support@example.com")
+          product2.update!(support_email: "support@example.com")
+
+          put :update, params: { user: user_params.merge(product_level_support_emails: []) }, format: :json
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(product1.reload.support_email).to be_nil
+          expect(product2.reload.support_email).to be_nil
+        end
+
+        context "when product_level_support_emails feature is disabled" do
+          before do
+            Feature.deactivate(:product_level_support_emails)
+          end
+
+          it "does not update product support emails" do
+            product_level_support_emails = [
+              { email: "contact@example.com", product_ids: [product1.external_id] }
+            ]
+
+            put :update, params: { user: user_params.merge(product_level_support_emails:) }, format: :json
+
+            expect(response.parsed_body["success"]).to be(true)
+            expect(product1.reload.support_email).to be_nil
+          end
         end
       end
     end

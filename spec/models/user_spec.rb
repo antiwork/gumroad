@@ -403,6 +403,62 @@ describe User, :vcr do
     end
   end
 
+  describe "#product_level_support_emails" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "3@example.com") }
+    let!(:product4) { create(:product, user:, support_email: nil) }
+
+    before { Feature.activate(:product_level_support_emails) }
+
+    it "returns the user's product support emails" do
+      result = user.product_level_support_emails
+
+      expect(result).to contain_exactly(
+        {
+          email: "1+2@example.com",
+          product_ids: [product1.external_id, product2.external_id],
+        },
+        {
+          email: "3@example.com",
+          product_ids: [product3.external_id],
+        }
+      )
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before { Feature.deactivate(:product_level_support_emails) }
+
+      it "returns nil" do
+        expect(user.product_level_support_emails).to be_nil
+      end
+    end
+  end
+
+  describe "#update_product_level_support_emails!" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user:, support_email: "old1@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
+
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
+
+    it "updates products support emails" do
+      user.update_product_level_support_emails!(
+        [
+          { email: "new1+2@example.com", product_ids: [product1.external_id, product2.external_id] }
+        ]
+      )
+
+      expect(product1.reload.support_email).to eq("new1+2@example.com")
+      expect(product2.reload.support_email).to eq("new1+2@example.com")
+      expect(product3.reload.support_email).to eq(nil)
+    end
+  end
+
   describe "#has_valid_payout_info?" do
     let(:user) { create(:user) }
 
@@ -1407,7 +1463,7 @@ describe User, :vcr do
       end
     end
 
-    describe "#support_email_domain_is_not_reserved" do
+    describe "reserved domain validation for support_email" do
       it "allows support_email to be nil" do
         @user.support_email = nil
         expect(@user).to be_valid
@@ -1416,7 +1472,7 @@ describe User, :vcr do
       it "fails the validation when domain is reserved" do
         @user.support_email = "something@gumroad.com"
         expect(@user).to be_invalid
-        expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
+        expect(@user.errors[:support_email]).to eq ["is reserved"]
       end
     end
 
@@ -2564,8 +2620,14 @@ describe User, :vcr do
 
       user = create(:user)
 
-      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+      # Enabled by default
+      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification}.each do |notification_key|
         expect(user.public_send(notification_key)).to be(true)
+      end
+
+      # Disabled by default
+      %i{enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+        expect(user.public_send(notification_key)).to be(false)
       end
     end
   end
@@ -3089,6 +3151,89 @@ describe User, :vcr do
       user.payouts_paused_internally = false
       user.payouts_paused_by_user = false
       expect(user.payouts_paused?).to eq(false)
+    end
+  end
+
+  describe "#payouts_paused_by_source" do
+    let!(:seller) { create(:user) }
+
+    it "returns source as admin if payouts are paused internally by an admin" do
+      seller.update!(payouts_paused_internally: true)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: 1)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "returns source as stripe if payouts are paused internally by stripe" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+    end
+
+    it "returns source as system if payouts are automatically paused internally" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    end
+
+    it "returns source as user if payouts are paused by seller" do
+      seller.update!(payouts_paused_internally: false, payouts_paused_by_user: true, payouts_paused_by: nil)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_USER)
+    end
+
+    it "returns source as admin if payouts are paused by seller as well as admin" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User.last.id)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "returns source as stripe if payouts are paused by seller as well as stripe" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+    end
+
+    it "returns source as system if payouts are paused by seller as well as system" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    end
+  end
+
+  describe "#payouts_paused_for_reason" do
+    let!(:seller) { create(:user) }
+
+    it "returns nil if payouts are not paused internally" do
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns nil if payouts are paused by admin but there are no corresponding comments" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns the content of the last comment of payouts_paused type if payouts are paused by admin" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+      seller.comments.create!(
+        author_id: User.last.id,
+        content: "Chargeback rate too high.",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to eq("Chargeback rate too high.")
+    end
+
+    it "returns nil if payouts are not paused by admin" do
+      seller.comments.create!(
+        author_id: User.last.id,
+        content: "Chargeback rate too high.",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_for_reason).to be nil
     end
   end
 

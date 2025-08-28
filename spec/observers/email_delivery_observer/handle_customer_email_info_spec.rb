@@ -165,7 +165,7 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
         it "notifies Bugsnag" do
           expect(Bugsnag).to receive(:notify) do |error|
             expect(error).to be_a(EmailDeliveryObserver::HandleCustomerEmailInfo::InvalidHeaderError)
-            expect(error.message.to_s).to eq("Failed to parse sendgrid header: unexpected token at 'invalid'")
+            expect(error.message.to_s).to eq("Failed to parse sendgrid header: unexpected character: 'invalid' at line 1 column 1")
             expect(JSON.parse(error.bugsnag_meta_data[:debug]).keys).to include(MailerInfo::SENDGRID_X_SMTPAPI_HEADER)
           end
 

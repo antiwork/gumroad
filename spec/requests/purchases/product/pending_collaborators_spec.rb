@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product checkout - with pending collaborators", type: :feature, js: true) do
+describe("Product checkout - with pending collaborators", type: :system, js: true) do
   let(:product) { create(:product, :recommendable, price_cents: 20_00) }
 
   let!(:pending_collaborator) do

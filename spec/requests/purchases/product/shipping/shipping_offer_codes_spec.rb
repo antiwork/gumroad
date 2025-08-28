@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping with offer codes", type: :feature, js: true, shipping: true) do
+describe("Product Page - Shipping with offer codes", type: :system, js: true, shipping: true) do
   it "allows the 50% offer code to only affect the product cost and not the shipping in USD" do
     @product = create(:product, user: create(:user), require_shipping: true, price_cents: 100_00)
     @offer_code = create(:percentage_offer_code, products: [@product], amount_percentage: 50, user: @product.user)
@@ -9,7 +9,6 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
     @product.price_currency_type = "usd"
     @product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
     @product.save!
-    previous_successful_purchase_count = Purchase.successful.count
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
@@ -17,9 +16,7 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
 
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-    end
+    expect(page).to have_alert("Your purchase was successful!")
 
     expect(Purchase.last.price_cents).to eq(7000)
     expect(Purchase.last.shipping_cents).to eq(2000)
@@ -33,7 +30,6 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
     @product.price_currency_type = "usd"
     @product.shipping_destinations << ShippingDestination.new(country_code: "US", one_item_rate_cents: 2000, multiple_items_rate_cents: 1000)
     @product.save!
-    previous_successful_purchase_count = Purchase.successful.count
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
@@ -41,9 +37,7 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
 
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-    end
+    expect(page).to have_alert("Your purchase was successful!")
 
     expect(Purchase.last.price_cents).to eq(2000)
     expect(Purchase.last.shipping_cents).to eq(2000)
@@ -64,7 +58,6 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
     @product.save!
 
     @offer_code = create(:offer_code, products: [@product], currency_type: "gbp", amount_cents: 50_00, user: @product.user)
-    previous_successful_purchase_count = Purchase.successful.count
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
@@ -75,11 +68,8 @@ describe("Product Page - Shipping with offer codes", type: :feature, js: true, s
       expect(page).to have_text("Total US$112.40", normalize_ws: true)
     end
 
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until Purchase.successful.count == (previous_successful_purchase_count + 1)
-    end
+    expect(page).to have_alert("Your purchase was successful!")
 
-    expect(page).to have_text("Your purchase was successful!")
     expect(page).to have_text(@product.name)
     expect(Purchase.last.price_cents).to eq(10727)
     expect(Purchase.last.shipping_cents).to eq(3065)

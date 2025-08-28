@@ -46,10 +46,22 @@ describe ReceiptPresenter::ChargeInfo do
       context "when is not for email" do
         let(:presenter) { described_class.new(purchase, for_email: false, order_items_count: 1) }
 
-        it "returns text with seller's email" do
-          expect(presenter.product_questions_note).to eq(
-            "Questions about your product? Contact Seller at <a href=\"mailto:seller@example.com\">seller@example.com</a>."
-          )
+        it "returns text with seller's email, if there is no product-level support email" do
+          product.update!(support_email: nil)
+
+          expect(presenter.product_questions_note).to eq(<<~HTML.squish)
+            Questions about your product?
+            Contact Seller at <a href="mailto:seller@example.com">seller@example.com</a>.
+          HTML
+        end
+
+        it "returns text with product support email, when there is a product-level support email" do
+          product.update!(support_email: "support@product.com")
+
+          expect(presenter.product_questions_note).to eq(<<~HTML.squish)
+            Questions about your product?
+            Contact Seller at <a href="mailto:support@product.com">support@product.com</a>.
+          HTML
         end
       end
 

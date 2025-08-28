@@ -3,7 +3,7 @@
 require("spec_helper")
 require "timeout"
 
-describe("PurchaseScenario using StripeJs", type: :feature, js: true) do
+describe("PurchaseScenario using StripeJs", type: :system, js: true) do
   it "uses a users saved cc if they have one" do
     previous_successful_sales_count = Purchase.successful.count
     link = create(:product, price_cents: 200)

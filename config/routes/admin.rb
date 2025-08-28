@@ -51,6 +51,7 @@ namespace :admin do
       post :put_on_probation
       post :flag_for_fraud
       post :set_custom_fee
+      post :toggle_adult_products
     end
   end
 
@@ -101,6 +102,7 @@ namespace :admin do
       post :update_giftee_email
       post :block_buyer
       post :unblock_buyer
+      post :undelete
     end
   end
 

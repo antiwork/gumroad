@@ -194,7 +194,7 @@ const EmptyState = () => (
       </figure>
       <h2>No collaborations yet</h2>
       <h4>Creators who have invited you to collaborate on their products will appear here.</h4>
-      <a data-helper-prompt="How can others invite me to collaborate on their products?">
+      <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
         Learn more about collaborations
       </a>
     </div>

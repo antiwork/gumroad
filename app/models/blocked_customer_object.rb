@@ -13,8 +13,8 @@ class BlockedCustomerObject < ApplicationRecord
   validates_presence_of :object_type, :object_value
   validates_presence_of :buyer_email, if: -> { object_type == SUPPORTED_OBJECT_TYPES[:charge_processor_fingerprint] }
   validates_inclusion_of :object_type, in: SUPPORTED_OBJECT_TYPES.values
-  validates_format_of :object_value, with: User::EMAIL_REGEX, if: -> { object_type == SUPPORTED_OBJECT_TYPES[:email] }
-  validates_format_of :buyer_email, with: User::EMAIL_REGEX, if: -> { buyer_email.present? }
+  validates :object_value, email_format: true, if: -> { object_type == SUPPORTED_OBJECT_TYPES[:email] }
+  validates :buyer_email, email_format: true, allow_blank: true
 
   scope :email, -> { where(object_type: SUPPORTED_OBJECT_TYPES[:email]) }
   scope :active, -> { where.not(blocked_at: nil) }

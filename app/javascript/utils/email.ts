@@ -20,6 +20,7 @@ const POPULAR_EMAIL_HOST_DOMAINS = [
   "126.com",
   "163.com",
   "21cn.com",
+  "aim.com",
   "alice.it",
   "aliyun.com",
   "aol.com",

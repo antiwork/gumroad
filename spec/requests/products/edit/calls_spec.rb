@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Calls Edit", type: :feature, js: true do
+describe "Calls Edit", type: :system, js: true do
   def upload_image(filenames)
     click_on "Upload images or videos"
     page.attach_file(filenames.map { |filename| file_fixture(filename) }) do

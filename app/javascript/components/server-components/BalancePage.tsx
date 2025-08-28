@@ -347,14 +347,16 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                 <div>
                   <h4>
                     Discover sales{" "}
-                    <a data-helper-prompt="Explain all of Gumroad's fees, including Gumroad reccomendations fees, affiliate fees, and payment processor fees.">
-                      fees{" "}
+                    <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
+                      fees
                     </a>
                   </h4>
-                  <small>
-                    on {payoutPeriodData.discover_sales_count}{" "}
-                    {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
-                  </small>
+                  {payoutPeriodData.discover_sales_count > 0 ? (
+                    <small>
+                      on {payoutPeriodData.discover_sales_count}{" "}
+                      {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
+                    </small>
+                  ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.discover_fees_cents)}</div>
               </div>
@@ -364,14 +366,16 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                 <div>
                   <h4>
                     Direct sales{" "}
-                    <a data-helper-prompt="Explain all of Gumroad's fees, including Gumroad reccomendations fees, affiliate fees, and payment processor fees.">
-                      fees{" "}
+                    <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
+                      fees
                     </a>
                   </h4>
-                  <small>
-                    on {payoutPeriodData.direct_sales_count}{" "}
-                    {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
-                  </small>
+                  {payoutPeriodData.direct_sales_count > 0 ? (
+                    <small>
+                      on {payoutPeriodData.direct_sales_count}{" "}
+                      {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
+                    </small>
+                  ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.direct_fees_cents)}</div>
               </div>
@@ -380,7 +384,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         ) : (
           <div>
             <h4>
-              <a data-helper-prompt="Explain all of Gumroad's fees, including Gumroad reccomendations fees, affiliate fees, and payment processor fees.">
+              <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                 Fees
               </a>
             </h4>
@@ -396,7 +400,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.chargebacks_cents !== 0 ? (
           <div>
             <h4>
-              <a data-helper-prompt="What may lead to a chargeback and what should I do if I receive one?">
+              <a href="/help/article/134-how-does-gumroad-handle-chargebacks" target="_blank" rel="noreferrer">
                 Chargebacks
               </a>
             </h4>
@@ -406,7 +410,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.credits_cents < 0 ? (
           <div>
             <h4>
-              <a data-helper-prompt="What are credits?">Credits</a>
+              <a href="/help/article/269-balance-page" target="_blank" rel="noreferrer">
+                Credits
+              </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.credits_cents)}</div>
           </div>
@@ -426,7 +432,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.paypal_payout_cents !== 0 ? (
           <div>
             <h4>
-              <a data-helper-prompt="What are PayPal payouts?">PayPal payouts</a>
+              <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
+                PayPal payouts
+              </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.paypal_payout_cents)}</div>
           </div>
@@ -434,7 +442,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.stripe_connect_payout_cents !== 0 ? (
           <div>
             <h4>
-              <a data-helper-prompt="What are Stripe Connect payouts?">Stripe Connect payouts</a>
+              <a href="/help/article/330-stripe-connect" target="_blank" rel="noreferrer">
+                Stripe Connect payouts
+              </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.stripe_connect_payout_cents)}</div>
           </div>
@@ -442,7 +452,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.taxes_cents !== 0 ? (
           <div>
             <h4>
-              <a data-helper-prompt="How are taxes on Gumroad calculated?">Taxes</a>
+              <a href="/help/article/121-sales-tax-on-gumroad" target="_blank" rel="noreferrer">
+                Taxes
+              </a>
             </h4>
             <div>
               <WithTooltip
@@ -498,7 +510,7 @@ const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: n
         symbolFormat: "short",
       })}{" "}
       to be paid out for your sales.
-      <NavigationButton color="accent" data-helper-prompt="Can you tell me more about payouts?">
+      <NavigationButton color="accent" href="/help/article/269-balance-page">
         Learn about payouts
       </NavigationButton>
     </div>
@@ -603,6 +615,8 @@ const BalancePage = ({
   next_payout_period_data,
   processing_payout_periods_data,
   payouts_status,
+  payouts_paused_by,
+  payouts_paused_for_reason,
   past_payout_period_data,
   instant_payout,
   show_instant_payouts_notice,
@@ -614,6 +628,8 @@ const BalancePage = ({
     | null;
   processing_payout_periods_data: PayoutPeriodData[];
   payouts_status: "paused" | "payable";
+  payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payouts_paused_for_reason: string | null;
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
     payable_amount_cents: number;
@@ -739,9 +755,7 @@ const BalancePage = ({
                 {instant_payout.payable_balances.some(
                   (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
                 ) ? (
-                  <a data-helper-prompt="I'd like to request an instant payout. Please connect me to a human.">
-                    Contact us for an instant payout
-                  </a>
+                  <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
                 ) : (
                   <Button
                     small
@@ -854,7 +868,27 @@ const BalancePage = ({
         {payouts_status === "paused" ? (
           <div className="warning" role="status">
             <p>
-              <strong>Your payouts have been paused.</strong>
+              {payouts_paused_by === "stripe" ? (
+                <strong>
+                  Your payouts are currently paused by our payment processor. Please check your{" "}
+                  <a href="/settings/payments">Payment Settings</a> for any verification requirements.
+                </strong>
+              ) : payouts_paused_by === "admin" ? (
+                <strong>
+                  Your payouts have been paused by Gumroad admin.
+                  {payouts_paused_for_reason ? ` Reason for pause: ${payouts_paused_for_reason}` : null}
+                </strong>
+              ) : payouts_paused_by === "system" ? (
+                <strong>
+                  Your payouts have been automatically paused for a security review and will be resumed once the review
+                  completes.
+                </strong>
+              ) : (
+                <strong>
+                  You have paused your payouts. Please go to <a href="/settings/payments">Payment Settings</a> to resume
+                  payouts.
+                </strong>
+              )}
             </p>
           </div>
         ) : null}

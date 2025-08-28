@@ -41,4 +41,96 @@ describe Admin::Users::PayoutsController do
       expect(response.body).to include(admin_payout_path(@payout_1))
     end
   end
+
+  describe "POST 'pause'" do
+    let!(:seller) { create(:user) }
+    before do
+      sign_in @admin_user_with_payout_privileges
+    end
+
+    it "pauses payouts for seller, sets the pause source as admin, and saves the provided reason" do
+      expect(seller.payouts_paused_internally?).to be false
+      expect(seller.payouts_paused_by_source).to be nil
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      expect do
+        post :pause, params: { user_id: seller.id, pause_payouts: { reason: "Chargeback rate too high." } }, format: :json
+      end.to change { seller.comments.with_type_payouts_paused.count }.by(1)
+
+      expect(seller.reload.payouts_paused_internally?).to be true
+      expect(seller.payouts_paused_by).to eq(@admin_user_with_payout_privileges.id)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to eq("Chargeback rate too high.")
+    end
+
+    it "pauses payouts for seller and sets the pause source as admin even if no reason is provided" do
+      expect(seller.payouts_paused_internally?).to be false
+      expect(seller.payouts_paused_by_source).to be nil
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      expect do
+        post :pause, params: { user_id: seller.id, pause_payouts: { reason: nil } }, format: :json
+      end.not_to change { seller.comments.with_type_payouts_paused.count }
+
+      expect(seller.reload.payouts_paused_internally?).to be true
+      expect(seller.payouts_paused_by).to eq(@admin_user_with_payout_privileges.id)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+  end
+
+  describe "POST 'resume'" do
+    let!(:seller) { create(:user) }
+    before do
+      seller.update!(payouts_paused_internally: true)
+      sign_in @admin_user_with_payout_privileges
+    end
+
+    it "resumes payouts for seller and clears the payout pause source if payouts are paused by admin" do
+      expect(seller.payouts_paused_internally?).to be true
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      expect do
+        post :resume, params: { user_id: seller.id }, format: :json
+      end.to change { seller.comments.with_type_payouts_resumed.count }.by(1)
+
+      expect(seller.reload.payouts_paused_internally?).to be false
+      expect(seller.payouts_paused_by).to be nil
+      expect(seller.payouts_paused_by_source).to be nil
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "resumes payouts for seller and clears the payout pause source if payouts are paused by stripe" do
+      seller.update!(payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.reload.payouts_paused_internally?).to be true
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      expect do
+        post :resume, params: { user_id: seller.id }, format: :json
+      end.to change { seller.comments.with_type_payouts_resumed.count }.by(1)
+
+      expect(seller.reload.payouts_paused_internally?).to be false
+      expect(seller.payouts_paused_by).to be nil
+      expect(seller.payouts_paused_by_source).to be nil
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "resumes payouts for seller and clears the payout pause source if payouts are paused by the system" do
+      seller.update!(payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.reload.payouts_paused_internally?).to be true
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      expect do
+        post :resume, params: { user_id: seller.id }, format: :json
+      end.to change { seller.comments.with_type_payouts_resumed.count }.by(1)
+
+      expect(seller.reload.payouts_paused_internally?).to be false
+      expect(seller.payouts_paused_by).to be nil
+      expect(seller.payouts_paused_by_source).to be nil
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+  end
 end

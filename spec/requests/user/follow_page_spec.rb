@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe "/follow page", type: :feature, js: true do
+describe "/follow page", type: :system, js: true do
   before do
     @email = generate(:email)
     @creator = create(:named_user)

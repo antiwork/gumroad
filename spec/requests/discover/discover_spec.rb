@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe("Discover", js: true, type: :feature) do
+describe("Discover", js: true, type: :system) do
   include StripeMerchantAccountHelper
 
   let(:discover_host) { UrlService.discover_domain_with_protocol }

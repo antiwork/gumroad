@@ -5,7 +5,7 @@ require "shared_examples/authorize_called"
 require "shared_examples/products_navigation"
 require "shared_examples/with_sorting_and_pagination"
 
-describe "Archived Products", type: :feature, js: true do
+describe "Archived Products", type: :system, js: true do
   let(:seller) { create(:named_seller) }
 
   include_context "with switching account to user as admin for seller"

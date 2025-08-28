@@ -3,23 +3,12 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Admin Pages Scenario", type: :feature, js: true do
+describe "Admin Pages Scenario", type: :system, js: true do
   let(:admin) { create(:named_user, :admin, has_risk_privilege: true) }
 
   before do
     allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
     login_as(admin)
-  end
-
-  def accept_browser_dialog
-    wait = Selenium::WebDriver::Wait.new(timeout: 30)
-    wait.until do
-      page.driver.browser.switch_to.alert
-      true
-    rescue Selenium::WebDriver::Error::NoAlertPresentError
-      false
-    end
-    page.driver.browser.switch_to.alert.accept
   end
 
   describe "Navigation" do

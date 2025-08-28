@@ -34,7 +34,7 @@ describe "InstallmentValidations" do
           allow(@installment).to receive(:audience_members_count).and_return(Installment::SENDING_LIMIT + 1)
 
           expect(@installment.valid?).to eq false
-          expect(@installment.errors.full_messages.to_sentence).to eq("<a data-helper-prompt='How much have I made in total earnings?'>Sorry, you cannot send out more than 2 emails until you have $100 in total earnings.</a>")
+          expect(@installment.errors.full_messages.to_sentence).to eq("<a href='/help/article/269-balance-page' target='_blank' rel='noreferrer'>Sorry, you cannot send out more than 2 emails until you have $100 in total earnings.</a>")
         end
 
         context "for an abandoned cart workflow installment" do

@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit custom permalink edit", type: :feature, js: true) do
+describe("Product Edit custom permalink edit", type: :system, js: true) do
   include ManageSubscriptionHelpers
   include ProductEditPageHelpers
 

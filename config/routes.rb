@@ -64,6 +64,7 @@ Rails.application.routes.draw do
           put :refund
         end
       end
+      resources :payouts, only: [:index, :show]
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
@@ -831,6 +832,8 @@ Rails.application.routes.draw do
     end
 
     resources :reviews, only: [:index]
+
+    resources :support, only: [:index]
 
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :url_redirect_expired_page

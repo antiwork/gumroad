@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Missing Tiered Membership Spec", type: :feature, js: true do
+describe "Missing Tiered Membership Spec", type: :system, js: true do
   include ManageSubscriptionHelpers
   include ProductWantThisHelpers
   include CurrencyHelper

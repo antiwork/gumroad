@@ -122,4 +122,51 @@ describe Admin::PurchasesController, :vcr do
       expect { post :refund_taxes_only, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
     end
   end
+
+  describe "POST undelete" do
+    before do
+      @purchase = create(:purchase, purchaser: create(:user), is_deleted_by_buyer: true)
+    end
+
+    it "undeletes the purchase and creates comments" do
+      comment_content = "Purchase undeleted by Admin (#{@admin_user.email})"
+      expect do
+        post :undelete, params: { id: @purchase.id }
+
+        expect(@purchase.reload.is_deleted_by_buyer).to be(false)
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+      end.to change { @purchase.comments.where(content: comment_content, comment_type: "note", author_id: @admin_user.id).count }.by(1)
+       .and change { @purchase.purchaser.comments.where(content: comment_content, comment_type: "note", author_id: @admin_user.id, purchase: @purchase).count }.by(1)
+    end
+
+    it "handles purchase that is already undeleted" do
+      @purchase.update!(is_deleted_by_buyer: false)
+
+      expect do
+        post :undelete, params: { id: @purchase.id }
+
+        expect(@purchase.reload.is_deleted_by_buyer).to be(false)
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+      end.not_to change { @purchase.comments.count }
+    end
+
+    it "handles purchase without purchaser" do
+      @purchase.update!(purchaser: nil)
+      comment_content = "Purchase undeleted by Admin (#{@admin_user.email})"
+
+      expect do
+        post :undelete, params: { id: @purchase.id }
+
+        expect(@purchase.reload.is_deleted_by_buyer).to be(false)
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+      end.to change { @purchase.comments.where(content: comment_content, comment_type: "note", author_id: @admin_user.id).count }.by(1)
+    end
+
+    it "raises error when purchase is not found" do
+      expect { post :undelete, params: { id: "invalid-id" } }.to raise_error(ActionController::RoutingError)
+    end
+  end
 end

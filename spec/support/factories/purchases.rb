@@ -13,8 +13,20 @@ FactoryBot.define do
     email { generate :email }
     stripe_fingerprint { price_cents == 0 ? nil : "shfbeg5142fff" }
     stripe_transaction_id { price_cents == 0 ? nil : "2763276372637263" }
-    card_type { "visa" }
-    card_visual { "**** **** **** 4062" }
+    card_type do
+      if charge_processor_id == PaypalChargeProcessor.charge_processor_id
+        CardType::PAYPAL
+      else
+        "visa"
+      end
+    end
+    card_visual do
+      if charge_processor_id == PaypalChargeProcessor.charge_processor_id
+        "jane@paypal.com"
+      else
+        "**** **** **** 4062"
+      end
+    end
     card_country { "US" }
     ip_address { Faker::Internet.ip_v4_address }
     browser_guid { generate :browser_guid }

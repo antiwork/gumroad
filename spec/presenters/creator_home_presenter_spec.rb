@@ -49,6 +49,11 @@ describe CreatorHomePresenter do
       )
     end
 
+    it "doesn't consider workflow installments for first_email" do
+      create(:installment, seller:, workflow_id: 1)
+      expect(presenter.creator_home_props[:getting_started_stats]["first_email"]).to eq(false)
+    end
+
     it "doesn't consider bundle product purchases for first_sale" do
       create(:purchase, :from_seller, seller:, is_bundle_product_purchase: true)
       expect(presenter.creator_home_props[:getting_started_stats]["first_sale"]).to eq(false)
@@ -129,6 +134,20 @@ describe CreatorHomePresenter do
 
       expect(product1_data["thumbnail"]).to be_nil
       expect(product2_data["thumbnail"]).to eq(thumbnail2.url)
+    end
+
+    it "excludes deleted products from the Best Selling section", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      active_product = create(:product, user: seller, price_cents: 1000)
+      deleted_product = create(:product, user: seller, price_cents: 2000)
+
+      create_list(:purchase, 3, link: active_product, price_cents: active_product.price_cents, created_at: 1.day.ago)
+      create_list(:purchase, 5, link: deleted_product, price_cents: deleted_product.price_cents, created_at: 2.days.ago)
+
+      deleted_product.update!(deleted_at: Time.current)
+
+      sales_data = presenter.creator_home_props[:sales]
+      expect(sales_data.map { |p| p["id"] }).to contain_exactly(active_product.unique_permalink)
+      expect(sales_data).not_to include(hash_including("id" => deleted_product.unique_permalink))
     end
 
     it "shows the 3 most sold products in past 30 days", :sidekiq_inline, :elasticsearch_wait_for_refresh do

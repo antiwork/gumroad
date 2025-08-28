@@ -27,16 +27,15 @@ module Product::CreationLimit
   end
 
   private
-    DAILY_CREATION_LIMIT = 10
     ISOLATED_EXECUTION_STATE_KEY = :gumroad_bypass_product_creation_limit
 
     def validate_daily_product_creation_limit
       return if skip_daily_product_creation_limit?
 
       last_24h_links_count = user.links.where(created_at: 1.day.ago..).count
-      return if last_24h_links_count < DAILY_CREATION_LIMIT
+      return if last_24h_links_count < daily_creation_limit
 
-      errors.add(:base, "Sorry, you can only create #{DAILY_CREATION_LIMIT} products per day.")
+      errors.add(:base, "Sorry, you can only create #{daily_creation_limit} products per day.")
     end
 
     def skip_daily_product_creation_limit?
@@ -46,5 +45,9 @@ module Product::CreationLimit
       return true if user.is_team_member?
 
       false
+    end
+
+    def daily_creation_limit
+      user&.compliant? ? 100 : 10
     end
 end

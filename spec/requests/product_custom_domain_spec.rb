@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "ProductCustomDomainScenario", type: :feature, js: true do
+describe "ProductCustomDomainScenario", type: :system, js: true do
   let(:product) { create(:product) }
   let(:custom_domain) { create(:custom_domain, domain: "test-custom-domain.gumroad.com", user: nil, product:) }
   let(:port) { Capybara.current_session.server.port }

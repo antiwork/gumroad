@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Signup Feature Scenario", js: true, type: :feature do
+describe "Signup Feature Scenario", js: true, type: :system do
   let(:user) { create(:user) }
 
   it "supports signing up with password" do
