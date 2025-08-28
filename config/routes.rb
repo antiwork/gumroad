@@ -62,6 +62,7 @@ Rails.application.routes.draw do
         member do
           put :mark_as_shipped
           put :refund
+          post :resend_receipt
         end
       end
       resources :payouts, only: [:index, :show]

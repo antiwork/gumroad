@@ -589,4 +589,71 @@ describe Api::V2::SalesController do
       end
     end
   end
+
+  describe "POST 'resend_receipt'" do
+    before do
+      @product = create(:product, user: @seller)
+      @params = { id: @purchase.external_id }
+    end
+
+    describe "when logged in with view_sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app,
+                                                   resource_owner_id: @seller.id,
+                                                   scopes: "view_sales")
+        @params.merge!(access_token: @token.token)
+      end
+
+      it "resends receipt for a sale that belongs to the seller" do
+        expect_any_instance_of(Purchase).to receive(:resend_receipt).once
+
+        post :resend_receipt, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sale: @purchase.as_json(version: 2)
+        }.as_json)
+      end
+
+      it "does not allow resending receipt for someone else's sale" do
+        @params.merge!(id: @purchase_by_seller.external_id)
+        post :resend_receipt, params: @params
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The sale was not found."
+        }.as_json)
+      end
+
+      it "returns error for non-existent sale" do
+        non_existent_id = ObfuscateIds.encrypt(999999)
+        @params.merge!(id: non_existent_id)
+        post :resend_receipt, params: @params
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The sale was not found."
+        }.as_json)
+      end
+    end
+
+    describe "when logged in with public scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app,
+                                                   resource_owner_id: @seller.id,
+                                                   scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "the response is 403 forbidden for incorrect scope" do
+        post :resend_receipt, params: @params
+        expect(response.code).to eq "403"
+      end
+    end
+
+    describe "when not logged in" do
+      it "the response is 401 unauthorized" do
+        post :resend_receipt, params: @params.except(:access_token)
+        expect(response.code).to eq "401"
+      end
+    end
+  end
 end
