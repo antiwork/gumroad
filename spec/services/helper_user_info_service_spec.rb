@@ -143,11 +143,11 @@ describe HelperUserInfoService do
 
       context "when user has payout notes" do
         it "includes payout notes from admin" do
-          create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-            author_id: GUMROAD_ADMIN_ID,
-            content: "Payout delayed due to verification"
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                 author_id: GUMROAD_ADMIN_ID,
+                 content: "Payout delayed due to verification"
           )
 
           result = service.user_info
@@ -156,11 +156,11 @@ describe HelperUserInfoService do
 
         it "excludes payout notes not from admin" do
           other_user = create(:user)
-          create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-            author_id: other_user.id,
-            content: "Non-admin payout note"
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                 author_id: other_user.id,
+                 content: "Non-admin payout note"
           )
 
           result = service.user_info
@@ -171,11 +171,11 @@ describe HelperUserInfoService do
       context "when user has risk notes" do
         it "includes all risk state comment types" do
           Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |comment_type, index|
-            create(:comment, 
-              commentable: user, 
-              comment_type: comment_type,
-              content: "Risk note #{index + 1}",
-              created_at: index.minutes.ago
+            create(:comment,
+                   commentable: user,
+                   comment_type: comment_type,
+                   content: "Risk note #{index + 1}",
+                   created_at: index.minutes.ago
             )
           end
 
@@ -186,24 +186,24 @@ describe HelperUserInfoService do
         end
 
         it "orders risk notes by creation time" do
-          older_comment = create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_FLAGGED,
-            content: "Older risk note",
-            created_at: 2.hours.ago
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_FLAGGED,
+                 content: "Older risk note",
+                 created_at: 2.hours.ago
           )
-          newer_comment = create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_COMPLIANT,
-            content: "Newer risk note",
-            created_at: 1.hour.ago
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_COMPLIANT,
+                 content: "Newer risk note",
+                 created_at: 1.hour.ago
           )
 
           result = service.user_info
           prompt_lines = result[:prompt].split("\n")
           older_index = prompt_lines.find_index { |line| line.include?("Older risk note") }
           newer_index = prompt_lines.find_index { |line| line.include?("Newer risk note") }
-          
+
           expect(older_index).to be < newer_index
         end
       end
@@ -213,10 +213,10 @@ describe HelperUserInfoService do
           before { allow(user).to receive(:suspended?).and_return(true) }
 
           it "includes suspension notes" do
-            create(:comment, 
-              commentable: user, 
-              comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-              content: "Account suspended for policy violation"
+            create(:comment,
+                   commentable: user,
+                   comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+                   content: "Account suspended for policy violation"
             )
 
             result = service.user_info
@@ -228,10 +228,10 @@ describe HelperUserInfoService do
           before { allow(user).to receive(:suspended?).and_return(false) }
 
           it "excludes suspension notes" do
-            create(:comment, 
-              commentable: user, 
-              comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-              content: "Account suspended for policy violation"
+            create(:comment,
+                   commentable: user,
+                   comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+                   content: "Account suspended for policy violation"
             )
 
             result = service.user_info
@@ -242,10 +242,10 @@ describe HelperUserInfoService do
 
       context "when user has other comment types" do
         it "includes general comments" do
-          create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
-            content: "General user comment"
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
+                 content: "General user comment"
           )
 
           result = service.user_info
@@ -253,10 +253,10 @@ describe HelperUserInfoService do
         end
 
         it "includes custom comment types" do
-          create(:comment, 
-            commentable: user, 
-            comment_type: "custom_type",
-            content: "Custom comment type"
+          create(:comment,
+                 commentable: user,
+                 comment_type: "custom_type",
+                 content: "Custom comment type"
           )
 
           result = service.user_info
@@ -266,24 +266,24 @@ describe HelperUserInfoService do
 
       context "when user has multiple comment types" do
         it "includes all comments in chronological order" do
-          payout_comment = create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-            author_id: GUMROAD_ADMIN_ID,
-            content: "Payout note",
-            created_at: 3.hours.ago
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                 author_id: GUMROAD_ADMIN_ID,
+                 content: "Payout note",
+                 created_at: 3.hours.ago
           )
-          risk_comment = create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_FLAGGED,
-            content: "Risk note",
-            created_at: 2.hours.ago
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_FLAGGED,
+                 content: "Risk note",
+                 created_at: 2.hours.ago
           )
-          general_comment = create(:comment, 
-            commentable: user, 
-            comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
-            content: "General note",
-            created_at: 1.hour.ago
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_USER_SUBMITTED,
+                 content: "General note",
+                 created_at: 1.hour.ago
           )
 
           result = service.user_info
@@ -295,7 +295,7 @@ describe HelperUserInfoService do
           payout_index = prompt_lines.find_index { |line| line.include?("Payout Note: Payout note") }
           risk_index = prompt_lines.find_index { |line| line.include?("Risk Note: Risk note") }
           general_index = prompt_lines.find_index { |line| line.include?("Comment: General note") }
-          
+
           expect(payout_index).to be < risk_index
           expect(risk_index).to be < general_index
         end

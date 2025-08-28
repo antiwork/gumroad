@@ -85,7 +85,7 @@ class HelperUserInfoService
 
     def add_seller_comments
       comments = user.comments.order(:created_at)
-      
+
       comments.each do |comment|
         case comment.comment_type
         when Comment::COMMENT_TYPE_PAYOUT_NOTE
