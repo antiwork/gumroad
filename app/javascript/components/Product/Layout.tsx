@@ -219,7 +219,7 @@ const CtaBar = ({
   const isDesktop = useIsAboveBreakpoint("lg");
 
   // Enhanced Safari detection - more reliable than just checking window.safari
-  const isSafari = React.useMemo(() => {
+  const isSafari = React.useMemo((): boolean => {
     if (typeof window === 'undefined') return false;
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || 
            (window as any).safari !== undefined;
@@ -229,7 +229,7 @@ const CtaBar = ({
     if (!ctaButtonRef.current) return;
     
     // Use a more robust intersection observer configuration
-    const observerOptions = {
+    const observerOptions: IntersectionObserverInit = {
       threshold: 0.5,
       // Add root margin to prevent edge case flickering
       rootMargin: isSafari ? '-1px 0px -1px 0px' : '0px'
