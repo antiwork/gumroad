@@ -3,6 +3,12 @@
 require "spec_helper"
 
 describe "Admin::SearchController Scenario", type: :system, js: true do
+  let(:admin) { create(:admin_user) }
+
+  before do
+    sign_in admin
+  end
+
   describe "purchases" do
     describe "product_title_query" do
       let(:product_title_query) { "design" }
@@ -11,44 +17,32 @@ describe "Admin::SearchController Scenario", type: :system, js: true do
 
       before do
         create(:purchase, link: create(:product, name: "Different Product"))
+        # Create another purchase with same email and same product to avoid redirect
+        create(:purchase, email: "user@example.com", link: product)
       end
 
-      context "when query is set" do
-        it "filters by product title" do
-          # Create another purchase with same email and same product to avoid redirect
-          create(:purchase, email: "user@example.com", link: product)
+      it "filters by product title" do
+        visit admin_search_purchases_path(query: "user@example.com", product_title_query:)
 
-          visit admin_search_purchases_path(query: "user@example.com", product_title_query:)
-
-          expect(page).to have_content("Graphic Design Course")
-          expect(page).not_to have_content("Different Product")
-        end
-
-        it "shows clear button and clears product title filter" do
-          # Create another purchase with same email and same product to avoid redirect
-          create(:purchase, email: "user@example.com", link: product)
-
-          visit admin_search_purchases_path(query: "user@example.com", product_title_query:)
-
-          expect(page).to have_link("Clear filter")
-
-          click_link("Clear filter")
-
-          expect(current_url).to include("query=user@example.com")
-          expect(current_url).not_to include("product_title_query")
-
-          expect(page).to have_content("Graphic Design Course")
-          expect(page).to have_content("Different Product")
-        end
+        expect(page).to have_content("Graphic Design Course")
+        expect(page).not_to have_content("Different Product")
       end
 
-      context "when query is not set" do
-        it "ignores product_title_query" do
-          visit admin_search_purchases_path(product_title_query:)
+      it "shows clear button and clears product title filter" do
+        different_product = create(:product, name: "Different Product")
+        create(:purchase, email: "user@example.com", link: different_product)
 
-          expect(page).to have_content("Graphic Design Course")
-          expect(page).to have_content("Different Product")
-        end
+        visit admin_search_purchases_path(query: "user@example.com", product_title_query:)
+
+        expect(page).to have_link("Clear")
+
+        click_link("Clear")
+
+        expect(current_url).to include("query=user%40example.com")
+        expect(current_url).not_to include("product_title_query")
+
+        expect(page).to have_content("Graphic Design Course")
+        expect(page).to have_content("Different Product")
       end
     end
   end
