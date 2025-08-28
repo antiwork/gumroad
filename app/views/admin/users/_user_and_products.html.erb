@@ -72,4 +72,18 @@
     font-weight: bold;
     background: white;
   }
+
+  @media (prefers-color-scheme: dark) {
+    .tab-buttons label {
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: bold;
+    }
+
+    #profile-tab-radio:checked ~ .tab-buttons label[for="profile-tab-radio"],
+    #products-tab-radio:checked ~ .tab-buttons label[for="products-tab-radio"] {
+      background: transparent;
+      color: white;
+      font-weight: bold;
+    }
+  }
 </style>
