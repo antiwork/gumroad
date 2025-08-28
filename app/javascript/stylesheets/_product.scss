@@ -295,6 +295,9 @@ article {
         &:not(:first-child) {
           border-top: $border;
         }
+        &:last-child {
+          border-top: 0px solid red;
+        }
       }
 
       &:first-of-type {
@@ -314,7 +317,7 @@ article {
 
         > .details {
           position: sticky;
-          top: calc(var(--spacer-5) * 2 + 1.5lh + var(--spacer-4));
+          top: calc(var(--spacer-5) * 2 + 1.42lh + var(--spacer-4));
           z-index: calc(z-index(header) - 1);
           background-color: var(--body-bg);
           margin: 0;
@@ -351,7 +354,7 @@ article {
         z-index: z-index(header);
         align-self: start;
         background-color: var(--body-bg);
-        border-bottom: $border;
+        border-bottom: 1px solid $border-color;
 
         @include breakpoint-up(lg) {
           max-height: 100vh;
