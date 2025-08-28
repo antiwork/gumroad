@@ -32,6 +32,8 @@ describe PayoutsPresenter do
           },
           processing_payout_periods_data: [],
           payouts_status: "payable",
+          payouts_paused_by: nil,
+          payouts_paused_for_reason: nil,
           past_payout_period_data: [],
           instant_payout: nil,
           show_instant_payouts_notice: false,
@@ -97,6 +99,8 @@ describe PayoutsPresenter do
             },
             processing_payout_periods_data: [],
             payouts_status: "payable",
+            payouts_paused_by: nil,
+            payouts_paused_for_reason: nil,
             past_payout_period_data: [],
             instant_payout: {
               payable_amount_cents: 1000,
@@ -169,6 +173,8 @@ describe PayoutsPresenter do
             },
             processing_payout_periods_data: [],
             payouts_status: "payable",
+            payouts_paused_by: nil,
+            payouts_paused_for_reason: nil,
             past_payout_period_data: [],
             instant_payout: nil,
             show_instant_payouts_notice: false,
@@ -210,6 +216,52 @@ describe PayoutsPresenter do
         pagination: {}
       )
       expect(instance.props[:next_payout_period_data]).to include(has_stripe_connect: true)
+    end
+
+    context "when seller's payouts are paused" do
+      it "returns the payout pause source and reason if present" do
+        user = create(:user, user_risk_state: "compliant", payouts_paused_internally: true)
+        product = create(:product, user:, price_cents: 20_00)
+        purchase = create :purchase_in_progress, price_cents: 20_00, link: product, seller: user, purchase_state: "in_progress"
+        purchase.process!
+        purchase.update_balance_and_mark_successful!
+        balance = UserBalanceStatsService.new(user:).fetch
+        instance = described_class.new(
+          next_payout_period_data: balance[:next_payout_period_data],
+          processing_payout_periods_data: balance[:processing_payout_periods_data],
+          seller: user,
+          past_payouts: [],
+          pagination: {}
+        )
+        expect(instance.props[:payouts_status]).to eq("paused")
+        expect(instance.props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        expect(instance.props[:payouts_paused_for_reason]).to eq(nil)
+
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+        user.comments.create!(
+          author_id: User.last.id,
+          content: "Chargeback rate too high.",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+        )
+        expect(instance.props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        expect(instance.props[:payouts_paused_for_reason]).to eq("Chargeback rate too high.")
+
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        expect(instance.props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        expect(instance.props[:payouts_paused_for_reason]).to eq(nil)
+
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(instance.props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(instance.props[:payouts_paused_for_reason]).to eq(nil)
+
+        user.update!(payouts_paused_internally: false, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_USER)
+        expect(instance.props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_USER)
+        expect(instance.props[:payouts_paused_for_reason]).to eq(nil)
+
+        user.update!(payouts_paused_internally: false, payouts_paused_by_user: false, payouts_paused_by: nil)
+        expect(instance.props[:payouts_paused_by]).to eq(nil)
+        expect(instance.props[:payouts_paused_for_reason]).to eq(nil)
+      end
     end
   end
 end

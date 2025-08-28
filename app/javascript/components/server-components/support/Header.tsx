@@ -8,6 +8,8 @@ import { Button } from "$app/components/Button";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
+import logo from "$assets/images/logo.svg";
+
 export function SupportHeader({
   onOpenNewTicket,
   hasHelperSession = true,
@@ -24,7 +26,7 @@ export function SupportHeader({
       <h1 className="hidden group-[.sidebar-nav]/body:block">Help</h1>
       <h1 className="group-[.sidebar-nav]/body:hidden">
         <a href={Routes.root_path()} className="flex items-center">
-          <img src="logo.svg" alt="Gumroad" className="h-8 dark:invert" width={32} height={32} />
+          <img src={logo} alt="Gumroad" className="h-8 w-auto dark:invert" />
         </a>
       </h1>
       <div className="actions">
@@ -32,37 +34,39 @@ export function SupportHeader({
           <a href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
             <span className="icon icon-solid-search"></span>
           </a>
-        ) : (
+        ) : hasHelperSession ? (
           <Button color="accent" onClick={onOpenNewTicket}>
             New ticket
           </Button>
-        )}
+        ) : null}
       </div>
-      <div role="tablist">
-        <a
-          href={Routes.help_center_root_path()}
-          role="tab"
-          aria-selected={pathname.startsWith(Routes.help_center_root_path())}
-          className="pb-2"
-        >
-          Articles
-        </a>
-        <a
-          href={Routes.support_index_path()}
-          role="tab"
-          aria-selected={pathname.startsWith(Routes.support_index_path())}
-          className="flex items-center gap-2 border-b-2 pb-2"
-        >
-          Support tickets
-          {hasHelperSession ? <UnreadTicketsBadge /> : null}
-        </a>
-      </div>
+      {hasHelperSession ? (
+        <div role="tablist">
+          <a
+            href={Routes.help_center_root_path()}
+            role="tab"
+            aria-selected={pathname.startsWith(Routes.help_center_root_path())}
+            className="pb-2"
+          >
+            Articles
+          </a>
+          <a
+            href={Routes.support_index_path()}
+            role="tab"
+            aria-selected={pathname.startsWith(Routes.support_index_path())}
+            className="flex items-center gap-2 border-b-2 pb-2"
+          >
+            Support tickets
+            <UnreadTicketsBadge />
+          </a>
+        </div>
+      ) : null}
     </>
   );
 }
 
 type WrapperProps = {
-  host: string;
+  host?: string | null;
   session?: {
     email?: string | null;
     emailHash?: string | null;
@@ -78,7 +82,7 @@ type WrapperProps = {
 };
 
 const Wrapper = ({ host, session, new_ticket_url }: WrapperProps) =>
-  session ? (
+  host && session ? (
     <HelperClientProvider host={host} session={session}>
       <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} />
     </HelperClientProvider>

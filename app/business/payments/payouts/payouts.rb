@@ -16,8 +16,8 @@ class Payouts
     end
 
     if user.payouts_paused?
-      paused_by = user.payouts_paused_internally? ? "admin" : "creator"
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by #{paused_by == 'admin' ? 'the admin' : 'you'}.") if add_comment
+      payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
+      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}.") if add_comment
       return false
     end
 

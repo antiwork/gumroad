@@ -746,13 +746,11 @@ module StripeMerchantAccountManager
       MerchantRegistrationMailer.stripe_charges_disabled(user.id).deliver_later(queue: "critical")
     end
 
-    if stripe_account["payouts_enabled"]
-      user.update!(payouts_paused_internally: false)
+    if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+      user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
     elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
-      user.update!(payouts_paused_internally: true)
-      if stripe_account["payouts_enabled"] == false && stripe_previous_attributes["payouts_enabled"] == true &&
-        stripe_fields_needed.present? &&
-        requirements["disabled_reason"].in?(%w(action_required.requested_capabilities requirements.past_due))
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      if stripe_fields_needed.present? && requirements["disabled_reason"].in?(%w(action_required.requested_capabilities requirements.past_due))
         MerchantRegistrationMailer.stripe_payouts_disabled(user.id).deliver_later
       end
     end

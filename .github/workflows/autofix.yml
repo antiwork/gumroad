@@ -22,8 +22,6 @@ jobs:
       - run: npm ci
 
       - uses: ruby/setup-ruby@v1
-        env:
-          BUNDLE_GEMS__CONTRIBSYS__COM: ${{ secrets.CONTRIBSYS_CREDENTIALS }}
         with:
           bundler-cache: true
 

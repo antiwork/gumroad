@@ -154,6 +154,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_threshold_cents, default: -> { minimum_payout_threshold_cents }
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :payouts_paused_by
 
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
@@ -884,6 +885,20 @@ class User < ApplicationRecord
 
   def payouts_paused?
     payouts_paused_internally? || payouts_paused_by_user?
+  end
+
+  def payouts_paused_by_source
+    return nil unless payouts_paused?
+
+    if payouts_paused_internally?
+      [PAYOUT_PAUSE_SOURCE_STRIPE, PAYOUT_PAUSE_SOURCE_SYSTEM].include?(payouts_paused_by) ? payouts_paused_by : PAYOUT_PAUSE_SOURCE_ADMIN
+    elsif payouts_paused_by_user?
+      PAYOUT_PAUSE_SOURCE_USER
+    end
+  end
+
+  def payouts_paused_for_reason
+    payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_ADMIN ? comments.with_type_payouts_paused.last&.content : nil
   end
 
   def made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
