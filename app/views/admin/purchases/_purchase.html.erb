@@ -258,7 +258,16 @@
       <% if purchase.purchase_refund_policy.present? %>
         <dt>Refund Policy</dt>
         <dd>
-          <strong><%= purchase.purchase_refund_policy.title %></strong>
+          <strong>
+            <% purchase.purchase_refund_policy.tap do |purchase_refund_policy| %>
+              <%= purchase_refund_policy.title %>
+              <% if purchase_refund_policy.different_than_product_refund_policy? %>
+                <%= with_tooltip(tip: "Current refund policy: #{purchase_refund_policy.product_refund_policy_title}") do %>
+                  <%= icon("solid-shield-exclamation", style: "color: rgb(var(--warning))") %>
+                <% end %>
+              <% end %>
+            <% end %>
+          </strong>
           <% if purchase.purchase_refund_policy.fine_print.present? %>
             <br>
             <%= simple_format(purchase.purchase_refund_policy.fine_print) %>
@@ -365,6 +374,9 @@
       <%= admin_action label: "Unblock buyer", url: unblock_buyer_admin_purchase_path(purchase), loading: "Unblocking buyer...", done: "Buyer unblocked!", success_message: "Buyer unblocked!" %>
     <% else %>
       <%= admin_action label: "Block buyer", url: block_buyer_admin_purchase_path(purchase), loading: "Blocking buyer...", done: "Buyer blocked!", confirm_message: "This will fully block this buyer's emails, GUID, and IP addresses. Proceed?", success_message: "Buyer blocked!" %>
+    <% end %>
+    <% if purchase.is_deleted_by_buyer? %>
+      <%= admin_action label: "Undelete", url: undelete_admin_purchase_path(purchase), loading: "Undeleting...", done: "Undeleted!", confirm_message: "Are you sure you want to undelete this purchase?", success_message: "Undeleted!" %>
     <% end %>
     <% if purchase.successful? %>
       <%= link_to "Go to Receipt", receipt_purchase_path(purchase.external_id), target: "_blank", class: "button small" %>
