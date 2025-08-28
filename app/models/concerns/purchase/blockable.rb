@@ -303,9 +303,9 @@ module Purchase::Blockable
 
       chargeback_stats = seller.lost_chargebacks
       chargeback_volume_percentage = chargeback_stats[:volume]
-      
+
       return if chargeback_volume_percentage == "NA"
-      
+
       volume_rate = chargeback_volume_percentage.to_f
       return if volume_rate <= 3.0
 

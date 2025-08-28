@@ -132,7 +132,7 @@ module Charge::Disputable
       purchase.save!
 
       purchase.mark_product_purchases_as_chargedback!
-      
+
       purchase.pause_payouts_for_seller_based_on_chargeback_rate!
     end
 
