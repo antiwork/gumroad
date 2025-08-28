@@ -15,4 +15,14 @@ class PurchaseRefundPolicy < ApplicationRecord
   def product_refund_policy_title
     purchase.link.product_refund_policy&.title
   end
+
+  def determine_max_refund_period_in_days
+    # Return only values from ALLOWED_REFUND_PERIODS_IN_DAYS or nil for unmatched titles
+    RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.each do |days, expected_title|
+      return days if title == expected_title
+    end
+
+    Rails.logger.debug("No exact match found for title '#{title}', skipping")
+    nil
+  end
 end
