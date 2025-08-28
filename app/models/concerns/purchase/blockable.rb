@@ -95,6 +95,26 @@ module Purchase::Blockable
     charge_processor_id == StripeChargeProcessor.charge_processor_id ? stripe_fingerprint : card_visual
   end
 
+  def pause_payouts_for_seller_based_on_chargeback_rate!
+    return unless seller.present?
+    return if seller.payouts_paused_internally?
+
+    chargeback_stats = seller.lost_chargebacks
+    chargeback_volume_percentage = chargeback_stats[:volume]
+
+    return if chargeback_volume_percentage == "NA"
+
+    volume_rate = chargeback_volume_percentage.to_f
+    return if volume_rate <= 3.0
+
+    seller.update!(payouts_paused_internally: true)
+    seller.comments.create(
+      content: "Payouts paused due to chargeback rate exceeding 3% volume (#{chargeback_volume_percentage}).",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: "pause_payouts_for_seller_based_on_chargeback_rate"
+    )
+  end
+
   private
     def recent_stripe_fingerprint
       Purchase.with_stripe_fingerprint
@@ -291,26 +311,6 @@ module Purchase::Blockable
 
     def failed_purchases_count_redis_key
       "product_#{link_id}"
-    end
-
-    def pause_payouts_for_seller_based_on_chargeback_rate!
-      return unless seller.present?
-      return if seller.payouts_paused_internally?
-
-      chargeback_stats = seller.lost_chargebacks
-      chargeback_volume_percentage = chargeback_stats[:volume]
-
-      return if chargeback_volume_percentage == "NA"
-
-      volume_rate = chargeback_volume_percentage.to_f
-      return if volume_rate <= 3.0
-
-      seller.update!(payouts_paused_internally: true)
-      seller.comments.create(
-        content: "Payouts paused due to chargeback rate exceeding 3% volume (#{chargeback_volume_percentage}).",
-        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-        author_name: "pause_payouts_for_seller_based_on_chargeback_rate"
-      )
     end
 
     private
