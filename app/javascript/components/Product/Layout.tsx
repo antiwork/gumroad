@@ -258,7 +258,8 @@ const CtaBar = ({
         boxShadow: visible
           ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
           : undefined,
-        position: "sticky",
+        position: "fixed",
+        width: "100%",
         top: isDesktop ? 0 : undefined,
         bottom: isDesktop ? undefined : 0,
         // Render above the product edit button
