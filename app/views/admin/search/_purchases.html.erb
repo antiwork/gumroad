@@ -27,7 +27,7 @@
             <%= " + #{purchase.formatted_gumroad_tax_amount} VAT" if purchase.gumroad_responsible_for_tax? %>
             <%= link_to_unless_current(h(purchase.link.name), admin_link_url(purchase.link), title: purchase.link.id) %>
             <%= purchase.variants_list %>
-            <%= link_to purchase.link.long_url, target: "_blank" do %>
+            <%= link_to purchase.link.long_url, target: "_blank", style: "text-decoration: none;" do %>
               <span class="icon icon-arrow-up-right-square"></span>
             <% end %>
             <ul class="inline">
