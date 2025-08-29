@@ -123,11 +123,11 @@ const WorkflowRow = ({
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
         {workflow.published ? (
           <small>
-            <Icon name="circle-fill" /> Published
+            Published
           </small>
         ) : (
           <small>
-            <Icon name="circle" /> Unpublished
+            Unpublished
           </small>
         )}
         <div className="button-group">

@@ -251,11 +251,11 @@ const Collaborators = () => {
                     <td data-label="Status" className="whitespace-nowrap">
                       {collaborator.invitation_accepted ? (
                         <>
-                          <Icon name="circle-fill" className="mr-1" /> Accepted
+                          Accepted
                         </>
                       ) : (
                         <>
-                          <Icon name="circle" className="mr-1" /> Pending
+                          Pending
                         </>
                       )}
                     </td>

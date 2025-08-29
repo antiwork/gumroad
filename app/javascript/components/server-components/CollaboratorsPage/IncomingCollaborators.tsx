@@ -153,11 +153,11 @@ const IncomingCollaboratorsTableRow = ({
     <td data-label="Status" className="whitespace-nowrap">
       {incomingCollaborator.invitation_accepted ? (
         <>
-          <Icon name="circle-fill" className="mr-1" /> Accepted
+          Accepted
         </>
       ) : (
         <>
-          <Icon name="circle" className="mr-1" /> Pending
+          Pending
         </>
       )}
     </td>

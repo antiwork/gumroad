@@ -160,19 +160,19 @@ export const ProductsPageMembershipsTable = (props: {
                     case "unpublished":
                       return (
                         <>
-                          <Icon name="circle" /> Unpublished
+                          Unpublished
                         </>
                       );
                     case "preorder":
                       return (
                         <>
-                          <Icon name="circle" /> Pre-order
+                          Pre-order
                         </>
                       );
                     case "published":
                       return (
                         <>
-                          <Icon name="circle-fill" /> Published
+                          Published
                         </>
                       );
                   }
