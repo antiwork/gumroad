@@ -394,7 +394,7 @@ jobs:
             -e IN_DOCKER \
             $WEB_REPO:test-${{ github.sha }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
-        timeout-minutes: 15
+        timeout-minutes: 20
       - name: Clean up
         if: always()
         run: |

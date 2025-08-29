@@ -248,15 +248,7 @@ const Collaborators = () => {
                       {formatCommission(collaborator)}
                     </td>
                     <td data-label="Status" className="whitespace-nowrap">
-                      {collaborator.invitation_accepted ? (
-                        <>
-                          <Icon name="circle-fill" className="mr-1" /> Accepted
-                        </>
-                      ) : (
-                        <>
-                          <Icon name="circle" className="mr-1" /> Pending
-                        </>
-                      )}
+                      {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
                     </td>
                     <td>
                       <div className="actions" onClick={(e) => e.stopPropagation()}>
