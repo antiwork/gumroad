@@ -249,15 +249,7 @@ const Collaborators = () => {
                       {formatCommission(collaborator)}
                     </td>
                     <td data-label="Status" className="whitespace-nowrap">
-                      {collaborator.invitation_accepted ? (
-                        <>
-                          Accepted
-                        </>
-                      ) : (
-                        <>
-                          Pending
-                        </>
-                      )}
+                      {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
                     </td>
                     <td>
                       <div className="actions" onClick={(e) => e.stopPropagation()}>

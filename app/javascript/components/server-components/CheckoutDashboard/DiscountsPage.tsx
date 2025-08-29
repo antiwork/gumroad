@@ -381,17 +381,11 @@ const DiscountsPage = ({
                           style={{ display: "grid", gridTemplateColumns: "min-content 1fr", gap: "var(--spacer-2)" }}
                         >
                           {validAt && currentDate < validAt ? (
-                            <>
-                              Scheduled
-                            </>
+                            <>Scheduled</>
                           ) : expiresAt && currentDate > expiresAt ? (
-                            <>
-                              Expired
-                            </>
+                            <>Expired</>
                           ) : (
-                            <>
-                              Live
-                            </>
+                            <>Live</>
                           )}
                         </div>
                       </td>

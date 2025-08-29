@@ -151,15 +151,7 @@ const IncomingCollaboratorsTableRow = ({
       {formatCommission(incomingCollaborator)}
     </td>
     <td data-label="Status" className="whitespace-nowrap">
-      {incomingCollaborator.invitation_accepted ? (
-        <>
-          Accepted
-        </>
-      ) : (
-        <>
-          Pending
-        </>
-      )}
+      {incomingCollaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
     </td>
     <td>
       {incomingCollaborator.invitation_accepted ? null : (

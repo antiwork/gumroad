@@ -152,23 +152,11 @@ export const ProductsPageProductsTable = (props: {
                 {(() => {
                   switch (product.status) {
                     case "unpublished":
-                      return (
-                        <>
-                          Unpublished
-                        </>
-                      );
+                      return <>Unpublished</>;
                     case "preorder":
-                      return (
-                        <>
-                          Pre-order
-                        </>
-                      );
+                      return <>Pre-order</>;
                     case "published":
-                      return (
-                        <>
-                          Published
-                        </>
-                      );
+                      return <>Published</>;
                   }
                 })()}
               </td>
