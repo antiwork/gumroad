@@ -17,18 +17,12 @@ module Admin::PurchaseHelper
 
     formatted_error_code = purchase.formatted_error_code
 
-    last_chargebacked_purchase = find_last_chargebacked_purchase_for(purchase) if purchase.error_code == PurchaseErrorCode::BUYER_CHARGED_BACK
+    last_chargebacked_purchase = purchase.find_past_chargebacked_purchases.first
 
     if last_chargebacked_purchase.present?
       "(#{link_to(formatted_error_code, admin_purchase_path(last_chargebacked_purchase))})".html_safe
     else
       "(#{formatted_error_code})"
     end
-  end
-
-  def find_last_chargebacked_purchase_for(purchase)
-    return nil unless purchase.email.present?
-
-    Purchase.chargedback.where(email: purchase.email).order(chargeback_date: :desc).first
   end
 end

@@ -68,6 +68,7 @@ describe Admin::PurchaseHelper, type: :helper do
       before do
         allow(purchase).to receive(:failed?).and_return(true)
         allow(purchase).to receive(:formatted_error_code).and_return("card_declined")
+        allow(purchase).to receive(:find_past_chargebacked_purchases).and_return([])
       end
 
       it "returns formatted error code" do
@@ -75,39 +76,33 @@ describe Admin::PurchaseHelper, type: :helper do
       end
 
       context "when error code is buyer charged back" do
-        before do
-          allow(purchase).to receive(:error_code).and_return("buyer_has_charged_back")
-          allow(helper).to receive(:find_last_chargebacked_purchase_for).and_return(chargebacked_purchase)
+        context "when there are past chargebacked purchases" do
+          before do
+            allow(purchase).to receive(:error_code).and_return("buyer_has_charged_back")
+            allow(purchase).to receive(:find_past_chargebacked_purchases).and_return([chargebacked_purchase])
+          end
+
+          it "returns linked error code" do
+            result = helper.purchase_error_code(purchase)
+            expect(result).to include("card_declined")
+            expect(result).to include(admin_purchase_path(chargebacked_purchase))
+          end
         end
 
-        it "returns linked error code" do
-          result = helper.purchase_error_code(purchase)
-          expect(result).to include("card_declined")
-          expect(result).to include(chargebacked_purchase.id.to_s)
+        context "when there are no past chargebacked purchases" do
+          before do
+            allow(purchase).to receive(:error_code).and_return("buyer_has_charged_back")
+            allow(purchase).to receive(:find_past_chargebacked_purchases).and_return([])
+          end
+
+          it "returns unlinked error code" do
+            result = helper.purchase_error_code(purchase)
+            expect(result).to eq("(card_declined)")
+          end
         end
       end
     end
   end
 
-  describe "#find_last_chargebacked_purchase_for" do
-    context "when there is no chargebacked purchase" do
-      let(:purchase_with_email) { create(:purchase, email: "test@example.com") }
 
-      it "returns nil" do
-        result = helper.find_last_chargebacked_purchase_for(purchase_with_email)
-        expect(result).to be_nil
-      end
-    end
-
-    context "when there is a chargebacked purchase" do
-      let(:purchase_with_email) { create(:purchase, email: "test@example.com") }
-      let(:chargebacked_purchase) { create(:purchase, email: "test@example.com", purchase_state: "successful", chargeback_date: Time.current) }
-
-      it "returns the chargebacked purchase" do
-        chargebacked_purchase # ensure it's created first
-        result = helper.find_last_chargebacked_purchase_for(purchase_with_email)
-        expect(result).to eq(chargebacked_purchase)
-      end
-    end
-  end
 end
