@@ -8,6 +8,8 @@ import { Button } from "$app/components/Button";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
+import logo from "$assets/images/logo.svg";
+
 export function SupportHeader({
   onOpenNewTicket,
   hasHelperSession = true,
@@ -24,7 +26,7 @@ export function SupportHeader({
       <h1 className="hidden group-[.sidebar-nav]/body:block">Help</h1>
       <h1 className="group-[.sidebar-nav]/body:hidden">
         <a href={Routes.root_path()} className="flex items-center">
-          <img src="logo.svg" alt="Gumroad" className="h-8 dark:invert" width={32} height={32} />
+          <img src={logo} alt="Gumroad" className="h-8 w-auto dark:invert" />
         </a>
       </h1>
       <div className="actions">
