@@ -31,28 +31,7 @@
               <span class="icon icon-arrow-up-right-square"></span>
             <% end %>
             <ul class="inline">
-              <% states = [purchase.purchase_state] %>
-              <% states << "(refunded)" if purchase.stripe_refunded? %>
-              <% states << "(partially refunded)" if purchase.stripe_partially_refunded? %>
-              <% states << "(chargeback)" if purchase.chargedback_not_reversed? %>
-              <% states << "(chargeback reversed)" if purchase.chargeback_reversed? %>
-              <% if purchase.failed? %>
-                <% if purchase.error_code == PurchaseErrorCode::BUYER_CHARGED_BACK %>
-                  <% ref_scope = Purchase.chargedback.not_chargeback_reversed %>
-                  <% rels = [] %>
-                  <% rels << ref_scope.where(email: purchase.email) if purchase.email.present? %>
-                  <% rels << ref_scope.where(browser_guid: purchase.browser_guid) if purchase.browser_guid.present? %>
-                  <% ref_cb = rels.any? ? rels.reduce { |acc, r| acc.or(r) }.order(chargeback_date: :desc).first : nil %>
-                  <% if ref_cb.present? %>
-                    <% states << "(#{purchase.formatted_error_code} - #{link_to ref_cb.id, admin_purchase_path(ref_cb)})".html_safe %>
-                  <% else %>
-                    <% states << "(#{purchase.formatted_error_code})" %>
-                  <% end %>
-                <% else %>
-                  <% states << "(#{purchase.formatted_error_code})" %>
-                <% end %>
-              <% end %>
-              <% states.each do |state| %>
+              <% purchase_states(purchase).each do |state| %>
                 <li><%= state %></li>
               <% end %>
             </ul>
