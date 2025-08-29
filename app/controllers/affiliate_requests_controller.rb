@@ -21,13 +21,6 @@ class AffiliateRequestsController < ApplicationController
   end
 
   def create
-    # Check if the requester has disabled being added as an affiliate
-    requester = User.find_by(email: permitted_create_params[:email])
-    if requester&.disable_affiliate_requests?
-      render json: { success: false, error: "You have disabled being added as an affiliate." }
-      return
-    end
-
     @affiliate_request = @user.affiliate_requests.new(permitted_create_params)
     @affiliate_request.locale = params[:locale] || "en"
 

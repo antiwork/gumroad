@@ -121,17 +121,6 @@ describe AffiliateRequestsController do
         end
       end
 
-      context "when the requester has disabled being added as an affiliate" do
-        let(:requester) { create(:user, disable_affiliate_requests: true) }
-
-        it "responds with an error" do
-          post :create, params: { username: creator.username, affiliate_request: { name: "John Doe", email: requester.email, promotion_text: "hello" } }, format: :json
-
-          expect(response.parsed_body["success"]).to eq false
-          expect(response.parsed_body["error"]).to eq "You have disabled being added as an affiliate."
-        end
-      end
-
       context "when the request payload is valid" do
         it "creates an affiliate request and notifies both the requester and the creator" do
           expect_any_instance_of(AffiliateRequest).to receive(:notify_requester_and_seller_of_submitted_request).and_call_original
