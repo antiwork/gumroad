@@ -236,6 +236,32 @@ class CustomerMailer < ApplicationMailer
     mail(to: @purchase.email, subject: @subject)
   end
 
+  def stamped_pdf_ready(purchase_id)
+    @purchase = Purchase.find(purchase_id)
+    @product = @purchase.link
+    @url_redirect = @purchase.url_redirect
+
+    @stamped_pdfs = @url_redirect.alive_stamped_pdfs.includes(:product_file)
+
+    return if @stamped_pdfs.empty?
+
+    @stamped_pdfs.each do |stamped_pdf|
+      product_file = stamped_pdf.product_file
+      temp_file = Tempfile.new
+      stamped_pdf.s3_object.download_file(temp_file.path)
+      temp_file.rewind
+      attachments[product_file.s3_filename] = temp_file.read
+    end
+
+    mail(
+      to: @purchase.email,
+      from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
+      reply_to: @product.support_email_or_default,
+      subject: "Your stamped PDFs are ready for download",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+    )
+  end
+
   private
     def receipt_for_gift_receiver?(chargeable)
       chargeable.orderable.receipt_for_gift_receiver?

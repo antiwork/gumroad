@@ -1,0 +1,23 @@
+<h1>Your stamped PDFs are ready!</h1>
+
+<p>Hi there,</p>
+
+<p>Your stamped PDFs for <strong><%= @product.name %></strong> are now ready for download. The PDFs have been personalized with your purchase information.</p>
+
+<p>You can download your files by clicking the links below, or visit your download page:</p>
+
+<p><a href="<%= url_redirect_download_page_url(@url_redirect.token) %>" style="background-color: #36a2eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Download Your Files</a></p>
+
+<% if @stamped_pdfs.any? %>
+  <h3>Your stamped PDFs:</h3>
+  <ul>
+    <% @stamped_pdfs.each do |stamped_pdf| %>
+      <li><%= stamped_pdf.product_file.s3_filename %></li>
+    <% end %>
+  </ul>
+<% end %>
+
+<p>Thank you for your purchase!</p>
+
+<p>Best regards,<br>
+<%= @product.user.display_name %></p>

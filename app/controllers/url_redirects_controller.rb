@@ -87,6 +87,15 @@ class UrlRedirectsController < ApplicationController
     else
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
       @product_file = product_files.first
+
+      if @product_file.must_be_pdf_stamped? && !@url_redirect.alive_stamped_pdfs.exists?(product_file_id: @product_file.id)
+        StampPdfForPurchaseJob.perform_async(@url_redirect.purchase_id)
+
+        flash[:notice] = "The PDF will be emailed to you shortly!"
+        redirect_to url_redirect_download_page_path(@url_redirect.token)
+        return
+      end
+
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
     end

@@ -11,10 +11,6 @@ class SendChargeReceiptJob
     charge = Charge.find(charge_id)
     return if charge.receipt_sent?
 
-    charge.purchases_requiring_stamping.each do |purchase|
-      PdfStampingService.stamp_for_purchase!(purchase)
-    end
-
     charge.with_lock do
       CustomerMailer.receipt(nil, charge.id).deliver_now
       charge.update!(receipt_sent: true)
