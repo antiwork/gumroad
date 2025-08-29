@@ -134,6 +134,42 @@ describe User::FeatureStatus do
     end
   end
 
+  describe "#can_publish_products?" do
+    let(:seller) { create(:compliant_user, payment_address: nil) }
+
+    before do
+      create(:user_compliance_info, user: seller)
+    end
+
+    it "returns false if no payout method is setup" do
+      expect(seller.can_publish_products?).to be false
+    end
+
+    it "returns true if a bank account is setup", :vcr do
+      create(:merchant_account_stripe, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
+
+    it "returns true if a PayPal account is connected" do
+      create(:merchant_account_paypal, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
+
+    it "returns true if a Stripe account is connected" do
+      create(:merchant_account_stripe_connect, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
+
+    it "returns true if a PayPal payment address is present" do
+      seller.update!(payment_address: "payme@example.com")
+
+      expect(seller.can_publish_products?).to be true
+    end
+  end
+
   describe "#paypal_connect_allowed?" do
     let!(:seller) { create(:user) }
 
