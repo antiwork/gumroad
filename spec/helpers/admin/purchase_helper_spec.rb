@@ -103,6 +103,4 @@ describe Admin::PurchaseHelper, type: :helper do
       end
     end
   end
-
-
 end
