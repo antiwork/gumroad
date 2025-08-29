@@ -2,8 +2,9 @@
 
 <div class="paragraphs css-tabs">
   <!-- Hidden radio buttons for state management -->
-  <input type="radio" name="user-tabs" id="profile-tab-radio" checked style="display: none;">
-  <input type="radio" name="user-tabs" id="products-tab-radio" style="display: none;">
+  <% show_products_tab = params[:page].present? && params[:page].to_i >= 2 %>
+  <input type="radio" name="user-tabs" id="profile-tab-radio" <%= "checked" unless show_products_tab %> style="display: none;">
+  <input type="radio" name="user-tabs" id="products-tab-radio" <%= "checked" if show_products_tab %> style="display: none;">
 
   <!-- Tab buttons -->
   <div role="tablist" class="tab-buttons" aria-label="Profile Tabs">
