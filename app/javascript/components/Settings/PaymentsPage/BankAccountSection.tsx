@@ -696,6 +696,7 @@ export type BankAccount =
 
 export type BankAccountDetails = {
   show_bank_account: boolean;
+  show_paypal: boolean;
   is_a_card: boolean;
   routing_number: string | null;
   account_number_visual: string | null;

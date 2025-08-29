@@ -368,7 +368,7 @@ describe LinksController, :vcr do
         it "returns an error message" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["error_message"]).to eq("You must connect connect at least one payment method before you can publish this product for sale.")
+          expect(response.parsed_body["error_message"]).to eq("You must connect at least one payment method before you can publish this product for sale.")
         end
 
         it "does not publish the link" do

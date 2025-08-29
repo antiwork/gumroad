@@ -468,7 +468,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         end
 
         describe "payout-skipped notes" do
-          context "when the payout was skipped because the account was suspended" do
+          context "when the payout was skipped because the account was not compliant" do
             before do
               seller.flag_for_tos_violation!(author_name: "iffy", bulk: true)
               seller.suspend_for_tos_violation!(author_name: "iffy", bulk: true)
@@ -479,7 +479,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             it "shows the payout-skipped notice" do
               visit balance_path
 
-              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account was suspended.")
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account was not compliant.")
             end
           end
 

@@ -169,6 +169,7 @@ class UpdatePayoutMethod
 
       return { error: :provide_valid_email_prompt } unless EmailFormatValidator.valid?(payment_address)
       return { error: :provide_ascii_only_email_prompt } unless payment_address.ascii_only?
+      return { error: :paypal_payouts_not_supported } if user.alive_user_compliance_info.blank? || user.native_payouts_supported?
 
       user.payment_address = payment_address
       user.save!
