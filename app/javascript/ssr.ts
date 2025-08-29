@@ -11,6 +11,7 @@ import AdminFlagForFraudForm from "$app/components/server-components/Admin/FlagF
 import AdminManualPayoutForm from "$app/components/server-components/Admin/ManualPayoutForm";
 import AdminMassTransferPurchasesForm from "$app/components/server-components/Admin/MassTransferPurchasesForm";
 import AdminNav from "$app/components/server-components/Admin/Nav";
+import AdminPausePayoutsForm from "$app/components/server-components/Admin/PausePayoutsForm";
 import AdminProductAttributesAndInfo from "$app/components/server-components/Admin/ProductAttributesAndInfo";
 import AdminProductPurchases from "$app/components/server-components/Admin/ProductPurchases";
 import AdminProductStats from "$app/components/server-components/Admin/ProductStats";
@@ -111,6 +112,7 @@ ReactOnRails.register({
   AdminManualPayoutForm,
   AdminMassTransferPurchasesForm,
   AdminNav,
+  AdminPausePayoutsForm,
   AdminProductAttributesAndInfo,
   AdminProductPurchases,
   AdminProductStats,

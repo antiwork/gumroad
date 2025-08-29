@@ -223,16 +223,6 @@ const CtaBar = ({
     new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
-        // @ts-expect-error: Fixes issue on Safari where the page gets scrolled up/down by the height of the CTA bar when it disappears/appears, resulting on an infinite loop of the CTA bar being shown/hidden.
-        if (window.safari !== undefined && isDesktop) {
-          const main = document.querySelector("main");
-          if (ref.current && ctaButtonRef.current && main && entry.rootBounds) {
-            if (entry.boundingClientRect.top < main.getBoundingClientRect().top)
-              // We use 1.9 here (instead of 2) because it empirically does a better job of eliminating
-              // the infinite scroll jumping described above.
-              main.scrollBy(0, ((entry.isIntersecting ? -1 : 1) * entry.boundingClientRect.height) / 1.9);
-          }
-        }
 
         setVisible(!entry.isIntersecting);
       },
@@ -258,9 +248,11 @@ const CtaBar = ({
         boxShadow: visible
           ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
           : undefined,
-        position: "sticky",
+        position: "fixed",
         top: isDesktop ? 0 : undefined,
         bottom: isDesktop ? undefined : 0,
+        left: 0,
+        right: 0,
         // Render above the product edit button
         zIndex: "var(--z-index-menubar)",
         marginTop: hasHero ? "var(--border-width)" : undefined,

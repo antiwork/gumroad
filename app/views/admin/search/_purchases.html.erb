@@ -1,4 +1,17 @@
 <div class="paragraphs">
+  <%= form_with url: admin_search_purchases_path, method: :get, class: "input-with-button", style: "margin-bottom: 1rem;" do |form| %>
+    <%= form.hidden_field :query, value: params[:query] %>
+    <div class="input">
+      <%= form.text_field :product_title_query, placeholder: "Filter by product title", value: params[:product_title_query] %>
+    </div>
+    <button type="submit" class="button primary">
+      <span class="icon icon-solid-search"></span>
+    </button>
+    <% if params[:product_title_query].present? %>
+      <%= link_to "Clear", admin_search_purchases_path(query: params[:query]), class: "button secondary" %>
+    <% end %>
+  <% end %>
+
   <table>
     <thead>
       <tr>
