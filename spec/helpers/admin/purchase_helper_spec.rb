@@ -90,21 +90,23 @@ describe Admin::PurchaseHelper, type: :helper do
   end
 
   describe "#find_last_chargebacked_purchase_for" do
-    context "when purchase has email" do
+    context "when there is no chargebacked purchase" do
       let(:purchase_with_email) { create(:purchase, email: "test@example.com") }
 
-      it "finds chargebacked purchase by email" do
+      it "returns nil" do
         result = helper.find_last_chargebacked_purchase_for(purchase_with_email)
         expect(result).to be_nil
       end
     end
 
-    context "when purchase has browser_guid" do
-      let(:purchase_with_guid) { create(:purchase, browser_guid: "guid123") }
+    context "when there is a chargebacked purchase" do
+      let(:purchase_with_email) { create(:purchase, email: "test@example.com") }
+      let(:chargebacked_purchase) { create(:purchase, email: "test@example.com", purchase_state: "successful", chargeback_date: Time.current) }
 
-      it "finds chargebacked purchase by browser_guid" do
-        result = helper.find_last_chargebacked_purchase_for(purchase_with_guid)
-        expect(result).to be_nil
+      it "returns the chargebacked purchase" do
+        chargebacked_purchase # ensure it's created first
+        result = helper.find_last_chargebacked_purchase_for(purchase_with_email)
+        expect(result).to eq(chargebacked_purchase)
       end
     end
   end

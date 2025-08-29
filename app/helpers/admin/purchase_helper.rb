@@ -27,12 +27,8 @@ module Admin::PurchaseHelper
   end
 
   def find_last_chargebacked_purchase_for(purchase)
-    return nil unless purchase.email.present? || purchase.browser_guid.present?
+    return nil unless purchase.email.present?
 
-    Purchase.chargedback
-            .not_chargeback_reversed
-            .where("email = ? OR browser_guid = ?", purchase.email, purchase.browser_guid)
-            .order(chargeback_date: :desc)
-            .first
+    Purchase.chargedback.where(email: purchase.email).order(chargeback_date: :desc).first
   end
 end
