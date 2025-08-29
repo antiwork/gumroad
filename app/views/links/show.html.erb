@@ -6,6 +6,56 @@
 
 <%= render("shared/js_needed_notice") %>
 
+<% structured_data = {
+  "@context" => "https://schema.org",
+  "@type" => "Product",
+  "name" => @product.name,
+  "description" => @product.custom_summary.presence || strip_tags(@product.html_safe_description).truncate(160),
+  "url" => @product.long_url,
+  "offers" => {
+    "@type" => "Offer",
+    "price" => (@product.price_cents / 100.0).to_s,
+    "priceCurrency" => @product.price_currency_type.upcase,
+    "availability" => @product.alive? && !@product.draft ? @product.max_purchase_count.present? ? "https://schema.org/LimitedAvailability" : "https://schema.org/InStock" : "https://schema.org/OutOfStock"
+  },
+  "category" => @product.taxonomy&.slug || @product.native_type.humanize,
+  "productID" => @product.external_id,
+} %>
+
+<% if @product.thumbnail&.alive&.url %>
+  <% structured_data["image"] = @product.thumbnail.alive.url %>
+<% end %>
+
+<% if @product.user %>
+  <% structured_data["seller"] = {
+    "@type" => "Person",
+    "name" => @product.user.display_name
+  } %>
+<% end %>
+
+<% if @product.display_product_reviews? && @product.rating_stats[:count] > 0 %>
+  <% rating_stats = @product.rating_stats %>
+  <% structured_data["aggregateRating"] = {
+    "@type" => "AggregateRating",
+    "ratingValue" => rating_stats[:average].to_s,
+    "reviewCount" => rating_stats[:count].to_s,
+    "bestRating" => "5",
+    "worstRating" => "1"
+  } %>
+<% end %>
+
+<% if @product.native_type == "digital" %>
+  <% structured_data["additionalType"] = "https://schema.org/DigitalDocument" %>
+<% elsif @product.native_type == "course" %>
+  <% structured_data["additionalType"] = "https://schema.org/Course" %>
+<% elsif @product.native_type == "ebook" %>
+  <% structured_data["additionalType"] = "https://schema.org/Book" %>
+<% end %>
+
+<script type="application/ld+json">
+<%= structured_data.to_json.html_safe %>
+</script>
+
 <%= load_pack("product") %>
 <% if params[:layout] == "profile" %>
   <%= react_component "ProfileProductPage", props: @product_props.merge({ creator_profile: ProfilePresenter.new(pundit_user:, seller: @product.user).creator_profile }), prerender: true %>
