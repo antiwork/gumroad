@@ -259,6 +259,7 @@ class User < ApplicationRecord
             49 => :can_create_physical_products,
             50 => :paypal_payout_fee_waived,
             51 => :dismissed_create_products_with_ai_promo_alert,
+            52 => :disable_affiliate_requests,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
