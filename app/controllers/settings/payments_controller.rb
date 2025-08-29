@@ -187,6 +187,8 @@ class Settings::PaymentsController < Sellers::BaseController
         render json: { success: false, error_message: "Please provide a valid email address." }
       when :provide_ascii_only_email_prompt
         render json: { success: false, error_message: "Email address cannot contain non-ASCII characters" }
+      when :paypal_payouts_not_supported
+        render json: { success: false, error_message: "PayPal payouts are not supported in your country." }
       end
 
       false

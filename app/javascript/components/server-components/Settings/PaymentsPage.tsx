@@ -224,11 +224,9 @@ const PaymentsPage = (props: Props) => {
         ? "card"
         : props.bank_account_details.account_number_visual !== null
           ? "bank"
-          : props.paypal_address !== null
+          : props.bank_account_details.show_paypal
             ? "paypal"
-            : props.bank_account_details.show_bank_account
-              ? "bank"
-              : "paypal",
+            : "bank",
   );
   const updatePayoutMethod = (newPayoutMethod: PayoutMethod) => {
     setSelectedPayoutMethod(newPayoutMethod);
@@ -1023,18 +1021,20 @@ const PaymentsPage = (props: Props) => {
                   ) : null}
                 </>
               ) : null}
-              <Button
-                role="radio"
-                key="paypal"
-                aria-checked={selectedPayoutMethod === "paypal"}
-                onClick={() => updatePayoutMethod("paypal")}
-                disabled={props.is_form_disabled}
-              >
-                <Icon name="shop-window" />
-                <div>
-                  <h4>PayPal</h4>
-                </div>
-              </Button>
+              {props.bank_account_details.show_paypal ? (
+                <Button
+                  role="radio"
+                  key="paypal"
+                  aria-checked={selectedPayoutMethod === "paypal"}
+                  onClick={() => updatePayoutMethod("paypal")}
+                  disabled={props.is_form_disabled}
+                >
+                  <Icon name="shop-window" />
+                  <div>
+                    <h4>PayPal</h4>
+                  </div>
+                </Button>
+              ) : null}
               {props.user.country_code === "BR" ||
               props.user.can_connect_stripe ||
               props.stripe_connect.has_connected_stripe ? (
