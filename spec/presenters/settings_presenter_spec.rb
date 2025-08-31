@@ -96,6 +96,7 @@ describe SettingsPresenter do
           disable_comments_email: false,
           disable_reviews_email: false,
           show_nsfw_products: false,
+          disable_affiliate_requests: false,
           product_level_support_emails: [],
           seller_refund_policy: {
             enabled: true,
