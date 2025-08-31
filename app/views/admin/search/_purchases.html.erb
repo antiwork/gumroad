@@ -1,16 +1,5 @@
 <div class="paragraphs">
-  <%= form_with url: admin_search_purchases_path, method: :get, class: "input-with-button", style: "margin-bottom: 1rem;" do |form| %>
-    <%= form.hidden_field :query, value: params[:query] %>
-    <div class="input">
-      <%= form.text_field :product_title_query, placeholder: "Filter by product title", value: params[:product_title_query] %>
-    </div>
-    <button type="submit" class="button primary">
-      <span class="icon icon-solid-search"></span>
-    </button>
-    <% if params[:product_title_query].present? %>
-      <%= link_to "Clear", admin_search_purchases_path(query: params[:query]), class: "button secondary" %>
-    <% end %>
-  <% end %>
+  <%= render("filter_form") %>
 
   <table>
     <thead>
@@ -27,17 +16,11 @@
             <%= " + #{purchase.formatted_gumroad_tax_amount} VAT" if purchase.gumroad_responsible_for_tax? %>
             <%= link_to_unless_current(h(purchase.link.name), admin_link_url(purchase.link), title: purchase.link.id) %>
             <%= purchase.variants_list %>
-            <%= link_to purchase.link.long_url, target: "_blank" do %>
+            <%= link_to purchase.link.long_url, target: "_blank", class: "no-underline" do %>
               <span class="icon icon-arrow-up-right-square"></span>
             <% end %>
             <ul class="inline">
-              <% states = [purchase.purchase_state] %>
-              <% states << "(refunded)" if purchase.stripe_refunded? %>
-              <% states << "(partially refunded)" if purchase.stripe_partially_refunded? %>
-              <% states << "(chargeback)" if purchase.chargedback_not_reversed? %>
-              <% states << "(chargeback reversed)" if purchase.chargeback_reversed? %>
-              <% states << "(#{purchase.formatted_error_code})" if purchase.failed? %>
-              <% states.each do |state| %>
+              <% purchase_states(purchase).each do |state| %>
                 <li><%= state %></li>
               <% end %>
             </ul>
