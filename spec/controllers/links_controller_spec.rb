@@ -80,9 +80,9 @@ describe LinksController, :vcr do
           decoded_content = CGI.unescapeHTML(data_page_match[1])
           json_data = JSON.parse(decoded_content)
 
-          products = json_data['props']['react_products_page_props']['products']
+          products = json_data["props"]["react_products_page_props"]["products"]
           expect(products).to be_present, "Expected products in Inertia.js response"
-          expect(products.first['successful_sales_count']).to eq(expected_count)
+          expect(products.first["successful_sales_count"]).to eq(expected_count)
         end
 
         it "with a single sale" do
@@ -91,8 +91,8 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include('data-page')
-          expect(response.body).to include('Products/index')
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
 
           expect_sales_count_in_inertia_response(1)
         end
@@ -102,8 +102,8 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include('data-page')
-          expect(response.body).to include('Products/index')
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
 
           expect_sales_count_in_inertia_response(3_030)
         end
@@ -114,8 +114,8 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include('data-page')
-          expect(response.body).to include('Products/index')
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
 
           expect_sales_count_in_inertia_response(424_242)
         end
@@ -126,8 +126,8 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include('data-page')
-          expect(response.body).to include('Products/index')
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
 
           expect_sales_count_in_inertia_response(1_111)
         end
@@ -139,8 +139,8 @@ describe LinksController, :vcr do
 
           expect(response).to be_successful
 
-          expect(response.body).to include('data-page')
-          expect(response.body).to include('Products/index')
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
 
           data_page_match = response.body.match(/data-page="([^"]*)"/)
           expect(data_page_match).to be_present
@@ -148,9 +148,9 @@ describe LinksController, :vcr do
           decoded_content = CGI.unescapeHTML(data_page_match[1])
           json_data = JSON.parse(decoded_content)
 
-          products = json_data['props']['react_products_page_props']['products']
+          products = json_data["props"]["react_products_page_props"]["products"]
           expect(products).to be_present
-          expect(products.first['url_without_protocol']).to be_present
+          expect(products.first["url_without_protocol"]).to be_present
         end
       end
     end

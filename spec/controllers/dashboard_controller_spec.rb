@@ -29,7 +29,7 @@ describe DashboardController do
       decoded_content = CGI.unescapeHTML(data_page_match[1])
       json_data = JSON.parse(decoded_content)
 
-      creator_home = json_data['props']['creator_home']
+      creator_home = json_data["props"]["creator_home"]
       expect(creator_home).to be_present, "Expected creator_home in Inertia.js response"
 
       expected_data.each do |key, value|
@@ -43,8 +43,8 @@ describe DashboardController do
 
         expect(response).to be_successful
 
-        expect(response.body).to include('data-page')
-        expect(response.body).to include('Dashboard/index')
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
 
         expect_dashboard_data_in_inertia_response(
           has_sale: false,
@@ -64,8 +64,8 @@ describe DashboardController do
 
         expect(response).to be_successful
 
-        expect(response.body).to include('data-page')
-        expect(response.body).to include('Dashboard/index')
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
 
         expect_dashboard_data_in_inertia_response(
           has_sale: false
@@ -74,10 +74,10 @@ describe DashboardController do
         data_page_match = response.body.match(/data-page="([^"]*)"/)
         decoded_content = CGI.unescapeHTML(data_page_match[1])
         json_data = JSON.parse(decoded_content)
-        creator_home = json_data['props']['creator_home']
+        creator_home = json_data["props"]["creator_home"]
 
-        expect(creator_home['sales']).to be_present
-        expect(creator_home['sales'].first['sales']).to eq(0)
+        expect(creator_home["sales"]).to be_present
+        expect(creator_home["sales"].first["sales"]).to eq(0)
       end
     end
 
@@ -101,14 +101,14 @@ describe DashboardController do
 
         expect(response).to be_successful
 
-        expect(response.body).to include('data-page')
-        expect(response.body).to include('Dashboard/index')
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
 
         data_page_match = response.body.match(/data-page="([^"]*)"/)
         if data_page_match
           decoded_content = CGI.unescapeHTML(data_page_match[1])
           json_data = JSON.parse(decoded_content)
-          creator_home = json_data['props']['creator_home']
+          creator_home = json_data["props"]["creator_home"]
           puts "Creator home with purchases:"
           puts "  has_sale: #{creator_home['has_sale']}"
           puts "  sales count: #{creator_home['sales']&.length}"
@@ -136,8 +136,8 @@ describe DashboardController do
         expect(response).to be_successful
 
         # For Inertia.js, we should check for the data-page attribute and component name
-        expect(response.body).to include('data-page')
-        expect(response.body).to include('Dashboard/index')
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
 
         # Check that the dashboard data shows no products (since product was deleted)
         expect_dashboard_data_in_inertia_response(
