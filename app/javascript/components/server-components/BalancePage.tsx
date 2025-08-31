@@ -242,7 +242,7 @@ type PastPeriodPayoutsData = {
 };
 
 export type BalancePageProps = {
- next_payout_period_data:
+  next_payout_period_data:
     | CurrentPayoutsDataWithUserNotPayable
     | CurrentPayoutsDataAndPaymentMethodWithUserPayable
     | null;
