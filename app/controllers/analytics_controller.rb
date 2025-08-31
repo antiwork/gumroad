@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class AnalyticsController < Sellers::BaseController
-  before_action :set_body_id_as_app
   before_action :set_time_range, only: %i[data_by_date data_by_state data_by_referral]
 
   after_action :set_dashboard_preference_to_sales, only: :index
@@ -12,6 +11,9 @@ class AnalyticsController < Sellers::BaseController
 
     @analytics_props = AnalyticsPresenter.new(seller: current_seller).page_props
     LargeSeller.create_if_warranted(current_seller)
+
+    render inertia: "Analytics/index",
+           props: inertia_props(analytics_props: @analytics_props)
   end
 
   def data_by_date

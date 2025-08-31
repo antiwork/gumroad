@@ -1,8 +1,6 @@
 import React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Membership, Product } from "$app/data/products";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -15,6 +13,15 @@ import ProductsPage from "./ProductsPage";
 
 import placeholder from "$assets/images/product_nudge.svg";
 
+export type ProductsDashboardPageProps = {
+  memberships: Membership[];
+  memberships_pagination: PaginationProps;
+  products: Product[];
+  products_pagination: PaginationProps;
+  archived_products_count: number;
+  can_create_product: boolean;
+};
+
 export const ProductsDashboardPage = ({
   memberships,
   memberships_pagination: membershipsPagination,
@@ -22,14 +29,7 @@ export const ProductsDashboardPage = ({
   products_pagination: productsPagination,
   archived_products_count: archivedProductsCount,
   can_create_product: canCreateProduct,
-}: {
-  memberships: Membership[];
-  memberships_pagination: PaginationProps;
-  products: Product[];
-  products_pagination: PaginationProps;
-  archived_products_count: number;
-  can_create_product: boolean;
-}) => {
+}: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
@@ -110,4 +110,4 @@ export const ProductsDashboardPage = ({
   );
 };
 
-export default register({ component: ProductsDashboardPage, propParser: createCast() });
+export default ProductsDashboardPage;

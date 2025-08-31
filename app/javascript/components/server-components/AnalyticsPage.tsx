@@ -1,7 +1,6 @@
 import { lightFormat } from "date-fns";
 import pickBy from "lodash/pickBy";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import {
   AnalyticsDataByReferral,
@@ -11,7 +10,6 @@ import {
 } from "$app/data/analytics";
 import { assertDefined } from "$app/utils/assert";
 import { AbortError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
@@ -95,15 +93,13 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
   return result;
 };
 
-const AnalyticsPage = ({
-  products: initialProducts,
-  country_codes,
-  state_names,
-}: {
+export type AnalyticsPageProps = {
   products: Product[];
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
-}) => {
+};
+
+const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }: AnalyticsPageProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -226,4 +222,4 @@ const AnalyticsPage = ({
   );
 };
 
-export default register({ component: AnalyticsPage, propParser: createCast() });
+export default AnalyticsPage;

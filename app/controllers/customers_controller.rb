@@ -4,7 +4,6 @@ class CustomersController < Sellers::BaseController
   include CurrencyHelper
 
   before_action :authorize
-  before_action :set_body_id_as_app
   before_action :set_on_page_type
 
   CUSTOMERS_PER_PAGE = 20
@@ -20,6 +19,9 @@ class CustomersController < Sellers::BaseController
       count: sales.results.total
     )
     create_user_event("customers_view")
+
+    render inertia: "Customers/index",
+           props: inertia_props(customers_presenter: @customers_presenter.customers_props)
   end
 
   def paged

@@ -477,11 +477,9 @@ describe "Communities", :js, type: :system do
           end
           expect(community1_link_element["aria-selected"]).to eq("true")
           community2_link_element = find_link("Scaling web apps")
-          within community2_link_element do
-            within "[aria-label='Unread message count']" do
-              expect(page).to have_text("1")
-            end
-          end
+
+          # Wait for the unread count to be rendered by the React component
+          expect(page).to have_selector("[aria-label='Unread message count']", text: "1", wait: 10)
           expect(community2_link_element["aria-selected"]).to eq("false")
         end
       end
@@ -587,11 +585,9 @@ describe "Communities", :js, type: :system do
           expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
           expect(page).not_to have_link("The ultimate guide to design systems")
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
-          within find_link("Mastering Rails") do
-            within "[aria-label='Unread message count']" do
-              expect(page).to have_text("2")
-            end
-          end
+
+          # Wait for the unread count to be rendered by the React component
+          expect(page).to have_selector("[aria-label='Unread message count']", text: "2", wait: 10)
         end
       end
 
@@ -623,11 +619,9 @@ describe "Communities", :js, type: :system do
           expect(page).to have_link("The ultimate guide to design systems", href: community_path(other_seller.external_id, other_community.external_id))
           expect(page).not_to have_link("Mastering Rails")
           expect(find_link("The ultimate guide to design systems")["aria-selected"]).to eq("true")
-          within find_link("The ultimate guide to design systems") do
-            within "[aria-label='Unread message count']" do
-              expect(page).to have_text("1")
-            end
-          end
+
+          # Wait for the unread count to be rendered by the React component
+          expect(page).to have_selector("[aria-label='Unread message count']", text: "1", wait: 10)
         end
       end
 
