@@ -119,5 +119,195 @@ describe HelperUserInfoService do
         expect(result[:prompt]).to include("License Key: #{license.serial}")
       end
     end
+
+    context "when user has country" do
+      it "includes country in the prompt" do
+        user.update!(country: "United States")
+
+        result = described_class.new(email: user.email).user_info
+        expect(result[:prompt]).to include("Country: United States")
+      end
+    end
+
+    context "when user has no country" do
+      it "does not include country in the prompt" do
+        user.update!(country: nil)
+
+        result = described_class.new(email: user.email).user_info
+        expect(result[:prompt]).not_to include("Country:")
+      end
+    end
+
+    context "seller comments" do
+      let(:service) { described_class.new(email: user.email) }
+
+      context "when user has payout notes" do
+        it "includes payout notes from admin" do
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                 author_id: GUMROAD_ADMIN_ID,
+                 content: "Payout delayed due to verification"
+          )
+
+          result = service.user_info
+          expect(result[:prompt]).to include("Payout Note: Payout delayed due to verification")
+        end
+
+        it "excludes payout notes not from admin" do
+          other_user = create(:user)
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                 author_id: other_user.id,
+                 content: "Non-admin payout note"
+          )
+
+          result = service.user_info
+          expect(result[:prompt]).not_to include("Payout Note: Non-admin payout note")
+        end
+      end
+
+      context "when user has risk notes" do
+        it "includes all risk state comment types" do
+          Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |comment_type, index|
+            create(:comment,
+                   commentable: user,
+                   comment_type: comment_type,
+                   content: "Risk note #{index + 1}",
+                   created_at: index.minutes.ago
+            )
+          end
+
+          result = service.user_info
+          Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |_, index|
+            expect(result[:prompt]).to include("Risk Note: Risk note #{index + 1}")
+          end
+        end
+
+        it "orders risk notes by creation time" do
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_FLAGGED,
+                 content: "Older risk note",
+                 created_at: 2.hours.ago
+          )
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
+                 content: "Newer risk note",
+                 created_at: 1.hour.ago
+          )
+
+          result = service.user_info
+          prompt_lines = result[:prompt].split("\n")
+          older_index = prompt_lines.find_index { |line| line.include?("Older risk note") }
+          newer_index = prompt_lines.find_index { |line| line.include?("Newer risk note") }
+
+          expect(older_index).to be < newer_index
+        end
+      end
+
+      context "when user has suspension notes" do
+        context "when user is suspended" do
+          let(:user) { create(:tos_user) }
+
+          it "includes suspension notes" do
+            create(:comment,
+                   commentable: user,
+                   comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+                   content: "Account suspended for policy violation"
+            )
+
+            result = service.user_info
+            expect(result[:prompt]).to include("Suspension Note: Account suspended for policy violation")
+          end
+        end
+
+        context "when user is not suspended" do
+          before { allow(user).to receive(:suspended?).and_return(false) }
+
+          it "excludes suspension notes" do
+            create(:comment,
+                   commentable: user,
+                   comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+                   content: "Account suspended for policy violation"
+            )
+
+            result = service.user_info
+            expect(result[:prompt]).not_to include("Suspension Note: Account suspended for policy violation")
+          end
+        end
+      end
+
+      context "when user has other comment types" do
+        it "includes general comments" do
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
+                 content: "General user comment"
+          )
+
+          result = service.user_info
+          expect(result[:prompt]).to include("Comment: General user comment")
+        end
+
+        it "includes custom comment types" do
+          create(:comment,
+                 commentable: user,
+                 comment_type: "custom_type",
+                 content: "Custom comment type"
+          )
+
+          result = service.user_info
+          expect(result[:prompt]).to include("Comment: Custom comment type")
+        end
+      end
+
+      context "when user has multiple comment types" do
+        it "includes all comments in chronological order" do
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                 author_id: GUMROAD_ADMIN_ID,
+                 content: "Payout note",
+                 created_at: 3.hours.ago
+          )
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_FLAGGED,
+                 content: "Risk note",
+                 created_at: 2.hours.ago
+          )
+          create(:comment,
+                 commentable: user,
+                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
+                 content: "General note",
+                 created_at: 1.hour.ago
+          )
+
+          result = service.user_info
+          expect(result[:prompt]).to include("Payout Note: Payout note")
+          expect(result[:prompt]).to include("Risk Note: Risk note")
+          expect(result[:prompt]).to include("Comment: General note")
+
+          prompt_lines = result[:prompt].split("\n")
+          payout_index = prompt_lines.find_index { |line| line.include?("Payout Note: Payout note") }
+          risk_index = prompt_lines.find_index { |line| line.include?("Risk Note: Risk note") }
+          general_index = prompt_lines.find_index { |line| line.include?("Comment: General note") }
+
+          expect(payout_index).to be < risk_index
+          expect(risk_index).to be < general_index
+        end
+      end
+
+      context "when user has no comments" do
+        it "does not include any comment information" do
+          result = service.user_info
+          expect(result[:prompt]).not_to include("Note:")
+          expect(result[:prompt]).not_to include("Comment:")
+        end
+      end
+    end
   end
 end

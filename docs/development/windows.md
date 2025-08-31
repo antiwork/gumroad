@@ -116,7 +116,6 @@ sudo apt update && sudo apt install -y \
 
 ```bash
 gem install bundler
-bundle config --local without production staging
 bundle install
 gem install dotenv
 ```

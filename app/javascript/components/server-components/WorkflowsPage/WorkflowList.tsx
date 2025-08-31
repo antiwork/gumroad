@@ -121,15 +121,7 @@ const WorkflowRow = ({
     <div style={{ display: "flex", alignItems: "center" }}>
       <h3 style={{ marginRight: "auto" }}>{workflow.name}</h3>
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
-        {workflow.published ? (
-          <small>
-            <Icon name="circle-fill" /> Published
-          </small>
-        ) : (
-          <small>
-            <Icon name="circle" /> Unpublished
-          </small>
-        )}
+        {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="button-group">
           <Link
             className="button"

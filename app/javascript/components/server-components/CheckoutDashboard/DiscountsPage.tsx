@@ -381,20 +381,11 @@ const DiscountsPage = ({
                           style={{ display: "grid", gridTemplateColumns: "min-content 1fr", gap: "var(--spacer-2)" }}
                         >
                           {validAt && currentDate < validAt ? (
-                            <>
-                              <Icon name="circle" />
-                              Scheduled
-                            </>
+                            <>Scheduled</>
                           ) : expiresAt && currentDate > expiresAt ? (
-                            <>
-                              <Icon name="circle-fill" style={{ background: "var(--red)" }} />
-                              Expired
-                            </>
+                            <>Expired</>
                           ) : (
-                            <>
-                              <Icon name="circle-fill" />
-                              Live
-                            </>
+                            <>Live</>
                           )}
                         </div>
                       </td>

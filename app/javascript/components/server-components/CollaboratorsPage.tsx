@@ -31,7 +31,6 @@ import { assertDefined } from "$app/utils/assert";
 import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -249,15 +248,7 @@ const Collaborators = () => {
                       {formatCommission(collaborator)}
                     </td>
                     <td data-label="Status" className="whitespace-nowrap">
-                      {collaborator.invitation_accepted ? (
-                        <>
-                          <Icon name="circle-fill" className="mr-1" /> Accepted
-                        </>
-                      ) : (
-                        <>
-                          <Icon name="circle" className="mr-1" /> Pending
-                        </>
-                      )}
+                      {collaborator.invitation_accepted ? <>Accepted</> : <>Pending</>}
                     </td>
                     <td>
                       <div className="actions" onClick={(e) => e.stopPropagation()}>
@@ -740,4 +731,4 @@ const CollaboratorsPage = () => {
   return <RouterProvider router={router} />;
 };
 
-export default register({ component: CollaboratorsPage, propParser: () => ({}) });
+export default CollaboratorsPage;

@@ -32,12 +32,12 @@
     <p>You can also retroactively add license keys to a product.</p>
     <h3 id="multi-seat">Issuing multi-seat licenses</h3>
     <div class="callout-blue">
-      <p>This feature is currently only available for <a href="82-membership-products.html">Membership</a> products.</p>
+      <p>This feature is currently only available for <a href="82-membership-products">Membership</a> products.</p>
     </div>
     <p>The “Multi-seat license” setting allows you to issue multiple seats for a single purchase or license key.</p>
     <p>Expand the License key module on your content page and toggle on "Allow customers to choose number of seats per license purchased"</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/65c9e3495d8fe340f3481960/file-MYl4EnL4Of.png" %></figure>
-    <p>If you'd like to prepopulate the number of seats for a given customer, you can use the quantity <a href="270-url-parameters.html">URL parameter</a> (Example: <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)</a></p>
+    <p>If you'd like to prepopulate the number of seats for a given customer, you can use the quantity <a href="270-url-parameters">URL parameter</a> (Example: <a href="https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4">https://hypermatic.gumroad.com/l/emailify?layout=profile&amp;quantity=4)</a></p>
     <p>You will be able to view and manage the number of seats linked with a license key from the customer’s drawer in the <a href="https://gumroad.com/customers/">Audience dashboard</a>, while your customers can do this from their “Manage membership” page.</p>
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/639b0a1c2e586565571c20eb/file-4oW74KD2yB.gif" %></figure>
     <p>Customers will immediately be charged a prorated amount if the number of seats increases. However, for a decrease in seats, their membership will get updated at the end of the current billing cycle. After that, they will be charged the reduced amount starting from the next renewal.</p>
@@ -72,7 +72,7 @@
     <ul>
       <li><strong>Can I make API calls from the browser?</strong> Yes, you can send API requests to <code class="inline-code">api.gumroad.com</code> from the browser. </li>
       <li><strong>Does the value of </strong><code class="inline-code"><strong>sale_timestamp</strong></code><strong> and </strong><code class="inline-code"><strong>created_at</strong></code><strong> update when a subscription is renewed?</strong> No. They both remain the same as the original value. </li>
-      <li><strong>Does the "disable" method cancel the customer’s subscription?</strong> No, it just disables the license key. <a href="139-how-to-cancel-your-customers-subscriptions.html">Here’s how</a> to cancel a subscription for a customer. </li>
+      <li><strong>Does the "disable" method cancel the customer's subscription?</strong> No, it just disables the license key. <a href="139-how-to-cancel-your-customers-subscriptions">Here's how</a> to cancel a subscription for a customer. </li>/li>
       <li><strong>Can I use my own license keys?</strong> You either have to choose the license keys we generate or manage your license keys outside of our system. We do not have a way for you to import license keys. </li>
       <li><strong>Can I reset the </strong><code class="inline-code"><strong>uses</strong></code><strong>count parameter to zero?</strong> You can increment or decrement the <code class="inline-code">uses</code> count, but you cannot reset it directly to zero. If you do not wish to increment the <code class="inline-code">uses</code> count at all, there's an <code class="inline-code">increment_uses_count</code> flag in the verify API call that you can set to false. Refer to our API docs <a href="https://gumroad.com/api#licenses">here</a>. </li>
       <li><strong>Can I generate license keys for past purchases that did not have a license attached to them originally?</strong> Yes. When you turn on the "Generate a unique license key per sale" setting, all previous purchases of that product will also get a license key. Your customers will be able to access the key from their respective download pages. </li>
@@ -83,11 +83,11 @@
   <div>
     <h3>Related Articles</h3>
     <ul>
-      <li><a href="64-is-gumroad-for-me.html"><span>Why choose Gumroad?</span></a></li>
-      <li><a href="149-adding-a-product.html"><span>Adding a product</span></a></li>
-      <li><a href="82-membership-products.html"><span>Selling memberships and subscriptions</span></a></li>
-      <li><a href="70-can-i-sell-services.html"><span>Sell digital services: freelancing, coaching, and tip jars</span></a></li>
-      <li><a href="81-custom-product-urls.html"><span>Custom product URLs</span></a></li>
+      <li><a href="64-is-gumroad-for-me"><span>Why choose Gumroad?</span></a></li>
+      <li><a href="149-adding-a-product"><span>Adding a product</span></a></li>
+      <li><a href="82-membership-products"><span>Selling memberships and subscriptions</span></a></li>
+      <li><a href="70-can-i-sell-services"><span>Sell digital services: freelancing, coaching, and tip jars</span></a></li>
+      <li><a href="81-custom-product-urls"><span>Custom product URLs</span></a></li>
     </ul>
   </div>
 </div>

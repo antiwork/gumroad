@@ -3,17 +3,17 @@
 class AdminSearchService
   class InvalidDateError < StandardError; end
 
-  def search_purchases(query: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
+  def search_purchases(query: nil, product_title_query: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
     purchases = Purchase.order(created_at: :desc)
 
     if query.present?
       unions = [
         Gift.select("gifter_purchase_id as purchase_id").where(gifter_email: query).to_sql,
         Gift.select("giftee_purchase_id as purchase_id").where(giftee_email: query).to_sql,
-        Purchase.select("id as purchase_id").where(email: query).to_sql,
-        Purchase.select("id as purchase_id").where(card_visual: query, card_type: CardType::PAYPAL).to_sql,
-        Purchase.select("id as purchase_id").where(stripe_fingerprint: query).to_sql,
-        Purchase.select("id as purchase_id").where(ip_address: query).to_sql
+        Purchase.select("purchases.id as purchase_id").where(email: query).to_sql,
+        Purchase.select("purchases.id as purchase_id").where(card_visual: query, card_type: CardType::PAYPAL).to_sql,
+        Purchase.select("purchases.id as purchase_id").where(stripe_fingerprint: query).to_sql,
+        Purchase.select("purchases.id as purchase_id").where(ip_address: query).to_sql,
       ]
 
       union_sql = <<~SQL.squish
@@ -21,7 +21,13 @@ class AdminSearchService
           #{ unions.map { |u| "(#{u})" }.join(" UNION ") }
         ) via_gifts_and_purchases
       SQL
-      purchases = purchases.where("id IN (#{union_sql})")
+      purchases = purchases.where("purchases.id IN (#{union_sql})")
+
+      # To be used only when query is set, as that uses an index to select purchases
+      if product_title_query.present?
+        raise ArgumentError, "product_title_query requires query parameter to be set" unless query.present?
+        purchases = purchases.joins(:link).where("links.name LIKE ?", "%#{product_title_query}%")
+      end
     end
 
     if creator_email.present?

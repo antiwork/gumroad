@@ -9741,6 +9741,21 @@ describe StripeMerchantAccountManager, :vcr do
               expect(user.reload.payouts_paused_internally?).to be true
             end
 
+            it "does not overwrite the payout pause source if payouts are already paused internally" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by).to eq(User.last.id)
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+            end
+
             it "does not email the creator if payouts are already paused" do
               user.update!(payouts_paused_internally: true)
               expect(user.reload.payouts_paused_internally?).to be true
@@ -9813,6 +9828,76 @@ describe StripeMerchantAccountManager, :vcr do
               end.not_to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_disabled).with(user.id)
 
               expect(user.reload.payouts_paused_internally?).to be true
+            end
+          end
+
+          describe "payouts are enabled" do
+            let(:merchant_account) { create(:merchant_account, user:) }
+
+            let(:stripe_event) do
+              {
+                "api_version" => API_VERSION,
+                "type" => "account.updated",
+                "id" => "stripe-event-id",
+                "account" => merchant_account.charge_processor_merchant_id,
+                "user_id" => merchant_account.charge_processor_merchant_id,
+                "data" => {
+                  "object" => {
+                    "object" => "account",
+                    "id" => merchant_account.charge_processor_merchant_id,
+                    "business_type" => "individual",
+                    "charges_enabled" => true,
+                    "payouts_enabled" => true,
+                    "requirements" => {
+                      "current_deadline" => 1_406_748_559, # "2014-07-30T19:29:19+00:00"
+                      "currently_due" => [],
+                      "eventually_due" => [],
+                      "past_due" => [
+                        "individual.ssn_last_4"
+                      ]
+                    }
+                  },
+                  "previous_attributes" => {
+                    "payouts_enabled" => false
+                  }
+                }
+              }
+            end
+
+            it "resumes payouts on the account if payouts are paused internally by stripe" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(user.reload.payouts_paused_internally?).to be false
+              expect(user.payouts_paused_by).to be nil
+              expect(user.payouts_paused_by_source).to be nil
+            end
+
+            it "does not resume payouts if payouts are paused internally by admin" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by).to eq(User.last.id)
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by).to eq(User.last.id)
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+            end
+
+            it "does not resume payouts if payouts are paused internally by system" do
+              user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(user.reload.payouts_paused_internally?).to be true
+              expect(user.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
             end
           end
         end

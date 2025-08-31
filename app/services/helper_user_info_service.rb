@@ -13,9 +13,7 @@ class HelperUserInfoService
 
     if user
       add_user_info
-      add_payout_notes
-      add_risk_notes
-      add_suspension_notes
+      add_seller_comments
       add_sales_info
     end
 
@@ -82,26 +80,24 @@ class HelperUserInfoService
       @info << "User Email: #{user.email}"
       @info << "Account Created: #{user.created_at.to_fs(:formatted_date_full_month)}"
       @info << "Account Status: #{user.suspended? ? 'Suspended' : 'Active'}"
+      @info << "Country: #{user.country}" if user.country.present?
     end
 
-    def add_payout_notes
-      payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).last
-      @info << "Payout Note: #{payout_note.content}" if payout_note
-    end
+    def add_seller_comments
+      comments = user.comments.order(:created_at)
 
-    def add_risk_notes
-      risk_notes = Comment::RISK_STATE_COMMENT_TYPES.map do |comment_type|
-        user.comments.where(comment_type:).last
-      end.compact.sort_by(&:created_at).pluck(:content)
-
-      @info.concat(risk_notes.map { |note| "Risk Note: #{note}" })
-    end
-
-    def add_suspension_notes
-      return unless user.suspended?
-
-      suspension_note = user.comments.where(comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE).last
-      @info << "Suspension Note: #{suspension_note.content}" if suspension_note
+      comments.each do |comment|
+        case comment.comment_type
+        when Comment::COMMENT_TYPE_PAYOUT_NOTE
+          @info << "Payout Note: #{comment.content}" if comment.author_id == GUMROAD_ADMIN_ID
+        when Comment::COMMENT_TYPE_SUSPENSION_NOTE
+          @info << "Suspension Note: #{comment.content}" if user.suspended?
+        when *Comment::RISK_STATE_COMMENT_TYPES
+          @info << "Risk Note: #{comment.content}"
+        else
+          @info << "Comment: #{comment.content}"
+        end
+      end
     end
 
     def add_recent_purchase_info

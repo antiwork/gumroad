@@ -35,7 +35,7 @@ jobs:
           if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
             logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
             NEW_BASE_REPO=$WEB_BASE_REPO \
-              CONTRIBSYS_CREDENTIALS=${{ secrets.CONTRIBSYS_CREDENTIALS }} \
+              BUNDLE_GEMS__CONTRIBSYS__COM=${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }} \
               make build_base
 
             logger "Pushing $WEB_BASE_REPO:$WEB_BASE_SHA"
@@ -356,46 +356,45 @@ jobs:
             bundle exec rake db:setup
 
       - name: Run tests
-        uses: nick-fields/retry@v3
         env:
+          RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+          RUBY_YJIT_ENABLE: 1
+          KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
+          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
+          KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
+          KNAPSACK_PRO_LOG_LEVEL: info
+          KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
+          KNAPSACK_PRO_TEST_FILE_PATTERN: 'spec/requests/**/*_spec.rb'
+          KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
+          KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
+          KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
+          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
+          KNAPSACK_PRO_PROJECT_DIR: /app
+          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
+          CI: true
+          IN_DOCKER: true
           WEB_REPO: quay.io/gumroad/web
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          on_retry_command: |
-            docker compose -f docker/docker-compose-test-and-ci.yml down -v
-            docker compose -f docker/docker-compose-test-and-ci.yml up -d
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-              $WEB_REPO:test-${{ github.sha }} \
-              docker/ci/wait_on_connection.sh db_test 3306
-
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-              -e RAILS_ENV=test \
-              -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
-              $WEB_REPO:test-${{ github.sha }} \
-              bundle exec rake db:setup
-          command: |
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-              -e RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }} \
-              -e RUBY_YJIT_ENABLE=1 \
-              -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
-              -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
-              -e KNAPSACK_PRO_CI_NODE_INDEX=${{ matrix.ci_node_index }} \
-              -e KNAPSACK_PRO_LOG_LEVEL=info \
-              -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES=true \
-              -e KNAPSACK_PRO_TEST_FILE_PATTERN="spec/requests/**/*_spec.rb" \
-              -e KNAPSACK_PRO_COMMIT_HASH=${{ github.sha }} \
-              -e KNAPSACK_PRO_BRANCH=${{ github.ref_name }} \
-              -e KNAPSACK_PRO_CI_NODE_BUILD_ID=${{ github.run_id }} \
-              -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
-              -e KNAPSACK_PRO_PROJECT_DIR=/app \
-              -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT=true \
-              -e S3_DELETER_ACCESS_KEY_ID=${{ secrets.S3_DELETER_ACCESS_KEY_ID }} \
-              -e S3_DELETER_SECRET_ACCESS_KEY=${{ secrets.S3_DELETER_SECRET_ACCESS_KEY }} \
-              -e CI=true \
-              -e IN_DOCKER=true \
-              $WEB_REPO:test-${{ github.sha }} \
-              /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+        run: |
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -e RAILS_MASTER_KEY \
+            -e RUBY_YJIT_ENABLE \
+            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
+            -e KNAPSACK_PRO_CI_NODE_TOTAL \
+            -e KNAPSACK_PRO_CI_NODE_INDEX \
+            -e KNAPSACK_PRO_LOG_LEVEL \
+            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
+            -e KNAPSACK_PRO_TEST_FILE_PATTERN \
+            -e KNAPSACK_PRO_COMMIT_HASH \
+            -e KNAPSACK_PRO_BRANCH \
+            -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
+            -e KNAPSACK_PRO_PROJECT_DIR \
+            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
+            -e CI \
+            -e IN_DOCKER \
+            $WEB_REPO:test-${{ github.sha }} \
+            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
+        timeout-minutes: 20
       - name: Clean up
         if: always()
         run: |
