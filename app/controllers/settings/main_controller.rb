@@ -64,6 +64,7 @@ class Settings::MainController < Sellers::BaseController
         :purchasing_power_parity_limit,
         :purchasing_power_parity_payment_verification_disabled,
         :show_nsfw_products,
+        :disable_affiliate_requests,
       ]
 
       params.require(:user).permit(permitted_params)
