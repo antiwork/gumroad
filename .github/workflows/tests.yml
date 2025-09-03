@@ -10,7 +10,7 @@ concurrency:
 jobs:
   build_base:
     name: Build base image
-    runs-on: ubicloud-standard-4
+    runs-on: hetzner
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -57,7 +57,7 @@ jobs:
           fi
 
   build_test:
-    runs-on: ubicloud-standard-4
+    runs-on: hetzner
     name: Build test image
     needs: build_base
     steps:
@@ -150,7 +150,7 @@ jobs:
     name: Test Fast ${{ matrix.ci_node_index }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
-    runs-on: ubicloud-standard-2
+    runs-on: hetzner
     needs: build_test
     strategy:
       fail-fast: false
