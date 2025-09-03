@@ -10,7 +10,7 @@ concurrency:
 jobs:
   build_base:
     name: Build base image
-    runs-on: self-hosted
+    runs-on: hetzner
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -56,7 +56,7 @@ jobs:
           fi
 
   build_test:
-    runs-on: self-hosted
+    runs-on: hetzner
     name: Build test image
     needs: build_base
     steps:
@@ -155,7 +155,7 @@ jobs:
       matrix:
         runner: [antiwork-1, antiwork-2]
     runs-on:
-      - self-hosted
+      - hetzner
       - ${{ matrix.runner }}
     needs: build_test
     steps:
@@ -183,7 +183,7 @@ jobs:
     name: Test Fast ${{ matrix.ci_node_index }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
-    runs-on: self-hosted
+    runs-on: hetzner
     needs: pull_images
     strategy:
       fail-fast: false
@@ -266,7 +266,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: quay.io/gumroad/web
-    runs-on: self-hosted
+    runs-on: hetzner
     needs: pull_images
     strategy:
       fail-fast: false
@@ -409,7 +409,7 @@ jobs:
       matrix:
         runner: [antiwork-1, antiwork-2]
     runs-on:
-      - self-hosted
+      - hetzner
       - ${{ matrix.runner }}
     needs: [test_fast, test_slow]
     if: always()
@@ -422,7 +422,7 @@ jobs:
 
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
-    runs-on: self-hosted
+    runs-on: hetzner
     needs: [test_fast, test_slow]
     if: success() && github.ref == 'refs/heads/main'
     steps:

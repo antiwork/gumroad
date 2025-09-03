@@ -51,6 +51,7 @@ class Purchase::CreateService < Purchase::BaseService
         )
       elsif @product.product_refund_policy_enabled?
         purchase.build_purchase_refund_policy(
+          max_refund_period_in_days: @product.product_refund_policy.max_refund_period_in_days,
           title: @product.product_refund_policy.title,
           fine_print: @product.product_refund_policy.fine_print
         )
