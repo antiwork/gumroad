@@ -766,7 +766,8 @@ describe CustomerMailer do
         expect(mail.body.encoded).to have_link("View content", href: purchase.product_purchases.first.url_redirect.download_page_url)
         expect(mail.body.sanitized).to have_text("Bundle Product 2")
         expect(mail.body.encoded).to have_link("View content", href: purchase.product_purchases.second.url_redirect.download_page_url)
-        expect(mail.body.sanitized).to have_text("Questions about your products? Contact Seller by replying to this email.")
+        expect(mail.body.sanitized).to have_text("Questions about your products? Contact Seller at")
+        expect(mail.body.encoded).to include("seller@example.com")
       end
     end
 
@@ -780,7 +781,8 @@ describe CustomerMailer do
       end
 
       it "generates questions note with reply" do
-        expect(mail.body.sanitized).to have_text("Questions about your product? Contact Seller by replying to this email.")
+        expect(mail.body.sanitized).to have_text("Questions about your product? Contact Seller at")
+        expect(mail.body.encoded).to include("seller@example.com")
       end
 
       context "when for_email is set to false" do

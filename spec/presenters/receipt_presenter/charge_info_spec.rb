@@ -37,10 +37,11 @@ describe ReceiptPresenter::ChargeInfo do
     end
 
     describe "#product_questions_note" do
-      it "returns note with reply" do
-        expect(presenter.product_questions_note).to eq(
-          "Questions about your product? Contact Seller by replying to this email."
-        )
+      it "returns note with email" do
+        expect(presenter.product_questions_note).to eq(<<~HTML.squish)
+          Questions about your product?
+          Contact Seller at <a href="mailto:seller@example.com">seller@example.com</a>.
+        HTML
       end
 
       context "when is not for email" do
@@ -70,7 +71,7 @@ describe ReceiptPresenter::ChargeInfo do
 
         it "escapes the seller name for email" do
           expect(presenter.product_questions_note).to include(
-            "Contact &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; by replying to this email."
+            "Contact &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; at"
           )
         end
 

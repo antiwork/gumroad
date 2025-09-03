@@ -2,7 +2,7 @@
 <div>
   <% if @product.is_physical %>
     <p>You have successfully pre-ordered <%= @product.name %>. You'll be charged on <%= displayable_release_at_date_and_time(@product.preorder_link.release_at, @product.user.timezone) %>, and shipment will occur soon after.</p>
-    <p>If you need to update your address, contact the creator immediately with your updated address by replying to this email.</p>
+    <p>If you need to update your address, contact the creator immediately with your updated address at <%= mail_to @product.support_email_or_default %>.</p>
     <p>
       <strong>Shipping address</strong>
     </p>

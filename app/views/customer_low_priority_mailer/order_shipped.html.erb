@@ -6,5 +6,5 @@
   <% else %>
     <p>Your order of <%= @product.name %> has been shipped and should arrive soon.</p>
   <% end %>
-  <p>If you have any questions about the status of the shipment, you can reach out by replying to this email.</p>
+  <p>If you have any questions about the status of the shipment, you can reach out to <%= @product.user.display_name %> at <%= mail_to @product.user.support_or_form_email %>.</p>
 </div>
