@@ -14,22 +14,21 @@ describe HelperUserInfoService do
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(2250)
 
       result = service.user_info
-      expect(result[:prompt]).to include("User ID: #{user.id}")
-      expect(result[:prompt]).to include("User Name: #{user.name}")
-      expect(result[:prompt]).to include("User Email: #{user.email}")
-      expect(result[:prompt]).to include("Account Created: #{user.created_at.to_fs(:formatted_date_full_month)}")
-      expect(result[:prompt]).to include("Account Status: Active")
-      expect(result[:prompt]).to include("Total Earnings Since Joining: $22.50")
-      expect(result[:metadata]).to eq({
-                                        name: user.name,
-                                        email: user.email,
-                                        value: 2250,
-                                        links: {
-                                          "Admin (user)": "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
-                                          "Admin (purchases)": "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
-                                          "Impersonate": "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}"
-                                        }
-                                      })
+
+      expect(result[:name]).to eq(user.name)
+      expect(result[:value]).to eq(2250)
+      expect(result[:actions]).to eq({
+        "Admin (user)" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
+        "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
+        "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}"
+      })
+
+      expect(result[:metadata]).to include(
+        "User ID" => user.id,
+        "Account Created" => user.created_at.to_fs(:formatted_date_full_month),
+        "Account Status" => "Active",
+        "Total Earnings Since Joining" => "$22.50"
+      )
     end
 
     context "value calculation" do
@@ -41,22 +40,24 @@ describe HelperUserInfoService do
         create(:purchase, purchaser: user, price_cents: 10_00, created_at: 1.day.ago)
         index_model_records(Purchase)
 
-        expect(service.user_info[:metadata][:value]).to eq(10_00)
+        expect(service.user_info[:value]).to eq(10_00)
 
         # Sold $100.00 of products, before fees.
         sale = create(:purchase, link: product, price_cents: 100_00, created_at: 30.days.ago)
         index_model_records(Purchase)
 
-        expect(service.user_info[:metadata][:value]).to eq(sale.payment_cents)
+        expect(service.user_info[:value]).to eq(sale.payment_cents)
       end
     end
 
     context "when user is not found" do
       let(:service) { described_class.new(email: "inexistent@example.com") }
 
-      it "returns empty prompt and metadata" do
+      it "returns empty user details and metadata" do
         result = service.user_info
-        expect(result[:prompt]).to eq("")
+        expect(result[:name]).to be_nil
+        expect(result[:value]).to be_nil
+        expect(result[:actions]).to be_nil
         expect(result[:metadata]).to eq({})
       end
     end
@@ -69,21 +70,29 @@ describe HelperUserInfoService do
         purchase = create(:purchase, purchaser: user, link: product, price_cents: 1_00, created_at: 1.day.ago)
         result = service.user_info
 
-        expect(result[:prompt]).to include("Successful Purchase: #{purchase.email} bought #{product.name} for $1 on #{purchase.created_at.to_fs(:formatted_date_full_month)}")
-        expect(result[:prompt]).to include("Product URL: #{product.long_url}")
-        expect(result[:prompt]).to include("Creator Support Email: #{purchase.seller.support_email || purchase.seller.form_email}")
-        expect(result[:prompt]).to include("Receipt URL: #{receipt_purchase_url(purchase.external_id, email: purchase.email, host: DOMAIN)}")
+        purchase_info = result[:metadata]["Most Recent Purchase"]
+        expect(purchase_info).to include(
+          "Status" => "Successful",
+          "Product" => product.name,
+          "Price" => purchase.formatted_display_price,
+          "Date" => purchase.created_at.to_fs(:formatted_date_full_month),
+          "Product URL" => product.long_url,
+          "Creator Support Email" => purchase.seller.support_email || purchase.seller.form_email,
+          "Creator Email" => purchase.seller_email,
+          "Receipt URL" => receipt_purchase_url(purchase.external_id, host: DOMAIN, email: purchase.email),
+          "License Key" => purchase.license_key
+        )
       end
     end
 
     context "when user has a Stripe Connect account" do
-      it "includes the stripe_connect_account_id in links" do
+      it "includes the stripe_connect_account_id in actions" do
         merchant_account = create(:merchant_account, charge_processor_id: StripeChargeProcessor.charge_processor_id)
         user_with_stripe = merchant_account.user
         service = described_class.new(email: user_with_stripe.email)
 
         result = service.user_info
-        expect(result[:metadata][:links]["View Stripe account"]).to eq("http://app.test.gumroad.com:31337/admin/helper_actions/stripe_dashboard/#{user_with_stripe.external_id}")
+        expect(result[:actions]["View Stripe account"]).to eq("http://app.test.gumroad.com:31337/admin/helper_actions/stripe_dashboard/#{user_with_stripe.external_id}")
       end
     end
 
@@ -92,8 +101,15 @@ describe HelperUserInfoService do
         product = create(:product)
         failed_purchase = create(:purchase, purchase_state: "failed", purchaser: user, link: product, price_cents: 1_00, created_at: 1.day.ago)
         result = described_class.new(email: user.email).user_info
-        expect(result[:prompt]).to include("Failed Purchase Attempt: #{failed_purchase.email} tried to buy #{product.name} for $1 on #{failed_purchase.created_at.to_fs(:formatted_date_full_month)}")
-        expect(result[:prompt]).to include("Error: #{failed_purchase.formatted_error_code}")
+
+        purchase_info = result[:metadata]["Most Recent Purchase"]
+        expect(purchase_info).to include(
+          "Status" => "Failed",
+          "Error" => failed_purchase.formatted_error_code,
+          "Product" => product.name,
+          "Price" => failed_purchase.formatted_display_price,
+          "Date" => failed_purchase.created_at.to_fs(:formatted_date_full_month)
+        )
       end
     end
 
@@ -106,7 +122,9 @@ describe HelperUserInfoService do
           fine_print: "This is the fine print of the refund policy."
         )
         result = described_class.new(email: user.email).user_info
-        expect(result[:prompt]).to include("Refund Policy: This is the fine print of the refund policy.")
+
+        purchase_info = result[:metadata]["Most Recent Purchase"]
+        expect(purchase_info["Refund Policy"]).to eq("This is the fine print of the refund policy.")
       end
     end
 
@@ -116,25 +134,27 @@ describe HelperUserInfoService do
         purchase = create(:purchase, purchaser: user, link: product, created_at: 1.day.ago)
         license = create(:license, purchase: purchase)
         result = described_class.new(email: user.email).user_info
-        expect(result[:prompt]).to include("License Key: #{license.serial}")
+
+        purchase_info = result[:metadata]["Most Recent Purchase"]
+        expect(purchase_info["License Key"]).to eq(license.serial)
       end
     end
 
     context "when user has country" do
-      it "includes country in the prompt" do
+      it "includes country in the metadata" do
         user.update!(country: "United States")
 
         result = described_class.new(email: user.email).user_info
-        expect(result[:prompt]).to include("Country: United States")
+        expect(result[:metadata]["Country"]).to eq("United States")
       end
     end
 
     context "when user has no country" do
-      it "does not include country in the prompt" do
+      it "does not include country in the metadata" do
         user.update!(country: nil)
 
         result = described_class.new(email: user.email).user_info
-        expect(result[:prompt]).not_to include("Country:")
+        expect(result[:metadata]).not_to have_key("Country")
       end
     end
 
@@ -151,7 +171,7 @@ describe HelperUserInfoService do
           )
 
           result = service.user_info
-          expect(result[:prompt]).to include("Payout Note: Payout delayed due to verification")
+          expect(result[:metadata]["Comments"]).to include("Payout Note: Payout delayed due to verification")
         end
 
         it "excludes payout notes not from admin" do
@@ -164,7 +184,8 @@ describe HelperUserInfoService do
           )
 
           result = service.user_info
-          expect(result[:prompt]).not_to include("Payout Note: Non-admin payout note")
+          comments = result[:metadata]["Comments"] || []
+          expect(comments).not_to include("Payout Note: Non-admin payout note")
         end
       end
 
@@ -180,8 +201,9 @@ describe HelperUserInfoService do
           end
 
           result = service.user_info
+          comments = result[:metadata]["Comments"] || []
           Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |_, index|
-            expect(result[:prompt]).to include("Risk Note: Risk note #{index + 1}")
+            expect(comments).to include("Risk Note: Risk note #{index + 1}")
           end
         end
 
@@ -200,9 +222,9 @@ describe HelperUserInfoService do
           )
 
           result = service.user_info
-          prompt_lines = result[:prompt].split("\n")
-          older_index = prompt_lines.find_index { |line| line.include?("Older risk note") }
-          newer_index = prompt_lines.find_index { |line| line.include?("Newer risk note") }
+          comments = result[:metadata]["Comments"] || []
+          older_index = comments.find_index { |comment| comment.include?("Older risk note") }
+          newer_index = comments.find_index { |comment| comment.include?("Newer risk note") }
 
           expect(older_index).to be < newer_index
         end
@@ -220,7 +242,7 @@ describe HelperUserInfoService do
             )
 
             result = service.user_info
-            expect(result[:prompt]).to include("Suspension Note: Account suspended for policy violation")
+            expect(result[:metadata]["Comments"]).to include("Suspension Note: Account suspended for policy violation")
           end
         end
 
@@ -235,7 +257,8 @@ describe HelperUserInfoService do
             )
 
             result = service.user_info
-            expect(result[:prompt]).not_to include("Suspension Note: Account suspended for policy violation")
+            comments = result[:metadata]["Comments"] || []
+            expect(comments).not_to include("Suspension Note: Account suspended for policy violation")
           end
         end
       end
@@ -249,7 +272,7 @@ describe HelperUserInfoService do
           )
 
           result = service.user_info
-          expect(result[:prompt]).to include("Comment: General user comment")
+          expect(result[:metadata]["Comments"]).to include("Comment: General user comment")
         end
 
         it "includes custom comment types" do
@@ -260,7 +283,7 @@ describe HelperUserInfoService do
           )
 
           result = service.user_info
-          expect(result[:prompt]).to include("Comment: Custom comment type")
+          expect(result[:metadata]["Comments"]).to include("Comment: Custom comment type")
         end
       end
 
@@ -287,14 +310,14 @@ describe HelperUserInfoService do
           )
 
           result = service.user_info
-          expect(result[:prompt]).to include("Payout Note: Payout note")
-          expect(result[:prompt]).to include("Risk Note: Risk note")
-          expect(result[:prompt]).to include("Comment: General note")
+          comments = result[:metadata]["Comments"] || []
+          expect(comments).to include("Payout Note: Payout note")
+          expect(comments).to include("Risk Note: Risk note")
+          expect(comments).to include("Comment: General note")
 
-          prompt_lines = result[:prompt].split("\n")
-          payout_index = prompt_lines.find_index { |line| line.include?("Payout Note: Payout note") }
-          risk_index = prompt_lines.find_index { |line| line.include?("Risk Note: Risk note") }
-          general_index = prompt_lines.find_index { |line| line.include?("Comment: General note") }
+          payout_index = comments.find_index { |comment| comment.include?("Payout Note: Payout note") }
+          risk_index = comments.find_index { |comment| comment.include?("Risk Note: Risk note") }
+          general_index = comments.find_index { |comment| comment.include?("Comment: General note") }
 
           expect(payout_index).to be < risk_index
           expect(risk_index).to be < general_index
@@ -304,8 +327,7 @@ describe HelperUserInfoService do
       context "when user has no comments" do
         it "does not include any comment information" do
           result = service.user_info
-          expect(result[:prompt]).not_to include("Note:")
-          expect(result[:prompt]).not_to include("Comment:")
+          expect(result[:metadata]).not_to have_key("Comments")
         end
       end
     end
