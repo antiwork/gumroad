@@ -8,7 +8,7 @@ class HelperUserInfoService
     @recent_purchase_period = recent_purchase_period
   end
 
-  def user_info
+  def customer_info
     {
       **user_details,
       metadata: {

@@ -7,13 +7,13 @@ describe HelperUserInfoService do
 
   let(:user) { create(:user, email: "user@example.com") }
 
-  describe "#user_info" do
+  describe "#customer_info" do
     let(:service) { described_class.new(email: user.email) }
 
     it "retrieves user info" do
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(2250)
 
-      result = service.user_info
+      result = service.customer_info
 
       expect(result[:name]).to eq(user.name)
       expect(result[:value]).to eq(2250)
@@ -40,13 +40,13 @@ describe HelperUserInfoService do
         create(:purchase, purchaser: user, price_cents: 10_00, created_at: 1.day.ago)
         index_model_records(Purchase)
 
-        expect(service.user_info[:value]).to eq(10_00)
+        expect(service.customer_info[:value]).to eq(10_00)
 
         # Sold $100.00 of products, before fees.
         sale = create(:purchase, link: product, price_cents: 100_00, created_at: 30.days.ago)
         index_model_records(Purchase)
 
-        expect(service.user_info[:value]).to eq(sale.payment_cents)
+        expect(service.customer_info[:value]).to eq(sale.payment_cents)
       end
     end
 
@@ -54,7 +54,7 @@ describe HelperUserInfoService do
       let(:service) { described_class.new(email: "inexistent@example.com") }
 
       it "returns empty user details and metadata" do
-        result = service.user_info
+        result = service.customer_info
         expect(result[:name]).to be_nil
         expect(result[:value]).to be_nil
         expect(result[:actions]).to be_nil
@@ -68,7 +68,7 @@ describe HelperUserInfoService do
       it "includes recent purchase info" do
         product = create(:product)
         purchase = create(:purchase, purchaser: user, link: product, price_cents: 1_00, created_at: 1.day.ago)
-        result = service.user_info
+        result = service.customer_info
 
         purchase_info = result[:metadata]["Most Recent Purchase"]
         expect(purchase_info).to include(
@@ -91,7 +91,7 @@ describe HelperUserInfoService do
         user_with_stripe = merchant_account.user
         service = described_class.new(email: user_with_stripe.email)
 
-        result = service.user_info
+        result = service.customer_info
         expect(result[:actions]["View Stripe account"]).to eq("http://app.test.gumroad.com:31337/admin/helper_actions/stripe_dashboard/#{user_with_stripe.external_id}")
       end
     end
@@ -100,7 +100,7 @@ describe HelperUserInfoService do
       it "includes failed purchase info" do
         product = create(:product)
         failed_purchase = create(:purchase, purchase_state: "failed", purchaser: user, link: product, price_cents: 1_00, created_at: 1.day.ago)
-        result = described_class.new(email: user.email).user_info
+        result = described_class.new(email: user.email).customer_info
 
         purchase_info = result[:metadata]["Most Recent Purchase"]
         expect(purchase_info).to include(
@@ -121,7 +121,7 @@ describe HelperUserInfoService do
           title: "This is a product-level refund policy",
           fine_print: "This is the fine print of the refund policy."
         )
-        result = described_class.new(email: user.email).user_info
+        result = described_class.new(email: user.email).customer_info
 
         purchase_info = result[:metadata]["Most Recent Purchase"]
         expect(purchase_info["Refund Policy"]).to eq("This is the fine print of the refund policy.")
@@ -133,7 +133,7 @@ describe HelperUserInfoService do
         product = create(:product, is_licensed: true)
         purchase = create(:purchase, purchaser: user, link: product, created_at: 1.day.ago)
         license = create(:license, purchase: purchase)
-        result = described_class.new(email: user.email).user_info
+        result = described_class.new(email: user.email).customer_info
 
         purchase_info = result[:metadata]["Most Recent Purchase"]
         expect(purchase_info["License Key"]).to eq(license.serial)
@@ -144,7 +144,7 @@ describe HelperUserInfoService do
       it "includes country in the metadata" do
         user.update!(country: "United States")
 
-        result = described_class.new(email: user.email).user_info
+        result = described_class.new(email: user.email).customer_info
         expect(result[:metadata]["Country"]).to eq("United States")
       end
     end
@@ -153,7 +153,7 @@ describe HelperUserInfoService do
       it "does not include country in the metadata" do
         user.update!(country: nil)
 
-        result = described_class.new(email: user.email).user_info
+        result = described_class.new(email: user.email).customer_info
         expect(result[:metadata]).not_to have_key("Country")
       end
     end
@@ -170,7 +170,7 @@ describe HelperUserInfoService do
                  content: "Payout delayed due to verification"
           )
 
-          result = service.user_info
+          result = service.customer_info
           expect(result[:metadata]["Comments"]).to include("Payout Note: Payout delayed due to verification")
         end
 
@@ -183,7 +183,7 @@ describe HelperUserInfoService do
                  content: "Non-admin payout note"
           )
 
-          result = service.user_info
+          result = service.customer_info
           comments = result[:metadata]["Comments"] || []
           expect(comments).not_to include("Payout Note: Non-admin payout note")
         end
@@ -200,7 +200,7 @@ describe HelperUserInfoService do
             )
           end
 
-          result = service.user_info
+          result = service.customer_info
           comments = result[:metadata]["Comments"] || []
           Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |_, index|
             expect(comments).to include("Risk Note: Risk note #{index + 1}")
@@ -221,7 +221,7 @@ describe HelperUserInfoService do
                  created_at: 1.hour.ago
           )
 
-          result = service.user_info
+          result = service.customer_info
           comments = result[:metadata]["Comments"] || []
           older_index = comments.find_index { |comment| comment.include?("Older risk note") }
           newer_index = comments.find_index { |comment| comment.include?("Newer risk note") }
@@ -241,7 +241,7 @@ describe HelperUserInfoService do
                    content: "Account suspended for policy violation"
             )
 
-            result = service.user_info
+            result = service.customer_info
             expect(result[:metadata]["Comments"]).to include("Suspension Note: Account suspended for policy violation")
           end
         end
@@ -256,7 +256,7 @@ describe HelperUserInfoService do
                    content: "Account suspended for policy violation"
             )
 
-            result = service.user_info
+            result = service.customer_info
             comments = result[:metadata]["Comments"] || []
             expect(comments).not_to include("Suspension Note: Account suspended for policy violation")
           end
@@ -271,7 +271,7 @@ describe HelperUserInfoService do
                  content: "General user comment"
           )
 
-          result = service.user_info
+          result = service.customer_info
           expect(result[:metadata]["Comments"]).to include("Comment: General user comment")
         end
 
@@ -282,7 +282,7 @@ describe HelperUserInfoService do
                  content: "Custom comment type"
           )
 
-          result = service.user_info
+          result = service.customer_info
           expect(result[:metadata]["Comments"]).to include("Comment: Custom comment type")
         end
       end
@@ -309,7 +309,7 @@ describe HelperUserInfoService do
                  created_at: 1.hour.ago
           )
 
-          result = service.user_info
+          result = service.customer_info
           comments = result[:metadata]["Comments"] || []
           expect(comments).to include("Payout Note: Payout note")
           expect(comments).to include("Risk Note: Risk note")
@@ -326,7 +326,7 @@ describe HelperUserInfoService do
 
       context "when user has no comments" do
         it "does not include any comment information" do
-          result = service.user_info
+          result = service.customer_info
           expect(result[:metadata]).not_to have_key("Comments")
         end
       end
