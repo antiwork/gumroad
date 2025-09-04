@@ -7,7 +7,7 @@ describe UrlRedirectsController do
 
   before do
     @product = create(:product_with_pdf_file)
-    @url_redirect = create(:url_redirect, purchase: create(:purchase, email: "abCabC@abc.com", link: @product))
+    @url_redirect = create(:url_redirect, purchase: create(:test_purchase, email: "abCabC@abc.com", link: @product))
     @token = @url_redirect.token
     @url = @url_redirect.referenced_link.product_files.alive.first.url
   end
@@ -733,7 +733,7 @@ describe UrlRedirectsController do
   describe "GET download_product_files" do
     before do
       @product = create(:product, user: create(:user))
-      @token = create(:url_redirect, purchase: create(:purchase, link: @product)).token
+      @token = create(:url_redirect, purchase: create(:test_purchase, link: @product)).token
     end
 
     it "returns a 404 if no files exist" do
@@ -758,6 +758,40 @@ describe UrlRedirectsController do
       get :download_product_files, format: :html, params: { id: @token, product_file_ids: [file.external_id] }
 
       expect(response).to redirect_to("https://example.com/file.srt")
+    end
+
+    context "when requesting a stampable PDF and it is not stamped yet" do
+      it "enqueues stamping job, flashes notice, and redirects to download page" do
+        pdf = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+        url_redirect = UrlRedirect.find_by(token: @token)
+
+        expect do
+          get :download_product_files, format: :html, params: { id: @token, product_file_ids: [pdf.external_id] }
+        end.to change { StampPdfForPurchaseJob.jobs.size }.by(1)
+
+        expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(url_redirect.purchase_id)
+        expect(flash[:notice]).to eq("The PDF will be emailed to you shortly!")
+        expect(response).to redirect_to(url_redirect_download_page_path(@token))
+      end
+    end
+
+    context "when requesting a stampable PDF and a stamped copy exists" do
+      it "redirects to the stamped file and creates a download event" do
+        pdf = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+        url_redirect = UrlRedirect.find_by(token: @token)
+        create(:stamped_pdf, url_redirect:, product_file: pdf)
+
+        expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(pdf).and_return("https://example.com/file.pdf")
+        expect do
+          get :download_product_files, format: :html, params: { id: @token, product_file_ids: [pdf.external_id] }
+        end.to change(ConsumptionEvent, :count).by(1)
+
+        expect(response).to redirect_to("https://example.com/file.pdf")
+        event = ConsumptionEvent.last
+        expect(event.event_type).to eq(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+        expect(event.product_file_id).to eq(pdf.id)
+        expect(event.url_redirect_id).to eq(url_redirect.id)
+      end
     end
   end
 
