@@ -163,9 +163,7 @@ export const FileRow = ({
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" resourceId={file.id}>
-      <NavigationButton disabled={file.processing} href={downloadUrl}>
-        Download
-      </NavigationButton>
+      <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
   const streamUrl = file.stream_url;
@@ -257,15 +255,7 @@ export const FileRow = ({
           </div>
         ) : null}
 
-        {downloadButton ? (
-          file.processing ? (
-            <WithTooltip tip="This file will be ready to download shortly." position="bottom">
-              {downloadButton}
-            </WithTooltip>
-          ) : (
-            downloadButton
-          )
-        ) : null}
+        {downloadButton}
 
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" resourceId={file.id}>
