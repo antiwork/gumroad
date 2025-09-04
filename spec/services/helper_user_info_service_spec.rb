@@ -18,10 +18,10 @@ describe HelperUserInfoService do
       expect(result[:name]).to eq(user.name)
       expect(result[:value]).to eq(2250)
       expect(result[:actions]).to eq({
-        "Admin (user)" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
-        "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
-        "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}"
-      })
+                                       "Admin (user)" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
+                                       "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
+                                       "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}"
+                                     })
 
       expect(result[:metadata]).to include(
         "User ID" => user.id,

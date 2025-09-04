@@ -73,7 +73,7 @@ class HelperUserInfoService
       {
         "User ID" => user.id,
         "Account Created" => user.created_at.to_fs(:formatted_date_full_month),
-        "Account Status" => user.suspended? ? 'Suspended' : 'Active',
+        "Account Status" => user.suspended? ? "Suspended" : "Active",
         "Country" => user.country,
       }.compact_blank
     end
