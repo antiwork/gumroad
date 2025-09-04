@@ -269,7 +269,7 @@
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 206
   slug: "206-how-to-open-zip-and-rar-files"
-  title: "How to open ZIP and RAR files"
+  title: "How to open ZIP and RAR files?"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 208
   slug: "208-how-do-i-send-my-gumroad-purchase-to-my-kindle"
@@ -345,7 +345,7 @@
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 266
   slug: "266-why-are-my-customers-purchases-failing"
-  title: "Why customer payments fail"
+  title: "Why customer payments fail?"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 268
   slug: "268-customer-dashboard"
@@ -377,7 +377,7 @@
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 282
   slug: "282-how-do-purchases-work-for-my-customers"
-  title: "How Gumroad works for customers"
+  title: "How Gumroad works for customers?"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 283
   slug: "283-fraudulent-purchases"
