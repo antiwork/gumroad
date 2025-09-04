@@ -32,6 +32,10 @@ steps:
       - docker-login#v3.0.0:
           username: "gumroadteam"
           password-env: DOCKERHUB_PASSWORD
+      - docker-login#v3.0.0:
+          server: quay.io
+          username: gumroad
+          password-env: QUAY_PASSWORD
 
   - label: ":rocket: Deploy Branch App"
     key: build-and-deploy-branch

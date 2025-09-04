@@ -7,6 +7,9 @@
 ARG WEB_BASE_DOCKERFILE_FROM
 FROM ${WEB_BASE_DOCKERFILE_FROM}
 
+# Expire Docker images after 6 months in Quay
+LABEL quay.expires-after=6M
+
 ENV BUNDLE_PATH=/bundle_path \
   APP_DIR=/app
 

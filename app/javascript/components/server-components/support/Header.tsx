@@ -41,7 +41,7 @@ export function SupportHeader({
         ) : null}
       </div>
       {hasHelperSession ? (
-        <div role="tablist">
+        <div role="tablist" className="col-span-full">
           <a
             href={Routes.help_center_root_path()}
             role="tab"

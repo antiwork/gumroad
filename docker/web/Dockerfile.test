@@ -4,6 +4,9 @@ ARG WEB_BASE_TEST_DOCKERFILE_FROM
 FROM ${WEB_DOCKERFILE_FROM}
 FROM ${WEB_BASE_TEST_DOCKERFILE_FROM}
 
+# Expire Docker images after 1 week in Quay
+LABEL quay.expires-after=1w
+
 COPY --from=0 /bundle_path /bundle_path
 COPY --from=0 /usr/local/bin /usr/local/bin
 

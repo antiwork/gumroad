@@ -10,7 +10,7 @@ concurrency:
 jobs:
   build_base:
     name: Build base image
-    runs-on: self-hosted
+    runs-on: hetzner
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -29,12 +29,13 @@ jobs:
           logger() {
             echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
           }
-          logger "pulling ruby:$(cat .ruby-version)-slim-bullseye"
-          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
-          WEB_BASE_SHA=$(docker/base/generate_tag_for_web_base.sh)
+          logger "pulling quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye"
+          docker pull --quiet quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye
+          WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
           if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
             logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
             NEW_BASE_REPO=$WEB_BASE_REPO \
+              WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye \
               BUNDLE_GEMS__CONTRIBSYS__COM=${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }} \
               make build_base
 
@@ -56,7 +57,7 @@ jobs:
           fi
 
   build_test:
-    runs-on: self-hosted
+    runs-on: hetzner
     name: Build test image
     needs: build_base
     steps:
@@ -66,11 +67,6 @@ jobs:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
           logout: false
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -113,8 +109,8 @@ jobs:
           logger() {
             echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
           }
-          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
-          WEB_BASE_TEST_SHA=$(docker/base/generate_tag_for_web_base_test.sh)
+          docker pull --quiet quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye
+          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base_test.sh)
           build_and_push() {
             local repo=$1
             local tag=$2
@@ -122,6 +118,7 @@ jobs:
             if ! docker manifest inspect $repo:$tag > /dev/null 2>&1; then
               logger "building $repo:$tag"
               NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO NEW_WEB_REPO=$WEB_REPO \
+                WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye \
                 BRANCH_CACHE_UPLOAD_ENABLED=false \
                   BRANCH_CACHE_RESTORE_ENABLED=false \
                   NEW_WEB_TAG=$REVISION \
@@ -149,42 +146,12 @@ jobs:
           build_and_push $WEB_BASE_TEST_REPO $WEB_BASE_TEST_SHA build_base_test
           build_and_push $WEB_REPO test-$REVISION build_test
 
-  pull_images:
-    name: Pull images to ${{ matrix.runner }}
-    strategy:
-      matrix:
-        runner: [antiwork-1, antiwork-2]
-    runs-on:
-      - self-hosted
-      - ${{ matrix.runner }}
-    needs: build_test
-    steps:
-      - uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
-      - name: Pull images
-        env:
-          WEB_REPO: quay.io/gumroad/web
-        run: |
-          for i in {1..3}; do
-            if docker pull --quiet $WEB_REPO:test-${{ github.sha }}; then
-              break
-            elif [ $i -eq 3 ]; then
-              echo "Failed to pull $WEB_REPO:test-${{ github.sha }} after 3 attempts"
-              exit 1
-            fi
-            sleep 20
-          done
-
   test_fast:
     name: Test Fast ${{ matrix.ci_node_index }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
-    runs-on: self-hosted
-    needs: pull_images
+    runs-on: hetzner
+    needs: build_test
     strategy:
       fail-fast: false
       matrix:
@@ -197,11 +164,6 @@ jobs:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
           logout: false
       - name: Start services
         env:
@@ -266,8 +228,8 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: quay.io/gumroad/web
-    runs-on: self-hosted
-    needs: pull_images
+    runs-on: ubicloud-standard-4
+    needs: build_test
     strategy:
       fail-fast: false
       matrix:
@@ -327,11 +289,6 @@ jobs:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
           logout: false
       - name: Start services
         env:
@@ -403,26 +360,9 @@ jobs:
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
-  cleanup:
-    name: Remove image from ${{ matrix.runner }}
-    strategy:
-      matrix:
-        runner: [antiwork-1, antiwork-2]
-    runs-on:
-      - self-hosted
-      - ${{ matrix.runner }}
-    needs: [test_fast, test_slow]
-    if: always()
-    steps:
-      - name: Remove images
-        env:
-          WEB_REPO: quay.io/gumroad/web
-        run: |
-          docker rmi $WEB_REPO:test-${{ github.sha }} 2>/dev/null || true
-
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
-    runs-on: self-hosted
+    runs-on: ubicloud-standard-4
     needs: [test_fast, test_slow]
     if: success() && github.ref == 'refs/heads/main'
     steps:

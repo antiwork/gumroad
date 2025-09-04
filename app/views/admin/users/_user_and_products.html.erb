@@ -1,22 +1,90 @@
 <%= load_pack("admin_review") %>
 
-<div class="paragraphs">
-  <%= render("admin/users/user", user: user, is_affiliate_user: is_affiliate_user) %>
-  <% if products.none? %>
-    <div class="info" role="status"><%= is_affiliate_user ? "No affiliated products." : "No products created." %></div>
-  <% end %>
-  <% products.each do |product| %>
-    <%= render("admin/links/product", product: product, show_purchases: true, is_affiliate_user: is_affiliate_user, user_id: user.id) %>
-  <% end %>
-  <% if pagy.pages > 1 %>
-    <div class="pagination" role="navigation" aria-label="Pagination">
-      <%= link_to("‹ Previous", pagy_url_for(pagy, pagy.prev), class: "button", inert: !pagy.prev) %>
-      <menu>
-        <% (1..pagy.pages).map do |page| %>
-          <li><%= link_to(page, pagy_url_for(pagy, page), class: "button", inert: page == pagy.page) %></li>
-        <% end %>
-      </menu>
-      <%= link_to("Next ›", pagy_url_for(pagy, pagy.next), class: "button", inert: !pagy.next) %>
+<div class="paragraphs css-tabs">
+  <!-- Hidden radio buttons for state management -->
+  <% show_products_tab = params[:page].present? && params[:page].to_i >= 2 %>
+  <input type="radio" name="user-tabs" id="profile-tab-radio" <%= "checked" unless show_products_tab %> style="display: none;">
+  <input type="radio" name="user-tabs" id="products-tab-radio" <%= "checked" if show_products_tab %> style="display: none;">
+
+  <!-- Tab buttons -->
+  <div role="tablist" class="tab-buttons" aria-label="Profile Tabs">
+    <label for="profile-tab-radio" role="tab" style="cursor: pointer;">
+      Profile
+    </label>
+    <label for="products-tab-radio" role="tab" style="cursor: pointer;">
+      Products
+    </label>
+  </div>
+
+  <!-- Tab content -->
+  <div class="tab-content">
+    <div id="profile-tab" class="tab-panel">
+      <%= render("admin/users/user", user: user, is_affiliate_user: is_affiliate_user) %>
     </div>
-  <% end %>
+
+    <div id="products-tab" class="tab-panel">
+      <% if products.none? %>
+        <div class="info" role="status"><%= is_affiliate_user ? "No affiliated products." : "No products created." %></div>
+      <% else %>
+        <% products.each do |product| %>
+          <%= render("admin/links/product", product: product, show_purchases: true, is_affiliate_user: is_affiliate_user, user_id: user.id) %>
+        <% end %>
+        <% if pagy.pages > 1 %>
+          <div class="pagination" role="navigation" aria-label="Pagination">
+            <%= link_to("‹ Previous", pagy_url_for(pagy, pagy.prev), class: "button", inert: !pagy.prev) %>
+            <menu>
+              <% (1..pagy.pages).map do |page| %>
+                <li><%= link_to(page, pagy_url_for(pagy, page), class: "button", inert: page == pagy.page) %></li>
+              <% end %>
+            </menu>
+            <%= link_to("Next ›", pagy_url_for(pagy, pagy.next), class: "button", inert: !pagy.next) %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
 </div>
+
+<style>
+  /* CSS-only tab styling */
+  .css-tabs .tab-panel {
+    display: none;
+  }
+
+  /* Show profile tab by default */
+  #profile-tab-radio:checked ~ .tab-content #profile-tab {
+    display: block;
+  }
+
+  /* Show products tab when selected */
+  #products-tab-radio:checked ~ .tab-content #products-tab {
+    display: block;
+  }
+
+  /* Active tab styling */
+  .tab-buttons label {
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+
+  #profile-tab-radio:checked ~ .tab-buttons label[for="profile-tab-radio"],
+  #products-tab-radio:checked ~ .tab-buttons label[for="products-tab-radio"] {
+    opacity: 1;
+    font-weight: bold;
+    background: white;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tab-buttons label {
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: bold;
+    }
+
+    #profile-tab-radio:checked ~ .tab-buttons label[for="profile-tab-radio"],
+    #products-tab-radio:checked ~ .tab-buttons label[for="products-tab-radio"] {
+      background: transparent;
+      color: white;
+      font-weight: bold;
+    }
+  }
+</style>
