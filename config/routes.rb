@@ -833,7 +833,11 @@ Rails.application.routes.draw do
 
     resources :reviews, only: [:index]
 
-    resources :support, only: [:index]
+    resources :support, only: [:index] do
+      collection do
+        post :unauthenticated_ticket, to: "support#create_unauthenticated_ticket", defaults: { format: :json }
+      end
+    end
 
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :url_redirect_expired_page

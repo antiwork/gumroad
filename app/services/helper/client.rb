@@ -50,6 +50,19 @@ class Helper::Client
     response.success?
   end
 
+  def create_conversation(email:, subject:, message:)
+    params = { email:, subject:, message:, timestamp: }
+    headers = get_auth_headers(json: params)
+    response = self.class.post("/api/v1/mailboxes/#{HELPER_MAILBOX_SLUG}/conversations/", headers:, body: params.to_json)
+
+    unless response.success?
+      Bugsnag.notify("Helper error: could not create conversation", email:, subject:)
+      raise "Helper::Client#create_conversation failed with status #{response.code}"
+    end
+
+    response.parsed_response.fetch("slug")
+  end
+
   private
     def get_auth_headers(params: nil, json: nil)
       hmac_base64 = Base64.encode64(create_hmac_digest(params:, json:))

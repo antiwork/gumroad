@@ -120,6 +120,11 @@ class Rack::Attack
 
   # Disable throttling for frequently used paths in staging
   if Rails.env.production?
+    # Support unauthenticated ticket creation rate limits
+    # Initial: 3rpm per IP; per email: 3rpm
+    throttle_by_ip path: "/support/unauthenticated_ticket", method: :post, requests: 3, period: 60.seconds
+    throttle_by_params path: "/support/unauthenticated_ticket", method: :post, requests: 3, period: 60.seconds,
+                       throttle_params: Proc.new { |req| req.json_params.is_a?(Hash) && req.json_params["email"].presence }
     throttle_by_ip path: "/login", method: :post,           requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/login.json",                     requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/signup",                         requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours

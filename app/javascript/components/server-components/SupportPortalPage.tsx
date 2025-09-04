@@ -5,6 +5,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import SupportPortal from "$app/components/support/SupportPortal";
+import UnauthenticatedSupportPortal from "$app/components/support/UnauthenticatedSupportPortal";
 
 type Props = {
   host: string;
@@ -19,12 +20,17 @@ type Props = {
     } | null;
     currentToken?: string | null;
   };
+  recaptcha_site_key?: string | null;
 };
 
-function SupportPortalPage({ host, session }: Props) {
+function SupportPortalPage({ host, session, recaptcha_site_key }: Props) {
   return (
     <HelperClientProvider host={host} session={session}>
-      <SupportPortal />
+      {session?.email ? (
+        <SupportPortal />
+      ) : (
+        <UnauthenticatedSupportPortal recaptchaSiteKey={recaptcha_site_key ?? null} />
+      )}
     </HelperClientProvider>
   );
 }

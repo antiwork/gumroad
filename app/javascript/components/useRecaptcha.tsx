@@ -68,5 +68,17 @@ export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
     });
   };
 
-  return { container: <div ref={containerRef} style={{ display: "contents" }} />, execute };
+  return {
+    container: (
+      <div
+        ref={containerRef}
+        style={{
+          background: "transparent",
+          colorScheme: "inherit",
+          contain: "layout style",
+        }}
+      />
+    ),
+    execute,
+  };
 }
