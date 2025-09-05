@@ -76,18 +76,6 @@ type Props = { content_items: (FileItem | FolderItem)[] };
 export const FileList = ({ content_items }: Props) => {
   const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
 
-  useRunOnce(() => {
-    if (
-      content_items
-        .flatMap((item) => (item.type === "folder" ? item.children : item))
-        .some(({ processing }) => processing)
-    )
-      showAlert(
-        "This product includes a file that's being processed. You'll be able to download it shortly.",
-        "warning",
-      );
-  });
-
   const getFileRow = (file: FileItem) => (
     <FileRow
       key={file.id}
