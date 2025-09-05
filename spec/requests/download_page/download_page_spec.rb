@@ -977,7 +977,7 @@ end
 describe "stamped PDF" do
   it "shows a flash when a stamped PDF is missing" do
     product = create(:product)
-    file = create(:readable_document, link: product, pdf_stamp_enabled: true)
+    create(:readable_document, link: product, pdf_stamp_enabled: true)
     purchase = create(:purchase, link: product)
     url_redirect = create(:url_redirect, purchase: purchase)
 

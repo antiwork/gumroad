@@ -163,9 +163,7 @@ export const FileRow = ({
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" resourceId={file.id}>
-      <NavigationButton href={downloadUrl}>
-        Download
-      </NavigationButton>
+      <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
   const streamUrl = file.stream_url;
