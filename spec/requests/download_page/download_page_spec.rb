@@ -985,6 +985,6 @@ describe "stamped PDF" do
     click_on "Download"
 
     expect(page).to have_current_path(url_redirect.download_page_url)
-    expect(page).to have_alert(text: "We are preparing the file for download. You will receive an email when it is ready.")
+    expect(page).to have_text("We are preparing the file for download. You will receive an email when it is ready.")
   end
 end
