@@ -15,6 +15,8 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     it "shows no products alert" do
       visit admin_user_path(user.id)
 
+      click_on "Products"
+
       expect(page).to have_text("No products created.")
     end
   end
@@ -29,6 +31,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
     it "shows products" do
       visit admin_user_path(user.id)
+      click_on "Products"
 
       expect(page).to have_text("Product a")
       expect(page).to have_text("Product b")

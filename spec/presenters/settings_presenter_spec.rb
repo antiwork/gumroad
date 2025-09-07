@@ -96,6 +96,7 @@ describe SettingsPresenter do
           disable_comments_email: false,
           disable_reviews_email: false,
           show_nsfw_products: false,
+          disable_affiliate_requests: false,
           product_level_support_emails: [],
           seller_refund_policy: {
             enabled: true,
@@ -450,6 +451,7 @@ describe SettingsPresenter do
         ip_country_code: nil,
         bank_account_details: {
           show_bank_account: false,
+          show_paypal: true,
           card_data_handling_mode: "stripejs.0",
           is_a_card: false,
           card: nil,
@@ -560,6 +562,8 @@ describe SettingsPresenter do
         saved_card: nil,
         formatted_balance_to_forfeit: nil,
         payouts_paused_internally: false,
+        payouts_paused_by: nil,
+        payouts_paused_for_reason: nil,
         payouts_paused_by_user: false,
         payout_threshold_cents: 1000,
         minimum_payout_threshold_cents: 1000,
@@ -651,6 +655,7 @@ describe SettingsPresenter do
                                              compliance_info: @compliance_info_details,
                                              bank_account_details: @base_props[:bank_account_details].merge({
                                                                                                               show_bank_account: true,
+                                                                                                              show_paypal: false,
                                                                                                             }),
                                              paypal_connect: @base_props[:paypal_connect].merge({
                                                                                                   show_paypal_connect: true,
@@ -698,6 +703,7 @@ describe SettingsPresenter do
 
         bank_account_details = @base_us_props[:bank_account_details].merge({
                                                                              show_bank_account: true,
+                                                                             show_paypal: false,
                                                                              routing_number: active_bank_account.routing_number,
                                                                              account_number_visual: active_bank_account.account_number_visual,
                                                                              bank_account: {
@@ -817,6 +823,72 @@ describe SettingsPresenter do
 
       it "returns true for can_connect_stripe" do
         expect(presenter.payments_props[:user][:can_connect_stripe]).to eq(true)
+      end
+    end
+
+    context "when the seller can receive PayPal payouts" do
+      it "returns true for show_paypal if country does not support bank payouts" do
+        create(:user_compliance_info, user: seller, country: "Brazil")
+        seller.update!(payment_address: nil)
+
+        expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(true)
+      end
+
+      it "returns true for show_paypal if seller already has a PayPal payment address setup" do
+        create(:user_compliance_info, user: seller, country: "United States")
+        seller.update!(payment_address: nil)
+        expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(false)
+
+        seller.update!(payment_address: "payme@example.com")
+        expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(true)
+
+        seller.update!(payment_address: "")
+        expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(false)
+      end
+    end
+
+    context "when seller's payouts are paused" do
+      it "returns the payout pause source and reason if present" do
+        seller.update!(payouts_paused_internally: true)
+        expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
+
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+        seller.comments.create!(
+          author_id: User.last.id,
+          content: "Chargeback rate too high.",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+        )
+        expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq("Chargeback rate too high.")
+
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
+
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
+
+        seller.update!(payouts_paused_internally: false, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_USER)
+        expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_USER)
+        expect(presenter.payments_props[:payouts_paused_internally]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to be(true)
+        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
+
+        seller.update!(payouts_paused_internally: false, payouts_paused_by_user: false, payouts_paused_by: nil)
+        expect(presenter.payments_props[:payouts_paused_internally]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
+        expect(presenter.payments_props[:payouts_paused_by]).to eq(nil)
+        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
       end
     end
   end

@@ -2,6 +2,9 @@
 ARG WEB_DOCKERFILE_FROM
 FROM ${WEB_DOCKERFILE_FROM}
 
+# Expire Docker images after 1 week in Quay
+LABEL quay.expires-after=1w
+
 ENV BUNDLE_PATH=/bundle_path
 ENV APP_DIR=/app
 
@@ -43,33 +46,32 @@ RUN sed -r 's/(name="memory" value=")[^"]+"/\11GiB"/' -i /etc/ImageMagick-6/poli
   # Change height limit from 10KP to 50KP
   && sed -r 's/(name="height" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml
 
-ARG CONTRIBSYS_CREDENTIALS
+ARG BUNDLE_GEMS__CONTRIBSYS__COM
 RUN cd $APP_DIR \
-  && bundle config gems.contribsys.com $CONTRIBSYS_CREDENTIALS \
   && bundle config set without 'development test' \
-  && bundle install
+  && BUNDLE_GEMS__CONTRIBSYS__COM=$BUNDLE_GEMS__CONTRIBSYS__COM bundle install
 
 ENV DATABASE_HOST="db" \
-    DATABASE_NAME="gumroad_development" \
-    DATABASE_PORT=3306 \
-    DATABASE_USERNAME="gumroad_development" \
-    DATABASE_PASSWORD="gumroad_development" \
-    PUMA_WORKING_DIRECTORY=$APP_DIR \
-    REDIS_HOST="redis:6379/0" \
-    SIDEKIQ_REDIS_HOST="redis:6379/1" \
-    RPUSH_REDIS_HOST="redis:6379/2" \
-    RACK_ATTACK_REDIS_HOST="redis:6379/3" \
-    RAILS_ENV="development" \
-    RACK_ENV="development" \
-    MONGO_DATABASE_URL="mongo:27017" \
-    MONGO_SECONDARY_DATABASE_URL="mongo:27017" \
-    MONGO_DATABASE_NAME="gumroad_log_development" \
-    MONGO_DATABASE_USERNAME="username" \
-    MONGO_DATABASE_PASSWORD="password" \
-    MONGO_REPLICA_SET="empty_replica_set" \
-    ELASTICSEARCH_HOST=http://elasticsearch:9200 \
-    MEMCACHE_SERVERS=memcached \
-    IN_DOCKER="true"
+  DATABASE_NAME="gumroad_development" \
+  DATABASE_PORT=3306 \
+  DATABASE_USERNAME="gumroad_development" \
+  DATABASE_PASSWORD="gumroad_development" \
+  PUMA_WORKING_DIRECTORY=$APP_DIR \
+  REDIS_HOST="redis:6379/0" \
+  SIDEKIQ_REDIS_HOST="redis:6379/1" \
+  RPUSH_REDIS_HOST="redis:6379/2" \
+  RACK_ATTACK_REDIS_HOST="redis:6379/3" \
+  RAILS_ENV="development" \
+  RACK_ENV="development" \
+  MONGO_DATABASE_URL="mongo:27017" \
+  MONGO_SECONDARY_DATABASE_URL="mongo:27017" \
+  MONGO_DATABASE_NAME="gumroad_log_development" \
+  MONGO_DATABASE_USERNAME="username" \
+  MONGO_DATABASE_PASSWORD="password" \
+  MONGO_REPLICA_SET="empty_replica_set" \
+  ELASTICSEARCH_HOST=http://elasticsearch:9200 \
+  MEMCACHE_SERVERS=memcached \
+  IN_DOCKER="true"
 
 WORKDIR $APP_DIR
 

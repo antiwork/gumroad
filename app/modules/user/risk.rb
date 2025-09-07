@@ -205,6 +205,11 @@ module User::Risk
       end
   end
 
+  PAYOUT_PAUSE_SOURCES = %w[stripe admin system user].freeze
+  PAYOUT_PAUSE_SOURCES.each do |source|
+    self.const_set("PAYOUT_PAUSE_SOURCE_#{source.upcase}", source)
+  end
+
   class_methods do
     def refund_queue(from_date = 7.days.ago)
       user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]

@@ -15,7 +15,7 @@ WEB_BASE_SHA=$(docker/base/generate_tag_for_web_base.sh)
 if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
   logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
   NEW_BASE_REPO=$WEB_BASE_REPO \
-    CONTRIBSYS_CREDENTIALS=$CONTRIBSYS_CREDENTIALS \
+    BUNDLE_GEMS__CONTRIBSYS__COM=$BUNDLE_GEMS__CONTRIBSYS__COM \
     make build_base
 
   logger "Pushing $WEB_BASE_REPO:$WEB_BASE_SHA"

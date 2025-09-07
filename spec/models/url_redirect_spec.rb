@@ -830,6 +830,23 @@ describe UrlRedirect do
     end
   end
 
+  describe "#missing_stamped_pdf?" do
+    it "returns true when no alive stamped pdf exists for the file" do
+      url_redirect = create(:url_redirect)
+      product_file = create(:pdf_product_file, link: url_redirect.link, pdf_stamp_enabled: true)
+
+      expect(url_redirect.missing_stamped_pdf?(product_file)).to be(true)
+    end
+
+    it "returns false when an alive stamped pdf exists for the file" do
+      url_redirect = create(:url_redirect)
+      product_file = create(:pdf_product_file, link: url_redirect.link, pdf_stamp_enabled: true)
+      create(:stamped_pdf, url_redirect:, product_file:)
+
+      expect(url_redirect.missing_stamped_pdf?(product_file)).to be(false)
+    end
+  end
+
   describe "#update_transcoded_videos_last_accessed_at", :freeze_time do
     it "sets last_accessed_at to now" do
       product_file = create(:streamable_video)

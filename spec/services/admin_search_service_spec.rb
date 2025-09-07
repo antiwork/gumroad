@@ -130,5 +130,93 @@ describe AdminSearchService do
         expect(purchases).to be_empty
       end
     end
+
+    describe "product_title_query" do
+      let(:product_title_query) { "design" }
+      let!(:product) { create(:product, name: "Graphic Design Course") }
+      let!(:purchase) { create(:purchase, link: product, email: "user@example.com") }
+      let(:query) { "user@example.com" }
+
+      before do
+        create(:purchase, link: create(:product, name: "Different Product"))
+      end
+
+      context "when query is set" do
+        it "filters by product title" do
+          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
+          expect(purchases).to eq [purchase]
+        end
+      end
+
+      context "when query is not set" do
+        let(:query) { nil }
+
+        it "ignores product_title_query" do
+          purchases = AdminSearchService.new.search_purchases(query:, product_title_query:)
+          expect(purchases).to include(purchase)
+        end
+      end
+    end
+
+    describe "purchase_status" do
+      let!(:successful_purchase) { create(:purchase, purchase_state: "successful", email: "successful@example.com") }
+      let!(:failed_purchase) { create(:purchase, purchase_state: "failed", email: "failed@example.com") }
+      let!(:not_charged_purchase) { create(:purchase, purchase_state: "not_charged", email: "not_charged@example.com") }
+      let!(:chargebacked_purchase) { create(:purchase, chargeback_date: Date.yesterday, email: "chargeback@example.com") }
+      let!(:chargebacked_reversed_purchase) { create(:purchase, chargeback_date: Date.yesterday, chargeback_reversed: true, email: "chargeback_reversed@example.com") }
+      let!(:refunded_purchase) { create(:purchase, stripe_refunded: true, email: "refunded@example.com") }
+
+      before do
+        create(:purchase, purchase_state: "successful", email: "other@example.com")
+        create(:purchase, purchase_state: "failed", email: "other@example.com")
+      end
+
+      context "when query is set" do
+        it "filters by successful status" do
+          purchases = AdminSearchService.new.search_purchases(query: successful_purchase.email, purchase_status: "successful")
+          expect(purchases).to contain_exactly(successful_purchase)
+        end
+
+        it "filters by failed status" do
+          purchases = AdminSearchService.new.search_purchases(query: failed_purchase.email, purchase_status: "failed")
+          expect(purchases).to contain_exactly(failed_purchase)
+        end
+
+        it "filters by not_charged status" do
+          purchases = AdminSearchService.new.search_purchases(query: not_charged_purchase.email, purchase_status: "not_charged")
+          expect(purchases).to contain_exactly(not_charged_purchase)
+        end
+
+        it "filters by chargeback status (excluding reversed)" do
+          purchases = AdminSearchService.new.search_purchases(query: chargebacked_purchase.email, purchase_status: "chargeback")
+          expect(purchases).to contain_exactly(chargebacked_purchase)
+          expect(purchases).not_to include(chargebacked_reversed_purchase)
+        end
+
+        it "filters by refunded status" do
+          purchases = AdminSearchService.new.search_purchases(query: refunded_purchase.email, purchase_status: "refunded")
+          expect(purchases).to contain_exactly(refunded_purchase)
+        end
+
+        it "ignores invalid purchase_status values" do
+          purchases = AdminSearchService.new.search_purchases(query: successful_purchase.email, purchase_status: "invalid_status")
+          expect(purchases).to contain_exactly(successful_purchase)
+        end
+
+        it "works with other parameters" do
+          purchases = AdminSearchService.new.search_purchases(query: successful_purchase.email, purchase_status: "successful")
+          expect(purchases).to contain_exactly(successful_purchase)
+        end
+      end
+
+      context "when query is not set" do
+        let(:query) { nil }
+
+        it "ignores purchase_status" do
+          purchases = AdminSearchService.new.search_purchases(query:, purchase_status: "successful")
+          expect(purchases).to include(successful_purchase, failed_purchase, not_charged_purchase, chargebacked_purchase, chargebacked_reversed_purchase, refunded_purchase)
+        end
+      end
+    end
   end
 end

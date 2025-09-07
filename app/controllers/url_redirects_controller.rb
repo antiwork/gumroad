@@ -87,6 +87,18 @@ class UrlRedirectsController < ApplicationController
     else
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
       @product_file = product_files.first
+
+      if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
+        flash[:alert] = "We are preparing the file for download. You will receive an email when it is ready."
+
+        # Do not enqueue the job more than once in 2 hours
+        Rails.cache.fetch("stamp_pdf_for_purchase_job_#{@url_redirect.purchase_id}", expires_in: 2.hours) do
+          StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
+        end
+
+        return redirect_to(@url_redirect.download_page_url)
+      end
+
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
     end
@@ -269,7 +281,6 @@ class UrlRedirectsController < ApplicationController
 
   private
     def trigger_files_lifecycle_events
-      @url_redirect.enqueue_job_to_regenerate_deleted_stamped_pdfs
       @url_redirect.update_transcoded_videos_last_accessed_at
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos
     end

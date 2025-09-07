@@ -8,7 +8,7 @@
 
   <hr>
   <div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
-    <div class="paragraphs">
+    <div class="paragraphs" style="width: 100%">
       <h3>Payout info</h3>
       <div>
         <% case %>
@@ -22,13 +22,8 @@
           This user has no payout method.
         <% end %>
       </div>
-      <div class="button-group">
-        <% if user.payouts_paused? %>
-          <%= admin_action label: "Resume payouts", url: resume_admin_user_payouts_path(user), loading: "Resuming payouts...", done: "Payouts resumed!", success_message: "Payouts resumed!" %>
-        <% else %>
-          <%= admin_action label: "Pause payouts", url: pause_admin_user_payouts_path(user), loading: "Pausing payouts...", done: "Payouts paused!", success_message: "Payouts paused!", outline: true, color: "warning" %>
-        <% end %>
-      </div>
+      <hr>
+      <%= react_component "AdminPausePayoutsForm", props: { user_id: user.id, payouts_paused_by: user.payouts_paused_by_source, reason: user.comments.with_type_payouts_paused.last&.content }, prerender: true %>
 
       <% last_payout_to_user = user.payments.last %>
       <% if last_payout_to_user.nil? || %w(completed failed returned reversed cancelled).include?(last_payout_to_user.state) %>

@@ -1,6 +1,9 @@
 ARG WEB_BASE_DOCKERFILE_FROM
 FROM ${WEB_BASE_DOCKERFILE_FROM}
 
+# Expire Docker images after 6 months in Quay
+LABEL quay.expires-after=6M
+
 # Customizations copied from:
 # https://github.com/circleci/circleci-images/blob/master/shared/images/Dockerfile-basic.template
 # https://github.com/circleci/circleci-images/blob/master/shared/images/Dockerfile-browsers.template

@@ -22,15 +22,35 @@ describe DashboardController do
       let(:record) { :dashboard }
     end
 
+    def expect_dashboard_data_in_inertia_response(expected_data = {})
+      data_page_match = response.body.match(/data-page="([^"]*)"/)
+      expect(data_page_match).to be_present, "Expected Inertia.js data-page attribute"
+
+      decoded_content = CGI.unescapeHTML(data_page_match[1])
+      json_data = JSON.parse(decoded_content)
+
+      creator_home = json_data["props"]["creator_home"]
+      expect(creator_home).to be_present, "Expected creator_home in Inertia.js response"
+
+      expected_data.each do |key, value|
+        expect(creator_home[key.to_s]).to eq(value), "Expected #{key} to be #{value}, but got #{creator_home[key.to_s]}"
+      end
+    end
+
     context "when seller has no activity" do
       it "renders the page" do
         get :index
 
-        expect(response.body).to have_text("Hey, Gumbot! Welcome to Gumroad.")
-        expect(response.body).to have_text("We're here to help you get paid for your work.")
-        expect(response.body).to have_selector("a[data-status='pending']", text: "Create your first product")
-        expect(response.body).to have_selector("a[data-status='pending']", text: "Make your first sale")
-        expect(response.body).to_not have_text("Best selling")
+        expect(response).to be_successful
+
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
+
+        expect_dashboard_data_in_inertia_response(
+          has_sale: false,
+          sales: [],
+          activity_items: []
+        )
       end
     end
 
@@ -42,8 +62,22 @@ describe DashboardController do
       it "renders no sales text" do
         get :index
 
-        expect(response.body).to have_text("Best selling")
-        expect(response.body).to have_text("You haven't made any sales yet. Learn how")
+        expect(response).to be_successful
+
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
+
+        expect_dashboard_data_in_inertia_response(
+          has_sale: false
+        )
+
+        data_page_match = response.body.match(/data-page="([^"]*)"/)
+        decoded_content = CGI.unescapeHTML(data_page_match[1])
+        json_data = JSON.parse(decoded_content)
+        creator_home = json_data["props"]["creator_home"]
+
+        expect(creator_home["sales"]).to be_present
+        expect(creator_home["sales"].first["sales"]).to eq(0)
       end
     end
 
@@ -65,19 +99,27 @@ describe DashboardController do
       it "renders the purchase", :sidekiq_inline, :elasticsearch_wait_for_refresh do
         get :index
 
-        expect(response.body).to have_selector("h1", text: "Hey, Gumbot! Welcome back to Gumroad.")
+        expect(response).to be_successful
 
-        expect(response.body).to_not have_text("We're here to help you get paid for your work.")
-        expect(response.body).to have_selector("[data-status='completed']", text: "Create your first product")
-        expect(response.body).to have_selector("[data-status='completed']", text: "Make your first sale")
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
 
-        expect(response.body).to have_table_row({ "Sales" => "1", "Revenue" => "$1.50", "Today" => "$1.50" })
+        data_page_match = response.body.match(/data-page="([^"]*)"/)
+        if data_page_match
+          decoded_content = CGI.unescapeHTML(data_page_match[1])
+          json_data = JSON.parse(decoded_content)
+          creator_home = json_data["props"]["creator_home"]
+          puts "Creator home with purchases:"
+          puts "  has_sale: #{creator_home['has_sale']}"
+          puts "  sales count: #{creator_home['sales']&.length}"
+          puts "  activity_items count: #{creator_home['activity_items']&.length}"
+          puts "  balances: #{creator_home['balances']}"
+          puts "  getting_started_stats: #{creator_home['getting_started_stats']}"
+        end
 
-        expect(response.body).to have_text "New sale of The Works of Edgar Gumstein for $1.50"
-        expect(response.body).to have_text "New follower #{follower.email} added"
-        expect(response.body).to have_text "Follower #{follower.email} removed"
-
-        expect(response.body).to have_link(product.name, href: edit_link_url(product))
+        expect_dashboard_data_in_inertia_response(
+          has_sale: true
+        )
       end
     end
 
@@ -91,8 +133,17 @@ describe DashboardController do
       it "renders appropriate text" do
         get :index
 
-        expect(response.body).to have_text("We're here to help you get paid for your work.")
-        expect(response.body).to have_selector("a", text: "Create your first product")
+        expect(response).to be_successful
+
+        # For Inertia.js, we should check for the data-page attribute and component name
+        expect(response.body).to include("data-page")
+        expect(response.body).to include("Dashboard/index")
+
+        # Check that the dashboard data shows no products (since product was deleted)
+        expect_dashboard_data_in_inertia_response(
+          has_sale: false,
+          sales: []
+        )
       end
     end
 

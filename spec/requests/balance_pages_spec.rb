@@ -396,7 +396,71 @@ describe "Balance Pages Scenario", js: true, type: :system do
             travel_to(Date.parse("2013-08-14")) do
               visit balance_path
 
-              expect(page).to have_status(text: "Your payouts have been paused.")
+              expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin.")
+              expect(page).to have_section("Next payout: paused")
+              expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
+            end
+          end
+
+          it "includes the reason provided by admin in the notice" do
+            seller.comments.create!(
+              author_id: User.last.id,
+              content: "Chargeback rate is too high.",
+              comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+            )
+
+            travel_to(Date.parse("2013-08-14")) do
+              visit balance_path
+
+              expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+              expect(page).to have_section("Next payout: paused")
+              expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
+            end
+          end
+        end
+
+        context "when payouts have been automatically paused by the system" do
+          before do
+            seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+          end
+
+          it "renders notice and paused in the heading" do
+            travel_to(Date.parse("2013-08-14")) do
+              visit balance_path
+
+              expect(page).to have_status(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
+              expect(page).to have_section("Next payout: paused")
+              expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
+            end
+          end
+        end
+
+        context "when payouts have been paused by Stripe" do
+          before do
+            seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+          end
+
+          it "renders notice and paused in the heading" do
+            travel_to(Date.parse("2013-08-14")) do
+              visit balance_path
+
+              expect(page).to have_status(text: "Your payouts are currently paused by our payment processor. Please check your Payment Settings for any verification requirements.")
+              expect(page).to have_section("Next payout: paused")
+              expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
+            end
+          end
+        end
+
+        context "when payouts have been paused by the seller" do
+          before do
+            seller.update!(payouts_paused_by_user: true)
+          end
+
+          it "renders notice and paused in the heading" do
+            travel_to(Date.parse("2013-08-14")) do
+              visit balance_path
+
+              expect(page).to have_status(text: "You have paused your payouts. Please go to Payment Settings to resume payouts.")
               expect(page).to have_section("Next payout: paused")
               expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
             end
@@ -404,7 +468,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         end
 
         describe "payout-skipped notes" do
-          context "when the payout was skipped because the account was suspended" do
+          context "when the payout was skipped because the account was not compliant" do
             before do
               seller.flag_for_tos_violation!(author_name: "iffy", bulk: true)
               seller.suspend_for_tos_violation!(author_name: "iffy", bulk: true)
@@ -415,7 +479,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             it "shows the payout-skipped notice" do
               visit balance_path
 
-              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account was suspended.")
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account was not compliant.")
             end
           end
 
@@ -430,6 +494,48 @@ describe "Balance Pages Scenario", js: true, type: :system do
               visit balance_path
 
               expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because payouts on the account were paused by the admin.")
+            end
+          end
+
+          context "when the payout was skipped because the payouts were paused by the system" do
+            before do
+              seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+              Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
+              seller.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+            end
+
+            it "shows the payout-skipped notice" do
+              visit balance_path
+
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because payouts on the account were paused by the system.")
+            end
+          end
+
+          context "when the payout was skipped because the payouts were paused by Stripe" do
+            before do
+              seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+              Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
+              seller.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+            end
+
+            it "shows the payout-skipped notice" do
+              visit balance_path
+
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because payouts on the account were paused by the payout processor.")
+            end
+          end
+
+          context "when the payout was skipped because the payouts were paused by the seller" do
+            before do
+              seller.update!(payouts_paused_by_user: true)
+              Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
+              seller.update!(payouts_paused_by_user: false)
+            end
+
+            it "shows the payout-skipped notice" do
+              visit balance_path
+
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because payouts on the account were paused by the user.")
             end
           end
 

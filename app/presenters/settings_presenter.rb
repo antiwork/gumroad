@@ -83,6 +83,7 @@ class SettingsPresenter
         disable_comments_email: seller.disable_comments_email,
         disable_reviews_email: seller.disable_reviews_email,
         show_nsfw_products: seller.show_nsfw_products?,
+        disable_affiliate_requests: seller.disable_affiliate_requests?,
         seller_refund_policy:,
         product_level_support_emails: seller.product_level_support_emails_enabled? ? seller.product_level_support_emails : nil
       }
@@ -221,6 +222,8 @@ class SettingsPresenter
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
       formatted_balance_to_forfeit: seller.formatted_balance_to_forfeit(:country_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
+      payouts_paused_by: seller.payouts_paused_by_source,
+      payouts_paused_for_reason: seller.payouts_paused_for_reason,
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.minimum_payout_amount_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
@@ -326,6 +329,7 @@ class SettingsPresenter
 
       {
         show_bank_account: bank_account.present? || seller.native_payouts_supported?,
+        show_paypal: seller.payment_address.present? || !seller.native_payouts_supported?,
         card_data_handling_mode: CardDataHandlingMode.get_card_data_handling_mode(seller),
         is_a_card: bank_account.is_a?(CardBankAccount),
         card: bank_account.is_a?(CardBankAccount) ? {
