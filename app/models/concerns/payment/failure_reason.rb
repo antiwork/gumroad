@@ -137,6 +137,34 @@ module Payment::FailureReason
   }
   private_constant :STRIPE_FAILURE_SOLUTIONS
 
+  def displayable_failure_reason
+    return nil if failure_reason.blank?
+
+    if processor == PayoutProcessorType::PAYPAL
+      curated = PAYPAL_FAILURE_SOLUTIONS[failure_reason]
+      return curated[:reason] if curated.present?
+      return PAYPAL_MASS_PAY[failure_reason] if PAYPAL_MASS_PAY.key?(failure_reason)
+      return failure_reason
+    elsif processor == PayoutProcessorType::STRIPE
+      curated = STRIPE_FAILURE_SOLUTIONS[failure_reason]
+      return curated[:reason] if curated.present?
+      return failure_reason.tr("_", " ")
+    else
+      return failure_reason
+    end
+  end
+
+  def requires_verification_to_resume?
+    return false if failure_reason.blank?
+
+    if processor == PayoutProcessorType::PAYPAL
+      # Regulatory review - Pending / Blocked
+      return ["PAYPAL 14763", "PAYPAL 14764"].include?(failure_reason)
+    end
+
+    false
+  end
+
   private
     def add_payment_failure_reason_comment
       return unless failure_reason.present?

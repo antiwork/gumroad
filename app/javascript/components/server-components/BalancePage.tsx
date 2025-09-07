@@ -180,7 +180,7 @@ type CurrentPayoutsDataWithUserNotPayable = {
   has_stripe_connect: boolean;
 };
 
-type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed";
+type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed" | "failed";
 type PayoutType = "standard" | "instant";
 
 type CurrentPeriodPayoutData = (
@@ -210,10 +210,16 @@ type CurrentPeriodPayoutData = (
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
   payout_note?: string | null;
+  requires_verification_to_resume?: boolean;
+  carried_over_from_failed_on?: string;
+  carried_over_cents?: number;
+  carried_over_displayed_amount?: string;
+  carried_over_items?: { failed_on: string; carried_over_cents: number; carried_over_displayed_amount: string }[];
+  included_in_payout_on_items?: { included_on: string }[];
 };
 
 type PastPeriodPayoutsData = {
-  status: "completed";
+  status: "completed" | "failed";
   should_be_shown_currencies_always: boolean;
   displayable_payout_period_range: string;
   payout_currency: string;
@@ -223,6 +229,11 @@ type PastPeriodPayoutsData = {
   arrival_date: string | null;
   payment_external_id: string;
   payout_date_formatted: string;
+  carried_over_from_failed_on?: string;
+  carried_over_cents?: number;
+  carried_over_displayed_amount?: string;
+  carried_over_items?: { failed_on: string; carried_over_cents: number; carried_over_displayed_amount: string }[];
+  included_in_payout_on_items?: { included_on: string }[];
   sales_cents: number;
   refunds_cents: number;
   chargebacks_cents: number;
@@ -239,6 +250,8 @@ type PastPeriodPayoutsData = {
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
   type: PayoutType;
+  displayable_failure_reason?: string | null;
+  requires_verification_to_resume?: boolean;
 };
 
 export type BalancePageProps = {
@@ -314,6 +327,8 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         return `Next payout: ${payoutDateFormatted}`;
       case "paused":
         return "Next payout: paused";
+      case "failed":
+        return payoutDateFormatted;
       case "completed":
         return payoutDateFormatted;
     }
@@ -330,7 +345,19 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           gap: "var(--spacer-4)",
         }}
       >
-        {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h2>{heading}</h2>}
+        {payoutPeriodData.status === "completed" || payoutPeriodData.status === "failed" ? (
+          <span>{heading}</span>
+        ) : (
+          <h2>{heading}</h2>
+        )}
+        {payoutPeriodData.status === "failed" ? (
+          <div className="pill small">
+            {Array.isArray(payoutPeriodData.included_in_payout_on_items) &&
+            payoutPeriodData.included_in_payout_on_items.length > 0
+              ? `Paid on ${payoutPeriodData.included_in_payout_on_items[0]?.included_on ?? ""}`
+              : "Failed"}
+          </div>
+        ) : null}
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
           <div className="pill small">Instant</div>
         ) : null}
@@ -348,6 +375,31 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           </WithTooltip>
         ) : null}
       </div>
+      {payoutPeriodData.status === "failed" &&
+      !(
+        Array.isArray(payoutPeriodData.included_in_payout_on_items) &&
+        payoutPeriodData.included_in_payout_on_items.length > 0
+      ) ? (
+        <div className="warning my-4" role="status">
+          <p>
+            <strong>
+              This payout failed due to
+              {"displayable_failure_reason" in payoutPeriodData && payoutPeriodData.displayable_failure_reason ? (
+                <>
+                  {" "}
+                  <span className="font-semibold underline">{payoutPeriodData.displayable_failure_reason}</span>
+                </>
+              ) : (
+                " an unknown error"
+              )}
+              . It will be included in your next payout automatically
+              {"requires_verification_to_resume" in payoutPeriodData && payoutPeriodData.requires_verification_to_resume
+                ? " once verification is complete."
+                : "."}
+            </strong>
+          </p>
+        </div>
+      ) : null}
       <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
         <div>
           <h4>Sales</h4>
@@ -491,26 +543,60 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             </div>
           </div>
         ) : null}
+        {payoutPeriodData.status === "payable" &&
+        payoutPeriodData.carried_over_from_failed_on &&
+        Array.isArray(payoutPeriodData.carried_over_items) &&
+        payoutPeriodData.carried_over_items.length > 0
+          ? payoutPeriodData.carried_over_items.map((item, idx) => (
+              <div key={`preview-co-${idx}`} style={{ display: "flex" }}>
+                <h4>Carried over from failed payout on {item.failed_on}</h4>
+                <div style={{ marginLeft: "auto" }}>+{item.carried_over_displayed_amount}</div>
+              </div>
+            ))
+          : null}
+        {payoutPeriodData.status === "completed" && payoutPeriodData.carried_over_from_failed_on ? (
+          Array.isArray(payoutPeriodData.carried_over_items) && payoutPeriodData.carried_over_items.length > 0 ? (
+            payoutPeriodData.carried_over_items.map((item, idx) => (
+              <div key={idx} style={{ display: "flex" }}>
+                <h4>Carried over from failed payout on {item.failed_on}</h4>
+                <div style={{ marginLeft: "auto" }}>+{item.carried_over_displayed_amount}</div>
+              </div>
+            ))
+          ) : (
+            <div style={{ display: "flex" }}>
+              <h4>Carried over from failed payout on {payoutPeriodData.carried_over_from_failed_on}</h4>
+              <div style={{ marginLeft: "auto" }}>
+                +
+                {payoutPeriodData.carried_over_displayed_amount ||
+                  formatDollarAmount(payoutPeriodData.carried_over_cents || 0)}
+              </div>
+            </div>
+          )
+        ) : null}
         <div>
-          {(() => {
-            const isCurrentPeriod = payoutPeriodData.status === "payable";
-            switch (payoutPeriodData.payout_method_type) {
-              case "stripe_connect":
-                return (
-                  <PeriodStripeConnectAccount
-                    isCurrentPeriod={isCurrentPeriod}
-                    stripeConnectAccount={payoutPeriodData}
-                  />
-                );
-              case "bank":
-                return <PeriodBankAccount isCurrentPeriod={isCurrentPeriod} bankAccount={payoutPeriodData} />;
-              case "paypal":
-                return <PeriodPaypalAccount isCurrentPeriod={isCurrentPeriod} paypalAccount={payoutPeriodData} />;
-              case "legacy-na":
-              case "none":
-                return <PeriodNoAccount />;
-            }
-          })()}
+          {payoutPeriodData.status === "failed" ? (
+            <h4>Total</h4>
+          ) : (
+            (() => {
+              const isCurrentPeriod = payoutPeriodData.status === "payable";
+              switch (payoutPeriodData.payout_method_type) {
+                case "stripe_connect":
+                  return (
+                    <PeriodStripeConnectAccount
+                      isCurrentPeriod={isCurrentPeriod}
+                      stripeConnectAccount={payoutPeriodData}
+                    />
+                  );
+                case "bank":
+                  return <PeriodBankAccount isCurrentPeriod={isCurrentPeriod} bankAccount={payoutPeriodData} />;
+                case "paypal":
+                  return <PeriodPaypalAccount isCurrentPeriod={isCurrentPeriod} paypalAccount={payoutPeriodData} />;
+                case "legacy-na":
+                case "none":
+                  return <PeriodNoAccount isCurrentPeriod={isCurrentPeriod} />;
+              }
+            })()
+          )}
           <div className="payout-amount">
             <span>
               {payoutPeriodData.payout_displayed_amount}
@@ -634,7 +720,9 @@ const PeriodPaypalAccount = ({
   </h4>
 );
 
-const PeriodNoAccount = () => <h4>Will be sent to:</h4>;
+const PeriodNoAccount = ({ isCurrentPeriod = false }: { isCurrentPeriod?: boolean }) => (
+  <h4>{isCurrentPeriod ? "Will be sent to:" : "Sent to:"}</h4>
+);
 
 const BalancePage = ({
   next_payout_period_data,

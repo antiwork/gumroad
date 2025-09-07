@@ -115,6 +115,7 @@ class Payment < ApplicationRecord
   scope :processing,              -> { where(state: "processing") }
   scope :completed,               -> { where(state: "completed") }
   scope :completed_or_processing, -> { where("state = 'completed' or state = 'processing'") }
+  scope :completed_or_failed,     -> { where("state = 'completed' or state = 'failed'") }
   scope :failed,                  -> { where(state: "failed").order(id: :desc) }
   scope :failed_cannot_pay,       -> { failed.where(failure_reason: "cannot_pay") }
   scope :displayable,             -> { where("created_at >= ?", PayoutsHelper::OLDEST_DISPLAYABLE_PAYOUT_PERIOD_END_DATE) }
