@@ -123,17 +123,15 @@ module PayoutsHelper
         end
       end
 
-      sales_balance_ids_for_breakdown = if allowed_balance_ids.present?
-        allowed_balance_ids - carried_over_balance_ids
-      else
-        balance_ids
-      end
+      sales_balance_ids_for_breakdown = (allowed_balance_ids || []) - carried_over_balance_ids
 
       payout_period_data.merge!(payout_sales_data(user:, balance_ids: sales_balance_ids_for_breakdown,
                                                   start_date: previous_payment&.payout_period_end_date.try(:next),
                                                   end_date: payout_period_end_date))
 
       payout_period_data.merge!(payout_method_details(user:))
+
+      payout_period_data[:is_user_payable] = payout_period_data[:payout_cents].to_i >= minimum_payout_amount_cents
     else
       payout_period_data[:status] = "not_payable"
     end
