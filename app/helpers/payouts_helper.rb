@@ -60,7 +60,6 @@ module PayoutsHelper
 
       balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
 
-      # Exclude verification-required failed payouts from the upcoming carry-over and totals
       allowed_balance_ids = balance_ids
       if balance_ids.present?
         verification_failed = user.payments
@@ -83,7 +82,6 @@ module PayoutsHelper
         end
       end
 
-      # Preview: show carry-overs from earlier failed payouts (excluding verification-required)
       carried_over_balance_ids = []
       if allowed_balance_ids.present?
         earlier_failed_list = user.payments
@@ -124,7 +122,7 @@ module PayoutsHelper
           end
         end
       end
-      # Exclude carried-over balances from the period breakdown so we don't double-count in Sales/Fees rows
+
       sales_balance_ids_for_breakdown = if allowed_balance_ids.present?
         allowed_balance_ids - carried_over_balance_ids
       else
@@ -174,7 +172,6 @@ module PayoutsHelper
 
     payout_period_data[:payout_date_formatted] = formatted_payout_date(payment.created_at)
     payout_period_data[:payout_currency] = payment.currency
-    # Derive payout total from associated balances to ensure fees are subtracted correctly
     payout_total_cents = payment.balances.sum(:holding_amount_cents)
     payout_period_data[:payout_cents] = payout_total_cents
     payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_total_cents)
@@ -193,7 +190,6 @@ module PayoutsHelper
     balance_ids = payment.balances.map(&:id)
     carried_over_balance_ids = []
 
-    # Use balances association to detect carry-over between failed and completed payouts
     if balance_ids.present? && payment.completed?
       earlier_failed_list = user.payments
         .failed
@@ -232,7 +228,6 @@ module PayoutsHelper
       end
     end
 
-    # Compute Sales/Fees for this payout excluding carried-over balances so the breakdown reflects period activity only
     sales_balance_ids_for_breakdown = balance_ids - carried_over_balance_ids
     payout_period_data.merge!(payout_sales_data(user:, balance_ids: sales_balance_ids_for_breakdown,
                                                 start_date: previous_payment&.payout_period_end_date.try(:next),
@@ -243,7 +238,6 @@ module PayoutsHelper
       payout_period_data[:direct_fees_cents] = payout_period_data[:direct_fees_cents].to_i + payment.gumroad_fee_cents
     end
 
-    # For failed payouts, expose future inclusion dates in later completed payouts
     if balance_ids.present? && payment.failed?
       later_completed_list = user.payments
         .completed

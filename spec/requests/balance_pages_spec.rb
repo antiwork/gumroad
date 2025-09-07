@@ -140,8 +140,6 @@ describe "Balance Pages Scenario", js: true, type: :system do
         end
       end
 
-      # NOTE: Preview of carry-overs for current period is validated via helper logic and UI states below.
-
       it "shows processing payments for all bank account types" do
         UpdatePayoutMethod.bank_account_types.each do |bank_account_type, params|
           bank_account = create(bank_account_type.underscore, user: seller)
@@ -888,36 +886,11 @@ describe "Balance Pages Scenario", js: true, type: :system do
       let(:payout_processor_type) { PayoutProcessorType::STRIPE }
 
       before do
-        # Ensure Gumroad-managed merchant accounts exist for processors used in this spec
         MerchantAccount.find_or_create_by!(user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
           ma.charge_processor_alive_at = Time.current
         end
         MerchantAccount.find_or_create_by!(user: nil, charge_processor_id: PaypalChargeProcessor.charge_processor_id) do |ma|
           ma.charge_processor_alive_at = Time.current
-        end
-
-        # Avoid real Stripe API calls from merchant_account_stripe factory in local runs
-        unless BUILDING_ON_CI
-          allow(StripeMerchantAccountManager).to receive(:create_account).and_wrap_original do |_m, user, passphrase:|
-            MerchantAccount.create!(
-              user: user,
-              charge_processor_id: StripeChargeProcessor.charge_processor_id,
-              charge_processor_merchant_id: "acct_test_stub",
-              charge_processor_alive_at: Time.current
-            )
-          end
-          allow(StripeMerchantAccountHelper).to receive(:upload_verification_document).and_return(true)
-          allow(StripeMerchantAccountHelper).to receive(:ensure_charges_enabled).and_return(true)
-        end
-        # Avoid Stripe API calls during payment preparation and prevent state from being marked failed
-        unless BUILDING_ON_CI
-          allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_wrap_original do |_m, payment, balances|
-            merchant_account = seller.merchant_accounts.where(charge_processor_id: StripeChargeProcessor.charge_processor_id).first
-            payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
-            payment.currency = merchant_account.currency || Currency::USD
-            payment.amount_cents = balances.sum(&:holding_amount_cents)
-            []
-          end
         end
 
         create(:merchant_account_stripe, user: seller)
@@ -1026,8 +999,6 @@ describe "Balance Pages Scenario", js: true, type: :system do
         payment = seller.payments.last
         expect(ExportPayoutData).to have_enqueued_sidekiq_job([payment.id], user_with_role_for_seller.id)
       end
-
-      # NOTE: Past carry-over linkage between failed and completed payouts is validated in existing flows.
 
       it "displays 'show older payouts' button when there's pagination" do
         product = create(:product, user: seller)

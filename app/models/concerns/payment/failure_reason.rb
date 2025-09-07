@@ -158,7 +158,6 @@ module Payment::FailureReason
     return false if failure_reason.blank?
 
     if processor == PayoutProcessorType::PAYPAL
-      # Regulatory review - Pending / Blocked
       return ["PAYPAL 14763", "PAYPAL 14764"].include?(failure_reason)
     end
 
