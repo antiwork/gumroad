@@ -67,7 +67,7 @@ module StripeMerchantAccountManager
       )
     end
 
-    stripe_account = Stripe::Account.create(account_params)
+    stripe_account = stripe_account_with_rate_limit(:create, [account_params])
 
     merchant_account.charge_processor_merchant_id = stripe_account.id
     merchant_account.save!
@@ -299,6 +299,31 @@ module StripeMerchantAccountManager
     unless user.stripe_account
       raise MerchantRegistrationUserNotReadyError
         .new(user.id, "does not have a Stripe merchant account")
+    end
+  end
+
+  private_class_method
+  def self.stripe_account_with_rate_limit(method, params, max_attempts: 5)
+    attempts = 0
+
+    loop do
+      attempts += 1
+
+      begin
+        return Stripe::Account.send(method, *params)
+      rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
+        if (e.code == "rate_limit") || (e.http_status == 429) || (e.is_a?(Stripe::RateLimitError)) || e.message.include?("creating accounts too quickly")
+          if attempts >= max_attempts
+            Rails.logger.error "Stripe account creation rate limit exceeded after #{max_attempts} attempts"
+            raise e
+          end
+
+          Rails.logger.warn "Stripe account creation rate limit hit, retrying in 1 second (attempt #{attempts}/#{max_attempts})"
+          sleep(1) # Since its 5 attemps per second, 1 second is enough to avoid rate limiting
+        else
+          raise e
+        end
+      end
     end
   end
 

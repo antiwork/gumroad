@@ -11288,4 +11288,123 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
   end
+
+  describe ".stripe_account_with_rate_limit" do
+    let(:account_params) { { type: "custom", country: "US" } }
+    let(:fake_stripe_account) { double("Stripe::Account", id: "acct_test_123") }
+
+    context "when the call succeeds on first attempt" do
+      it "returns the result without retrying" do
+        expect(Stripe::Account).to receive(:send).with(:create, account_params).and_return(fake_stripe_account)
+        expect(Rails.logger).not_to receive(:warn)
+
+        result = described_class.send(:stripe_account_with_rate_limit, :create, [account_params])
+        expect(result).to eq(fake_stripe_account)
+      end
+    end
+
+    context "when rate limit error occurs" do
+      context "with Stripe::RateLimitError" do
+        it "retries with 1 second delay and succeeds" do
+          expect(Stripe::Account).to receive(:send).with(:create, account_params).and_raise(Stripe::RateLimitError.new("Rate limit exceeded"))
+          expect(Stripe::Account).to receive(:send).with(:create, account_params).and_return(fake_stripe_account)
+          expect(Rails.logger).to receive(:warn).with(/retrying in 1 second \(attempt 1\/5\)/)
+
+          result = described_class.send(:stripe_account_with_rate_limit, :create, [account_params])
+          expect(result).to eq(fake_stripe_account)
+        end
+      end
+
+      context "with Stripe::InvalidRequestError containing rate limit message" do
+        it "retries with 1 second delay and succeeds" do
+          rate_limit_error = Stripe::InvalidRequestError.new("Sorry, you're creating accounts too quickly", nil)
+          allow(rate_limit_error).to receive(:code).and_return("rate_limit")
+          allow(rate_limit_error).to receive(:http_status).and_return(429)
+
+          expect(Stripe::Account).to receive(:send).with(:create, account_params).and_raise(rate_limit_error)
+          expect(Stripe::Account).to receive(:send).with(:create, account_params).and_return(fake_stripe_account)
+          expect(Rails.logger).to receive(:warn).with(/retrying in 1 second \(attempt 1\/5\)/)
+
+          result = described_class.send(:stripe_account_with_rate_limit, :create, [account_params])
+          expect(result).to eq(fake_stripe_account)
+        end
+      end
+
+      context "with HTTP 429 status code" do
+        it "retries with 1 second delay and succeeds" do
+          error_429 = Stripe::InvalidRequestError.new("Too many requests", nil)
+          allow(error_429).to receive(:http_status).and_return(429)
+
+          expect(Stripe::Account).to receive(:send).with(:create, account_params).and_raise(error_429)
+          expect(Stripe::Account).to receive(:send).with(:create, account_params).and_return(fake_stripe_account)
+          expect(Rails.logger).to receive(:warn).with(/retrying in 1 second \(attempt 1\/5\)/)
+
+          result = described_class.send(:stripe_account_with_rate_limit, :create, [account_params])
+          expect(result).to eq(fake_stripe_account)
+        end
+      end
+    end
+
+    context "when max attempts are reached" do
+      it "raises the error after 5 attempts" do
+        rate_limit_error = Stripe::RateLimitError.new("Rate limit exceeded")
+
+        expect(Stripe::Account).to receive(:send).exactly(5).times.and_raise(rate_limit_error)
+        expect(Rails.logger).to receive(:warn).exactly(4).times
+        expect(Rails.logger).to receive(:error).with(/rate limit exceeded after 5 attempts/)
+        # Sleep is stubbed in before block to avoid Billy proxy conflicts
+
+        expect do
+          described_class.send(:stripe_account_with_rate_limit, :create, [account_params])
+        end.to raise_error(Stripe::RateLimitError, "Rate limit exceeded")
+      end
+    end
+
+    context "when non-rate-limit error occurs" do
+      it "raises the error immediately without retrying" do
+        validation_error = Stripe::InvalidRequestError.new("Invalid country", nil)
+
+        expect(Stripe::Account).to receive(:send).once.and_raise(validation_error)
+        expect(Rails.logger).not_to receive(:warn)
+
+        expect do
+          described_class.send(:stripe_account_with_rate_limit, :create, [account_params])
+        end.to raise_error(Stripe::InvalidRequestError, "Invalid country")
+      end
+    end
+
+    context "when using different Stripe methods" do
+      let(:person_params) { { first_name: "John", last_name: "Doe" } }
+      let(:fake_person) { double("Stripe::Person", id: "person_123") }
+
+      it "works with create_person method" do
+        expect(Stripe::Account).to receive(:send).with(:create_person, "acct_123", person_params).and_return(fake_person)
+
+        result = described_class.send(:stripe_account_with_rate_limit, :create_person, ["acct_123", person_params])
+        expect(result).to eq(fake_person)
+      end
+
+      it "works with update method" do
+        update_params = { business_type: "company" }
+        expect(Stripe::Account).to receive(:send).with(:update, "acct_123", update_params).and_return(fake_stripe_account)
+
+        result = described_class.send(:stripe_account_with_rate_limit, :update, ["acct_123", update_params])
+        expect(result).to eq(fake_stripe_account)
+      end
+    end
+
+    context "with custom max_attempts" do
+      it "respects the custom max_attempts parameter" do
+        rate_limit_error = Stripe::RateLimitError.new("Rate limit exceeded")
+
+        expect(Stripe::Account).to receive(:send).exactly(3).times.and_raise(rate_limit_error)
+        expect(Rails.logger).to receive(:warn).exactly(2).times
+        expect(Rails.logger).to receive(:error).with(/rate limit exceeded after 3 attempts/)
+
+        expect do
+          described_class.send(:stripe_account_with_rate_limit, :create, [account_params], max_attempts: 3)
+        end.to raise_error(Stripe::RateLimitError)
+      end
+    end
+  end
 end
