@@ -839,7 +839,10 @@ describe Purchase::Blockable do
     let(:purchase) { create(:purchase, link: product) }
 
     context "when seller payouts are already paused internally" do
-      before { seller.update!(payouts_paused_internally: true) }
+      before do
+        seller.update!(payouts_paused_internally: true)
+        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "4.2%", count: "15.0%" })
+      end
 
       it "does not change the payout pause source" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
