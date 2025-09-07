@@ -97,19 +97,17 @@ module Purchase::Blockable
 
   def pause_payouts_for_seller_based_on_chargeback_rate!
     return unless seller.present?
-    return if seller.payouts_paused_internally?
 
     chargeback_stats = seller.lost_chargebacks
     chargeback_volume_percentage = chargeback_stats[:volume]
-
     return if chargeback_volume_percentage == "NA"
 
     volume_rate = chargeback_volume_percentage.to_f
-    return if volume_rate <= 3.0
+    return if volume_rate <= User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS
 
-    seller.update!(payouts_paused_internally: true)
+    seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM) unless seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
     seller.comments.create(
-      content: "Payouts paused due to chargeback rate exceeding 3% volume (#{chargeback_volume_percentage}).",
+      content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
       comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
       author_name: "pause_payouts_for_seller_based_on_chargeback_rate"
     )

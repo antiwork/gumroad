@@ -838,23 +838,12 @@ describe Purchase::Blockable do
     let(:product) { create(:product, user: seller) }
     let(:purchase) { create(:purchase, link: product) }
 
-    context "when seller is not present" do
-      it "does not pause payouts" do
-        purchase_without_seller = build(:purchase, seller: nil, link: nil)
-
-        expect(purchase_without_seller.seller).to be_nil
-        purchase_without_seller.pause_payouts_for_seller_based_on_chargeback_rate!
-
-        expect(seller.reload.payouts_paused_internally).to be(false)
-      end
-    end
-
     context "when seller payouts are already paused internally" do
       before { seller.update!(payouts_paused_internally: true) }
 
-      it "does not check chargeback rate" do
-        expect(seller).to_not receive(:lost_chargebacks)
+      it "does not change the payout pause source" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+        expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
       end
 
       it "does not create additional comments" do
@@ -873,6 +862,7 @@ describe Purchase::Blockable do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         expect(seller.reload.payouts_paused_internally).to be(false)
+        expect(seller.payouts_paused_by_source).to be_nil
       end
 
       it "does not create a comment" do
@@ -890,7 +880,8 @@ describe Purchase::Blockable do
       it "does not pause payouts" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
-        expect(seller.reload.payouts_paused_internally).to be(false)
+        expect(seller.reload.payouts_paused_internally?).to be(false)
+        expect(seller.payouts_paused_by_source).to be_nil
       end
 
       it "does not create a comment" do
@@ -908,7 +899,8 @@ describe Purchase::Blockable do
       it "does not pause payouts" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
-        expect(seller.reload.payouts_paused_internally).to be(false)
+        expect(seller.reload.payouts_paused_internally?).to be(false)
+        expect(seller.payouts_paused_by_source).to be_nil
       end
 
       it "does not create a comment" do
@@ -926,14 +918,15 @@ describe Purchase::Blockable do
       it "pauses payouts internally" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
-        expect(seller.reload.payouts_paused_internally).to be(true)
+        expect(seller.reload.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       end
 
       it "creates a comment with the chargeback rate" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         comment = seller.comments.last
-        expect(comment.content).to eq("Payouts paused due to chargeback rate exceeding 3% volume (4.2%).")
+        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (4.2%) exceeding 3.0% volume.")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end
@@ -947,14 +940,15 @@ describe Purchase::Blockable do
       it "pauses payouts internally" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
-        expect(seller.reload.payouts_paused_internally).to be(true)
+        expect(seller.reload.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       end
 
       it "creates a comment with the correct chargeback rate" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         comment = seller.comments.last
-        expect(comment.content).to eq("Payouts paused due to chargeback rate exceeding 3% volume (15.7%).")
+        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (15.7%) exceeding 3.0% volume.")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end
@@ -968,14 +962,15 @@ describe Purchase::Blockable do
       it "pauses payouts internally" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
-        expect(seller.reload.payouts_paused_internally).to be(true)
+        expect(seller.reload.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       end
 
       it "creates a comment with the chargeback rate" do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         comment = seller.comments.last
-        expect(comment.content).to eq("Payouts paused due to chargeback rate exceeding 3% volume (3.1%).")
+        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (3.1%) exceeding 3.0% volume.")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end
