@@ -759,6 +759,21 @@ describe UrlRedirectsController do
 
       expect(response).to redirect_to("https://example.com/file.srt")
     end
+
+    context "when a PDF must be stamped and stamped file is missing" do
+      it "shows alert, enqueues job (critical, notify=true), and redirects to download page" do
+        product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+        url_redirect = UrlRedirect.find_by(token: @token)
+
+        StampPdfForPurchaseJob.jobs.clear
+
+        get :download_product_files, format: :html, params: { id: @token, product_file_ids: [product_file.external_id] }
+
+        expect(response).to redirect_to(url_redirect.download_page_url)
+        expect(flash[:alert]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
+        expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(url_redirect.purchase_id, true).on("critical")
+      end
+    end
   end
 
   describe "GET download_subtitle_file" do

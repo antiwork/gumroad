@@ -18,6 +18,8 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
     it "shows no products alert" do
       visit admin_affiliate_path(affiliate_user)
 
+      click_on "Products"
+
       expect(page).to have_text("No affiliated products.")
     end
   end
@@ -35,6 +37,8 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
 
     it "shows products" do
       visit admin_affiliate_path(affiliate_user)
+
+      click_on "Products"
 
       expect(page).to have_text("Product a")
       expect(page).to have_text("Product b")

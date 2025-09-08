@@ -28,6 +28,7 @@ describe "RenderingExtension" do
               short_domain: SHORT_DOMAIN,
               discover_domain: DISCOVER_DOMAIN,
               third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+              api_domain: API_DOMAIN,
             },
             user_agent_info: { is_mobile: true },
             logged_in_user: nil,
@@ -68,6 +69,7 @@ describe "RenderingExtension" do
                 short_domain: SHORT_DOMAIN,
                 discover_domain: DISCOVER_DOMAIN,
                 third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+                api_domain: API_DOMAIN,
               },
               user_agent_info: { is_mobile: true },
               logged_in_user: {

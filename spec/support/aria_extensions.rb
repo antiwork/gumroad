@@ -89,14 +89,14 @@ end
 
 Capybara.add_selector(:command) do
   xpath do |locator, **options|
-    %i[link button menuitem].map do |selector|
+    %i[link button menuitem tab_button].map do |selector|
       expression_for(selector, locator, **options)
     end.reduce(:union)
   end
   node_filter(:disabled, :boolean, default: false, skip_if: :all) { |node, value| !(value ^ node.disabled?) }
   expression_filter(:disabled, :boolean, default: false, skip_if: :all) { |xpath, val| val ? xpath : xpath[~XPath.attr(:"inert")] }
   expression_filter(:role, default: true) do |xpath|
-    xpath[XPath.attr(:role).one_of("button", "link", "menuitem").or ~XPath.attr(:role)]
+    xpath[XPath.attr(:role).one_of("button", "link", "menuitem", "tab").or ~XPath.attr(:role)]
   end
 end
 

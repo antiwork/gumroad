@@ -302,7 +302,7 @@ const UpsellsPage = (props: {
               New upsell
             </Button>
             <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
-              Learn more about upsells.
+              Learn more about upsells
             </a>
           </div>
         )}
