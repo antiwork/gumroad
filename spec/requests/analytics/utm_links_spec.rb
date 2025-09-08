@@ -860,6 +860,7 @@ describe "UTM links", :js, type: :system do
       create(:seller_profile, seller:, json_data: { tabs: [{ name: "Tab", sections: [seller1_section.id] }] })
       seller2_section = create(:seller_profile_products_section, seller: seller2, header: "Products", shown_products: [product1_by_seller2.id, product2_by_seller2.id])
       create(:seller_profile, seller: seller2, json_data: { tabs: [{ name: "Tab", sections: [seller2_section.id] }] })
+      Link.__elasticsearch__.refresh_index!
 
       visit seller1_utm_link.short_url
       wait_for_ajax
