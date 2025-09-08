@@ -65,15 +65,15 @@ describe("Purchase from a product page", type: :system, js: true) do
     fill_in "ZIP code", with: "94107"
 
     fill_in_credit_card(number: "", expiry: "", cvc: "")
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
 
     fill_in_credit_card(expiry: "", cvc: "")
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
 
     fill_in_credit_card(cvc: "")
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
 
     check_out(@product)
@@ -104,41 +104,41 @@ describe("Purchase from a product page", type: :system, js: true) do
     visit product.long_url
     add_to_cart(product)
 
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     within_fieldset "Card information" do
       within_frame { expect_focused find_field("Card number") }
     end
 
     fill_in_credit_card(expiry: nil, cvc: nil)
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     within_fieldset "Card information" do
       within_frame { expect_focused find_field("MM / YY") }
     end
 
     fill_in_credit_card(cvc: nil)
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     within_fieldset "Card information" do
       within_frame { expect_focused find_field("CVC") }
     end
 
     fill_in_credit_card
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect_focused find_field("Your email address")
 
     fill_in "Your email address", with: "gumroad@example.com"
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect_focused find_field("Full name")
 
     fill_in "Full name", with: "G McGumroadson"
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect_focused find_field("Street address")
 
     fill_in "Street address", with: "123 Main St"
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect_focused find_field("City")
 
     fill_in "City", with: "San Francisco"
-    find('[data-testid="pay-button"]').click
+    click_button "Pay", exact: true
     expect_focused find_field("ZIP code")
   end
 end
