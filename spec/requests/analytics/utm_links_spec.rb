@@ -864,6 +864,7 @@ describe "UTM links", :js, type: :system do
       visit seller1_utm_link.short_url
       wait_for_ajax
       seller1_utm_link_visit = seller1_utm_link.utm_link_visits.last
+      expect(page).to have_content("Product 1 by Seller 1", wait: 10)
       click_on "Product 1 by Seller 1"
       click_on "Add to cart"
       visit product2.long_url
