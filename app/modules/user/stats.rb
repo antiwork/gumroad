@@ -284,6 +284,11 @@ module User::Stats
     refunded_affiliate_fee_cents + disputed_affiliate_fee_cents
   end
 
+  def carried_over_cents_from_failed_payout_for_balances(balance_ids)
+    failed_balance_ids = payments.failed.joins(:balances).where(balances: { id: balance_ids }).pluck("balances.id").uniq
+    Balance.where(id: failed_balance_ids).sum(:amount_cents)
+  end
+
   def sales_data_for_balance_ids(balance_ids)
     {
       sales_cents: sales_cents_for_balances(balance_ids),
@@ -299,6 +304,7 @@ module User::Stats
       taxes_cents: taxes_cents_for_balances(balance_ids),
       affiliate_credits_cents: affiliate_credit_cents_for_balances(balance_ids),
       affiliate_fees_cents: affiliate_fee_cents_for_balances(balance_ids),
+      carried_over_cents_from_failed_payout: carried_over_cents_from_failed_payout_for_balances(balance_ids),
       paypal_payout_cents: 0
     }
   end

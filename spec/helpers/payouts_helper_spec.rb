@@ -397,4 +397,28 @@ describe PayoutsHelper do
       end
     end
   end
+
+  describe "failed payout" do
+    it("shows the failure reason for failed payouts using stripe") do
+      user = create(:user)
+      payment = create(:payment, user:, amount_cents: 10_00, processor: PayoutProcessorType::STRIPE, state: "failed", failure_reason: "account_closed")
+      balance = create(:balance, user:, amount_cents: 10_00, date: 30.days.ago, state: "unpaid")
+      payment.balances << balance
+
+      payout_data = self.payout_period_data(user, payment)
+      expect(payout_data[:failure_reason]).to eq("the bank account has been closed")
+      expect(payout_data[:carried_over_cents_from_failed_payout]).to eq(10_00)
+    end
+
+    it("shows the failure reason for failed payouts using paypal") do
+      user = create(:user)
+      payment = create(:payment, user:, amount_cents: 10_00, processor: PayoutProcessorType::PAYPAL, state: "failed", failure_reason: "PAYPAL 3015")
+      balance = create(:balance, user:, amount_cents: 10_00, date: 30.days.ago, state: "unpaid")
+      payment.balances << balance
+
+      payout_data = self.payout_period_data(user, payment)
+      expect(payout_data[:failure_reason]).to eq("receiver's account is locked or inactive")
+      expect(payout_data[:carried_over_cents_from_failed_payout]).to eq(10_00)
+    end
+  end
 end

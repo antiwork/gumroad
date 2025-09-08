@@ -122,6 +122,10 @@ module PayoutsHelper
       payout_period_data[:direct_fees_cents] = payout_period_data[:direct_fees_cents].to_i + payment.gumroad_fee_cents
     end
 
+    if payment.state == Payment::FAILED
+      payout_period_data[:failure_reason] = payment.payout_failure_reason
+    end
+
     payout_period_data.merge(payout_method_details(payment:))
   end
 

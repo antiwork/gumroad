@@ -115,6 +115,7 @@ class Payment < ApplicationRecord
   scope :processing,              -> { where(state: "processing") }
   scope :completed,               -> { where(state: "completed") }
   scope :completed_or_processing, -> { where("state = 'completed' or state = 'processing'") }
+  scope :completed_or_failed,     -> { where("state = 'completed' or state = 'failed'") }
   scope :failed,                  -> { where(state: "failed").order(id: :desc) }
   scope :failed_cannot_pay,       -> { failed.where(failure_reason: "cannot_pay") }
   scope :displayable,             -> { where("created_at >= ?", PayoutsHelper::OLDEST_DISPLAYABLE_PAYOUT_PERIOD_END_DATE) }
@@ -189,6 +190,22 @@ class Payment < ApplicationRecord
     sync_with_paypal if processor == PayoutProcessorType::PAYPAL
   end
 
+  def payout_failure_reason
+    return nil unless failure_reason.present?
+
+    puts "Payout failure reason: #{failure_reason}"
+    if processor == PayoutProcessorType::PAYPAL
+      reason = PAYPAL_FAILURE_SOLUTIONS[failure_reason]&.dig(:reason)
+    elsif processor == PayoutProcessorType::STRIPE
+      reason = STRIPE_FAILURE_SOLUTIONS[failure_reason]&.dig(:reason)
+    else
+      reason = failure_reason
+    end
+
+    puts "Payout failure humanized reason: #{reason}"
+    reason
+  end
+
   def as_json(options = {})
     json = {
       id: external_id,
@@ -200,6 +217,7 @@ class Payment < ApplicationRecord
       payment_processor: processor,
       bank_account_visual: bank_account&.account_number_visual,
       paypal_email: payment_address
+      # PreviousBalance
     }
 
     if options[:include_sales]

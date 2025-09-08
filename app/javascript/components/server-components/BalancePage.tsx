@@ -180,7 +180,7 @@ type CurrentPayoutsDataWithUserNotPayable = {
   has_stripe_connect: boolean;
 };
 
-type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed";
+type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed" | "failed";
 type PayoutType = "standard" | "instant";
 
 type CurrentPeriodPayoutData = (
@@ -209,6 +209,8 @@ type CurrentPeriodPayoutData = (
   paypal_payout_cents: number;
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
+  carried_over_cents_from_failed_payout: number;
+  failure_reason?: string | null;
   payout_note?: string | null;
 };
 
@@ -238,6 +240,8 @@ type PastPeriodPayoutsData = {
   paypal_payout_cents: number;
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
+  carried_over_cents_from_failed_payout: number;
+  failure_reason?: string | null;
   type: PayoutType;
 };
 
@@ -348,6 +352,17 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           </WithTooltip>
         ) : null}
       </div>
+      {payoutPeriodData.status === "failed" ? (
+        <div className="warning my-3" role="status">
+          <p>
+            This payout failed due to{" "}
+            <span className="font-bold underline">
+              {payoutPeriodData.failure_reason ? payoutPeriodData.failure_reason : "Unknown error"}
+            </span>
+            . The balance has been carried over and will be included in your next payout.
+          </p>
+        </div>
+      ) : null}
       <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
         <div>
           <h4>Sales</h4>
@@ -416,6 +431,12 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <div>{formatNegativeDollarAmount(payoutPeriodData.fees_cents)}</div>
           </div>
         )}
+        {payoutPeriodData.carried_over_cents_from_failed_payout > 0 ? (
+          <div>
+            <h4>Carried over from failed payout </h4>
+            <div>{formatDollarAmount(payoutPeriodData.carried_over_cents_from_failed_payout)}</div>
+          </div>
+        ) : null}
         {payoutPeriodData.refunds_cents !== 0 ? (
           <div>
             <h4>Refunds</h4>
