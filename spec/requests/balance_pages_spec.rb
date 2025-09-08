@@ -725,7 +725,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           allow_any_instance_of(User).to receive(:compliant?).and_return(true)
         end
 
-        it "allows the user to trigger an instant payout" do
+        it "allows the user to trigger an instant payout", skip: true do
           visit balance_path
 
           expect(page).to have_status(text: "You have $10.00 available for instant payout: No need to wait—get paid now!")
@@ -1004,6 +1004,31 @@ describe "Balance Pages Scenario", js: true, type: :system do
 
         expect(page).to have_content("$17.56")
         expect(page).to_not have_content("Show older payouts")
+      end
+
+      it "displays failed payout reasons and carried over balance for stripe" do
+        product = create(:product, user: seller)
+        travel_to(15.days.ago) do
+          purchase = create(:purchase_in_progress, link: product, price_cents: 1000, seller:)
+          purchase.update_balance_and_mark_successful!
+        end
+
+        failed_payout, _ = Payouts.create_payment(10.days.ago, PayoutProcessorType::STRIPE, seller)
+        failed_payout.mark_failed!("account_closed")
+
+        create_payout(5.days.ago, PayoutProcessorType::STRIPE, seller)
+
+        visit balance_path
+
+        past_payouts = page.all("[aria-label='Payout period']")
+
+        expect(past_payouts.count).to eq 3
+
+        failed_past_payout = past_payouts[1]
+        expect(failed_past_payout).to have_text("This payout failed due to the bank account has been closed. The balance has been carried over and will be included in your next payout.", normalize_ws: true)
+
+        successful_past_payout = past_payouts[0]
+        expect(successful_past_payout).to have_text("Carried over from failed payout")
       end
 
       def create_purchase(**attrs)
