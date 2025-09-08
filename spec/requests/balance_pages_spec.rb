@@ -725,7 +725,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           allow_any_instance_of(User).to receive(:compliant?).and_return(true)
         end
 
-        it "allows the user to trigger an instant payout", skip: true do
+        it "allows the user to trigger an instant payout" do
           visit balance_path
 
           expect(page).to have_status(text: "You have $10.00 available for instant payout: No need to wait—get paid now!")
@@ -1006,7 +1006,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         expect(page).to_not have_content("Show older payouts")
       end
 
-      it "displays failed payout reasons and carried over balance for stripe" do
+      it "displays failed payout reasons and carried over balance" do
         product = create(:product, user: seller)
         travel_to(15.days.ago) do
           purchase = create(:purchase_in_progress, link: product, price_cents: 1000, seller:)

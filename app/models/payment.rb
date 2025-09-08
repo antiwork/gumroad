@@ -202,7 +202,6 @@ class Payment < ApplicationRecord
       reason = failure_reason
     end
 
-    puts "Payout failure humanized reason: #{reason}"
     reason
   end
 
@@ -217,7 +216,6 @@ class Payment < ApplicationRecord
       payment_processor: processor,
       bank_account_visual: bank_account&.account_number_visual,
       paypal_email: payment_address
-      # PreviousBalance
     }
 
     if options[:include_sales]
