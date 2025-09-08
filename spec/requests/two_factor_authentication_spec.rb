@@ -113,6 +113,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page.current_url).to eq login_url(host: Capybara.app_host, next: two_factor_verify_link)
 
         submit_login_form
+        expect(page).to have_selector("body", wait: 5)
 
         # It directly navigates to logged in page since 2FA is verified through the link between the redirects.
         expect(page).to have_text("Welcome to Gumroad.")

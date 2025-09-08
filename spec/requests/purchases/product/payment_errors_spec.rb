@@ -127,6 +127,7 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     fill_in "Your email address", with: "gumroad@example.com"
     click_on "Pay"
+    expect(page).to have_field("Full name", disabled: false, wait: 10)
     expect_focused find_field("Full name")
 
     fill_in "Full name", with: "G McGumroadson"

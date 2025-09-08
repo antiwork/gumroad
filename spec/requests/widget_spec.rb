@@ -81,7 +81,7 @@ describe "Widget Page scenario", js: true, type: :system do
         expect(page).not_to have_content("Copy to Clipboard")
         copy_button = find_button("Copy embed code")
         copy_button.hover
-        expect(page).to have_content("Copy to Clipboard")
+        expect(page).to have_content("Copy to Clipboard", visible: true, wait: 10)
 
         copy_button.click
         expect(page).to have_content("Copied!")
