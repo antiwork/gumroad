@@ -600,7 +600,12 @@ const CustomerDetails = () => {
         <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
       ) : null}
       <div>
-        <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+        <Button
+          data-testid="pay-button"
+          color="primary"
+          onClick={() => dispatch({ type: "offer" })}
+          disabled={isSubmitDisabled(state)}
+        >
           {payLabel}
         </Button>
       </div>
