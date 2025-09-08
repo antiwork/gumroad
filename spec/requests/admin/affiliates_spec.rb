@@ -3,8 +3,6 @@
 require "spec_helper"
 
 describe "Admin::AffiliatesController Scenario", type: :system, js: true do
-  include CapybaraHelpers
-
   let(:admin) { create(:admin_user, has_risk_privilege: true) }
   let(:affiliate_user) { create(:affiliate_user) }
 
@@ -21,7 +19,8 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
       visit admin_affiliate_path(affiliate_user)
 
       click_on "Products"
-      wait_for_ajax
+
+      sleep(2)
 
       expect(page).to have_text("No affiliated products.")
     end
@@ -42,7 +41,8 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
       visit admin_affiliate_path(affiliate_user)
 
       click_on "Products"
-      wait_for_ajax
+
+      sleep(2)
 
       expect(page).to have_text("Product a")
       expect(page).to have_text("Product b")
