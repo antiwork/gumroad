@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class Admin::PurchasesController < Admin::BaseController
-  before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud resend_receipt
-                                          show sync_status_with_charge_processor block_buyer unblock_buyer]
+  before_action :fetch_purchase, only: %i[cancel_subscription refund refund_for_fraud refund_taxes_only resend_receipt
+                                          show sync_status_with_charge_processor block_buyer unblock_buyer undelete]
 
   def cancel_subscription
     if @purchase.subscription
@@ -26,6 +26,16 @@ class Admin::PurchasesController < Admin::BaseController
       render json: { success: true }
     else
       render json: { success: false }
+    end
+  end
+
+  def refund_taxes_only
+    e404 if @purchase.nil?
+
+    if @purchase.refund_gumroad_taxes!(refunding_user_id: current_user.id, note: params[:note], business_vat_id: params[:business_vat_id])
+      render json: { success: true }
+    else
+      render json: { success: false, message: @purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available" }
     end
   end
 
@@ -81,6 +91,30 @@ class Admin::PurchasesController < Admin::BaseController
     render json: { success: true }
   rescue => e
     render json: { success: false, message: e.message }
+  end
+
+  def undelete
+    e404 if @purchase.nil?
+
+    begin
+      if @purchase.is_deleted_by_buyer?
+        @purchase.update!(is_deleted_by_buyer: false)
+
+        comment_content = "Purchase undeleted by Admin (#{current_user.email})"
+        @purchase.comments.create!(content: comment_content, comment_type: "note", author_id: current_user.id)
+
+        if @purchase.purchaser.present?
+          @purchase.purchaser.comments.create!(content: comment_content,
+                                               comment_type: "note",
+                                               author: current_user,
+                                               purchase: @purchase)
+        end
+      end
+
+      render json: { success: true }
+    rescue => e
+      render json: { success: false, message: e.message }
+    end
   end
 
   def update_giftee_email

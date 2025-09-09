@@ -87,12 +87,9 @@
 
       <dt>Status</dt>
       <dd>
-        <%= purchase.purchase_state.capitalize %>
-        <%= "(refunded)" if purchase.stripe_refunded %>
-        <%= "(partially refunded)" if purchase.stripe_partially_refunded %>
-        <%= "(chargeback)" if purchase.chargedback_not_reversed? %>
-        <%= "(chargeback reversed)" if purchase.chargeback_reversed? %>
-        <%= "(#{purchase.formatted_error_code})" if purchase.failed? %>
+        <% purchase_states(purchase).each do |state| %>
+          <%= state %>
+        <% end %>
       </dd>
 
       <% if purchase.refunds.present? %>
@@ -108,6 +105,10 @@
             <li>
               Refund Status:
               <%= refund.status.capitalize %>
+            </li>
+            <li>
+              Date of refund:
+              <%= format_datetime_with_relative_tooltip(refund.created_at) %>
             </li>
           <% end %>
           </ul>
@@ -254,7 +255,16 @@
       <% if purchase.purchase_refund_policy.present? %>
         <dt>Refund Policy</dt>
         <dd>
-          <strong><%= purchase.purchase_refund_policy.title %></strong>
+          <strong>
+            <% purchase.purchase_refund_policy.tap do |purchase_refund_policy| %>
+              <%= purchase_refund_policy.title %>
+              <% if purchase_refund_policy.different_than_product_refund_policy? %>
+                <%= with_tooltip(tip: "Current refund policy: #{purchase_refund_policy.product_refund_policy_title}") do %>
+                  <%= icon("solid-shield-exclamation", style: "color: rgb(var(--warning))") %>
+                <% end %>
+              <% end %>
+            <% end %>
+          </strong>
           <% if purchase.purchase_refund_policy.fine_print.present? %>
             <br>
             <%= simple_format(purchase.purchase_refund_policy.fine_print) %>
@@ -350,6 +360,7 @@
     <% if purchase.successful? && !purchase.stripe_refunded %>
       <%= admin_action label: "Refund", url: refund_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase?", success_message: "Refunded!" %>
       <%= admin_action label: "Refund for Fraud", url: refund_for_fraud_admin_purchase_path(purchase), loading: "Refunding...", done: "Refunded!", confirm_message: "Are you sure you want to refund this purchase for fraud?", success_message: "Refunded!" %>
+      <%= admin_action label: "Refund taxes only", url: refund_taxes_only_admin_purchase_path(purchase), loading: "Refunding taxes...", done: "Taxes refunded!", confirm_message: "Are you sure you want to refund only the taxes for this purchase?", success_message: "Taxes refunded!" %>
       <%= admin_action label: "Refund Card for Fraud", url: refund_admin_cards_path(stripe_fingerprint: purchase.stripe_fingerprint), loading: "Refunding...", done: "Refunding purchases!", confirm_message: "Are you sure you want to Mass-refund for fraud all purchases associated with this purchase's card?", success_message: "Refunding purchases!" %>
     <% end %>
     <% if purchase.subscription.present? && !purchase.subscription.cancelled_or_failed? && !purchase.subscription.ended? %>
@@ -360,6 +371,9 @@
       <%= admin_action label: "Unblock buyer", url: unblock_buyer_admin_purchase_path(purchase), loading: "Unblocking buyer...", done: "Buyer unblocked!", success_message: "Buyer unblocked!" %>
     <% else %>
       <%= admin_action label: "Block buyer", url: block_buyer_admin_purchase_path(purchase), loading: "Blocking buyer...", done: "Buyer blocked!", confirm_message: "This will fully block this buyer's emails, GUID, and IP addresses. Proceed?", success_message: "Buyer blocked!" %>
+    <% end %>
+    <% if purchase.is_deleted_by_buyer? %>
+      <%= admin_action label: "Undelete", url: undelete_admin_purchase_path(purchase), loading: "Undeleting...", done: "Undeleted!", confirm_message: "Are you sure you want to undelete this purchase?", success_message: "Undeleted!" %>
     <% end %>
     <% if purchase.successful? %>
       <%= link_to "Go to Receipt", receipt_purchase_path(purchase.external_id), target: "_blank", class: "button small" %>

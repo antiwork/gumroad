@@ -13,7 +13,6 @@ import { assert } from "$app/utils/assert";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
-import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -46,6 +45,7 @@ import {
 } from "$app/components/Checkout/payment";
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
+import { useFeatureFlags } from "$app/components/FeatureFlags";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
@@ -207,6 +207,7 @@ export const CheckoutPage = ({
     }
     return initialCart;
   });
+  const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
     country,
     email,
@@ -222,6 +223,7 @@ export const CheckoutPage = ({
     recaptchaKey: recaptcha_key,
     paypalClientId: paypal_client_id,
     gift,
+    requireEmailTypoAcknowledgment: require_email_typo_acknowledgment,
   });
   const [state, dispatch] = reducer;
   const [results, setResults] = React.useState<Result[] | null>(null);
@@ -633,7 +635,7 @@ export const CheckoutPage = ({
       {currentOffer && surchargesIfAccepted ? (
         <Modal open onClose={completeOffer} title={currentOffer.text}>
           {currentOffer.type === "cross-sell" ? (
-            <CrossSellModal crossSell={currentOffer} accept={acceptOffer} decline={completeOffer} />
+            <CrossSellModal crossSell={currentOffer} accept={acceptOffer} decline={completeOffer} cart={cart} />
           ) : (
             <UpsellModal cart={cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />
           )}
@@ -647,14 +649,26 @@ export const CrossSellModal = ({
   crossSell,
   decline,
   accept,
+  cart,
 }: {
   crossSell: CrossSell;
   accept: () => void;
   decline: () => void;
+  cart: CartState;
 }) => {
   const product = crossSell.offered_product.product;
   const option = product.options.find(({ id }) => id === crossSell.offered_product.option_id);
-  const discountedPrice = applyOfferCodeToCents(crossSell.discount, crossSell.offered_product.price);
+
+  const crossSellCartItem: CartItem = {
+    ...crossSell.offered_product,
+    quantity: crossSell.offered_product.quantity || 1,
+    url_parameters: {},
+    referrer: "",
+    recommender_model_name: null,
+    accepted_offer: crossSell.discount ? { id: crossSell.id, discount: crossSell.discount } : null,
+  };
+  const { price: discountedPrice } = getDiscountedPrice(cart, crossSellCartItem);
+
   return (
     <>
       <div style={{ display: "grid", gap: "var(--spacer-4)" }}>

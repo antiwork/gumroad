@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Wishlist following page", :js, type: :feature do
+describe "Wishlist following page", :js, type: :system do
   include Rails.application.routes.url_helpers
 
   let(:user) { create(:user, name: "Follower") }

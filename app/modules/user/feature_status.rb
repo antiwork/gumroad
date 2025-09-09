@@ -15,6 +15,10 @@ class User
       alive_user_compliance_info.present? && PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.exclude?(::Compliance::Countries.find_by_name(alive_user_compliance_info.country)&.alpha2)
     end
 
+    def paypal_connect_allowed?
+      compliant? && sales_cents_total >= PaypalMerchantAccountManager::MIN_SALES_CENTS_REQ_FOR_PCP && has_completed_payouts?
+    end
+
     def paypal_disconnect_allowed?
       !active_subscribers?(charge_processor_id: PaypalChargeProcessor.charge_processor_id) &&
         !active_preorders?(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
@@ -41,7 +45,7 @@ class User
     end
 
     def can_publish_products?
-      !(check_merchant_account_is_linked && !merchant_accounts.alive.charge_processor_alive.exists?)
+      stripe_account.present? || stripe_connect_account.present? || paypal_connect_account.present? || payment_address.present?
     end
 
     def pay_with_paypal_enabled?
@@ -77,6 +81,10 @@ class User
       timezone_for_gumroad_day = gumroad_day_timezone.presence || timezone
       is_today_gumroad_day = Time.now.in_time_zone(timezone_for_gumroad_day).to_date == $redis.get(RedisKey.gumroad_day_date)&.to_date
       is_today_gumroad_day || Feature.active?(:waive_gumroad_fee_on_new_sales, self)
+    end
+
+    def product_level_support_emails_enabled?
+      Feature.active?(:product_level_support_emails, self)
     end
   end
 end

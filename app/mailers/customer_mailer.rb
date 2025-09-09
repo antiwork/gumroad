@@ -40,7 +40,7 @@ class CustomerMailer < ApplicationMailer
     mail(
       to: @chargeable.orderable.email,
       from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
-      reply_to: @chargeable.seller.support_or_form_email,
+      reply_to: @chargeable.support_email,
       subject: @receipt_presenter.mail_subject,
       template_name: is_receipt_for_gift_receiver ? "gift_receiver_receipt" : "receipt",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller)
@@ -72,7 +72,7 @@ class CustomerMailer < ApplicationMailer
     mail(
       to: email,
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
-      reply_to: @product.user.support_or_form_email,
+      reply_to: @product.support_email_or_default,
       subject: "You pre-ordered #{@product.name}!",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
     )
@@ -152,7 +152,7 @@ class CustomerMailer < ApplicationMailer
   def subscription_magic_link(subscription_id, email)
     @subscription = Subscription.find(subscription_id)
 
-    return unless email.present? && email.match(User::EMAIL_REGEX)
+    return unless EmailFormatValidator.valid?(email)
 
     mail(
       to: email,
@@ -234,6 +234,20 @@ class CustomerMailer < ApplicationMailer
     @subject = "Your scheduled call with #{@purchase.seller.display_name} is tomorrow!"
     @item_info = ReceiptPresenter::ItemInfo.new(@purchase)
     mail(to: @purchase.email, subject: @subject)
+  end
+
+  def files_ready_for_download(purchase_id)
+    @purchase = Purchase.find(purchase_id)
+    @product = @purchase.link
+    @url_redirect = @purchase.url_redirect
+
+    mail(
+      to: @purchase.email,
+      from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
+      reply_to: @product.support_email_or_default,
+      subject: "Your files are ready for download!",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+    )
   end
 
   private

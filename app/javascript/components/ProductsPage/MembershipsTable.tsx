@@ -158,23 +158,11 @@ export const ProductsPageMembershipsTable = (props: {
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":
-                      return (
-                        <>
-                          <Icon name="circle" /> Unpublished
-                        </>
-                      );
+                      return <>Unpublished</>;
                     case "preorder":
-                      return (
-                        <>
-                          <Icon name="circle" /> Pre-order
-                        </>
-                      );
+                      return <>Pre-order</>;
                     case "published":
-                      return (
-                        <>
-                          <Icon name="circle-fill" /> Published
-                        </>
-                      );
+                      return <>Published</>;
                   }
                 })()}
               </td>

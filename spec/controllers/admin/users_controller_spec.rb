@@ -9,7 +9,7 @@ describe Admin::UsersController do
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
-    @admin_user = create(:admin_user, has_payout_privilege: true, has_risk_privilege: true)
+    @admin_user = create(:admin_user)
     sign_in @admin_user
   end
 
@@ -211,6 +211,109 @@ describe Admin::UsersController do
           content: "Marked compliant by #{@admin_user.username} on #{Time.current.strftime('%B %-d, %Y')}",
           author: @admin_user
         )
+      end
+    end
+  end
+
+  describe "POST #set_custom_fee" do
+    let(:user) { create(:user) }
+
+    it "sets the custom fee for the user" do
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "2.5" }
+
+      expect(response).to be_successful
+      expect(user.reload.custom_fee_per_thousand).to eq 25
+    end
+
+    it "returns error if custom fee parameter is invalid" do
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "-5" }
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be greater than or equal to 0")
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "101" }
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("Validation failed: Custom fee per thousand must be less than or equal to 1000")
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+    end
+
+    it "updates the existing custom fee" do
+      user.update!(custom_fee_per_thousand: 75)
+      expect(user.reload.custom_fee_per_thousand).to eq 75
+
+      post :set_custom_fee, params: { id: user.id, custom_fee_percent: "5" }
+
+      expect(response).to be_successful
+      expect(user.reload.custom_fee_per_thousand).to eq 50
+    end
+  end
+
+  describe "POST #toggle_adult_products" do
+    let(:user) { create(:user) }
+
+    context "when all_adult_products is false" do
+      before do
+        user.update!(all_adult_products: false)
+      end
+
+      it "toggles all_adult_products to true" do
+        post :toggle_adult_products, params: { id: user.id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+
+    context "when all_adult_products is true" do
+      before do
+        user.update!(all_adult_products: true)
+      end
+
+      it "toggles all_adult_products to false" do
+        post :toggle_adult_products, params: { id: user.id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(false)
+      end
+    end
+
+    context "when all_adult_products is nil" do
+      before do
+        user.update!(all_adult_products: nil)
+      end
+
+      it "toggles all_adult_products to true" do
+        post :toggle_adult_products, params: { id: user.id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+
+    context "when user is found by email" do
+      it "toggles all_adult_products successfully" do
+        user.update!(all_adult_products: false)
+
+        post :toggle_adult_products, params: { id: user.email }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
+      end
+    end
+
+    context "when user is found by username" do
+      it "toggles all_adult_products successfully" do
+        user.update!(all_adult_products: false, username: "testuser")
+
+        post :toggle_adult_products, params: { id: user.username }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.all_adult_products).to be(true)
       end
     end
   end

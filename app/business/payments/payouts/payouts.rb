@@ -10,14 +10,14 @@ class Payouts
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
-    if user.suspended? && !from_admin
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was suspended.") if add_comment
+    unless user.compliant? || from_admin
+      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was not compliant.") if add_comment
       return false
     end
 
     if user.payouts_paused?
-      paused_by = user.payouts_paused_internally? ? "admin" : "creator"
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by #{paused_by == 'admin' ? 'the admin' : 'you'}.") if add_comment
+      payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
+      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}.") if add_comment
       return false
     end
 

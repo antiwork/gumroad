@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product page sales count", js: true, type: :feature) do
+describe("Product page sales count", js: true, type: :system) do
   before(:each) do
     @user = create(:user)
     @product = create(:product, user: @user, should_show_sales_count: true, price_cents: 100)

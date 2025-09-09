@@ -98,7 +98,9 @@ const WorkflowList = () => {
             <h2>Automate emails with ease.</h2>
             <h4>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</h4>
             {newWorkflowButton}
-            <a data-helper-prompt="How can I use workflows to send automated updates?">Learn more about workflows</a>
+            <a href="/help/article/131-using-workflows-to-send-automated-updates" target="_blank" rel="noreferrer">
+              Learn more about workflows
+            </a>
           </div>
         </div>
       )}
@@ -119,15 +121,7 @@ const WorkflowRow = ({
     <div style={{ display: "flex", alignItems: "center" }}>
       <h3 style={{ marginRight: "auto" }}>{workflow.name}</h3>
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
-        {workflow.published ? (
-          <small>
-            <Icon name="circle-fill" /> Published
-          </small>
-        ) : (
-          <small>
-            <Icon name="circle" /> Unpublished
-          </small>
-        )}
+        {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="button-group">
           <Link
             className="button"

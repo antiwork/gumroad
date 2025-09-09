@@ -50,6 +50,8 @@ namespace :admin do
       post :suspend_for_tos_violation
       post :put_on_probation
       post :flag_for_fraud
+      post :set_custom_fee
+      post :toggle_adult_products
     end
   end
 
@@ -92,6 +94,7 @@ namespace :admin do
     member do
       post :refund
       post :refund_for_fraud
+      post :refund_taxes_only
       post :cancel_subscription
       post "change_risk_state/:state", to: "purchases#change_risk_state", as: :change_risk_state
       post :resend_receipt
@@ -99,6 +102,7 @@ namespace :admin do
       post :update_giftee_email
       post :block_buyer
       post :unblock_buyer
+      post :undelete
     end
   end
 

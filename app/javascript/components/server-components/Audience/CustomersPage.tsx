@@ -3,7 +3,6 @@ import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import {
   Address,
@@ -56,7 +55,6 @@ import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -87,6 +85,18 @@ import placeholder from "$assets/images/placeholders/customers.png";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
+export type CustomerPageProps = {
+  customers: Customer[];
+  pagination: PaginationProps | null;
+  product_id: string | null;
+  products: Product[];
+  count: number;
+  currency_type: CurrencyCode;
+  countries: string[];
+  can_ping: boolean;
+  show_refund_fee_notice: boolean;
+};
+
 const year = new Date().getFullYear();
 
 const formatPrice = (priceCents: number, currencyType: CurrencyCode, recurrence?: RecurrenceId | null) =>
@@ -109,17 +119,7 @@ const CustomersPage = ({
   can_ping,
   show_refund_fee_notice,
   ...initialState
-}: {
-  customers: Customer[];
-  pagination: PaginationProps | null;
-  product_id: string | null;
-  products: Product[];
-  count: number;
-  currency_type: CurrencyCode;
-  countries: string[];
-  can_ping: boolean;
-  show_refund_fee_notice: boolean;
-}) => {
+}: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
   const userAgentInfo = useUserAgentInfo();
 
@@ -244,7 +244,7 @@ const CustomersPage = ({
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
 
   return (
-    <main>
+    <main className="h-full">
       <header>
         <h1>Sales</h1>
         <div className="actions">
@@ -417,6 +417,11 @@ const CustomersPage = ({
               >
                 Download
               </NavigationButton>
+              {count > 2000 && (
+                <div className="text-gray-600 mt-2 text-sm">
+                  Exports over 2,000 rows will be processed in the background and emailed to you.
+                </div>
+              )}
             </div>
           </Popover>
         </div>
@@ -556,7 +561,7 @@ const CustomersPage = ({
                 </div>
                 <p>
                   or{" "}
-                  <a data-helper-prompt="Can you tell me more about the audience dashboard?">
+                  <a href="/help/article/268-customer-dashboard" target="_blank" rel="noreferrer">
                     learn more about the audience dashboard
                   </a>
                 </p>
@@ -2174,7 +2179,9 @@ const RefundForm = ({
           <div role="status" className="info">
             <p>
               Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
-              <a data-helper-prompt="How do I refund a customer?">Learn more</a>
+              <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
             </p>
           </div>
         ) : null}
@@ -2542,4 +2549,4 @@ const CommissionSection = ({
   );
 };
 
-export default register({ component: CustomersPage, propParser: createCast() });
+export default CustomersPage;

@@ -35,4 +35,10 @@ mkcert gumroad.dev "*.gumroad.dev"
 mv gumroad.dev+1.pem gumroad_dev.crt
 mv gumroad.dev+1-key.pem gumroad_dev.key
 
+echo "Generating certificates for helperai.dev..."
+mkcert helperai.dev "*.helperai.dev"
+mv helperai.dev+1.pem helperai_dev.crt
+mv helperai.dev+1-key.pem helperai_dev.key
+echo "SSL certificates for helperai.dev generated successfully!"
+
 echo "SSL certificates generated successfully in docker/local-nginx/certs/"

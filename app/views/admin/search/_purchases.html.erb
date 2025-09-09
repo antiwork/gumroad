@@ -1,4 +1,6 @@
 <div class="paragraphs">
+  <%= render("filter_form") %>
+
   <table>
     <thead>
       <tr>
@@ -14,20 +16,29 @@
             <%= " + #{purchase.formatted_gumroad_tax_amount} VAT" if purchase.gumroad_responsible_for_tax? %>
             <%= link_to_unless_current(h(purchase.link.name), admin_link_url(purchase.link), title: purchase.link.id) %>
             <%= purchase.variants_list %>
-            <%= link_to purchase.link.long_url, target: "_blank" do %>
+            <%= link_to purchase.link.long_url, target: "_blank", class: "no-underline" do %>
               <span class="icon icon-arrow-up-right-square"></span>
             <% end %>
             <ul class="inline">
-              <% states = [purchase.purchase_state] %>
-              <% states << "(refunded)" if purchase.stripe_refunded? %>
-              <% states << "(partially refunded)" if purchase.stripe_partially_refunded? %>
-              <% states << "(chargeback)" if purchase.chargedback_not_reversed? %>
-              <% states << "(chargeback reversed)" if purchase.chargeback_reversed? %>
-              <% states << "(#{purchase.formatted_error_code})" if purchase.failed? %>
-              <% states.each do |state| %>
+              <% purchase_states(purchase).each do |state| %>
                 <li><%= state %></li>
               <% end %>
             </ul>
+            <div class="text-sm">
+              <ul class="inline">
+                <% purchase_refund_policy = purchase.purchase_refund_policy %>
+                <% if purchase_refund_policy.present? %>
+                  <li>Refund policy: <%= purchase_refund_policy.title %>
+                    <% if purchase_refund_policy.different_than_product_refund_policy? %>
+                      <%= with_tooltip(tip: "Current refund policy: #{purchase_refund_policy.product_refund_policy_title}") do %>
+                        <%= icon("solid-shield-exclamation", style: "color: rgb(var(--warning))") %>
+                      <% end %>
+                    <% end %>
+                  </li>
+                <% end %>
+                <li>Seller: <%= copy_to_clipboard(purchase.seller.email) %></li>
+              </ul>
+            </div>
           </td>
           <td data-label="By">
             <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>

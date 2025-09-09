@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Advanced Settings Scenario", type: :feature, js: true) do
+describe("Advanced Settings Scenario", type: :system, js: true) do
   let(:seller) { create(:user, name: "Gum") }
 
   describe "deleting the gumroad account" do

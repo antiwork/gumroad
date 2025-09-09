@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
-describe("Workflows", js: true, type: :feature) do
+describe("Workflows", js: true, type: :system) do
   include PostHelpers
 
   def find_email_row(name)

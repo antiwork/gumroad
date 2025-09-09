@@ -9,7 +9,7 @@ class User < ApplicationRecord
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, Mongoable, JsonData, Deletable, MoneyBalance,
           DeviseInternal, PayoutSchedule, SocialFacebook, SocialTwitter, SocialGoogle, SocialApple, SocialGoogleMobile,
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
-          Email, AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
+          AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId
 
@@ -29,6 +29,8 @@ class User < ApplicationRecord
   MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT = 100_00
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
+
+  MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
@@ -151,6 +153,8 @@ class User < ApplicationRecord
   attr_json_data_accessor :gumroad_day_timezone
   attr_json_data_accessor :payout_threshold_cents, default: -> { minimum_payout_threshold_cents }
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
+  attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :payouts_paused_by
 
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
@@ -168,9 +172,10 @@ class User < ApplicationRecord
 
   validates_presence_of :email, if: :email_required?
   validate :email_almost_unique
-  validates_format_of :email, with: EMAIL_REGEX, allow_blank: true, if: :email_changed?
-  validates_format_of :kindle_email, with: KINDLE_EMAIL_REGEX, allow_blank: true, if: :kindle_email_changed?
-  validates_format_of :support_email, with: EMAIL_REGEX, allow_blank: true, if: :support_email_changed?
+  validates :email, email_format: true, allow_blank: true, if: :email_changed?
+  validates :kindle_email, format: { with: KINDLE_EMAIL_REGEX }, allow_blank: true, if: :kindle_email_changed?
+  validates :support_email, email_format: true, allow_blank: true, if: :support_email_changed?
+  validates :support_email, not_reserved_email_domain: true, allow_blank: true, if: :support_email_changed?, unless: :is_team_member?
   validate :google_analytics_id_valid
   validate :avatar_is_valid
   validate :payout_frequency_is_valid
@@ -183,14 +188,13 @@ class User < ApplicationRecord
   validates :recommendation_type, inclusion: { in: User::RecommendationType::TYPES }
 
   validates :currency_type, inclusion: { in: CURRENCY_CHOICES.keys, message: "%{value} is not a supported currency." }
+  validates :custom_fee_per_thousand, allow_nil: true, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }
 
   validate :json_data, :json_data_must_be_hash
   validate :account_created_email_domain_is_not_blocked, on: :create
   validate :account_created_ip_is_not_blocked, on: :create
   validate :facebook_meta_tag_is_valid
-  validate :support_email_domain_is_not_reserved
-
-  validates_format_of :payment_address, with: EMAIL_REGEX, allow_blank: true
+  validates :payment_address, email_format: true, allow_blank: true
 
   before_save :append_http
   before_save :save_external_id
@@ -232,8 +236,8 @@ class User < ApplicationRecord
             26 => :collect_eu_vat,
             27 => :is_eu_vat_exclusive,
             28 => :is_team_member,
-            29 => :has_payout_privilege,
-            30 => :has_risk_privilege,
+            29 => :DEPRECATED_has_payout_privilege,
+            30 => :DEPRECATED_has_risk_privilege,
             31 => :disable_paypal_sales,
             32 => :all_adult_products,
             33 => :enable_free_downloads_email,
@@ -254,6 +258,8 @@ class User < ApplicationRecord
             48 => :upcoming_refund_policy_change_email_sent,
             49 => :can_create_physical_products,
             50 => :paypal_payout_fee_waived,
+            51 => :dismissed_create_products_with_ai_promo_alert,
+            52 => :disable_affiliate_requests,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -420,11 +426,11 @@ class User < ApplicationRecord
   end
 
   def stripe_and_paypal_merchant_accounts_exist?
-    merchant_account(StripeChargeProcessor.charge_processor_id) && merchant_account(PaypalChargeProcessor.charge_processor_id)
+    merchant_account(StripeChargeProcessor.charge_processor_id) && paypal_connect_account
   end
 
   def stripe_or_paypal_merchant_accounts_exist?
-    merchant_account(StripeChargeProcessor.charge_processor_id) || merchant_account(PaypalChargeProcessor.charge_processor_id)
+    merchant_account(StripeChargeProcessor.charge_processor_id) || paypal_connect_account
   end
 
   def stripe_connect_account
@@ -448,9 +454,7 @@ class User < ApplicationRecord
             .find { |ma| ma.can_accept_charges? && !ma.is_a_stripe_connect_account? }
       end
     else
-      merchant_accounts.alive.charge_processor_alive
-          .where(charge_processor_id:)
-          .find { |ma| ma.can_accept_charges? }
+      merchant_accounts.alive.charge_processor_alive.where(charge_processor_id:).find(&:can_accept_charges?)
     end
   end
 
@@ -487,6 +491,25 @@ class User < ApplicationRecord
 
       product.update!(purchasing_power_parity_disabled: should_disable) unless should_disable && product.purchasing_power_parity_disabled?
     end
+  end
+
+  def product_level_support_emails
+    return unless product_level_support_emails_enabled?
+
+    products
+      .where.not(support_email: nil)
+      .pluck(:support_email, :id)
+      .group_by { |support_email, _| support_email }
+      .map do |email, pairs|
+        {
+          email:,
+          product_ids: pairs.map { |_, id| Link.to_external_id(id) }
+        }
+      end
+  end
+
+  def update_product_level_support_emails!(entries)
+    Product::BulkUpdateSupportEmailService.new(self, entries).perform
   end
 
   def save_external_id
@@ -851,7 +874,7 @@ class User < ApplicationRecord
   end
 
   def eligible_for_instant_payouts?
-    !suspended? &&
+    compliant? &&
       !payouts_paused? &&
       payments.completed.count >= 4 &&
       alive_user_compliance_info&.legal_entity_country_code == "US"
@@ -863,6 +886,20 @@ class User < ApplicationRecord
 
   def payouts_paused?
     payouts_paused_internally? || payouts_paused_by_user?
+  end
+
+  def payouts_paused_by_source
+    return nil unless payouts_paused?
+
+    if payouts_paused_internally?
+      [PAYOUT_PAUSE_SOURCE_STRIPE, PAYOUT_PAUSE_SOURCE_SYSTEM].include?(payouts_paused_by) ? payouts_paused_by : PAYOUT_PAUSE_SOURCE_ADMIN
+    elsif payouts_paused_by_user?
+      PAYOUT_PAUSE_SOURCE_USER
+    end
+  end
+
+  def payouts_paused_for_reason
+    payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_ADMIN ? comments.with_type_payouts_paused.last&.content : nil
   end
 
   def made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
@@ -983,6 +1020,16 @@ class User < ApplicationRecord
       .exists?
   end
 
+  def eligible_for_ai_product_generation?
+    return false unless Feature.active?(:ai_product_generation, self)
+    return true if Rails.env.development?
+    return false unless confirmed?
+    return false if suspended?
+    return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
+
+    has_completed_payouts?
+  end
+
   protected
     def after_confirmation
       # The password reset link sent to the old email should be invalidated
@@ -1052,8 +1099,6 @@ class User < ApplicationRecord
       enable_payment_push_notification
       enable_free_downloads_email
       enable_free_downloads_push_notification
-      enable_recurring_subscription_charge_email
-      enable_recurring_subscription_charge_push_notification
     }
     private_constant :FLAGS_TO_ENABLE_BY_DEFAULT
 

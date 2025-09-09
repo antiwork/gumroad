@@ -144,6 +144,8 @@ type Props = {
   saved_card: SavedCreditCard | null;
   formatted_balance_to_forfeit: string | null;
   payouts_paused_internally: boolean;
+  payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payouts_paused_for_reason: string | null;
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
@@ -222,11 +224,9 @@ const PaymentsPage = (props: Props) => {
         ? "card"
         : props.bank_account_details.account_number_visual !== null
           ? "bank"
-          : props.paypal_address !== null
+          : props.bank_account_details.show_paypal
             ? "paypal"
-            : props.bank_account_details.show_bank_account
-              ? "bank"
-              : "paypal",
+            : "bank",
   );
   const updatePayoutMethod = (newPayoutMethod: PayoutMethod) => {
     setSelectedPayoutMethod(newPayoutMethod);
@@ -712,10 +712,8 @@ const PaymentsPage = (props: Props) => {
 
     let cardData;
     if (selectedPayoutMethod === "card") {
-      if (!debitCard) {
+      if (!debitCard || debitCard.type === "saved") {
         cardData = null;
-      } else if (debitCard.type === "saved") {
-        cardData = {};
       } else {
         try {
           cardData = await prepareCardTokenForPayouts({ cardElement: debitCard.element });
@@ -822,6 +820,31 @@ const PaymentsPage = (props: Props) => {
         />
       ) : null}
       <form ref={formRef}>
+        {props.payouts_paused_by !== null ? (
+          <div className="warning" role="status" style={{ marginBottom: "var(--spacer-7)" }}>
+            <p>
+              {props.payouts_paused_by === "stripe" ? (
+                <strong>
+                  Your payouts are currently paused by our payment processor. Please check for any pending verification
+                  requirements below.
+                </strong>
+              ) : props.payouts_paused_by === "admin" ? (
+                <strong>
+                  Your payouts have been paused by Gumroad admin.
+                  {props.payouts_paused_for_reason ? ` Reason for pause: ${props.payouts_paused_for_reason}` : null}
+                </strong>
+              ) : props.payouts_paused_by === "system" ? (
+                <strong>
+                  Your payouts have been automatically paused for a security review and will be resumed once the review
+                  completes.
+                </strong>
+              ) : (
+                <strong>You have paused your payouts.</strong>
+              )}
+            </p>
+          </div>
+        ) : null}
+
         <section>
           <header>
             <h2>Verification</h2>
@@ -938,7 +961,17 @@ const PaymentsPage = (props: Props) => {
               )}
             </fieldset>
             {props.payouts_paused_internally ? (
-              <WithTooltip tip="Your payouts were paused by our payment processor. Please update your information below.">
+              <WithTooltip
+                tip={
+                  props.payouts_paused_by === "stripe"
+                    ? "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements above."
+                    : props.payouts_paused_by === "admin"
+                      ? `Your payouts have been paused by Gumroad admin.${props.payouts_paused_for_reason && ` Reason for pause: ${props.payouts_paused_for_reason}`}`
+                      : props.payouts_paused_by === "system"
+                        ? "Your payouts have been automatically paused for a security review and will be resumed once the review completes."
+                        : null
+                }
+              >
                 {payoutsPausedToggle}
               </WithTooltip>
             ) : (
@@ -951,7 +984,7 @@ const PaymentsPage = (props: Props) => {
           <header>
             <h2>Payout method</h2>
             <div>
-              <a data-helper-prompt="I have a question about my payout settings?">
+              <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
                 Any questions about these payout settings?
               </a>
             </div>
@@ -988,18 +1021,20 @@ const PaymentsPage = (props: Props) => {
                   ) : null}
                 </>
               ) : null}
-              <Button
-                role="radio"
-                key="paypal"
-                aria-checked={selectedPayoutMethod === "paypal"}
-                onClick={() => updatePayoutMethod("paypal")}
-                disabled={props.is_form_disabled}
-              >
-                <Icon name="shop-window" />
-                <div>
-                  <h4>PayPal</h4>
-                </div>
-              </Button>
+              {props.bank_account_details.show_paypal ? (
+                <Button
+                  role="radio"
+                  key="paypal"
+                  aria-checked={selectedPayoutMethod === "paypal"}
+                  onClick={() => updatePayoutMethod("paypal")}
+                  disabled={props.is_form_disabled}
+                >
+                  <Icon name="shop-window" />
+                  <div>
+                    <h4>PayPal</h4>
+                  </div>
+                </Button>
+              ) : null}
               {props.user.country_code === "BR" ||
               props.user.can_connect_stripe ||
               props.stripe_connect.has_connected_stripe ? (
@@ -1049,6 +1084,7 @@ const PaymentsPage = (props: Props) => {
                 feeInfoText={props.fee_info.paypal_fee_info_text}
                 updatePayoutMethod={updatePayoutMethod}
                 errorFieldNames={errorFieldNames}
+                user={props.user}
               />
             ) : null}
             {selectedPayoutMethod !== "stripe" ? (
@@ -1075,7 +1111,7 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {props.paypal_connect.allow_paypal_connect ? (
+        {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}
             isFormDisabled={props.is_form_disabled}

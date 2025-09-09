@@ -26,7 +26,8 @@ describe Checkout::Upsells::ProductsController do
             currency_code: "usd",
             review_count: 1,
             average_rating: 5.0,
-            native_type: "digital"
+            native_type: "digital",
+            options: []
           },
           {
             id: product2.external_id,
@@ -36,7 +37,40 @@ describe Checkout::Upsells::ProductsController do
             currency_code: "eur",
             review_count: 0,
             average_rating: 0.0,
-            native_type: "physical"
+            native_type: "physical",
+            options: []
+          },
+          {
+            id: versioned_product.external_id,
+            name: "Versioned Product",
+            permalink: versioned_product.unique_permalink,
+            price_cents: 3000,
+            currency_code: "usd",
+            review_count: 0,
+            average_rating: 0.0,
+            native_type: "digital",
+            options: [
+              {
+                id: versioned_product.variants.first.external_id,
+                name: "Untitled 1",
+                quantity_left: nil,
+                description: "",
+                price_difference_cents: 0,
+                recurrence_price_values: nil,
+                is_pwyw: false,
+                duration_in_minutes: nil
+              },
+              {
+                id: versioned_product.variants.last.external_id,
+                name: "Untitled 2",
+                quantity_left: nil,
+                description: "",
+                price_difference_cents: 0,
+                recurrence_price_values: nil,
+                is_pwyw: false,
+                duration_in_minutes: nil
+              }
+            ]
           }
         ]
       )
@@ -62,7 +96,8 @@ describe Checkout::Upsells::ProductsController do
               currency_code: "usd",
               review_count: 1,
               average_rating: 5.0,
-              native_type: "digital"
+              native_type: "digital",
+              options: []
             },
             {
               id: product2.external_id,
@@ -72,7 +107,40 @@ describe Checkout::Upsells::ProductsController do
               currency_code: "eur",
               review_count: 0,
               average_rating: 0.0,
-              native_type: "physical"
+              native_type: "physical",
+              options: []
+            },
+            {
+              id: versioned_product.external_id,
+              permalink: versioned_product.unique_permalink,
+              name: "Versioned Product",
+              price_cents: 3000,
+              currency_code: "usd",
+              review_count: 0,
+              average_rating: 0.0,
+              native_type: "digital",
+              options: [
+                {
+                  id: versioned_product.variants.first.external_id,
+                  name: "Untitled 1",
+                  quantity_left: nil,
+                  description: "",
+                  price_difference_cents: 0,
+                  recurrence_price_values: nil,
+                  is_pwyw: false,
+                  duration_in_minutes: nil
+                },
+                {
+                  id: versioned_product.variants.last.external_id,
+                  name: "Untitled 2",
+                  quantity_left: nil,
+                  description: "",
+                  price_difference_cents: 0,
+                  recurrence_price_values: nil,
+                  is_pwyw: false,
+                  duration_in_minutes: nil
+                }
+              ]
             }
           ]
         )
@@ -95,7 +163,8 @@ describe Checkout::Upsells::ProductsController do
           currency_code: "usd",
           review_count: 1,
           average_rating: 5.0,
-          native_type: "digital"
+          native_type: "digital",
+          options: []
         }
       )
     end

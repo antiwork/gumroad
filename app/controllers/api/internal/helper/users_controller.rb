@@ -1,15 +1,12 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseController
-  before_action :authorize_hmac_signature!, only: :user_info
-  before_action :authorize_helper_token!, except: :user_info
-
   def user_info
     render json: { success: false, error: "'email' parameter is required" }, status: :bad_request if params[:email].blank?
 
     render json: {
       success: true,
-      user_info: HelperUserInfoService.new(email: params[:email]).user_info,
+      customer: HelperUserInfoService.new(email: params[:email]).customer_info,
     }
   end
 
@@ -182,7 +179,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     }
   }.freeze
   def send_reset_password_instructions
-    if params[:email].present? && params[:email].match(User::EMAIL_REGEX)
+    if EmailFormatValidator.valid?(params[:email])
       user = User.alive.by_email(params[:email]).first
       if user
         user.send_reset_password_instructions
@@ -250,7 +247,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return
     end
 
-    if !params[:new_email].match(User::EMAIL_REGEX)
+    if !EmailFormatValidator.valid?(params[:new_email])
       render json: { error_message: "Invalid new email format." }, status: :unprocessable_entity
       return
     end

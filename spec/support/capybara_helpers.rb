@@ -57,4 +57,19 @@ module CapybaraHelpers
   def get_client_time_zone
     page.evaluate_script("Intl.DateTimeFormat().resolvedOptions().timeZone")
   end
+
+  def unfocus
+    find("body").click
+  end
+
+  def accept_browser_dialog
+    wait = Selenium::WebDriver::Wait.new(timeout: 30)
+    wait.until do
+      page.driver.browser.switch_to.alert
+      true
+    rescue Selenium::WebDriver::Error::NoAlertPresentError
+      false
+    end
+    page.driver.browser.switch_to.alert.accept
+  end
 end

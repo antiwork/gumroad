@@ -167,8 +167,9 @@ class UpdatePayoutMethod
     elsif params[:payment_address].present?
       payment_address = params[:payment_address].strip
 
-      return { error: :provide_valid_email_prompt } if payment_address.match(User::EMAIL_REGEX).nil?
+      return { error: :provide_valid_email_prompt } unless EmailFormatValidator.valid?(payment_address)
       return { error: :provide_ascii_only_email_prompt } unless payment_address.ascii_only?
+      return { error: :paypal_payouts_not_supported } if user.alive_user_compliance_info.blank? || user.native_payouts_supported?
 
       user.payment_address = payment_address
       user.save!

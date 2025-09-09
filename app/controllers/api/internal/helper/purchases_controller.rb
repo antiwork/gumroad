@@ -55,7 +55,7 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def refund_last_purchase
     if @purchase.present? && @purchase.refund_and_save!(GUMROAD_ADMIN_ID)
-      render json: { success: true, message: "Successfully refunded purchase ID #{@purchase.id}" }
+      render json: { success: true, message: "Successfully refunded purchase number #{@purchase.external_id_numeric}" }
     else
       render json: { success: false, message: @purchase.present? ? @purchase.errors.full_messages.to_sentence : "Purchase not found" }, status: :unprocessable_entity
     end
@@ -112,7 +112,69 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   }.freeze
   def resend_last_receipt
     @purchase.resend_receipt
-    render json: { success: true, message: "Successfully resent receipt for purchase ID #{@purchase.id}" }
+    render json: { success: true, message: "Successfully resent receipt for purchase number #{@purchase.external_id_numeric}" }
+  end
+
+  RESEND_ALL_RECEIPTS_OPENAPI = {
+    summary: "Resend all receipts",
+    description: "Resend all receipt emails to customer for all their purchases",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the customer" }
+            },
+            required: ["email"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully resent all receipts",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                message: { type: "string" },
+                count: { type: "integer" }
+              }
+            }
+          }
+        },
+      },
+      '404': {
+        description: "No purchases found for email",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+    }
+  }.freeze
+  def resend_all_receipts
+    purchases = Purchase.where(email: params[:email]).successful
+    return render json: { success: false, message: "No purchases found for email: #{params[:email]}" }, status: :not_found if purchases.empty?
+
+    CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+    render json: {
+      success: true,
+      message: "Successfully resent all receipts to #{params[:email]}",
+      count: purchases.count
+    }
   end
 
   SEARCH_PURCHASE_OPENAPI = {
@@ -215,6 +277,23 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     purchase_json[:id] = purchase.external_id_numeric
     purchase_json[:seller_email] = purchase.seller_email
     purchase_json[:receipt_url] = receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
+
+    if purchase.refunded?
+      purchase_json[:refund_status] = "refunded"
+    elsif purchase.stripe_partially_refunded
+      purchase_json[:refund_status] = "partially_refunded"
+    else
+      purchase_json[:refund_status] = nil
+    end
+
+    if purchase.amount_refunded_cents > 0
+      purchase_json[:refund_amount] = purchase.amount_refunded_cents
+    end
+
+    if purchase_json[:refund_status]
+      purchase_json[:refund_date] = purchase.refunds.order(:created_at).last&.created_at
+    end
+
     render json: { success: true, message: "Purchase found", purchase: purchase_json }
   rescue AdminSearchService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
@@ -275,7 +354,75 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     return e404_json unless purchase.present?
 
     purchase.resend_receipt
-    render json: { success: true, message: "Successfully resent receipt for purchase ID #{purchase.id} to #{purchase.email}" }
+    render json: { success: true, message: "Successfully resent receipt for purchase number #{purchase.external_id_numeric} to #{purchase.email}" }
+  end
+
+  REFRESH_LIBRARY_OPENAPI = {
+    summary: "Refresh purchases in user's library",
+    description: "Link purchases with missing purchaser_id to the user account for the given email address",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the customer" }
+            },
+            required: ["email"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully refreshed library",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                message: { type: "string" },
+                count: { type: "integer" }
+              }
+            }
+          }
+        }
+      },
+      '404': {
+        description: "User not found",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+
+  def refresh_library
+    email = params[:email]
+
+    return render json: { success: false, message: "Email address is required" }, status: :bad_request unless email.present?
+
+    user = User.find_by(email: email)
+    return render json: { success: false, message: "No user found with email: #{email}" }, status: :not_found unless user.present?
+
+    count = Purchase.where(email: user.email, purchaser_id: nil).update_all(purchaser_id: user.id)
+
+    render json: {
+      success: true,
+      message: "Successfully refreshed library for #{email}. Updated #{count} purchases.",
+      count: count
+    }
   end
 
   REASSIGN_PURCHASES_OPENAPI = {
@@ -468,9 +615,96 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     end
 
     if purchase.refund_and_save!(GUMROAD_ADMIN_ID)
-      render json: { success: true, message: "Successfully refunded purchase ID #{purchase.id}" }
+      render json: { success: true, message: "Successfully refunded purchase number #{purchase.external_id_numeric}" }
     else
-      render json: { success: false, message: "Refund failed for purchase ID #{purchase.id}" }, status: :unprocessable_entity
+      render json: { success: false, message: "Refund failed for purchase number #{purchase.external_id_numeric}" }, status: :unprocessable_entity
+    end
+  end
+
+  REFUND_TAXES_ONLY_OPENAPI = {
+    summary: "Refund taxes only",
+    description: "Refund only the tax portion of a purchase for tax-exempt customers. Does not refund the product price.",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              purchase_id: { type: "string", description: "Purchase ID/number to refund taxes for" },
+              email: { type: "string", description: "Email address of the customer, must match purchase" },
+              note: { type: "string", description: "Optional note for the refund" },
+              business_vat_id: { type: "string", description: "Optional business VAT ID for invoice generation" }
+            },
+            required: ["purchase_id", "email"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Successfully refunded taxes",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '422': {
+        description: "No refundable taxes or refund failed",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '404': {
+        description: "Purchase not found or email mismatch",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+
+  def refund_taxes_only
+    purchase_id = params[:purchase_id]&.to_i
+    email = params[:email]
+
+    return render json: { success: false, message: "Both 'purchase_id' and 'email' parameters are required" }, status: :bad_request unless purchase_id.present? && email.present?
+
+    purchase = Purchase.find_by_external_id_numeric(purchase_id)
+
+    unless purchase && purchase.email.downcase == email.downcase
+      return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
+    end
+
+    if purchase.refund_gumroad_taxes!(refunding_user_id: GUMROAD_ADMIN_ID, note: params[:note], business_vat_id: params[:business_vat_id])
+      render json: { success: true, message: "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}" }
+    else
+      error_message = purchase.errors.full_messages.presence&.to_sentence || "No refundable taxes available"
+      render json: { success: false, message: error_message }, status: :unprocessable_entity
     end
   end
 

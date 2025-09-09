@@ -15,6 +15,8 @@ class Comment < ApplicationRecord
   COMMENT_TYPE_SUSPENSION_NOTE = "suspension_note"
   COMMENT_TYPE_BALANCE_FORFEITED = "balance_forfeited"
   COMMENT_TYPE_COUNTRY_CHANGED = "country_changed"
+  COMMENT_TYPE_PAYOUTS_PAUSED = "payouts_paused"
+  COMMENT_TYPE_PAYOUTS_RESUMED = "payouts_resumed"
   RISK_STATE_COMMENT_TYPES = [COMMENT_TYPE_COMPLIANT, COMMENT_TYPE_ON_PROBATION, COMMENT_TYPE_FLAGGED, COMMENT_TYPE_SUSPENDED]
   MAX_ALLOWED_DEPTH = 4 # Depth of a root comment starts with 0.
 
@@ -39,6 +41,8 @@ class Comment < ApplicationRecord
 
   scope :with_type_payout_note, -> { where(comment_type: COMMENT_TYPE_PAYOUT_NOTE) }
   scope :with_type_on_probation, -> { where(comment_type: COMMENT_TYPE_ON_PROBATION) }
+  scope :with_type_payouts_paused, -> { where(comment_type: COMMENT_TYPE_PAYOUTS_PAUSED) }
+  scope :with_type_payouts_resumed, -> { where(comment_type: COMMENT_TYPE_PAYOUTS_RESUMED) }
 
   def mark_subtree_deleted!
     transaction do

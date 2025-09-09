@@ -3,23 +3,12 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Admin Pages Scenario", type: :feature, js: true do
-  let(:admin) { create(:named_user, :admin, has_risk_privilege: true) }
+describe "Admin Pages Scenario", type: :system, js: true do
+  let(:admin) { create(:named_user, :admin) }
 
   before do
     allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
     login_as(admin)
-  end
-
-  def accept_browser_dialog
-    wait = Selenium::WebDriver::Wait.new(timeout: 30)
-    wait.until do
-      page.driver.browser.switch_to.alert
-      true
-    rescue Selenium::WebDriver::Error::NoAlertPresentError
-      false
-    end
-    page.driver.browser.switch_to.alert.accept
   end
 
   describe "Navigation" do
@@ -157,6 +146,7 @@ describe "Admin Pages Scenario", type: :feature, js: true do
       end
 
       visit admin_user_path(creator)
+      click_on "Products"
 
       expect(page).to have_text(product.name)
       expect(page).to have_text("2 views")

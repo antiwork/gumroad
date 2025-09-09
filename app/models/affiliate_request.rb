@@ -10,7 +10,7 @@ class AffiliateRequest < ApplicationRecord
 
   validates :seller, :name, :email, :promotion_text, presence: true
   validates :name, length: { maximum: User::MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." }
-  validates_format_of :email, with: User::EMAIL_REGEX
+  validates :email, email_format: true
   validate :duplicate_request_validation, on: :create
   validate :requester_is_not_seller, on: :create
 

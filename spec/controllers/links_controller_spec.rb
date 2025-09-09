@@ -73,35 +73,63 @@ describe LinksController, :vcr do
       end
 
       describe "shows the correct number of sales" do
+        def expect_sales_count_in_inertia_response(expected_count)
+          data_page_match = response.body.match(/data-page="([^"]*)"/)
+          expect(data_page_match).to be_present, "Expected Inertia.js data-page attribute"
+
+          decoded_content = CGI.unescapeHTML(data_page_match[1])
+          json_data = JSON.parse(decoded_content)
+
+          products = json_data["props"]["react_products_page_props"]["products"]
+          expect(products).to be_present, "Expected products in Inertia.js response"
+          expect(products.first["successful_sales_count"]).to eq(expected_count)
+        end
+
         it "with a single sale" do
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
 
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "1" })
-          expect(response.body).to have_selector("tfoot", text: "Totals3$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(1)
         end
 
         it "with over a thousand sales, comma-delimited" do
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(3_030)
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "3,030" })
-          expect(response.body).to have_selector("tfoot", text: "Totals9,090$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(3_030)
         end
 
         it "shows comma-delimited pre-orders count" do
           @product1.update_attribute(:is_in_preorder_state, true)
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(424_242)
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "424,242" })
-          expect(response.body).to have_selector("tfoot", text: "Totals1,272,726$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(424_242)
         end
 
         it "shows comma-delimited subscribers count" do
           create(:subscription_product, user: seller)
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1_111)
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "1,111" })
-          expect(response.body).to have_selector("tfoot", text: "Totals4,444$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(1_111)
         end
       end
 
@@ -109,8 +137,20 @@ describe LinksController, :vcr do
         it "shows product URL without the protocol part" do
           get :index
 
-          expect(response.body).to have_selector("td:nth-of-type(2) > div > a:nth-of-type(2)[href='#{@product1.long_url}']",
-                                                 text: "#{seller.subdomain}/l/#{@product1.general_permalink}")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          data_page_match = response.body.match(/data-page="([^"]*)"/)
+          expect(data_page_match).to be_present
+
+          decoded_content = CGI.unescapeHTML(data_page_match[1])
+          json_data = JSON.parse(decoded_content)
+
+          products = json_data["props"]["react_products_page_props"]["products"]
+          expect(products).to be_present
+          expect(products.first["url_without_protocol"]).to be_present
         end
       end
     end
@@ -368,7 +408,7 @@ describe LinksController, :vcr do
         it "returns an error message" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["error_message"]).to eq("You must connect connect at least one payment method before you can publish this product for sale.")
+          expect(response.parsed_body["error_message"]).to eq("You must connect at least one payment method before you can publish this product for sale.")
         end
 
         it "does not publish the link" do
@@ -777,6 +817,39 @@ describe LinksController, :vcr do
       it "appends removed_file_info_attributes when additional keys are provided" do
         put :update, params: @params.merge({ file_attributes: [] }), format: :json
         expect(@product.reload.removed_file_info_attributes).to eq %i[Size Length]
+      end
+
+      describe "currency and price updates" do
+        before do
+          @product.update!(price_currency_type: "usd", price_cents: 1000)
+        end
+
+        it "changes product from USD $10 to EUR €12 and back to USD $11" do
+          expect(@product.price_currency_type).to eq "usd"
+          expect(@product.price_cents).to eq 1000
+
+          put :update, params: {
+            id: @product.unique_permalink,
+            price_currency_type: "eur",
+            price_cents: 1200
+          }, as: :json
+
+          expect(response).to be_successful
+          @product.reload
+          expect(@product.price_currency_type).to eq "eur"
+          expect(@product.price_cents).to eq 1200
+
+          put :update, params: {
+            id: @product.unique_permalink,
+            price_currency_type: "usd",
+            price_cents: 1100
+          }, as: :json
+
+          expect(response).to be_successful
+          @product.reload
+          expect(@product.price_currency_type).to eq "usd"
+          expect(@product.price_cents).to eq 1100
+        end
       end
 
       it "sets the correct value for removed_file_info_attributes if there are none" do
@@ -3161,6 +3234,76 @@ describe LinksController, :vcr do
           end
         end
       end
+
+      describe "Product details generation using AI" do
+        let(:params) do
+          {
+            name: "UX design mastery using Figma",
+            description: "<p>Learn how to design user interfaces using Figma</p>",
+            custom_summary: "Learn how to design user interfaces using Figma",
+            number_of_content_pages: 2,
+            ai_prompt: "Create an ebook on UX design using Figma",
+            price_cents: 100,
+            native_type: "ebook",
+          }
+        end
+
+        before do
+          Feature.activate_user(:ai_product_generation, seller)
+        end
+
+        it "calls AI service when ai_prompt is present and feature is active" do
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          allow(service_double).to receive(:generate_cover_image).and_return({ image_data: "fake_image_data" })
+          allow(service_double).to receive(:generate_rich_content_pages).and_return({
+                                                                                      pages: [
+                                                                                        { "title" => "Introduction", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Welcome to the course" }] }] },
+                                                                                        { "title" => "Conclusion", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Thank you for reading this course" }] }] }
+                                                                                      ]
+                                                                                    })
+          allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_return(nil)
+          allow_any_instance_of(Link).to receive_message_chain(:asset_previews, :build).and_return(nil)
+          allow_any_instance_of(Link).to receive(:build_thumbnail).and_return(nil)
+
+          post :create, params: { format: :json, link: params }
+
+          expect(service_double).to have_received(:generate_cover_image)
+          expect(service_double).to have_received(:generate_rich_content_pages)
+          expect(response.parsed_body["success"]).to eq(true)
+
+          link = Link.last
+          expect(link.name).to eq("UX design mastery using Figma")
+          expect(link.description).to eq("<p>Learn how to design user interfaces using Figma</p>")
+          expect(link.custom_summary).to eq("Learn how to design user interfaces using Figma")
+          expect(link.custom_attributes.sole).to eq({ "name" => "Pages", "value" => "2" })
+          expect(link.rich_contents.count).to eq(2)
+          expect(link.rich_contents.first.title).to eq("Introduction")
+          expect(link.rich_contents.first.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Welcome to the course" }] }])
+          expect(link.rich_contents.last.title).to eq("Conclusion")
+          expect(link.rich_contents.last.description).to eq([{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Thank you for reading this course" }] }])
+        end
+
+        it "does not call AI service when feature is inactive" do
+          Feature.deactivate_user(:ai_product_generation, seller)
+
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          expect(service_double).not_to receive(:generate_cover_image)
+          expect(service_double).not_to receive(:generate_rich_content_pages)
+
+          post :create, params: { format: :json, link: params }
+        end
+
+        it "does not call AI service when ai_prompt is blank" do
+          service_double = instance_double(Ai::ProductDetailsGeneratorService)
+          allow(Ai::ProductDetailsGeneratorService).to receive(:new).and_return(service_double)
+          expect(service_double).not_to receive(:generate_cover_image)
+          expect(service_double).not_to receive(:generate_rich_content_pages)
+
+          post :create, params: { format: :json, link: { price_cents: 100, name: "Regular Product" } }
+        end
+      end
     end
 
     describe "POST release_preorder" do
@@ -4173,6 +4316,7 @@ describe LinksController, :vcr do
           @creator = create(:compliant_user, username: "creatordudey", name: "Creator Dudey")
           @section = create(:seller_profile_products_section, seller: @creator)
           @product = create(:product, name: "Top quality weasel", user: @creator, taxonomy: Taxonomy.find_or_create_by(slug: "3d"))
+          create(:purchase, :with_review, link: @product, created_at: 1.week.ago)
           create(:product_review, link: @product)
           Link.import(force: true, refresh: true)
         end

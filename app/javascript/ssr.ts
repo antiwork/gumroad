@@ -11,12 +11,14 @@ import AdminFlagForFraudForm from "$app/components/server-components/Admin/FlagF
 import AdminManualPayoutForm from "$app/components/server-components/Admin/ManualPayoutForm";
 import AdminMassTransferPurchasesForm from "$app/components/server-components/Admin/MassTransferPurchasesForm";
 import AdminNav from "$app/components/server-components/Admin/Nav";
+import AdminPausePayoutsForm from "$app/components/server-components/Admin/PausePayoutsForm";
 import AdminProductAttributesAndInfo from "$app/components/server-components/Admin/ProductAttributesAndInfo";
 import AdminProductPurchases from "$app/components/server-components/Admin/ProductPurchases";
 import AdminProductStats from "$app/components/server-components/Admin/ProductStats";
 import AdminResendReceiptForm from "$app/components/server-components/Admin/ResendReceiptForm";
 import AdminSalesReportsPage from "$app/components/server-components/Admin/SalesReportsPage";
 import AdminSearchPopover from "$app/components/server-components/Admin/SearchPopover";
+import AdminSetCustomFeeForm from "$app/components/server-components/Admin/SetCustomFeeForm";
 import AdminSuspendForFraudForm from "$app/components/server-components/Admin/SuspendForFraudForm";
 import AdminSuspendForTosForm from "$app/components/server-components/Admin/SuspendForTosForm";
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
@@ -92,6 +94,7 @@ import SubscribePage from "$app/components/server-components/SubscribePage";
 import SubscribePreview from "$app/components/server-components/SubscribePreview";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
 import SubscriptionManagerMagicLink from "$app/components/server-components/SubscriptionManagerMagicLink";
+import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
 import UtmLinksPage from "$app/components/server-components/UtmLinksPage";
@@ -109,12 +112,14 @@ ReactOnRails.register({
   AdminManualPayoutForm,
   AdminMassTransferPurchasesForm,
   AdminNav,
+  AdminPausePayoutsForm,
   AdminProductAttributesAndInfo,
   AdminProductPurchases,
   AdminProductStats,
   AdminSalesReportsPage,
   AdminResendReceiptForm,
   AdminSearchPopover,
+  AdminSetCustomFeeForm,
   AdminSuspendForFraudForm,
   AdminSuspendForTosForm,
   AdminUserGuids,
@@ -129,6 +134,7 @@ ReactOnRails.register({
   ApplicationEditPage,
   ArchivedProductsPage,
   HelpCenterArticlesIndexPage,
+  SupportHeader,
   AudienceCustomersPage,
   AudiencePage,
   AuthorizedApplicationsSettingsPage,

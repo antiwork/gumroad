@@ -7,9 +7,6 @@ class Admin::UsersController < Admin::BaseController
   skip_before_action :require_admin!, if: :request_from_iffy?, only: %i[suspend_for_fraud_from_iffy mark_compliant_from_iffy flag_for_explicit_nsfw_tos_violation_from_iffy]
 
   before_action :fetch_user, except: %i[refund_queue block_ip_address]
-  before_action :require_user_has_payout_privileges!, only: %i[
-    create_stripe_managed_account
-  ]
 
   helper Pagy::UrlHelpers
 
@@ -200,6 +197,23 @@ class Admin::UsersController < Admin::BaseController
     else
       render json: { success: false, message: "Credit amount is required" }
     end
+  end
+
+  def set_custom_fee
+    custom_fee_per_thousand = params[:custom_fee_percent].present? ? (params[:custom_fee_percent].to_f * 10).round : nil
+    @user.update!(custom_fee_per_thousand:)
+
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
+  def toggle_adult_products
+    @user.all_adult_products = !@user.all_adult_products
+    @user.save!
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
   end
 
   private

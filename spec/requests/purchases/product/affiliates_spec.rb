@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product checkout - with affiliate", type: :feature, js: true) do
+describe("Product checkout - with affiliate", type: :system, js: true) do
   def set_affiliate_cookie
     browser = Capybara.current_session.driver.browser
     browser.manage.add_cookie(name: CGI.escape(affiliate.cookie_key), value: {

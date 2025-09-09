@@ -84,7 +84,7 @@ describe AdminHelper do
       travel_to(datetime) do
         puts Time.current
         result = format_datetime_with_relative_tooltip(1.day.from_now)
-        expect(result).to eq('<span title="1 day from now">Feb 23, 2022 at 10:00 AM</span>')
+        expect(result).to eq('<span title="1 day from now">Feb 23, 2022 at 10:00 AM UTC</span>')
       end
     end
 
@@ -93,7 +93,7 @@ describe AdminHelper do
       travel_to(datetime) do
         puts Time.current
         result = format_datetime_with_relative_tooltip(1.day.ago)
-        expect(result).to eq('<span title="1 day ago">Feb 21, 2022 at 10:00 AM</span>')
+        expect(result).to eq('<span title="1 day ago">Feb 21, 2022 at 10:00 AM UTC</span>')
       end
     end
   end

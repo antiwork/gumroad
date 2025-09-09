@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Profile settings on product pages", type: :feature, js: true do
+describe "Profile settings on product pages", type: :system, js: true do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
 

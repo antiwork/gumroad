@@ -189,7 +189,54 @@ class Payment < ApplicationRecord
     sync_with_paypal if processor == PayoutProcessorType::PAYPAL
   end
 
+  def as_json(options = {})
+    json = {
+      id: external_id,
+      amount: format("%.2f", (amount_cents || 0) / 100.0),
+      currency: currency,
+      status: state,
+      created_at: created_at,
+      processed_at: state == COMPLETED ? updated_at : nil,
+      payment_processor: processor,
+      bank_account_visual: bank_account&.account_number_visual,
+      paypal_email: payment_address
+    }
+
+    if options[:include_sales]
+      json[:sales] = successful_sales.map(&:external_id)
+      json[:refunded_sales] = refunded_sales.map(&:external_id)
+      json[:disputed_sales] = disputed_sales.map(&:external_id)
+    end
+
+    json
+  end
+
+  def successful_sales
+    Purchase.where(purchase_success_balance_id: balance_ids)
+            .includes(:link)
+            .distinct
+            .order(created_at: :desc, id: :desc)
+  end
+
+  def refunded_sales
+    Purchase.where(purchase_refund_balance_id: balance_ids)
+            .includes(:link)
+            .distinct
+            .order(created_at: :desc, id: :desc)
+  end
+
+  def disputed_sales
+    Purchase.where(purchase_chargeback_balance_id: balance_ids)
+            .includes(:link)
+            .distinct
+            .order(created_at: :desc, id: :desc)
+  end
+
   private
+    def balance_ids
+      @balance_ids ||= balances.pluck(:id)
+    end
+
     def mark_balances_as_paid
       balances.each(&:mark_paid!)
     end

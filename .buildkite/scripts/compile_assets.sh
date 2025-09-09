@@ -75,7 +75,7 @@ if [[ $BUILDKITE_PARALLEL_JOB = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   push_image staging || exit 1
 fi
 
-if [[ $BUILDKITE_PARALLEL_JOB = 1 && ! $BUILDKITE_BRANCH =~ ^deploy-.* ]]; then
+if [[ $BUILDKITE_PARALLEL_JOB = 1 && ! $BUILDKITE_BRANCH =~ ^(deploy-.*|devin/.*)$ ]]; then
   logger "Building production assets"
   docker rm production-assets || :
   COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \

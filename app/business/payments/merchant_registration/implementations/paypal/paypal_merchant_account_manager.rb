@@ -5,13 +5,18 @@ class PaypalMerchantAccountManager
 
   # Ref: https://developer.paypal.com/docs/api/reference/country-codes/#paypal-commerce-platform-availability
   COUNTRY_CODES_NOT_SUPPORTED_BY_PCP = [
+    Compliance::Countries::DZA,
     Compliance::Countries::BRA,
+    Compliance::Countries::EGY,
     Compliance::Countries::IND,
     Compliance::Countries::ISR,
     Compliance::Countries::JPN,
     Compliance::Countries::FSM,
+    Compliance::Countries::MAR,
     Compliance::Countries::TUR,
   ].map(&:alpha2).freeze
+
+  MIN_SALES_CENTS_REQ_FOR_PCP = 100_00 # $100
 
   def create_partner_referral(user, return_url)
     payment_integration_api = PaypalIntegrationRestApi.new(user, authorization_header:)
@@ -41,6 +46,7 @@ class PaypalMerchantAccountManager
                               send_email_confirmation_notification: true,
                               create_new: true)
     return "There was an error connecting your PayPal account with Gumroad." if user.blank? || paypal_merchant_id.blank?
+    return "Your PayPal account could not be connected because you do not meet the eligibility requirements." unless user.paypal_connect_allowed?
 
     paypal_merchant_accounts = user.merchant_accounts
                                    .where(charge_processor_id: PaypalChargeProcessor.charge_processor_id)

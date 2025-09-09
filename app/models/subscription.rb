@@ -576,6 +576,12 @@ class Subscription < ApplicationRecord
     end
   end
 
+  def expected_completion_time
+    return nil unless has_fixed_length?
+
+    end_time_of_last_paid_period + period * remaining_charges_count
+  end
+
   def send_renewal_reminder_at
     [end_time_of_subscription - BasePrice::Recurrence.renewal_reminder_email_days(recurrence), Time.current].max
   end
@@ -968,7 +974,7 @@ class Subscription < ApplicationRecord
     end
 
     def enable_mor_fee
-      self.mor_fee_applicable = Feature.active?(:merchant_of_record_fee, seller)
+      self.mor_fee_applicable = true
     end
 
     def assign_seller

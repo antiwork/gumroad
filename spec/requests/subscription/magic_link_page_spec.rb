@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Membership magic link page", type: :feature, js: true do
+describe "Membership magic link page", type: :system, js: true do
   include ManageSubscriptionHelpers
 
   before { setup_subscription }

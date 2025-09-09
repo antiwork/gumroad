@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::Users::PayoutsController < Admin::BaseController
-  before_action :require_user_has_payout_privileges!, except: %i[index show sync sync_all]
   before_action :fetch_payment, only: %i[show retry cancel fail sync]
   before_action :fetch_user, only: [:index, :pause, :resume]
 
@@ -81,13 +80,26 @@ class Admin::Users::PayoutsController < Admin::BaseController
   end
 
   def pause
-    @user.update!(payouts_paused_internally: true)
+    reason = params.require(:pause_payouts).permit(:reason)[:reason]
+    @user.update!(payouts_paused_internally: true, payouts_paused_by: current_user.id)
+    @user.comments.create!(
+      author_id: current_user.id,
+      content: reason,
+      comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+    ) if reason.present?
 
     render json: { success: true, message: "User's payouts paused" }
   end
 
   def resume
-    @user.update!(payouts_paused_internally: false)
+    render json: { success: false } and return unless @user.payouts_paused_internally?
+
+    @user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+    @user.comments.create!(
+      author_id: current_user.id,
+      content: "Payouts resumed.",
+      comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED
+    )
 
     render json: { success: true, message: "User's payouts resumed" }
   end

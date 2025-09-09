@@ -64,6 +64,7 @@ Rails.application.routes.draw do
           put :refund
         end
       end
+      resources :payouts, only: [:index, :show]
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
@@ -244,10 +245,12 @@ Rails.application.routes.draw do
             collection do
               post :refund_last_purchase
               post :resend_last_receipt
+              post :resend_all_receipts
               post :resend_receipt_by_number
               post :search
               post :reassign_purchases
               post :auto_refund_purchase
+              post :refund_taxes_only
             end
           end
 
@@ -463,6 +466,7 @@ Rails.application.routes.draw do
           end
         end
       end
+      resource :dismiss_ai_product_generation_promo, only: [:create]
     end
 
     resources :stripe_account_sessions, only: :create
@@ -829,6 +833,8 @@ Rails.application.routes.draw do
 
     resources :reviews, only: [:index]
 
+    resources :support, only: [:index]
+
     # url redirects
     get "/r/:id/expired", to: "url_redirects#expired", as: :url_redirect_expired_page
     get "/r/:id/rental_expired", to: "url_redirects#rental_expired_page", as: :url_redirect_rental_expired_page
@@ -930,6 +936,8 @@ Rails.application.routes.draw do
             resources :rejections, only: [:create]
           end
         end
+
+        resources :ai_product_details_generations, only: [:create]
       end
     end
 

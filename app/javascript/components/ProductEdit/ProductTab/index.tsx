@@ -7,6 +7,7 @@ import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
+import { Icon } from "$app/components/Icons";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
@@ -60,6 +61,14 @@ export const ProductTab = () => {
   const [initialProduct] = React.useState(product);
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
+  const [showAiNotification, setShowAiNotification] = React.useState(false);
+
+  React.useEffect(() => {
+    if (window.location.hash === "#ai-generated") {
+      setShowAiNotification(true);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -76,6 +85,23 @@ export const ProductTab = () => {
       <main className="squished">
         <form>
           <section>
+            {showAiNotification ? (
+              <div
+                role="status"
+                className="grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
+              >
+                <span className="self-center text-lg">
+                  <Icon name="sparkle" />
+                </span>
+                <div>
+                  <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
+                  Tweak things and make it your own—this is your time to shine!
+                </div>
+                <button className="link !col-start-3 self-center" onClick={() => setShowAiNotification(false)}>
+                  close
+                </button>
+              </div>
+            ) : null}
             <BundleConversionNotice />
             <fieldset>
               <label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</label>
@@ -191,7 +217,7 @@ export const ProductTab = () => {
                       onChange={(newValue) => updateProduct({ community_chat_enabled: newValue })}
                       help={{
                         label: "Learn more",
-                        dataHelperPrompt: "What is Gumroad community chat?",
+                        url: "/help/article/347-gumroad-community",
                       }}
                     />
                   )}
@@ -284,8 +310,11 @@ export const ProductTab = () => {
                       <section>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
-                          {/* TODO: Fill this in with the correct link to the help center article */}
-                          <a href="#" target="_blank" rel="noreferrer">
+                          <a
+                            href="https://gumroad.com/help/article/70-can-i-sell-services#call"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Learn more
                           </a>
                         </div>
@@ -316,11 +345,9 @@ export const ProductTab = () => {
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <h2>{product.native_type === "physical" ? "Variants" : "Versions"}</h2>
                         <a
-                          data-helper-prompt={
-                            product.native_type === "physical"
-                              ? "Can you tell me more about variants?"
-                              : "Can you tell me more about versions?"
-                          }
+                          href="/help/article/126-setting-up-versions-on-a-digital-product"
+                          target="_blank"
+                          rel="noreferrer"
                         >
                           Learn more
                         </a>
@@ -405,7 +432,9 @@ export const ProductTab = () => {
                       onChange={(newValue) => updateProduct({ is_epublication: newValue })}
                     >
                       Mark product as e-publication for VAT purposes{" "}
-                      <a data-helper-prompt="Can you explain how VAT works for e-publications?">Learn more</a>
+                      <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
+                        Learn more
+                      </a>
                     </Toggle>
                   ) : null}
                   {!seller_refund_policy_enabled ? (
@@ -418,14 +447,12 @@ export const ProductTab = () => {
                       setShowPreview={setShowRefundPolicyPreview}
                     />
                   ) : null}
-                  {product.native_type !== "physical" && initialProduct.require_shipping ? (
-                    <Toggle
-                      value={product.require_shipping}
-                      onChange={(newValue) => updateProduct({ require_shipping: newValue })}
-                    >
-                      Require shipping information
-                    </Toggle>
-                  ) : null}
+                  <Toggle
+                    value={product.require_shipping}
+                    onChange={(newValue) => updateProduct({ require_shipping: newValue })}
+                  >
+                    Require shipping information
+                  </Toggle>
                 </fieldset>
                 {product.native_type === "membership" ? (
                   <fieldset>

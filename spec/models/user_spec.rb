@@ -403,6 +403,62 @@ describe User, :vcr do
     end
   end
 
+  describe "#product_level_support_emails" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "1+2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "3@example.com") }
+    let!(:product4) { create(:product, user:, support_email: nil) }
+
+    before { Feature.activate(:product_level_support_emails) }
+
+    it "returns the user's product support emails" do
+      result = user.product_level_support_emails
+
+      expect(result).to contain_exactly(
+        {
+          email: "1+2@example.com",
+          product_ids: [product1.external_id, product2.external_id],
+        },
+        {
+          email: "3@example.com",
+          product_ids: [product3.external_id],
+        }
+      )
+    end
+
+    context "when product_level_support_emails feature is disabled" do
+      before { Feature.deactivate(:product_level_support_emails) }
+
+      it "returns nil" do
+        expect(user.product_level_support_emails).to be_nil
+      end
+    end
+  end
+
+  describe "#update_product_level_support_emails!" do
+    let(:user) { create(:user) }
+    let!(:product1) { create(:product, user:, support_email: "old1@example.com") }
+    let!(:product2) { create(:product, user:, support_email: "old2@example.com") }
+    let!(:product3) { create(:product, user:, support_email: "old3@example.com") }
+
+    before do
+      Feature.activate(:product_level_support_emails)
+    end
+
+    it "updates products support emails" do
+      user.update_product_level_support_emails!(
+        [
+          { email: "new1+2@example.com", product_ids: [product1.external_id, product2.external_id] }
+        ]
+      )
+
+      expect(product1.reload.support_email).to eq("new1+2@example.com")
+      expect(product2.reload.support_email).to eq("new1+2@example.com")
+      expect(product3.reload.support_email).to eq(nil)
+    end
+  end
+
   describe "#has_valid_payout_info?" do
     let(:user) { create(:user) }
 
@@ -1407,7 +1463,7 @@ describe User, :vcr do
       end
     end
 
-    describe "#support_email_domain_is_not_reserved" do
+    describe "reserved domain validation for support_email" do
       it "allows support_email to be nil" do
         @user.support_email = nil
         expect(@user).to be_valid
@@ -1416,7 +1472,35 @@ describe User, :vcr do
       it "fails the validation when domain is reserved" do
         @user.support_email = "something@gumroad.com"
         expect(@user).to be_invalid
-        expect(@user.errors[:base]).to eq ["Sorry, that support email is reserved. Please use another email."]
+        expect(@user.errors[:support_email]).to eq ["is reserved"]
+      end
+    end
+
+    describe "custom_fee_per_thousand" do
+      it "allows nil and an integer between 0 and 1000" do
+        user = build(:user, custom_fee_per_thousand: nil)
+        expect(user).to be_valid
+
+        user.custom_fee_per_thousand = 100.5
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be an integer"]
+
+        user.custom_fee_per_thousand = -1
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be greater than or equal to 0"]
+
+        user.custom_fee_per_thousand = 1001
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["must be less than or equal to 1000"]
+
+        user.custom_fee_per_thousand = "abc"
+        expect(user).to be_invalid
+        expect(user.errors[:custom_fee_per_thousand]).to eq ["is not a number"]
+
+        [0, 50, 100, 500, 750, 1000].each do |value|
+          user.custom_fee_per_thousand = value
+          expect(user).to be_valid
+        end
       end
     end
   end
@@ -2058,7 +2142,7 @@ describe User, :vcr do
       before do
         user.check_merchant_account_is_linked = true
         user.save
-
+        create(:user_compliance_info, user:)
         @merchant_account = create(:merchant_account_paypal, user:)
       end
 
@@ -2078,6 +2162,10 @@ describe User, :vcr do
     end
 
     context "when a merchant account is not connected" do
+      before do
+        Feature.deactivate(:disable_braintree_sales)
+      end
+
       it "returns true for non-complaint user" do
         expect(user.alive_user_compliance_info).to be_nil
         expect(user.pay_with_paypal_enabled?).to be(true)
@@ -2536,8 +2624,14 @@ describe User, :vcr do
 
       user = create(:user)
 
-      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+      # Enabled by default
+      %i{enable_payment_email enable_payment_push_notification enable_free_downloads_email enable_free_downloads_push_notification}.each do |notification_key|
         expect(user.public_send(notification_key)).to be(true)
+      end
+
+      # Disabled by default
+      %i{enable_recurring_subscription_charge_email enable_recurring_subscription_charge_push_notification}.each do |notification_key|
+        expect(user.public_send(notification_key)).to be(false)
       end
     end
   end
@@ -2965,12 +3059,11 @@ describe User, :vcr do
   end
 
   describe "#eligible_for_instant_payouts?" do
-    let(:user) { create(:user) }
+    let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }
     let!(:payments) { create_list(:payment_completed, 4, user:) }
 
     before do
-      allow(user).to receive(:compliant?).and_return(true)
       allow(user).to receive(:payouts_paused?).and_return(false)
     end
 
@@ -2978,9 +3071,16 @@ describe User, :vcr do
       expect(user.eligible_for_instant_payouts?).to eq(true)
     end
 
-    it "returns false when user is suspended" do
-      allow(user).to receive(:suspended?).and_return(true)
-      expect(user.eligible_for_instant_payouts?).to eq(false)
+    it "returns false when user is not compliant" do
+      [:not_reviewed,
+       :on_probation,
+       :flagged_for_fraud,
+       :flagged_for_tos_violation,
+       :suspended_for_fraud,
+       :suspended_for_tos_violation].each do |non_compliant_risk_state|
+        user.update!(user_risk_state: non_compliant_risk_state)
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
     end
 
     it "returns false when payouts are paused" do
@@ -3055,6 +3155,89 @@ describe User, :vcr do
       user.payouts_paused_internally = false
       user.payouts_paused_by_user = false
       expect(user.payouts_paused?).to eq(false)
+    end
+  end
+
+  describe "#payouts_paused_by_source" do
+    let!(:seller) { create(:user) }
+
+    it "returns source as admin if payouts are paused internally by an admin" do
+      seller.update!(payouts_paused_internally: true)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: 1)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "returns source as stripe if payouts are paused internally by stripe" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+    end
+
+    it "returns source as system if payouts are automatically paused internally" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    end
+
+    it "returns source as user if payouts are paused by seller" do
+      seller.update!(payouts_paused_internally: false, payouts_paused_by_user: true, payouts_paused_by: nil)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_USER)
+    end
+
+    it "returns source as admin if payouts are paused by seller as well as admin" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User.last.id)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    end
+
+    it "returns source as stripe if payouts are paused by seller as well as stripe" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+    end
+
+    it "returns source as system if payouts are paused by seller as well as system" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    end
+  end
+
+  describe "#payouts_paused_for_reason" do
+    let!(:seller) { create(:user) }
+
+    it "returns nil if payouts are not paused internally" do
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns nil if payouts are paused by admin but there are no corresponding comments" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to be nil
+    end
+
+    it "returns the content of the last comment of payouts_paused type if payouts are paused by admin" do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+      seller.comments.create!(
+        author_id: User.last.id,
+        content: "Chargeback rate too high.",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      expect(seller.payouts_paused_for_reason).to eq("Chargeback rate too high.")
+    end
+
+    it "returns nil if payouts are not paused by admin" do
+      seller.comments.create!(
+        author_id: User.last.id,
+        content: "Chargeback rate too high.",
+        comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+      )
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.payouts_paused_for_reason).to be nil
+
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      expect(seller.payouts_paused_for_reason).to be nil
     end
   end
 
@@ -3451,6 +3634,70 @@ describe User, :vcr do
       create(:purchase, purchaser: user, link: small_bets_product)
 
       expect(user.purchased_small_bets?).to eq(true)
+    end
+  end
+
+  describe "#eligible_for_ai_product_generation?" do
+    let(:user) { create(:user) }
+
+    before do
+      Feature.activate_user(:ai_product_generation, user)
+      user.confirm
+      allow(user).to receive(:sales_cents_total).and_return(15_000)
+    end
+
+    it "returns true when user has completed payments" do
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+
+    it "returns true when user made successful sale with Stripe Connect account" do
+      stripe_connect_account = create(:merchant_account_stripe_connect, user:)
+      create(:purchase, seller: user, link: create(:product, user:), merchant_account: stripe_connect_account)
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+
+    it "returns true when user made successful sale with PayPal Connect account" do
+      paypal_connect_account = create(:merchant_account_paypal, user:)
+      create(:purchase, seller: user, link: create(:product, user:), merchant_account: paypal_connect_account)
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+
+    it "returns false when user has no completed payments or successful sales" do
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when feature flag is inactive" do
+      Feature.deactivate_user(:ai_product_generation, user)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when user is not confirmed" do
+      user.update!(confirmed_at: nil)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when user is suspended" do
+      user.update!(user_risk_state: :suspended_for_fraud)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns false when user has insufficient sales" do
+      allow(user).to receive(:sales_cents_total).and_return(5_000)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_ai_product_generation?).to eq(false)
+    end
+
+    it "returns true regardless of other conditions in development environment" do
+      allow(Rails.env).to receive(:development?).and_return(true)
+      user.update!(confirmed_at: nil)
+      user.update!(user_risk_state: :suspended_for_fraud)
+      allow(user).to receive(:sales_cents_total).and_return(0)
+
+      expect(user.eligible_for_ai_product_generation?).to eq(true)
     end
   end
 end

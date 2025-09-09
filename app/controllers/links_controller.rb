@@ -21,7 +21,6 @@ class LinksController < ApplicationController
 
   before_action :set_affiliate_cookie, only: [:show]
 
-  before_action :set_body_id_as_app
   before_action :hide_layouts, only: %i[show]
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :ensure_seller_is_not_deleted, only: [:show]
@@ -54,6 +53,9 @@ class LinksController < ApplicationController
       products: @products,
       products_pagination: @products_pagination
     ).page_props
+
+    render inertia: "Products/index",
+           props: inertia_props(react_products_page_props: @react_products_page_props)
   end
 
   def memberships_paged
@@ -111,6 +113,7 @@ class LinksController < ApplicationController
 
     @product.price_range = params[:link][:price_range]
 
+    @product.save_custom_summary(params[:link][:custom_summary]) if params[:link][:custom_summary].present?
     @product.draft = true
     @product.purchase_disabled_at = Time.current
     @product.require_shipping = true if @product.is_physical
@@ -124,6 +127,10 @@ class LinksController < ApplicationController
 
     begin
       @product.save!
+
+      if params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+        generate_product_details_using_ai
+      end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
       @error_message = if @product&.errors&.any?
         @product.errors.full_messages.first
@@ -618,7 +625,10 @@ class LinksController < ApplicationController
     def paginated_products(page:, query: nil)
       products = current_seller
         .products
-        .includes(thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } })
+        .includes([
+                    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+                  ])
         .non_membership
         .visible_and_not_archived
       products = products.where("links.name like ?", "%#{query}%") if query.present?
@@ -714,5 +724,84 @@ class LinksController < ApplicationController
       return if [Link::NATIVE_TYPE_COFFEE, Link::NATIVE_TYPE_BUNDLE].include?(@product.native_type)
 
       @product.toggle_community_chat!(enabled)
+    end
+
+    def generate_product_details_using_ai
+      if Rails.env.test?
+        generate_product_cover_and_thumbnail_using_ai
+        generate_product_content_using_ai
+      else
+        cover_thread = Thread.new { generate_product_cover_and_thumbnail_using_ai }
+        content_thread = Thread.new { generate_product_content_using_ai }
+
+        cover_thread.join
+        content_thread.join
+      end
+    end
+
+    def generate_product_cover_and_thumbnail_using_ai
+      return unless @product.persisted?
+
+      begin
+        service = Ai::ProductDetailsGeneratorService.new(current_seller:)
+        result = service.generate_cover_image(product_name: @product.name)
+        image_data = result[:image_data]
+        create_blob = ->(identifier) {
+          ActiveStorage::Blob.create_and_upload!(
+            io: StringIO.new(image_data),
+            filename: "#{@product.external_id}_#{identifier}_#{Time.now.to_i}.jpeg",
+            content_type: "image/jpeg",
+            identify: false
+          )
+        }
+
+        cover_image_blob = create_blob.call("cover")
+        cover_image_blob.analyze
+        asset_preview = @product.asset_previews.build
+        asset_preview.file.attach(cover_image_blob)
+        asset_preview.analyze_file
+        asset_preview.save!
+
+        thumbnail_image_blob = create_blob.call("thumbnail")
+        thumbnail_image_blob.analyze
+        thumbnail = @product.build_thumbnail
+        thumbnail.file.attach(thumbnail_image_blob)
+        thumbnail.file.analyze
+        thumbnail.save!
+      rescue => e
+        Bugsnag.notify(e)
+      end
+    end
+
+    def generate_product_content_using_ai
+      return unless @product.persisted?
+
+      number_of_content_pages = params[:link][:number_of_content_pages]
+      if number_of_content_pages.present? && @product.native_type == Link::NATIVE_TYPE_EBOOK
+        attribute = @product.custom_attributes.find { _1["name"] == "Pages" }
+        attribute["value"] = number_of_content_pages.to_s if attribute.present?
+        @product.save!
+      end
+
+      begin
+        product_info = {
+          name: @product.name,
+          description: @product.description,
+          native_type: @product.native_type,
+          number_of_content_pages:
+        }
+        service = Ai::ProductDetailsGeneratorService.new(current_seller:)
+        response = service.generate_rich_content_pages(product_info)
+
+        response[:pages].each.with_index do |page_data, index|
+          rich_content = @product.alive_rich_contents.build
+          rich_content.title = page_data["title"]
+          rich_content.description = page_data["content"] || []
+          rich_content.position = index
+          rich_content.save!
+        end
+      rescue => e
+        Bugsnag.notify(e)
+      end
     end
 end

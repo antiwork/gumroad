@@ -191,7 +191,7 @@ export const Checkout = ({
   const futureInstallmentsWithoutTipsTotal = cart.items.reduce((sum, item) => {
     if (!item.product.installment_plan || !item.pay_in_installments) return sum;
 
-    const price = getDiscountedPrice(cart, item).price;
+    const price = convertToUSD(item, getDiscountedPrice(cart, item).price);
     const firstInstallmentPrice = calculateFirstInstallmentPaymentPriceCents(
       price,
       item.product.installment_plan.number_of_installments,

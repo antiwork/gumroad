@@ -4,7 +4,6 @@ class CustomersController < Sellers::BaseController
   include CurrencyHelper
 
   before_action :authorize
-  before_action :set_body_id_as_app
   before_action :set_on_page_type
 
   CUSTOMERS_PER_PAGE = 20
@@ -20,6 +19,9 @@ class CustomersController < Sellers::BaseController
       count: sales.results.total
     )
     create_user_event("customers_view")
+
+    render inertia: "Customers/index",
+           props: inertia_props(customers_presenter: @customers_presenter.customers_props)
   end
 
   def paged
@@ -162,7 +164,11 @@ class CustomersController < Sellers::BaseController
     def load_sales(sales)
       sales.records
         .includes(
+          :call,
+          :purchase_offer_code_discount,
           :tip,
+          :upsell_purchase,
+          :variant_attributes,
           product_review: [:response, { alive_videos: [:video_file] }],
           utm_link: [target_resource: [:seller, :user]]
         )

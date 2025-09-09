@@ -1,9 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { NavigationButton } from "$app/components/Button";
@@ -19,6 +17,7 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -38,7 +37,7 @@ type ProductRow = {
   last_30: number;
 };
 
-type Props = {
+export type DashboardPageProps = {
   name: string;
   has_sale: boolean;
   getting_started_stats: {
@@ -59,13 +58,14 @@ type Props = {
   };
   activity_items: ActivityItem[];
   stripe_verification_message?: string | null;
+  tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
 };
 type TableProps = { sales: ProductRow[] };
 
 type GettingStartedItemType = {
   name: string;
-  getCompleted: (stats: Props["getting_started_stats"]) => boolean;
+  getCompleted: (stats: DashboardPageProps["getting_started_stats"]) => boolean;
   link: string;
   IconComponent: React.ComponentType<GettingStartedIconProps>;
   description: string;
@@ -148,8 +148,8 @@ const Greeter = () => (
     <NavigationButton href={Routes.new_product_path()} color="accent">
       Create your first product
     </NavigationButton>
-    <a href="#" data-helper-prompt="How can I create my first product?">
-      Learn more about creating products.
+    <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
+      Learn more about creating products
     </a>
   </div>
 );
@@ -215,11 +215,11 @@ const ProductsTable = ({ sales }: TableProps) => {
         <div className="placeholder">
           <p>
             You haven't made any sales yet. Learn how to{" "}
-            <a href="#" data-helper-prompt="How can I build a following?">
+            <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
               build a following
             </a>{" "}
             and{" "}
-            <a href="#" data-helper-prompt="How can I sell on Gumroad Discover?">
+            <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
               sell on Gumroad Discover
             </a>
           </p>
@@ -296,8 +296,9 @@ export const DashboardPage = ({
   activity_items,
   balances,
   stripe_verification_message,
+  tax_forms,
   show_1099_download_notice,
-}: Props) => {
+}: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
 
@@ -318,6 +319,9 @@ export const DashboardPage = ({
           {name ? `Hey, ${name}! ` : null}
           {has_sale ? "Welcome back to Gumroad." : "Welcome to Gumroad."}
         </h1>
+        <div className="actions flex gap-2">
+          {Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+        </div>
       </header>
       <div className="main-app-content" style={{ display: "grid", gap: "var(--spacer-7)" }}>
         {stripe_verification_message ? (
@@ -407,4 +411,4 @@ export const DashboardPage = ({
   );
 };
 
-export default register({ component: DashboardPage, propParser: createCast() });
+export default DashboardPage;

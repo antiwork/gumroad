@@ -134,6 +134,79 @@ describe User::FeatureStatus do
     end
   end
 
+  describe "#can_publish_products?" do
+    let(:seller) { create(:compliant_user, payment_address: nil) }
+
+    before do
+      create(:user_compliance_info, user: seller)
+    end
+
+    it "returns false if no payout method is setup" do
+      expect(seller.can_publish_products?).to be false
+    end
+
+    it "returns true if a bank account is setup", :vcr do
+      create(:merchant_account_stripe, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
+
+    it "returns true if a PayPal account is connected" do
+      create(:merchant_account_paypal, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
+
+    it "returns true if a Stripe account is connected" do
+      create(:merchant_account_stripe_connect, user: seller)
+
+      expect(seller.can_publish_products?).to be true
+    end
+
+    it "returns true if a PayPal payment address is present" do
+      seller.update!(payment_address: "payme@example.com")
+
+      expect(seller.can_publish_products?).to be true
+    end
+  end
+
+  describe "#paypal_connect_allowed?" do
+    let!(:seller) { create(:user) }
+
+    before do
+      seller.mark_compliant!(author_name: "Iffy")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+      create(:payment_completed, user: seller)
+    end
+
+    it "returns true if seller is compliant and has more than $100 in sales and a successful payout" do
+      expect(seller.paypal_connect_allowed?).to eq true
+    end
+
+    it "returns false if seller is not compliant" do
+      seller.update!(user_risk_state: "not_reviewed")
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+
+    it "returns false if seller does not have $100 in sales" do
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(99_00)
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+
+    it "returns false if seller does not have a successful payout" do
+      seller.payments.last.update!(state: "failed")
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+
+    it "returns false if seller does not meet any eligibility requirement" do
+      seller.update!(user_risk_state: "not_reviewed")
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(99_00)
+      seller.payments.last.update!(state: "failed")
+
+      expect(seller.reload.paypal_connect_allowed?).to eq false
+    end
+  end
+
   describe "#stripe_disconnect_allowed?" do
     it "returns true if there is no connected Stripe account" do
       creator = create(:user)
@@ -174,6 +247,24 @@ describe User::FeatureStatus do
       expect(creator.reload.merchant_migration_enabled?).to eq true
       expect(creator.has_stripe_account_connected?).to eq true
       expect(creator.stripe_disconnect_allowed?).to eq false
+    end
+  end
+
+  describe "#product_level_support_emails_enabled?" do
+    let(:user) { create(:user) }
+
+    it "returns true if product_level_support_emails feature flag is enabled for user" do
+      Feature.activate_user(:product_level_support_emails, user)
+      expect(user.product_level_support_emails_enabled?).to eq true
+
+      Feature.deactivate_user(:product_level_support_emails, user)
+      expect(user.product_level_support_emails_enabled?).to eq false
+
+      Feature.activate(:product_level_support_emails)
+      expect(user.product_level_support_emails_enabled?).to eq true
+
+      Feature.deactivate(:product_level_support_emails)
+      expect(user.product_level_support_emails_enabled?).to eq false
     end
   end
 

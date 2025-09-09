@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe Oauth::AuthorizationsController, type: :feature do
+describe Oauth::AuthorizationsController, type: :system do
   before :each do
     visit "/"
     stub_const("DOMAIN", "gumroad.com")

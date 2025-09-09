@@ -3,11 +3,12 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Payments Settings Scenario", type: :feature, js: true) do
+describe("Payments Settings Scenario", type: :system, js: true) do
   describe "PayPal section" do
     let(:user) { create(:user, name: "Gum") }
 
     before do
+      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(true)
       login_as user
     end
 
@@ -83,6 +84,18 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
       expect(page).to have_link(text: "Connect with Paypal", inert: false)
     end
 
+    it "keeps the PayPal Connect button disabled and shows the eligibility requirements when the user is not eligible" do
+      create(:user_compliance_info, user:)
+      allow_any_instance_of(User).to receive(:paypal_connect_allowed?).and_return(false)
+
+      visit settings_payments_path
+      expect(page).to have_link(text: "Connect with Paypal", inert: true)
+      expect(page).to have_text("You must meet the following requirements in order to connect a PayPal account:")
+      expect(page).to have_text("Your account must be marked as compliant")
+      expect(page).to have_text("You must have earned at least $100")
+      expect(page).to have_text("You must have received at least one successful payout")
+    end
+
     context "when logged user has role admin" do
       let(:seller) { create(:named_seller) }
 
@@ -115,7 +128,7 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
     end
   end
 
-  describe("Payout Information Collection", type: :feature, js: true) do
+  describe("Payout Information Collection", type: :system, js: true) do
     before do
       @user = create(:named_user, payment_address: nil)
       user_compliance_info = @user.fetch_or_build_user_compliance_info
@@ -213,6 +226,25 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
       bank_account = @user.bank_accounts.alive.last
       expect(bank_account.type).to eq("CardBankAccount")
       expect(bank_account.account_number_last_four).to eq("8210")
+    end
+
+    it "allows the creator to update other info when they have a debit card connected" do
+      creator = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: creator, phone: "+15022541982")
+      create(:card_bank_account, user: creator)
+      expect(creator.payout_frequency).to eq(User::PayoutSchedule::WEEKLY)
+
+      login_as creator
+      visit settings_payments_path
+      expect(page).to have_select("Schedule", selected: "Weekly")
+      select "Monthly", from: "Schedule"
+
+      click_on "Update settings"
+
+      expect(page).to have_alert(text: "Thanks! You're all set.")
+      expect(creator.reload.payout_frequency).to eq(User::PayoutSchedule::MONTHLY)
+      refresh
+      expect(page).to have_select("Schedule", selected: "Monthly")
     end
 
     it "allows the creator to connect their Stripe account if they are from Brazil" do
@@ -380,60 +412,12 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
         expect(@user.active_ach_account.account_number_visual).to eq("******1116")
       end
 
-      it "allows the creator to switch from bank to PayPal as payout method" do
+      it "does not show PayPal as a payout method as bank payouts are supported" do
         stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
-
-        stripe_account = create(:merchant_account_stripe, user: @user)
-        create(:balance, user: @user, merchant_account: stripe_account)
-        create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION)
-        create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID)
-        @user.update!(payouts_paused_internally: true)
-
-        expect(@user.unpaid_balances.where(merchant_account_id: stripe_account.id).sum(:holding_amount_cents)).to eq 10_00
-        expect(@user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad("stripe")).sum(:holding_amount_cents)).to eq 0
-        expect(@user.user_compliance_info_requests.requested.count).to eq(2)
-        expect(@user.payouts_paused_internally?).to be true
 
         visit settings_payments_path
 
-        choose "PayPal"
-
-        fill_in("First name", with: "barnabas")
-        fill_in("Last name", with: "barnabastein")
-        fill_in("Address", with: "123 barnabas st")
-        fill_in("City", with: "barnabasville")
-        select "California", from: "State"
-        fill_in("ZIP code", with: "10110")
-
-        select("1", from: "Day")
-        select("1", from: "Month")
-        select("1901", from: "Year")
-        fill_in("Last 4 digits of SSN", with: "0000")
-        fill_in("Phone number", with: "5022-541-982")
-
-        fill_in("PayPal Email", with: "valid@gumroad.com")
-
-        click_on "Update settings"
-
-        expect(page).to have_content("Thanks! You're all set.")
-        compliance_info = @user.reload.alive_user_compliance_info
-        expect(compliance_info.first_name).to eq("barnabas")
-        expect(compliance_info.last_name).to eq("barnabastein")
-        expect(compliance_info.street_address).to eq("123 barnabas st")
-        expect(compliance_info.city).to eq("barnabasville")
-        expect(compliance_info.state).to eq("CA")
-        expect(compliance_info.zip_code).to eq("10110")
-        expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
-        expect(compliance_info.individual_tax_id.decrypt("1234")).to eq("0000")
-        expect(@user.active_bank_account).to be nil
-        expect(@user.stripe_account).to be nil
-        expect(@user.payment_address).to eq("valid@gumroad.com")
-        expect(stripe_account.reload.deleted_at).to be_present
-        expect(@user.unpaid_balances.where(merchant_account_id: stripe_account.id).sum(:holding_amount_cents)).to eq 0
-        expect(@user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad("stripe")).sum(:holding_amount_cents)).to eq 10_00
-        expect(TransferStripeConnectAccountBalanceToGumroadJob).to have_enqueued_sidekiq_job(stripe_account.id, 10_00)
-        expect(@user.user_compliance_info_requests.requested.count).to eq(0)
-        expect(@user.payouts_paused_internally?).to be false
+        expect(page).not_to have_field("PayPal")
       end
 
       it "allows the creator to update the name on their account" do
@@ -5648,6 +5632,28 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
     end
   end
 
+  describe "Country selection modal" do
+    before do
+      @user = create(:named_user, payment_address: nil)
+      login_as @user
+    end
+
+    it "navigates back to previous page when modal is closed" do
+      visit settings_main_path
+      find('a[role="tab"]', text: "Payments").click
+      expect(page).to have_content("Where are you located?")
+      find("button[aria-label='Close']").click
+      expect(page).to have_current_path(settings_main_path)
+    end
+
+    it "navigates to dashboard page when modal is closed and no previous page exists" do
+      visit settings_payments_path
+      expect(page).to have_content("Where are you located?")
+      find("button[aria-label='Close']").click
+      expect(page).to have_current_path(dashboard_path)
+    end
+  end
+
   describe "Taxes collection section" do
     before do
       @creator = create(:user_with_compliance_info, name: "Chuck Bartowski", au_backtax_sales_cents: 30000_00, au_backtax_owed_cents: 2727_27)
@@ -5759,6 +5765,49 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
       login_as user
     end
 
+    describe "payouts paused notice" do
+      it "shows the warning notice when payouts are paused internally by admin" do
+        user.update!(payouts_paused_internally: true)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin.")
+      end
+
+      it "shows the warning notice when payouts are paused internally by admin with a reason" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+        user.comments.create!(
+          author_id: User.last.id,
+          content: "Chargeback rate is too high.",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+        )
+
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+      end
+
+      it "shows the warning notice when payouts are paused internally by Stripe" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements below.")
+      end
+
+      it "shows the warning notice when payouts are paused internally by the system" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
+      end
+
+      it "shows the warning notice when payouts are paused by the user" do
+        user.update!(payouts_paused_by_user: true)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "You have paused your payouts.")
+      end
+    end
+
     describe "pausing payouts" do
       it "allows enabling and disabling payouts" do
         visit settings_payments_path
@@ -5782,14 +5831,53 @@ describe("Payments Settings Scenario", type: :feature, js: true) do
         expect(user.reload.payouts_paused_by_user?).to be false
       end
 
-      it "disables the toggle when payouts are paused internally" do
+      it "disables the toggle when payouts are paused internally by admin" do
         user.update!(payouts_paused_internally: true)
         visit settings_payments_path
 
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts were paused by our payment processor. Please update your information below.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad admin.")
+        end
+      end
+
+      it "disables the toggle when payouts are paused internally by admin with a reason" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
+        user.comments.create!(
+          author_id: User.last.id,
+          content: "Chargeback rate is too high.",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
+        )
+
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+        end
+      end
+
+      it "disables the toggle when payouts are paused internally by Stripe" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements above.")
+        end
+      end
+
+      it "disables the toggle when payouts are paused internally by the system" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        visit settings_payments_path
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
         end
       end
     end

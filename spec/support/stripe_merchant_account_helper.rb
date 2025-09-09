@@ -25,7 +25,22 @@ module StripeMerchantAccountHelper
     attempts = 0
     while !stripe_account.charges_enabled && attempts < MAX_ATTEMPTS_TO_WAIT_FOR_CAPABILITIES
       # Sleep if we are making requests against Stripe API; otherwise fast-forward through the recorded cassette to save time
-      sleep 10 if !VCR.turned_on? || VCR.current_cassette.recording?
+      # Debug flaky specs.
+      if !VCR.turned_on? || VCR.current_cassette&.recording?
+        sleep 10
+        puts "*" * 100
+        puts RSpec.current_example.full_description
+        puts RSpec.current_example.location
+        puts "VCR off: sleeping for 10 seconds"
+        puts "*" * 100
+      else
+        puts "*" * 100
+        puts RSpec.current_example.full_description
+        puts RSpec.current_example.location
+        puts "VCR on: fast-forwarding through the recorded cassette"
+        puts VCR.current_cassette&.name
+        puts "*" * 100
+      end
 
       attempts += 1
       stripe_account = Stripe::Account.retrieve(stripe_account_id)

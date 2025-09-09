@@ -7,7 +7,7 @@ set -e
 cd $APP_DIR
 
 # Set CUSTOM_DOMAIN for branch app assets precompilation
-if [[ $BUILDKITE_BRANCH == deploy-* ]]; then
+if [[ $BUILDKITE_BRANCH == deploy-* || $BUILDKITE_BRANCH == devin/* ]]; then
   base_domain="staging.gumroad.org"
   app_name=$(get_app_name $BUILDKITE_BRANCH)
 

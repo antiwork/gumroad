@@ -26,6 +26,22 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    context "when support email exists" do
+      subject(:mail) do
+        user = create(:user, email: "bob@gumroad.com", name: "bob walsh")
+        link = create(:product, user:, support_email: "support@example.com")
+
+        @purchase = create(:purchase, link:, seller: link.user, email: "to@example.org")
+        @purchase.create_url_redirect!
+
+        CustomerMailer.receipt(@purchase.id)
+      end
+
+      it "uses correct support email" do
+        expect(mail[:reply_to].value).to eq("support@example.com")
+      end
+    end
+
     it "renders the headers with UrlRedirect" do
       user = create(:user, email: "bob@gumroad.com", name: "bob walsh, LLC")
       link = create(:product, user:)
@@ -351,6 +367,7 @@ describe CustomerMailer do
 
           context "when purchase is in EUR" do
             before do
+              purchase.link.default_price.update!(currency: Currency::EUR)
               purchase.link.update!(price_currency_type: Currency::EUR)
               purchase.update!(
                 displayed_price_currency_type: Currency::EUR,
@@ -402,7 +419,7 @@ describe CustomerMailer do
           it "renders upcoming payment information" do
             mail = CustomerMailer.receipt(purchase.id)
 
-            expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein $19.98 on Feb 1, 2023")
+            expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein: 2 of 2 $19.98 on Feb 1, 2023")
           end
         end
 
@@ -903,6 +920,25 @@ describe CustomerMailer do
       expect(mailer[:from].value).to eq("#{charge.seller.name} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>")
       expect(mailer[:reply_to].value).to eq(charge.seller.email)
     end
+
+    context "products have the same support emails" do
+      let(:product_support_email) { "product_support_email@example.com" }
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: product_support_email) }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: product_support_email) }
+
+      it "use the product support email" do
+        expect(mailer[:reply_to].value).to eq(product_support_email)
+      end
+    end
+
+    context "when products have different support emails" do
+      let(:product) { create(:product, user: seller, name: "Product One", support_email: "reply_to@example.com") }
+      let(:product_two) { create(:product, user: seller, name: "Product Two", support_email: nil) }
+
+      it "uses seller's default email" do
+        expect(mailer[:reply_to].value).to eq(charge.seller.support_or_form_email)
+      end
+    end
   end
 
   describe ".abandoned_cart_preview" do
@@ -1244,6 +1280,29 @@ describe CustomerMailer do
       expect(mail.to).to eq(["kindle@kindle.com"])
       expect(mail.subject).to eq("convert")
       expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
+    end
+  end
+
+  describe "#files_ready_for_download" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product, seller:, email: "customer@example.com") }
+
+    before { purchase.create_url_redirect! }
+
+    it "sends the email with correct headers and content" do
+      mail = CustomerMailer.files_ready_for_download(purchase.id)
+
+      expect(mail.to).to eq(["customer@example.com"])
+      expect(mail.subject).to eq("Your files are ready for download!")
+      expect(mail[:from].value).to eq("#{seller.name} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>")
+      expect(mail[:reply_to].value).to eq(product.support_email_or_default)
+
+      body = mail.body.encoded
+      expect(body).to include("Your files are ready for download!")
+      expect(body).to include(product.name)
+      expect(body).to include(purchase.url_redirect.download_page_url)
+      expect(body).to include("Contact Seller by replying to this email.")
     end
   end
 end

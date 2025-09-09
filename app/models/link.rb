@@ -50,7 +50,7 @@ class Link < ApplicationRecord
           Product::ReviewStat, Product::Utils, ActionView::Helpers::SanitizeHelper,
           ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
-          Integrations, Product::StaffPicked, RichContents, Product::Sorting
+          Integrations, Product::StaffPicked, RichContents, Product::Sorting, Product::CreationLimit
 
   has_cdn_url :description
 
@@ -143,6 +143,12 @@ class Link < ApplicationRecord
   has_many :active_integrations, through: :live_product_integrations, source: :integration
   has_many :product_cached_values, foreign_key: :product_id
   has_one :upsell, -> { upsell.alive }, foreign_key: :product_id
+  has_many :upsell_variants, through: :upsell
+  has_many :cross_sells, ->(link) {
+    includes(:selected_products)
+      .where(selected_products: { id: link.id })
+      .or(where(universal: true))
+  }, through: :user, source: :cross_sells
   has_and_belongs_to_many :custom_fields, join_table: "custom_fields_products", foreign_key: "product_id"
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"
@@ -162,6 +168,8 @@ class Link < ApplicationRecord
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
+  # Keep in sync with Product::BulkUpdateSupportEmailService.
+  validates :support_email, email_format: true, not_reserved_email_domain: true, allow_nil: true
   validates :default_price_cents, presence: true
   validates :unique_permalink, presence: true, uniqueness: { case_sensitive: false }, format: { with: /\A[a-zA-Z_]+\z/ }
   validates :custom_permalink, format: { with: /\A[a-zA-Z0-9_-]+\z/ }, uniqueness: { scope: :user_id, case_sensitive: false }, allow_nil: true, allow_blank: true
@@ -195,7 +203,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
-  validate :validate_daily_product_creation_limit, on: :create
+
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
   before_save :downcase_filetype
@@ -285,11 +293,7 @@ class Link < ApplicationRecord
     with(latest_product_cached_values: ProductCachedValue.joins(cte_join_sql)).joins(join_sql)
   }
 
-  scope :eligible_for_content_upsells, -> {
-    visible_and_not_archived
-      .not_is_tiered_membership
-      .where.missing(:variant_categories_alive)
-  }
+  scope :eligible_for_content_upsells, -> { visible_and_not_archived.not_is_tiered_membership }
 
   alias super_as_json as_json
 
@@ -631,8 +635,10 @@ class Link < ApplicationRecord
   def options
     if skus_enabled
       skus.not_is_default_sku.alive.map(&:to_option_for_product)
+    elsif variant_categories_alive.any?
+      variants.where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
     else
-      (variant_category = variant_categories_alive.first) ? variant_category.variants.in_order.alive.map(&:to_option) : []
+      []
     end
   end
 
@@ -1113,10 +1119,6 @@ class Link < ApplicationRecord
     user.auto_transcode_videos? || has_successful_sales?
   end
 
-  def cross_sells
-    user.cross_sells.includes(:selected_products).where(selected_products: { id: }).or(user.cross_sells.where(universal: true))
-  end
-
   def find_or_initialize_product_refund_policy
     product_refund_policy || build_product_refund_policy(seller: user)
   end
@@ -1199,6 +1201,12 @@ class Link < ApplicationRecord
         communities.alive.each(&:mark_deleted!)
       end
     end
+  end
+
+  def support_email_or_default
+    return user.support_or_form_email unless user.product_level_support_emails_enabled?
+
+    support_email || user.support_or_form_email
   end
 
   protected
@@ -1287,8 +1295,8 @@ class Link < ApplicationRecord
     def enforce_merchant_account_exits_for_new_users!
       return if publishable?
 
-      errors.add(:base, "You must connect connect at least one payment method before you can publish this product for sale.")
-      raise LinkInvalid, "You must connect connect at least one payment method before you can publish this product for sale."
+      errors.add(:base, "You must connect at least one payment method before you can publish this product for sale.")
+      raise LinkInvalid, "You must connect at least one payment method before you can publish this product for sale."
     end
 
     def free_trial_only_enabled_if_recurring_billing
@@ -1446,15 +1454,6 @@ class Link < ApplicationRecord
       end
     end
 
-    def validate_daily_product_creation_limit
-      return unless user.present?
-
-      last_24h_links_count = user.links.where(created_at: 24.hours.ago..Time.current).count
-      if last_24h_links_count >= 100
-        errors.add(:base, "Sorry, you can only create 100 products per day.")
-      end
-    end
-
     def custom_permalink_or_is_licensed_changed?
       custom_permalink_changed? || is_licensed_changed?
     end
@@ -1485,7 +1484,7 @@ class Link < ApplicationRecord
           node.remove
         elsif node.name == "upsell-card"
           node.attributes.each do |attr|
-            node.remove_attribute(attr.first) unless %w[id productid discount].include?(attr.first)
+            node.remove_attribute(attr.first) unless %w[id productid variantid discount].include?(attr.first)
           end
         elsif node.name == "review-card"
           node.attributes.each do |attr|

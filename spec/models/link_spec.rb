@@ -75,6 +75,29 @@ describe Link, :vcr do
       expect(link).not_to be_valid
       expect(link.errors.full_messages).to include "Sorry, a product must be at least $0.99."
     end
+
+    context "when product has prices in multiple currencies" do
+      let(:product) { create(:product, price_currency_type: "usd", price_cents: 100) }
+
+      it "validates prices for the current currency against correct thresholds when switching currencies" do
+        usd_price = product.default_price
+        expect(usd_price.currency).to eq "usd"
+        expect(usd_price.price_cents).to eq 100
+
+        expect do
+          product.update!(price_currency_type: "inr", price_cents: 5000)
+        end
+          .to raise_error(ActiveRecord::RecordInvalid)
+          .with_message("Validation failed: Sorry, a product must be at least ₹73.")
+
+        # The USD 1.00 is lower than the INR 73.00 dollar threshold, but should
+        # be ignored since it's not the current currency
+        expect do
+          product.update!(price_currency_type: "inr", price_cents: 50000)
+        end
+          .to_not raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
   end
 
   describe "native_type inclusion validation" do
@@ -272,37 +295,6 @@ describe Link, :vcr do
         expect(product).not_to be_valid
         expect(product.errors.full_messages).to include "Free trials are only allowed for subscription products."
       end
-    end
-  end
-
-  describe "daily product creation limit validation" do
-    let(:user) { create(:user) }
-
-    it "allows creating up to 100 products in 24 hours" do
-      create_list(:product, 99, user: user)
-      new_product = build(:product, user: user)
-      expect(new_product).to be_valid
-    end
-
-    it "prevents creating more than 100 products in 24 hours" do
-      create_list(:product, 100, user: user)
-      new_product = build(:product, user: user)
-      expect(new_product).not_to be_valid
-      expect(new_product.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
-    end
-
-    it "allows different users to each create 100 products in 24 hours" do
-      user1 = create(:user)
-      user2 = create(:user)
-      create_list(:product, 100, user: user1)
-      new_product = build(:product, user: user2)
-      expect(new_product).to be_valid
-    end
-
-    it "allows creating products after 24 hours have passed" do
-      create_list(:product, 100, user: user, created_at: 25.hours.ago)
-      new_product = build(:product, user: user)
-      expect(new_product).to be_valid
     end
   end
 
@@ -990,6 +982,7 @@ describe Link, :vcr do
       context "when new account and no valid merchant account connected" do
         before do
           @user.check_merchant_account_is_linked = true
+          @user.payment_address = nil
           @user.save!
           @merchant_account.mark_deleted!
         end
@@ -5118,6 +5111,45 @@ describe Link, :vcr do
     end
   end
 
+  describe "support email validations" do
+    let(:product) { build(:product) }
+
+    context "when support_email is nil" do
+      it "is valid" do
+        product.support_email = nil
+        expect(product).to be_valid
+      end
+    end
+
+    context "when support_email is blank" do
+      it "is invalid" do
+        product.support_email = ""
+        expect(product).not_to be_valid
+      end
+    end
+
+    context "when support_email has a valid email format" do
+      it "is valid" do
+        product.support_email = "support@example.com"
+        expect(product).to be_valid
+      end
+    end
+
+    context "when support_email has an invalid email format" do
+      it "is invalid without @ symbol" do
+        product.support_email = "invalidemail"
+        expect(product).not_to be_valid
+        expect(product.errors[:support_email]).to include("is invalid")
+      end
+
+      it "is invalid without domain" do
+        product.support_email = "user@"
+        expect(product).not_to be_valid
+        expect(product.errors[:support_email]).to include("is invalid")
+      end
+    end
+  end
+
   describe "#can_gift?" do
     let(:product) { build(:product) }
 
@@ -5217,8 +5249,8 @@ describe Link, :vcr do
     let!(:product_with_variants) { create(:product_with_digital_versions) }
     let!(:archived_product) { create(:product, archived: true) }
 
-    it "returns visible non-membership products without variants" do
-      expect(Link.eligible_for_content_upsells).to match_array([regular_product])
+    it "returns visible non-membership products including those with variants" do
+      expect(Link.eligible_for_content_upsells).to match_array([regular_product, product_with_variants])
     end
   end
 

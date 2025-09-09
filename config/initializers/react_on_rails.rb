@@ -17,6 +17,7 @@ module RenderingExtension
         short_domain: SHORT_DOMAIN,
         discover_domain: DISCOVER_DOMAIN,
         third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+        api_domain: API_DOMAIN,
       },
       user_agent_info: {
         is_mobile: view_context.controller.is_mobile?,
@@ -24,7 +25,10 @@ module RenderingExtension
       logged_in_user: logged_in_user_props(pundit_user, is_impersonating: view_context.controller.impersonating?),
       current_seller: current_seller_props(pundit_user),
       csp_nonce: SecureHeaders.content_security_policy_script_nonce(view_context.request),
-      locale: view_context.controller.http_accept_language.user_preferred_languages[0] || "en-US"
+      locale: view_context.controller.http_accept_language.user_preferred_languages[0] || "en-US",
+      feature_flags: {
+        require_email_typo_acknowledgment: Feature.active?(:require_email_typo_acknowledgment),
+      }
     }
   end
 

@@ -2,8 +2,8 @@
 
 require "spec_helper"
 
-describe "Admin::UsersController Scenario", type: :feature, js: true do
-  let(:admin) { create(:admin_user, has_risk_privilege: true, has_payout_privilege: true) }
+describe "Admin::UsersController Scenario", type: :system, js: true do
+  let(:admin) { create(:admin_user) }
   let(:user) { create(:user) }
   let!(:user_compliance_info) { create(:user_compliance_info, user:) }
 
@@ -14,6 +14,8 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
   context "when user has no products" do
     it "shows no products alert" do
       visit admin_user_path(user.id)
+
+      click_on "Products"
 
       expect(page).to have_text("No products created.")
     end
@@ -29,6 +31,7 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
 
     it "shows products" do
       visit admin_user_path(user.id)
+      click_on "Products"
 
       expect(page).to have_text("Product a")
       expect(page).to have_text("Product b")
@@ -51,7 +54,7 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
       end
     end
 
-    context "whent the user has user memberships" do
+    context "when the user has user memberships" do
       let(:seller_one) { create(:user, :without_username) }
       let(:seller_two) { create(:user) }
       let(:seller_three) { create(:user) }
@@ -67,6 +70,148 @@ describe "Admin::UsersController Scenario", type: :feature, js: true do
         expect(page).to have_text(seller_one.display_name(prefer_email_over_default_username: true))
         expect(page).to have_text(seller_two.display_name(prefer_email_over_default_username: true))
         expect(page).not_to have_text(seller_three.display_name(prefer_email_over_default_username: true))
+      end
+    end
+  end
+
+  describe "custom fees" do
+    context "when the user has a custom fee set" do
+      before do
+        user.update(custom_fee_per_thousand: 50)
+      end
+
+      it "shows the custom fee percentage" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_text("Custom fee: 5.0%")
+      end
+    end
+
+    context "when the user does not have a custom fee set" do
+      it "does not show the custom fee heading" do
+        visit admin_user_path(user.id)
+
+        expect(page).not_to have_text("Custom fee:")
+      end
+    end
+
+    it "allows setting new custom fee" do
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+
+      visit admin_user_path(user.id)
+      find_and_click "h3", text: "Custom fee"
+      fill_in "custom_fee_percent", with: "2.5"
+      click_on "Submit"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_fee_per_thousand).to eq(25)
+    end
+
+    it "allows updating the existing custom fee" do
+      user.update(custom_fee_per_thousand: 50)
+      expect(user.reload.custom_fee_per_thousand).to eq(50)
+
+      visit admin_user_path(user.id)
+      find_and_click "h3", text: "Custom fee"
+      fill_in "custom_fee_percent", with: "2.5"
+      click_on "Submit"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_fee_per_thousand).to eq(25)
+    end
+
+    it "allows clearing the existing custom fee" do
+      user.update(custom_fee_per_thousand: 75)
+      expect(user.reload.custom_fee_per_thousand).to eq(75)
+
+      visit admin_user_path(user.id)
+      find_and_click "h3", text: "Custom fee"
+      fill_in "custom_fee_percent", with: ""
+      click_on "Submit"
+      accept_browser_dialog
+      wait_for_ajax
+
+      expect(user.reload.custom_fee_per_thousand).to be_nil
+    end
+  end
+
+  describe "toggle adult products" do
+    context "when the user is not marked as adult" do
+      before do
+        user.update!(all_adult_products: false)
+      end
+
+      it "shows 'Mark as adult' button" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_button("Mark as adult")
+        expect(page).not_to have_button("Unmark as adult")
+      end
+
+      it "allows marking user as adult" do
+        expect(user.reload.all_adult_products).to be(false)
+
+        visit admin_user_path(user.id)
+        click_on "Mark as adult"
+        accept_browser_dialog
+        wait_for_ajax
+
+        expect(user.reload.all_adult_products).to be(true)
+        expect(page).to have_button("Unmark as adult")
+        expect(page).not_to have_button("Mark as adult")
+      end
+    end
+
+    context "when the user is marked as adult" do
+      before do
+        user.update!(all_adult_products: true)
+      end
+
+      it "shows 'Unmark as adult' button" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_button("Unmark as adult")
+        expect(page).not_to have_button("Mark as adult")
+      end
+
+      it "allows unmarking user as adult" do
+        expect(user.reload.all_adult_products).to be(true)
+
+        visit admin_user_path(user.id)
+        click_on "Unmark as adult"
+        accept_browser_dialog
+        wait_for_ajax
+
+        expect(user.reload.all_adult_products).to be(false)
+        expect(page).to have_button("Mark as adult")
+        expect(page).not_to have_button("Unmark as adult")
+      end
+    end
+
+    context "when the user's all_adult_products is nil" do
+      before do
+        user.all_adult_products = nil
+        user.save!
+      end
+
+      it "shows 'Mark as adult' button" do
+        visit admin_user_path(user.id)
+
+        expect(page).to have_button("Mark as adult")
+        expect(page).not_to have_button("Unmark as adult")
+      end
+
+      it "allows marking user as adult" do
+        visit admin_user_path(user.id)
+        click_on "Mark as adult"
+        accept_browser_dialog
+        wait_for_ajax
+
+        expect(user.reload.all_adult_products).to be(true)
+        expect(page).to have_button("Unmark as adult")
+        expect(page).not_to have_button("Mark as adult")
       end
     end
   end

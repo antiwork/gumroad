@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Wishlist index page", :js, type: :feature do
+describe "Wishlist index page", :js, type: :system do
   let(:wishlist) { create(:wishlist, name: "My Wishlist", user: create(:user, name: "Wishlist User")) }
   let(:quantity_item) { create(:wishlist_product, :with_quantity, wishlist:) }
   let(:variant_item) { create(:wishlist_product, :with_recurring_variant, wishlist:) }
@@ -31,9 +31,7 @@ describe "Wishlist index page", :js, type: :feature do
     visit wishlists_path
 
     within find(:table_row, { "Name" => wishlist.name }) do
-      select_disclosure "Actions" do
-        click_on "Delete"
-      end
+      find("button[aria-label='Delete wishlist']").click
     end
 
     click_on "Yes, delete"

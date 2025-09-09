@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Coffee", type: :feature, js: true do
+describe "Coffee", type: :system, js: true do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
   let(:coffee) do
     create(
@@ -116,6 +116,26 @@ describe "Coffee", type: :feature, js: true do
       expect(purchase.price_cents).to eq(10000)
       expect(purchase.link).to eq(coffee)
       expect(purchase.variant_attributes).to eq([])
+    end
+  end
+
+  context "email formatting in body text" do
+    let(:coffee_with_email) do
+      create(
+        :product,
+        name: "Buy me a coffee!",
+        description: "Contact me at test@example.com for questions.",
+        user: seller,
+        native_type: Link::NATIVE_TYPE_COFFEE,
+      )
+    end
+
+    it "displays email addresses as clickable links" do
+      visit coffee_with_email.long_url
+
+      expect(page).to have_selector("h1", text: "Buy me a coffee!")
+      expect(page).to have_link("test@example.com", href: "mailto:test@example.com")
+      expect(page).not_to have_text('<a href="mailto:test@example.com"')
     end
   end
 end

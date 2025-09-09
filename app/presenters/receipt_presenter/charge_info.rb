@@ -21,6 +21,10 @@ class ReceiptPresenter::ChargeInfo
     formatted_dollar_amount(chargeable.charged_amount_cents)
   end
 
+  def order_id
+    chargeable.external_id_for_invoice
+  end
+
   def product_questions_note
     return if chargeable.orderable.receipt_for_gift_sender?
 
@@ -30,7 +34,7 @@ class ReceiptPresenter::ChargeInfo
       if for_email
         "Contact #{h(seller.display_name)} by replying to this email."
       else
-        "Contact #{h(seller.display_name)} at #{mail_to(seller.support_or_form_email)}."
+        "Contact #{h(seller.display_name)} at #{mail_to(chargeable.support_email)}."
       end
     "#{question} #{action}".html_safe
   rescue NotImplementedError

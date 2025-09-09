@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe "Dropbox uploads", type: :feature, js: true do
+describe "Dropbox uploads", type: :system, js: true do
   include ProductEditPageHelpers
 
   let(:seller) { create(:named_seller) }

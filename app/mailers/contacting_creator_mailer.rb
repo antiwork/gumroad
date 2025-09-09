@@ -374,7 +374,7 @@ class ContactingCreatorMailer < ApplicationMailer
     file_or_url = MailerAttachmentOrLinkService.new(
       file: sales_csv_tempfile,
       extension: "csv",
-      filename: "Sales_#{user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.csv"
+      filename: "user-sales-data/Sales_#{user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.csv"
     ).perform
     file = file_or_url[:file]
     if file
@@ -554,7 +554,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
       recipient = @recipient || @seller
       email = recipient.form_email
-      return unless email.present? && email.match(User::EMAIL_REGEX)
+      return unless EmailFormatValidator.valid?(email)
 
       mailer_args = { to: email, subject: @subject }
       mailer_args[:reply_to] = @reply_to if @reply_to.present?

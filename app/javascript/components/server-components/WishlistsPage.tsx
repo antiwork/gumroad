@@ -9,7 +9,6 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -106,8 +105,8 @@ const WishlistsPage = ({
                       <small>{wishlist.url}</small>
                     </a>
                   </td>
-                  <td>{wishlist.product_count}</td>
-                  <td>
+                  <td data-label="Products">{wishlist.product_count}</td>
+                  <td data-label="Discoverable">
                     <Toggle
                       value={!wishlist.discover_opted_out}
                       onChange={(checked) => void updateDiscoverOptOut(wishlist.id, !checked)}
@@ -116,13 +115,14 @@ const WishlistsPage = ({
                   </td>
                   <td>
                     <div className="actions">
-                      <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
-                        <div role="menu">
-                          <div role="menuitem" className="danger" onClick={() => setConfirmingDeleteWishlist(wishlist)}>
-                            <Icon name="trash2" /> Delete
-                          </div>
-                        </div>
-                      </Popover>
+                      <Button
+                        color="danger"
+                        outline
+                        aria-label="Delete wishlist"
+                        onClick={() => setConfirmingDeleteWishlist(wishlist)}
+                      >
+                        <Icon name="trash2" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -136,7 +136,9 @@ const WishlistsPage = ({
             </figure>
             <h2>Save products you are wishing for</h2>
             Bookmark and organize your desired products with ease
-            <a data-helper-prompt="How do wishlists work on Gumroad?">Learn more about wishlists</a>
+            <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
+              Learn more about wishlists
+            </a>
           </div>
         )}
 

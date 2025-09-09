@@ -12,7 +12,7 @@ module MassTransferPurchases
         "User has no purchases."
       elsif new_email.blank?
         "Email can't be blank."
-      elsif !new_email.match(User::EMAIL_REGEX)
+      elsif !EmailFormatValidator.valid?(new_email)
         "Invalid email format."
       end
       return { success: false, message: error_message, status: :unprocessable_entity } if error_message.present?

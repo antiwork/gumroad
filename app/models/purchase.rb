@@ -9,7 +9,7 @@ class Purchase < ApplicationRecord
           Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
-          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Receipt, UnusedColumns, SecureExternalId
+          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Paypal, Receipt, UnusedColumns, SecureExternalId
 
   extend PreorderHelper
   extend ProductsHelper
@@ -69,6 +69,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :chargeback_reason
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
+  attr_json_data_accessor :custom_fee_per_thousand
 
   belongs_to :link, optional: true
   has_one :url_redirect
@@ -327,6 +328,7 @@ class Purchase < ApplicationRecord
   validates :call, presence: true, if: -> { link.native_type == Link::NATIVE_TYPE_CALL }
   validates_inclusion_of :recommender_model_name, in: RecommendedProductsService::MODELS, allow_nil: true
   validates :purchaser, presence: true, if: -> { is_gift_receiver_purchase && gift&.is_recipient_hidden? }
+  validates :custom_fee_per_thousand, allow_nil: true, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 }
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
@@ -412,7 +414,7 @@ class Purchase < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions, :offer_code_name,
+  attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
                 :discount_code, :url_parameters, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
@@ -509,14 +511,8 @@ class Purchase < ApplicationRecord
   }
   scope :created_after, ->(start_at) { where("purchases.created_at > ?", start_at) if start_at.present? }
   scope :created_before, ->(end_at) { where("purchases.created_at < ?", end_at) if end_at.present? }
-  scope :paypal_orders, -> { where.not(paypal_order_id: nil) }
-  scope :unsuccessful_paypal_orders, lambda { |created_after_timestamp, created_before_timestamp|
-    not_successful.paypal_orders
-                  .created_after(created_after_timestamp)
-                  .created_before(created_before_timestamp)
-  }
 
-  scope :with_credit_card_id, -> { where("credit_card_id IS NOT NULL") }
+  scope :with_credit_card_id, -> { where.not(credit_card_id: nil) }
   scope :not_rental_expired, -> { where(rental_expired: [nil, false]) }
   scope :rentals_to_expire, -> {
     time_now = Time.current
@@ -577,7 +573,6 @@ class Purchase < ApplicationRecord
       .where(purchaser_id:)
   }
 
-  scope :paypal, -> { where(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
   scope :stripe, -> { where(charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
   scope :not_access_revoked_or_is_paid, -> { not_is_access_revoked.or(paid) }
@@ -690,7 +685,7 @@ class Purchase < ApplicationRecord
       expiry_year: nil
     }
 
-    if options[:query] && options[:query].to_s == card_visual && card_visual.match?(User::EMAIL_REGEX)
+    if options[:query] && options[:query].to_s == card_visual && EmailFormatValidator.valid?(card_visual)
       json[:paypal_email] = card_visual
     end
 
@@ -842,10 +837,6 @@ class Purchase < ApplicationRecord
     merchant_account&.is_a_stripe_connect_account?
   end
 
-  def charged_using_paypal_connect_account?
-    merchant_account&.is_a_paypal_connect_account?
-  end
-
   def update_user_balance_in_transaction_for_affiliate
     if charged_using_gumroad_merchant_account? && using_gumroad_merchant_account_for_affiliate_user?
       true
@@ -867,10 +858,6 @@ class Purchase < ApplicationRecord
 
   def seller_merchant_migration_enabled?
     seller&.merchant_migration_enabled?
-  end
-
-  def seller_native_paypal_payment_enabled?
-    seller&.native_paypal_payment_enabled?
   end
 
   def using_gumroad_merchant_account_for_affiliate_user?
@@ -1523,10 +1510,6 @@ class Purchase < ApplicationRecord
 
   def amount_refundable_cents_in_currency
     usd_cents_to_currency(link.price_currency_type, amount_refundable_cents, rate_converted_to_usd)
-  end
-
-  def paypal_refund_expired?
-    created_at < 6.months.ago && card_type == CardType::PAYPAL
   end
 
   def refunding_amount_cents(amount)
@@ -2362,13 +2345,6 @@ class Purchase < ApplicationRecord
     subscription_id.present? ? subscription.true_original_purchase : self
   end
 
-  def paypal_fee_usd_cents
-    return 0 if charge_processor_id != PaypalChargeProcessor.charge_processor_id ||
-      processor_fee_cents_currency.blank? ||
-      processor_fee_cents.to_i == 0
-    get_usd_cents(processor_fee_cents_currency, processor_fee_cents)
-  end
-
   def total_fee_cents
     fee_cents + paypal_fee_usd_cents
   end
@@ -3176,10 +3152,8 @@ class Purchase < ApplicationRecord
         else
           fixed_processor_fee_cents
         end
-      elsif Feature.active?(:merchant_of_record_fee, seller)
-        was_discover_fee_charged? ? 0 : GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
       else
-        fixed_processor_fee_cents
+        was_discover_fee_charged? ? 0 : GUMROAD_FIXED_FEE_CENTS + fixed_processor_fee_cents
       end
 
       self.fee_cents = variable_fee_cents + fixed_fee_cents
@@ -3188,21 +3162,18 @@ class Purchase < ApplicationRecord
 
     def calculate_additional_discover_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
-        preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND + PROCESSOR_FEE_PER_THOUSAND : 0)
+        preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) + PROCESSOR_FEE_PER_THOUSAND : 0)
       else
-        if Feature.active?(:merchant_of_record_fee, seller)
-          GUMROAD_DISCOVER_FEE_PER_THOUSAND - GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
-        else
-          link.discover_fee_per_thousand - (flat_fee_applicable? ? GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND : 0)
-        end
+        GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       end
     end
 
     def calculate_gumroad_fee_per_thousand
       if flat_fee_applicable?
-        gumroad_flat_fee_per_thousand + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        calculate_custom_fee_per_thousand
+        (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif seller.tier_pricing_enabled?
         (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
       else
@@ -3211,6 +3182,19 @@ class Purchase < ApplicationRecord
         else
           gumroad_fee_percentage_for_migrated_account
         end
+      end
+    end
+
+    def calculate_custom_fee_per_thousand
+      return if custom_fee_per_thousand.present?
+      return if charge_discover_fee?
+
+      if is_recurring_subscription_charge || is_updated_original_subscription_purchase
+        self.custom_fee_per_thousand = subscription.original_purchase.custom_fee_per_thousand if subscription.original_purchase.custom_fee_per_thousand.present?
+      elsif is_preorder_charge?
+        self.custom_fee_per_thousand = preorder.authorization_purchase.custom_fee_per_thousand if preorder.authorization_purchase.custom_fee_per_thousand.present?
+      elsif seller.custom_fee_per_thousand.present?
+        self.custom_fee_per_thousand = seller.custom_fee_per_thousand
       end
     end
 
@@ -3589,7 +3573,7 @@ class Purchase < ApplicationRecord
     def must_have_valid_email
       return if email && !email_changed?
 
-      errors.add(:base, "valid email required") if email.blank? || !email.match(User::EMAIL_REGEX)
+      errors.add(:base, "valid email required") unless EmailFormatValidator.valid?(email)
     end
 
     def seller_is_link_user

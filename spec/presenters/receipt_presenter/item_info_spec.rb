@@ -522,6 +522,64 @@ describe ReceiptPresenter::ItemInfo do
           )
         end
       end
+
+      context "when the purchase is a bundle product purchase" do
+        let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
+        let(:purchase) { create(:purchase, link: bundle, seller:) }
+        let!(:product) { create(:product, user: seller, name: "Product") }
+        let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
+
+        before do
+          purchase.create_purchase_refund_policy!(
+            title: "Bundle refund policy",
+            fine_print: "Bundle fine print."
+          )
+          purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "uses the bundle purchase's refund policy" do
+          presenter = described_class.new(purchase.product_purchases.last)
+          expect(presenter.props[:general_attributes]).to eq(
+            [
+              {
+                label: "Bundle",
+                value: link_to("Bundle product", bundle.long_url, target: "_blank")
+              },
+              { label: "Bundle refund policy", value: "Bundle fine print." },
+            ]
+          )
+        end
+      end
+
+      context "when the purchase is a bundle gift receiver purchase" do
+        let(:bundle) { create(:product, user: seller, is_bundle: true, name: "Bundle product") }
+        let(:gift) { create(:gift, gift_note: "Hope you like it!", giftee_email: "giftee@example.com", link: bundle) }
+        let(:gifter_purchase) { create(:purchase, link: bundle, seller:, gift_given: gift, is_gift_sender_purchase: true) }
+        let(:purchase) { create(:purchase, link: bundle, seller:, gift_received: gift, is_gift_receiver_purchase: true) }
+        let!(:product) { create(:product, user: seller, name: "Product") }
+        let!(:bundle_product) { create(:bundle_product, bundle:, product:) }
+
+        before do
+          gifter_purchase.create_purchase_refund_policy!(
+            title: "Bundle gift refund policy",
+            fine_print: "Bundle gift fine print."
+          )
+          purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "uses the gifter bundle purchase's refund policy" do
+          presenter = described_class.new(purchase.product_purchases.last)
+          expect(presenter.props[:general_attributes]).to eq(
+            [
+              {
+                label: "Bundle",
+                value: link_to("Bundle product", bundle.long_url, target: "_blank")
+              },
+              { label: "Bundle gift refund policy", value: "Bundle gift fine print." },
+            ]
+          )
+        end
+      end
     end
 
     describe "#refund_policy_attribute" do
@@ -578,7 +636,7 @@ describe ReceiptPresenter::ItemInfo do
     end
 
     describe "manage_subscription_note" do
-      context "when the purchase is not a membership" do
+      context "when the purchase is not a subscription" do
         it "returns nil" do
           expect(props[:manage_subscription_note]).to be_nil
         end
@@ -636,6 +694,32 @@ describe ReceiptPresenter::ItemInfo do
               expect(props[:manage_subscription_note]).to be_nil
             end
           end
+        end
+      end
+
+      context "when the purchase is an installment plan" do
+        it "returns the installment plan manage note with dates and link" do
+          travel_to(Time.zone.parse("2025-03-14"))
+
+          product_installment_plan = create(
+            :product_installment_plan,
+            number_of_installments: 5,
+            recurrence: "monthly",
+          )
+          purchase = create(:installment_plan_purchase, link: product_installment_plan.link)
+          subscription = purchase.subscription
+
+          props = described_class.new(purchase).props
+
+          url = Rails.application.routes.url_helpers.manage_subscription_url(
+            subscription.external_id,
+            host: UrlService.domain_with_protocol,
+          )
+          expect(props[:manage_subscription_note]).to eq(
+            "Installment plan initiated on Mar 14, 2025. " \
+            "Your final charge will be on Aug 14, 2025. " \
+            "You can manage your payment settings <a target=\"_blank\" href=\"#{url}\">here</a>."
+          )
         end
       end
     end
