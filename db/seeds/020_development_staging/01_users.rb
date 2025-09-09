@@ -8,8 +8,6 @@ if seller.blank?
   seller.username = "seller"
   seller.confirmed_at = Time.current
   seller.is_team_member = true
-  seller.has_payout_privilege = true
-  seller.has_risk_privilege = true
   seller.user_risk_state = "compliant"
   seller.password = SecureRandom.hex(24)
 

@@ -5,7 +5,7 @@ require "spec_helper"
 describe "Admin::LinksController Scenario", type: :system, js: true do
   let(:product) { create(:product) }
   before do
-    login_as(create(:admin_user, has_risk_privilege: true))
+    login_as(create(:admin_user))
   end
 
   xdescribe "views and sales async" do
