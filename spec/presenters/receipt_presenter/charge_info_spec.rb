@@ -36,6 +36,12 @@ describe ReceiptPresenter::ChargeInfo do
       end
     end
 
+    describe "#order_id" do
+      it "returns the external_id_for_invoice" do
+        expect(presenter.order_id).to eq(chargeable.external_id_for_invoice)
+      end
+    end
+
     describe "#product_questions_note" do
       it "returns note with reply" do
         expect(presenter.product_questions_note).to eq(
