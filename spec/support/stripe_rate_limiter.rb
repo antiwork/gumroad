@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module StripeRateLimiter
-  MAX_RETRIES = 3
+  MAX_RETRIES = 4
   BASE_DELAY = 1.0
 
   class << self
