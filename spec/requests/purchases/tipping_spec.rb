@@ -310,6 +310,56 @@ describe("Product checkout with tipping", type: :system, js: true) do
     end
   end
 
+  context "when all products in the cart are free" do
+    let(:free_product1) { create(:product, name: "Free Product 1", user: seller, price_cents: 0) }
+    let(:free_product2) { create(:product, name: "Free Product 2", user: seller, price_cents: 0) }
+    let(:another_seller) { create(:named_seller, :eligible_for_service_products, tipping_enabled: true) }
+    let(:free_product3) { create(:product, name: "Free Product 3", user: another_seller, price_cents: 0) }
+
+    it "applies tip to one product in cart when all products are free" do
+      visit free_product1.long_url
+      add_to_cart(free_product1, pwyw_price: 0)
+      visit free_product2.long_url
+      add_to_cart(free_product2, pwyw_price: 0)
+      visit free_product3.long_url
+      add_to_cart(free_product3, pwyw_price: 0)
+      fill_checkout_form(free_product1)
+
+      expect(page).to have_text("Subtotal US$0", normalize_ws: true)
+      expect(page).to have_text("Total US$0", normalize_ws: true)
+
+      choose "Other"
+      fill_in "Tip", with: 15
+
+      expect(page).to have_text("Subtotal US$0", normalize_ws: true)
+      expect(page).to have_text("Tip US$15", normalize_ws: true)
+      expect(page).to have_text("Total US$15", normalize_ws: true)
+      click_on "Pay"
+
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+      # Check that purchases were created successfully
+      purchases = Purchase.last(3)
+      expect(purchases).to all(be_successful)
+
+      # Find purchases by product
+      purchase1 = purchases.find { |p| p.link == free_product1 }
+      purchase2 = purchases.find { |p| p.link == free_product2 }
+      purchase3 = purchases.find { |p| p.link == free_product3 }
+
+      # First product in cart should get the entire tip
+      expect(purchase1.price_cents).to eq(1500) # Full $15 tip
+      expect(purchase1.tip.value_cents).to eq(1500)
+
+      # Other products should get no tip
+      expect(purchase2.price_cents).to eq(0)
+      expect(purchase2.tip).to be_nil
+
+      expect(purchase3.price_cents).to eq(0)
+      expect(purchase3.tip).to be_nil
+    end
+  end
+
   context "when the product is a commission" do
     let(:commission_product) { create(:commission_product) }
 

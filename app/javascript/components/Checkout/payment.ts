@@ -171,18 +171,42 @@ export function computeTip(state: State) {
   return Math.round((state.tip.percentage / 100) * getTotalPriceFromProducts(state));
 }
 
-export function computeTipForPrice(state: State, price: number) {
+interface ProductForTip {
+  permalink: string;
+}
+
+export function computeTipForPrice(state: State, price: number, product?: ProductForTip) {
   if (!isTippingEnabled(state)) return null;
   if (state.tip.type === "fixed") {
     const totalPrice = getTotalPriceFromProducts(state);
     if (totalPrice === 0) {
-      return Math.round((state.tip.amount ?? 0) / state.products.length);
+      return computeTipForFreeProducts(state, price, product);
     }
 
     return Math.round((state.tip.amount ?? 0) * (price / totalPrice));
   }
 
   return Math.round((state.tip.percentage / 100) * price);
+}
+
+function computeTipForFreeProducts(state: State, _price: number, product?: ProductForTip) {
+  if (!product) {
+    const tipAmount = state.tip.type === "fixed" ? (state.tip.amount ?? 0) : 0;
+    return Math.round(tipAmount / state.products.length);
+  }
+
+  const firstProduct = state.products[0];
+  if (!firstProduct) {
+    return 0;
+  }
+  const isFirstProductSelected = firstProduct.permalink === product.permalink;
+
+  if (isFirstProductSelected) {
+    const tipAmount = state.tip.type === "fixed" ? (state.tip.amount ?? 0) : 0;
+    return tipAmount;
+  }
+
+  return 0;
 }
 
 export function getTotalPrice(state: State) {
@@ -209,7 +233,8 @@ export const loadSurcharges = (state: State) => {
     products: state.products.map((item) => ({
       permalink: item.permalink,
       quantity: item.quantity,
-      price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + (computeTipForPrice(state, item.price) ?? 0)),
+      price:
+        item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + (computeTipForPrice(state, item.price, item) ?? 0)),
       subscription_id: item.subscription_id,
       recommended_by: item.recommended_by,
     })),
