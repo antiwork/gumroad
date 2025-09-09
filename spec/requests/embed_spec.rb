@@ -114,7 +114,10 @@ describe "Embed scenario", type: :system, js: true do
     it "successfully credits the affiliate commission for the product bought using its affiliated product URL" do
       visit(create_embed_page(product, url: direct_affiliate.referral_url_for_product(product), outbound: false))
 
-      within_frame { click_on "Add to cart" }
+      within_frame { 
+        expect(page).to have_content("Add to cart", wait: 10)
+        click_on "Add to cart" 
+      }
 
       check_out(product)
 
