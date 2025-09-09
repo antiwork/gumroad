@@ -740,6 +740,8 @@ describe "Sales page", type: :system, js: true do
         end
         expect(page).to have_alert(text: "Email updated successfully.")
 
+        refresh
+        find(:table_row, { "Name" => "Customer 1" }).click
         within_section "Bundle", section_element: :aside do
           within_section "Content", section_element: :section do
             within_section "Bundle Product 1" do

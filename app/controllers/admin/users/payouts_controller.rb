@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::Users::PayoutsController < Admin::BaseController
-  before_action :require_user_has_payout_privileges!, except: %i[index show sync sync_all]
   before_action :fetch_payment, only: %i[show retry cancel fail sync]
   before_action :fetch_user, only: [:index, :pause, :resume]
 
