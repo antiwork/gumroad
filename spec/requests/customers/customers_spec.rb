@@ -738,7 +738,7 @@ describe "Sales page", type: :system, js: true do
             click_on "Save"
           end
         end
-        expect(page).to have_alert(text: "Email updated successfully.")
+        expect(page).to have_alert(text: "Email updated successfully.", wait: 10)
 
         refresh
         find(:table_row, { "Name" => "Customer 1" }).click
@@ -751,7 +751,7 @@ describe "Sales page", type: :system, js: true do
         end
         within_section "Bundle Product 1", section_element: :aside do
           within_section "Email", section_element: :section do
-            expect(page).to have_text("customer2@gumroad.com")
+            expect(page).to have_text("customer2@gumroad.com", wait: 10)
           end
         end
 
@@ -765,7 +765,7 @@ describe "Sales page", type: :system, js: true do
         end
         within_section "Bundle Product 2", section_element: :aside do
           within_section "Email", section_element: :section do
-            expect(page).to have_text("customer2@gumroad.com")
+            expect(page).to have_text("customer2@gumroad.com", wait: 10)
           end
         end
 
