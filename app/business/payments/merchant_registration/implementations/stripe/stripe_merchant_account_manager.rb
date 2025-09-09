@@ -319,7 +319,11 @@ module StripeMerchantAccountManager
           end
 
           Rails.logger.warn "Stripe account creation rate limit hit, retrying in 1 second (attempt #{attempts}/#{max_attempts})"
-          sleep(1) # Since its 5 attemps per second, 1 second is enough to avoid rate limiting
+
+          # For test env we have 5 calls/second so, it would be 200ms. So in that case im using 400 so we can have a small buffer
+          # For prod env we have 30 calls/second so, it would be 33ms. So in that case im using 100 so we can have a small buffer
+          sleep_time = Rails.env.production? ? 0.1 : 0.4
+          sleep(sleep_time) # Since its 5 attemps per second, 1 second is enough to avoid rate limiting
         else
           raise e
         end
