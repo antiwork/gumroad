@@ -53,7 +53,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
         login_to_app
 
         # It doesn't ask for 2FA again
-        expect(page).to have_text("Welcome to Gumroad.")
+        expect(page).to have_text("Dashboard")
       end
     end
 
@@ -115,7 +115,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
         submit_login_form
 
         # It directly navigates to logged in page since 2FA is verified through the link between the redirects.
-        expect(page).to have_text("Welcome to Gumroad.")
+        expect(page).to have_text("Dashboard")
         expect(page.current_url).to eq dashboard_url(host: Capybara.app_host)
       end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(user.id)
     end

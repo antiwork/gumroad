@@ -21,7 +21,7 @@ describe "Login Feature Scenario", js: true, type: :system do
       click_on "Login"
       expect(page).to have_selector("iframe[title*=recaptcha]", visible: false)
       wait_for_ajax
-      expect(page).to have_content("Welcome to Gumroad.")
+      expect(page).to have_content("Dashboard")
     end
 
     it "shows an error when login fails" do
