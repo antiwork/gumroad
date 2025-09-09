@@ -146,7 +146,7 @@ const ReviewsPage = ({
               Discover products
             </NavigationButton>
             <a href="/help/article/344-rate-and-review-your-purchase" target="_blank" rel="noreferrer">
-              Learn more about reviews.
+              Learn more about reviews
             </a>
           </div>
         ) : (
