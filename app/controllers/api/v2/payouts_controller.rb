@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Api::V2::PayoutsController < Api::V2::BaseController
+  include PayoutsHelper
+
   before_action -> { doorkeeper_authorize!(:view_payouts) }
 
   RESULTS_PER_PAGE = 10
@@ -30,6 +32,18 @@ class Api::V2::PayoutsController < Api::V2::BaseController
     paginated_payouts = filter_payouts(start_date: start_date, end_date: end_date)
     paginated_payouts = paginated_payouts.where(where_page_data) if where_page_data
     paginated_payouts = paginated_payouts.limit(RESULTS_PER_PAGE + 1).to_a
+
+    if include_upcoming_payout?(end_date)
+      payout_period_end_date = current_payout_end_date(current_resource_owner)
+      balance_ids = current_resource_owner.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
+      paginated_payouts.unshift(
+        Payment.new(
+          amount_cents: current_resource_owner.unpaid_balance_cents_up_to_date(payout_period_end_date),
+          currency: current_resource_owner.currency_type,
+          state: current_resource_owner.payouts_status,
+        ).as_json.merge(id: nil)
+      )
+    end
 
     has_next_page = paginated_payouts.size > RESULTS_PER_PAGE
     paginated_payouts = paginated_payouts.first(RESULTS_PER_PAGE)
@@ -62,5 +76,9 @@ class Api::V2::PayoutsController < Api::V2::BaseController
       payouts = payouts.where("created_at >= ?", start_date) if start_date
       payouts = payouts.where("created_at < ?", end_date) if end_date
       payouts.order(created_at: :desc, id: :desc)
+    end
+
+    def include_upcoming_payout?(end_date)
+      params[:page_key].blank? && current_resource_owner.next_payout_date && (end_date.nil? || end_date >= current_payout_end_date(current_resource_owner))
     end
 end
