@@ -171,7 +171,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
       <div>
         {loading ? (
           <div className="flex justify-center">
-          <Progress width="5rem" />
+            <Progress width="5rem" />
           </div>
         ) : followers.length > 0 ? (
           <div>
