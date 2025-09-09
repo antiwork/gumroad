@@ -1,37 +1,42 @@
 # frozen_string_literal: true
 
 module StripeRateLimiter
-  RATE_LIMIT_PER_SECOND = 5
+  MAX_RETRIES = 3
+  BASE_DELAY = 1.0
 
   class << self
     def with_rate_limit(&block)
       return yield unless Rails.env.test?
       return yield if vcr_cassette_active?
 
-      @mutex ||= Mutex.new
+      attempt = 0
 
-      @mutex.synchronize do
-        @call_timestamps ||= []
-        current_time = Time.current
+      begin
+        yield
+      rescue Stripe::RateLimitError => e
+        attempt += 1
 
-        @call_timestamps.reject! { |timestamp| current_time - timestamp > 1.0 }
-
-        # If we've made 5 calls in the last second, sleep until the next second
-        if @call_timestamps.length >= RATE_LIMIT_PER_SECOND
-          oldest_call = @call_timestamps.min
-          sleep_duration = 1.0 - (current_time - oldest_call)
-          sleep(sleep_duration) if sleep_duration > 0
-
-          @call_timestamps.clear
+        if attempt <= MAX_RETRIES
+          delay = calculate_delay(attempt)
+          Rails.logger.debug "Stripe rate limit hit (attempt #{attempt}/#{MAX_RETRIES}). Retrying in #{delay}s"
+          sleep(delay)
+          retry
+        else
+          Rails.logger.error "Stripe rate limit exceeded after #{MAX_RETRIES} retries"
+          raise e
         end
-
-        @call_timestamps << Time.current
       end
-
-      yield
     end
 
     private
+      def calculate_delay(attempt)
+        # Exponential backoff with jitter as recommended by Stripe
+        # Formula: base_delay * (2 ^ (attempt - 1)) + random jitter
+        base_wait = BASE_DELAY * (2**(attempt - 1))
+        jitter = rand(0.0..0.2) # Small random jitter to avoid thundering herd
+        base_wait + jitter
+      end
+
       def vcr_cassette_active?
         # Check if current spec has VCR cassette
         defined?(VCR) && VCR.current_cassette.present?
