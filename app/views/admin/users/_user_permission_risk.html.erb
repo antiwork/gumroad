@@ -1,77 +1,75 @@
-<% if current_user.has_risk_privilege %>
-  <hr>
-  <div style="display: flex; justify-content: space-between">
-    <div class="button-group">
-      <% unless user.compliant? %>
-        <%= admin_action label: "Mark compliant", url: mark_compliant_admin_user_path(user), loading: "Marking compliant...", done: "Marked compliant!", success_message: "Marked compliant!", outline: true, color: "success" %>
-      <% end %>
-      <% if user.suspended? && user.unpaid_balance_cents.positive? %>
-        <%= admin_action label: "Refund balance", url: refund_balance_admin_user_path(user), confirm_message: "Are you sure you want to refund user #{user.id}'s not paid out purchases!?", done: "Refunded.", success_message: "Refunded" %>
-      <% end %>
-      <% unless user.disable_paypal_sales? %>
-        <%= admin_action label: "Disable PayPal sales", url: disable_paypal_sales_admin_user_path(user), loading: "Disabling PayPal sales...", done: "PayPal sales disabled!", success_message: "PayPal sales disabled!", outline: true, color: "warning" %>
-      <% end %>
-    </div>
-    <div>
-      <%= with_tooltip(tip: "Risk State", position: "left") do %>
-        <div class="pill small <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
-      <% end %>
-    </div>
+<hr>
+<div style="display: flex; justify-content: space-between">
+  <div class="button-group">
+    <% unless user.compliant? %>
+      <%= admin_action label: "Mark compliant", url: mark_compliant_admin_user_path(user), loading: "Marking compliant...", done: "Marked compliant!", success_message: "Marked compliant!", outline: true, color: "success" %>
+    <% end %>
+    <% if user.suspended? && user.unpaid_balance_cents.positive? %>
+      <%= admin_action label: "Refund balance", url: refund_balance_admin_user_path(user), confirm_message: "Are you sure you want to refund user #{user.id}'s not paid out purchases!?", done: "Refunded.", success_message: "Refunded" %>
+    <% end %>
+    <% unless user.disable_paypal_sales? %>
+      <%= admin_action label: "Disable PayPal sales", url: disable_paypal_sales_admin_user_path(user), loading: "Disabling PayPal sales...", done: "PayPal sales disabled!", success_message: "PayPal sales disabled!", outline: true, color: "warning" %>
+    <% end %>
   </div>
+  <div>
+    <%= with_tooltip(tip: "Risk State", position: "left") do %>
+      <div class="pill small <%= user.compliant? ? "success" : "warning" %>"><%= user.user_risk_state.humanize %></div>
+    <% end %>
+  </div>
+</div>
 
-  <% unless (user.flagged_for_fraud? || user.suspended? || user.on_probation?) %>
-    <hr>
-    <details>
-      <summary>
-        <h3>Flag for fraud</h3>
-      </summary>
-      <%= react_component "AdminFlagForFraudForm", props: { user_id: user.id }, prerender: true %>
-    </details>
-  <% end %>
-
-  <% if user.flagged_for_fraud? || user.on_probation? %>
-    <hr>
-    <details>
-      <summary>
-        <h3>Suspend for fraud</h3>
-      </summary>
-      <%= react_component "AdminSuspendForFraudForm", props: { user_id: user.id }, prerender: true %>
-    </details>
-  <% end %>
-
-  <hr>
-  <%= react_component "AdminUserGuids", props: { user_id: user.id }, prerender: true %>
-
+<% unless (user.flagged_for_fraud? || user.suspended? || user.on_probation?) %>
   <hr>
   <details>
     <summary>
-      <h3>Bio</h3>
+      <h3>Flag for fraud</h3>
     </summary>
-    <% if user.bio.present? %>
-      <%= user.bio %>
-    <% else %>
-      <div class="info" role="status">No bio provided.</div>
-    <% end %>
-  </details>
-
-  <hr>
-  <details>
-    <summary>
-      <h3>Last posts</h3>
-    </summary>
-    <% user.last_5_created_posts.tap do |posts| %>
-      <% if posts.any? %>
-        <div class="stack">
-          <% user.last_5_created_posts.each do |post| %>
-            <div>
-              <h5><%= link_to_unless(user.suspended?, post.name, build_view_post_route(post: post)) %></h5>
-              <%= format_datetime_with_relative_tooltip(post.created_at) %>
-            </div>
-          <% end %>
-        </div>
-      <% else %>
-        <div class="info" role="status">No posts created.</div>
-      <% end %>
-    <% end %>
+    <%= react_component "AdminFlagForFraudForm", props: { user_id: user.id }, prerender: true %>
   </details>
 <% end %>
+
+<% if user.flagged_for_fraud? || user.on_probation? %>
+  <hr>
+  <details>
+    <summary>
+      <h3>Suspend for fraud</h3>
+    </summary>
+    <%= react_component "AdminSuspendForFraudForm", props: { user_id: user.id }, prerender: true %>
+  </details>
+<% end %>
+
+<hr>
+<%= react_component "AdminUserGuids", props: { user_id: user.id }, prerender: true %>
+
+<hr>
+<details>
+  <summary>
+    <h3>Bio</h3>
+  </summary>
+  <% if user.bio.present? %>
+    <%= user.bio %>
+  <% else %>
+    <div class="info" role="status">No bio provided.</div>
+  <% end %>
+</details>
+
+<hr>
+<details>
+  <summary>
+    <h3>Last posts</h3>
+  </summary>
+  <% user.last_5_created_posts.tap do |posts| %>
+    <% if posts.any? %>
+      <div class="stack">
+        <% user.last_5_created_posts.each do |post| %>
+          <div>
+            <h5><%= link_to_unless(user.suspended?, post.name, build_view_post_route(post: post)) %></h5>
+            <%= format_datetime_with_relative_tooltip(post.created_at) %>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="info" role="status">No posts created.</div>
+    <% end %>
+  <% end %>
+</details>

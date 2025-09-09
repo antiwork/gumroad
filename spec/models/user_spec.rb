@@ -2142,7 +2142,7 @@ describe User, :vcr do
       before do
         user.check_merchant_account_is_linked = true
         user.save
-
+        create(:user_compliance_info, user:)
         @merchant_account = create(:merchant_account_paypal, user:)
       end
 
@@ -2162,6 +2162,10 @@ describe User, :vcr do
     end
 
     context "when a merchant account is not connected" do
+      before do
+        Feature.deactivate(:disable_braintree_sales)
+      end
+
       it "returns true for non-complaint user" do
         expect(user.alive_user_compliance_info).to be_nil
         expect(user.pay_with_paypal_enabled?).to be(true)

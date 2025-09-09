@@ -69,13 +69,13 @@
   <div style="display: grid; gap: var(--spacer-2); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), max-content));">
     <% if payment.cancelled? || payment.failed? || payment.returned? %>
       <%= admin_action label: "Retry", url: retry_admin_payout_path(payment), confirm_message: "Are you sure you want to retry this payment?", loading: "Retrying...", done: "Retried.", success_message: "Retried." %>
-    <% elsif payment.processing? && current_user.has_payout_privilege && (payment.created_at <= 2.days.ago) %>
+    <% elsif payment.processing? && (payment.created_at <= 2.days.ago) %>
       <%= admin_action label: "Mark failed", url: fail_admin_payout_path(payment), confirm_message: "Are you sure you want to mark this payment as failed?", done: "Mark failed" %>
-    <% elsif payment.unclaimed? && current_user.has_payout_privilege %>
+    <% elsif payment.unclaimed? %>
       <%= admin_action label: "Mark cancelled", url: cancel_admin_payout_path(payment), loading: "Cancelling...", done: "Cancelled!",
           confirm_message: "NOTE: This action should only be taken after the transaction has been cancelled in the PayPal dashboard. Are you sure you want to mark this payment as cancelled?" %>
     <% end %>
-    <% if current_user.has_payout_privilege && payment.processor == PayoutProcessorType::PAYPAL && Payment::NON_TERMINAL_STATES.include?(payment.state) %>
+    <% if payment.processor == PayoutProcessorType::PAYPAL && Payment::NON_TERMINAL_STATES.include?(payment.state) %>
       <%= admin_action label: "Sync with PayPal", url: sync_admin_payout_path(payment), done: "Synced!",
           confirm_message: "Are you sure you want to try and sync this payment with PayPal?" %>
       <%= admin_action label: "Sync ALL stuck PayPal payouts", url: sync_all_admin_user_payouts_path(payment), done: "Enqueued!",
