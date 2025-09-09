@@ -107,4 +107,9 @@ class CustomerMailerPreview < ActionMailer::Preview
   def upcoming_call_reminder
     CustomerMailer.upcoming_call_reminder(Call.last&.id)
   end
+
+  def files_ready_for_download
+    purchase = Purchase.joins(:url_redirect).last
+    CustomerMailer.files_ready_for_download(purchase&.id)
+  end
 end

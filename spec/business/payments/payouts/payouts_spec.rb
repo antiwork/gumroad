@@ -51,6 +51,38 @@ describe Payouts do
         expect(described_class.is_user_payable(creator, payout_date)).to be(true)
       end
 
+      it "returns false for accounts not reviewed" do
+        expect_processors_not_called
+        creator = create(:user, payment_address: "payme@example.com", user_risk_state: "not_reviewed")
+        create(:balance, user: creator, amount_cents: 100_001, date: Date.today - 3)
+
+        expect(described_class.is_user_payable(creator, payout_date)).to be(false)
+      end
+
+      it "returns false for accounts on probation" do
+        expect_processors_not_called
+        creator = create(:user, payment_address: "payme@example.com", user_risk_state: "on_probation")
+        create(:balance, user: creator, amount_cents: 100_001, date: Date.today - 3)
+
+        expect(described_class.is_user_payable(creator, payout_date)).to be(false)
+      end
+
+      it "returns false for accounts flagged for terms violation" do
+        expect_processors_not_called
+        creator = create(:user, payment_address: "payme@example.com", user_risk_state: "flagged_for_tos_violation")
+        create(:balance, user: creator, amount_cents: 100_001, date: Date.today - 3)
+
+        expect(described_class.is_user_payable(creator, payout_date)).to be(false)
+      end
+
+      it "returns false for accounts flagged for fraud" do
+        expect_processors_not_called
+        creator = create(:user, payment_address: "payme@example.com", user_risk_state: "flagged_for_fraud")
+        create(:balance, user: creator, amount_cents: 100_001, date: Date.today - 3)
+
+        expect(described_class.is_user_payable(creator, payout_date)).to be(false)
+      end
+
       describe "non-compliant user from admin" do
         let(:payout_date) { Date.today }
         let(:user) { create(:tos_user, payment_address: "bob1@example.com") }
@@ -112,7 +144,7 @@ describe Payouts do
     end
 
     describe "instant payouts" do
-      let(:seller) { create(:user) }
+      let(:seller) { create(:compliant_user) }
 
       before do
         allow(StripePayoutProcessor).to receive(:is_user_payable).and_return(true)
@@ -139,7 +171,7 @@ describe Payouts do
     end
 
     describe "payout processor logic" do
-      let(:u1) { create(:user) }
+      let(:u1) { create(:compliant_user) }
 
       before do
         create(:balance, user: u1, amount_cents: 49_99, date: payout_date - 2)
@@ -431,7 +463,7 @@ describe Payouts do
         end.to change { seller.comments.with_type_payout_note.count }.by(1)
 
         date = Time.current.to_fs(:formatted_date_full_month)
-        content = "Payout on #{date} was skipped because the account was suspended."
+        content = "Payout on #{date} was skipped because the account was not compliant."
         expect(seller.comments.with_type_payout_note.count).to eq 1
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
 

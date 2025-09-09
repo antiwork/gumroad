@@ -146,6 +146,7 @@ describe Purchase::CreateService, :vcr do
           buyer:
         ).perform
 
+        expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(30)
         expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
         expect(purchase.purchase_refund_policy.fine_print).to eq("This is a product-level refund policy")
       end
@@ -199,6 +200,7 @@ describe Purchase::CreateService, :vcr do
           buyer:
         ).perform
 
+        expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(30)
         expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
         expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
       end

@@ -87,12 +87,9 @@
 
       <dt>Status</dt>
       <dd>
-        <%= purchase.purchase_state.capitalize %>
-        <%= "(refunded)" if purchase.stripe_refunded %>
-        <%= "(partially refunded)" if purchase.stripe_partially_refunded %>
-        <%= "(chargeback)" if purchase.chargedback_not_reversed? %>
-        <%= "(chargeback reversed)" if purchase.chargeback_reversed? %>
-        <%= "(#{purchase.formatted_error_code})" if purchase.failed? %>
+        <% purchase_states(purchase).each do |state| %>
+          <%= state %>
+        <% end %>
       </dd>
 
       <% if purchase.refunds.present? %>

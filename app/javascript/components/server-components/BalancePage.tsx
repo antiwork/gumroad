@@ -1,12 +1,11 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
 import { createInstantPayout } from "$app/data/payout";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -240,6 +239,32 @@ type PastPeriodPayoutsData = {
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
   type: PayoutType;
+};
+
+export type BalancePageProps = {
+  next_payout_period_data:
+    | CurrentPayoutsDataWithUserNotPayable
+    | CurrentPayoutsDataAndPaymentMethodWithUserPayable
+    | null;
+  processing_payout_periods_data: PayoutPeriodData[];
+  payouts_status: "paused" | "payable";
+  payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payouts_paused_for_reason: string | null;
+  past_payout_period_data: PayoutPeriodData[];
+  instant_payout: {
+    payable_amount_cents: number;
+    payable_balances: {
+      id: string;
+      date: string;
+      amount_cents: number;
+    }[];
+    bank_account_type: string;
+    bank_name: string | null;
+    routing_number: string;
+    account_number: string;
+  } | null;
+  show_instant_payouts_notice: boolean;
+  pagination: PaginationProps;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -621,31 +646,7 @@ const BalancePage = ({
   instant_payout,
   show_instant_payouts_notice,
   pagination: initialPagination,
-}: {
-  next_payout_period_data:
-    | CurrentPayoutsDataWithUserNotPayable
-    | CurrentPayoutsDataAndPaymentMethodWithUserPayable
-    | null;
-  processing_payout_periods_data: PayoutPeriodData[];
-  payouts_status: "paused" | "payable";
-  payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
-  past_payout_period_data: PayoutPeriodData[];
-  instant_payout: {
-    payable_amount_cents: number;
-    payable_balances: {
-      id: string;
-      date: string;
-      amount_cents: number;
-    }[];
-    bank_account_type: string;
-    bank_name: string | null;
-    routing_number: string;
-    account_number: string;
-  } | null;
-  show_instant_payouts_notice: boolean;
-  pagination: PaginationProps;
-}) => {
+}: BalancePageProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
 
@@ -957,4 +958,4 @@ const BalancePage = ({
   );
 };
 
-export default register({ component: BalancePage, propParser: createCast() });
+export default BalancePage;

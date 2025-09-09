@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe "Admin::AffiliatesController Scenario", type: :system, js: true do
-  let(:admin) { create(:admin_user, has_risk_privilege: true) }
+  let(:admin) { create(:admin_user) }
   let(:affiliate_user) { create(:affiliate_user) }
 
   before do
@@ -17,6 +17,8 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
 
     it "shows no products alert" do
       visit admin_affiliate_path(affiliate_user)
+
+      click_on "Products"
 
       expect(page).to have_text("No affiliated products.")
     end
@@ -35,6 +37,8 @@ describe "Admin::AffiliatesController Scenario", type: :system, js: true do
 
     it "shows products" do
       visit admin_affiliate_path(affiliate_user)
+
+      click_on "Products"
 
       expect(page).to have_text("Product a")
       expect(page).to have_text("Product b")

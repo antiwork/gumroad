@@ -16,6 +16,13 @@ describe StampPdfForPurchaseJob do
     expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase)
   end
 
+  it "enqueues files ready email when notify flag is true" do
+    expect do
+      purchase.create_url_redirect!
+      described_class.new.perform(purchase.id, true)
+    end.to have_enqueued_mail(CustomerMailer, :files_ready_for_download).with(purchase.id)
+  end
+
   context "when stamping the PDFs fails with a known error" do
     before do
       allow(PdfStampingService).to receive(:stamp_for_purchase!).and_raise(PdfStampingService::Error)
