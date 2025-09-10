@@ -123,22 +123,27 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     fill_in_credit_card
     click_on "Pay"
+    expect(page).to have_field("Your email address", disabled: false)
     expect_focused find_field("Your email address")
 
     fill_in "Your email address", with: "gumroad@example.com"
     click_on "Pay"
+    expect(page).to have_field("Full name", disabled: false)
     expect_focused find_field("Full name")
 
     fill_in "Full name", with: "G McGumroadson"
     click_on "Pay"
+    expect(page).to have_field("Street address", disabled: false)
     expect_focused find_field("Street address")
 
     fill_in "Street address", with: "123 Main St"
     click_on "Pay"
+    expect(page).to have_field("City", disabled: false)
     expect_focused find_field("City")
 
     fill_in "City", with: "San Francisco"
     click_on "Pay"
+    expect(page).to have_field("ZIP code", disabled: false)
     expect_focused find_field("ZIP code")
   end
 end
