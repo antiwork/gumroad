@@ -53,8 +53,6 @@ describe SalesTaxCalculator do
       end
 
       it "calculates tax as a portion of the displayed price for tax-inclusive products" do
-        # For tax-inclusive pricing: tax = price * (rate / (1 + rate))
-        # tax = 1000 * (0.10 / (1 + 0.10)) = 1000 * (0.10 / 1.10) = 90.91 cents
         expected_tax_cents = (price_cents * tax_rate / (1 + tax_rate)).round
 
         sales_tax = SalesTaxCalculator.new(product: product,
@@ -67,8 +65,6 @@ describe SalesTaxCalculator do
 
       it "calculates tax as an addition to the price for tax-exclusive products" do
         product.update!(tax_inclusive: false)
-        # For tax-exclusive pricing: tax = price * rate
-        # tax = 1000 * 0.10 = 100 cents
         expected_tax_cents = (price_cents * tax_rate).round
 
         sales_tax = SalesTaxCalculator.new(product: product,
