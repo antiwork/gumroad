@@ -9,6 +9,7 @@ import FileUtils from "$app/utils/file";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -76,6 +77,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
 }
 
 export function ConversationDetail({ conversationSlug, onBack }: { conversationSlug: string; onBack: () => void }) {
+  const { apiDomain } = useDomains();
   const { data: conversation, isLoading, error, refetch } = useConversation(conversationSlug);
   const { mutateAsync: createMessage, isPending: isSubmitting } = useCreateMessage({
     onError: (error) => {
@@ -93,7 +95,12 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed) return;
-    await createMessage({ conversationSlug, content: trimmed, attachments });
+    await createMessage({
+      conversationSlug,
+      content: trimmed,
+      attachments,
+      customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+    });
     setInput("");
     setAttachments([]);
     void refetch();

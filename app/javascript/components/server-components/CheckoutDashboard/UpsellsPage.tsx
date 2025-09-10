@@ -201,30 +201,32 @@ const UpsellsPage = (props: {
       pages={props.pages}
       actions={
         <>
-          <Popover
-            open={isSearchPopoverOpen}
-            onToggle={setIsSearchPopoverOpen}
-            aria-label="Search"
-            trigger={
-              <div className="button">
+          {upsells.length > 0 && (
+            <Popover
+              open={isSearchPopoverOpen}
+              onToggle={setIsSearchPopoverOpen}
+              aria-label="Search"
+              trigger={
+                <div className="button">
+                  <Icon name="solid-search" />
+                </div>
+              }
+            >
+              <div className="input">
                 <Icon name="solid-search" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search"
+                  value={searchQuery ?? ""}
+                  onChange={(evt) => {
+                    setSearchQuery(evt.target.value);
+                    debouncedLoadUpsells();
+                  }}
+                />
               </div>
-            }
-          >
-            <div className="input">
-              <Icon name="solid-search" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search"
-                value={searchQuery ?? ""}
-                onChange={(evt) => {
-                  setSearchQuery(evt.target.value);
-                  debouncedLoadUpsells();
-                }}
-              />
-            </div>
-          </Popover>
+            </Popover>
+          )}
           <Button color="accent" onClick={() => setView("create")} disabled={isReadOnly}>
             New upsell
           </Button>
@@ -302,7 +304,7 @@ const UpsellsPage = (props: {
               New upsell
             </Button>
             <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
-              Learn more about upsells.
+              Learn more about upsells
             </a>
           </div>
         )}

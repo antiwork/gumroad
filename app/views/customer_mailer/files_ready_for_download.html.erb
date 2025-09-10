@@ -1,0 +1,11 @@
+<%= header_section("Your files are ready for download!") %>
+
+<div>
+  <p>Your files for <strong><%= @product.name %></strong> are now ready for download.</p>
+
+  <p>Click the button below to access your files:</p>
+
+  <%= render("shared/download_button", link: @product, url_redirect: @url_redirect) %>
+
+  <p>Questions about your product? Contact Seller by replying to this email.</p>
+</div>

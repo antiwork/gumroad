@@ -149,7 +149,7 @@ const Greeter = () => (
       Create your first product
     </NavigationButton>
     <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
-      Learn more about creating products.
+      Learn more about creating products
     </a>
   </div>
 );

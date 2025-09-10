@@ -213,7 +213,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
               you see what's working, and what could be working better.
             </p>
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
-              Learn more about the analytics dashboard.
+              Learn more about the analytics dashboard
             </a>
           </div>
         </div>

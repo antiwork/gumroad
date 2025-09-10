@@ -1,15 +1,12 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseController
-  before_action :authorize_hmac_signature!, only: :user_info
-  before_action :authorize_helper_token!, except: :user_info
-
   def user_info
     render json: { success: false, error: "'email' parameter is required" }, status: :bad_request if params[:email].blank?
 
     render json: {
       success: true,
-      user_info: HelperUserInfoService.new(email: params[:email]).user_info,
+      customer: HelperUserInfoService.new(email: params[:email]).customer_info,
     }
   end
 

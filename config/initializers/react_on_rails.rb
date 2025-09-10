@@ -17,6 +17,7 @@ module RenderingExtension
         short_domain: SHORT_DOMAIN,
         discover_domain: DISCOVER_DOMAIN,
         third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+        api_domain: API_DOMAIN,
       },
       user_agent_info: {
         is_mobile: view_context.controller.is_mobile?,

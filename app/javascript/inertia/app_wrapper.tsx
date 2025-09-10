@@ -19,6 +19,7 @@ type GlobalProps = {
     short_domain: string;
     discover_domain: string;
     third_party_analytics_domain: string;
+    api_domain: string;
   };
   user_agent_info: {
     is_mobile: boolean;
@@ -70,6 +71,7 @@ export default function AppWrapper({ children, global }: { children: React.React
           shortDomain: global.domain_settings.short_domain,
           discoverDomain: global.domain_settings.discover_domain,
           thirdPartyAnalyticsDomain: global.domain_settings.third_party_analytics_domain,
+          apiDomain: global.domain_settings.api_domain,
         }}
       >
         <UserAgentProvider
