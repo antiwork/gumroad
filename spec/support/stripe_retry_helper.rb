@@ -31,9 +31,10 @@ module StripeRetryHelper
     private
       def calculate_delay(attempt)
         # Exponential backoff with jitter as recommended by Stripe
-        # Formula: base_delay * (2 ^ (attempt - 1)) + random jitter
+        # Formula: base_delay * (2 ^ (attempt - 1)) + random jitter to avoid thundering herd
         base_wait = BASE_DELAY * (2**(attempt - 1))
-        jitter = rand(0.0..0.2) # Small random jitter to avoid thundering herd
+        jitter_range = base_wait * 0.25
+        jitter = rand(0.0..jitter_range)
         base_wait + jitter
       end
 
