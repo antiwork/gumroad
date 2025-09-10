@@ -79,7 +79,7 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
     <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate} hasAside>
       <div className="fixed-aside lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
-          <section className="space-y-4 p-4 md:!p-8">
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Profile</h2>
             </header>
@@ -158,7 +158,7 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
               </fieldset>
             ) : null}
           </section>
-          <section className="space-y-4 p-4 md:!p-8">
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Design</h2>
             </header>

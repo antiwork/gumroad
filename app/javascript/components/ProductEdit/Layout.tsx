@@ -1,9 +1,10 @@
 import cx from "classnames";
 import * as React from "react";
-import { useMatches, useNavigate } from "react-router-dom";
+import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 import { paramsToQueryString } from "$app/utils/url";
 
@@ -251,7 +252,11 @@ export const Layout = ({
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                <Button
+                  color="accent"
+                  disabled={isBusy}
+                  onClick={() => void setPublished(true).then(() => navigate.current(`${rootPath}/share`))}
+                >
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
@@ -259,36 +264,48 @@ export const Layout = ({
           )
         }
       >
-        <Tabs style={{ gridColumn: 1 }}>
-          <Tab href={rootPath} isSelected={tab === "product"} onClick={onTabClick}>
-            Product
-          </Tab>
-          {!isCoffee ? (
-            <Tab href={`${rootPath}/content`} isSelected={tab === "content"} onClick={onTabClick}>
-              Content
+        <div
+          className={classNames(
+            "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between",
+            headerActions && "mt-2",
+          )}
+        >
+          <Tabs style={{ gridColumn: 1 }}>
+            <Tab asChild isSelected={tab === "product"}>
+              <Link to={rootPath} onClick={onTabClick}>
+                Product
+              </Link>
             </Tab>
-          ) : null}
-          <Tab
-            href={`${rootPath}/share`}
-            isSelected={tab === "share"}
-            onClick={(evt) => {
-              onTabClick(evt, () => {
-                if (!product.is_published) {
-                  evt.preventDefault();
-                  showAlert(
-                    "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                    "warning",
-                  );
-                }
-              });
-            }}
-          >
-            Share
-          </Tab>
-        </Tabs>
-        {headerActions}
+            {!isCoffee ? (
+              <Tab asChild isSelected={tab === "content"}>
+                <Link to={`${rootPath}/content`} onClick={onTabClick}>
+                  Content
+                </Link>
+              </Tab>
+            ) : null}
+            <Tab asChild isSelected={tab === "share"}>
+              <Link
+                to={`${rootPath}/share`}
+                onClick={(evt) => {
+                  onTabClick(evt, () => {
+                    if (!product.is_published) {
+                      evt.preventDefault();
+                      showAlert(
+                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+                        "warning",
+                      );
+                    }
+                  });
+                }}
+              >
+                Share
+              </Link>
+            </Tab>
+          </Tabs>
+          {headerActions}
+        </div>
       </PageHeader>
-      <div className={preview ? "fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
+      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}
         {preview ? (
           <aside aria-label="Preview">

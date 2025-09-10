@@ -16,7 +16,6 @@ import { Covers } from "$app/components/Product/Covers";
 import { Progress } from "$app/components/Progress";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -50,7 +49,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section className="space-y-4 p-4 md:!p-8">
+    <section className="!p-4 md:!p-8">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
@@ -237,9 +236,10 @@ const CoverUploader = ({
 };
 
 const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>((props, ref) => (
-  <Tabs
+  <div
     ref={ref}
-    className="scrollable"
+    role="tablist"
+    className="tab-buttons scrollable"
     style={
       /*
         `overflow-y: visible` would be interpreted as `overflow-y: auto` since `overflow-x` is `auto` on this element
@@ -247,10 +247,9 @@ const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivEl
       */
       { paddingTop: "calc(var(--big-icon-size) / 2)", marginTop: "calc(var(--big-icon-size) / -2)" }
     }
-    {...props}
   >
     {props.children}
-  </Tabs>
+  </div>
 ));
 CoversTabList.displayName = "CoversTabList";
 

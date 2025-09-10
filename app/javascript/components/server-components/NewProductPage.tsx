@@ -279,7 +279,7 @@ const NewProductPage = ({
       <div>
         <div>
           <form id={`new-product-form-${formUID}`} className="row" onSubmit={(e) => void submit(e)}>
-            <section className="space-y-4 p-4 md:!p-8">
+            <section className="!p-4 md:!p-8">
               <header>
                 <p>
                   Turn your idea into a live product in minutes. No fuss, just a few quick selections and you're ready

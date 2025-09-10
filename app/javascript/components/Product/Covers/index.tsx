@@ -71,6 +71,7 @@ export const Covers = ({
           {covers.map((cover, i) => (
             <div
               key={i}
+              role="tab"
               aria-label={`Show cover ${i + 1}`}
               aria-selected={i === activeCoverIndex}
               aria-controls={cover.id}

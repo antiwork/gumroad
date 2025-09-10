@@ -1,6 +1,6 @@
 $dashed-accent-border: dashed $border-width full-color(accent);
 
-main.product-content {
+.product-content {
   header h1 {
     @include max-lines(2);
   }

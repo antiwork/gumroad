@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMatches, useNavigate } from "react-router-dom";
+import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveBundle } from "$app/data/bundle";
 import { setProductPublished } from "$app/data/publish_product";
@@ -142,7 +142,11 @@ export const Layout = ({
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                <Button
+                  color="accent"
+                  disabled={isBusy}
+                  onClick={() => void setPublished(true).then(() => navigate(`/bundles/${id}/share`))}
+                >
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
@@ -151,32 +155,37 @@ export const Layout = ({
         }
       >
         <Tabs style={{ gridColumn: 1 }}>
-          <Tab href={`/bundles/${id}`} isSelected={tab === "product"} onClick={onTabClick}>
-            Product
+          <Tab asChild isSelected={tab === "product"}>
+            <Link to={`/bundles/${id}`} onClick={onTabClick}>
+              Product
+            </Link>
           </Tab>
-          <Tab href={`/bundles/${id}/content`} isSelected={tab === "content"} onClick={onTabClick}>
-            Content
+          <Tab asChild isSelected={tab === "content"}>
+            <Link to={`/bundles/${id}/content`} onClick={onTabClick}>
+              Content
+            </Link>
           </Tab>
-          <Tab
-            href={`/bundles/${id}/share`}
-            isSelected={tab === "share"}
-            onClick={(evt: React.MouseEvent<HTMLAnchorElement>) => {
-              onTabClick(evt, () => {
-                if (!bundle.is_published) {
-                  evt.preventDefault();
-                  showAlert(
-                    "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                    "warning",
-                  );
-                }
-              });
-            }}
-          >
-            Share
+          <Tab asChild isSelected={tab === "share"}>
+            <Link
+              to={`/bundles/${id}/share`}
+              onClick={(evt: React.MouseEvent<HTMLAnchorElement>) => {
+                onTabClick(evt, () => {
+                  if (!bundle.is_published) {
+                    evt.preventDefault();
+                    showAlert(
+                      "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+                      "warning",
+                    );
+                  }
+                });
+              }}
+            >
+              Share
+            </Link>
           </Tab>
         </Tabs>
       </PageHeader>
-      <div className={preview ? "fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
+      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}
         {preview ? (
           <aside aria-label="Preview">
