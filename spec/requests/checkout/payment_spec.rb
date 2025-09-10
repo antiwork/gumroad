@@ -5,6 +5,7 @@ require "spec_helper"
 describe "Checkout payment", :js, type: :system do
   before do
     @product = create(:product, price_cents: 1000)
+    Feature.deactivate(:disable_braintree_sales)
   end
 
   it "shows native, braintree, or no paypal button depending on availability" do

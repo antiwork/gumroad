@@ -113,6 +113,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
       });
       showAlert("Successfully posted your comment", "success");
       upsertComment(comment);
+      setDraft(null);
     } catch (e) {
       assertResponseError(e);
       showAlert(`An error occurred while posting your comment - ${e.message}`, "error");

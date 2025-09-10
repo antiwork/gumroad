@@ -92,7 +92,7 @@ class UrlRedirectsController < ApplicationController
         flash[:alert] = "We are preparing the file for download. You will receive an email when it is ready."
 
         # Do not enqueue the job more than once in 2 hours
-        Rails.cache.fetch("stamp_pdf_for_purchase_job_#{@url_redirect.purchase_id}", expires_in: 2.hours) do
+        Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
           StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
         end
 
