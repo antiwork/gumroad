@@ -173,19 +173,20 @@ export const Layout = (
         configurationSelectorRef={configurationSelectorRef}
         hasHero={!!hasHero}
       />
-      {"products" in props ? (
-        <SectionEditor props={props}>{productView}</SectionEditor>
-      ) : props.sections.length > 0 ? (
-        props.sections.map((section, i) => (
-          <React.Fragment key={section.id}>
-            {i === main_section_index ? mainSection : null}
-            <Section section={section} {...props} />
-            {main_section_index >= props.sections.length && i === props.sections.length - 1 ? mainSection : null}
-          </React.Fragment>
-        ))
-      ) : (
-        mainSection
-      )}
+      <div style={{ paddingBottom: "120px" }} className="lg:pb-0">        {"products" in props ? (
+          <SectionEditor props={props}>{productView}</SectionEditor>
+        ) : props.sections.length > 0 ? (
+          props.sections.map((section, i) => (
+            <React.Fragment key={section.id}>
+              {i === main_section_index ? mainSection : null}
+              <Section section={section} {...props} />
+              {main_section_index >= props.sections.length && i === props.sections.length - 1 ? mainSection : null}
+            </React.Fragment>
+          ))
+        ) : (
+          mainSection
+        )}
+      </div>
     </>
   );
 };
