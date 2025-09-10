@@ -232,7 +232,7 @@ const UpsellsPage = (props: {
         </>
       }
     >
-      <section className="space-y-4 p-8">
+      <section className="space-y-4 p-4 md:p-8">
         {upsells.length > 0 ? (
           <>
             <table aria-busy={isLoading} aria-label="Upsells">

@@ -127,7 +127,7 @@ export const Wishlist = ({
         ) : null}
         {description ? <h4>{description}</h4> : null}
       </PageHeader>
-      <section className="p-8">
+      <section className="p-4 md:p-8">
         <div className="product-card-grid">
           {items.map((item) => (
             <Card

@@ -238,7 +238,7 @@ export const Layout = ({
           <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}
         {settings || pageList ? (
-          <div className="has-sidebar p-8">
+          <div className="has-sidebar p-4 md:p-8">
             <div className="paragraphs">
               {pageList}
               {isDesktop ? settings : null}
@@ -249,7 +249,7 @@ export const Layout = ({
             </div>
           </div>
         ) : (
-          <div className="paragraphs flex-1 p-8">{children}</div>
+          <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
         )}
       </main>
     </>

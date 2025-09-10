@@ -211,7 +211,7 @@ export const Checkout = ({
         }
       />
       {isOpenTuple(cart.items, 1) ? (
-        <div className="grid gap-8 p-8">
+        <div className="grid gap-8 p-4 md:p-8">
           <div className="with-sidebar right" style={{ gridAutoColumns: "minmax(26rem, 1fr)" }}>
             <div style={{ display: "grid", gap: "var(--spacer-5)" }}>
               <div className="cart" role="list">
@@ -359,7 +359,7 @@ export const Checkout = ({
           </div>
         </div>
       ) : (
-        <div className="p-8">
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />

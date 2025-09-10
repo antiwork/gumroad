@@ -164,7 +164,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
       }
     >
       {hasContent ? (
-        <div className="space-y-8 p-8">
+        <div className="space-y-8 p-4 md:p-8">
           <SalesQuickStats total={mainData?.total} />
           {mainData ? (
             <>

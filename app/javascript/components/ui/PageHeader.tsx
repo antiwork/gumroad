@@ -11,10 +11,10 @@ export const PageHeader = React.forwardRef<
     className?: string;
   }
 >(({ title, actions, children, className }, ref) => (
-  <header className={classNames("flex flex-col gap-4 border-b border-border p-8", className)} ref={ref}>
+  <header className={classNames("flex flex-col gap-4 border-b border-border p-4 md:p-8", className)} ref={ref}>
     <div className="flex items-center justify-between">
-      <h1 className="hidden text-2xl md:block">{title}</h1>
-      <div className="-my-2 flex gap-2">{actions}</div>
+      <h1 className="hidden text-2xl sm:block">{title}</h1>
+      <div className="override grid flex-1 grid-cols-2 gap-2 sm:flex sm:flex-none md:-my-2">{actions}</div>
     </div>
     {children}
   </header>

@@ -323,7 +323,7 @@ const WorkflowForm = () => {
         </>
       }
     >
-      <form className="space-y-4 p-8">
+      <form className="space-y-4 p-4 md:p-8">
         <section>
           <header>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</header>
           <fieldset className={cx({ danger: invalidFields.has("name") })}>

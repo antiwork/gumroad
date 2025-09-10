@@ -743,7 +743,7 @@ export const EmailForm = () => {
           </>
         }
       />
-      <section className="space-y-4 p-8">
+      <section className="space-y-4 p-4 md:p-8">
         <div className="with-sidebar">
           <div className="stack">
             <div>

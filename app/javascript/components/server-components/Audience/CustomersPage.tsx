@@ -429,7 +429,7 @@ const CustomersPage = ({
           </>
         }
       />
-      <section className="space-y-4 p-8">
+      <section className="space-y-4 p-4 md:p-8">
         {customers.length > 0 ? (
           <>
             <table aria-live="polite" aria-busy={isLoading}>
