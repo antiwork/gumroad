@@ -6,6 +6,7 @@ module StripeRetryHelper
 
   class << self
     def with_retry_on_rate_limit(&block)
+      puts "[StripeRetryHelper] with_retry_on_rate_limit called, VCR: #{vcr_cassette_active?}"
       return yield unless Rails.env.test?
       return yield if vcr_cassette_active?
 
@@ -13,18 +14,22 @@ module StripeRetryHelper
 
       begin
         yield
-      rescue Stripe::RateLimitError => e
+      rescue Stripe::StripeError => e
+        puts "[StripeRetryHelper] Caught Stripe error: #{e.class.name} - #{e.message}"
         attempt += 1
 
         if attempt <= MAX_RETRIES
           delay = calculate_delay(attempt)
-          puts "Stripe rate limit hit (attempt #{attempt}/#{MAX_RETRIES}). Retrying in #{delay}s"
+          puts "[StripeRetryHelper] Stripe rate limit hit (attempt #{attempt}/#{MAX_RETRIES}). Retrying in #{delay}s"
           sleep(delay)
           retry
         else
-          puts "Stripe rate limit exceeded after #{MAX_RETRIES} retries"
+          puts "[StripeRetryHelper] Stripe rate limit exceeded after #{MAX_RETRIES} retries"
           raise e
         end
+      rescue e
+        puts "[StripeRetryHelper] Caught unexpected error: #{e.class.name} - #{e.message}"
+        raise e
       end
     end
 
@@ -43,7 +48,7 @@ module StripeRetryHelper
         defined?(VCR) && VCR.current_cassette.present?
       rescue StandardError => e
         # If VCR check fails, default to applying rate limiting
-        puts "VCR check failed: #{e.message}"
+        puts "[StripeRetryHelper] VCR check failed: #{e.message}"
         false
       end
   end
