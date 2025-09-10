@@ -199,6 +199,7 @@ RSpec.configure do |config|
       follow_wishlists
       seller_refund_policy_new_users_enabled
       paypal_payout_fee
+      disable_braintree_sales
     ].each do |feature|
       Feature.activate(feature)
     end

@@ -9,7 +9,7 @@ describe Admin::UsersController do
   it_behaves_like "inherits from Admin::BaseController"
 
   before do
-    @admin_user = create(:admin_user, has_payout_privilege: true, has_risk_privilege: true)
+    @admin_user = create(:admin_user)
     sign_in @admin_user
   end
 

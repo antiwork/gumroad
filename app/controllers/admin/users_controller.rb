@@ -7,9 +7,6 @@ class Admin::UsersController < Admin::BaseController
   skip_before_action :require_admin!, if: :request_from_iffy?, only: %i[suspend_for_fraud_from_iffy mark_compliant_from_iffy flag_for_explicit_nsfw_tos_violation_from_iffy]
 
   before_action :fetch_user, except: %i[refund_queue block_ip_address]
-  before_action :require_user_has_payout_privileges!, only: %i[
-    create_stripe_managed_account
-  ]
 
   helper Pagy::UrlHelpers
 
