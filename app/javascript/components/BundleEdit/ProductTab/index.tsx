@@ -95,6 +95,8 @@ export const ProductTab = () => {
                 installment_plan: { ...bundle.installment_plan, number_of_installments: value },
               })
             }
+            taxInclusive={bundle.tax_inclusive}
+            setTaxInclusive={(taxInclusive) => updateBundle({ tax_inclusive: taxInclusive })}
           />
         </section>
         <ThumbnailEditor

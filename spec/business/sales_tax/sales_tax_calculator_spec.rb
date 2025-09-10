@@ -42,6 +42,44 @@ describe SalesTaxCalculator do
       compare_calculations(expected: SalesTaxCalculation.zero_tax(0), actual: sales_tax)
     end
 
+    describe "tax-inclusive pricing" do
+      let(:tax_rate) { 0.10 } # 10% tax rate
+      let(:price_cents) { 1000 } # $10.00
+      let(:zip_tax_rate) { create(:zip_tax_rate, country: "US", state: "CA", zip_code: "94107", combined_rate: tax_rate) }
+      let(:product) { create(:product, user: @seller, tax_inclusive: true) }
+
+      before do
+        zip_tax_rate
+      end
+
+      it "calculates tax as a portion of the displayed price for tax-inclusive products" do
+        # For tax-inclusive pricing: tax = price * (rate / (1 + rate))
+        # tax = 1000 * (0.10 / (1 + 0.10)) = 1000 * (0.10 / 1.10) = 90.91 cents
+        expected_tax_cents = (price_cents * tax_rate / (1 + tax_rate)).round
+
+        sales_tax = SalesTaxCalculator.new(product: product,
+                                           price_cents: price_cents,
+                                           buyer_location: { postal_code: "94107", country: "US" }).calculate
+
+        expect(sales_tax.tax_cents).to eq(expected_tax_cents)
+        expect(sales_tax.price_cents).to eq(price_cents)
+      end
+
+      it "calculates tax as an addition to the price for tax-exclusive products" do
+        product.update!(tax_inclusive: false)
+        # For tax-exclusive pricing: tax = price * rate
+        # tax = 1000 * 0.10 = 100 cents
+        expected_tax_cents = (price_cents * tax_rate).round
+
+        sales_tax = SalesTaxCalculator.new(product: product,
+                                           price_cents: price_cents,
+                                           buyer_location: { postal_code: "94107", country: "US" }).calculate
+
+        expect(sales_tax.tax_cents).to eq(expected_tax_cents)
+        expect(sales_tax.price_cents).to eq(price_cents)
+      end
+    end
+
     it "returns zero tax if product is physical and in the EU" do
       create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil)
 

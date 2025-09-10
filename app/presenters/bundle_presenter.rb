@@ -48,6 +48,7 @@ class BundlePresenter
         display_product_reviews: bundle.display_product_reviews,
         is_adult: bundle.is_adult,
         discover_fee_per_thousand: bundle.discover_fee_per_thousand,
+        tax_inclusive: bundle.tax_inclusive?,
         section_ids: profile_sections.filter_map { |section| section.external_id if section.shown_products.include?(bundle.id) },
         is_published: !bundle.draft && bundle.alive?,
         products: bundle.bundle_products.alive.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).map { self.class.bundle_product(product: _1.product, quantity: _1.quantity, selected_variant_id: _1.variant&.external_id) },

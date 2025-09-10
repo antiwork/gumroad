@@ -41,7 +41,15 @@ class SalesTaxCalculator
     return SalesTaxCalculation.zero_tax(price_cents) if tax_rate.nil?
     return SalesTaxCalculation.zero_tax(price_cents) unless tax_eligible?
 
-    tax_amount_cents = price_cents * tax_rate.combined_rate
+    if product.tax_inclusive?
+      # For tax-inclusive pricing, calculate tax as a portion of the displayed price
+      # tax_amount = price_cents * (tax_rate / (1 + tax_rate))
+      tax_amount_cents = (price_cents * tax_rate.combined_rate / (1 + tax_rate.combined_rate)).round
+    else
+      # For tax-exclusive pricing, calculate tax as an addition to the price
+      tax_amount_cents = price_cents * tax_rate.combined_rate
+    end
+
     SalesTaxCalculation.new(price_cents:,
                             tax_cents: tax_amount_cents,
                             zip_tax_rate: tax_rate,
@@ -101,7 +109,16 @@ class SalesTaxCalculator
         jurisdiction_city: taxjar_response_json["jurisdictions"]["city"]
       }
 
-      tax_amount_cents = (taxjar_response_json["amount_to_collect"] * 100.0).round.to_d
+      if product.tax_inclusive?
+        # For tax-inclusive pricing, calculate tax as a portion of the displayed price
+        # TaxJar returns the tax amount to collect, but for inclusive pricing we need to calculate
+        # the tax portion of the displayed price
+        tax_rate = taxjar_response_json["rate"]
+        tax_amount_cents = (price_cents * tax_rate / (1 + tax_rate)).round.to_d
+      else
+        # For tax-exclusive pricing, use the tax amount from TaxJar
+        tax_amount_cents = (taxjar_response_json["amount_to_collect"] * 100.0).round.to_d
+      end
 
       SalesTaxCalculation.new(price_cents:,
                               tax_cents: tax_amount_cents,

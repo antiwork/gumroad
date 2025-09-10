@@ -141,6 +141,54 @@ describe "PurchaseTaxation", :vcr do
         end
       end
 
+      describe "tax-inclusive pricing" do
+        before(:context) do
+          @tax_state = "CA"
+          @tax_zip = "94107"
+          @tax_country = "US"
+          @tax_combined_rate = 0.10
+          @tax_is_seller_responsible = true
+        end
+
+        describe "with tax-inclusive product" do
+          before(:context) do
+            @purchase_country = "United States"
+            @purchase_chargeable_country = "US"
+            @purchase_ip_country = "United States"
+            @purchase_transaction_amount = 10_00
+          end
+
+          before(:example) do
+            @product.update!(tax_inclusive: true)
+          end
+
+          it "sets was_tax_excluded_from_price to false for tax-inclusive products" do
+            expect(@purchase.was_purchase_taxable).to be(true)
+            expect(@purchase.was_tax_excluded_from_price).to be(false)
+            expect(@purchase.zip_tax_rate).to eq(@zip_tax_rate)
+          end
+        end
+
+        describe "with tax-exclusive product" do
+          before(:context) do
+            @purchase_country = "United States"
+            @purchase_chargeable_country = "US"
+            @purchase_ip_country = "United States"
+            @purchase_transaction_amount = 11_00
+          end
+
+          before(:example) do
+            @product.update!(tax_inclusive: false)
+          end
+
+          it "sets was_tax_excluded_from_price to true for tax-exclusive products" do
+            expect(@purchase.was_purchase_taxable).to be(true)
+            expect(@purchase.was_tax_excluded_from_price).to be(true)
+            expect(@purchase.zip_tax_rate).to eq(@zip_tax_rate)
+          end
+        end
+      end
+
       describe "location verification with available zip tax entry" do
         before(:context) do
           @tax_combined_rate = 0.22

@@ -103,6 +103,7 @@ class ProductPresenter
         hide_sold_out_variants: product.hide_sold_out_variants?,
         is_epublication: product.is_epublication?,
         product_refund_policy_enabled: product.product_refund_policy_enabled?,
+        tax_inclusive: product.tax_inclusive?,
         refund_policy: {
           allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
             {

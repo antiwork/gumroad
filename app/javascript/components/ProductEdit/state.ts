@@ -142,6 +142,7 @@ export type Product = {
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
   community_chat_enabled: boolean | null;
+  tax_inclusive: boolean;
 } & (
   | { native_type: "call"; variants: Duration[] }
   | { native_type: "membership"; variants: Tier[] }

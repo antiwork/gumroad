@@ -76,6 +76,7 @@ export type Bundle = {
   products: BundleProduct[];
   public_files: PublicFileWithStatus[];
   audio_previews_enabled: boolean;
+  tax_inclusive: boolean;
 };
 
 export const computeStandalonePrice = (bundleProduct: BundleProduct) =>

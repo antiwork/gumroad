@@ -3282,7 +3282,7 @@ class Purchase < ApplicationRecord
       end
 
       self.was_purchase_taxable = gumroad_tax_cents > 0 || tax_cents > 0
-      self.was_tax_excluded_from_price = true
+      self.was_tax_excluded_from_price = !link.tax_inclusive?
     end
 
     def calculate_shipping

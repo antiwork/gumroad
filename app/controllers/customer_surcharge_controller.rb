@@ -22,7 +22,11 @@ class CustomerSurchargeController < ApplicationController
       shipping_rate += get_usd_cents(product.price_currency_type, surcharges[:shipping_rate])
       tax_cents = tax_result.tax_cents
       if tax_cents > 0
-        tax_rate += tax_cents
+        if product.tax_inclusive?
+          tax_included_rate += tax_cents
+        else
+          tax_rate += tax_cents
+        end
       end
       subtotal += tax_result.price_cents
     end

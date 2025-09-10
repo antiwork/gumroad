@@ -21,6 +21,8 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
   currencyCodeSelector,
+  taxInclusive,
+  setTaxInclusive,
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -35,6 +37,8 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
+  taxInclusive: boolean;
+  setTaxInclusive: (taxInclusive: boolean) => void;
 }) => {
   const uid = React.useId();
 
@@ -48,6 +52,9 @@ export const PriceEditor = ({
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
       />
+      <Toggle value={taxInclusive} onChange={setTaxInclusive}>
+        Price includes tax
+      </Toggle>
       <Details
         className="toggle"
         open={isPWYW}

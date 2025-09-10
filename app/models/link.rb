@@ -40,6 +40,7 @@ class Link < ApplicationRecord
             31 => :DEPRECATED_excluded_from_mobile_app_discover,
             32 => :moderated_by_iffy,
             33 => :hide_sold_out_variants,
+            34 => :tax_inclusive,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -298,6 +299,7 @@ class Link < ApplicationRecord
   alias super_as_json as_json
 
   before_create :set_default_discover_fee_per_thousand
+  before_create :set_default_tax_inclusive
   after_create :initialize_tier_if_needed
   after_create :add_to_profile_sections
   after_create :initialize_suggested_amount_if_needed!
@@ -306,6 +308,10 @@ class Link < ApplicationRecord
 
   def set_default_discover_fee_per_thousand
     self.discover_fee_per_thousand = DEFAULT_BOOSTED_DISCOVER_FEE_PER_THOUSAND if user.discover_boost_enabled?
+  end
+
+  def set_default_tax_inclusive
+    self.tax_inclusive = true
   end
 
   def initialize_tier_if_needed
@@ -394,7 +400,7 @@ class Link < ApplicationRecord
   def publish!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
-    enforce_merchant_account_exits_for_new_users!
+    # enforce_merchant_account_exits_for_new_users!
 
     if auto_transcode_videos?
       transcode_videos!

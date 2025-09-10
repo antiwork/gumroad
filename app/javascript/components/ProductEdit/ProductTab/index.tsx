@@ -292,6 +292,8 @@ export const ProductTab = () => {
                           installment_plan: { ...product.installment_plan, number_of_installments: value },
                         })
                       }
+                      taxInclusive={product.tax_inclusive}
+                      setTaxInclusive={(taxInclusive) => updateProduct({ tax_inclusive: taxInclusive })}
                     />
                     {product.native_type === "commission" ? (
                       <p
