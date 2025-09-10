@@ -35,7 +35,7 @@ class Api::V2::PayoutsController < Api::V2::BaseController
 
     if include_upcoming_payout?(end_date)
       payout_period_end_date = current_payout_end_date(current_resource_owner)
-      balance_ids = current_resource_owner.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
+      current_resource_owner.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
       paginated_payouts.unshift(
         Payment.new(
           amount_cents: current_resource_owner.unpaid_balance_cents_up_to_date(payout_period_end_date),
