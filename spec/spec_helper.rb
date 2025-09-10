@@ -33,6 +33,8 @@ Mongoid.load!(Rails.root.join("config", "mongoid.yml"))
 Braintree::Configuration.logger = Logger.new(File::NULL)
 PayPal::SDK.logger = Logger.new(File::NULL)
 
+Stripe.max_network_retries = 7
+
 unless BUILDING_ON_CI
   # super_diff error formatting doesn't work well on CI, and for flaky Capybara specs it can potentially obfuscate the actual error
   require "super_diff/rspec-rails"
