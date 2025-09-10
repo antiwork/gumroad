@@ -3,9 +3,9 @@ name: Tests
 on:
   push:
     branches:
-      - **
+      - '**'
     tags-ignore:
-      - production-*
+      - 'production-*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
