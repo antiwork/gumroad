@@ -729,7 +729,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           visit balance_path
 
           expect(page).to have_status(text: "You have $10.00 available for instant payout: No need to wait—get paid now!")
-          click_on "Get paid!"
+          click_on "Get paid!", match: :first
           within_modal "Instant payout" do
             expect(page).to have_text("You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your bank account within 30 minutes, though some payouts may take longer to be credited.")
             expect(page).to have_select("Pay out balance up to", selected: Date.current.strftime("%B %-d, %Y"))
@@ -741,9 +741,9 @@ describe "Balance Pages Scenario", js: true, type: :system do
           end
           expect(page).to_not have_modal("Instant payout")
 
-          click_on "Get paid!"
+          click_on "Get paid!", match: :first
           within_modal "Instant payout" do
-            click_on "Get paid!"
+            click_on "Get paid!", match: :first
           end
 
           current_date = Time.current.strftime("%B #{Time.current.day.ordinalize}, %Y")
@@ -788,7 +788,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           visit balance_path
 
           expect(page).to have_status(text: "You have $15,000.00 available for instant payout: No need to wait—get paid now!")
-          click_on "Get paid!"
+          click_on "Get paid!", match: :first
           within_modal "Instant payout" do
             expect(page).to have_text("You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your bank account within 30 minutes, though some payouts may take longer to be credited.")
             expect(page).to have_text("Sent to Test Bank", normalize_ws: true)
@@ -801,7 +801,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             select "January 2, 2025", from: "Pay out balance up to"
             click_on "Cancel"
           end
-          click_on "Get paid!"
+          click_on "Get paid!", match: :first
           within_modal "Instant payout" do
             expect(page).to have_text("Amount $9,000", normalize_ws: true)
             expect(page).to have_text("Instant payout fee (3%) -$262.14", normalize_ws: true)
@@ -810,7 +810,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             select "January 1, 2025", from: "Pay out balance up to"
             click_on "Cancel"
           end
-          click_on "Get paid!"
+          click_on "Get paid!", match: :first
           within_modal "Instant payout" do
             expect(page).to have_text("Amount $5,000", normalize_ws: true)
             expect(page).to have_text("Instant payout fee (3%) -$145.64", normalize_ws: true)
