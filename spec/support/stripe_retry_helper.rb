@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-module StripeRateLimiter
-  MAX_RETRIES = 4
+module StripeRetryHelper
+  MAX_RETRIES = 7
   BASE_DELAY = 1.0
 
   class << self
-    def with_rate_limit(&block)
+    def with_retry_on_rate_limit(&block)
       return yield unless Rails.env.test?
       return yield if vcr_cassette_active?
 
@@ -18,11 +18,11 @@ module StripeRateLimiter
 
         if attempt <= MAX_RETRIES
           delay = calculate_delay(attempt)
-          Rails.logger.debug "Stripe rate limit hit (attempt #{attempt}/#{MAX_RETRIES}). Retrying in #{delay}s"
+          puts "Stripe rate limit hit (attempt #{attempt}/#{MAX_RETRIES}). Retrying in #{delay}s"
           sleep(delay)
           retry
         else
-          Rails.logger.error "Stripe rate limit exceeded after #{MAX_RETRIES} retries"
+          puts "Stripe rate limit exceeded after #{MAX_RETRIES} retries"
           raise e
         end
       end
@@ -42,7 +42,7 @@ module StripeRateLimiter
         defined?(VCR) && VCR.current_cassette.present?
       rescue StandardError => e
         # If VCR check fails, default to applying rate limiting
-        Rails.logger.debug "VCR check failed: #{e.message}"
+        puts "VCR check failed: #{e.message}"
         false
       end
   end
@@ -56,7 +56,7 @@ module Stripe
         alias_method :"original_#{method_name}", method_name
 
         define_method(method_name) do |*args, **kwargs|
-          StripeRateLimiter.with_rate_limit do
+          StripeRetryHelper.with_retry_on_rate_limit do
             send(:"original_#{method_name}", *args, **kwargs)
           end
         end
