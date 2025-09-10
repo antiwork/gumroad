@@ -16,7 +16,7 @@ export const Layout = ({
   currentPage: keyof typeof pageNames;
   children?: React.ReactNode;
 }) => (
-  <main>
+  <div>
     <PageHeader title={pageNames[currentPage]}>
       <Tabs>
         {Object.entries(pageNames).map(([page, name]) => (
@@ -27,5 +27,5 @@ export const Layout = ({
       </Tabs>
     </PageHeader>
     {children}
-  </main>
+  </div>
 );

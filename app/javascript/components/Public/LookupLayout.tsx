@@ -68,7 +68,7 @@ const LookupLayout = ({ children, title, type }: {
   }
 
   return (
-    <main>
+    <div>
       <header>
         <h1>{title}</h1>
       </header>
@@ -176,7 +176,7 @@ const LookupLayout = ({ children, title, type }: {
         </form>
         {children}
       </div>
-    </main>
+    </div>
   )
 }
 

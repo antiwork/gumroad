@@ -74,13 +74,13 @@ export const Layout = ({ title, hasStickyHeader, actions, navigation, children }
   hasStickyHeader ? (
     <>
       <Header title={title} actions={actions} navigation={navigation} sticky />
-      <main>{children}</main>
+      <div>{children}</div>
     </>
   ) : (
-    <main>
+    <div>
       <Header title={title} actions={actions} navigation={navigation} />
       {children}
-    </main>
+    </div>
   );
 
 const Header = ({

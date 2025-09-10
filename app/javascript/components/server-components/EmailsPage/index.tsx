@@ -51,7 +51,7 @@ export const Layout = ({
   }, [isSearchPopoverOpen]);
 
   return (
-    <main>
+    <div>
       <PageHeader
         title="Emails"
         actions={
@@ -99,7 +99,7 @@ export const Layout = ({
         </Tabs>
       </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };
 

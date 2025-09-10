@@ -17,12 +17,12 @@ export const Layout = ({
   followingWishlistsEnabled: boolean;
   children: React.ReactNode;
 }) => {
-  const ref = React.useRef<HTMLElement>(null);
+  const ref = React.useRef<HTMLDivElement>(null);
 
   useOnScrollToBottom(ref, () => onScrollToBottom?.(), 30);
 
   return (
-    <main className="library" ref={ref}>
+    <div className="library" ref={ref}>
       <PageHeader title="Library">
         <Tabs>
           <Tab href={Routes.library_path()} isSelected={selectedTab === "purchases"}>
@@ -44,7 +44,7 @@ export const Layout = ({
         </Tabs>
       </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };
 Layout.displayName = "Layout";

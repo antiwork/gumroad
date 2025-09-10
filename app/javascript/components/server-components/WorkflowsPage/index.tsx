@@ -39,13 +39,13 @@ export const Layout = ({ title, actions, navigation, children, preview }: Layout
     </PageHeader>
     {preview ? (
       <div className="fixed-aside lg:grid lg:grid-cols-[1fr_30vw]">
-        <main>{children}</main>
+        <div>{children}</div>
         <aside className="hidden lg:block" aria-label="Preview">
           {preview}
         </aside>
       </div>
     ) : (
-      <main>{children}</main>
+      <div>{children}</div>
     )}
   </>
 );
@@ -136,7 +136,7 @@ export const EditPageNavigation = (props: { workflowExternalId: string }) => {
 const ErrorBoundary = () => {
   const error = useRouteError();
   return (
-    <main>
+    <div>
       <div>
         <div className="placeholder">
           <p>
@@ -146,7 +146,7 @@ const ErrorBoundary = () => {
           </p>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

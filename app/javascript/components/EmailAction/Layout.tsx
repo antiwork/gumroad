@@ -7,12 +7,12 @@ export const Layout = ({ heading, children }: { heading: string; children: React
 
   return (
     <>
-      <main className="stack">
+      <div className="stack">
         <header>
           <h2>{heading}</h2>
         </header>
         <p>{children}</p>
-      </main>
+      </div>
       <footer
         style={{
           textAlign: "center",

@@ -806,7 +806,7 @@ const Form = ({
   };
 
   return (
-    <main>
+    <div>
       <PageHeader
         title={title}
         actions={
@@ -1123,7 +1123,7 @@ const Form = ({
           </fieldset>
         </section>
       </form>
-    </main>
+    </div>
   );
 };
 

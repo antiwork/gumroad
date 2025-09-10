@@ -10,14 +10,14 @@ const PurchaseProductPage = (props: ProductProps) => {
 
   return (
     <div>
-      <main>
+      <div>
         <section>
           <Product {...props} selection={selection} setSelection={setSelection} />
         </section>
         <footer style={{ borderTop: "none", padding: 0 }}>
           Powered by <span className="logo-full" />
         </footer>
-      </main>
+      </div>
     </div>
   );
 };

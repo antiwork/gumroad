@@ -18,7 +18,7 @@ export const ProductsLayout = ({
   children: React.ReactNode;
   archivedTabVisible: boolean;
 }) => (
-  <main>
+  <div>
     <PageHeader title={title || "Products"} actions={ctaButton}>
       <Tabs>
         <Tab isSelected={selectedTab === "products"} href={Routes.products_path()}>
@@ -41,5 +41,5 @@ export const ProductsLayout = ({
       </Tabs>
     </PageHeader>
     {children}
-  </main>
+  </div>
 );

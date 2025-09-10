@@ -27,7 +27,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
 
   if (state.status.type !== "finished") return null;
   return (
-    <main>
+    <div>
       <PageHeader title="Library" />
       <section className="p-4 md:p-8">
         <div className="with-sidebar">
@@ -85,7 +85,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 };
 

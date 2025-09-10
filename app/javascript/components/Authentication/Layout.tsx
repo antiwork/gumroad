@@ -18,7 +18,7 @@ export const Layout = ({
 
   return (
     <div className="flex flex-1">
-      <main className="squished flex-1">
+      <div className="squished flex-1">
         <PageHeader
           title={<a href={`${scheme}://${rootDomain}`} className="logo-full" aria-label="Gumroad" />}
           actions={headerActions}
@@ -27,7 +27,7 @@ export const Layout = ({
           {header}
         </PageHeader>
         <div className="p-16">{children}</div>
-      </main>
+      </div>
       <aside>
         <img src={background} />
       </aside>

@@ -233,7 +233,7 @@ export const Layout = ({
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}
         </div>
       ) : null}
-      <main className="product-content flex-1">
+      <div className="product-content flex-1">
         {is_mobile_app_web_view ? null : (
           <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}
@@ -251,7 +251,7 @@ export const Layout = ({
         ) : (
           <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
         )}
-      </main>
+      </div>
     </>
   );
 };

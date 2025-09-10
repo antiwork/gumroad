@@ -106,7 +106,7 @@ const GenerateInvoicePage = ({
 
   return (
     <>
-      <main className="stack">
+      <div className="stack">
         <header>
           <h4>{form_info.heading}</h4>
         </header>
@@ -269,7 +269,7 @@ const GenerateInvoicePage = ({
             Download
           </Button>
         </footer>
-      </main>
+      </div>
       <footer style={{ textAlign: "center", padding: "var(--spacer-4)" }}>
         Powered by <span className="logo-full" />
       </footer>

@@ -646,7 +646,7 @@ const Form = ({
           </>
         }
       />
-      <main className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+      <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
           <section className="!p-8">
             <p>
@@ -950,7 +950,7 @@ const Form = ({
             )}
           </dialog>
         </CheckoutPreview>
-      </main>
+      </div>
     </>
   );
 };

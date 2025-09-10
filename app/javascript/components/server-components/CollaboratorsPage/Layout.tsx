@@ -18,7 +18,7 @@ export const Layout = ({
   selectedTab = "collaborators",
   showTabs = false,
 }: LayoutProps) => (
-  <main>
+  <div>
     <PageHeader title={title} actions={headerActions}>
       {showTabs ? (
         <Tabs>
@@ -32,5 +32,5 @@ export const Layout = ({
       ) : null}
     </PageHeader>
     {children}
-  </main>
+  </div>
 );

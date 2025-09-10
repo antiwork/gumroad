@@ -276,7 +276,7 @@ const NewProductPage = ({
           </>
         }
       />
-      <main>
+      <div>
         <div>
           <form id={`new-product-form-${formUID}`} className="row" onSubmit={(e) => void submit(e)}>
             <section className="space-y-4 p-4 md:!p-8">
@@ -411,7 +411,7 @@ const NewProductPage = ({
             </section>
           </form>
         </div>
-      </main>
+      </div>
     </>
   );
 };

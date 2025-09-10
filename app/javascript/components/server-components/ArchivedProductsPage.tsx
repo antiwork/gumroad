@@ -70,7 +70,7 @@ export const ArchivedProductsPage = ({
         </>
       }
     >
-      <section>
+      <section className="p-4 md:p-8">
         <ProductsPage
           memberships={memberships}
           membershipsPagination={membershipsPagination}

@@ -31,7 +31,7 @@ export const ShareTab = () => {
 
   return (
     <Layout preview={<ProductPreview />}>
-      <main className="squished">
+      <div className="squished">
         <form>
           <section className="!p-8">
             <DiscoverEligibilityPromo />
@@ -108,7 +108,7 @@ export const ShareTab = () => {
             </fieldset>
           </section>
         </form>
-      </main>
+      </div>
     </Layout>
   );
 };

@@ -245,7 +245,7 @@ const CustomersPage = ({
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
 
   return (
-    <main className="h-full">
+    <div className="h-full">
       <PageHeader
         title="Sales"
         actions={
@@ -584,7 +584,7 @@ const CustomersPage = ({
           />
         ) : null}
       </section>
-    </main>
+    </div>
   );
 };
 

@@ -863,7 +863,7 @@ const GoBackHeader = () => {
 };
 
 const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) => (
-  <main>
+  <div>
     <section>
       <div className="placeholder">
         <figure>
@@ -885,5 +885,5 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
         </p>
       </div>
     </section>
-  </main>
+  </div>
 );

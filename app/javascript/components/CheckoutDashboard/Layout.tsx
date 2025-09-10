@@ -27,13 +27,13 @@ export const Layout = ({
   hasAside ? (
     <>
       <Header actions={actions} pages={pages} currentPage={currentPage} sticky />
-      <main className="squished">{children}</main>
+      <div className="squished">{children}</div>
     </>
   ) : (
-    <main>
+    <div>
       <Header actions={actions} pages={pages} currentPage={currentPage} />
       {children}
-    </main>
+    </div>
   );
 
 const Header = ({

@@ -146,7 +146,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
   const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
 
   return (
-    <main className="stack">
+    <div className="stack">
       <header>
         Dispute evidence
         <h2>Submit additional information</h2>
@@ -335,7 +335,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
           </div>
         </>
       )}
-    </main>
+    </div>
   );
 };
 

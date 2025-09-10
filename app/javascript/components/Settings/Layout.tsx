@@ -50,6 +50,6 @@ export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpda
         ))}
       </Tabs>
     </PageHeader>
-    <main className={cx({ squished: hasAside })}>{children}</main>
+    <div className={cx({ squished: hasAside })}>{children}</div>
   </>
 );

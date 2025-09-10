@@ -185,7 +185,7 @@ export const Layout: React.FC<{
   };
 
   return (
-    <main className={cx("discover", className)}>
+    <div className={cx("discover", className)}>
       <header
         className="hero border-b border-t-0 border-border py-8 lg:pe-16 lg:ps-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
@@ -207,7 +207,7 @@ export const Layout: React.FC<{
         ) : null}
       </header>
       {children}
-    </main>
+    </div>
   );
 };
 

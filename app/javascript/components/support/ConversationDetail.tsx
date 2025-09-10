@@ -110,7 +110,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
   if (error || !conversation) return <div>Something went wrong.</div>;
 
   return (
-    <main>
+    <div>
       <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
           <Icon name="arrow-left" /> Go back to Support tickets
@@ -187,6 +187,6 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
           </div>
         </form>
       </div>
-    </main>
+    </div>
   );
 }

@@ -484,7 +484,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   return (
     <>
-      <main className="product-content h-screen sm:h-full">
+      <div className="product-content h-screen sm:h-full">
         {editor ? (
           <RichTextEditorToolbar
             className="border-b border-border px-8"
@@ -858,7 +858,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           )}
           <EditorContent className="rich-text" editor={editor} data-gumroad-ignore />
         </div>
-      </main>
+      </div>
       {confirmingDeletePage !== null ? (
         <Modal
           open

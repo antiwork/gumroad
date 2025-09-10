@@ -80,7 +80,7 @@ const SecureRedirectPage = ({
   };
 
   return (
-    <main className="stack single-page-form horizontal-form">
+    <div className="stack single-page-form horizontal-form">
       <header>
         <h2>Confirm access</h2>
         <p>{message}</p>
@@ -108,7 +108,7 @@ const SecureRedirectPage = ({
           {isSubmitting ? "Processing..." : "Continue"}
         </Button>
       </form>
-    </main>
+    </div>
   );
 };
 

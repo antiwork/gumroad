@@ -59,13 +59,13 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </section>
         ) : null}
       </header>
-      <main className="custom-sections">
+      <div className="custom-sections">
         {children}
         <footer>
           Powered by&ensp;
           <a href={Routes.root_url({ host: rootDomain })} className="logo-full" aria-label="Gumroad" />
         </footer>
-      </main>
+      </div>
     </div>
   );
 };

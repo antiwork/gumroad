@@ -203,7 +203,7 @@ export const Checkout = ({
   const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
-    <main>
+    <div>
       <PageHeader
         title="Checkout"
         actions={
@@ -372,7 +372,7 @@ export const Checkout = ({
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 };
 

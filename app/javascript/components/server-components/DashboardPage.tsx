@@ -312,7 +312,7 @@ export const DashboardPage = ({
   };
 
   return (
-    <main>
+    <div>
       <PageHeader
         title="Dashboard"
         actions={Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
@@ -401,7 +401,7 @@ export const DashboardPage = ({
 
         <ActivityFeed items={activity_items} />
       </div>
-    </main>
+    </div>
   );
 };
 

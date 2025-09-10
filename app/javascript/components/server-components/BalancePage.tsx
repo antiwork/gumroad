@@ -717,7 +717,7 @@ const BalancePage = ({
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
 
   return (
-    <main>
+    <div>
       <PageHeader
         title="Payouts"
         actions={
@@ -957,7 +957,7 @@ const BalancePage = ({
           </>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 };
 

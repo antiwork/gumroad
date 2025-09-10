@@ -627,7 +627,7 @@ export const EmailForm = () => {
     routerLocation.state?.from ?? emailTabPath(context.has_scheduled_emails ? "scheduled" : "published");
 
   return (
-    <main>
+    <div>
       <PageHeader
         title={installment?.external_id ? "Edit email" : "New email"}
         actions={
@@ -1138,6 +1138,6 @@ export const EmailForm = () => {
           </S3UploadConfigProvider>
         </div>
       </section>
-    </main>
+    </div>
   );
 };

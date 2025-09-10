@@ -19,7 +19,7 @@ type LayoutProps = {
   children: React.ReactNode;
 };
 const Layout = ({ title, body, handleSendMagicLink, children }: LayoutProps) => (
-  <main className="squished">
+  <div className="squished">
     <header>
       <a className="logo-full" href={Routes.root_path()} />
 
@@ -37,7 +37,7 @@ const Layout = ({ title, body, handleSendMagicLink, children }: LayoutProps) => 
     >
       <section>{children}</section>
     </form>
-  </main>
+  </div>
 );
 
 type SubscriptionManagerMagicLinkProps = {

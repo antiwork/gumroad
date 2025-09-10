@@ -27,19 +27,19 @@ export const UtmLinkLayout = ({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <main>
+  <div>
     <header>
       <h1>{title}</h1>
       {actions ? <div className="actions">{actions}</div> : null}
     </header>
     {children}
-  </main>
+  </div>
 );
 
 const ErrorBoundary = () => {
   const error = useRouteError();
   return (
-    <main>
+    <div>
       <div>
         <div className="placeholder">
           <p>
@@ -49,7 +49,7 @@ const ErrorBoundary = () => {
           </p>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

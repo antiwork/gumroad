@@ -33,7 +33,7 @@ const Layout = ({
   const loggedInUser = useLoggedInUser();
 
   return (
-    <main>
+    <div>
       <PageHeader title={title} actions={actions}>
         <Tabs>
           <Tab href={`${Routes.emails_path()}/published`} isSelected={false}>
@@ -55,7 +55,7 @@ const Layout = ({
         </Tabs>
       </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };
 

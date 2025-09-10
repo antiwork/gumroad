@@ -18,7 +18,7 @@ export const AnalyticsLayout = ({
   const user = assertDefined(useLoggedInUser());
 
   return (
-    <main>
+    <div>
       <PageHeader title="Analytics" actions={actions}>
         <Tabs>
           <Tab href={Routes.audience_dashboard_path()} isSelected={selectedTab === "following"}>
@@ -35,6 +35,6 @@ export const AnalyticsLayout = ({
         </Tabs>
       </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };

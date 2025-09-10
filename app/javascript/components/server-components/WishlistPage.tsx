@@ -6,9 +6,9 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Wishlist, WishlistProps } from "$app/components/Wishlist";
 
 const WishlistPage = (props: WishlistProps) => (
-  <main>
+  <div>
     <Wishlist {...props} />
-  </main>
+  </div>
 );
 
 export default register({ component: WishlistPage, propParser: createCast() });

@@ -82,7 +82,7 @@ export const ProductTab = () => {
 
   return (
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
-      <main className="squished">
+      <div className="squished">
         <form>
           <section className="space-y-4 p-4 md:!p-8">
             {showAiNotification ? (
@@ -482,7 +482,7 @@ export const ProductTab = () => {
             </>
           )}
         </form>
-      </main>
+      </div>
     </Layout>
   );
 };

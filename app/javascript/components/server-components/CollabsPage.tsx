@@ -42,7 +42,7 @@ const CollabsPage = ({
 
   return (
     <ProductsLayout selectedTab="collabs" title="Products" archivedTabVisible={archivedTabVisible}>
-      <section>
+      <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
           <div className="placeholder">
             <figure>
