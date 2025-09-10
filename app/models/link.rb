@@ -400,7 +400,7 @@ class Link < ApplicationRecord
   def publish!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
-    # enforce_merchant_account_exits_for_new_users!
+    enforce_merchant_account_exits_for_new_users!
 
     if auto_transcode_videos?
       transcode_videos!
