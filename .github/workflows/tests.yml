@@ -2,6 +2,8 @@ name: Tests
 
 on:
   push:
+    branches:
+      - **
     tags-ignore:
       - production-*
 
