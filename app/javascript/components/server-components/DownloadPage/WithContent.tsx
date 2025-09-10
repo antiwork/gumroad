@@ -341,7 +341,7 @@ const WithContent = ({
           {isDesktop ? null : (
             <Popover
               aria-label="Table of Contents"
-              position="top"
+              position="bottom"
               trigger={
                 <div className="button">
                   <Icon name="unordered-list" />

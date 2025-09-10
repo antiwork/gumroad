@@ -5,6 +5,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
@@ -13,13 +14,30 @@ import logo from "$assets/images/logo.svg";
 export function SupportHeader({
   onOpenNewTicket,
   hasHelperSession = true,
+  recaptchaSiteKey,
 }: {
   onOpenNewTicket: () => void;
   hasHelperSession?: boolean;
+  recaptchaSiteKey?: string | null;
 }) {
-  const { pathname } = new URL(useOriginalLocation());
+  const { pathname, searchParams } = new URL(useOriginalLocation());
   const isHelpArticle =
     pathname.startsWith(Routes.help_center_root_path()) && pathname !== Routes.help_center_root_path();
+  const isAnonymousUserOnHelpCenter = !hasHelperSession && pathname === Routes.help_center_root_path();
+
+  const [isUnauthenticatedNewTicketOpen, setIsUnauthenticatedNewTicketOpen] = React.useState(
+    isAnonymousUserOnHelpCenter && !!searchParams.get("new_ticket"),
+  );
+
+  React.useEffect(() => {
+    if (isAnonymousUserOnHelpCenter) {
+      const url = new URL(location.href);
+      if (!isUnauthenticatedNewTicketOpen && url.searchParams.get("new_ticket")) {
+        url.searchParams.delete("new_ticket");
+        history.replaceState(null, "", url.toString());
+      }
+    }
+  }, [isUnauthenticatedNewTicketOpen, isAnonymousUserOnHelpCenter]);
 
   return (
     <>
@@ -34,6 +52,10 @@ export function SupportHeader({
           <a href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
             <span className="icon icon-solid-search"></span>
           </a>
+        ) : isAnonymousUserOnHelpCenter ? (
+          <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
+            Contact support
+          </Button>
         ) : hasHelperSession ? (
           <Button color="accent" onClick={onOpenNewTicket}>
             New ticket
@@ -61,6 +83,15 @@ export function SupportHeader({
           </a>
         </div>
       ) : null}
+
+      {isAnonymousUserOnHelpCenter ? (
+        <UnauthenticatedNewTicketModal
+          open={isUnauthenticatedNewTicketOpen}
+          onClose={() => setIsUnauthenticatedNewTicketOpen(false)}
+          onCreated={() => setIsUnauthenticatedNewTicketOpen(false)}
+          recaptchaSiteKey={recaptchaSiteKey ?? null}
+        />
+      ) : null}
     </>
   );
 }
@@ -79,15 +110,20 @@ type WrapperProps = {
     currentToken?: string | null;
   } | null;
   new_ticket_url: string;
+  recaptcha_site_key?: string | null;
 };
 
-const Wrapper = ({ host, session, new_ticket_url }: WrapperProps) =>
+const Wrapper = ({ host, session, new_ticket_url, recaptcha_site_key }: WrapperProps) =>
   host && session ? (
     <HelperClientProvider host={host} session={session}>
       <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} />
     </HelperClientProvider>
   ) : (
-    <SupportHeader onOpenNewTicket={() => (window.location.href = new_ticket_url)} hasHelperSession={false} />
+    <SupportHeader
+      onOpenNewTicket={() => (window.location.href = new_ticket_url)}
+      hasHelperSession={false}
+      recaptchaSiteKey={recaptcha_site_key ?? null}
+    />
   );
 
 export default register({ component: Wrapper, propParser: createCast() });
