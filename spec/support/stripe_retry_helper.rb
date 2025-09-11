@@ -14,10 +14,6 @@ module StripeRetryHelper
       begin
         yield
       rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
-        puts "[StripeRetryHelper] Error HTTP Headers: #{e.http_headers}" if e.respond_to?(:http_headers)
-        puts "[StripeRetryHelper] Error HTTP Status: #{e.http_status}" if e.respond_to?(:http_status)
-        puts "[StripeRetryHelper] Error HTTP Body: #{e.http_body}" if e.respond_to?(:http_body)
-        puts "[StripeRetryHelper] Error Code: #{e.code}" if e.respond_to?(:code)
         # NOTE: Stripe is raising InvalidRequestError for rate limits on account creation
         # also status 429 is not being set on the error object
         # so we have to check the message content
