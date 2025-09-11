@@ -1,8 +1,13 @@
 <% charge_info = @receipt_presenter.charge_info %>
-<div>
-  <p style="display: inline-block;">
-    <%= charge_info.formatted_created_at %>
-  </p>
+<div class="receipt">
+  <div class="info-row">
+    <span class="info-label">Order ID:</span>
+    <span class="info-value"><%= charge_info.order_id %></span>
+  </div>
+  <div class="info-row with-top-margin">
+    <span class="info-label">Order date:</span>
+    <span class="info-value"><%= charge_info.formatted_created_at %></span>
+  </div>
 </div>
 
 <div>

@@ -2,6 +2,10 @@ name: Tests
 
 on:
   push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'production-*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

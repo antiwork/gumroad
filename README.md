@@ -285,3 +285,25 @@ bin/rake task_name
 We use ESLint for JS, and Rubocop for Ruby. Your editor should support displaying and fixing issues reported by these inline, and CI will automatically check and fix (if possible) these.
 
 If you'd like, you can run `git config --local core.hooksPath .githooks` to check for these locally when committing.
+
+## Common Issues
+
+### macOS Error When Running Tests (Related to `fork()`)
+
+```
+objc[11912]: +[__NSCFConstantString initialize] may have been in progress in another thread when fork() was called.
+objc[11912]: +[__NSCFConstantString initialize] may have been in progress in another thread when fork() was called. We cannot safely call it or ignore it in the fork() child process. Crashing instead. Set a breakpoint on objc_initializeAfterForkError to debug.
+```
+
+This issue occurs on macOS due to how the `fork()` system call interacts with multithreaded Objective-C applications—commonly triggered when Spring is enabled during testing.
+
+#### How to Fix:
+
+Temporarily disable Spring before running your tests to avoid this error.
+
+```bash
+export DISABLE_SPRING=1
+bin/rspec spec/requests/balance_pages_spec.rb
+```
+
+This will disable Spring for the current session, allowing the tests to run without triggering the `fork()`-related crash.

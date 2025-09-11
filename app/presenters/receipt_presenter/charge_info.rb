@@ -21,6 +21,10 @@ class ReceiptPresenter::ChargeInfo
     formatted_dollar_amount(chargeable.charged_amount_cents)
   end
 
+  def order_id
+    chargeable.external_id_for_invoice
+  end
+
   def product_questions_note
     return if chargeable.orderable.receipt_for_gift_sender?
 
