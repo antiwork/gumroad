@@ -460,7 +460,7 @@ const AffiliatesTab = () => {
       }
       navigation={<AffiliatesNavigation />}
     >
-      <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+      <div className="p-4 lg:p-8" style={{ display: "grid", gap: "var(--spacer-7)" }}>
         {navigation.state === "loading" && affiliates.length === 0 ? (
           <div style={{ justifySelf: "center" }}>
             <Progress width="5rem" />

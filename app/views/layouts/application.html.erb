@@ -12,7 +12,7 @@
     <%= render("layouts/shared/flash") %>
     <div class="flex h-screen">
       <% if show_nav %>
-        <div class="flex-shrink-0 min-h-screen bg-black">
+        <div class="flex-shrink-0 overflow-y-auto bg-black">
           <%= react_component "Nav", props: { helper_host: helper_widget_host, helper_session:, title: @title }, prerender: true %>
         </div>
       <% end %>

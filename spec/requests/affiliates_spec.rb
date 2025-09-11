@@ -402,7 +402,7 @@ describe "Affiliates", type: :system, js: true do
         within :table_row, { "Products" => product_one.name } do
           expect(page).to have_link(product_one.name, href: existing_affiliate.referral_url_for_product(product_one))
         end
-        find("td[data-label='Products']", match: :first).hover
+        find("td[data-label='Products'] a", match: :first).hover
         expect(page).to have_text("#{product_one.name} (15%), #{product_two.name} (5%)")
 
         expect(new_direct_affiliate.apply_to_all_products).to be false

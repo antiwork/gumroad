@@ -3,14 +3,13 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Layout, Props } from "$app/components/Product/Layout";
 
 const ProductPage = (props: Props) => (
-  <div className="custom-sections mx-auto w-full max-w-6xl">
+  <div className="custom-sections">
     <Layout {...props} />
-    <footer>
-      Powered by <span className="logo-full" />
-    </footer>
+    <PoweredByFooter />
   </div>
 );
 

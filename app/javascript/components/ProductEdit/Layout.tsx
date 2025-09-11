@@ -252,11 +252,7 @@ export const Layout = ({
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button
-                  color="accent"
-                  disabled={isBusy}
-                  onClick={() => void setPublished(true).then(() => navigate.current(`${rootPath}/share`))}
-                >
+                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
@@ -308,7 +304,7 @@ export const Layout = ({
       <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}
         {preview ? (
-          <aside aria-label="Preview">
+          <aside aria-label="Preview" className="!sticky top-0 min-h-screen self-start overflow-y-auto">
             <header>
               <h2>Preview</h2>
               <WithTooltip tip="Preview">

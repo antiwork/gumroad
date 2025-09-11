@@ -120,7 +120,11 @@ const SectionEditor = ({
         {sections.map((section, i) => (
           <section key={section.id} id={section.id} className="border-b border-border py-16">
             <AddSectionButton index={i} />
-            {section.id ? <EditSection section={section} /> : children}
+            {section.id ? (
+              <EditSection section={section} />
+            ) : (
+              <div className="mx-auto w-full max-w-6xl">{children}</div>
+            )}
             {i === sections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
           </section>
         ))}

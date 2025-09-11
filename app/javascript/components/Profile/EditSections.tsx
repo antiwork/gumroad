@@ -282,7 +282,7 @@ export const SectionLayout = ({
         </button>
       </div>
       <div ref={scrollRef} style={{ position: "absolute" }} />
-      {children}
+      <div className="mx-auto w-full max-w-6xl">{children}</div>
     </>
   );
 };
