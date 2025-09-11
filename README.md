@@ -121,6 +121,21 @@ While generating invoices, to convert HTML to PDF, PDFKit expects [wkhtmltopdf](
 
 - **Note** similar to pdftk, this may also be blocked by Apple's firewall on MacOS. Follow a similar process as above.
 
+#### GeoIP Database Setup
+
+We use MaxMind's GeoIP2 database for IP geolocation functionality (e.g., determining country and state from IP addresses). This database is required for certain features and tests to work properly.
+
+**Download the GeoIP2 database:**
+
+```bash
+# From project root
+cd tmp
+curl -J -L -o GeoIP2-City.tar.gz "https://download.maxmind.com/app/geoip_download?edition_id=GeoIP2-City&license_key=fxN7iBPUYfTS76V5&suffix=tar.gz"
+tar xzf GeoIP2-City.tar.gz
+cp GeoIP2-City_*/GeoIP2-City.mmdb ../lib/GeoIP2-City.mmdb
+rm -rf GeoIP2-City*
+```
+
 ### Installation
 
 #### Bundler and gems
