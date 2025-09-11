@@ -211,7 +211,7 @@ const ProductsTable = ({ sales }: TableProps) => {
 
   if (sales.every((b) => b.sales === 0)) {
     return (
-      <div style={{ display: "grid", gap: "var(--spacer-4)" }} className="p-4 md:p-8">
+      <div style={{ display: "grid", gap: "var(--spacer-4)" }}>
         <h2>Best selling</h2>
         <div className="placeholder">
           <p>

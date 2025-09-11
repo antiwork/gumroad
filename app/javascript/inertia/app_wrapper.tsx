@@ -86,7 +86,7 @@ export default function AppWrapper({ children, global }: { children: React.React
                 <div id="inertia-shell" className="flex h-screen">
                   <Nav title="Dashboard" />
                   {isRouteLoading ? <LoadingSkeleton /> : null}
-                  <div className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</div>
+                  <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
                 </div>
               </SSRLocationProvider>
             </CurrentSellerProvider>
