@@ -271,11 +271,18 @@ const UpsellsPage = (props: {
                       aria-selected={selectedUpsellId === upsell.id}
                     >
                       <td>
-                        <div>
+                        <div className="flex gap-4">
                           <div>
-                            <b>{upsell.name}</b>
+                            <div>
+                              <b>{upsell.name}</b>
+                            </div>
+                            <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
                           </div>
-                          <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
+                          {!upsell.is_active && (
+                            <div>
+                              <span className="pill small danger">Inactive</span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       {statistics ? (
