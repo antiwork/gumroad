@@ -6,7 +6,6 @@ module StripeRetryHelper
 
   class << self
     def with_retry_on_rate_limit(&block)
-      puts "[StripeRetryHelper] with_retry_on_rate_limit called, VCR: #{vcr_cassette_active?}"
       return yield unless Rails.env.test?
       return yield if vcr_cassette_active?
 
@@ -14,9 +13,11 @@ module StripeRetryHelper
 
       begin
         yield
-      rescue Stripe::StripeError => e
-        if e.http_status != 429
-          puts "[StripeRetryHelper] Non-rate-limit Stripe error encountered: #{e.class.name} - #{e.message}"
+      rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
+        # NOTE: Stripe is raising InvalidRequestError for rate limits on account creation
+        # also status 429 is not being set on the error object
+        # so we have to check the message content
+        if !/creating accounts too quickly/i.match?(e.message)
           raise e
         end
 
@@ -32,8 +33,8 @@ module StripeRetryHelper
           puts "[StripeRetryHelper] Stripe rate limit exceeded after #{MAX_RETRIES} retries"
           raise e
         end
-      rescue e
-        puts "[StripeRetryHelper] Caught unexpected error: #{e.class.name} - #{e.message}"
+      rescue Stripe::StripeError => e
+        puts "[StripeRetryHelper] Caught generic Stripe error: #{e.class.name} - #{e.message}"
         raise e
       end
     end
