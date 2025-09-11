@@ -17,7 +17,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink } from "$app/components/Nav";
+import { Nav as NavFramework, NavLink, useNavContext } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -43,6 +43,7 @@ export const ClientNavLink = ({
   onClick?: (event: React.MouseEvent) => void;
 }) => {
   const currentPath = window.location.href;
+  const { closeMenu } = useNavContext();
 
   const ariaCurrent = [href, ...additionalPatterns].some((pattern) => {
     const escaped = escapeRegExp(pattern);
@@ -51,8 +52,17 @@ export const ClientNavLink = ({
     ? "page"
     : undefined;
 
+    const handleClick = (event: React.MouseEvent) => {
+      closeMenu();
+
+      if (onClick) {
+        onClick(event);
+      }
+    };
+
+
   return (
-    <Link aria-current={ariaCurrent} href={href} title={text} {...(onClick && { onClick })}>
+    <Link aria-current={ariaCurrent} href={href} title={text} onClick={handleClick}>
       {icon ? <Icon name={icon} /> : null}
       {text}
       {badge ? (

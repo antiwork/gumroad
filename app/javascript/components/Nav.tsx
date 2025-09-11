@@ -36,8 +36,20 @@ export const NavLink = ({
     ? "page"
     : undefined;
 
+  const navContext = React.useContext(NavContext);
+
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (navContext) {
+      navContext.closeMenu();
+    }
+
+    if (onClick) {
+      onClick(event);
+    }
+  };
+
   return (
-    <a aria-current={ariaCurrent} href={href} title={text} onClick={onClick} className="flex items-center">
+    <a aria-current={ariaCurrent} href={href} title={text} onClick={handleClick} className="flex items-center">
       {icon ? <Icon name={icon} /> : null}
       {text}
       {badge ? (
@@ -74,26 +86,50 @@ type Props = {
   compact?: boolean;
 };
 
+type NavContextValue = {
+  closeMenu: () => void;
+};
+
+const NavContext = React.createContext<NavContextValue | null>(null);
+
+export const useNavContext = () => {
+  const context = React.useContext(NavContext);
+  if (!context) {
+    throw new Error('useNavContext must be used within a Nav component');
+  }
+  return context;
+};
+
 export const Nav = ({ title, children, footer, compact }: Props) => {
   const [open, setOpen] = React.useState(false);
 
+  const closeMenu = React.useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const contextValue: NavContextValue = React.useMemo(() => ({
+    closeMenu,
+  }), [closeMenu]);
+
   return (
-    <nav aria-label="Main" className={cx({ compact, open })}>
-      <div className="navbar">
-        <a href={Routes.root_url()}>
-          <span className="logo-g">&nbsp;</span>
-        </a>
-        <h1>{title}</h1>
-        <button className="toggle" onClick={() => setOpen(!open)} />
-      </div>
-      <header>
-        <a href={Routes.root_url()} aria-label="Dashboard">
-          <span className="logo-full">&nbsp;</span>
-        </a>
-      </header>
-      {children}
-      <footer>{footer}</footer>
-    </nav>
+    <NavContext.Provider value={contextValue}>
+      <nav aria-label="Main" className={cx({ compact, open })}>
+        <div className="navbar">
+          <a href={Routes.root_url()}>
+            <span className="logo-g">&nbsp;</span>
+          </a>
+          <h1>{title}</h1>
+          <button className="toggle" onClick={() => setOpen(!open)} />
+        </div>
+        <header>
+          <a href={Routes.root_url()} aria-label="Dashboard">
+            <span className="logo-full">&nbsp;</span>
+          </a>
+        </header>
+        {children}
+        <footer>{footer}</footer>
+      </nav>
+    </NavContext.Provider>
   );
 };
 
