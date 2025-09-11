@@ -21,6 +21,10 @@ export type UpsellPayload = {
   upsellVariants: { selectedVariantId: string; offeredVariantId: string }[];
 };
 
+export type UpsellTogglePayload = {
+  isActive: boolean;
+};
+
 export const createUpsell = async ({
   name,
   text,
@@ -98,6 +102,23 @@ export const updateUpsell = async (
         selected_variant_id: selectedVariantId,
         offered_variant_id: offeredVariantId,
       })),
+    },
+  });
+  const responseData = cast<
+    { success: true; upsells: Upsell[]; pagination: PaginationProps } | { success: false; error: string }
+  >(await response.json());
+  if (!responseData.success) throw new ResponseError(responseData.error);
+
+  return responseData;
+};
+
+export const toggleUpsell = async (id: string, { isActive }: UpsellTogglePayload) => {
+  const response = await request({
+    method: "PUT",
+    accept: "json",
+    url: Routes.toggle_active_checkout_upsell_path(id),
+    data: {
+      is_active: isActive,
     },
   });
   const responseData = cast<

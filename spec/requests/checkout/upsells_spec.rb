@@ -717,4 +717,40 @@ describe("Checkout upsells page", type: :system, js: true) do
     expect(upsell.offer_code.amount_percentage).to eq(20)
     expect(upsell.offer_code.products).to eq([product2])
   end
+
+  it "allows enabling/disabling selected upsell" do
+    upsell1.update!(is_active: true)
+    visit checkout_upsells_path
+    find(:table_row, { "Upsell" => upsell1.name }).click
+    toggle = find_field("Active", visible: :all)
+    expect(toggle).to be_present
+    toggle.click
+    expect(page).to have_alert(text: "Successfully disabled upsell!")
+
+    expect(upsell1.reload.is_active).to eq(false)
+    find(:table_row, { "Upsell" => upsell1.name }).click
+    toggle = find_field("Active", visible: :all)
+    expect(toggle).to be_present
+    toggle.click
+    expect(page).to have_alert(text: "Successfully enabled upsell!")
+    expect(upsell1.reload.is_active).to eq(true)
+  end
+
+  it "allows enabling/disabling selected cross-sell" do
+    upsell2.update!(is_active: true)
+    visit checkout_upsells_path
+    find(:table_row, { "Upsell" => upsell2.name }).click
+    toggle = find_field("Active", visible: :all)
+    expect(toggle).to be_present
+    toggle.click
+    expect(page).to have_alert(text: "Successfully disabled upsell!")
+
+    expect(upsell2.reload.is_active).to eq(false)
+    find(:table_row, { "Upsell" => upsell2.name }).click
+    toggle = find_field("Active", visible: :all)
+    expect(toggle).to be_present
+    toggle.click
+    expect(page).to have_alert(text: "Successfully enabled upsell!")
+    expect(upsell2.reload.is_active).to eq(true)
+  end
 end

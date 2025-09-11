@@ -8,6 +8,7 @@ FactoryBot.define do
     text { "Take advantage of this excellent offer!" }
     description { "This offer will only last for a few weeks." }
     cross_sell { false }
+    is_active { true }
   end
 
   factory :upsell_purchase do

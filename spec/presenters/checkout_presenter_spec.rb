@@ -491,6 +491,23 @@ describe CheckoutPresenter do
         )
       end
     end
+
+    it "does not send disabled upsells and cross-sells" do
+      product = create(:product_with_digital_versions, name: "Sample Product", user: create(:named_user))
+      disabled_upsell = create(:upsell, seller: product.user, product:, is_active: false, description: "Disabled upsell")
+      create(:upsell_variant, upsell: disabled_upsell, selected_variant: product.alive_variants.first, offered_variant: product.alive_variants.second)
+      offered_product = create(:product_with_digital_versions, user: product.user)
+
+      create(:upsell, name: "Disabled Cross-sell", selected_products: [product], seller: product.user, product: offered_product, variant: offered_product.alive_variants.first, cross_sell: true, is_active: false)
+      options = product.options
+      params = { product: product.unique_permalink, recommended_by: "discover", option: options.first[:id] }
+      props = @instance.checkout_props(params:, browser_guid:)
+      upsell = props[:add_products].first[:product][:upsell]
+      cross_sells = props[:add_products].first[:product][:cross_sells]
+
+      expect(upsell).to be_nil
+      expect(cross_sells).to eq([])
+    end
   end
 
   describe "#subscription_manager_props", :vcr do

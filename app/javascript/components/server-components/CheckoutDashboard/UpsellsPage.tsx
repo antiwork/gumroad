@@ -8,6 +8,7 @@ import {
   getCartItem,
   getPagedUpsells,
   getStatistics,
+  toggleUpsell,
   updateUpsell,
   UpsellPayload,
   UpsellStatistics,
@@ -52,6 +53,7 @@ export type Upsell = {
   universal: boolean;
   cross_sell: boolean;
   replace_selected_products: boolean;
+  is_active: boolean;
   product: {
     id: string;
     name: string;
@@ -195,6 +197,21 @@ const UpsellsPage = (props: {
     setIsLoading(false);
   });
 
+  const handleToggleActive = asyncVoid(async (active: boolean) => {
+    if (!selectedUpsellId) return;
+    try {
+      setIsLoading(true);
+      setState(await toggleUpsell(selectedUpsellId, { isActive: active }));
+      setView("list");
+      setSelectedUpsellId(null);
+      showAlert(`Successfully ${active ? "enabled" : "disabled"} upsell!`, "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsLoading(false);
+  });
+
   return view === "list" ? (
     <Layout
       currentPage="upsells"
@@ -314,6 +331,7 @@ const UpsellsPage = (props: {
             statistics={upsellStatistics[selectedUpsell.id] ?? null}
             onCreate={() => setView("create")}
             onEdit={() => setView("edit")}
+            handleToggleActive={handleToggleActive}
             onDelete={handleDelete}
             onClose={handleCancel}
             isLoading={isLoading}
@@ -348,6 +366,7 @@ const UpsellDrawer = ({
   onCreate,
   onEdit,
   onDelete,
+  handleToggleActive,
   onClose,
   isLoading,
 }: {
@@ -357,6 +376,7 @@ const UpsellDrawer = ({
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
+  handleToggleActive: (active: boolean) => void;
   isLoading: boolean;
 }) => {
   const loggedInUser = useLoggedInUser();
@@ -447,6 +467,18 @@ const UpsellDrawer = ({
         </section>
       )}
       <section style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+        <div className="flex flex-col items-center justify-center gap-2">
+          <label className="flex cursor-pointer select-none items-center gap-2">
+            <input
+              type="checkbox"
+              role="switch"
+              className="accent-accent focus:ring-accent h-5 w-5 rounded transition focus:ring-2"
+              checked={selectedUpsell.is_active}
+              onChange={(evt) => handleToggleActive(evt.target.checked)}
+            />
+            <span className="text-sm font-medium">Active</span>
+          </label>
+        </div>
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>

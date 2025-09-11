@@ -94,7 +94,7 @@ class CheckoutPresenter
           )
         end,
         ppp_details: product.ppp_details(@ip),
-        upsell: product.upsell.present? ? {
+        upsell: (product.upsell.present? && product.upsell.is_active) ? {
           id: product.upsell.external_id,
           text: product.upsell.text,
           description: Rinku.auto_link(sanitize(product.upsell.description), :all, 'target="_blank" rel="noopener"'),
@@ -126,7 +126,7 @@ class CheckoutPresenter
     }
     if include_cross_sells
       value[:product][:cross_sells] = product.cross_sells.filter_map do |cross_sell|
-        next unless cross_sell.product.alive? &&
+        next unless cross_sell.product.alive? && cross_sell.is_active &&
           (cross_sell.product.remaining_for_sale_count.nil? || cross_sell.product.remaining_for_sale_count > 0) &&
           (cross_sell.variant.blank? || cross_sell.variant.available?) &&
           (

@@ -29,6 +29,10 @@ class Checkout::UpsellPolicy < ApplicationPolicy
     create? && record.seller == seller
   end
 
+  def toggle_active?
+    update?
+  end
+
   def destroy?
     update?
   end

@@ -123,6 +123,20 @@ class Checkout::UpsellsController < Sellers::BaseController
     }
   end
 
+  def toggle_active
+    @upsell = current_seller.upsells.find_by_external_id!(params[:id])
+    authorize [:checkout, @upsell]
+
+    @upsell.is_active = params[:is_active]
+
+    if @upsell.save
+      pagination, upsells = fetch_upsells
+      render json: { success: true, upsells: upsells, pagination: pagination }
+    else
+      render json: { success: false, error: @upsell.errors.full_messages.first }
+    end
+  end
+
   private
     def upsell_params
       params.permit(:name, :text, :description, :cross_sell, :product_id, :variant_id, :universal, :replace_selected_products, offer_code: [:amount_cents, :amount_percentage], product_ids: [], upsell_variants: [:selected_variant_id, :offered_variant_id])
