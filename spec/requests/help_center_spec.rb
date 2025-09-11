@@ -6,6 +6,11 @@ describe "Help Center", type: :system, js: true do
   let(:seller) { create(:named_seller) }
 
   before do
+    allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY")
+    allow(GlobalConfig).to receive(:get).with("ENTERPRISE_RECAPTCHA_API_KEY")
+    allow(GlobalConfig).to receive(:get).with("HELPER_WIDGET_SECRET").and_return("test_secret")
+    allow(GlobalConfig).to receive(:get).with("HELPER_WIDGET_HOST").and_return("https://helper.test")
+
     stub_request(:post, "https://helper.test/api/widget/session")
       .to_return(
         status: 200,
