@@ -15,6 +15,11 @@ module StripeRetryHelper
       begin
         yield
       rescue Stripe::StripeError => e
+        if e.http_status != 429
+          puts "[StripeRetryHelper] Non-rate-limit Stripe error encountered: #{e.class.name} - #{e.message}"
+          raise e
+        end
+
         puts "[StripeRetryHelper] Caught Stripe error: #{e.class.name} - #{e.message}"
         attempt += 1
 
