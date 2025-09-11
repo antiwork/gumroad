@@ -51,8 +51,17 @@ export const ClientNavLink = ({
     ? "page"
     : undefined;
 
+  const handleClick = (event: React.MouseEvent) => {
+    if (onClick) onClick(event);
+    const nav = document.querySelector("nav");
+    const toggleButton = nav?.querySelector("button.toggle") as HTMLButtonElement;
+    if (nav?.classList.contains("open") && toggleButton) {
+      toggleButton.click();
+    }
+  };
+
   return (
-    <Link aria-current={ariaCurrent} href={href} title={text} {...(onClick && { onClick })}>
+    <Link aria-current={ariaCurrent} href={href} title={text} onClick={handleClick}>
       {icon ? <Icon name={icon} /> : null}
       {text}
       {badge ? (
