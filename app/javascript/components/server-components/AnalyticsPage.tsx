@@ -203,7 +203,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
           )}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
