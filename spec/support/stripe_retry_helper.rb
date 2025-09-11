@@ -38,8 +38,7 @@ module StripeRetryHelper
         # Exponential backoff with jitter as recommended by Stripe
         # Formula: base_delay * (2 ^ (attempt - 1)) + random jitter to avoid thundering herd
         base_wait = BASE_DELAY * (2**(attempt - 1))
-        jitter_range = base_wait * 0.25
-        jitter = rand(0.0..jitter_range)
+        jitter = (0.5 * (1 + rand))
         base_wait + jitter
       end
 
