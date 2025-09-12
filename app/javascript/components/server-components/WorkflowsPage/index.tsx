@@ -38,7 +38,7 @@ export const Layout = ({ title, actions, navigation, children, preview }: Layout
       {navigation ?? null}
     </PageHeader>
     {preview ? (
-      <div className="fixed-aside lg:grid lg:grid-cols-[1fr_30vw]">
+      <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <div>{children}</div>
         <aside className="hidden lg:block" aria-label="Preview">
           {preview}

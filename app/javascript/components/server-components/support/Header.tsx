@@ -64,7 +64,11 @@ export function SupportHeader({
             <Tab href={Routes.help_center_root_path()} isSelected={pathname.startsWith(Routes.help_center_root_path())}>
               Articles
             </Tab>
-            <Tab href={Routes.support_index_path()} isSelected={pathname.startsWith(Routes.support_index_path())}>
+            <Tab
+              href={Routes.support_index_path()}
+              isSelected={pathname.startsWith(Routes.support_index_path())}
+              className="flex items-center gap-2"
+            >
               Support tickets
               <UnreadTicketsBadge />
             </Tab>

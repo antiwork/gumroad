@@ -371,7 +371,11 @@ export const DashboardPage = ({
           )
         : null}
 
-      {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? <Greeter /> : null}
+      {!getting_started_stats.first_product && loggedInUser?.policies.product.create ? (
+        <div className="p-4 md:p-8">
+          <Greeter />
+        </div>
+      ) : null}
 
       <div className="p-4 md:p-8">
         <ProductsTable sales={sales} />

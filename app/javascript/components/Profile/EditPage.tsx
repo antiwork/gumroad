@@ -245,16 +245,7 @@ export const EditProfile = (props: Props) => {
           ))}
         </Tabs>
       </header>
-      <div
-        style={{
-          position: "fixed",
-          top: "var(--spacer-3)",
-          left: "var(--spacer-3)",
-          zIndex: "var(--z-index-above-overlay)",
-          padding: 0,
-          border: "none",
-        }}
-      >
+      <div className="!fixed left-3 top-3 z-30 !p-0">
         <WithTooltip tip="Edit profile" position="right">
           <NavigationButton
             color="filled"
@@ -271,7 +262,7 @@ export const EditProfile = (props: Props) => {
             key={section.id}
             id={section.id}
             style={{ overflowAnchor: section.id === movedSectionId ? "none" : undefined }}
-            className="border-b border-border py-16"
+            className="border-b border-border px-4 py-8 lg:py-16"
           >
             <AddSectionButton index={i} />
             <ImageUploadSettingsContext.Provider value={imageUploadSettings}>

@@ -118,7 +118,7 @@ const SectionEditor = ({
     <SectionReducerContext.Provider value={reducer}>
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
         {sections.map((section, i) => (
-          <section key={section.id} id={section.id} className="border-b border-border py-16">
+          <section key={section.id} id={section.id} className="border-b border-border px-4 py-8 lg:py-16">
             <AddSectionButton index={i} />
             {section.id ? (
               <EditSection section={section} />
@@ -163,7 +163,7 @@ export const Layout = (
     </>
   );
 
-  const mainSection = <section className="border-b border-border py-16">{productView}</section>;
+  const mainSection = <section className="border-b border-border px-4 py-8 lg:py-16">{productView}</section>;
 
   return (
     <>

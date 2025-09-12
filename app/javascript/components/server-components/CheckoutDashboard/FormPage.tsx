@@ -111,7 +111,7 @@ const FormPage = ({
     >
       <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <div>
-          <section className="space-y-4 p-4 md:p-8">
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2>Custom fields</h2>
               <a href="/help/article/101-designing-your-product-page" target="_blank" rel="noreferrer">
@@ -251,7 +251,7 @@ const FormPage = ({
               </Button>
             </div>
           </section>
-          <section className="space-y-4 p-4 md:p-8">
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2>Discounts</h2>
               <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
@@ -280,7 +280,7 @@ const FormPage = ({
               </label>
             </fieldset>
           </section>
-          <section className="space-y-4 p-4 md:p-8">
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2>More like this recommendations</h2>
               <a href="/help/article/334-more-like-this" target="_blank" rel="noreferrer">
@@ -336,7 +336,7 @@ const FormPage = ({
               </label>
             </fieldset>
           </section>
-          <section className="space-y-4 p-4 md:p-8">
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
             <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2>Tipping</h2>
               <a href="/help/article/345-tipping" target="_blank" rel="noreferrer">

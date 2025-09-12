@@ -198,7 +198,7 @@ export type PageProps = {
 };
 
 export const Section = ({ section, creator_profile, currency_code }: { section: Section } & PageProps) => (
-  <section id={section.id} className="border-b border-border py-16">
+  <section id={section.id} className="border-b border-border px-4 py-8 lg:py-16">
     {section.header ? <h2>{section.header}</h2> : null}
     {section.type === "SellerProfileProductsSection" ? (
       <ProductsSectionView section={section} creatorProfile={creator_profile} currencyCode={currency_code} />

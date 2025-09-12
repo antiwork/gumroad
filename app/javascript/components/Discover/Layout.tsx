@@ -187,7 +187,7 @@ export const Layout: React.FC<{
   return (
     <div className={cx("discover", className)}>
       <header
-        className="hero border-b border-t-0 border-border py-8 lg:pe-16 lg:ps-16"
+        className="hero relative z-20 border-b border-t-0 border-border bg-body px-4 py-8 lg:pe-16 lg:ps-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
       >
         <div className="flex w-full flex-col gap-4">
