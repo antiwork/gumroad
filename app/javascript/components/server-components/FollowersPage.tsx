@@ -120,27 +120,29 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
       title="Subscribers"
       actions={
         <>
-          <Popover
-            open={searchBoxOpen}
-            onToggle={setSearchBoxOpen}
-            aria-label="Search"
-            trigger={
-              <WithTooltip tip="Search" position="bottom">
-                <div className="button">
-                  <Icon name="solid-search" />
-                </div>
-              </WithTooltip>
-            }
-          >
-            <input
-              ref={searchInputRef}
-              value={searchQuery}
-              autoFocus
-              type="text"
-              placeholder="Search followers"
-              onChange={(evt) => setSearchQuery(evt.target.value)}
-            />
-          </Popover>
+          {(followers.length > 0 || searchQuery.length > 0) && (
+            <Popover
+              open={searchBoxOpen}
+              onToggle={setSearchBoxOpen}
+              aria-label="Search"
+              trigger={
+                <WithTooltip tip="Search" position="bottom">
+                  <div className="button">
+                    <Icon name="solid-search" />
+                  </div>
+                </WithTooltip>
+              }
+            >
+              <input
+                ref={searchInputRef}
+                value={searchQuery}
+                autoFocus
+                type="text"
+                placeholder="Search followers"
+                onChange={(evt) => setSearchQuery(evt.target.value)}
+              />
+            </Popover>
+          )}
           <Popover
             aria-label="Export"
             trigger={
