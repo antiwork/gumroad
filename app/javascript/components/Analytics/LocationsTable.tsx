@@ -3,6 +3,7 @@ import * as React from "react";
 import { AnalyticsDataByState, LocationDataValue } from "$app/data/analytics";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { SelectPopover } from "$app/components/Analytics/SelectPopover";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 type TableEntry = {
@@ -192,15 +193,15 @@ export const LocationsTable = ({
   const caption = (
     <div style={{ display: "flex", justifyContent: "space-between" }}>
       Locations
-      <select
-        aria-label="Locations"
-        style={{ width: "fit-content" }}
+      <SelectPopover
+        options={[
+          { value: "world", label: "World" },
+          { value: "us", label: "United States" },
+        ]}
         value={selected}
-        onChange={(ev) => setSelected(ev.target.value)}
-      >
-        <option value="world">World</option>
-        <option value="us">United States</option>
-      </select>
+        onChange={setSelected}
+        ariaLabel="Locations"
+      />
     </div>
   );
 

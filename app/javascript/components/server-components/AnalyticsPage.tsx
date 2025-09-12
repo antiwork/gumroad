@@ -17,6 +17,7 @@ import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
 import { ReferrersTable } from "$app/components/Analytics/ReferrersTable";
 import { SalesChart } from "$app/components/Analytics/SalesChart";
 import { SalesQuickStats } from "$app/components/Analytics/SalesQuickStats";
+import { SelectPopover } from "$app/components/Analytics/SelectPopover";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Progress } from "$app/components/Progress";
@@ -149,13 +150,15 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
       actions={
         hasContent ? (
           <>
-            <select
-              aria-label="Aggregate by"
-              onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
-            >
-              <option value="daily">Daily</option>
-              <option value="monthly">Monthly</option>
-            </select>
+            <SelectPopover
+              options={[
+                { value: "daily", label: "Daily" },
+                { value: "monthly", label: "Monthly" },
+              ]}
+              value={aggregateBy}
+              onChange={setAggregateBy}
+              ariaLabel="Aggregate by"
+            />
             <ProductsPopover products={products} setProducts={setProducts} />
             <DateRangePicker {...dateRange} />
           </>
