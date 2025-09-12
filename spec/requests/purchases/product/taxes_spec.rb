@@ -13,7 +13,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     it "calls the tax endpoint for a real zip code that doesn't show in the enterprise zip codes database" do
       visit("/l/#{@product.unique_permalink}")
       add_to_cart(@product)
-      check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144", country: "US" }) do
+      check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144", country: "US" }, should_verify_address: true) do
         expect(page).to have_text("Subtotal US$500", normalize_ws: true)
         expect(page).to have_text("Sales tax US$33.50", normalize_ws: true)
       end
@@ -52,7 +52,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         visit("/l/#{@product.unique_permalink}")
         add_to_cart(@product, option: "type 1")
-        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
+        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
           expect(page).to have_text("Subtotal US$501.50", normalize_ws: true)
           expect(page).to have_text("Sales tax US$33.60", normalize_ws: true)
           expect(page).to have_text("Total US$535.10", normalize_ws: true)
@@ -85,7 +85,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         visit "/l/#{@product.unique_permalink}/taxoffer"
         add_to_cart(@product, offer_code:)
-        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }) do
+        check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
           expect(page).to have_text("$500")
           expect(page).to have_text("Subtotal US$500", normalize_ws: true)
           expect(page).to have_text("Sales tax US$26.80", normalize_ws: true)
@@ -134,6 +134,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("Total US$586.85", normalize_ws: true)
 
         click_on "Pay"
+        if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
+          click_on "Yes, it is"
+        elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
+          click_on "No, continue"
+        end
         expect(page).to have_alert(text: "Your purchase was successful!")
 
         purchase = Purchase.last

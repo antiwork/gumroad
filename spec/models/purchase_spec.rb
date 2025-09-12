@@ -2272,13 +2272,13 @@ describe Purchase, :vcr do
     describe "when the creator does not have their own merchant account" do
       it "is charged using a Gumroad merchant account for suppliers" do
         purchase.process!
-        expect(purchase.merchant_account).not_to eq(nil)
+        expect(purchase.errors).to be_empty
         expect(purchase.merchant_account).to eq(MerchantAccount.gumroad(purchase.charge_processor_id))
       end
     end
 
     describe "when the creator has their own merchant account" do
-      let(:merchant_account) { create(:merchant_account, user:) }
+      let(:merchant_account) { create(:merchant_account_stripe, user:) }
 
       before do
         merchant_account
@@ -2288,7 +2288,7 @@ describe Purchase, :vcr do
       describe "when the link is digital" do
         it "is charged using the creators merchant account" do
           purchase.process!
-          expect(purchase.merchant_account).not_to eq(nil)
+          expect(purchase.errors).to be_empty
           expect(purchase.merchant_account).to eq(merchant_account)
         end
       end
@@ -2298,12 +2298,12 @@ describe Purchase, :vcr do
 
         it "is charged using the creators merchant account" do
           purchase.process!
-          expect(purchase.merchant_account).not_to eq(nil)
+          expect(purchase.errors).to be_empty
           expect(purchase.merchant_account).to eq(user.merchant_account(purchase.charge_processor_id))
         end
       end
 
-      pending describe "when the purchase has sales tax that gumroad is collecting and will pay as the merchant" do
+      describe "when the purchase has sales tax that gumroad is collecting and will pay as the merchant" do
         let(:purchase) do
           create(:purchase, seller: user, link:, price_cents: link.price_cents, fee_cents: 30, purchase_state: "in_progress", merchant_account: nil, chargeable:,
                             full_name: "Edgar Gumstein", street_address: "123 Gum Road", city: "London", zip_code: "94017", country: "United Kingdom", ip_country: "United Kingdom")
@@ -2317,7 +2317,6 @@ describe Purchase, :vcr do
         it "is charged using a Gumroad merchant account for suppliers" do
           purchase.process!
           expect(purchase.errors).to be_empty
-          expect(purchase.merchant_account).not_to eq(nil)
           expect(purchase.merchant_account).to eq(merchant_account)
         end
       end
