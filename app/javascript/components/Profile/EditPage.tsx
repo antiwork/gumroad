@@ -192,7 +192,7 @@ export const EditProfile = (props: Props) => {
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="border-b border-border py-8">
+      <header className="grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <div role="toolbar" style={{ gridColumn: "unset" }}>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>

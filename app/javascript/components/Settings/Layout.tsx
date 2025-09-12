@@ -34,11 +34,9 @@ export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpda
       title="Settings"
       actions={
         onSave ? (
-          <div className="actions">
-            <Button color="accent" onClick={onSave} disabled={!canUpdate}>
-              Update settings
-            </Button>
-          </div>
+          <Button color="accent" onClick={onSave} disabled={!canUpdate}>
+            Update settings
+          </Button>
         ) : null
       }
     >
