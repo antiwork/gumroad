@@ -80,4 +80,10 @@
       display: block;
     }
   }
+
+  &.popover-open {
+    [role="tooltip"] {
+      display: none !important;
+    }
+  }
 }

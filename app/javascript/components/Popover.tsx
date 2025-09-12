@@ -51,6 +51,14 @@ export const Popover = ({
     if (focusElement instanceof HTMLElement) focusElement.focus();
   }, [open]);
 
+  React.useEffect(() => {
+    const summaryEl = ref.current?.querySelector("summary") ?? null;
+    const triggerTooltip = summaryEl?.querySelector(".has-tooltip") as HTMLElement | null;
+    if (!triggerTooltip) return;
+    if (open) triggerTooltip.classList.add("popover-open");
+    else triggerTooltip.classList.remove("popover-open");
+  }, [open]);
+
   return (
     <Details
       className={cx("popover toggle", position, className)}
