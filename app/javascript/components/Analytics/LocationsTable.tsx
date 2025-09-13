@@ -201,6 +201,7 @@ export const LocationsTable = ({
         value={selected}
         onChange={setSelected}
         ariaLabel="Locations"
+        size="large"
       />
     </div>
   );

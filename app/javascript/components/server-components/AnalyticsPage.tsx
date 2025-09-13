@@ -158,6 +158,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
               value={aggregateBy}
               onChange={setAggregateBy}
               ariaLabel="Aggregate by"
+              size="small"
             />
             <ProductsPopover products={products} setProducts={setProducts} />
             <DateRangePicker {...dateRange} />

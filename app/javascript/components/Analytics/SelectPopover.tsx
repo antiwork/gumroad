@@ -13,9 +13,10 @@ interface SelectPopoverProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   ariaLabel?: string;
+  size?: "small" | "large";
 }
 
-export function SelectPopover<T extends string>({ options, value, onChange, ariaLabel }: SelectPopoverProps<T>) {
+export function SelectPopover<T extends string>({ options, value, onChange, ariaLabel, size = "small" }: SelectPopoverProps<T>) {
   const selectedOption = options.find((opt) => opt.value === value);
   const radioGroupName = React.useId();
 
@@ -26,10 +27,14 @@ export function SelectPopover<T extends string>({ options, value, onChange, aria
     close();
   };
 
+  const sizeClasses = {
+    trigger: size === "small" ? "select-popover-trigger-small" : "select-popover-trigger-large"
+  };
+
   return (
     <Popover
       trigger={
-        <span className="input" aria-label={ariaLabel} style={{ width: "120px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span className={`input ${sizeClasses.trigger} flex items-center justify-between`} aria-label={ariaLabel}>
           <span>{selectedOption?.label || "Select..."}</span>
           <Icon name="outline-cheveron-down" />
         </span>
