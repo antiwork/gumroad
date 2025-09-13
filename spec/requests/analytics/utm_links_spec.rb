@@ -844,7 +844,7 @@ describe "UTM links", :js, type: :system do
       expect(utm_link.reload.unique_clicks).to eq(1)
     end
 
-    it "attributes all qualified purchases to respective UTM link visits when buying multiple products" do
+    it "attributes all qualified purchases to respective UTM link visits when buying multiple products", :elasticsearch_wait_for_refresh do
       seller2 = create(:user)
       Feature.activate_user(:utm_links, seller2)
 
