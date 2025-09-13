@@ -175,6 +175,13 @@ describe Api::V2::PayoutsController do
           create(:bank, routing_number: "110000000", name: "Bank of America")
         end
 
+        around do |example|
+          # Exactly which days are in the upcoming payout may depend on the day of the week, so make sure it's consistent
+          travel_to(Time.zone.parse("2025-09-15 12:00:00")) do
+            example.run
+          end
+        end
+
         it "includes upcoming payout when no pagination and no date filtering" do
           get :index, params: @params
 
@@ -262,16 +269,14 @@ describe Api::V2::PayoutsController do
           expect(payouts.none? { |p| p["id"].nil? }).to be true
         end
 
-        it "upcoming payout reflects current unpaid balance up to payout period end date" do
-          travel_to(Time.current + 1.day) do
-            create(:balance, user: @seller, amount_cents: 5_00, date: Date.current + 2.days, state: "unpaid")
+        it "reflects current unpaid balance up to payout period end date" do
+          create(:balance, user: @seller, amount_cents: 5_00, date: Date.current + 2.days, state: "unpaid")
 
-            get :index, params: @params
+          get :index, params: @params
 
-            upcoming_payout = response.parsed_body["payouts"].first
-            expect(upcoming_payout["id"]).to be_nil
-            expect(upcoming_payout["amount"]).to eq("20.00")
-          end
+          upcoming_payout = response.parsed_body["payouts"].first
+          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payout["amount"]).to eq("20.00")
         end
 
         it "does not include upcoming payout when user is not payable due to minimum threshold" do
