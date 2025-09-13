@@ -27,14 +27,12 @@ export function SelectPopover<T extends string>({ options, value, onChange, aria
     close();
   };
 
-  const sizeClasses = {
-    trigger: size === "small" ? "select-popover-trigger-small" : "select-popover-trigger-large"
-  };
+  const widthClass = size === "small" ? "!w-32" : "!w-40";
 
   return (
     <Popover
       trigger={
-        <span className={`input ${sizeClasses.trigger} flex items-center justify-between`} aria-label={ariaLabel}>
+        <span className={`input ${widthClass} flex items-center justify-between whitespace-nowrap`} aria-label={ariaLabel}>
           <span>{selectedOption?.label || "Select..."}</span>
           <Icon name="outline-cheveron-down" />
         </span>
