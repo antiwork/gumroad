@@ -18,6 +18,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -189,6 +190,7 @@ export const EditProfile = (props: Props) => {
   const reducer = React.useMemo(() => [{ ...props, sections: visibleSections }, dispatch] as const, [visibleSections]);
 
   const imageUploadSettings = useSectionImageUploadSettings();
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
     <SectionReducerContext.Provider value={reducer}>
@@ -245,8 +247,8 @@ export const EditProfile = (props: Props) => {
           ))}
         </Tabs>
       </header>
-      <div className="!fixed left-3 top-3 z-30 !p-0">
-        <WithTooltip tip="Edit profile" position="right">
+      <div className="!fixed right-3 top-3 z-30 !p-0 lg:left-3 lg:right-auto">
+        <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"
             href={Routes.settings_profile_url({ host: appDomain })}

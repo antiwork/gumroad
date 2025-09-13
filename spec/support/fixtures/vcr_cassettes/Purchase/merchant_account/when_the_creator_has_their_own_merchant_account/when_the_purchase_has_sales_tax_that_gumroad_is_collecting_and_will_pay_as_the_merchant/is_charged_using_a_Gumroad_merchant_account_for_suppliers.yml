@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=4264255706949&metadata[tos_agreement_id]=qsIb1VZhP1nIA4RL38NQdw%3D%3D&metadata[user_compliance_info_id]=gQNFrMeRf3J586Hug-2Ppg%3D%3D&tos_acceptance[date]=1757682540&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar78395f83_4%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=2751194636774&metadata[tos_agreement_id]=i_5VP7xFWt46Pa7AFNiBsw%3D%3D&metadata[user_compliance_info_id]=zDwPbqp1ZcYVKi5UZWuHLg%3D%3D&tos_acceptance[date]=1757682605&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar1aec0fc3_7%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -14,9 +14,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_b9UuWHRKDSOuln","request_duration_ms":468}}'
+      - '{"last_request_metrics":{"request_id":"req_1yWoLrwtGuwtxW","request_duration_ms":397}}'
       Idempotency-Key:
-      - b97bb00d-2ef4-4f53-b938-35715240bfa3
+      - 1ef012c2-1e54-4170-a042-b2ac822682f0
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -35,7 +35,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:03 GMT
+      - Fri, 12 Sep 2025 13:10:10 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -60,11 +60,11 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Idempotency-Key:
-      - b97bb00d-2ef4-4f53-b938-35715240bfa3
+      - 1ef012c2-1e54-4170-a042-b2ac822682f0
       Original-Request:
-      - req_EmDBvC8qfC5oDc
+      - req_oDvIba90BETjDI
       Request-Id:
-      - req_EmDBvC8qfC5oDc
+      - req_oDvIba90BETjDI
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -83,7 +83,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -143,7 +143,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -152,7 +152,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -165,9 +165,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -176,13 +176,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -241,9 +241,9 @@ http_interactions:
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -331,16 +331,16 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:03 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:10 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP/persons
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T/persons
     body:
       encoding: US-ASCII
       string: ''
@@ -352,7 +352,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_EmDBvC8qfC5oDc","request_duration_ms":3617}}'
+      - '{"last_request_metrics":{"request_id":"req_oDvIba90BETjDI","request_duration_ms":4130}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -371,7 +371,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:04 GMT
+      - Fri, 12 Sep 2025 13:10:10 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -396,9 +396,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_hFn5tawq1PgsrK
+      - req_WN1CFEqF1qA4ih
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -418,9 +418,9 @@ http_interactions:
           "object": "list",
           "data": [
             {
-              "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+              "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
               "object": "person",
-              "account": "acct_1S6WimS21WIu1MgP",
+              "account": "acct_1S6WjqS1xLzZLs3T",
               "additional_tos_acceptances": {
                 "account": {
                   "date": null,
@@ -436,13 +436,13 @@ http_interactions:
                 "postal_code": "94107",
                 "state": "California"
               },
-              "created": 1757682541,
+              "created": 1757682606,
               "dob": {
                 "day": 1,
                 "month": 1,
                 "year": 1901
               },
-              "email": "edgar78395f83_4@gumroad.com",
+              "email": "edgar1aec0fc3_7@gumroad.com",
               "first_name": "Chuck",
               "future_requirements": {
                 "alternatives": [],
@@ -502,12 +502,12 @@ http_interactions:
             }
           ],
           "has_more": false,
-          "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/persons"
+          "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/persons"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:04 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:10 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP/persons/person_1S6WimS21WIu1MgPc4GGr9fw
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T/persons/person_1S6WjqS1xLzZLs3TRcMqsRsJ
     body:
       encoding: UTF-8
       string: verification[document][front]=file_identity_document_success
@@ -519,9 +519,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_hFn5tawq1PgsrK","request_duration_ms":571}}'
+      - '{"last_request_metrics":{"request_id":"req_WN1CFEqF1qA4ih","request_duration_ms":571}}'
       Idempotency-Key:
-      - 5178608a-5eb5-4b4d-9098-af3ff3bbe799
+      - afddd2b5-75dc-4597-9e1f-109b64fb36de
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -540,7 +540,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:07 GMT
+      - Fri, 12 Sep 2025 13:10:13 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -565,13 +565,13 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Idempotency-Key:
-      - 5178608a-5eb5-4b4d-9098-af3ff3bbe799
+      - afddd2b5-75dc-4597-9e1f-109b64fb36de
       Original-Request:
-      - req_Jwv2sF1wbpZrg1
+      - req_wsuL8YZU05qzQv
       Request-Id:
-      - req_Jwv2sF1wbpZrg1
+      - req_wsuL8YZU05qzQv
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -590,9 +590,9 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+          "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
           "object": "person",
-          "account": "acct_1S6WimS21WIu1MgP",
+          "account": "acct_1S6WjqS1xLzZLs3T",
           "additional_tos_acceptances": {
             "account": {
               "date": null,
@@ -608,13 +608,13 @@ http_interactions:
             "postal_code": "94107",
             "state": "California"
           },
-          "created": 1757682541,
+          "created": 1757682606,
           "dob": {
             "day": 1,
             "month": 1,
             "year": 1901
           },
-          "email": "edgar78395f83_4@gumroad.com",
+          "email": "edgar1aec0fc3_7@gumroad.com",
           "first_name": "Chuck",
           "future_requirements": {
             "alternatives": [],
@@ -667,15 +667,15 @@ http_interactions:
               "back": null,
               "details": null,
               "details_code": null,
-              "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+              "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
             },
             "status": "pending"
           }
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:07 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:13 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T
     body:
       encoding: US-ASCII
       string: ''
@@ -687,7 +687,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_Jwv2sF1wbpZrg1","request_duration_ms":2791}}'
+      - '{"last_request_metrics":{"request_id":"req_wsuL8YZU05qzQv","request_duration_ms":2359}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -706,7 +706,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:07 GMT
+      - Fri, 12 Sep 2025 13:10:13 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -731,9 +731,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_j0sRKuQCkyGSHK
+      - req_enRZA2gNEmgkB6
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -750,7 +750,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -810,7 +810,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -819,7 +819,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -832,9 +832,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -843,13 +843,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -902,15 +902,15 @@ http_interactions:
                 "back": null,
                 "details": null,
                 "details_code": null,
-                "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+                "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
               },
               "status": "pending"
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -998,16 +998,16 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:07 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:13 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T
     body:
       encoding: US-ASCII
       string: ''
@@ -1019,7 +1019,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_j0sRKuQCkyGSHK","request_duration_ms":647}}'
+      - '{"last_request_metrics":{"request_id":"req_enRZA2gNEmgkB6","request_duration_ms":739}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -1038,7 +1038,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:18 GMT
+      - Fri, 12 Sep 2025 13:10:24 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -1063,9 +1063,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_ZIGjJK5ZF3f6WL
+      - req_CPfZdLizhsc6q5
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -1082,7 +1082,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -1142,7 +1142,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -1151,7 +1151,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -1164,9 +1164,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -1175,13 +1175,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -1234,15 +1234,15 @@ http_interactions:
                 "back": null,
                 "details": null,
                 "details_code": null,
-                "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+                "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
               },
               "status": "pending"
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -1330,16 +1330,16 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:18 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:24 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T
     body:
       encoding: US-ASCII
       string: ''
@@ -1351,7 +1351,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_ZIGjJK5ZF3f6WL","request_duration_ms":673}}'
+      - '{"last_request_metrics":{"request_id":"req_CPfZdLizhsc6q5","request_duration_ms":645}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -1370,7 +1370,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:29 GMT
+      - Fri, 12 Sep 2025 13:10:35 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -1395,9 +1395,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_VAjB3oTXohtU1Z
+      - req_i0EHrNgIkzvzQP
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -1414,7 +1414,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -1474,7 +1474,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -1483,7 +1483,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -1496,9 +1496,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -1507,13 +1507,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -1566,15 +1566,15 @@ http_interactions:
                 "back": null,
                 "details": null,
                 "details_code": null,
-                "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+                "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
               },
               "status": "pending"
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -1662,16 +1662,16 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:29 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:35 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T
     body:
       encoding: US-ASCII
       string: ''
@@ -1683,7 +1683,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_VAjB3oTXohtU1Z","request_duration_ms":639}}'
+      - '{"last_request_metrics":{"request_id":"req_i0EHrNgIkzvzQP","request_duration_ms":682}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -1702,7 +1702,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:39 GMT
+      - Fri, 12 Sep 2025 13:10:45 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -1727,9 +1727,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_qkpVryW4MdmG4k
+      - req_FccjfqPqGO9Oll
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -1746,7 +1746,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -1806,7 +1806,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -1815,7 +1815,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -1828,9 +1828,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -1839,13 +1839,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -1898,15 +1898,15 @@ http_interactions:
                 "back": null,
                 "details": null,
                 "details_code": null,
-                "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+                "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
               },
               "status": "pending"
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -1994,16 +1994,16 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:39 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:46 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T
     body:
       encoding: US-ASCII
       string: ''
@@ -2015,7 +2015,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_qkpVryW4MdmG4k","request_duration_ms":636}}'
+      - '{"last_request_metrics":{"request_id":"req_FccjfqPqGO9Oll","request_duration_ms":1066}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -2034,7 +2034,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:09:50 GMT
+      - Fri, 12 Sep 2025 13:10:56 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -2059,9 +2059,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_6ONQ0OgeR7mWkM
+      - req_szJ0z3ip28pEMR
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -2078,7 +2078,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -2138,7 +2138,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -2147,7 +2147,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -2160,9 +2160,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -2171,13 +2171,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -2230,15 +2230,15 @@ http_interactions:
                 "back": null,
                 "details": null,
                 "details_code": null,
-                "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+                "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
               },
               "status": "pending"
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -2326,16 +2326,16 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:09:50 GMT
+  recorded_at: Fri, 12 Sep 2025 13:10:56 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1S6WimS21WIu1MgP
+    uri: https://api.stripe.com/v1/accounts/acct_1S6WjqS1xLzZLs3T
     body:
       encoding: US-ASCII
       string: ''
@@ -2347,7 +2347,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_6ONQ0OgeR7mWkM","request_duration_ms":757}}'
+      - '{"last_request_metrics":{"request_id":"req_szJ0z3ip28pEMR","request_duration_ms":642}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -2366,7 +2366,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:01 GMT
+      - Fri, 12 Sep 2025 13:11:07 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -2391,9 +2391,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_CSXUhuYN67Cj4Y
+      - req_cvgZC3tU8tER7B
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -2410,7 +2410,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1S6WimS21WIu1MgP",
+          "id": "acct_1S6WjqS1xLzZLs3T",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -2470,7 +2470,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1757682541,
+          "created": 1757682607,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -2479,7 +2479,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1S6WimS21WIu1MgP/external_accounts"
+            "url": "/v1/accounts/acct_1S6WjqS1xLzZLs3T/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -2492,9 +2492,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1S6WimS21WIu1MgPc4GGr9fw",
+            "id": "person_1S6WjqS1xLzZLs3TRcMqsRsJ",
             "object": "person",
-            "account": "acct_1S6WimS21WIu1MgP",
+            "account": "acct_1S6WjqS1xLzZLs3T",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -2503,13 +2503,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1757682541,
+            "created": 1757682606,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar78395f83_4@gumroad.com",
+            "email": "edgar1aec0fc3_7@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -2555,15 +2555,15 @@ http_interactions:
                 "back": null,
                 "details": null,
                 "details_code": null,
-                "front": "file_1S6WirS21WIu1MgPCY9WeEDz"
+                "front": "file_1S6WjvS1xLzZLs3TKrMZpFWj"
               },
               "status": "verified"
             }
           },
           "metadata": {
-            "tos_agreement_id": "qsIb1VZhP1nIA4RL38NQdw==",
-            "user_compliance_info_id": "gQNFrMeRf3J586Hug-2Ppg==",
-            "user_id": "4264255706949"
+            "tos_agreement_id": "i_5VP7xFWt46Pa7AFNiBsw==",
+            "user_compliance_info_id": "zDwPbqp1ZcYVKi5UZWuHLg==",
+            "user_id": "2751194636774"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -2644,13 +2644,13 @@ http_interactions:
             }
           },
           "tos_acceptance": {
-            "date": 1757682540,
+            "date": 1757682605,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:01 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:07 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/payment_methods
@@ -2665,9 +2665,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_CSXUhuYN67Cj4Y","request_duration_ms":636}}'
+      - '{"last_request_metrics":{"request_id":"req_cvgZC3tU8tER7B","request_duration_ms":634}}'
       Idempotency-Key:
-      - c3a8305c-64f6-489f-ac14-63485007898b
+      - f9ea946f-3b51-482a-84b7-885991de349f
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -2686,7 +2686,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:01 GMT
+      - Fri, 12 Sep 2025 13:11:07 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -2711,11 +2711,11 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Idempotency-Key:
-      - c3a8305c-64f6-489f-ac14-63485007898b
+      - f9ea946f-3b51-482a-84b7-885991de349f
       Original-Request:
-      - req_xkfOzB5jdCmgAu
+      - req_KYA64xwr4xjcpZ
       Request-Id:
-      - req_xkfOzB5jdCmgAu
+      - req_KYA64xwr4xjcpZ
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -2734,7 +2734,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_0S6Wjl9e1RjUNIyY5zwFdQdO",
+          "id": "pm_0S6Wkp9e1RjUNIyYq2PDNu3i",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -2778,16 +2778,16 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1757682601,
+          "created": 1757682667,
           "customer": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:02 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:07 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/payment_methods/pm_0S6Wjl9e1RjUNIyY5zwFdQdO
+    uri: https://api.stripe.com/v1/payment_methods/pm_0S6Wkp9e1RjUNIyYq2PDNu3i
     body:
       encoding: US-ASCII
       string: ''
@@ -2799,7 +2799,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_xkfOzB5jdCmgAu","request_duration_ms":465}}'
+      - '{"last_request_metrics":{"request_id":"req_KYA64xwr4xjcpZ","request_duration_ms":453}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -2818,7 +2818,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:02 GMT
+      - Fri, 12 Sep 2025 13:11:08 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -2843,7 +2843,7 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_2SxZtMaH84BY4u
+      - req_6UIkhvteYnSC6P
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -2860,7 +2860,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_0S6Wjl9e1RjUNIyY5zwFdQdO",
+          "id": "pm_0S6Wkp9e1RjUNIyYq2PDNu3i",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -2904,19 +2904,19 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1757682601,
+          "created": 1757682667,
           "customer": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:02 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:09 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/payment_intents
     body:
       encoding: UTF-8
-      string: amount=100&currency=usd&description=You+bought+http%3A%2F%2Fedgar3972aa752.test.gumroad.com%3A31337%2Fl%2Fy%21&metadata[purchase]=_MjDQ8REvM26cm9r_KKjOA%3D%3D&transfer_group=620&payment_method_types[0]=card&off_session=true&confirm=true&payment_method=pm_0S6Wjl9e1RjUNIyY5zwFdQdO&statement_descriptor_suffix=edgar3972aa752&transfer_data[destination]=acct_1S6WimS21WIu1MgP&transfer_data[amount]=7
+      string: amount=200&currency=usd&description=You+bought+http%3A%2F%2Fedgar356fb50b3.test.gumroad.com%3A31337%2Fl%2Fc%21&metadata[purchase]=1KOhlF0Cim9-QyLL5BnYGQ%3D%3D&transfer_group=621&payment_method_types[0]=card&off_session=true&confirm=true&payment_method=pm_0S6Wkp9e1RjUNIyYq2PDNu3i&statement_descriptor_suffix=edgar356fb50b3&transfer_data[destination]=acct_1S6WjqS1xLzZLs3T&transfer_data[amount]=7
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -2925,9 +2925,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_2SxZtMaH84BY4u","request_duration_ms":380}}'
+      - '{"last_request_metrics":{"request_id":"req_6UIkhvteYnSC6P","request_duration_ms":450}}'
       Idempotency-Key:
-      - fcda6d2b-c08e-448c-a6d7-5fa271305fac
+      - decb0af6-a359-4e51-af03-5f7fcb2cc992
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -2946,7 +2946,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:04 GMT
+      - Fri, 12 Sep 2025 13:11:11 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -2971,11 +2971,11 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Idempotency-Key:
-      - fcda6d2b-c08e-448c-a6d7-5fa271305fac
+      - decb0af6-a359-4e51-af03-5f7fcb2cc992
       Original-Request:
-      - req_bxTspPb3ra8l7U
+      - req_LYplAsRtF31kcC
       Request-Id:
-      - req_bxTspPb3ra8l7U
+      - req_LYplAsRtF31kcC
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
@@ -2994,37 +2994,37 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pi_2S6Wjm9e1RjUNIyY1eZ53c5x",
+          "id": "pi_2S6Wkr9e1RjUNIyY0S6ZTcN8",
           "object": "payment_intent",
-          "amount": 100,
+          "amount": 200,
           "amount_capturable": 0,
           "amount_details": {
             "tip": {}
           },
-          "amount_received": 100,
+          "amount_received": 200,
           "application": null,
           "application_fee_amount": null,
           "automatic_payment_methods": null,
           "canceled_at": null,
           "cancellation_reason": null,
           "capture_method": "automatic",
-          "client_secret": "pi_2S6Wjm9e1RjUNIyY1eZ53c5x_secret_Xvef8Xpz27fl0SEJV4wcQadPn",
+          "client_secret": "pi_2S6Wkr9e1RjUNIyY0S6ZTcN8_secret_frS5OirMUhg3hPO5UMPzl4vKx",
           "confirmation_method": "automatic",
-          "created": 1757682602,
+          "created": 1757682669,
           "currency": "usd",
           "customer": null,
-          "description": "You bought http://edgar3972aa752.test.gumroad.com:31337/l/y!",
+          "description": "You bought http://edgar356fb50b3.test.gumroad.com:31337/l/c!",
           "excluded_payment_method_types": null,
           "invoice": null,
           "last_payment_error": null,
-          "latest_charge": "ch_2S6Wjm9e1RjUNIyY12bmphwF",
+          "latest_charge": "ch_2S6Wkr9e1RjUNIyY0Q8KyBL8",
           "livemode": false,
           "metadata": {
-            "purchase": "_MjDQ8REvM26cm9r_KKjOA=="
+            "purchase": "1KOhlF0Cim9-QyLL5BnYGQ=="
           },
           "next_action": null,
           "on_behalf_of": null,
-          "payment_method": "pm_0S6Wjl9e1RjUNIyY5zwFdQdO",
+          "payment_method": "pm_0S6Wkp9e1RjUNIyYq2PDNu3i",
           "payment_method_configuration_details": null,
           "payment_method_options": {
             "card": {
@@ -3044,18 +3044,18 @@ http_interactions:
           "shipping": null,
           "source": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar3972aa752",
+          "statement_descriptor_suffix": "edgar356fb50b3",
           "status": "succeeded",
           "transfer_data": {
             "amount": 7,
-            "destination": "acct_1S6WimS21WIu1MgP"
+            "destination": "acct_1S6WjqS1xLzZLs3T"
           },
-          "transfer_group": "620"
+          "transfer_group": "621"
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:04 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:11 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/charges/ch_2S6Wjm9e1RjUNIyY12bmphwF?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
+    uri: https://api.stripe.com/v1/charges/ch_2S6Wkr9e1RjUNIyY0Q8KyBL8?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
     body:
       encoding: US-ASCII
       string: ''
@@ -3067,7 +3067,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_bxTspPb3ra8l7U","request_duration_ms":1715}}'
+      - '{"last_request_metrics":{"request_id":"req_LYplAsRtF31kcC","request_duration_ms":1901}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -3086,7 +3086,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:04 GMT
+      - Fri, 12 Sep 2025 13:11:11 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -3111,7 +3111,7 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_oSmpQqGgkuwDz7
+      - req_CCaYaKhXgDrPvD
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -3128,30 +3128,30 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "ch_2S6Wjm9e1RjUNIyY12bmphwF",
+          "id": "ch_2S6Wkr9e1RjUNIyY0Q8KyBL8",
           "object": "charge",
-          "amount": 100,
-          "amount_captured": 100,
+          "amount": 200,
+          "amount_captured": 200,
           "amount_refunded": 0,
           "amount_updates": [],
           "application": null,
           "application_fee": null,
           "application_fee_amount": null,
           "balance_transaction": {
-            "id": "txn_2S6Wjm9e1RjUNIyY1EdtGM9c",
+            "id": "txn_2S6Wkr9e1RjUNIyY0nPCOl82",
             "object": "balance_transaction",
-            "amount": 100,
+            "amount": 200,
             "available_on": 1757980800,
             "balance_type": "payments",
-            "created": 1757682603,
+            "created": 1757682669,
             "currency": "usd",
-            "description": "You bought http://edgar3972aa752.test.gumroad.com:31337/l/y!",
+            "description": "You bought http://edgar356fb50b3.test.gumroad.com:31337/l/c!",
             "exchange_rate": null,
             "fee": 0,
             "fee_details": [],
-            "net": 100,
+            "net": 200,
             "reporting_category": "charge",
-            "source": "ch_2S6Wjm9e1RjUNIyY12bmphwF",
+            "source": "ch_2S6Wkr9e1RjUNIyY0Q8KyBL8",
             "status": "pending",
             "type": "charge"
           },
@@ -3169,13 +3169,13 @@ http_interactions:
             "phone": null,
             "tax_id": null
           },
-          "calculated_statement_descriptor": "GUMROAD* EDGAR3972AA75",
+          "calculated_statement_descriptor": "GUMROAD* EDGAR356FB50B",
           "captured": true,
-          "created": 1757682603,
+          "created": 1757682669,
           "currency": "usd",
           "customer": null,
-          "description": "You bought http://edgar3972aa752.test.gumroad.com:31337/l/y!",
-          "destination": "acct_1S6WimS21WIu1MgP",
+          "description": "You bought http://edgar356fb50b3.test.gumroad.com:31337/l/c!",
+          "destination": "acct_1S6WjqS1xLzZLs3T",
           "dispute": null,
           "disputed": false,
           "failure_balance_transaction": null,
@@ -3185,7 +3185,7 @@ http_interactions:
           "invoice": null,
           "livemode": false,
           "metadata": {
-            "purchase": "_MjDQ8REvM26cm9r_KKjOA=="
+            "purchase": "1KOhlF0Cim9-QyLL5BnYGQ=="
           },
           "on_behalf_of": null,
           "order": null,
@@ -3196,17 +3196,17 @@ http_interactions:
             "network_status": "approved_by_network",
             "reason": null,
             "risk_level": "normal",
-            "risk_score": 55,
+            "risk_score": 49,
             "seller_message": "Payment complete.",
             "type": "authorized"
           },
           "paid": true,
-          "payment_intent": "pi_2S6Wjm9e1RjUNIyY1eZ53c5x",
-          "payment_method": "pm_0S6Wjl9e1RjUNIyY5zwFdQdO",
+          "payment_intent": "pi_2S6Wkr9e1RjUNIyY0S6ZTcN8",
+          "payment_method": "pm_0S6Wkp9e1RjUNIyYq2PDNu3i",
           "payment_method_details": {
             "card": {
-              "amount_authorized": 100,
-              "authorization_code": "297143",
+              "amount_authorized": 200,
+              "authorization_code": "550575",
               "brand": "visa",
               "checks": {
                 "address_line1_check": null,
@@ -3236,7 +3236,7 @@ http_interactions:
               },
               "network_transaction_id": "875457497450891",
               "overcapture": {
-                "maximum_amount_capturable": 100,
+                "maximum_amount_capturable": 200,
                 "status": "unavailable"
               },
               "regulated_status": "unregulated",
@@ -3248,26 +3248,26 @@ http_interactions:
           "radar_options": {},
           "receipt_email": null,
           "receipt_number": null,
-          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUorLeQxgYyBpiOEoc-vzosFuwjk9L6bAq9FqfescDHuVkCvDCQ5lAZcwAAheAOybHfy1zX_RiDgTntXdw",
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUo77eQxgYyBpxkS5kZfTosFuJFpAz0KojljvaW4wN1XbcteAnxj1rJAMjZzoaAFDv7pKRiPxAzPL_P4IQ",
           "refunded": false,
           "review": null,
           "shipping": null,
           "source": null,
           "source_transfer": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar3972aa752",
+          "statement_descriptor_suffix": "edgar356fb50b3",
           "status": "succeeded",
-          "transfer": "tr_2S6Wjm9e1RjUNIyY1kId6pyJ",
+          "transfer": "tr_2S6Wkr9e1RjUNIyY0j5nYg0S",
           "transfer_data": {
             "amount": 7,
-            "destination": "acct_1S6WimS21WIu1MgP"
+            "destination": "acct_1S6WjqS1xLzZLs3T"
           },
-          "transfer_group": "620"
+          "transfer_group": "621"
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:04 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:11 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/transfers/tr_2S6Wjm9e1RjUNIyY1kId6pyJ
+    uri: https://api.stripe.com/v1/transfers/tr_2S6Wkr9e1RjUNIyY0j5nYg0S
     body:
       encoding: US-ASCII
       string: ''
@@ -3279,7 +3279,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_oSmpQqGgkuwDz7","request_duration_ms":442}}'
+      - '{"last_request_metrics":{"request_id":"req_CCaYaKhXgDrPvD","request_duration_ms":419}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -3298,7 +3298,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:05 GMT
+      - Fri, 12 Sep 2025 13:11:11 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -3323,7 +3323,7 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_zj788giBhC6Xib
+      - req_3c2Q1tfsL6wqN5
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -3340,16 +3340,16 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "tr_2S6Wjm9e1RjUNIyY1kId6pyJ",
+          "id": "tr_2S6Wkr9e1RjUNIyY0j5nYg0S",
           "object": "transfer",
           "amount": 7,
           "amount_reversed": 0,
-          "balance_transaction": "txn_2S6Wjm9e1RjUNIyY1ZnpRnFQ",
-          "created": 1757682603,
+          "balance_transaction": "txn_2S6Wkr9e1RjUNIyY0ohRJlcG",
+          "created": 1757682669,
           "currency": "usd",
           "description": null,
-          "destination": "acct_1S6WimS21WIu1MgP",
-          "destination_payment": "py_1S6WjnS21WIu1MgPUSEXpMXY",
+          "destination": "acct_1S6WjqS1xLzZLs3T",
+          "destination_payment": "py_1S6WkrS1xLzZLs3T9HKPnG1G",
           "livemode": false,
           "metadata": {},
           "reversals": {
@@ -3357,17 +3357,17 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/transfers/tr_2S6Wjm9e1RjUNIyY1kId6pyJ/reversals"
+            "url": "/v1/transfers/tr_2S6Wkr9e1RjUNIyY0j5nYg0S/reversals"
           },
           "reversed": false,
-          "source_transaction": "ch_2S6Wjm9e1RjUNIyY12bmphwF",
+          "source_transaction": "ch_2S6Wkr9e1RjUNIyY0Q8KyBL8",
           "source_type": "card",
-          "transfer_group": "620"
+          "transfer_group": "621"
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:05 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:11 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/charges/py_1S6WjnS21WIu1MgPUSEXpMXY?expand%5B%5D=balance_transaction
+    uri: https://api.stripe.com/v1/charges/py_1S6WkrS1xLzZLs3T9HKPnG1G?expand%5B%5D=balance_transaction
     body:
       encoding: US-ASCII
       string: ''
@@ -3379,7 +3379,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_zj788giBhC6Xib","request_duration_ms":356}}'
+      - '{"last_request_metrics":{"request_id":"req_3c2Q1tfsL6wqN5","request_duration_ms":480}}'
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       X-Stripe-Client-User-Agent:
@@ -3387,7 +3387,7 @@ http_interactions:
         Harbakshs-MacBook-Air.local 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22
         19:48:46 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8103 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -3400,7 +3400,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 12 Sep 2025 13:10:05 GMT
+      - Fri, 12 Sep 2025 13:11:12 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -3425,9 +3425,9 @@ http_interactions:
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
         'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=nboyhm8ejzDbnCtOYuWscJ2H1jX6u8QekW814XfwU-Ws58vwIP2EFGWyi_hnSFXIcM99F4KouiKqoIkL
       Request-Id:
-      - req_1yWoLrwtGuwtxW
+      - req_ZVmqAYssebb3xB
       Stripe-Account:
-      - acct_1S6WimS21WIu1MgP
+      - acct_1S6WjqS1xLzZLs3T
       Stripe-Version:
       - 2023-10-16; risk_in_requirements_beta=v1
       Vary:
@@ -3444,7 +3444,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "py_1S6WjnS21WIu1MgPUSEXpMXY",
+          "id": "py_1S6WkrS1xLzZLs3T9HKPnG1G",
           "object": "charge",
           "amount": 7,
           "amount_captured": 7,
@@ -3453,12 +3453,12 @@ http_interactions:
           "application_fee": null,
           "application_fee_amount": null,
           "balance_transaction": {
-            "id": "txn_1S6WjnS21WIu1MgPdXsa9SSm",
+            "id": "txn_1S6WksS1xLzZLs3Tmg5f5dBz",
             "object": "balance_transaction",
             "amount": 7,
             "available_on": 1757980800,
             "balance_type": "payments",
-            "created": 1757682603,
+            "created": 1757682670,
             "currency": "usd",
             "description": null,
             "exchange_rate": null,
@@ -3466,7 +3466,7 @@ http_interactions:
             "fee_details": [],
             "net": 7,
             "reporting_category": "charge",
-            "source": "py_1S6WjnS21WIu1MgPUSEXpMXY",
+            "source": "py_1S6WkrS1xLzZLs3T9HKPnG1G",
             "status": "pending",
             "type": "payment"
           },
@@ -3486,7 +3486,7 @@ http_interactions:
           },
           "calculated_statement_descriptor": null,
           "captured": true,
-          "created": 1757682603,
+          "created": 1757682670,
           "currency": "usd",
           "customer": null,
           "description": null,
@@ -3512,7 +3512,7 @@ http_interactions:
           },
           "receipt_email": null,
           "receipt_number": null,
-          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xUzZXaW1TMjFXSXUxTWdQKK23kMYGMgZOyPuyV0M6LBbdMa8GN0FCZ6uzp9pzHOFU7zW3Ds87uvwInou1VpIVyfutKeETnwnuHPuY",
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xUzZXanFTMXhMelpMczNUKPC3kMYGMgYRHi1vQdo6LBZrbuRvGE9v8HwFuQt-jQIspi60bOqXxi3KbEf2ZN0rcrmLQFJY-DrKqNaw",
           "refunded": false,
           "review": null,
           "shipping": null,
@@ -3524,12 +3524,12 @@ http_interactions:
             "application_name": "Gumroad",
             "application_url": "https://gumroad.com"
           },
-          "source_transfer": "tr_2S6Wjm9e1RjUNIyY1kId6pyJ",
+          "source_transfer": "tr_2S6Wkr9e1RjUNIyY0j5nYg0S",
           "statement_descriptor": null,
           "statement_descriptor_suffix": null,
           "status": "succeeded",
           "transfer_data": null,
           "transfer_group": null
         }
-  recorded_at: Fri, 12 Sep 2025 13:10:05 GMT
+  recorded_at: Fri, 12 Sep 2025 13:11:12 GMT
 recorded_with: VCR 6.2.0

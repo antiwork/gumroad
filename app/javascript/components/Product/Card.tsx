@@ -13,14 +13,16 @@ export const Card = ({
   product,
   badge,
   footerAction,
+  eager,
 }: {
   product: CardProduct;
   badge?: React.ReactNode;
   footerAction?: React.ReactNode;
+  eager?: boolean | undefined;
 }) => (
   <article className="product-card">
     <figure>
-      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
+      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </figure>
     {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
     <header>
@@ -54,10 +56,10 @@ export const Card = ({
   </article>
 );
 
-export const HorizontalCard = ({ product, big }: { product: CardProduct; big?: boolean }) => (
+export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
   <article className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
     <figure>
-      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
+      <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </figure>
     {product.quantity_remaining != null ? <div className="ribbon">{product.quantity_remaining} left</div> : null}
     <section>
