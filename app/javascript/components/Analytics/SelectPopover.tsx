@@ -30,7 +30,7 @@ export function SelectPopover<T extends string>({ options, value, onChange, aria
   return (
     <Popover
       trigger={
-        <span className={`input flex items-center justify-between whitespace-nowrap`} aria-label={ariaLabel}>
+        <span className={`input flex items-center justify-between whitespace-nowrap min-w-[12ch]`} aria-label={ariaLabel}>
           <span>{selectedOption?.label || "Select..."}</span>
           <Icon name="outline-cheveron-down" />
         </span>
