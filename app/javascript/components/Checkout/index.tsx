@@ -305,7 +305,12 @@ export const Checkout = ({
                         placeholder="Discount code"
                         value={newDiscountCode}
                         disabled={discountInputDisabled}
-                        onChange={(e) => setNewDiscountCode(e.target.value.toUpperCase())}
+                        onChange={(e) => {
+                          const value = e.target.value.toUpperCase();
+                          // Only allow letters, numbers, dashes, and underscores
+                          const validValue = value.replace(/[^A-Z0-9\-_]/g, "");
+                          setNewDiscountCode(validValue);
+                        }}
                       />
                       <Button type="submit" disabled={discountInputDisabled}>
                         Apply

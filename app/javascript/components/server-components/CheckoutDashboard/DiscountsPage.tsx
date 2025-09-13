@@ -856,7 +856,12 @@ const Form = ({
                 type="text"
                 id={`${uid}code`}
                 value={code.value}
-                onChange={(evt) => setCode({ value: evt.target.value.toUpperCase() })}
+                onChange={(evt) => {
+                  const value = evt.target.value.toUpperCase();
+                  // Only allow letters, numbers, dashes, and underscores
+                  const validValue = value.replace(/[^A-Z0-9\-_]/g, "");
+                  setCode({ value: validValue });
+                }}
                 aria-invalid={code.error}
                 readOnly={readOnlyCode}
               />
@@ -868,6 +873,7 @@ const Form = ({
                 <Icon name="outline-refresh" />
               </Button>
             </div>
+            <small>Only letters, numbers, dashes, and underscores are allowed</small>
           </fieldset>
           <fieldset className={cx({ danger: selectedProductIds.error })}>
             <legend>
