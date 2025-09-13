@@ -12,7 +12,9 @@ const ProductPage = (props: Props) => {
   const loggedInUser = useLoggedInUser();
 
   return (
-    <div className={cx("custom-sections", loggedInUser?.id === props.creator_profile.external_id && "has-user")}>
+    <div
+      className={cx("custom-sections product", loggedInUser?.id === props.creator_profile.external_id && "has-user")}
+    >
       <Layout {...props} />
       <PoweredByFooter />
     </div>

@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { NavigationButton } from "$app/components/Button";
@@ -163,7 +164,11 @@ export const Layout = (
     </>
   );
 
-  const mainSection = <section className="border-b border-border px-4 py-8 lg:py-16">{productView}</section>;
+  const mainSection = (
+    <section className={classNames("border-b border-border lg:py-16", props.sections.length > 0 ? "px-4 py-8" : "p-4")}>
+      {productView}
+    </section>
+  );
 
   return (
     <>
