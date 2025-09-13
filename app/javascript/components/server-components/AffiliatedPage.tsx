@@ -287,21 +287,21 @@ const AffiliatedPage = ({
       selectedTab="affiliated"
       title={isShowingGlobalAffiliates ? "Gumroad Affiliates" : undefined}
       ctaButton={
-        <>
-          <Search onSearch={handleSearch} value={state.query} />
-          {isShowingGlobalAffiliates ? (
-            <Button onClick={() => toggleOpen(false)}>
-              <Icon name="x-circle" />
-              Close
-            </Button>
-          ) : (
+        isShowingGlobalAffiliates ? (
+          <Button onClick={() => toggleOpen(false)}>
+            <Icon name="x-circle" />
+            Close
+          </Button>
+        ) : (
+          <>
+            {initialAffiliatedProducts.length > 0 && <Search onSearch={handleSearch} value={state.query} />}
             <WithTooltip position="bottom" tip={affiliatesDisabledReason}>
               <Button color="accent" disabled={affiliatesDisabledReason !== null} onClick={() => toggleOpen(true)}>
                 Gumroad affiliate
               </Button>
             </WithTooltip>
-          )}
-        </>
+          </>
+        )
       }
       archivedTabVisible={archivedTabVisible}
     >
