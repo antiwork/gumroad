@@ -413,6 +413,9 @@ form {
 [role="combobox"] {
   cursor: pointer;
 }
+#{$text-inputs} {
+  cursor: text !important;
+}
 
 textarea {
   resize: vertical;
