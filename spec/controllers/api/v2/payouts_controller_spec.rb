@@ -207,6 +207,15 @@ describe Api::V2::PayoutsController do
           expect(payouts.length).to be >= 1
         end
 
+        it "does not include upcoming payout when include_upcoming is false" do
+          @params.merge!(include_upcoming: "false")
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          expect(payouts).to be_all { |p| p["id"].present? }
+        end
+
         it "does not include upcoming payout when using pagination" do
           @params.merge!(page_key: "#{Time.current.to_fs(:usec)}-#{ObfuscateIds.encrypt_numeric(123)}")
 

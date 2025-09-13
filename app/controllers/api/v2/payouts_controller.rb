@@ -79,6 +79,6 @@ class Api::V2::PayoutsController < Api::V2::BaseController
     end
 
     def include_upcoming_payout?(end_date)
-      params[:page_key].blank? && current_resource_owner.next_payout_date && (end_date.nil? || end_date >= current_payout_end_date(current_resource_owner))
+      params[:page_key].blank? && params[:include_upcoming] != "false" && current_resource_owner.next_payout_date && (end_date.nil? || end_date >= current_payout_end_date(current_resource_owner))
     end
 end
