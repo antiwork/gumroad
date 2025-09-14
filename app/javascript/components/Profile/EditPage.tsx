@@ -17,6 +17,7 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -188,6 +189,7 @@ export const EditProfile = (props: Props) => {
   const reducer = React.useMemo(() => [{ ...props, sections: visibleSections }, dispatch] as const, [visibleSections]);
 
   const imageUploadSettings = useSectionImageUploadSettings();
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
     <SectionReducerContext.Provider value={reducer}>
@@ -248,14 +250,15 @@ export const EditProfile = (props: Props) => {
       <div
         style={{
           position: "fixed",
-          top: "var(--spacer-3)",
-          left: "var(--spacer-3)",
+          top: isDesktop ? "var(--spacer-3)" : "var(--spacer-5)",
+          left: isDesktop ? "var(--spacer-3)" : undefined,
+          right: isDesktop ? undefined : "var(--spacer-4)",
           zIndex: "var(--z-index-above-overlay)",
           padding: 0,
           border: "none",
         }}
       >
-        <WithTooltip tip="Edit profile" position="right">
+        <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"
             href={Routes.settings_profile_url({ host: appDomain })}
