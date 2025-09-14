@@ -166,7 +166,7 @@ module CheckoutHelpers
       if error.present?
         expect(page).to have_alert(text: error) if error != true
       else
-        expect(page).to have_text("Your purchase was successful!")
+        expect(page).to have_alert(text: "Your purchase was successful!")
         expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
 
         expect(page).to have_text("You bought this for #{gift[:email]}") if gift.present?
