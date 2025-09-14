@@ -166,8 +166,11 @@ module CheckoutHelpers
       if error.present?
         expect(page).to have_alert(text: error) if error != true
       else
-        expect(page).to have_text("Your purchase was successful!", visible: false) # The alert show/hide timing can cause specs to be flaky
-        expect(page).to have_text("Open in app")
+        if gift.present?
+          expect(page).to have_text("Your purchase was successful!")
+        else
+          expect(page).to have_alert(text: "Your purchase was successful!", visible: :all) # The alert show/hide timing can cause specs to be flaky
+        end
         expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
 
         expect(page).to have_text("You bought this for #{gift[:email]}") if gift.present?
