@@ -34,6 +34,11 @@ export const DateInput = ({
       defaultValue={formatDate(value)}
       min={min ? formatDate(min) : undefined}
       max={max ? formatDate(max) : undefined}
+      style={{
+        WebkitAppearance: "none",
+        MozAppearance: "textfield",
+        ...rest.style,
+      }}
       onBlur={(e) => {
         let parsed = parseISO(e.target.value);
         if (seller && withTime) parsed = fromZonedTime(parsed, seller.timeZone.name);
