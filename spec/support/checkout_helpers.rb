@@ -169,11 +169,11 @@ module CheckoutHelpers
         if gift.present? || product.is_in_preorder_state
           # Specific cases where we show the receipt instead of the product content
           expect(page).to have_text("Your purchase was successful!")
+          expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
         else
           # The alert show/hide timing can cause specs to be flaky
-          expect(page).to have_alert(text: "Your purchase was successful!", visible: :all)
+          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{logged_in_user&.email&.downcase || email&.downcase}", visible: :all)
         end
-        expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
 
         expect(page).to have_text("You bought this for #{gift[:email] || gift[:name]}") if gift&.dig(:email).present? || gift&.dig(:name).present?
 
