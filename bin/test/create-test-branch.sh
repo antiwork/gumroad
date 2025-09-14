@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO="${REPO:-antiwork/gumroad}"
 INTERACTIVE="${INTERACTIVE:-true}"
+PR_LIMIT="${PR_LIMIT:-25}"
 PR_NUMBERS=()
 
 RED='\033[0;31m'
@@ -93,7 +94,7 @@ check_prerequisites() {
 }
 
 get_external_prs() {
-  local prs=$(gh pr list --repo "$REPO" --state open --json number,title,headRefName,author,isCrossRepository)
+  local prs=$(gh pr list --repo "$REPO" --state open --limit "$PR_LIMIT" --json number,title,headRefName,author,isCrossRepository)
   echo "$prs" | jq -c '.[] | select(.isCrossRepository == true)' 2>/dev/null || echo "$prs" | jq -c '.[]'
 }
 
@@ -234,7 +235,7 @@ main() {
 case "${1:-}" in
   -h|--help)
     echo "Usage: $0 [PR_NUMBERS...]"
-    echo "Environment: REPO (default: antiwork/gumroad), INTERACTIVE (default: true)"
+    echo "Environment: REPO (default: antiwork/gumroad), INTERACTIVE (default: true), PR_LIMIT (default: 25)"
     exit 0
     ;;
   *)
