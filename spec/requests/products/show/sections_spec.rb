@@ -7,7 +7,7 @@ describe "Profile settings on product pages", type: :system, js: true do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
 
-  it "renders sections correctly when the user is logged out" do
+  it "renders sections correctly when the user is logged out", :elasticsearch_wait_for_refresh do
     products = create_list(:product, 3, user: seller)
     create(:seller_profile_products_section, seller:)
     section1 = create(:seller_profile_products_section, seller:, product:, header: "Section 1", shown_products: products.map(&:id))
@@ -54,7 +54,7 @@ describe "Profile settings on product pages", type: :system, js: true do
     end
   end
 
-  it "allows editing sections when the user is logged in" do
+  it "allows editing sections when the user is logged in", :elasticsearch_wait_for_refresh do
     login_as seller
     product2 = create(:product, user: seller, name: "Product 2")
     visit short_link_path(product)
