@@ -69,7 +69,7 @@ export default {
         gray: "#f4f4f0",
         "dark-gray": "#242423",
 
-        body: "rgb(var(--body-bg))",
+        body: "var(--body-bg)",
         background: "rgb(var(--filled))",
         foreground: "rgb(var(--color))",
         border: "rgb(var(--color) / var(--border-alpha))",
