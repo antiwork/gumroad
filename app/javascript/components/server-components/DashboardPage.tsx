@@ -354,7 +354,7 @@ export const DashboardPage = ({
                   />
                 </a>
               </div>
-              <div className="override grid w-full grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
+              <div className="override grid w-full grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 min-[2000px]:grid-cols-8">
                 {GETTING_STARTED_ITEMS.map((item) => (
                   <GettingStartedItem
                     key={item.name}

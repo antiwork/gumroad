@@ -478,11 +478,7 @@ const ProductTypeSelector = ({
   onChange: (type: ProductNativeType) => void;
   disabled?: boolean;
 }) => (
-  <div
-    className="radio-buttons"
-    role="radiogroup"
-    style={{ gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr)" }}
-  >
+  <div className="radio-buttons !grid-cols-1 sm:!grid-cols-2 md:!grid-cols-3 2xl:!grid-cols-5" role="radiogroup">
     {types.map((type) => {
       const typeButton = (
         <Button

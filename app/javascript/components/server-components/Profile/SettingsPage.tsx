@@ -164,7 +164,7 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
             </header>
             <fieldset>
               <legend>Font</legend>
-              <div className="radio-buttons" role="radiogroup">
+              <div className="radio-buttons !grid-cols-1 sm:!grid-cols-2 md:!grid-cols-3" role="radiogroup">
                 {(["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"] as const).map(
                   (font) => (
                     <Button
