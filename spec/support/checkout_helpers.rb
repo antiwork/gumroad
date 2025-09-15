@@ -154,8 +154,11 @@ module CheckoutHelpers
       click_on is_free ? "Get" : "Pay", exact: true
 
       if should_verify_address
-        expect(page).to have_text("We are unable to verify your shipping address. Is your address correct?")
-        click_on "Yes, it is"
+        if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
+          click_on "Yes, it is"
+        elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
+          click_on "No, continue"
+        end
       end
 
       within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil?

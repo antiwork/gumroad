@@ -59,7 +59,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </section>
         ) : null}
       </header>
-      <main className="custom-sections">
+      <main className={cx("custom-sections", loggedInUser?.id === creatorProfile.external_id && "has-user")}>
         {children}
         <footer>
           Powered by&ensp;

@@ -73,8 +73,9 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
           }}
           onMouseOut={() => setDragStart(null)}
         >
-          {products.map((product) => (
-            <HorizontalCard key={product.id} product={product} big />
+          {products.map((product, idx) => (
+            // Only the first 3 cards are visible, so we can set eager loading for them
+            <HorizontalCard key={product.id} product={product} big eager={idx < 3} />
           ))}
         </div>
       </div>

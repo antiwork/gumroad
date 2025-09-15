@@ -348,8 +348,9 @@ export const Checkout = ({
                 <section className="paragraphs">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
                   <div className="product-card-grid narrow">
-                    {recommendedProducts.map((product) => (
-                      <Card key={product.id} product={product} />
+                    {recommendedProducts.map((product, idx) => (
+                      // All of this grid is off-screen. so we just eager load the first image
+                      <Card key={product.id} product={product} eager={idx === 0} />
                     ))}
                   </div>
                 </section>
