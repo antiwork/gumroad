@@ -37,6 +37,7 @@
     "abortcontroller-polyfill": "^1.7.5",
     "autolinker": "^4.0.0",
     "braintree-web": "^3.88.6",
+    "class-variance-authority": "^0.7.1",
     "classnames": "^2.3.2",
     "clipboard": "^2.0.11",
     "clsx": "^2.1.1",
