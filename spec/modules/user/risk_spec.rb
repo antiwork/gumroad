@@ -18,10 +18,6 @@ describe User::Risk do
     let(:user) { create(:user) }
     let(:collection) { MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME] }
 
-    after do
-      collection.delete_many("user_id" => user.id)
-    end
-
     it "writes suspension data to mongo collection" do
       freeze_time do
         user.log_suspension_time_to_mongo

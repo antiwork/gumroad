@@ -1758,10 +1758,6 @@ describe User, :vcr do
     describe "logging suspension time to mongo", :sidekiq_inline do
       let(:collection) { MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME] }
 
-      after do
-        collection.delete_many("user_id" => @user.id)
-      end
-
       shared_examples "logs suspension data to mongo" do |suspension_type|
         it "logs suspension data to mongo when suspended for #{suspension_type}" do
           freeze_time do
