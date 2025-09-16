@@ -41,7 +41,9 @@
             </div>
           </td>
           <td data-label="By">
-            <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>
+            <%= copy_to_clipboard(purchase.email) do %>
+              <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>
+            <% end %>
             <small>
               <%= format_datetime_with_relative_tooltip(purchase.created_at) %>
             </small>
