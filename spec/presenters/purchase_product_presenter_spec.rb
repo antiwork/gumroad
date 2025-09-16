@@ -140,8 +140,9 @@ describe PurchaseProductPresenter, :versioning do
       context "when the purchase has a refund policy" do
         let!(:refund_policy) do
           purchase.create_purchase_refund_policy!(
-            title: "Refund policy",
-            fine_print: "This is the fine print."
+            title: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            fine_print: "This is the fine print.",
+            max_refund_period_in_days: 30
           )
         end
 
