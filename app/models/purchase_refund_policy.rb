@@ -17,6 +17,9 @@ class PurchaseRefundPolicy < ApplicationRecord
   end
 
   def determine_max_refund_period_in_days
+    previous_value = determine_max_refund_period_in_days_from_previous_policy
+    return previous_value if previous_value.present?
+
     return 0 if title.match?(/no refunds|final|no returns/i)
 
     exact_match = find_exact_match_by_title
@@ -70,6 +73,17 @@ class PurchaseRefundPolicy < ApplicationRecord
     end
 
     prompt
+  end
+
+  # Avoid calling AI if possible by checking the product refund policy, and previous purchase refund policies
+  def determine_max_refund_period_in_days_from_previous_policy
+    product_refund_policy = purchase.link.product_refund_policy
+    return product_refund_policy.max_refund_period_in_days if product_refund_policy&.title == title
+
+    other_purchase_refund_policy = PurchaseRefundPolicy.joins(:purchase).where(purchases: { link_id: purchase.link_id }).where.not(id: id).where(title:).first
+    return other_purchase_refund_policy.max_refund_period_in_days if other_purchase_refund_policy.present?
+
+    nil
   end
 
   private

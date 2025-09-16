@@ -1755,6 +1755,32 @@ describe User, :vcr do
       end
     end
 
+    describe "logging suspension time to mongo", :sidekiq_inline do
+      let(:collection) { MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME] }
+
+      shared_examples "logs suspension data to mongo" do |suspension_type|
+        it "logs suspension data to mongo when suspended for #{suspension_type}" do
+          freeze_time do
+            case suspension_type
+            when "fraud"
+              @user.flag_for_fraud!(author_id: @admin_user.id)
+              @user.suspend_for_fraud!(author_id: @admin_user.id)
+            when "tos_violation"
+              @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
+              @user.suspend_for_tos_violation!(author_id: @admin_user.id)
+            end
+
+            record = collection.find("user_id" => @user.id).first
+            expect(record).to be_present
+            expect(record["user_id"]).to eq(@user.id)
+            expect(record["suspended_at"]).to eq(Time.current.to_s)
+          end
+        end
+      end
+
+      include_examples "logs suspension data to mongo", "fraud"
+      include_examples "logs suspension data to mongo", "tos_violation"
+    end
     it "adds a comment when flagging for TOS violation" do
       expect do
         @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)

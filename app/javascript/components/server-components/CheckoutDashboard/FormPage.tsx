@@ -99,269 +99,270 @@ const FormPage = ({
   });
 
   return (
-    <>
-      <Layout
-        currentPage="form"
-        pages={pages}
-        actions={
-          <Button
-            color="accent"
-            onClick={handleSave}
-            disabled={!loggedInUser?.policies.checkout_form.update || isSaving}
-          >
-            {isSaving ? "Saving changes..." : "Save changes"}
-          </Button>
-        }
-        hasAside
-      >
-        <section className="paragraphs">
-          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>Custom fields</h2>
-            <a href="/help/article/101-designing-your-product-page" target="_blank" rel="noreferrer">
-              Learn more
-            </a>
-          </header>
-          You can add custom fields in your checkout form to get more information from your customers, such as their
-          name or more specific instructions.
-          {customFields.length > 0 ? (
-            <div className="stack">
-              {customFields.map((field, i) => (
-                <div key={field.key}>
-                  <div className="paragraphs">
-                    <fieldset>
-                      <legend>
-                        <label htmlFor={`${uid}-${field.key}-type`}>Type of field</label>
-                      </legend>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
-                        <TypeSafeOptionSelect
-                          id={`${uid}-${field.key}-type`}
-                          value={field.type}
-                          onChange={(type) => updateCustomField(i, { type })}
-                          options={[
-                            { id: "text", label: "Text" },
-                            { id: "checkbox", label: "Checkbox" },
-                            { id: "terms", label: "Terms" },
-                          ]}
-                        />
-                        <Button
-                          onClick={() => setCustomFields(customFields.filter((_, index) => index !== i))}
-                          color="danger"
-                          outline
-                          aria-label="Remove"
-                        >
-                          <Icon name="trash2" />
-                        </Button>
-                      </div>
-                      {field.type !== "terms" ? (
-                        <label>
-                          <input
-                            type="checkbox"
-                            role="switch"
-                            checked={field.required}
-                            onChange={(e) => updateCustomField(i, { required: e.target.checked })}
-                          />
-                          Required
-                        </label>
-                      ) : null}
-                    </fieldset>
-                    <fieldset className={cx({ danger: errors.get(field.key)?.has("name") })}>
-                      <legend>
-                        <label htmlFor={`${uid}-${field.key}-name`}>
-                          {field.type === "terms" ? "Terms URL" : "Label"}
-                        </label>
-                      </legend>
-                      <input
-                        id={`${uid}-${field.key}-name`}
-                        value={field.name}
-                        aria-invalid={errors.get(field.key)?.has("name") ?? false}
-                        onChange={(e) => updateCustomField(i, { name: e.target.value })}
-                      />
-                    </fieldset>
-                    <fieldset className={cx({ danger: errors.get(field.key)?.has("products") })}>
-                      <legend>
-                        <label htmlFor={`${uid}-${field.key}-products`}>Products</label>
-                      </legend>
-                      <Select
-                        inputId={`${uid}-${field.key}-products`}
-                        instanceId={`${uid}-${field.key}-products`}
-                        options={products
-                          .filter((product) => !product.archived)
-                          .map((product) => ({ id: product.id, label: product.name }))}
-                        value={products
-                          .filter((product) => field.global || field.products.includes(product.id))
-                          .map((product) => ({ id: product.id, label: product.name }))}
-                        aria-invalid={errors.get(field.key)?.has("products") ?? false}
-                        isMulti
-                        isClearable
-                        onChange={(items) =>
-                          updateCustomField(i, { global: false, products: items.map(({ id }) => id) })
-                        }
-                      />
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={field.global}
-                          onChange={(e) =>
-                            updateCustomField(
-                              i,
-                              e.target.checked
-                                ? { global: true, products: products.map(({ id }) => id) }
-                                : { global: false },
-                            )
-                          }
-                        />{" "}
-                        All products
-                      </label>
-                      {field.global || field.products.length > 1 ? (
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={field.collect_per_product}
-                            onChange={(e) => updateCustomField(i, { collect_per_product: e.target.checked })}
-                          />{" "}
-                          Collect separately for each product on checkout
-                        </label>
-                      ) : null}
-                    </fieldset>
-                  </div>
-                </div>
-              ))}
+    <Layout
+      currentPage="form"
+      pages={pages}
+      actions={
+        <Button color="accent" onClick={handleSave} disabled={!loggedInUser?.policies.checkout_form.update || isSaving}>
+          {isSaving ? "Saving changes..." : "Save changes"}
+        </Button>
+      }
+      hasAside
+    >
+      <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+        <div>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2>Custom fields</h2>
+              <a href="/help/article/101-designing-your-product-page" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </header>
+            <div>
+              You can add custom fields in your checkout form to get more information from your customers, such as their
+              name or more specific instructions.
             </div>
-          ) : null}
-          <div>
-            <Button
-              color="primary"
-              onClick={() =>
-                setCustomFields([
-                  ...customFields,
-                  {
-                    id: null,
-                    products: [],
-                    name: "",
-                    required: false,
-                    type: "text",
-                    global: false,
-                    collect_per_product: false,
-                    key: key(),
-                  },
-                ])
-              }
-            >
-              <Icon name="plus" />
-              Add custom field
-            </Button>
-          </div>
-        </section>
-        <section className="paragraphs">
-          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>Discounts</h2>
-            <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
-              Learn more
-            </a>
-          </header>
-          <fieldset>
-            <legend>Add discount code field to purchase form</legend>
-            <label>
-              <input
-                type="radio"
-                checked={displayOfferCodeField}
-                onChange={(evt) => setDisplayOfferCodeField(evt.target.checked)}
-                disabled={!loggedInUser?.policies.checkout_form.update}
-              />
-              Only if a discount is available
-            </label>
-            <label>
-              <input
-                type="radio"
-                checked={!displayOfferCodeField}
-                onChange={(evt) => setDisplayOfferCodeField(!evt.target.checked)}
-                disabled={!loggedInUser?.policies.checkout_form.update}
-              />
-              Never
-            </label>
-          </fieldset>
-        </section>
-        <section className="paragraphs">
-          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>More like this recommendations</h2>
-            <a href="/help/article/334-more-like-this" target="_blank" rel="noreferrer">
-              Learn more
-            </a>
-          </header>
-          <fieldset>
-            <legend>Product recommendations during checkout</legend>
-            <label>
-              <input
-                type="radio"
-                checked={recommendationType === "no_recommendations"}
-                onChange={(evt) => {
-                  if (evt.target.checked) setRecommendationType("no_recommendations");
-                }}
-              />
-              Don't recommend any products
-            </label>
-            <label>
-              <input
-                type="radio"
-                checked={recommendationType === "own_products"}
-                onChange={(evt) => {
-                  if (evt.target.checked) setRecommendationType("own_products");
-                }}
-              />
-              Recommend my products
-            </label>
-            <label>
-              <input
-                type="radio"
-                checked={recommendationType === "directly_affiliated_products"}
-                onChange={(evt) => {
-                  if (evt.target.checked) setRecommendationType("directly_affiliated_products");
-                }}
-              />
-              <span>Recommend my products and products I'm an affiliate of</span>
-            </label>
-            <label>
-              <input
-                type="radio"
-                checked={recommendationType === "gumroad_affiliates_products"}
-                onChange={(evt) => {
-                  if (evt.target.checked) setRecommendationType("gumroad_affiliates_products");
-                }}
-              />
-              <span>
-                Recommend all products and earn a commission with{" "}
-                <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
-                  Gumroad Affiliates
-                </a>
-              </span>
-            </label>
-          </fieldset>
-        </section>
-        <section className="paragraphs">
-          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2>Tipping</h2>
-            <a href="/help/article/345-tipping" target="_blank" rel="noreferrer">
-              Learn more
-            </a>
-          </header>
-          <Toggle value={tippingEnabled} onChange={setTippingEnabled}>
-            Allow customers to add tips to their orders
-          </Toggle>
-        </section>
-      </Layout>
-      <CheckoutPreview
-        cartItem={{
-          ...cartItem,
-          product: {
-            ...cartItem.product,
-            has_offer_codes: displayOfferCodeField,
-            custom_fields: customFields.map(({ key, ...field }) => ({ ...field, id: key })),
-            has_tipping_enabled: tippingEnabled,
-          },
-        }}
-        recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
-      />
-    </>
+            {customFields.length > 0 ? (
+              <div className="stack">
+                {customFields.map((field, i) => (
+                  <div key={field.key}>
+                    <div className="paragraphs">
+                      <fieldset>
+                        <legend>
+                          <label htmlFor={`${uid}-${field.key}-type`}>Type of field</label>
+                        </legend>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
+                          <TypeSafeOptionSelect
+                            id={`${uid}-${field.key}-type`}
+                            value={field.type}
+                            onChange={(type) => updateCustomField(i, { type })}
+                            options={[
+                              { id: "text", label: "Text" },
+                              { id: "checkbox", label: "Checkbox" },
+                              { id: "terms", label: "Terms" },
+                            ]}
+                          />
+                          <Button
+                            onClick={() => setCustomFields(customFields.filter((_, index) => index !== i))}
+                            color="danger"
+                            outline
+                            aria-label="Remove"
+                          >
+                            <Icon name="trash2" />
+                          </Button>
+                        </div>
+                        {field.type !== "terms" ? (
+                          <label>
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              checked={field.required}
+                              onChange={(e) => updateCustomField(i, { required: e.target.checked })}
+                            />
+                            Required
+                          </label>
+                        ) : null}
+                      </fieldset>
+                      <fieldset className={cx({ danger: errors.get(field.key)?.has("name") })}>
+                        <legend>
+                          <label htmlFor={`${uid}-${field.key}-name`}>
+                            {field.type === "terms" ? "Terms URL" : "Label"}
+                          </label>
+                        </legend>
+                        <input
+                          id={`${uid}-${field.key}-name`}
+                          value={field.name}
+                          aria-invalid={errors.get(field.key)?.has("name") ?? false}
+                          onChange={(e) => updateCustomField(i, { name: e.target.value })}
+                        />
+                      </fieldset>
+                      <fieldset className={cx({ danger: errors.get(field.key)?.has("products") })}>
+                        <legend>
+                          <label htmlFor={`${uid}-${field.key}-products`}>Products</label>
+                        </legend>
+                        <Select
+                          inputId={`${uid}-${field.key}-products`}
+                          instanceId={`${uid}-${field.key}-products`}
+                          options={products
+                            .filter((product) => !product.archived)
+                            .map((product) => ({ id: product.id, label: product.name }))}
+                          value={products
+                            .filter((product) => field.global || field.products.includes(product.id))
+                            .map((product) => ({ id: product.id, label: product.name }))}
+                          aria-invalid={errors.get(field.key)?.has("products") ?? false}
+                          isMulti
+                          isClearable
+                          onChange={(items) =>
+                            updateCustomField(i, { global: false, products: items.map(({ id }) => id) })
+                          }
+                        />
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={field.global}
+                            onChange={(e) =>
+                              updateCustomField(
+                                i,
+                                e.target.checked
+                                  ? { global: true, products: products.map(({ id }) => id) }
+                                  : { global: false },
+                              )
+                            }
+                          />{" "}
+                          All products
+                        </label>
+                        {field.global || field.products.length > 1 ? (
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={field.collect_per_product}
+                              onChange={(e) => updateCustomField(i, { collect_per_product: e.target.checked })}
+                            />{" "}
+                            Collect separately for each product on checkout
+                          </label>
+                        ) : null}
+                      </fieldset>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div>
+              <Button
+                color="primary"
+                onClick={() =>
+                  setCustomFields([
+                    ...customFields,
+                    {
+                      id: null,
+                      products: [],
+                      name: "",
+                      required: false,
+                      type: "text",
+                      global: false,
+                      collect_per_product: false,
+                      key: key(),
+                    },
+                  ])
+                }
+              >
+                <Icon name="plus" />
+                Add custom field
+              </Button>
+            </div>
+          </section>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2>Discounts</h2>
+              <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </header>
+            <fieldset>
+              <legend>Add discount code field to purchase form</legend>
+              <label>
+                <input
+                  type="radio"
+                  checked={displayOfferCodeField}
+                  onChange={(evt) => setDisplayOfferCodeField(evt.target.checked)}
+                  disabled={!loggedInUser?.policies.checkout_form.update}
+                />
+                Only if a discount is available
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={!displayOfferCodeField}
+                  onChange={(evt) => setDisplayOfferCodeField(!evt.target.checked)}
+                  disabled={!loggedInUser?.policies.checkout_form.update}
+                />
+                Never
+              </label>
+            </fieldset>
+          </section>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2>More like this recommendations</h2>
+              <a href="/help/article/334-more-like-this" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </header>
+            <fieldset>
+              <legend>Product recommendations during checkout</legend>
+              <label>
+                <input
+                  type="radio"
+                  checked={recommendationType === "no_recommendations"}
+                  onChange={(evt) => {
+                    if (evt.target.checked) setRecommendationType("no_recommendations");
+                  }}
+                />
+                Don't recommend any products
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={recommendationType === "own_products"}
+                  onChange={(evt) => {
+                    if (evt.target.checked) setRecommendationType("own_products");
+                  }}
+                />
+                Recommend my products
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={recommendationType === "directly_affiliated_products"}
+                  onChange={(evt) => {
+                    if (evt.target.checked) setRecommendationType("directly_affiliated_products");
+                  }}
+                />
+                <span>Recommend my products and products I'm an affiliate of</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  checked={recommendationType === "gumroad_affiliates_products"}
+                  onChange={(evt) => {
+                    if (evt.target.checked) setRecommendationType("gumroad_affiliates_products");
+                  }}
+                />
+                <span>
+                  Recommend all products and earn a commission with{" "}
+                  <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
+                    Gumroad Affiliates
+                  </a>
+                </span>
+              </label>
+            </fieldset>
+          </section>
+          <section className="space-y-4 border-b border-border p-4 md:p-8">
+            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2>Tipping</h2>
+              <a href="/help/article/345-tipping" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </header>
+            <Toggle value={tippingEnabled} onChange={setTippingEnabled}>
+              Allow customers to add tips to their orders
+            </Toggle>
+          </section>
+        </div>
+        <CheckoutPreview
+          className="hidden lg:block"
+          cartItem={{
+            ...cartItem,
+            product: {
+              ...cartItem.product,
+              has_offer_codes: displayOfferCodeField,
+              custom_fields: customFields.map(({ key, ...field }) => ({ ...field, id: key })),
+              has_tipping_enabled: tippingEnabled,
+            },
+          }}
+          recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
+        />
+      </div>
+    </Layout>
   );
 };
 

@@ -513,6 +513,11 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Important: Upcoming refund policy changes effective January 1, 2025"
   end
 
+  def paypal_suspension_notification(user_id)
+    @seller = User.find(user_id)
+    @subject = "Important: Update Your Payout Method on Gumroad"
+  end
+
   def ping_endpoint_failure(user_id, ping_url, response_code)
     @seller = User.find(user_id)
     @ping_url = redact_ping_url(ping_url)

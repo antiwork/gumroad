@@ -113,6 +113,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
       });
       showAlert("Successfully posted your comment", "success");
       upsertComment(comment);
+      setDraft(null);
     } catch (e) {
       assertResponseError(e);
       showAlert(`An error occurred while posting your comment - ${e.message}`, "error");
@@ -126,7 +127,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
   const nestedComments = React.useMemo(() => nestComments(data.comments), [data.comments]);
 
   return (
-    <section className="comments comments-section" style={{ display: "grid", gap: "var(--spacer-6)" }}>
+    <section className="comments comments-section grid gap-8 border-b border-border p-4 lg:py-12">
       <h2>
         {data.count} {data.count === 1 ? "comment" : "comments"}
       </h2>

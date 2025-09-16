@@ -654,3 +654,23 @@ $accent-color: map-get($colors, "pink"); // [1]
     }
   }
 }
+
+.receipt {
+  .info-row {
+    margin-bottom: spacer(2);
+    overflow: hidden;
+
+    &.with-top-margin {
+      margin-top: spacer(1);
+    }
+  }
+
+  .info-label {
+    font-weight: bold;
+    float: left;
+  }
+
+  .info-value {
+    float: right;
+  }
+}

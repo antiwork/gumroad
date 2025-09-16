@@ -10,7 +10,7 @@ describe Admin::Users::PayoutsController do
 
   before do
     @admin_user = create(:admin_user)
-    @admin_user_with_payout_privileges = create(:admin_user, has_payout_privilege: true)
+    @admin_user_with_payout_privileges = create(:admin_user)
     @params = {
       payout_period_end_date: payout_period_end_date.to_s,
       passphrase: "1234"

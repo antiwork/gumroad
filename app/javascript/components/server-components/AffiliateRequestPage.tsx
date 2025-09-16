@@ -12,6 +12,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout } from "$app/components/Profile/Layout";
 import { showAlert } from "$app/components/server-components/Alert";
+import { PageHeader } from "$app/components/ui/PageHeader";
 
 type FormStatus =
   | { type: "initial" }
@@ -52,10 +53,8 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
 
   return (
     <Layout creatorProfile={creator_profile}>
-      <header>
-        <h1>Become an affiliate for {creator_profile.name}</h1>
-      </header>
-      <form>
+      <PageHeader title={`Become an affiliate for ${creator_profile.name}`} />
+      <form className="border-b border-border pt-8">
         <section>
           <header>
             <div className="paragraphs">
