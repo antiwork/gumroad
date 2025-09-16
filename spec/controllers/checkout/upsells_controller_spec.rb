@@ -389,20 +389,27 @@ describe Checkout::UpsellsController do
     end
   end
 
-  describe "PUT set_active_status" do
-    it "toggles the is_active field for an upsell" do
+  describe "POST publish and unpublish" do
+    it "sets the is_active field to true for an upsell when publishing" do
       upsell = seller.upsells.first
+      upsell.update!(is_active: false)
+      expect(upsell.is_active).to eq(false)
+      post :publish, params: { id: upsell.external_id }, as: :json
+      upsell.reload
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
       expect(upsell.is_active).to eq(true)
-      put :set_active_status, params: { id: upsell.external_id, is_active: false }, as: :json
+    end
+
+    it "sets the is_active field to false for an upsell when unpublishing" do
+      upsell = seller.upsells.first
+      upsell.update!(is_active: true)
+      expect(upsell.is_active).to eq(true)
+      post :unpublish, params: { id: upsell.external_id }, as: :json
       upsell.reload
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)
       expect(upsell.is_active).to eq(false)
-      post :set_active_status, params: { id: upsell.external_id, is_active: true }, as: :json
-      upsell.reload
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to eq(true)
-      expect(upsell.is_active).to eq(true)
     end
   end
 end

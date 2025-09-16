@@ -123,15 +123,25 @@ class Checkout::UpsellsController < Sellers::BaseController
     }
   end
 
-  def set_active_status
+  def publish
     @upsell = current_seller.upsells.find_by_external_id!(params[:id])
     authorize [:checkout, @upsell]
 
-    @upsell.is_active = params[:is_active]
-
-    if @upsell.save
+    if @upsell.update(is_active: true)
       pagination, upsells = fetch_upsells
-      render json: { success: true, upsells: upsells, pagination: pagination }
+      render json: { success: true, upsells:, pagination: }
+    else
+      render json: { success: false, error: @upsell.errors.full_messages.first }
+    end
+  end
+
+  def unpublish
+    @upsell = current_seller.upsells.find_by_external_id!(params[:id])
+    authorize [:checkout, @upsell]
+
+    if @upsell.update(is_active: false)
+      pagination, upsells = fetch_upsells
+      render json: { success: true, upsells:, pagination: }
     else
       render json: { success: false, error: @upsell.errors.full_messages.first }
     end

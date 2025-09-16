@@ -8,7 +8,7 @@ import {
   getCartItem,
   getPagedUpsells,
   getStatistics,
-  toggleUpsell,
+  updateUpsellActiveStatus,
   updateUpsell,
   UpsellPayload,
   UpsellStatistics,
@@ -202,7 +202,7 @@ const UpsellsPage = (props: {
     if (!selectedUpsellId) return;
     try {
       setIsLoading(true);
-      setState(await toggleUpsell(selectedUpsellId, { isActive: active }));
+      setState(await updateUpsellActiveStatus(selectedUpsellId, { isActive: active }));
       setView("list");
       setSelectedUpsellId(null);
       showAlert(`Successfully ${active ? "enabled" : "disabled"} upsell!`, "success");

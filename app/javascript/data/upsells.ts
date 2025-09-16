@@ -112,14 +112,11 @@ export const updateUpsell = async (
   return responseData;
 };
 
-export const toggleUpsell = async (id: string, { isActive }: UpsellTogglePayload) => {
+export const updateUpsellActiveStatus = async (id: string, { isActive }: UpsellTogglePayload) => {
   const response = await request({
-    method: "PUT",
+    method: "POST",
     accept: "json",
-    url: Routes.set_active_status_checkout_upsell_path(id),
-    data: {
-      is_active: isActive,
-    },
+    url: isActive ? Routes.publish_checkout_upsell_path(id) : Routes.unpublish_checkout_upsell_path(id),
   });
   const responseData = cast<
     { success: true; upsells: Upsell[]; pagination: PaginationProps } | { success: false; error: string }

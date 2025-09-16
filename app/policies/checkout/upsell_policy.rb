@@ -29,7 +29,11 @@ class Checkout::UpsellPolicy < ApplicationPolicy
     create? && record.seller == seller
   end
 
-  def set_active_status?
+  def publish?
+    update?
+  end
+
+  def unpublish?
     update?
   end
 
