@@ -322,7 +322,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
       reviewsPageEnabled={reviews_page_enabled}
       followingWishlistsEnabled={following_wishlists_enabled}
     >
-      <section className="products-section__container">
+      <section className="space-y-4 p-4 md:p-8">
         {state.results.length === 0 || showArchivedNotice ? (
           <div className="placeholder">
             {state.results.length === 0 ? (

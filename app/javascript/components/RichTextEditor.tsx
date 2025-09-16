@@ -302,10 +302,12 @@ export const RichTextEditorToolbar = ({
   editor,
   custom,
   productId,
+  className,
 }: {
   custom?: React.ReactNode;
   editor: Editor;
   productId?: string;
+  className?: string;
 }) => {
   const showTooltipState = React.useState(false);
   const [_, setShowTooltip] = showTooltipState;
@@ -375,7 +377,11 @@ export const RichTextEditorToolbar = ({
 
   return (
     <ToolbarTooltipContext.Provider value={showTooltipState}>
-      <div role="toolbar" className="rich-text-editor-toolbar" onMouseLeave={() => setShowTooltip(false)}>
+      <div
+        role="toolbar"
+        className={cx("rich-text-editor-toolbar", className)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
         <Popover
           aria-label="Text formats"
           trigger={

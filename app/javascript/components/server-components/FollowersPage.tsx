@@ -14,6 +14,8 @@ import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -31,31 +33,29 @@ const Layout = ({
   const loggedInUser = useLoggedInUser();
 
   return (
-    <main>
-      <header>
-        <h1>{title}</h1>
-        {actions ? <div className="actions">{actions}</div> : null}
-        <div role="tablist">
-          <a href={`${Routes.emails_path()}/published`} role="tab">
+    <div>
+      <PageHeader title={title} actions={actions}>
+        <Tabs>
+          <Tab href={`${Routes.emails_path()}/published`} isSelected={false}>
             Published
-          </a>
+          </Tab>
           {loggedInUser?.policies.installment.create ? (
             <>
-              <a href={`${Routes.emails_path()}/scheduled`} role="tab">
+              <Tab href={`${Routes.emails_path()}/scheduled`} isSelected={false}>
                 Scheduled
-              </a>
-              <a href={`${Routes.emails_path()}/drafts`} role="tab">
+              </Tab>
+              <Tab href={`${Routes.emails_path()}/drafts`} isSelected={false}>
                 Drafts
-              </a>
+              </Tab>
             </>
           ) : null}
-          <a href={Routes.followers_path()} role="tab" aria-selected="true">
+          <Tab href={Routes.followers_path()} isSelected>
             Subscribers
-          </a>
-        </div>
-      </header>
+          </Tab>
+        </Tabs>
+      </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };
 
@@ -170,7 +170,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
         </>
       }
     >
-      <div>
+      <div className="space-y-4 p-4 md:p-8">
         {loading ? (
           <div className="flex justify-center">
             <Progress width="5rem" />

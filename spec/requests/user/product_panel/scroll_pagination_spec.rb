@@ -66,7 +66,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(@c)
       expect(page).to_not have_product_card(text: "product 7")
 
-      find("main").scroll_to :bottom
+      first("main").scroll_to :bottom
       wait_for_ajax
 
       expect(page).to have_product_card(count: 18)
@@ -75,7 +75,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(text: "product 8")
       expect(page).to_not have_product_card(text: "product 13")
 
-      find("main").scroll_to :bottom
+      first("main").scroll_to :bottom
       wait_for_ajax
 
       expect(page).to have_product_card(count: 27)
@@ -84,7 +84,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(text: "product 14")
       expect(page).to_not have_product_card(text: "product 20")
 
-      find("main").scroll_to :bottom
+      first("main").scroll_to :bottom
       wait_for_ajax
 
       expect(page).to have_product_card(count: 36)
@@ -94,7 +94,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to_not have_product_card(text: "product 27")
       expect(page).to have_product_card(count: 36)
 
-      find("main").scroll_to :bottom
+      first("main").scroll_to :bottom
       wait_for_ajax
 
       expect(page).to have_product_card(count: 38)
@@ -103,7 +103,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(text: "product 28")
       expect(page).to have_product_card(count: 38)
 
-      find("main").scroll_to :bottom
+      first("main").scroll_to :bottom
       wait_for_ajax
 
       expect(page).to have_product_card(count: 38)

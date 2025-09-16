@@ -54,14 +54,8 @@ export const LoginPage = ({
 
   return (
     <Layout
-      header={
-        <>
-          <div className="actions">
-            <a href={Routes.signup_path({ next })}>Sign up</a>
-          </div>
-          <h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>
-        </>
-      }
+      header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
+      headerActions={<a href={Routes.signup_path({ next })}>Sign up</a>}
     >
       {showForgotPassword ? (
         <ForgotPasswordForm onClose={() => setShowForgotPassword(false)} />
