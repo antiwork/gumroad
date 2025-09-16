@@ -22,11 +22,11 @@ export const Layout = ({
         <PageHeader
           title={<a href={`${scheme}://${rootDomain}`} className="logo-full" aria-label="Gumroad" />}
           actions={headerActions}
-          className="px-16"
+          className="p-8 sm:p-16"
         >
           {header}
         </PageHeader>
-        <div className="p-16">{children}</div>
+        <div className="p-8 sm:p-16">{children}</div>
       </div>
       <aside>
         <img src={background} />

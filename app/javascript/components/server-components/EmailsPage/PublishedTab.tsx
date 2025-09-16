@@ -195,7 +195,7 @@ export const PublishedTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <aside>
+              <aside className="!mt-0">
                 <header>
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />

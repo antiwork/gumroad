@@ -316,6 +316,7 @@ export const DashboardPage = ({
       <PageHeader
         title="Dashboard"
         actions={Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
+        className="border-b-0 sm:border-b"
       />
       {stripe_verification_message ? (
         <div role="alert" className="warning">

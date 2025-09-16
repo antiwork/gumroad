@@ -28,13 +28,13 @@ const PayPalEmailSection = ({
 }) => {
   const uid = React.useId();
   return (
-    <section className="!p-4 md:!p-8" style={{ display: "grid", gap: "var(--spacer-6)" }}>
+    <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
       {showPayPalPayoutsFeeNote ? (
         <div className="info" role="status">
           PayPal payouts are subject to a 2% processing fee.
         </div>
       ) : null}
-      <div>{feeInfoText}</div>
+      <div className="whitespace-pre-line">{feeInfoText}</div>
       <div>
         {countrySupportsNativePayouts && !isFormDisabled ? (
           <button className="link" onClick={() => updatePayoutMethod("bank")}>
