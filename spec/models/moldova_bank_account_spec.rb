@@ -36,9 +36,13 @@ describe MoldovaBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows only 11 characters in the correct format" do
+    it "allows only 8-11 characters in the correct format" do
       expect(build(:moldova_bank_account, bank_code: "AAAAMDMDXXX")).to be_valid
       expect(build(:moldova_bank_account, bank_code: "BBBBMDMDYYY")).to be_valid
+      expect(build(:moldova_bank_account, bank_code: "AGRNMD2XZZZ")).to be_valid
+      expect(build(:moldova_bank_account, bank_code: "AGRNMD2ZZ")).not_to be_valid
+      expect(build(:moldova_bank_account, bank_code: "AGRNMM2XZZZ")).not_to be_valid
+      expect(build(:moldova_bank_account, bank_code: "AGRNMD2XZZZZ")).not_to be_valid
       expect(build(:moldova_bank_account, bank_code: "AAAMDMDXXX")).not_to be_valid
       expect(build(:moldova_bank_account, bank_code: "AAAAMDMDXXXX")).not_to be_valid
     end

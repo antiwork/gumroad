@@ -1,6 +1,6 @@
 services:
   db_test:
-    image: mysql:8.0.32
+    image: quay.io/gumroad/mysql:8.0.32
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
@@ -14,14 +14,14 @@ services:
       - "--character-set-server=utf8mb4"
 
   redis:
-    image: redis:7.0.7
+    image: quay.io/gumroad/redis:7.0.7
     volumes:
       - redis_data:/data
     ports:
       - "6379"
 
   mongo:
-    image: mongo:3.6.16
+    image: quay.io/gumroad/mongo:3.6.16
     volumes:
       - mongo_data:/data/db
     ports:
@@ -29,7 +29,7 @@ services:
     command: "mongod --smallfiles"
 
   elasticsearch:
-    image: elasticsearch:7.9.3
+    image: quay.io/gumroad/elasticsearch:7.9.3
     ports:
       - "9200"
     environment:
@@ -37,7 +37,7 @@ services:
       - "discovery.type=single-node"
 
   memcached:
-    image: memcached
+    image: quay.io/gumroad/memcached:latest
     ports:
       - "11211"
 

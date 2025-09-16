@@ -112,7 +112,7 @@ export const DraftsTab = () => {
 
   return (
     <Layout selectedTab="drafts">
-      <div>
+      <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
             <table

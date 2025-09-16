@@ -73,35 +73,63 @@ describe LinksController, :vcr do
       end
 
       describe "shows the correct number of sales" do
+        def expect_sales_count_in_inertia_response(expected_count)
+          data_page_match = response.body.match(/data-page="([^"]*)"/)
+          expect(data_page_match).to be_present, "Expected Inertia.js data-page attribute"
+
+          decoded_content = CGI.unescapeHTML(data_page_match[1])
+          json_data = JSON.parse(decoded_content)
+
+          products = json_data["props"]["react_products_page_props"]["products"]
+          expect(products).to be_present, "Expected products in Inertia.js response"
+          expect(products.first["successful_sales_count"]).to eq(expected_count)
+        end
+
         it "with a single sale" do
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
 
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "1" })
-          expect(response.body).to have_selector("tfoot", text: "Totals3$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(1)
         end
 
         it "with over a thousand sales, comma-delimited" do
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(3_030)
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "3,030" })
-          expect(response.body).to have_selector("tfoot", text: "Totals9,090$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(3_030)
         end
 
         it "shows comma-delimited pre-orders count" do
           @product1.update_attribute(:is_in_preorder_state, true)
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(424_242)
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "424,242" })
-          expect(response.body).to have_selector("tfoot", text: "Totals1,272,726$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(424_242)
         end
 
         it "shows comma-delimited subscribers count" do
           create(:subscription_product, user: seller)
           allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1_111)
           get(:index)
-          expect(response.body).to have_selector(:table_row, { "Sales" => "1,111" })
-          expect(response.body).to have_selector("tfoot", text: "Totals4,444$0")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          expect_sales_count_in_inertia_response(1_111)
         end
       end
 
@@ -109,8 +137,20 @@ describe LinksController, :vcr do
         it "shows product URL without the protocol part" do
           get :index
 
-          expect(response.body).to have_selector("td:nth-of-type(2) > div > a:nth-of-type(2)[href='#{@product1.long_url}']",
-                                                 text: "#{seller.subdomain}/l/#{@product1.general_permalink}")
+          expect(response).to be_successful
+
+          expect(response.body).to include("data-page")
+          expect(response.body).to include("Products/index")
+
+          data_page_match = response.body.match(/data-page="([^"]*)"/)
+          expect(data_page_match).to be_present
+
+          decoded_content = CGI.unescapeHTML(data_page_match[1])
+          json_data = JSON.parse(decoded_content)
+
+          products = json_data["props"]["react_products_page_props"]["products"]
+          expect(products).to be_present
+          expect(products.first["url_without_protocol"]).to be_present
         end
       end
     end
@@ -368,7 +408,7 @@ describe LinksController, :vcr do
         it "returns an error message" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["error_message"]).to eq("You must connect connect at least one payment method before you can publish this product for sale.")
+          expect(response.parsed_body["error_message"]).to eq("You must connect at least one payment method before you can publish this product for sale.")
         end
 
         it "does not publish the link" do

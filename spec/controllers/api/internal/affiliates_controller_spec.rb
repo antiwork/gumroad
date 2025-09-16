@@ -420,6 +420,16 @@ describe Api::Internal::AffiliatesController do
       expect(response.parsed_body["message"]).to eq("This user cannot be added as an affiliate because they use a Brazilian Stripe account.")
     end
 
+    it "does not allow affiliate to be created if affiliate user has disabled being added as an affiliate" do
+      affiliate_user.update!(disable_affiliate_requests: true)
+
+      expect do
+        post :create, params:, as: :json
+      end.to_not change { DirectAffiliate.count }
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to eq("This user has disabled being added as an affiliate.")
+    end
+
     context "with affiliate user being the seller" do
       before { sign_in(seller) }
 

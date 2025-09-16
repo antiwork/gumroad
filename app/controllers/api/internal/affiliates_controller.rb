@@ -75,6 +75,7 @@ class Api::Internal::AffiliatesController < Api::Internal::BaseController
       affiliate_user = User.alive.find_by(email: affiliate_email)
       return render json: { success: false, message: "The affiliate has not created a Gumroad account with this email address." } if affiliate_user.nil?
       return render json: { success: false, message: "You found you. Good job. You can't be your own affiliate though." } if affiliate_user == current_seller
+      return render json: { success: false, message: "This user has disabled being added as an affiliate." } if affiliate_user.disable_affiliate_requests?
 
       return render json: { success: false, message: "Please enable at least one product." } if !apply_to_all_products && affiliate_params[:products].none? { _1[:enabled] }
 

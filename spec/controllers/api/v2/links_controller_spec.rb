@@ -292,6 +292,7 @@ describe Api::V2::LinksController do
       context "when new account and no valid merchant account connected" do
         before do
           @user.check_merchant_account_is_linked = true
+          @user.payment_address = nil
           @user.save!
 
           @product.update!(purchase_disabled_at: 1.day.ago)
@@ -301,7 +302,7 @@ describe Api::V2::LinksController do
           put @action, params: @params
 
           expect(response.parsed_body["success"]).to eq(false)
-          expect(response.parsed_body["message"]).to eq("You must connect connect at least one payment method before you can publish this product for sale.")
+          expect(response.parsed_body["message"]).to eq("You must connect at least one payment method before you can publish this product for sale.")
 
           expect(@product.purchase_disabled_at).to_not be_nil
         end

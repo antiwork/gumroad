@@ -45,7 +45,7 @@ class User
     end
 
     def can_publish_products?
-      !(check_merchant_account_is_linked && !merchant_accounts.alive.charge_processor_alive.exists?)
+      stripe_account.present? || stripe_connect_account.present? || paypal_connect_account.present? || payment_address.present?
     end
 
     def pay_with_paypal_enabled?

@@ -26,6 +26,15 @@ module Purchase::Risk
     nil
   end
 
+  def find_past_chargebacked_purchases
+    @_find_past_chargebacked_purchases_for_purchases ||= begin
+      past_email_purchases = Purchase.where(email:).chargedback.not_chargeback_reversed.order(chargeback_date: :desc)
+      past_guid_purchases = Purchase.where("browser_guid is not null").where(browser_guid:).chargedback.not_chargeback_reversed.order(chargeback_date: :desc)
+
+      past_email_purchases + past_guid_purchases
+    end
+  end
+
   private
     def vague_error_message
       record = is_gift_receiver_purchase ? gift_received.gifter_purchase : self
@@ -51,9 +60,7 @@ module Purchase::Risk
     end
 
     def check_for_past_chargebacks
-      past_email_purchases = Purchase.where(email:).chargedback.not_chargeback_reversed
-      past_guid_purchases = Purchase.where("browser_guid is not null").where(browser_guid:).chargedback.not_chargeback_reversed
-      return if !past_email_purchases.exists? && !past_guid_purchases.exists?
+      return if find_past_chargebacked_purchases.none?
 
       self.error_code = PurchaseErrorCode::BUYER_CHARGED_BACK
       errors.add :base, "There's an active chargeback on one of your past Gumroad purchases. Please withdraw it by contacting your charge processor and try again later."

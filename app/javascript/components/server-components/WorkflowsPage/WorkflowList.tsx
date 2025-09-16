@@ -35,7 +35,7 @@ const WorkflowList = () => {
   return (
     <Layout title="Workflows" actions={newWorkflowButton}>
       {workflows.length > 0 ? (
-        <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div className="space-y-8 p-4 md:p-8">
           {workflows.map((workflow) => (
             <WorkflowRow
               key={workflow.external_id}
@@ -90,7 +90,7 @@ const WorkflowList = () => {
           ) : null}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
@@ -121,15 +121,7 @@ const WorkflowRow = ({
     <div style={{ display: "flex", alignItems: "center" }}>
       <h3 style={{ marginRight: "auto" }}>{workflow.name}</h3>
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
-        {workflow.published ? (
-          <small>
-            <Icon name="circle-fill" /> Published
-          </small>
-        ) : (
-          <small>
-            <Icon name="circle" /> Unpublished
-          </small>
-        )}
+        {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="button-group">
           <Link
             className="button"

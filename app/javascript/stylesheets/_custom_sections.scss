@@ -79,4 +79,15 @@
       margin-bottom: -1 * spacer(1) - $border-width;
     }
   }
+
+  &.has-user > *:not(header) {
+    @media (max-width: 1023px) {
+      padding-top: 5rem;
+    }
+  }
+
+  &.product > * {
+    padding-left: $body-padding-desktop-center;
+    padding-right: $body-padding-desktop-center;
+  }
 }

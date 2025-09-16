@@ -87,19 +87,19 @@ export const ProductsPageProductsTable = (props: {
         <thead>
           <tr>
             <th />
-            <th {...thProps("name")} title="Sort by Name">
+            <th {...thProps("name")} title="Sort by Name" className="pl-0 lg:relative lg:-left-20">
               Name
             </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Sales">
+            <th {...thProps("successful_sales_count")} title="Sort by Sales" className="lg:px-8">
               Sales
             </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
+            <th {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
               Revenue
             </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price">
+            <th {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
               Price
             </th>
-            <th {...thProps("status")} title="Sort by Status">
+            <th {...thProps("status")} title="Sort by Status" className="lg:px-8">
               Status
             </th>
           </tr>
@@ -117,7 +117,7 @@ export const ProductsPageProductsTable = (props: {
                   <Icon name="card-image-fill" />
                 )}
               </td>
-              <td>
+              <td className="w-full">
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
@@ -130,7 +130,7 @@ export const ProductsPageProductsTable = (props: {
                 </div>
               </td>
 
-              <td data-label="Sales" style={{ whiteSpace: "nowrap" }}>
+              <td data-label="Sales" className="whitespace-nowrap lg:px-8">
                 <a href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
                 </a>
@@ -140,40 +140,28 @@ export const ProductsPageProductsTable = (props: {
                 ) : null}
               </td>
 
-              <td data-label="Revenue" style={{ whiteSpace: "nowrap" }}>
+              <td data-label="Revenue" className="whitespace-nowrap lg:px-8">
                 {formatPriceCentsWithCurrencySymbol("usd", product.revenue, { symbolFormat: "short" })}
               </td>
 
-              <td data-label="Price" style={{ whiteSpace: "nowrap" }}>
+              <td data-label="Price" className="whitespace-nowrap lg:px-8">
                 {product.price_formatted}
               </td>
 
-              <td data-label="Status" style={{ whiteSpace: "nowrap" }}>
+              <td data-label="Status" className="whitespace-nowrap lg:px-8">
                 {(() => {
                   switch (product.status) {
                     case "unpublished":
-                      return (
-                        <>
-                          <Icon name="circle" /> Unpublished
-                        </>
-                      );
+                      return <>Unpublished</>;
                     case "preorder":
-                      return (
-                        <>
-                          <Icon name="circle" /> Pre-order
-                        </>
-                      );
+                      return <>Pre-order</>;
                     case "published":
-                      return (
-                        <>
-                          <Icon name="circle-fill" /> Published
-                        </>
-                      );
+                      return <>Published</>;
                   }
                 })()}
               </td>
               {product.can_duplicate || product.can_destroy ? (
-                <td>
+                <td className="whitespace-nowrap lg:px-8">
                   <ActionsPopover
                     product={product}
                     onDuplicate={() => void loadProducts(1)}
@@ -197,9 +185,11 @@ export const ProductsPageProductsTable = (props: {
         <tfoot>
           <tr>
             <td colSpan={2}>Totals</td>
-            <td>{products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}</td>
+            <td className="whitespace-nowrap lg:px-8">
+              {products.reduce((sum, product) => sum + product.successful_sales_count, 0).toLocaleString(locale)}
+            </td>
 
-            <td colSpan={5}>
+            <td colSpan={5} className="whitespace-nowrap lg:px-8">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 products.reduce((sum, product) => sum + product.revenue, 0),

@@ -1,7 +1,6 @@
 import { lightFormat } from "date-fns";
 import pickBy from "lodash/pickBy";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import {
   AnalyticsDataByReferral,
@@ -11,7 +10,6 @@ import {
 } from "$app/data/analytics";
 import { assertDefined } from "$app/utils/assert";
 import { AbortError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
@@ -95,15 +93,13 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
   return result;
 };
 
-const AnalyticsPage = ({
-  products: initialProducts,
-  country_codes,
-  state_names,
-}: {
+export type AnalyticsPageProps = {
   products: Product[];
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
-}) => {
+};
+
+const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }: AnalyticsPageProps) => {
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -156,6 +152,7 @@ const AnalyticsPage = ({
             <select
               aria-label="Aggregate by"
               onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
+              className="w-auto"
             >
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>
@@ -167,7 +164,7 @@ const AnalyticsPage = ({
       }
     >
       {hasContent ? (
-        <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div className="space-y-8 p-4 md:p-8">
           <SalesQuickStats total={mainData?.total} />
           {mainData ? (
             <>
@@ -206,7 +203,7 @@ const AnalyticsPage = ({
           )}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
@@ -217,7 +214,7 @@ const AnalyticsPage = ({
               you see what's working, and what could be working better.
             </p>
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
-              Learn more about the analytics dashboard.
+              Learn more about the analytics dashboard
             </a>
           </div>
         </div>
@@ -226,4 +223,4 @@ const AnalyticsPage = ({
   );
 };
 
-export default register({ component: AnalyticsPage, propParser: createCast() });
+export default AnalyticsPage;

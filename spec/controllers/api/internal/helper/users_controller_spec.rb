@@ -25,19 +25,19 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when user is not found" do
-      it "returns empty prompt and metadata" do
+      it "returns empty customer info" do
         params = @params.merge(email: "inexistent@example.com")
         set_headers(params:)
 
         get :user_info, params: params
 
         expect(response).to have_http_status(:success)
-        expect(response.body).to eq({ success: true, user_info: { prompt: "", metadata: {} } }.to_json)
+        expect(response.body).to eq({ success: true, customer: { metadata: {} } }.to_json)
       end
     end
 
     context "when user info is retrieved" do
-      it "returns success response with user info" do
+      it "returns success response with customer info" do
         set_headers(params: @params)
 
         get :user_info, params: @params
@@ -45,20 +45,21 @@ describe Api::Internal::Helper::UsersController do
         expect(response).to have_http_status(:success)
         parsed_response = JSON.parse(response.body)
         expect(parsed_response["success"]).to be true
-        expect(parsed_response["user_info"]["prompt"]).to include("User ID: #{user.id}")
-        expect(parsed_response["user_info"]["prompt"]).to include("User Name: #{user.name}")
-        expect(parsed_response["user_info"]["prompt"]).to include("User Email: #{user.email}")
-        expect(parsed_response["user_info"]["prompt"]).to include("Account Status: Active")
-        expect(parsed_response["user_info"]["metadata"]).to eq({
-                                                                 "name" => user.name,
-                                                                 "email" => user.email,
-                                                                 "value" => 0,
-                                                                 "links" => {
-                                                                   "Admin (user)" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
-                                                                   "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
-                                                                   "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}",
-                                                                 }
-                                                               })
+
+        customer_info = parsed_response["customer"]
+        expect(customer_info["name"]).to eq(user.name)
+        expect(customer_info["value"]).to eq(0)
+        expect(customer_info["actions"]).to eq({
+                                                 "Admin (user)" => "http://app.test.gumroad.com:31337/admin/users/#{user.id}",
+                                                 "Admin (purchases)" => "http://app.test.gumroad.com:31337/admin/search_purchases?query=#{CGI.escape(user.email)}",
+                                                 "Impersonate" => "http://app.test.gumroad.com:31337/admin/helper_actions/impersonate/#{user.external_id}",
+                                               })
+
+        metadata = customer_info["metadata"]
+        expect(metadata["User ID"]).to eq(user.id)
+        expect(metadata["Account Created"]).to eq(user.created_at.to_fs(:formatted_date_full_month))
+        expect(metadata["Account Status"]).to eq("Active")
+        expect(metadata["Total Earnings Since Joining"]).to eq("$0.00")
       end
     end
   end
@@ -110,7 +111,7 @@ describe Api::Internal::Helper::UsersController do
       end
     end
 
-    context "when user is suspended locally but not found in iffy api" do
+    context "when user is suspended locally" do
       let(:suspended_user) { create(:tos_user) }
       let(:suspension_comment) { create(:comment, commentable: suspended_user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago) }
 
@@ -119,13 +120,7 @@ describe Api::Internal::Helper::UsersController do
       end
 
       it "returns suspended status from local data" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
+        expect(HTTParty).not_to receive(:get)
 
         get :user_suspension_info, params: { email: suspended_user.email }
 

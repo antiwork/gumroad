@@ -11,10 +11,12 @@ export const CheckoutPreview = ({
   children,
   cartItem,
   recommendedProduct,
+  className,
 }: {
   children?: React.ReactNode;
   cartItem: CartItem;
   recommendedProduct?: CardProduct | undefined;
+  className?: string;
 }) => {
   const paymentState = React.useMemo<ReturnType<typeof createReducer>>(
     () => [
@@ -74,7 +76,7 @@ export const CheckoutPreview = ({
   );
 
   return (
-    <aside aria-label="Preview">
+    <aside aria-label="Preview" className={className}>
       <header>
         <h2>Preview</h2>
       </header>

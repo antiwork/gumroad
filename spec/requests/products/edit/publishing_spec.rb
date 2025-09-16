@@ -6,7 +6,7 @@ require "shared_examples/authorize_called"
 describe("Product Edit - Publishing Scenario", type: :system, js: true) do
   include ProductEditPageHelpers
 
-  let(:seller) { create(:named_seller) }
+  let(:seller) { create(:named_seller, payment_address: nil) }
 
   include_context "with switching account to user as admin for seller"
 
@@ -16,6 +16,7 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
       @tag = create(:tag, name: "camel", humanized_name: "Bactrian 🐫s Have Two Humps")
       @product.tag!("camel")
       create(:product_review, purchase: create(:purchase, link: @product))
+      create(:merchant_account_stripe_connect, user: seller)
       visit edit_link_path(@product.unique_permalink)
     end
 
@@ -80,7 +81,20 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
       @product = create(:product_with_pdf_file, user: seller, draft: false, purchase_disabled_at: Time.current)
     end
 
-    it("allows user to publish and unpublish product") do
+    it("does not allow publishing a product if no payout method is setup") do
+      visit edit_link_path(@product.unique_permalink)
+      click_on "Save and continue"
+      wait_for_ajax
+      click_on "Publish and continue"
+      wait_for_ajax
+      expect(page).to have_alert("You must connect at least one payment method before you can publish this product for sale.")
+      expect(@product.reload.alive?).to be(false)
+      expect(@product.published?).to be(false)
+    end
+
+    it("allows user to publish and unpublish product if a payout method is setup") do
+      create(:merchant_account_stripe_connect, user: seller)
+
       visit edit_link_path(@product.unique_permalink)
       click_on "Save and continue"
       wait_for_ajax
@@ -88,10 +102,12 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
       wait_for_ajax
       expect(page).to have_button("Unpublish")
       expect(@product.reload.alive?).to be(true)
+      expect(@product.published?).to be(true)
       click_on "Unpublish"
       wait_for_ajax
       expect(page).to have_button("Publish and continue")
       expect(@product.reload.alive?).to be(false)
+      expect(@product.published?).to be(false)
     end
 
     context "Merchant migration enabled" do
@@ -120,6 +136,7 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
         wait_for_ajax
         expect(page).to have_button("Unpublish")
         expect(@product.reload.alive?).to be(true)
+        expect(@product.published?).to be(true)
       end
     end
   end

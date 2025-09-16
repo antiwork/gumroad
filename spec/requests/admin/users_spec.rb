@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe "Admin::UsersController Scenario", type: :system, js: true do
-  let(:admin) { create(:admin_user, has_risk_privilege: true, has_payout_privilege: true) }
+  let(:admin) { create(:admin_user) }
   let(:user) { create(:user) }
   let!(:user_compliance_info) { create(:user_compliance_info, user:) }
 
@@ -14,6 +14,8 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
   context "when user has no products" do
     it "shows no products alert" do
       visit admin_user_path(user.id)
+
+      click_on "Products"
 
       expect(page).to have_text("No products created.")
     end
@@ -29,6 +31,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
     it "shows products" do
       visit admin_user_path(user.id)
+      click_on "Products"
 
       expect(page).to have_text("Product a")
       expect(page).to have_text("Product b")

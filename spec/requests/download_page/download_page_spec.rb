@@ -631,21 +631,6 @@ describe("Download Page", type: :system, js: true) do
     end
   end
 
-  context "when a PDF hasn't been stamped yet" do
-    it "displays an alert and disables the download button" do
-      product = create(:product)
-      create(:product_file, link: product, pdf_stamp_enabled: true)
-      purchase = create(:purchase, link: product)
-      url_redirect = create(:url_redirect, purchase:)
-
-      visit url_redirect.download_page_url
-      expect(page).to have_alert(text: "This product includes a file that's being processed. You'll be able to download it shortly.")
-      download_button = find_link("Download", inert: true)
-      download_button.hover
-      expect(download_button).to have_tooltip(text: "This file will be ready to download shortly.")
-    end
-  end
-
   it "plays videos in the order they are shown on the download page for an installment" do
     video_blob = ActiveStorage::Blob.create_and_upload!(io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "sample.mov"), "video/quicktime"), filename: "sample.mov", key: "test/sample.mov")
     allow_any_instance_of(UrlRedirect).to receive(:html5_video_url_and_guid_for_product_file).and_return([video_blob.url, ""])
@@ -970,6 +955,22 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_link("Other Product", href: other_product.long_url(**url_options))
       expect(page).to have_link("Affiliate Product", href: affiliate_product.long_url(**url_options, affiliate_id: affiliate.external_id_numeric))
       expect(page).to have_link("Global Affiliate Product", href: global_affiliate_product.long_url(**url_options, affiliate_id: product.user.global_affiliate.external_id_numeric))
+    end
+  end
+
+  describe "stamped PDF download" do
+    it "shows a flash message when a stamped PDF is missing" do
+      product = create(:product)
+      create(:readable_document, link: product, pdf_stamp_enabled: true)
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, purchase: purchase)
+      url_redirect.update!(is_done_pdf_stamping: true)
+
+      visit url_redirect.download_page_url
+      click_on "Download"
+
+      expect(page).to have_current_path(url_redirect.download_page_url)
+      expect(page).to have_text("We are preparing the file for download. You will receive an email when it is ready.")
     end
   end
 end

@@ -412,60 +412,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_ach_account.account_number_visual).to eq("******1116")
       end
 
-      it "allows the creator to switch from bank to PayPal as payout method" do
+      it "does not show PayPal as a payout method as bank payouts are supported" do
         stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
-
-        stripe_account = create(:merchant_account_stripe, user: @user)
-        create(:balance, user: @user, merchant_account: stripe_account)
-        create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION)
-        create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID)
-        @user.update!(payouts_paused_internally: true)
-
-        expect(@user.unpaid_balances.where(merchant_account_id: stripe_account.id).sum(:holding_amount_cents)).to eq 10_00
-        expect(@user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad("stripe")).sum(:holding_amount_cents)).to eq 0
-        expect(@user.user_compliance_info_requests.requested.count).to eq(2)
-        expect(@user.payouts_paused_internally?).to be true
 
         visit settings_payments_path
 
-        choose "PayPal"
-
-        fill_in("First name", with: "barnabas")
-        fill_in("Last name", with: "barnabastein")
-        fill_in("Address", with: "123 barnabas st")
-        fill_in("City", with: "barnabasville")
-        select "California", from: "State"
-        fill_in("ZIP code", with: "10110")
-
-        select("1", from: "Day")
-        select("1", from: "Month")
-        select("1901", from: "Year")
-        fill_in("Last 4 digits of SSN", with: "0000")
-        fill_in("Phone number", with: "5022-541-982")
-
-        fill_in("PayPal Email", with: "valid@gumroad.com")
-
-        click_on "Update settings"
-
-        expect(page).to have_content("Thanks! You're all set.")
-        compliance_info = @user.reload.alive_user_compliance_info
-        expect(compliance_info.first_name).to eq("barnabas")
-        expect(compliance_info.last_name).to eq("barnabastein")
-        expect(compliance_info.street_address).to eq("123 barnabas st")
-        expect(compliance_info.city).to eq("barnabasville")
-        expect(compliance_info.state).to eq("CA")
-        expect(compliance_info.zip_code).to eq("10110")
-        expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
-        expect(compliance_info.individual_tax_id.decrypt("1234")).to eq("0000")
-        expect(@user.active_bank_account).to be nil
-        expect(@user.stripe_account).to be nil
-        expect(@user.payment_address).to eq("valid@gumroad.com")
-        expect(stripe_account.reload.deleted_at).to be_present
-        expect(@user.unpaid_balances.where(merchant_account_id: stripe_account.id).sum(:holding_amount_cents)).to eq 0
-        expect(@user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad("stripe")).sum(:holding_amount_cents)).to eq 10_00
-        expect(TransferStripeConnectAccountBalanceToGumroadJob).to have_enqueued_sidekiq_job(stripe_account.id, 10_00)
-        expect(@user.user_compliance_info_requests.requested.count).to eq(0)
-        expect(@user.payouts_paused_internally?).to be false
+        expect(page).not_to have_field("PayPal")
       end
 
       it "allows the creator to update the name on their account" do

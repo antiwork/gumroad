@@ -32,6 +32,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -319,7 +320,7 @@ const DiscountsPage = ({
         </>
       }
     >
-      <section className="paragraphs">
+      <section className="p-4 md:p-8">
         {offerCodes.length > 0 ? (
           <>
             <table aria-live="polite" aria-busy={isLoading}>
@@ -381,20 +382,11 @@ const DiscountsPage = ({
                           style={{ display: "grid", gridTemplateColumns: "min-content 1fr", gap: "var(--spacer-2)" }}
                         >
                           {validAt && currentDate < validAt ? (
-                            <>
-                              <Icon name="circle" />
-                              Scheduled
-                            </>
+                            <>Scheduled</>
                           ) : expiresAt && currentDate > expiresAt ? (
-                            <>
-                              <Icon name="circle-fill" style={{ background: "var(--red)" }} />
-                              Expired
-                            </>
+                            <>Expired</>
                           ) : (
-                            <>
-                              <Icon name="circle-fill" />
-                              Live
-                            </>
+                            <>Live</>
                           )}
                         </div>
                       </td>
@@ -814,21 +806,23 @@ const Form = ({
   };
 
   return (
-    <main>
-      <header>
-        <h1>{title}</h1>
-        <div className="actions">
-          <Button onClick={cancel} disabled={isLoading}>
-            <Icon name="x-square" />
-            Cancel
-          </Button>
-          <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
-            {submitLabel}
-          </Button>
-        </div>
-      </header>
+    <div>
+      <PageHeader
+        title={title}
+        actions={
+          <>
+            <Button onClick={cancel} disabled={isLoading}>
+              <Icon name="x-square" />
+              Cancel
+            </Button>
+            <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
+              {submitLabel}
+            </Button>
+          </>
+        }
+      />
       <form>
-        <section>
+        <section className="!p-8">
           <header>
             <div className="paragraphs">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
@@ -1129,7 +1123,7 @@ const Form = ({
           </fieldset>
         </section>
       </form>
-    </main>
+    </div>
   );
 };
 

@@ -4,6 +4,7 @@ import React from "react";
 import FileUtils from "$app/utils/file";
 
 import { Button } from "$app/components/Button";
+import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
@@ -18,6 +19,7 @@ export function NewTicketModal({
   onClose: () => void;
   onCreated: (slug: string) => void;
 }) {
+  const { apiDomain } = useDomains();
   const { mutateAsync: createConversation } = useCreateConversation({
     onError: (error) => {
       showAlert(error.message, "error");
@@ -66,7 +68,12 @@ export function NewTicketModal({
             setIsSubmitting(true);
             try {
               const { conversationSlug } = await createConversation({ subject: subject.trim() });
-              await createMessage({ conversationSlug, content: message.trim(), attachments });
+              await createMessage({
+                conversationSlug,
+                content: message.trim(),
+                attachments,
+                customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+              });
               onCreated(conversationSlug);
             } finally {
               setIsSubmitting(false);

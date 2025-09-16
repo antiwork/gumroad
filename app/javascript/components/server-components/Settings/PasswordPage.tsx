@@ -56,7 +56,7 @@ const PasswordPage = (props: Props) => {
           setIsSaving(false);
         })}
       >
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Change password</h2>
           </header>

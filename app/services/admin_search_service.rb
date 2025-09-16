@@ -3,7 +3,7 @@
 class AdminSearchService
   class InvalidDateError < StandardError; end
 
-  def search_purchases(query: nil, product_title_query: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
+  def search_purchases(query: nil, product_title_query: nil, purchase_status: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
     purchases = Purchase.order(created_at: :desc)
 
     if query.present?
@@ -27,6 +27,22 @@ class AdminSearchService
       if product_title_query.present?
         raise ArgumentError, "product_title_query requires query parameter to be set" unless query.present?
         purchases = purchases.joins(:link).where("links.name LIKE ?", "%#{product_title_query}%")
+      end
+
+      if purchase_status.present?
+        case purchase_status
+        when "successful"
+          purchases = purchases.where(purchase_state: "successful")
+        when "failed"
+          purchases = purchases.where(purchase_state: "failed")
+        when "not_charged"
+          purchases = purchases.where(purchase_state: "not_charged")
+        when "chargeback"
+          purchases = purchases.where.not(chargeback_date: nil)
+            .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
+        when "refunded"
+          purchases = purchases.where(stripe_refunded: true)
+        end
       end
     end
 

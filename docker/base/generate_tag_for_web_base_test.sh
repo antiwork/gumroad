@@ -2,7 +2,7 @@
 
 set -e
 
-WEB_BASE_DOCKERFILE_FROM="ruby:$(cat .ruby-version)-slim-bullseye"
+WEB_BASE_DOCKERFILE_FROM=${WEB_BASE_DOCKERFILE_FROM:-"ruby:$(cat .ruby-version)-slim-bullseye"}
 DOCKER_CMD=${DOCKER_CMD:-docker}
 
 dockerfile_from_shas=$($DOCKER_CMD history -q $WEB_BASE_DOCKERFILE_FROM \

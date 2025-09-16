@@ -136,6 +136,10 @@ class ApplicationController < ActionController::Base
         request_referrer_is_not_two_factor_authentication_path?
     end
 
+    def inertia_props(props = {})
+      RenderingExtension.custom_context(view_context).merge(props)
+    end
+
   private
     def redirect_to_custom_subdomain
       redirect_url = SubdomainRedirectorService.new.redirect_url_for(request)

@@ -56,6 +56,104 @@ describe Purchase::Risk do
     end
   end
 
+  describe "#check_for_past_chargebacks" do
+    let(:product) { create(:product) }
+    let(:new_purchase) { build(:purchase, link: product, email: "test@example.com", browser_guid: "test-guid-123") }
+
+    context "when there are no past chargebacks" do
+      it "does not add errors" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+    end
+
+    context "when there is a past chargeback by email" do
+      before do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: Time.current)
+      end
+
+      it "adds chargeback error" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+
+      it "sets the correct error message" do
+        new_purchase.send(:check_for_past_chargebacks)
+        expect(new_purchase.errors.full_messages).to include("There's an active chargeback on one of your past Gumroad purchases. Please withdraw it by contacting your charge processor and try again later.")
+      end
+    end
+
+    context "when there is a past chargeback by browser_guid" do
+      before do
+        create(:purchase, link: product, browser_guid: "test-guid-123", chargeback_date: Time.current)
+      end
+
+      it "adds chargeback error" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+    end
+
+    context "when there are chargebacks by both email and browser_guid" do
+      before do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: Time.current)
+        create(:purchase, link: product, browser_guid: "test-guid-123", chargeback_date: Time.current)
+      end
+
+      it "adds chargeback error" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+          .and change { new_purchase.errors.count }.by(1)
+      end
+    end
+
+    context "when chargeback has been reversed" do
+      before do
+        chargeback_purchase = create(:purchase, link: product, email: "test@example.com", chargeback_date: Time.current)
+        chargeback_purchase.chargeback_reversed = true
+        chargeback_purchase.save!
+      end
+
+      it "does not add errors" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+    end
+
+    context "when purchase has no email" do
+      let(:new_purchase) { build(:purchase, link: product, email: nil, browser_guid: "test-guid-123") }
+
+      it "only checks browser_guid" do
+        create(:purchase, link: product, browser_guid: "test-guid-123", chargeback_date: Time.current)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+      end
+    end
+
+    context "when purchase has no browser_guid" do
+      let(:new_purchase) { build(:purchase, link: product, email: "test@example.com", browser_guid: nil) }
+
+      it "only checks email" do
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: Time.current)
+
+        expect { new_purchase.send(:check_for_past_chargebacks) }
+          .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
+      end
+    end
+
+    context "when purchase has neither email nor browser_guid" do
+      let(:new_purchase) { build(:purchase, link: product, email: nil, browser_guid: nil) }
+
+      it "does not add errors" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+    end
+  end
+
   describe "#check_for_fraud" do
     before do
       @user = create(:user, account_created_ip: "123.121.11.1")

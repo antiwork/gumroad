@@ -982,6 +982,7 @@ describe Link, :vcr do
       context "when new account and no valid merchant account connected" do
         before do
           @user.check_merchant_account_is_linked = true
+          @user.payment_address = nil
           @user.save!
           @merchant_account.mark_deleted!
         end

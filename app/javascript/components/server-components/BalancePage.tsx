@@ -1,12 +1,11 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
 import { createInstantPayout } from "$app/data/payout";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -15,6 +14,7 @@ import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportPayoutsPopover } from "$app/components/server-components/BalancePage/ExportPayoutsPopover";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -240,6 +240,32 @@ type PastPeriodPayoutsData = {
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
   type: PayoutType;
+};
+
+export type BalancePageProps = {
+  next_payout_period_data:
+    | CurrentPayoutsDataWithUserNotPayable
+    | CurrentPayoutsDataAndPaymentMethodWithUserPayable
+    | null;
+  processing_payout_periods_data: PayoutPeriodData[];
+  payouts_status: "paused" | "payable";
+  payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payouts_paused_for_reason: string | null;
+  past_payout_period_data: PayoutPeriodData[];
+  instant_payout: {
+    payable_amount_cents: number;
+    payable_balances: {
+      id: string;
+      date: string;
+      amount_cents: number;
+    }[];
+    bank_account_type: string;
+    bank_name: string | null;
+    routing_number: string;
+    account_number: string;
+  } | null;
+  show_instant_payouts_notice: boolean;
+  pagination: PaginationProps;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -621,31 +647,7 @@ const BalancePage = ({
   instant_payout,
   show_instant_payouts_notice,
   pagination: initialPagination,
-}: {
-  next_payout_period_data:
-    | CurrentPayoutsDataWithUserNotPayable
-    | CurrentPayoutsDataAndPaymentMethodWithUserPayable
-    | null;
-  processing_payout_periods_data: PayoutPeriodData[];
-  payouts_status: "paused" | "payable";
-  payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
-  past_payout_period_data: PayoutPeriodData[];
-  instant_payout: {
-    payable_amount_cents: number;
-    payable_balances: {
-      id: string;
-      date: string;
-      amount_cents: number;
-    }[];
-    bank_account_type: string;
-    bank_name: string | null;
-    routing_number: string;
-    account_number: string;
-  } | null;
-  show_instant_payouts_notice: boolean;
-  pagination: PaginationProps;
-}) => {
+}: BalancePageProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
 
@@ -715,17 +717,19 @@ const BalancePage = ({
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
 
   return (
-    <main>
-      <header>
-        <h1>Payouts</h1>
-        {settingsAction || bulkExportAction ? (
-          <div className="actions flex gap-2">
-            {settingsAction}
-            {bulkExportAction}
-          </div>
-        ) : null}
-      </header>
-      <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+    <div>
+      <PageHeader
+        title="Payouts"
+        actions={
+          settingsAction || bulkExportAction ? (
+            <div className="flex gap-2">
+              {settingsAction}
+              {bulkExportAction}
+            </div>
+          ) : undefined
+        }
+      />
+      <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
             <div className="info" role="status">
@@ -953,8 +957,8 @@ const BalancePage = ({
           </>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 };
 
-export default register({ component: BalancePage, propParser: createCast() });
+export default BalancePage;

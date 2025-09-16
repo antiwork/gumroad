@@ -38,4 +38,15 @@ describe PdfStampingService do
       expect(result).to be true
     end
   end
+
+  describe ".cache_key_for_purchase" do
+    it "returns the correct cache key format for a given purchase ID" do
+      purchase_id = 12345
+      expected_key = "stamp_pdf_for_purchase_job_12345"
+
+      result = described_class.cache_key_for_purchase(purchase_id)
+
+      expect(result).to eq(expected_key)
+    end
+  end
 end

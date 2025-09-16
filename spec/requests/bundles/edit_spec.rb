@@ -177,6 +177,7 @@ describe("Bundle edit page", type: :system, js: true) do
             click_on "Upload"
           end
           wait_for_ajax
+          all("img[src*='gumroad-specs.s3.amazonaws.com']").last.hover
           click_on "Show next cover"
           expect(page).to have_selector("iframe[src*='youtube.com']")
           expect(bundle.reload.display_asset_previews.alive.second.url).to match("youtube.com")

@@ -86,19 +86,19 @@ export const ProductsPageMembershipsTable = (props: {
         <thead>
           <tr>
             <th />
-            <th {...thProps("name")} title="Sort by Name">
+            <th {...thProps("name")} title="Sort by Name" className="pl-0 lg:relative lg:-left-20">
               Name
             </th>
-            <th {...thProps("successful_sales_count")} title="Sort by Members">
+            <th {...thProps("successful_sales_count")} title="Sort by Members" className="lg:px-8">
               Members
             </th>
-            <th {...thProps("revenue")} title="Sort by Revenue">
+            <th {...thProps("revenue")} title="Sort by Revenue" className="lg:px-8">
               Revenue
             </th>
-            <th {...thProps("display_price_cents")} title="Sort by Price">
+            <th {...thProps("display_price_cents")} title="Sort by Price" className="lg:px-8">
               Price
             </th>
-            <th {...thProps("status")} title="Sort by Status">
+            <th {...thProps("status")} title="Sort by Status" className="lg:px-8">
               Status
             </th>
           </tr>
@@ -116,7 +116,7 @@ export const ProductsPageMembershipsTable = (props: {
                   <Icon name="card-image-fill" />
                 )}
               </td>
-              <td>
+              <td className="w-full">
                 {/* Safari currently doesn't support position: relative on <tr>, so we can't use stretched-link here */}
                 <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
                   <h4>{membership.name}</h4>
@@ -126,7 +126,7 @@ export const ProductsPageMembershipsTable = (props: {
                 </a>
               </td>
 
-              <td data-label="Members">
+              <td data-label="Members" className="whitespace-nowrap lg:px-8">
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
@@ -134,7 +134,7 @@ export const ProductsPageMembershipsTable = (props: {
                 ) : null}
               </td>
 
-              <td data-label="Revenue">
+              <td data-label="Revenue" className="whitespace-nowrap lg:px-8">
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
                 <small>
@@ -152,34 +152,24 @@ export const ProductsPageMembershipsTable = (props: {
                 </small>
               </td>
 
-              <td data-label="Price">{membership.price_formatted}</td>
+              <td data-label="Price" className="whitespace-nowrap lg:px-8">
+                {membership.price_formatted}
+              </td>
 
-              <td data-label="Status">
+              <td data-label="Status" className="whitespace-nowrap lg:px-8">
                 {(() => {
                   switch (membership.status) {
                     case "unpublished":
-                      return (
-                        <>
-                          <Icon name="circle" /> Unpublished
-                        </>
-                      );
+                      return <>Unpublished</>;
                     case "preorder":
-                      return (
-                        <>
-                          <Icon name="circle" /> Pre-order
-                        </>
-                      );
+                      return <>Pre-order</>;
                     case "published":
-                      return (
-                        <>
-                          <Icon name="circle-fill" /> Published
-                        </>
-                      );
+                      return <>Published</>;
                   }
                 })()}
               </td>
               {membership.can_duplicate || membership.can_destroy ? (
-                <td>
+                <td className="whitespace-nowrap lg:px-8">
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => void loadMemberships(1)}
@@ -204,13 +194,13 @@ export const ProductsPageMembershipsTable = (props: {
           <tr>
             <td colSpan={2}>Totals</td>
 
-            <td>
+            <td className="whitespace-nowrap lg:px-8">
               {memberships
                 .reduce((sum, membership) => sum + membership.successful_sales_count, 0)
                 .toLocaleString(userAgentInfo.locale)}
             </td>
 
-            <td colSpan={4}>
+            <td colSpan={4} className="whitespace-nowrap lg:px-8">
               {formatPriceCentsWithCurrencySymbol(
                 "usd",
                 memberships.reduce((sum, membership) => sum + membership.revenue, 0),

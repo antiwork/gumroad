@@ -6,9 +6,9 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
-import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 
 import { FollowForm } from "./FollowForm";
 
@@ -21,12 +21,11 @@ type Props = {
 
 export const Layout = ({ className, creatorProfile, hideFollowForm, children }: Props) => {
   const cartItemsCount = useCartItemsCount();
-  const { rootDomain } = useDomains();
   const loggedInUser = useLoggedInUser();
 
   return (
     <div className={cx("profile", className)}>
-      <header>
+      <header className="relative z-20 bg-background">
         <section>
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (
@@ -59,12 +58,9 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </section>
         ) : null}
       </header>
-      <main className="custom-sections">
+      <main className={cx("custom-sections", loggedInUser?.id === creatorProfile.external_id && "has-user")}>
         {children}
-        <footer>
-          Powered by&ensp;
-          <a href={Routes.root_url({ host: rootDomain })} className="logo-full" aria-label="Gumroad" />
-        </footer>
+        <PoweredByFooter />
       </main>
     </div>
   );

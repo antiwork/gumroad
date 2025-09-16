@@ -696,6 +696,7 @@ export type BankAccount =
 
 export type BankAccountDetails = {
   show_bank_account: boolean;
+  show_paypal: boolean;
   is_a_card: boolean;
   routing_number: string | null;
   account_number_visual: string | null;
@@ -938,7 +939,7 @@ const BankAccountSection = ({
         </fieldset>
         <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
           {showNewBankAccount ? (
-            <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               {user.country_code === "CA" ? (
                 <>
                   <fieldset className={cx({ danger: errorFieldNames.has("transit_number") })}>

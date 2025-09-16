@@ -27,8 +27,9 @@ describe BalanceController do
 
       get :index
       expect(response).to be_successful
-      expect(response).to render_template(:index)
 
+      # For Inertia.js controllers, we focus on testing the response status
+      # The actual Inertia.js rendering is tested in system tests
       payout_presenter = assigns(:payout_presenter)
       expect(payout_presenter.seller).to eq(seller)
     end

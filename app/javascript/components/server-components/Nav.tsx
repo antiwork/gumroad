@@ -2,16 +2,20 @@ import { HelperClientProvider } from "@helperai/react";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
-import { useLoggedInUser, TeamMembership } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, NavLinkDropdownItem, UnbecomeDropdownItem } from "$app/components/Nav";
+import { useLoggedInUser } from "$app/components/LoggedInUser";
+import {
+  Nav as NavFramework,
+  NavLink,
+  NavLinkDropdownItem,
+  UnbecomeDropdownItem,
+  NavLinkDropdownMembershipItem,
+} from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
-import { showAlert } from "$app/components/server-components/Alert";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -30,43 +34,6 @@ type Props = {
     } | null;
     currentToken?: string | null;
   };
-};
-
-const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembership: TeamMembership }) => {
-  const onClick = (ev: React.MouseEvent<HTMLAnchorElement>) => {
-    const currentUrl = new URL(window.location.href);
-    // It is difficult to tell if the account to be switched has access to the current page via policies in this context.
-    // Pundit deals with that, and PunditAuthorization concern handles Pundit::NotAuthorizedError.
-    // account_switched param is solely for the purpose of not showing the error message when redirecting to the
-    // dashboard in case the user doesn't have access to the page.
-    currentUrl.searchParams.set("account_switched", "true");
-    ev.preventDefault();
-    request({
-      method: "POST",
-      accept: "json",
-      url: Routes.sellers_switch_path({ team_membership_id: teamMembership.id }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new ResponseError();
-        window.location.href = currentUrl.toString();
-      })
-      .catch((e: unknown) => {
-        assertResponseError(e);
-        showAlert("Something went wrong.", "error");
-      });
-  };
-
-  return (
-    <a
-      role="menuitemradio"
-      href={Routes.sellers_switch_path()}
-      onClick={onClick}
-      aria-checked={teamMembership.is_selected}
-    >
-      <img className="user-avatar" src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
-      <span title={teamMembership.seller_name}>{teamMembership.seller_name}</span>
-    </a>
-  );
 };
 
 export const Nav = (props: Props) => {

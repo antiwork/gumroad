@@ -6,7 +6,6 @@ class Checkout::FormController < Sellers::BaseController
 
     @title = "Checkout form"
     @form_props = Checkout::FormPresenter.new(pundit_user:).form_props
-    @body_class = "fixed-aside"
   end
 
   def update

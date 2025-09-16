@@ -53,6 +53,7 @@ type Props = {
     disable_comments_email: boolean;
     disable_reviews_email: boolean;
     show_nsfw_products: boolean;
+    disable_affiliate_requests: boolean;
     seller_refund_policy: {
       enabled: boolean;
       allowed_refund_periods_in_days: { key: number; value: string }[];
@@ -140,7 +141,7 @@ const MainPage = (props: Props) => {
       canUpdate={!props.is_form_disabled && !isSaving}
     >
       <form ref={formRef}>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>User details</h2>
           </header>
@@ -174,7 +175,7 @@ const MainPage = (props: Props) => {
             ) : null}
           </fieldset>
         </section>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Notifications</h2>
             <div>
@@ -293,7 +294,7 @@ const MainPage = (props: Props) => {
             </table>
           </fieldset>
         </section>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Support</h2>
           </header>
@@ -321,7 +322,7 @@ const MainPage = (props: Props) => {
           )}
         </section>
         {props.user.seller_refund_policy.enabled ? (
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Refund policy</h2>
               <div>Choose how refunds will be handled for your products.</div>
@@ -394,7 +395,7 @@ const MainPage = (props: Props) => {
             </fieldset>
           </section>
         ) : null}
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Local</h2>
           </header>
@@ -526,7 +527,7 @@ const MainPage = (props: Props) => {
             </small>
           </fieldset>
         </section>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Adult content</h2>
           </header>
@@ -537,6 +538,20 @@ const MainPage = (props: Props) => {
               disabled={props.is_form_disabled}
               label="Show adult content in recommendations and search results"
             />
+          </fieldset>
+        </section>
+        <section className="!p-4 md:!p-8">
+          <header>
+            <h2>Affiliates</h2>
+          </header>
+          <fieldset>
+            <ToggleSettingRow
+              value={userSettings.disable_affiliate_requests}
+              onChange={(value) => updateUserSettings({ disable_affiliate_requests: value })}
+              disabled={props.is_form_disabled}
+              label="Prevent others from adding me as an affiliate"
+            />
+            <small>When enabled, other users cannot add you as an affiliate or request to become your affiliate.</small>
           </fieldset>
         </section>
         {props.invalidate_active_sessions ? <InvalidateActiveSessionsSection /> : null}
@@ -566,7 +581,7 @@ const InvalidateActiveSessionsSection = () => {
   });
 
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <fieldset>
         <button className="link" type="button" onClick={() => setIsConfirmationDialogOpen(true)}>
           Sign out from all active sessions

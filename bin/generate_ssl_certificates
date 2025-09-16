@@ -35,13 +35,10 @@ mkcert gumroad.dev "*.gumroad.dev"
 mv gumroad.dev+1.pem gumroad_dev.crt
 mv gumroad.dev+1-key.pem gumroad_dev.key
 
-# Check if HELPER_WIDGET_HOST exists in .env.development and generate helperai.dev certs
-if [[ -f "../../../.env" ]] && grep -q "HELPER_WIDGET_HOST" "../../../.env"; then
-  echo "HELPER_WIDGET_HOST found in .env, generating certificates for helperai.dev..."
-  mkcert helperai.dev "*.helperai.dev"
-  mv helperai.dev+1.pem helperai_dev.crt
-  mv helperai.dev+1-key.pem helperai_dev.key
-  echo "SSL certificates for helperai.dev generated successfully!"
-fi
+echo "Generating certificates for helperai.dev..."
+mkcert helperai.dev "*.helperai.dev"
+mv helperai.dev+1.pem helperai_dev.crt
+mv helperai.dev+1-key.pem helperai_dev.key
+echo "SSL certificates for helperai.dev generated successfully!"
 
 echo "SSL certificates generated successfully in docker/local-nginx/certs/"

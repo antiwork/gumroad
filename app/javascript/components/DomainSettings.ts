@@ -9,6 +9,7 @@ type DomainSettings = {
   shortDomain: string;
   discoverDomain: string;
   thirdPartyAnalyticsDomain: string;
+  apiDomain: string;
 };
 
 const Context = React.createContext<DomainSettings | null>(null);
