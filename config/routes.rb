@@ -480,7 +480,7 @@ Rails.application.routes.draw do
         get :paged, on: :collection
         get :cart_item, on: :collection
         get :statistics, on: :member
-        put :toggle_active, on: :member
+        put :set_active_status, on: :member
       end
       namespace :upsells do
         resources :products, only: [:index, :show]

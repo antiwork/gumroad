@@ -389,16 +389,16 @@ describe Checkout::UpsellsController do
     end
   end
 
-  describe "PUT toggle_active" do
+  describe "PUT set_active_status" do
     it "toggles the is_active field for an upsell" do
       upsell = seller.upsells.first
       expect(upsell.is_active).to eq(true)
-      put :toggle_active, params: { id: upsell.external_id, is_active: false }, as: :json
+      put :set_active_status, params: { id: upsell.external_id, is_active: false }, as: :json
       upsell.reload
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)
       expect(upsell.is_active).to eq(false)
-      post :toggle_active, params: { id: upsell.external_id, is_active: true }, as: :json
+      post :set_active_status, params: { id: upsell.external_id, is_active: true }, as: :json
       upsell.reload
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)

@@ -116,7 +116,7 @@ export const toggleUpsell = async (id: string, { isActive }: UpsellTogglePayload
   const response = await request({
     method: "PUT",
     accept: "json",
-    url: Routes.toggle_active_checkout_upsell_path(id),
+    url: Routes.set_active_status_checkout_upsell_path(id),
     data: {
       is_active: isActive,
     },

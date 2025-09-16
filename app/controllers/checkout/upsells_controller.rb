@@ -123,7 +123,7 @@ class Checkout::UpsellsController < Sellers::BaseController
     }
   end
 
-  def toggle_active
+  def set_active_status
     @upsell = current_seller.upsells.find_by_external_id!(params[:id])
     authorize [:checkout, @upsell]
 
