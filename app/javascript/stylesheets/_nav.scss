@@ -1,7 +1,6 @@
 @use "sass:math";
 
 nav {
-  grid-row: -4;
   display: flex;
   flex-direction: column;
   @include bg-color("black");
@@ -38,7 +37,7 @@ nav {
 
   header {
     display: none;
-    padding: spacer(7) spacer(5);
+    padding: spacer(5);
   }
 
   section,

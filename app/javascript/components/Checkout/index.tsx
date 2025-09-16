@@ -24,6 +24,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -202,18 +203,16 @@ export const Checkout = ({
   const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
-    <main>
-      <header>
-        <h1>Checkout</h1>
-        {isDesktop ? (
-          <div className="actions">
-            <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton>
-          </div>
-        ) : null}
-      </header>
+    <div>
+      <PageHeader
+        title="Checkout"
+        actions={
+          isDesktop ? <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton> : null
+        }
+      />
       {isOpenTuple(cart.items, 1) ? (
-        <div style={{ display: "grid", gap: "var(--spacer-8)" }}>
-          <div className="with-sidebar right" style={{ gridAutoColumns: "minmax(26rem, 1fr)" }}>
+        <div className="grid gap-8 p-4 md:p-8">
+          <div className="with-sidebar right lg:grid-flow-col" style={{ gridAutoColumns: "minmax(26rem, 1fr)" }}>
             <div style={{ display: "grid", gap: "var(--spacer-5)" }}>
               <div className="cart" role="list">
                 {cart.items.map((item) => (
@@ -361,7 +360,7 @@ export const Checkout = ({
           </div>
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
@@ -374,7 +373,7 @@ export const Checkout = ({
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 };
 

@@ -31,9 +31,9 @@ export const ShareTab = () => {
 
   return (
     <Layout preview={<ProductPreview />}>
-      <main className="squished">
+      <div className="squished">
         <form>
-          <section>
+          <section className="!p-8">
             <DiscoverEligibilityPromo />
             <header>
               <h2>Share</h2>
@@ -63,7 +63,7 @@ export const ShareTab = () => {
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
             profileSections={profileSections}
           />
-          <section>
+          <section className="!p-8">
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h2>Gumroad Discover</h2>
               <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
@@ -108,7 +108,7 @@ export const ShareTab = () => {
             </fieldset>
           </section>
         </form>
-      </main>
+      </div>
     </Layout>
   );
 };

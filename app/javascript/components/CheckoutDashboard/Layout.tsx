@@ -1,6 +1,9 @@
 import cx from "classnames";
 import * as React from "react";
 
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
+
 const pageNames = {
   discounts: "Discounts",
   form: "Checkout form",
@@ -24,13 +27,13 @@ export const Layout = ({
   hasAside ? (
     <>
       <Header actions={actions} pages={pages} currentPage={currentPage} sticky />
-      <main className="squished">{children}</main>
+      <div className="squished">{children}</div>
     </>
   ) : (
-    <main>
+    <div>
       <Header actions={actions} pages={pages} currentPage={currentPage} />
       {children}
-    </main>
+    </div>
   );
 
 const Header = ({
@@ -44,15 +47,13 @@ const Header = ({
   actions?: React.ReactNode;
   sticky?: boolean;
 }) => (
-  <header className={cx({ "sticky-top": sticky })}>
-    <h1>Checkout</h1>
-    {actions ? <div className="actions">{actions}</div> : null}
-    <div role="tablist">
+  <PageHeader className={cx({ "sticky-top": sticky })} title="Checkout" actions={actions}>
+    <Tabs>
       {pages.map((page) => (
-        <a key={page} role="tab" href={Routes[`checkout_${page}_path`]()} aria-selected={page === currentPage}>
+        <Tab key={page} href={Routes[`checkout_${page}_path`]()} isSelected={page === currentPage}>
           {pageNames[page]}
-        </a>
+        </Tab>
       ))}
-    </div>
-  </header>
+    </Tabs>
+  </PageHeader>
 );
