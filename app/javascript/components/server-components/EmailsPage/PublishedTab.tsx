@@ -93,7 +93,7 @@ export const PublishedTab = () => {
   const userAgentInfo = useUserAgentInfo();
 
   return (
-    <Layout selectedTab="published" hasPosts={!!data?.installments?.length}>
+    <Layout selectedTab="published" hasPosts={!!data?.installments.length}>
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>

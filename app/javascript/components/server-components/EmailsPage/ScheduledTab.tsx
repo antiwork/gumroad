@@ -124,7 +124,7 @@ export const ScheduledTab = () => {
   };
 
   return (
-    <Layout selectedTab="scheduled" hasPosts={!!data?.installments?.length}>
+    <Layout selectedTab="scheduled" hasPosts={!!data?.installments.length}>
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
