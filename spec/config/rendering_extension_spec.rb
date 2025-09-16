@@ -136,6 +136,7 @@ describe "RenderingExtension" do
                 },
                 is_gumroad_admin: false,
                 is_impersonating: true,
+                lazy_load_offscreen_discover_images: false,
               },
               current_seller: UserPresenter.new(user: seller).as_current_seller,
               csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),

@@ -111,7 +111,7 @@ describe Api::Internal::Helper::UsersController do
       end
     end
 
-    context "when user is suspended locally but not found in iffy api" do
+    context "when user is suspended locally" do
       let(:suspended_user) { create(:tos_user) }
       let(:suspension_comment) { create(:comment, commentable: suspended_user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago) }
 
@@ -120,13 +120,7 @@ describe Api::Internal::Helper::UsersController do
       end
 
       it "returns suspended status from local data" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
+        expect(HTTParty).not_to receive(:get)
 
         get :user_suspension_info, params: { email: suspended_user.email }
 

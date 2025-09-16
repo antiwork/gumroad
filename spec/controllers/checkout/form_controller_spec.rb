@@ -21,7 +21,6 @@ describe Checkout::FormController do
       expect(response).to be_successful
       expect(assigns[:title]).to eq("Checkout form")
       expect(assigns[:form_props]).to eq(Checkout::FormPresenter.new(pundit_user:).form_props)
-      expect(assigns[:body_class]).to eq("fixed-aside")
     end
   end
 

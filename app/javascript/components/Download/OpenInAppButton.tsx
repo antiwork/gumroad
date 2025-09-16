@@ -7,6 +7,7 @@ type Props = { iosAppUrl: string; androidAppUrl: string };
 export const OpenInAppButton = ({ iosAppUrl, androidAppUrl }: Props) => (
   <Popover trigger={<span className="button">Open in app</span>}>
     <div
+      className="mx-auto"
       style={{
         display: "grid",
         textAlign: "center",

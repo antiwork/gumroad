@@ -15,7 +15,7 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
       visit dashboard_path
 
       # Wait for Inertia to load and check for actual content
-      expect(page).to have_content("Welcome to Gumroad", wait: 10)
+      expect(page).to have_content("Dashboard", wait: 10)
 
       # Check for dashboard elements that actually exist
       expect(page).to have_content("Balance")
@@ -57,7 +57,6 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
       # Wait for the fetch request to complete by checking if the variable is set
       expect(page).to have_selector("body", wait: 5)
       expect { page.evaluate_script("window.customersCount") }.not_to raise_error
-
       customers_count = page.evaluate_script("window.customersCount")
       expect(customers_count).not_to be_nil
     end
@@ -134,8 +133,9 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
     before do
       # Mock analytics data without creating complex purchase records
       allow_any_instance_of(AnalyticsPresenter).to receive(:page_props).and_return({
-                                                                                     revenue_data: [{ date: Date.current.to_s, revenue: 1000 }],
-                                                                                     sales_data: [{ date: Date.current.to_s, sales: 1 }]
+                                                                                     products: [],
+                                                                                     country_codes: {},
+                                                                                     state_names: []
                                                                                    })
     end
 
@@ -368,7 +368,7 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
 
     it "handles navigation between Inertia pages without full page reloads" do
       visit dashboard_path
-      expect(page).to have_content("Welcome to Gumroad", wait: 10)
+      expect(page).to have_content("Dashboard", wait: 10)
 
       # Navigate to products page if the link exists
       if page.has_link?("Products")
@@ -423,7 +423,7 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
     it "loads pages within acceptable time limits" do
       start_time = Time.current
       visit dashboard_path
-      expect(page).to have_content("Welcome to Gumroad", wait: 10)
+      expect(page).to have_content("Dashboard", wait: 10)
       load_time = Time.current - start_time
 
       expect(load_time).to be < 10.seconds

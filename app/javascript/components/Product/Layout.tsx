@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { NavigationButton } from "$app/components/Button";
@@ -118,9 +119,13 @@ const SectionEditor = ({
     <SectionReducerContext.Provider value={reducer}>
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
         {sections.map((section, i) => (
-          <section key={section.id} id={section.id}>
+          <section key={section.id} id={section.id} className="border-b border-border !px-4 py-8 lg:py-16">
             <AddSectionButton index={i} />
-            {section.id ? <EditSection section={section} /> : children}
+            {section.id ? (
+              <EditSection section={section} />
+            ) : (
+              <div className="mx-auto w-full max-w-6xl">{children}</div>
+            )}
             {i === sections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
           </section>
         ))}
@@ -159,7 +164,13 @@ export const Layout = (
     </>
   );
 
-  const mainSection = <section>{productView}</section>;
+  const mainSection = (
+    <section
+      className={classNames("border-b border-border lg:!py-16", props.sections.length > 0 ? "!px-4 py-8" : "!p-4")}
+    >
+      {productView}
+    </section>
+  );
 
   return (
     <>
@@ -313,6 +324,7 @@ const CtaBar = ({
 
 const EditButton = ({ product }: { product: Product }) => {
   const appDomain = useAppDomain();
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   if (!product.can_edit) return null;
 
@@ -320,13 +332,14 @@ const EditButton = ({ product }: { product: Product }) => {
     <div
       style={{
         position: "absolute",
-        top: "var(--spacer-3)",
-        left: "var(--spacer-3)",
+        top: isDesktop ? "var(--spacer-3)" : "var(--spacer-4)",
+        right: isDesktop ? undefined : "var(--spacer-4)",
+        left: isDesktop ? "var(--spacer-3)" : undefined,
         // Render above the product `article`
         zIndex: "var(--z-index-overlay)",
       }}
     >
-      <WithTooltip tip="Edit product" position="right">
+      <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
         <NavigationButton
           color="filled"
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
