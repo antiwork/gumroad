@@ -51,6 +51,7 @@ import {
   formatPriceCentsWithoutCurrencySymbol,
 } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
+import { isValidEmail } from "$app/utils/email";
 import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
@@ -74,6 +75,7 @@ import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -244,189 +246,191 @@ const CustomersPage = ({
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
 
   return (
-    <main className="h-full">
-      <header>
-        <h1>Sales</h1>
-        <div className="actions">
-          <Popover
-            aria-label="Search"
-            onToggle={() => searchInputRef.current?.focus()}
-            trigger={
-              <WithTooltip tip="Search">
-                <div className="button">
-                  <Icon name="solid-search" />
-                </div>
-              </WithTooltip>
-            }
-          >
-            <div className="input">
-              <Icon name="solid-search" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search sales"
-                value={searchQuery ?? ""}
-                onChange={(evt) => updateQuery({ query: evt.target.value })}
-                autoFocus
-              />
-            </div>
-          </Popover>
-          <Popover
-            aria-label="Filter"
-            trigger={
-              <WithTooltip tip="Filter">
-                <div className="button">
-                  <Icon name="filter" />
-                </div>
-              </WithTooltip>
-            }
-          >
-            <div className="stack" style={{ width: "35rem" }}>
-              <div>
-                <ProductSelect
-                  products={products}
-                  label="Customers who bought"
-                  items={includedItems}
-                  setItems={setIncludedItems}
+    <div className="h-full">
+      <PageHeader
+        title="Sales"
+        actions={
+          <>
+            <Popover
+              aria-label="Search"
+              onToggle={() => searchInputRef.current?.focus()}
+              trigger={
+                <WithTooltip tip="Search">
+                  <div className="button">
+                    <Icon name="solid-search" />
+                  </div>
+                </WithTooltip>
+              }
+            >
+              <div className="input">
+                <Icon name="solid-search" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search sales"
+                  value={searchQuery ?? ""}
+                  onChange={(evt) => updateQuery({ query: evt.target.value })}
+                  autoFocus
                 />
               </div>
-              <div>
-                <ProductSelect
-                  products={products}
-                  label="Customers who have not bought"
-                  items={excludedItems}
-                  setItems={setExcludedItems}
-                />
-              </div>
-              <div>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "var(--spacer-4)",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                  }}
-                >
-                  <fieldset>
-                    <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
-                    <PriceInput
-                      id={`${uid}-minimum-amount`}
-                      currencyCode={currency_type}
-                      cents={minimumAmount}
-                      onChange={(minimumAmount) => updateQuery({ minimumAmount })}
-                      placeholder="0"
-                    />
-                  </fieldset>
-                  <fieldset>
-                    <label htmlFor={`${uid}-maximum-amount`}>Paid less than</label>
-                    <PriceInput
-                      id={`${uid}-maximum-amount`}
-                      currencyCode={currency_type}
-                      cents={maximumAmount}
-                      onChange={(maximumAmount) => updateQuery({ maximumAmount })}
-                      placeholder="0"
-                    />
-                  </fieldset>
+            </Popover>
+            <Popover
+              aria-label="Filter"
+              trigger={
+                <WithTooltip tip="Filter">
+                  <div className="button">
+                    <Icon name="filter" />
+                  </div>
+                </WithTooltip>
+              }
+            >
+              <div className="stack" style={{ width: "35rem" }}>
+                <div>
+                  <ProductSelect
+                    products={products}
+                    label="Customers who bought"
+                    items={includedItems}
+                    setItems={setIncludedItems}
+                  />
                 </div>
-              </div>
-              <div>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "var(--spacer-4)",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                  }}
-                >
-                  <fieldset>
-                    <label htmlFor={`${uid}-after-date`}>After</label>
-                    <DateInput
-                      id={`${uid}-after-date`}
-                      value={createdAfter}
-                      onChange={(createdAfter) => updateQuery({ createdAfter })}
-                    />
-                    <small suppressHydrationWarning>{`00:00  ${timeZoneAbbreviation}`}</small>
-                  </fieldset>
-                  <fieldset>
-                    <label htmlFor={`${uid}-before-date`}>Before</label>
-                    <DateInput
-                      id={`${uid}-before-date`}
-                      value={createdBefore}
-                      onChange={(createdBefore) => updateQuery({ createdBefore })}
-                    />
-                    <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
-                  </fieldset>
+                <div>
+                  <ProductSelect
+                    products={products}
+                    label="Customers who have not bought"
+                    items={excludedItems}
+                    setItems={setExcludedItems}
+                  />
                 </div>
-              </div>
-              <div>
-                <fieldset>
-                  <label htmlFor={`${uid}-country`}>From</label>
-                  <select
-                    id={`${uid}-country`}
-                    value={country ?? "Anywhere"}
-                    onChange={(evt) =>
-                      updateQuery({ country: evt.target.value === "Anywhere" ? null : evt.target.value })
-                    }
+                <div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "var(--spacer-4)",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                    }}
                   >
-                    <option>Anywhere</option>
-                    {countries.map((country) => (
-                      <option value={country} key={country}>
-                        {country}
-                      </option>
-                    ))}
-                  </select>
-                </fieldset>
-              </div>
-              <div>
-                <h4>
-                  <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
-                </h4>
-                <Toggle
-                  id={`${uid}-active-customers-only`}
-                  value={activeCustomersOnly}
-                  onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
-                />
-              </div>
-            </div>
-          </Popover>
-          <Popover
-            aria-label="Export"
-            trigger={
-              <WithTooltip tip="Export">
-                <div className="button">
-                  <Icon name="download" />
+                    <fieldset>
+                      <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
+                      <PriceInput
+                        id={`${uid}-minimum-amount`}
+                        currencyCode={currency_type}
+                        cents={minimumAmount}
+                        onChange={(minimumAmount) => updateQuery({ minimumAmount })}
+                        placeholder="0"
+                      />
+                    </fieldset>
+                    <fieldset>
+                      <label htmlFor={`${uid}-maximum-amount`}>Paid less than</label>
+                      <PriceInput
+                        id={`${uid}-maximum-amount`}
+                        currencyCode={currency_type}
+                        cents={maximumAmount}
+                        onChange={(maximumAmount) => updateQuery({ maximumAmount })}
+                        placeholder="0"
+                      />
+                    </fieldset>
+                  </div>
                 </div>
-              </WithTooltip>
-            }
-          >
-            <div className="paragraphs">
-              <h3>Download sales as CSV</h3>
-              <div>
-                {exportNames
-                  ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
-                  : "This will download a CSV with each purchase on its own row."}
-              </div>
-              <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
-              <NavigationButton
-                color="primary"
-                href={Routes.export_purchases_path({
-                  format: "csv",
-                  start_time: lightFormat(from, "yyyy-MM-dd"),
-                  end_time: lightFormat(to, "yyyy-MM-dd"),
-                  product_ids: includedProductIds,
-                  variant_ids: includedVariantIds,
-                })}
-              >
-                Download
-              </NavigationButton>
-              {count > 2000 && (
-                <div className="text-gray-600 mt-2 text-sm">
-                  Exports over 2,000 rows will be processed in the background and emailed to you.
+                <div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "var(--spacer-4)",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                    }}
+                  >
+                    <fieldset>
+                      <label htmlFor={`${uid}-after-date`}>After</label>
+                      <DateInput
+                        id={`${uid}-after-date`}
+                        value={createdAfter}
+                        onChange={(createdAfter) => updateQuery({ createdAfter })}
+                      />
+                      <small suppressHydrationWarning>{`00:00  ${timeZoneAbbreviation}`}</small>
+                    </fieldset>
+                    <fieldset>
+                      <label htmlFor={`${uid}-before-date`}>Before</label>
+                      <DateInput
+                        id={`${uid}-before-date`}
+                        value={createdBefore}
+                        onChange={(createdBefore) => updateQuery({ createdBefore })}
+                      />
+                      <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
+                    </fieldset>
+                  </div>
                 </div>
-              )}
-            </div>
-          </Popover>
-        </div>
-      </header>
-      <section className="paragraphs">
+                <div>
+                  <fieldset>
+                    <label htmlFor={`${uid}-country`}>From</label>
+                    <select
+                      id={`${uid}-country`}
+                      value={country ?? "Anywhere"}
+                      onChange={(evt) =>
+                        updateQuery({ country: evt.target.value === "Anywhere" ? null : evt.target.value })
+                      }
+                    >
+                      <option>Anywhere</option>
+                      {countries.map((country) => (
+                        <option value={country} key={country}>
+                          {country}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+                </div>
+                <div>
+                  <h4>
+                    <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
+                  </h4>
+                  <Toggle
+                    id={`${uid}-active-customers-only`}
+                    value={activeCustomersOnly}
+                    onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
+                  />
+                </div>
+              </div>
+            </Popover>
+            <Popover
+              aria-label="Export"
+              trigger={
+                <WithTooltip tip="Export">
+                  <div className="button">
+                    <Icon name="download" />
+                  </div>
+                </WithTooltip>
+              }
+            >
+              <div className="paragraphs">
+                <h3>Download sales as CSV</h3>
+                <div>
+                  {exportNames
+                    ? `This will download sales of '${exportNames}' as a CSV, with each purchase on its own row.`
+                    : "This will download a CSV with each purchase on its own row."}
+                </div>
+                <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
+                <NavigationButton
+                  color="primary"
+                  href={Routes.export_purchases_path({
+                    format: "csv",
+                    start_time: lightFormat(from, "yyyy-MM-dd"),
+                    end_time: lightFormat(to, "yyyy-MM-dd"),
+                    product_ids: includedProductIds,
+                    variant_ids: includedVariantIds,
+                  })}
+                >
+                  Download
+                </NavigationButton>
+                {count > 2000 && (
+                  <div className="text-gray-600 mt-2 text-sm">
+                    Exports over 2,000 rows will be processed in the background and emailed to you.
+                  </div>
+                )}
+              </div>
+            </Popover>
+          </>
+        }
+      />
+      <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <>
             <table aria-live="polite" aria-busy={isLoading}>
@@ -581,7 +585,7 @@ const CustomersPage = ({
           />
         ) : null}
       </section>
-    </main>
+    </div>
   );
 };
 
@@ -1523,6 +1527,15 @@ const EmailSection = ({
 
   const handleSave = async () => {
     if (!onSave) return;
+
+    const emailError =
+      email.length === 0 ? "Email must be provided" : !isValidEmail(email) ? "Please enter a valid email" : null;
+
+    if (emailError) {
+      showAlert(emailError, "error");
+      return;
+    }
+
     setIsLoading(true);
     await onSave(email);
     setIsLoading(false);

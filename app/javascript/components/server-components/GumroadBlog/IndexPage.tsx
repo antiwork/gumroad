@@ -6,6 +6,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";
 
@@ -183,29 +184,6 @@ const PostsGrid = ({ posts }: { posts: Post[] }) => (
   </section>
 );
 
-interface TabButtonProps {
-  children: React.ReactNode;
-  isActive: boolean;
-  onClick: () => void;
-  count?: number;
-  showCount?: boolean;
-}
-
-const TabButton = ({ children, isActive, onClick, count, showCount = false }: TabButtonProps) => {
-  const baseClasses =
-    "block no-underline px-4 py-2 rounded-full border border-black transition-all duration-200 ease-in-out flex items-center justify-center cursor-pointer";
-  const activeClasses = isActive
-    ? "bg-black text-white"
-    : "bg-white text-black hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]";
-
-  return (
-    <button role="tab" aria-selected={isActive} className={cx(baseClasses, activeClasses)} onClick={onClick}>
-      {children}
-      {showCount ? <span className="ml-1.5 text-base opacity-85">({count})</span> : null}
-    </button>
-  );
-};
-
 const TagSelector = ({
   postsByTags,
   allPostsCount,
@@ -233,26 +211,22 @@ const TagSelector = ({
   }, []);
 
   return (
-    <div className="mb-12" role="tablist">
-      <ul className="flex flex-wrap gap-x-3 gap-y-3 text-lg">
-        <li>
-          <TabButton isActive={isAllPostsActive} onClick={selectAll} count={allPostsCount} showCount={isAllPostsActive}>
-            All Posts
-          </TabButton>
-        </li>
+    <div className="mb-12">
+      <Tabs>
+        <Tab isSelected={isAllPostsActive} onClick={selectAll}>
+          All Posts {isAllPostsActive ? <span className="ml-1.5 text-base opacity-85">({allPostsCount})</span> : null}
+        </Tab>
         {tags.map((tag) => {
           const isActive = activeTab === tag;
           const count = postsByTags[tag]?.length || 0;
 
           return (
-            <li key={tag}>
-              <TabButton isActive={isActive} onClick={() => selectTag(tag)} count={count} showCount={isActive}>
-                {tag}
-              </TabButton>
-            </li>
+            <Tab key={tag} isSelected={isActive} onClick={() => selectTag(tag)}>
+              {tag} {isActive ? <span className="ml-1.5 text-base opacity-85">({count})</span> : null}
+            </Tab>
           );
         })}
-      </ul>
+      </Tabs>
     </div>
   );
 };

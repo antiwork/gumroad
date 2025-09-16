@@ -21,7 +21,7 @@ describe("Authentication Scenario", type: :system, js: true) do
               fill_in("Password", with: "password")
               click_on("Create account")
 
-              expect(page).to_not have_content("Welcome to Gumroad.")
+              expect(page).to_not have_content("Dashboard")
               expect(page).to have_alert(text: "Password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
             end
           end
@@ -38,7 +38,7 @@ describe("Authentication Scenario", type: :system, js: true) do
           fill_in("Password", with: SecureRandom.hex(24))
           click_on("Create account")
 
-          expect(page).to have_content("Welcome to Gumroad.")
+          expect(page).to have_content("Dashboard")
         end
       end.to change { User.count }.by(1)
     end
@@ -55,7 +55,7 @@ describe("Authentication Scenario", type: :system, js: true) do
             fill_in("Password", with: user.password)
             click_on("Login")
 
-            expect(page).to have_selector("h1", text: "Welcome to Gumroad.")
+            expect(page).to have_selector("h1", text: "Dashboard")
             expect(page).to_not have_alert
           end
         end
@@ -74,7 +74,7 @@ describe("Authentication Scenario", type: :system, js: true) do
             fill_in("Password", with: user.password)
             click_on("Login")
 
-            expect(page).to have_selector("h1", text: "Welcome to Gumroad.")
+            expect(page).to have_selector("h1", text: "Dashboard")
             expect(page).to have_alert(text: "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it.")
           end
         end
@@ -117,7 +117,7 @@ describe("Authentication Scenario", type: :system, js: true) do
 
       visit("/dashboard")
 
-      expect(page).to have_selector("h1", text: "Welcome to Gumroad.")
+      expect(page).to have_selector("h1", text: "Dashboard")
       expect(page).to_not have_alert
     end
   end

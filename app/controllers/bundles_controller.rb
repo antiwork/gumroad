@@ -11,7 +11,6 @@ class BundlesController < Sellers::BaseController
     authorize bundle
 
     @title = bundle.name
-    @body_class = "fixed-aside"
 
     @props = BundlePresenter.new(bundle:).bundle_props
   end

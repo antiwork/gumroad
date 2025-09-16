@@ -71,7 +71,7 @@ const WishlistsPage = ({
       reviewsPageEnabled={reviews_page_enabled}
       followingWishlistsEnabled={following_wishlists_enabled}
     >
-      <section>
+      <section className="space-y-4 p-4 md:p-8">
         {wishlists.length > 0 ? (
           <table>
             <thead>

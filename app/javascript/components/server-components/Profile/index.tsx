@@ -10,6 +10,7 @@ import { EditProfile, Props as EditProps } from "$app/components/Profile/EditPag
 import { FollowFormBlock } from "$app/components/Profile/FollowForm";
 import { Layout } from "$app/components/Profile/Layout";
 import { PageProps as SectionsProps, Section } from "$app/components/Profile/Sections";
+import { Tabs as UITabs, Tab as UITab } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
@@ -62,20 +63,20 @@ const PublicProfile = (props: Props) => {
   return (
     <>
       {props.bio || props.tabs.length > 1 ? (
-        <header>
+        <header className="grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
           {props.bio ? (
             <h1 style={{ whiteSpace: "pre-line" }}>
               <AutoLink text={props.bio} />
             </h1>
           ) : null}
           {props.tabs.length > 1 ? (
-            <div role="tablist" aria-label="Profile Tabs">
+            <UITabs aria-label="Profile Tabs">
               {tabs.map((tab, i) => (
-                <div role="tab" key={i} aria-selected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
+                <UITab key={i} isSelected={tab === selectedTab} onClick={() => setSelectedTab(tab)}>
                   {tab.name}
-                </div>
+                </UITab>
               ))}
-            </div>
+            </UITabs>
           ) : null}
         </header>
       ) : null}

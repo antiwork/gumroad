@@ -327,7 +327,7 @@ const SubscriptionManager = ({
       : null;
 
   return (
-    <main className="stack input-group">
+    <div className="stack input-group mx-auto my-8 max-w-2xl">
       <header>
         {`Manage ${subscriptionEntity}`}
         <h2>{product.name}</h2>
@@ -383,7 +383,7 @@ const SubscriptionManager = ({
           </Button>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 };
 

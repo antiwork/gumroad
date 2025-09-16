@@ -7,6 +7,7 @@ import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type FieldState = { value: string; error?: boolean };
@@ -106,7 +107,7 @@ const GenerateInvoicePage = ({
 
   return (
     <>
-      <main className="stack">
+      <div className="stack">
         <header>
           <h4>{form_info.heading}</h4>
         </header>
@@ -269,10 +270,8 @@ const GenerateInvoicePage = ({
             Download
           </Button>
         </footer>
-      </main>
-      <footer style={{ textAlign: "center", padding: "var(--spacer-4)" }}>
-        Powered by <span className="logo-full" />
-      </footer>
+      </div>
+      <PoweredByFooter />
     </>
   );
 };

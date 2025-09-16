@@ -28,6 +28,8 @@ export const ChatMessageList = ({
   const dateObserversRef = React.useRef<Map<string, IntersectionObserver>>(new Map());
   const dateElementsRef = React.useRef<Map<string, HTMLDivElement>>(new Map());
 
+  const isSafari = typeof window !== "undefined" && /^((?!chrome|android).)*safari/iu.test(navigator.userAgent);
+
   const lastReadMessageCreatedAt = community.last_read_community_chat_message_created_at;
   let lastReadMessageIndex = -1;
   if (lastReadMessageCreatedAt) {
@@ -97,6 +99,11 @@ export const ChatMessageList = ({
         // Observer for the date group content visibility
         const groupObserver = new IntersectionObserver(([entry]) => {
           setVisibleDateGroups((prev) => {
+            // Safari has issues with rapid IntersectionObserver callbacks,
+            // causing the UI to jump around when scrolling.
+            // So we skip updating the visible date groups in Safari.
+            if (isSafari) return prev;
+
             if (entry?.isIntersecting && !prev.includes(date)) {
               return [...prev, date].sort();
             } else if (!entry?.isIntersecting && prev.includes(date)) {

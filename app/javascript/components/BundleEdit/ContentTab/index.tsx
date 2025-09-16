@@ -68,7 +68,7 @@ export const ContentTab = () => {
   return (
     <Layout
       preview={
-        <main>
+        <div>
           <header>
             <h1>Library</h1>
           </header>
@@ -79,11 +79,11 @@ export const ContentTab = () => {
               ))}
             </div>
           </section>
-        </main>
+        </div>
       }
     >
       <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
-        <section>
+        <section className="!p-4 md:!p-8">
           {hasOutdatedPurchases ? <BundleContentUpdatedStatus /> : null}
           {isSelecting ? (
             <>

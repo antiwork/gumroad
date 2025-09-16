@@ -1,52 +1,148 @@
-import cx from "classnames";
+import { cva } from "class-variance-authority";
 import * as React from "react";
 import { is } from "ts-safe-cast";
 
 import { assert } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { ButtonColor, buttonColors } from "$app/components/design";
 
+const buttonVariants = cva("button", {
+  variants: {
+    variant: {
+      default: "",
+      outline: "",
+      secondary: "",
+      destructive: "",
+    },
+    size: {
+      default: "",
+      sm: "small",
+    },
+    color: {
+      primary: "primary",
+      black: "black",
+      accent: "accent",
+      filled: "filled",
+      success: "success",
+      danger: "danger",
+      warning: "warning",
+      info: "info",
+    },
+  },
+  compoundVariants: [
+    {
+      variant: "outline",
+      color: "primary",
+      className: "outline-primary",
+    },
+    {
+      variant: "outline",
+      color: "danger",
+      className: "outline-danger",
+    },
+    {
+      variant: "outline",
+      color: "success",
+      className: "outline-success",
+    },
+    {
+      variant: "outline",
+      color: "warning",
+      className: "outline-warning",
+    },
+    {
+      variant: "outline",
+      color: "info",
+      className: "outline-info",
+    },
+    {
+      variant: "outline",
+      color: "black",
+      className: "outline-black",
+    },
+    {
+      variant: "outline",
+      color: "accent",
+      className: "outline-accent",
+    },
+    {
+      variant: "outline",
+      color: "filled",
+      className: "outline-filled",
+    },
+  ],
+  defaultVariants: {
+    variant: "default",
+    size: "default",
+  },
+});
+
+// Legacy props for backward compatibility
 type ButtonVariation = {
-  disabled?: boolean | undefined;
   color?: ButtonColor | undefined;
-  outline?: boolean | undefined;
-  small?: boolean | undefined;
+  outline?: boolean;
+  small?: boolean;
 };
 
-export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & ButtonVariation;
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>((props, ref) => {
-  useValidateClassName(props.className);
+export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {}
 
-  const { className, ...rest } = extractButtonClassNameFromProps(props);
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, color, outline, small, disabled, ...props }, ref) => {
+    useValidateClassName(className);
 
-  return <button className={cx("button", className)} ref={ref} disabled={props.disabled} type="button" {...rest} />;
-});
+    const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
+    const size = small ? "sm" : "default";
+
+    return (
+      <button
+        className={classNames(
+          buttonVariants({ variant, size, color: color && !outline ? color : undefined }),
+          className,
+        )}
+        ref={ref}
+        disabled={disabled}
+        type="button"
+        {...props}
+      />
+    );
+  },
+);
 Button.displayName = "Button";
 
-type NavigationButtonProps = React.ComponentPropsWithoutRef<"a"> & ButtonVariation;
-export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>((props, ref) => {
-  useValidateClassName(props.className);
+export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
+  disabled?: boolean | undefined;
+}
 
-  const { className, disabled, ...rest } = extractButtonClassNameFromProps(props);
+export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
+  ({ className, color, outline, small, disabled, ...props }, ref) => {
+    useValidateClassName(className);
 
-  return (
-    <a
-      className={cx(className, "button")}
-      ref={ref}
-      inert={disabled}
-      {...rest}
-      onClick={(evt) => {
-        if (props.onClick == null) return;
+    const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
+    const size = small ? "sm" : "default";
 
-        if (props.href == null || props.href === "#") evt.preventDefault();
+    return (
+      <a
+        className={classNames(
+          buttonVariants({ variant, size, color: color && !outline ? color : undefined }),
+          className,
+        )}
+        ref={ref}
+        inert={disabled}
+        {...props}
+        onClick={(evt) => {
+          if (props.onClick == null) return;
 
-        props.onClick(evt);
+          if (props.href == null || props.href === "#") evt.preventDefault();
 
-        evt.stopPropagation();
-      }}
-    />
-  );
-});
+          props.onClick(evt);
+
+          evt.stopPropagation();
+        }}
+      />
+    );
+  },
+);
 NavigationButton.displayName = "NavigationButton";
 
 // Logs warnings whenever `className` changes, instead of on every render
@@ -76,14 +172,4 @@ const validateClassName = (className: string | undefined) => {
     );
     assert(cls !== "small", `Button: Instead of using '${cls}' as a class, use the 'small' prop`);
   });
-};
-
-const extractButtonClassNameFromProps = <ElementProps extends ButtonProps | NavigationButtonProps>(
-  props: ElementProps,
-): { className: string } & Omit<ElementProps, "className" | "color" | "outline" | "small"> => {
-  const { className, color, outline, small, ...rest } = props;
-
-  const classNames = cx({ small }, color != null ? (outline ? `outline-${color}` : color) : null, className);
-
-  return { className: classNames, ...rest };
 };

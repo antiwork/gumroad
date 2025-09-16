@@ -46,7 +46,7 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
     <div className="w-full">
       <h2 className="mb-4 font-semibold">{category.title}</h2>
       <div
-        className="w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        className="w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         style={{ display: "grid", gridAutoRows: "160px" }}
       >
         {category.articles.map((article) => (
@@ -75,7 +75,7 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
     : categories;
 
   return (
-    <div>
+    <>
       <input
         type="text"
         autoFocus
@@ -89,7 +89,7 @@ const ArticlesIndexPage = ({ categories }: ArticlesIndexPageProps) => {
           <CategoryArticles key={category.url} category={category} searchTerm={searchTerm} />
         ))}
       </div>
-    </div>
+    </>
   );
 };
 

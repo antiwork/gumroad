@@ -204,6 +204,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.upcoming_refund_policy_change(User.last&.id)
   end
 
+  def paypal_suspension_notification
+    ContactingCreatorMailer.paypal_suspension_notification(User.last&.id)
+  end
+
   def ping_endpoint_failure
     ContactingCreatorMailer.ping_endpoint_failure(User.last&.id, "https://example.com/webhook", 500)
   end
