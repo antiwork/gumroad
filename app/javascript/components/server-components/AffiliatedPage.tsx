@@ -313,7 +313,7 @@ const AffiliatedPage = ({
           affiliateQueryParam={globalAffiliatesData.affiliate_query_param}
         />
       ) : (
-        <section>
+        <section className="p-4 md:p-8">
           {initialAffiliatedProducts.length === 0 ? (
             <div className="placeholder">
               <figure>

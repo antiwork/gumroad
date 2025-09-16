@@ -78,7 +78,7 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
 };
 
 const ApplicationsSection = (props: { applications: Application[] }) => (
-  <section>
+  <section className="!p-4 md:!p-8">
     <CreateApplication />
     <ApplicationList applications={props.applications} />
   </section>

@@ -263,7 +263,7 @@ export const Receipt = ({
   const [state] = useState();
   if (state.status.type !== "finished") return null;
   return (
-    <main className="stack">
+    <div className="stack mx-auto my-8 max-w-2xl">
       <header>
         <h4 style={{ position: "relative" }}>
           Checkout
@@ -303,6 +303,6 @@ export const Receipt = ({
           }}
         />
       ) : null}
-    </main>
+    </div>
   );
 };
