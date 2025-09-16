@@ -25,7 +25,7 @@ describe("Purchase product page", type: :system, js: true) do
       visit purchase_product_path(purchase.external_id)
 
       click_on("30-day money back guarantee")
-      within_modal "This is a product-level refund policy" do
+      within_modal "30-day money back guarantee" do
         expect(page).to have_text("This is the fine print of the refund policy.")
       end
     end
