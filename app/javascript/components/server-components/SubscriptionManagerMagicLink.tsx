@@ -8,6 +8,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type UserEmail = { email: string; source: string };
@@ -19,23 +20,22 @@ type LayoutProps = {
   children: React.ReactNode;
 };
 const Layout = ({ title, body, handleSendMagicLink, children }: LayoutProps) => (
-  <div className="squished">
-    <header>
-      <a className="logo-full" href={Routes.root_path()} />
-
-      <div className="actions">
-        <a href={Routes.login_path()}>Log in</a>
-      </div>
-      <h1>{title}</h1>
+  <div className="squished flex-1">
+    <PageHeader
+      title={<a href={Routes.root_path()} className="logo-full" aria-label="Gumroad" />}
+      actions={<a href={Routes.login_path()}>Log in</a>}
+      className="border-none px-16"
+    >
+      <h1 className="mt-12">{title}</h1>
       <h3>{body}</h3>
-    </header>
+    </PageHeader>
     <form
       onSubmit={(evt) => {
         evt.preventDefault();
         void handleSendMagicLink();
       }}
     >
-      <section>{children}</section>
+      <section className="my-12 p-4 md:p-8">{children}</section>
     </form>
   </div>
 );
@@ -80,6 +80,10 @@ const SubscriptionManagerMagicLink = ({
       body={`Please check your inbox and click the link in your email to manage your ${subscriptionEntity}.`}
       handleSendMagicLink={handleSendMagicLink}
     >
+      <Button color="primary" type="submit" disabled={loading}>
+        {loading ? <LoadingSpinner /> : null}
+        Resend magic link
+      </Button>
       <p>
         {user_emails.length > 1 ? (
           <>
@@ -93,10 +97,6 @@ const SubscriptionManagerMagicLink = ({
           "Can't see the email? Please check your spam folder or try resending the link below."
         )}
       </p>
-      <Button color="primary" type="submit" disabled={loading}>
-        {loading ? <LoadingSpinner /> : null}
-        Resend magic link
-      </Button>
     </Layout>
   ) : (
     <Layout

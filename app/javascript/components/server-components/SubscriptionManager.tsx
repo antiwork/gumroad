@@ -327,7 +327,7 @@ const SubscriptionManager = ({
       : null;
 
   return (
-    <div className="stack input-group">
+    <div className="stack input-group mx-auto my-8 max-w-2xl">
       <header>
         {`Manage ${subscriptionEntity}`}
         <h2>{product.name}</h2>

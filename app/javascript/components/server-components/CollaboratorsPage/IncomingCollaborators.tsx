@@ -179,7 +179,7 @@ const TableRowLoadingSpinner = () => (
 );
 
 const EmptyState = () => (
-  <section>
+  <section className="p-4 md:p-8">
     <div className="placeholder">
       <figure>
         <img src={placeholder} />
@@ -214,7 +214,7 @@ const IncomingCollaboratorsTable = ({
   onReject: (collaborator: IncomingCollaborator) => void;
   onRemove: (collaborator: IncomingCollaborator) => void;
 }) => (
-  <section className="paragraphs">
+  <section className="p-4 md:p-8">
     <table aria-busy={loading || disabled}>
       <thead>
         <tr>

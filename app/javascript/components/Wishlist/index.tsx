@@ -2,6 +2,7 @@ import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
 import { CardProduct } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { register } from "$app/utils/serverComponentUtil";
 
@@ -44,7 +45,7 @@ export type WishlistProps = {
   discover_opted_out: boolean | null;
   checkout_enabled: boolean;
   items: WishlistItem[];
-  topLevel?: boolean;
+  isDiscover?: boolean;
 };
 
 const formatName = ({ product, option, recurrence }: WishlistItem) => {
@@ -80,6 +81,7 @@ export const Wishlist = ({
   discover_opted_out,
   checkout_enabled,
   items: initialItems,
+  isDiscover,
 }: WishlistProps) => {
   const [name, setName] = React.useState(initialName);
   const [description, setDescription] = React.useState(initialDescription);
@@ -89,6 +91,7 @@ export const Wishlist = ({
   return (
     <>
       <PageHeader
+        className={isDiscover ? "lg:px-16" : ""}
         title={name}
         actions={
           <>
@@ -127,7 +130,7 @@ export const Wishlist = ({
         ) : null}
         {description ? <h4>{description}</h4> : null}
       </PageHeader>
-      <section className="p-4 md:p-8">
+      <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
         <div className="product-card-grid">
           {items.map((item) => (
             <Card
