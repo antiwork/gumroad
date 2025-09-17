@@ -39,9 +39,11 @@ export const editEmailPath = (id: string) => `/emails/${id}/edit`;
 export const Layout = ({
   selectedTab,
   children,
+  hasPosts,
 }: {
   selectedTab: (typeof TABS)[number];
   children: React.ReactNode;
+  hasPosts?: boolean;
 }) => {
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
@@ -56,30 +58,31 @@ export const Layout = ({
         title="Emails"
         actions={
           <>
-            <Popover
-              open={isSearchPopoverOpen}
-              onToggle={setIsSearchPopoverOpen}
-              aria-label="Toggle Search"
-              trigger={
-                <WithTooltip tip="Search" position="bottom">
-                  <div className="button">
-                    <Icon name="solid-search" />
-                  </div>
-                </WithTooltip>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search emails"
-                  value={query}
-                  onChange={(evt) => setQuery(evt.target.value)}
-                />
-              </div>
-            </Popover>
-
+            {hasPosts ? (
+              <Popover
+                open={isSearchPopoverOpen}
+                onToggle={setIsSearchPopoverOpen}
+                aria-label="Toggle Search"
+                trigger={
+                  <WithTooltip tip="Search" position="bottom">
+                    <div className="button">
+                      <Icon name="solid-search" />
+                    </div>
+                  </WithTooltip>
+                }
+              >
+                <div className="input">
+                  <Icon name="solid-search" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search emails"
+                    value={query}
+                    onChange={(evt) => setQuery(evt.target.value)}
+                  />
+                </div>
+              </Popover>
+            ) : null}
             <NewEmailButton />
           </>
         }

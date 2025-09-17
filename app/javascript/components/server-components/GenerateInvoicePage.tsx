@@ -107,7 +107,7 @@ const GenerateInvoicePage = ({
 
   return (
     <>
-      <div className="stack">
+      <main className="stack">
         <header>
           <h4>{form_info.heading}</h4>
         </header>
@@ -270,7 +270,7 @@ const GenerateInvoicePage = ({
             Download
           </Button>
         </footer>
-      </div>
+      </main>
       <PoweredByFooter />
     </>
   );
