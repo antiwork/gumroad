@@ -26,6 +26,8 @@ import { DraftsTab } from "$app/components/server-components/EmailsPage/DraftsTa
 import { EmailForm } from "$app/components/server-components/EmailsPage/EmailForm";
 import { PublishedTab } from "$app/components/server-components/EmailsPage/PublishedTab";
 import { ScheduledTab } from "$app/components/server-components/EmailsPage/ScheduledTab";
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const TABS = ["published", "scheduled", "drafts", "subscribers"] as const;
@@ -37,9 +39,11 @@ export const editEmailPath = (id: string) => `/emails/${id}/edit`;
 export const Layout = ({
   selectedTab,
   children,
+  hasPosts,
 }: {
   selectedTab: (typeof TABS)[number];
   children: React.ReactNode;
+  hasPosts?: boolean;
 }) => {
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
@@ -49,54 +53,56 @@ export const Layout = ({
   }, [isSearchPopoverOpen]);
 
   return (
-    <main>
-      <header>
-        <h1>Emails</h1>
-
-        <div className="actions">
-          <Popover
-            open={isSearchPopoverOpen}
-            onToggle={setIsSearchPopoverOpen}
-            aria-label="Toggle Search"
-            trigger={
-              <WithTooltip tip="Search" position="bottom">
-                <div className="button">
+    <div>
+      <PageHeader
+        title="Emails"
+        actions={
+          <>
+            {hasPosts ? (
+              <Popover
+                open={isSearchPopoverOpen}
+                onToggle={setIsSearchPopoverOpen}
+                aria-label="Toggle Search"
+                trigger={
+                  <WithTooltip tip="Search" position="bottom">
+                    <div className="button">
+                      <Icon name="solid-search" />
+                    </div>
+                  </WithTooltip>
+                }
+              >
+                <div className="input">
                   <Icon name="solid-search" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search emails"
+                    value={query}
+                    onChange={(evt) => setQuery(evt.target.value)}
+                  />
                 </div>
-              </WithTooltip>
-            }
-          >
-            <div className="input">
-              <Icon name="solid-search" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search emails"
-                value={query}
-                onChange={(evt) => setQuery(evt.target.value)}
-              />
-            </div>
-          </Popover>
-
-          <NewEmailButton />
-        </div>
-
-        <div role="tablist">
+              </Popover>
+            ) : null}
+            <NewEmailButton />
+          </>
+        }
+      >
+        <Tabs>
           {TABS.map((tab) =>
             tab === "subscribers" ? (
-              <a href={Routes.followers_path()} role="tab" key={tab}>
+              <Tab href={Routes.followers_path()} isSelected={false} key={tab}>
                 Subscribers
-              </a>
+              </Tab>
             ) : (
-              <Link to={emailTabPath(tab)} role="tab" aria-selected={selectedTab === tab} key={tab}>
+              <Tab href={emailTabPath(tab)} isSelected={selectedTab === tab} key={tab}>
                 {tab === "published" ? "Published" : tab === "scheduled" ? "Scheduled" : "Drafts"}
-              </Link>
+              </Tab>
             ),
           )}
-        </div>
-      </header>
+        </Tabs>
+      </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };
 

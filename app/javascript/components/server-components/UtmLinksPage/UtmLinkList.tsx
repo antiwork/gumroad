@@ -153,7 +153,7 @@ const UtmLinkList = () => {
           <Progress width="5rem" />
         </div>
       ) : utmLinks.length > 0 ? (
-        <section className="paragraphs">
+        <section className="p-4 md:p-8">
           <table>
             <thead>
               <tr>
@@ -302,7 +302,7 @@ const UtmLinkList = () => {
           ) : null}
         </section>
       ) : query ? (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={noLinksFoundPlaceholder} />
@@ -311,7 +311,7 @@ const UtmLinkList = () => {
           </div>
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={noLinksYetPlaceholder} />

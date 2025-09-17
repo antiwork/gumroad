@@ -7,9 +7,9 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-
-import logo from "$assets/images/logo.svg";
 
 export function SupportHeader({
   onOpenNewTicket,
@@ -41,49 +41,40 @@ export function SupportHeader({
 
   return (
     <>
-      <h1 className="hidden group-[.sidebar-nav]/body:block">Help</h1>
-      <h1 className="group-[.sidebar-nav]/body:hidden">
-        <a href={Routes.root_path()} className="flex items-center">
-          <img src={logo} alt="Gumroad" className="h-8 w-auto dark:invert" />
-        </a>
-      </h1>
-      <div className="actions">
-        {isHelpArticle ? (
-          <a href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-            <span className="icon icon-solid-search"></span>
-          </a>
-        ) : isAnonymousUserOnHelpCenter ? (
-          <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
-            Contact support
-          </Button>
-        ) : hasHelperSession ? (
-          <Button color="accent" onClick={onOpenNewTicket}>
-            New ticket
-          </Button>
+      <PageHeader
+        title="Help Center"
+        actions={
+          isHelpArticle ? (
+            <a href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
+              <span className="icon icon-solid-search"></span>
+            </a>
+          ) : isAnonymousUserOnHelpCenter ? (
+            <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
+              Contact support
+            </Button>
+          ) : hasHelperSession ? (
+            <Button color="accent" onClick={onOpenNewTicket}>
+              New ticket
+            </Button>
+          ) : null
+        }
+      >
+        {hasHelperSession ? (
+          <Tabs>
+            <Tab href={Routes.help_center_root_path()} isSelected={pathname.startsWith(Routes.help_center_root_path())}>
+              Articles
+            </Tab>
+            <Tab
+              href={Routes.support_index_path()}
+              isSelected={pathname.startsWith(Routes.support_index_path())}
+              className="flex items-center gap-2"
+            >
+              Support tickets
+              <UnreadTicketsBadge />
+            </Tab>
+          </Tabs>
         ) : null}
-      </div>
-      {hasHelperSession ? (
-        <div role="tablist" className="col-span-full">
-          <a
-            href={Routes.help_center_root_path()}
-            role="tab"
-            aria-selected={pathname.startsWith(Routes.help_center_root_path())}
-            className="pb-2"
-          >
-            Articles
-          </a>
-          <a
-            href={Routes.support_index_path()}
-            role="tab"
-            aria-selected={pathname.startsWith(Routes.support_index_path())}
-            className="flex items-center gap-2 border-b-2 pb-2"
-          >
-            Support tickets
-            <UnreadTicketsBadge />
-          </a>
-        </div>
-      ) : null}
-
+      </PageHeader>
       {isAnonymousUserOnHelpCenter ? (
         <UnauthenticatedNewTicketModal
           open={isUnauthenticatedNewTicketOpen}

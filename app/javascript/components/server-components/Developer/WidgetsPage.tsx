@@ -48,7 +48,7 @@ export const WidgetsPage = ({ display_product_select, products, affiliated_produ
   return (
     <Layout currentPage="widgets">
       <form>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h3>Share your product</h3>
             <p>
@@ -69,7 +69,7 @@ export const WidgetsPage = ({ display_product_select, products, affiliated_produ
           </div>
         </section>
         {currentSeller ? (
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h3>Subscribe form</h3>
               <p>

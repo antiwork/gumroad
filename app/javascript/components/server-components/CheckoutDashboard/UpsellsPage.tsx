@@ -34,6 +34,7 @@ import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -233,7 +234,7 @@ const UpsellsPage = (props: {
         </>
       }
     >
-      <section className="paragraphs">
+      <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
           <>
             <table aria-busy={isLoading} aria-label="Upsells">
@@ -629,22 +630,25 @@ const Form = ({
   useLoadCartItem(selectedProductIds.value[0] ?? null);
 
   return (
-    <div className="fixed-aside" style={{ display: "contents" }}>
-      <header className="sticky-top">
-        <h1>{title}</h1>
-        <div className="actions">
-          <Button onClick={onCancel} disabled={isLoading}>
-            <Icon name="x-square" />
-            Cancel
-          </Button>
-          <Button type="submit" color="accent" onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </header>
-      <main className="squished">
+    <>
+      <PageHeader
+        className="sticky-top"
+        title={title}
+        actions={
+          <>
+            <Button onClick={onCancel} disabled={isLoading}>
+              <Icon name="x-square" />
+              Cancel
+            </Button>
+            <Button type="submit" color="accent" onClick={handleSubmit} disabled={isLoading}>
+              {isLoading ? "Saving..." : "Save"}
+            </Button>
+          </>
+        }
+      />
+      <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
-          <section>
+          <section className="!p-8">
             <p>
               When a customer clicks "Pay", offer a version upgrade or another product with or without a discount.{" "}
               <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
@@ -866,88 +870,88 @@ const Form = ({
             )}
           </section>
         </form>
-      </main>
-      <CheckoutPreview cartItem={previewCartItem}>
-        <dialog open aria-labelledby={`${uid}preview`}>
-          <header>
-            <h2 id={`${uid}preview`}>{offerText.value}</h2>
-            <button className="close" />
-          </header>
-          {isCrossSell ? (
-            <CrossSellModal
-              crossSell={{
-                id: "",
-                replace_selected_products: type === "replacement-cross-sell",
-                text: offerText.value,
-                description: offerDescription,
-                offered_product: {
-                  ...(offeredCartItem ?? PLACEHOLDER_CART_ITEM),
-                  option_id: offeredVariantId.value ?? previewCartItem.option_id,
-                  price: offeredCartItem
-                    ? applySelection(offeredCartItem.product, null, {
-                        rent: !!offeredCartItem.product.rental?.rent_only,
-                        optionId: offeredVariantId.value,
-                        price: { error: false, value: null },
-                        quantity: 1,
-                        recurrence: offeredCartItem.recurrence,
-                        callStartTime: null,
-                        payInInstallments: false,
-                      }).priceCents
-                    : 0,
-                  accepted_offer: null,
-                },
-                discount: discount?.value
-                  ? {
-                      ...(discount.type === "percent"
-                        ? { type: "percent", percents: discount.value }
-                        : { type: "fixed", cents: discount.value }),
-                      product_ids: null,
-                      minimum_quantity: null,
-                      expires_at: null,
-                      duration_in_billing_cycles: null,
-                      minimum_amount_cents: null,
-                    }
-                  : null,
-                ratings: null,
-              }}
-              accept={() => {}}
-              decline={() => {}}
-              cart={{
-                items: [previewCartItem],
-                discountCodes: [],
-              }}
-            />
-          ) : (
-            <UpsellModal
-              upsell={{
-                id: "",
-                text: offerText.value,
-                description: offerDescription,
-                offeredOption: selectedProduct?.options.find(({ id }) =>
-                  variants.some(({ offeredVariantId }) => offeredVariantId === id),
-                ) ?? {
+        <CheckoutPreview cartItem={previewCartItem}>
+          <dialog open aria-labelledby={`${uid}preview`}>
+            <header>
+              <h2 id={`${uid}preview`}>{offerText.value}</h2>
+              <button className="close" />
+            </header>
+            {isCrossSell ? (
+              <CrossSellModal
+                crossSell={{
                   id: "",
-                  name: "",
-                  quantity_left: null,
-                  description: "",
-                  price_difference_cents: 0,
-                  recurrence_price_values: null,
-                  is_pwyw: false,
-                  duration_in_minutes: null,
-                },
-                item: previewCartItem,
-              }}
-              cart={{
-                items: [previewCartItem],
-                discountCodes: [],
-              }}
-              accept={() => {}}
-              decline={() => {}}
-            />
-          )}
-        </dialog>
-      </CheckoutPreview>
-    </div>
+                  replace_selected_products: type === "replacement-cross-sell",
+                  text: offerText.value,
+                  description: offerDescription,
+                  offered_product: {
+                    ...(offeredCartItem ?? PLACEHOLDER_CART_ITEM),
+                    option_id: offeredVariantId.value ?? previewCartItem.option_id,
+                    price: offeredCartItem
+                      ? applySelection(offeredCartItem.product, null, {
+                          rent: !!offeredCartItem.product.rental?.rent_only,
+                          optionId: offeredVariantId.value,
+                          price: { error: false, value: null },
+                          quantity: 1,
+                          recurrence: offeredCartItem.recurrence,
+                          callStartTime: null,
+                          payInInstallments: false,
+                        }).priceCents
+                      : 0,
+                    accepted_offer: null,
+                  },
+                  discount: discount?.value
+                    ? {
+                        ...(discount.type === "percent"
+                          ? { type: "percent", percents: discount.value }
+                          : { type: "fixed", cents: discount.value }),
+                        product_ids: null,
+                        minimum_quantity: null,
+                        expires_at: null,
+                        duration_in_billing_cycles: null,
+                        minimum_amount_cents: null,
+                      }
+                    : null,
+                  ratings: null,
+                }}
+                accept={() => {}}
+                decline={() => {}}
+                cart={{
+                  items: [previewCartItem],
+                  discountCodes: [],
+                }}
+              />
+            ) : (
+              <UpsellModal
+                upsell={{
+                  id: "",
+                  text: offerText.value,
+                  description: offerDescription,
+                  offeredOption: selectedProduct?.options.find(({ id }) =>
+                    variants.some(({ offeredVariantId }) => offeredVariantId === id),
+                  ) ?? {
+                    id: "",
+                    name: "",
+                    quantity_left: null,
+                    description: "",
+                    price_difference_cents: 0,
+                    recurrence_price_values: null,
+                    is_pwyw: false,
+                    duration_in_minutes: null,
+                  },
+                  item: previewCartItem,
+                }}
+                cart={{
+                  items: [previewCartItem],
+                  discountCodes: [],
+                }}
+                accept={() => {}}
+                decline={() => {}}
+              />
+            )}
+          </dialog>
+        </CheckoutPreview>
+      </div>
+    </>
   );
 };
 

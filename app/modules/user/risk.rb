@@ -85,6 +85,10 @@ module User::Risk
     !verified
   end
 
+  def log_suspension_time_to_mongo
+    Mongoer.async_write(MongoCollections::USER_SUSPENSION_TIME, "user_id" => id, "suspended_at" => Time.current.to_s)
+  end
+
   def disable_links_and_tell_chat
     links.each do |link|
       link.update(banned_at: Time.current)

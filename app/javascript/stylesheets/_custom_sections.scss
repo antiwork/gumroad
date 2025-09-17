@@ -85,4 +85,9 @@
       padding-top: 5rem;
     }
   }
+
+  &.product > * {
+    padding-left: $body-padding-desktop-center;
+    padding-right: $body-padding-desktop-center;
+  }
 }
