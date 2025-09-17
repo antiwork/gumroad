@@ -87,7 +87,9 @@
   }
 
   &.product > * {
-    padding-left: $body-padding-desktop-center;
-    padding-right: $body-padding-desktop-center;
+    @media (min-width: 1024px) {
+      padding-left: $body-padding-desktop-center;
+      padding-right: $body-padding-desktop-center;
+    }
   }
 }
