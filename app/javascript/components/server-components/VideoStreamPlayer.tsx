@@ -1,12 +1,13 @@
 import throttle from "lodash/throttle";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast, createCast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import GuidGenerator from "$app/utils/guid_generator";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { register } from "$app/utils/serverComponentUtil";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -71,6 +72,44 @@ export const VideoStreamPlayer = ({
         })),
       });
 
+      let lastKnownPosition = 0;
+      let lastPauseAtMs: number | null = null;
+
+      const getCurrentVideoFile = () => playlist[player.getPlaylistIndex()];
+
+      const extractTokenFromPath = (): string | null => {
+        const match = window.location.pathname.match(/\/url_redirects\/([^/]+)/);
+        return match ? match[1] : null;
+      };
+
+      const refreshCurrentItemSources = async () => {
+        const current = getCurrentVideoFile();
+        if (!current) return;
+        try {
+          const token = extractTokenFromPath();
+          if (!token) return;
+          const response = await request({
+            url: Routes.url_redirect_media_urls_path(token, { params: { file_ids: [current.external_id] } }),
+            method: "GET",
+            accept: "json",
+          });
+          if (!response.ok) throw new ResponseError();
+          const urls = cast<Record<string, string[]>>(await response.json());
+          const sources = (urls[current.external_id] || []).map((u) => ({ file: u }));
+          if (sources.length === 0) return;
+
+          player.load([{ sources, tracks: current.tracks, title: current.title }]);
+
+          const targetTime = Math.max(0, lastKnownPosition - 1);
+          player.on("loaded", () => {
+            if (targetTime > 0) player.seek(targetTime);
+            player.play();
+          });
+        } catch (e) {
+          assertResponseError(e);
+        }
+      };
+
       const updateLocalMediaLocation = (position: number, duration: number) => {
         const videoFile = playlist[player.getPlaylistIndex()];
         if (videoFile && isInitialSeekDone && lastPlayedId === player.getPlaylistIndex()) {
@@ -105,11 +144,13 @@ export const VideoStreamPlayer = ({
       player.on("seek", (ev) => {
         trackMediaLocation(ev.offset);
         updateLocalMediaLocation(ev.offset, player.getDuration());
+        lastKnownPosition = ev.offset;
       });
 
       player.on("time", (ev) => {
         throttledTrackMediaLocation(ev.position);
         updateLocalMediaLocation(ev.position, ev.duration);
+        lastKnownPosition = ev.position;
       });
 
       player.on("complete", () => {
@@ -133,6 +174,7 @@ export const VideoStreamPlayer = ({
           lastPlayedId = itemId;
           isInitialSeekDone = false;
         }
+        lastPauseAtMs = null;
       });
 
       player.on("visualQuality", () => {
@@ -146,6 +188,53 @@ export const VideoStreamPlayer = ({
         }
         isInitialSeekDone = true;
       });
+
+      player.on("pause", () => {
+        lastPauseAtMs = Date.now();
+      });
+      player.on("idle", () => {
+        lastPauseAtMs = Date.now();
+      });
+
+      player.on("error", () => {
+        void refreshCurrentItemSources();
+      });
+      player.on("playAttemptFailed", () => {
+        void refreshCurrentItemSources();
+      });
+
+      const onVisibilityChange = () => {
+        if (document.visibilityState === "visible" && lastPauseAtMs != null) {
+          const pausedForMs = Date.now() - lastPauseAtMs;
+          if (pausedForMs > 5 * 60 * 1000) {
+            void refreshCurrentItemSources();
+          }
+        }
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
+      let bufferTimeout: ReturnType<typeof setTimeout> | null = null;
+      const clearBufferTimeout = () => {
+        if (bufferTimeout) {
+          clearTimeout(bufferTimeout);
+          bufferTimeout = null;
+        }
+      };
+      player.on("buffer", () => {
+        clearBufferTimeout();
+        bufferTimeout = setTimeout(() => {
+          void refreshCurrentItemSources();
+        }, 10 * 1000);
+      });
+      player.on("playing", clearBufferTimeout);
+      player.on("complete", clearBufferTimeout);
+
+      const cleanup = () => {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        clearBufferTimeout();
+      };
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      window.addEventListener("beforeunload", cleanup);
     };
 
     void createPlayer();
