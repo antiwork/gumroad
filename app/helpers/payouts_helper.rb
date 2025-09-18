@@ -41,10 +41,8 @@ module PayoutsHelper
       payout_period_data[:status] = user.payouts_status
       payout_period_end_date = current_payout_end_date(user)
 
-      # Set basic payout information
       set_basic_payout_info(payout_period_data, user, payout_period_end_date)
 
-      # Handle verification requirements and balance filtering
       allowed_balance_ids = filter_balances_for_verification(user, payout_period_data, payout_period_end_date)
 
       # Calculate carried over amounts from failed payouts
@@ -64,7 +62,6 @@ module PayoutsHelper
       payout_period_data[:status] = "not_payable"
     end
 
-    # Add payout note if present
     add_payout_note(payout_period_data, user)
     payout_period_data
   end
@@ -92,8 +89,7 @@ module PayoutsHelper
 
     payout_period_data[:payout_date_formatted] = formatted_payout_date(payment.created_at)
     payout_period_data[:payout_currency] = payment.currency
-    payout_total_cents = payment.amount_cents
-    payout_period_data[:payout_cents] = payout_total_cents
+    payout_period_data[:payout_cents] = payment.amount_cents
     payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_total_cents)
     payout_period_data[:is_processing] = payment.processing?
     payout_period_data[:arrival_date] = payment.arrival_date ? formatted_payout_date(Time.zone.at(payment.arrival_date)) : nil
@@ -119,12 +115,21 @@ module PayoutsHelper
 
         items = []
         total_cents = 0
+        processed_balance_ids = Set.new
+
         earlier_failed_list.each do |failed_p|
           failed_ids = failed_p.balances.pluck(:id)
           intersect_ids = balance_ids & failed_ids
           next if intersect_ids.empty?
-          carried_over_balance_ids |= intersect_ids
-          cents = Balance.where(id: intersect_ids).sum(:holding_amount_cents)
+
+          # Only process balances that haven't been counted yet
+          new_balance_ids = intersect_ids - processed_balance_ids.to_a
+          next if new_balance_ids.empty?
+
+          carried_over_balance_ids |= new_balance_ids
+          processed_balance_ids.merge(new_balance_ids)
+
+          cents = Balance.where(id: new_balance_ids).sum(:holding_amount_cents)
           next if cents.zero?
           total_cents += cents
           items << {
@@ -153,8 +158,7 @@ module PayoutsHelper
     end
 
     if balance_ids.present? && payment.failed?
-      # Find the first completed payout that includes any of these failed balances
-      first_later_completed = user.payments
+      payout_included_in = user.payments
         .completed
         .joins(:balances)
         .where("payments.created_at > ?", payment.created_at)
@@ -162,9 +166,9 @@ module PayoutsHelper
         .order("payments.created_at ASC")
         .first
 
-      if first_later_completed.present?
+      if payout_included_in.present?
         payout_period_data[:included_in_payout_on_items] = [
-          { included_on: formatted_payout_date(first_later_completed.created_at) }
+          { included_on: formatted_payout_date(payout_included_in.created_at) }
         ]
       end
     end
@@ -205,7 +209,6 @@ module PayoutsHelper
 
   private
 
-  # Sets basic payout information like currency, amount, date, and type
   def set_basic_payout_info(payout_period_data, user, payout_period_end_date)
     previous_payment = user.payments.completed_or_processing
                            .displayable
@@ -224,8 +227,6 @@ module PayoutsHelper
     end
   end
 
-  # Filters balances based on user-level verification requirements
-  # Returns allowed balance IDs after checking for verification requirements
   def filter_balances_for_verification(user, payout_period_data, payout_period_end_date)
     balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
     allowed_balance_ids = balance_ids
@@ -245,8 +246,6 @@ module PayoutsHelper
     allowed_balance_ids
   end
 
-  # Calculates carried over amounts from previously failed payouts
-  # Returns array of carried over balance IDs
   def calculate_carried_over_amounts(user, allowed_balance_ids, payout_period_data)
     carried_over_balance_ids = []
 
@@ -259,12 +258,21 @@ module PayoutsHelper
 
         items = []
         total_cents = 0
+        processed_balance_ids = Set.new
+
         earlier_failed_list.each do |failed_p|
           failed_ids = failed_p.balances.pluck(:id)
           intersect_ids = allowed_balance_ids & failed_ids
           next if intersect_ids.empty?
-          carried_over_balance_ids |= intersect_ids
-          cents = Balance.where(id: intersect_ids).sum(:holding_amount_cents)
+
+          # Only process balances that haven't been counted yet
+          new_balance_ids = intersect_ids - processed_balance_ids.to_a
+          next if new_balance_ids.empty?
+
+          carried_over_balance_ids |= new_balance_ids
+          processed_balance_ids.merge(new_balance_ids)
+
+          cents = Balance.where(id: new_balance_ids).sum(:holding_amount_cents)
           next if cents.zero?
           total_cents += cents
           items << {
@@ -285,7 +293,6 @@ module PayoutsHelper
     carried_over_balance_ids
   end
 
-  # Common method to get earlier failed payments for a given set of balance IDs
   def get_earlier_failed_payments(user, balance_ids, cutoff_date)
     user.payments
       .failed
@@ -297,7 +304,6 @@ module PayoutsHelper
       .to_a
   end
 
-  # Adds payout note if present and relevant
   def add_payout_note(payout_period_data, user)
     last_payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
     payout_period_data[:payout_note] = \
