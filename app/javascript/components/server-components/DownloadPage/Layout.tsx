@@ -15,6 +15,7 @@ import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 type ContentUnavailabilityReasonCode =
@@ -224,15 +225,7 @@ export const Layout = ({
   return (
     <>
       {loggedInUser && !is_mobile_app_web_view ? (
-        <div
-          style={{
-            padding: "var(--spacer-4)",
-            borderBottom: "var(--border)",
-            fontSize: "1rem",
-            gridRow: -3,
-          }}
-          className="text-singleline"
-        >
+        <div className="font-size-base grid-row-[-3] text-singleline border-b border-border px-8 py-4">
           <a style={{ textDecoration: "none" }} href={Routes.library_url()} title="Back to Library">
             <Icon name="arrow-left" className="mr-1.5" />
             {headerVisible ? "Back to Library" : null}
@@ -240,15 +233,12 @@ export const Layout = ({
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}
         </div>
       ) : null}
-      <main className="product-content">
+      <div className="product-content flex-1">
         {is_mobile_app_web_view ? null : (
-          <header ref={headerRef}>
-            <h1>{purchase?.product_name}</h1>
-            {headerActions ? <div className="actions">{headerActions}</div> : null}
-          </header>
+          <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}
         {settings || pageList ? (
-          <div className="has-sidebar">
+          <div className="has-sidebar p-4 md:p-8">
             <div className="paragraphs">
               {pageList}
               {isDesktop ? settings : null}
@@ -259,11 +249,9 @@ export const Layout = ({
             </div>
           </div>
         ) : (
-          <div className="paragraphs" style={{ flexGrow: 1 }}>
-            {children}
-          </div>
+          <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
         )}
-      </main>
+      </div>
     </>
   );
 };

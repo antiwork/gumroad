@@ -65,19 +65,15 @@ export const SignupPage = ({
   return (
     <Layout
       header={
-        <>
-          <div className="actions">
-            <a href={Routes.login_path({ next })}>Log in</a>
-          </div>
-          <h1>
-            {referrer
-              ? `Join ${referrer.name} on Gumroad`
-              : application_name
-                ? `Sign up for Gumroad and connect ${application_name}`
-                : `Join over ${number_of_creators.toLocaleString()} creators who have earned over ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} on Gumroad selling digital products and memberships.`}
-          </h1>
-        </>
+        <h1>
+          {referrer
+            ? `Join ${referrer.name} on Gumroad`
+            : application_name
+              ? `Sign up for Gumroad and connect ${application_name}`
+              : `Join over ${number_of_creators.toLocaleString()} creators who have earned over ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} on Gumroad selling digital products and memberships.`}
+        </h1>
       }
+      headerActions={<a href={Routes.login_path({ next })}>Log in</a>}
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
         <SocialAuth />

@@ -18,6 +18,7 @@ import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -73,8 +74,9 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
           }}
           onMouseOut={() => setDragStart(null)}
         >
-          {products.map((product) => (
-            <HorizontalCard key={product.id} product={product} big />
+          {products.map((product, idx) => (
+            // Only the first 3 cards are visible, so we can set eager loading for them
+            <HorizontalCard key={product.id} product={product} big eager={idx < 3} />
           ))}
         </div>
       </div>
@@ -200,7 +202,7 @@ const Discover = (props: Props) => {
       query={state.params.query}
       setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}
     >
-      <div className="grid !gap-16 lg:pe-16 lg:ps-16">
+      <div className="grid !gap-16 px-4 py-16 lg:pe-16 lg:ps-16">
         {showRecommendedSections ? (
           <ProductsCarousel
             products={recommendedProducts}
@@ -217,11 +219,10 @@ const Discover = (props: Props) => {
                 : sortTitles[is<keyof typeof sortTitles>(state.params.sort) ? state.params.sort : "trending"]}
             </h2>
             {state.params.query ? null : (
-              <div role="tablist" className="tab-pills">
+              <Tabs>
                 {props.curated_product_ids.length > 0 ? (
-                  <div
-                    role="tab"
-                    aria-selected={state.params.sort === "curated"}
+                  <Tab
+                    isSelected={state.params.sort === "curated"}
                     onClick={() =>
                       updateParams({
                         sort: "curated",
@@ -230,32 +231,29 @@ const Discover = (props: Props) => {
                     }
                   >
                     Curated
-                  </div>
+                  </Tab>
                 ) : null}
-                <div
-                  role="tab"
-                  aria-selected={!state.params.sort || state.params.sort === "default"}
+                <Tab
+                  isSelected={!state.params.sort || state.params.sort === "default"}
                   onClick={() => updateParams({ sort: undefined })}
                 >
                   Trending
-                </div>
+                </Tab>
                 {props.curated_product_ids.length === 0 ? (
-                  <div
-                    role="tab"
-                    aria-selected={state.params.sort === "best_sellers"}
+                  <Tab
+                    isSelected={state.params.sort === "best_sellers"}
                     onClick={() => updateParams({ sort: "best_sellers" })}
                   >
                     Best Sellers
-                  </div>
+                  </Tab>
                 ) : null}
-                <div
-                  role="tab"
-                  aria-selected={state.params.sort === "hot_and_new"}
+                <Tab
+                  isSelected={state.params.sort === "hot_and_new"}
                   onClick={() => updateParams({ sort: "hot_and_new" })}
                 >
                   Hot &amp; New
-                </div>
-              </div>
+                </Tab>
+              </Tabs>
             )}
           </div>
           <CardGrid

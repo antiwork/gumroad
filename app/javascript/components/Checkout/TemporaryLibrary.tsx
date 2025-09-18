@@ -10,6 +10,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Result } from "$app/components/server-components/CheckoutPage";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const formatName = (productName: string, optionName: string | null) =>
@@ -26,11 +27,9 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
 
   if (state.status.type !== "finished") return null;
   return (
-    <main>
-      <header>
-        <h1>Library</h1>
-      </header>
-      <section>
+    <div>
+      <PageHeader title="Library" />
+      <section className="p-4 md:p-8">
         <div className="with-sidebar">
           {!user && canBuyerSignUp ? (
             <div className="stack">
@@ -86,7 +85,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 };
 

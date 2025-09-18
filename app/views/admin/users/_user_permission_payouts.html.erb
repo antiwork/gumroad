@@ -1,124 +1,122 @@
-<% if current_user.has_payout_privilege %>
-  <% if user.alive_user_compliance_info %>
-    <hr>
-    <div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
-      <%= render("admin/users/compliance_infos/user_compliance_info_details", user_compliance_info: user.alive_user_compliance_info) %>
-    </div>
-  <% end %>
-
+<% if user.alive_user_compliance_info %>
   <hr>
   <div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
-    <div class="paragraphs" style="width: 100%">
-      <h3>Payout info</h3>
-      <div>
-        <% case %>
-        <% when user.active_bank_account %>
-          <% account = user.active_bank_account %>
-          <span><%= "#{account.type} / #{account.account_holder_full_name} / #{account.formatted_account}" %></span>
-        <% when user.payment_address.present? %>
-          <span><%= "PayPal / #{user.payment_address}" %></span>
-        <% else %>
-          <%= icon_no %>
-          This user has no payout method.
-        <% end %>
-      </div>
-      <hr>
-      <%= react_component "AdminPausePayoutsForm", props: { user_id: user.id, payouts_paused_by: user.payouts_paused_by_source, reason: user.comments.with_type_payouts_paused.last&.content }, prerender: true %>
+    <%= render("admin/users/compliance_infos/user_compliance_info_details", user_compliance_info: user.alive_user_compliance_info) %>
+  </div>
+<% end %>
 
-      <% last_payout_to_user = user.payments.last %>
-      <% if last_payout_to_user.nil? || %w(completed failed returned reversed cancelled).include?(last_payout_to_user.state) %>
-        <% manual_payout_period_end_date = User::PayoutSchedule.manual_payout_end_date %>
-        <% stripe_payable = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::STRIPE) %>
-        <% paypal_payable = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::PAYPAL) %>
-        <% stripe_payable_from_admin = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::STRIPE, from_admin: true) %>
-        <% paypal_payable_from_admin = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::PAYPAL, from_admin: true) %>
-        <% if stripe_payable_from_admin || paypal_payable_from_admin %>
-          <h3>Manual Payout</h3>
-          <%= react_component "AdminManualPayoutForm", props: {
-            user_id: user.id,
-            stripe: stripe_payable_from_admin ? {
-              unpaid_balance_held_by_gumroad: formatted_dollar_amount(user.unpaid_balance_cents_up_to_date_held_by_gumroad(manual_payout_period_end_date)),
-              unpaid_balance_held_by_stripe: formatted_amount_in_currency(user.unpaid_balance_holding_cents_up_to_date_held_by_stripe(manual_payout_period_end_date), user.stripe_account&.currency)
-            } : nil,
-            paypal: paypal_payable_from_admin ? {
-              should_payout_be_split: user.should_paypal_payout_be_split?,
-              split_payment_by_cents: PaypalPayoutProcessor.split_payment_by_cents(user)
-            } : nil,
-            manual_payout_period_end_date: manual_payout_period_end_date,
-            unpaid_balance_up_to_date: user.unpaid_balance_cents_up_to_date(manual_payout_period_end_date),
-            currency: user.stripe_account&.currency,
-            ask_confirmation: (stripe_payable_from_admin || paypal_payable_from_admin) && !stripe_payable && !paypal_payable,
-          }, prerender: true %>
-        <% end %>
-      <% end %>
-    </div>
-
-    <div class="paragraphs">
-      <h3>Merchant Accounts</h3>
-      <% if user.merchant_accounts.empty? %>
-        No merchant accounts.
+<hr>
+<div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
+  <div class="paragraphs" style="width: 100%">
+    <h3>Payout info</h3>
+    <div>
+      <% case %>
+      <% when user.active_bank_account %>
+        <% account = user.active_bank_account %>
+        <span><%= "#{account.type} / #{account.account_holder_full_name} / #{account.formatted_account}" %></span>
+      <% when user.payment_address.present? %>
+        <span><%= "PayPal / #{user.payment_address}" %></span>
       <% else %>
-        <ul class="inline">
-          <% user.merchant_accounts.each do |merchant_account| %>
-            <li>
-              <%= link_to "#{merchant_account.id} – #{merchant_account.charge_processor_id}", admin_merchant_account_path(merchant_account) %>
-              <%= merchant_account.alive? && merchant_account.charge_processor_alive? ? icon_yes : icon_no %>
-            </li>
-          <% end %>
-        </ul>
+        <%= icon_no %>
+        This user has no payout method.
       <% end %>
-      <div class="button-group">
-        <% if user.stripe_account.nil? %>
-          <%= admin_action label: "Create Managed Account", url: create_stripe_managed_account_admin_user_url(user), confirm_message: "Are you sure you want to create a Stripe Managed Account for user #{user.id}?", class: "button-stripe" %>
-        <% end %>
-      </div>
     </div>
+    <hr>
+    <%= react_component "AdminPausePayoutsForm", props: { user_id: user.id, payouts_paused_by: user.payouts_paused_by_source, reason: user.comments.with_type_payouts_paused.last&.content }, prerender: true %>
+
+    <% last_payout_to_user = user.payments.last %>
+    <% if last_payout_to_user.nil? || %w(completed failed returned reversed cancelled).include?(last_payout_to_user.state) %>
+      <% manual_payout_period_end_date = User::PayoutSchedule.manual_payout_end_date %>
+      <% stripe_payable = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::STRIPE) %>
+      <% paypal_payable = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::PAYPAL) %>
+      <% stripe_payable_from_admin = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::STRIPE, from_admin: true) %>
+      <% paypal_payable_from_admin = Payouts.is_user_payable(user, manual_payout_period_end_date, processor_type: PayoutProcessorType::PAYPAL, from_admin: true) %>
+      <% if stripe_payable_from_admin || paypal_payable_from_admin %>
+        <h3>Manual Payout</h3>
+        <%= react_component "AdminManualPayoutForm", props: {
+          user_id: user.id,
+          stripe: stripe_payable_from_admin ? {
+            unpaid_balance_held_by_gumroad: formatted_dollar_amount(user.unpaid_balance_cents_up_to_date_held_by_gumroad(manual_payout_period_end_date)),
+            unpaid_balance_held_by_stripe: formatted_amount_in_currency(user.unpaid_balance_holding_cents_up_to_date_held_by_stripe(manual_payout_period_end_date), user.stripe_account&.currency)
+          } : nil,
+          paypal: paypal_payable_from_admin ? {
+            should_payout_be_split: user.should_paypal_payout_be_split?,
+            split_payment_by_cents: PaypalPayoutProcessor.split_payment_by_cents(user)
+          } : nil,
+          manual_payout_period_end_date: manual_payout_period_end_date,
+          unpaid_balance_up_to_date: user.unpaid_balance_cents_up_to_date(manual_payout_period_end_date),
+          currency: user.stripe_account&.currency,
+          ask_confirmation: (stripe_payable_from_admin || paypal_payable_from_admin) && !stripe_payable && !paypal_payable,
+        }, prerender: true %>
+      <% end %>
+    <% end %>
   </div>
 
-  <hr>
-  <details>
-    <summary>
-      <h3>Email changes</h3>
-    </summary>
-    <div>
-      <% fields = %w(email payment_address) %>
-      <table>
-        <thead>
-          <tr>
-            <th>Field</th>
-            <th>Old</th>
-            <th>New</th>
-            <th>Changed</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% user.versions_for(*fields).each do |version| %>
-            <% version.changes.sort.each do |field, values| %>
-              <tr>
-                <td data-label="Field"><%= field %></td>
-                <td data-label="Old"><%= values.first %></td>
-                <td data-label="New"><%= values.last %></td>
-                <td data-label="Changed"><%= format_datetime_with_relative_tooltip(version.created_at) %></td>
-              </tr>
-            <% end %>
-          <% end %>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4">
-              <p>
-                Tracked fields:
-                <%= fields.join(", ") %>
-              </p>
-              <small>
-                Results from last <%= Versionable::LIMIT %> version records.
-                <br>
-                Version records are deleted regularly. The information may not reflect the complete history of the account.
-              </small>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+  <div class="paragraphs">
+    <h3>Merchant Accounts</h3>
+    <% if user.merchant_accounts.empty? %>
+      No merchant accounts.
+    <% else %>
+      <ul class="inline">
+        <% user.merchant_accounts.each do |merchant_account| %>
+          <li>
+            <%= link_to "#{merchant_account.id} – #{merchant_account.charge_processor_id}", admin_merchant_account_path(merchant_account) %>
+            <%= merchant_account.alive? && merchant_account.charge_processor_alive? ? icon_yes : icon_no %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+    <div class="button-group">
+      <% if user.stripe_account.nil? %>
+        <%= admin_action label: "Create Managed Account", url: create_stripe_managed_account_admin_user_url(user), confirm_message: "Are you sure you want to create a Stripe Managed Account for user #{user.id}?", class: "button-stripe" %>
+      <% end %>
     </div>
-  </details>
-<% end %>
+  </div>
+</div>
+
+<hr>
+<details>
+  <summary>
+    <h3>Email changes</h3>
+  </summary>
+  <div>
+    <% fields = %w(email payment_address) %>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Old</th>
+          <th>New</th>
+          <th>Changed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% user.versions_for(*fields).each do |version| %>
+          <% version.changes.sort.each do |field, values| %>
+            <tr>
+              <td data-label="Field"><%= field %></td>
+              <td data-label="Old"><%= values.first %></td>
+              <td data-label="New"><%= values.last %></td>
+              <td data-label="Changed"><%= format_datetime_with_relative_tooltip(version.created_at) %></td>
+            </tr>
+          <% end %>
+        <% end %>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4">
+            <p>
+              Tracked fields:
+              <%= fields.join(", ") %>
+            </p>
+            <small>
+              Results from last <%= Versionable::LIMIT %> version records.
+              <br>
+              Version records are deleted regularly. The information may not reflect the complete history of the account.
+            </small>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</details>

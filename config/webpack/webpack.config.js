@@ -22,6 +22,11 @@ export default async () => {
         "react-dom/server": "react-dom/server.browser",
         "@rails/activestorage": false,
       },
+      fallback: {
+        tty: false,
+        os: false,
+        util: false,
+      },
     },
     target: "es2019", // most recent supported ES version by the libv8-node gem
   });

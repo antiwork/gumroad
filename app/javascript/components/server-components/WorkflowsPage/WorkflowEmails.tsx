@@ -343,7 +343,7 @@ const WorkflowEmails = () => {
             <EvaporateUploaderProvider value={evaporateUploader}>
               <ImageUploadSettingsContext.Provider value={imageSettings}>
                 <FilesDispatchProvider value={filesDispatch}>
-                  <div className="paragraphs">
+                  <section className="space-y-4 p-4 md:p-8">
                     {emails.length === 0 ? (
                       <div className="placeholder">
                         <h2>Create emails for your workflow</h2>
@@ -417,7 +417,7 @@ const WorkflowEmails = () => {
                         </h4>
                       </Modal>
                     ) : null}
-                  </div>
+                  </section>
                 </FilesDispatchProvider>
               </ImageUploadSettingsContext.Provider>
             </EvaporateUploaderProvider>

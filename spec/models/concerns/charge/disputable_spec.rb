@@ -319,6 +319,12 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      it "calls pause_payouts_for_seller_based_on_chargeback_rate! for each purchase" do
+        expect_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
+        Purchase.handle_charge_event(event)
+        expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+      end
+
       describe "purchase involves an affiliate" do
         let(:merchant_account) { create(:merchant_account, user: seller) }
         let(:affiliate_user) { create(:affiliate_user) }

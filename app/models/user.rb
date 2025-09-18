@@ -236,8 +236,8 @@ class User < ApplicationRecord
             26 => :collect_eu_vat,
             27 => :is_eu_vat_exclusive,
             28 => :is_team_member,
-            29 => :has_payout_privilege,
-            30 => :has_risk_privilege,
+            29 => :DEPRECATED_has_payout_privilege,
+            30 => :DEPRECATED_has_risk_privilege,
             31 => :disable_paypal_sales,
             32 => :all_adult_products,
             33 => :enable_free_downloads_email,
@@ -305,6 +305,7 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :suspend_sellers_other_accounts
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
 
     after_transition any => :compliant, :do => :enable_refunds!
 

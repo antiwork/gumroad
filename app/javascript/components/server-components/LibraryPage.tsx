@@ -60,6 +60,7 @@ export const Card = ({
   onDelete: (confirm?: boolean) => void;
 }) => {
   const { product, purchase } = result;
+  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 
   const toggleArchived = asyncVoid(async () => {
     const data = { purchase_id: result.purchase.id, is_archived: !result.purchase.is_archived };
@@ -67,6 +68,7 @@ export const Card = ({
       await setPurchaseArchived(data);
       onArchive();
       showAlert(result.purchase.is_archived ? "Product unarchived!" : "Product archived!", "success");
+      setIsPopoverOpen(false);
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
@@ -99,7 +101,12 @@ export const Card = ({
         ) : (
           <div className="user" />
         )}
-        <Popover aria-label="Open product action menu" trigger={<Icon name="three-dots" />}>
+        <Popover
+          aria-label="Open product action menu"
+          trigger={<Icon name="three-dots" />}
+          open={isPopoverOpen}
+          onToggle={setIsPopoverOpen}
+        >
           <div role="menu">
             <div role="menuitem" onClick={toggleArchived}>
               <Icon name="archive" />
@@ -315,7 +322,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
       reviewsPageEnabled={reviews_page_enabled}
       followingWishlistsEnabled={following_wishlists_enabled}
     >
-      <section className="products-section__container">
+      <section className="space-y-4 p-4 md:p-8">
         {state.results.length === 0 || showArchivedNotice ? (
           <div className="placeholder">
             {state.results.length === 0 ? (

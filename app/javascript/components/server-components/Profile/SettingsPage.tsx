@@ -76,10 +76,10 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
     `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
   return (
-    <>
-      <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate} hasAside>
+    <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate} hasAside>
+      <div className="fixed-aside lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Profile</h2>
             </header>
@@ -158,13 +158,13 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
               </fieldset>
             ) : null}
           </section>
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Design</h2>
             </header>
             <fieldset>
               <legend>Font</legend>
-              <div className="radio-buttons" role="radiogroup">
+              <div className="radio-buttons !grid-cols-1 sm:!grid-cols-2 md:!grid-cols-3" role="radiogroup">
                 {(["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"] as const).map(
                   (font) => (
                     <Button
@@ -217,43 +217,43 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
             </div>
           </section>
         </form>
-      </SettingsLayout>
-      <aside>
-        <header>
-          <h2>Preview</h2>
-          <WithTooltip tip="Preview" position="bottom">
-            <a
-              className="button"
-              href={Routes.root_url({ host: creatorProfile.subdomain })}
-              target="_blank"
-              aria-label="Preview"
-              rel="noreferrer"
-            >
-              <Icon name="arrow-diagonal-up-right" />
-            </a>
-          </WithTooltip>
-        </header>
-        <Preview
-          scaleFactor={0.35}
-          style={{
-            border: "var(--border)",
-            fontFamily: profileSettings.font === "ABC Favorit" ? undefined : profileSettings.font,
-            "--accent": hexToRgb(profileSettings.highlight_color),
-            "--contrast-accent": hexToRgb(getContrastColor(profileSettings.highlight_color)),
-            "--filled": hexToRgb(profileSettings.background_color),
-            "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
-            "--primary": "var(--color)",
-            "--body-bg": "rgb(var(--filled))",
-            "--contrast-primary": "var(--filled)",
-            "--contrast-filled": "var(--color)",
-            backgroundColor: "rgb(var(--filled))",
-            color: "rgb(var(--color))",
-          }}
-        >
-          <Profile creator_profile={creatorProfile} {...profileProps} bio={profileSettings.bio} />
-        </Preview>
-      </aside>
-    </>
+        <aside>
+          <header>
+            <h2>Preview</h2>
+            <WithTooltip tip="Preview" position="bottom">
+              <a
+                className="button"
+                href={Routes.root_url({ host: creatorProfile.subdomain })}
+                target="_blank"
+                aria-label="Preview"
+                rel="noreferrer"
+              >
+                <Icon name="arrow-diagonal-up-right" />
+              </a>
+            </WithTooltip>
+          </header>
+          <Preview
+            scaleFactor={0.35}
+            style={{
+              border: "var(--border)",
+              fontFamily: profileSettings.font === "ABC Favorit" ? undefined : profileSettings.font,
+              "--accent": hexToRgb(profileSettings.highlight_color),
+              "--contrast-accent": hexToRgb(getContrastColor(profileSettings.highlight_color)),
+              "--filled": hexToRgb(profileSettings.background_color),
+              "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
+              "--primary": "var(--color)",
+              "--body-bg": "rgb(var(--filled))",
+              "--contrast-primary": "var(--filled)",
+              "--contrast-filled": "var(--color)",
+              backgroundColor: "rgb(var(--filled))",
+              color: "rgb(var(--color))",
+            }}
+          >
+            <Profile creator_profile={creatorProfile} {...profileProps} bio={profileSettings.bio} />
+          </Preview>
+        </aside>
+      </div>
+    </SettingsLayout>
   );
 };
 

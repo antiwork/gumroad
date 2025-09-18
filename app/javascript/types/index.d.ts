@@ -27,6 +27,9 @@ declare namespace React {
   interface HTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {
     inert?: boolean | undefined;
   }
+  interface ImgHTMLAttributes<T> extends HTMLAttributes<T> {
+    fetchpriority?: HTMLImageElement["fetchPriority"];
+  }
 }
 
 declare const SSR: boolean;

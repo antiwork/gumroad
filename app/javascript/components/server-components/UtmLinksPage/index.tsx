@@ -13,6 +13,7 @@ import { getEditUtmLink, getNewUtmLink, getUtmLinks, SortKey } from "$app/data/u
 import { assertDefined } from "$app/utils/assert";
 import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 import { UtmLinkForm } from "./UtmLinkForm";
@@ -27,20 +28,17 @@ export const UtmLinkLayout = ({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <main>
-    <header>
-      <h1>{title}</h1>
-      {actions ? <div className="actions">{actions}</div> : null}
-    </header>
+  <div>
+    <PageHeader title={title} actions={actions} />
     {children}
-  </main>
+  </div>
 );
 
 const ErrorBoundary = () => {
   const error = useRouteError();
   return (
-    <main>
-      <div>
+    <div>
+      <div className="p-4 md:p-8">
         <div className="placeholder">
           <p>
             {isRouteErrorResponse(error) && error.status === 404
@@ -49,7 +47,7 @@ const ErrorBoundary = () => {
           </p>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

@@ -38,6 +38,47 @@ describe Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies do
       expect { service.process }.not_to change { purchase_refund_policy_already_set.reload.max_refund_period_in_days }
     end
 
+    describe "policies reuse data from previous policies" do
+      let!(:product) { create(:product) }
+      let!(:product_refund_policy) { create(:product_refund_policy, product:, title: "6-month money back guarantee", max_refund_period_in_days: 183) }
+
+      let(:purchase) { create(:purchase, link: product) }
+      let!(:purchase_refund_policy) do
+        purchase.create_purchase_refund_policy!(
+          title: "30-day money back guarantee",
+          max_refund_period_in_days: 30
+        )
+      end
+      let(:new_purchase) { create(:purchase, link: product) }
+      let!(:new_purchase_refund_policy) do
+        new_purchase.create_purchase_refund_policy!(
+          title: "30-day money back guarantee",
+          max_refund_period_in_days: nil
+        )
+      end
+      let(:service_with_reuse) { described_class.new(max_id: new_purchase_refund_policy.id) }
+
+      context "when policy title matches product refund policy title" do
+        before do
+          new_purchase_refund_policy.update!(title: product_refund_policy.title)
+        end
+
+        it "reuses max_refund_period_in_days from product refund policy" do
+          expect { service_with_reuse.process }.to change { new_purchase_refund_policy.reload.max_refund_period_in_days }.from(nil).to(183)
+        end
+      end
+
+      context "when policy title does not match product refund policy title" do
+        before do
+          purchase_refund_policy.update!(title: purchase_refund_policy.title)
+        end
+
+        it "reuses max_refund_period_in_days from previous policy with same title" do
+          expect { service_with_reuse.process }.to change { new_purchase_refund_policy.reload.max_refund_period_in_days }.from(nil).to(30)
+        end
+      end
+    end
+
     context "when title doesn't match any known pattern" do
       let(:purchase_unknown) { create(:purchase) }
       let!(:purchase_refund_policy_unknown) do

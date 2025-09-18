@@ -252,7 +252,7 @@ end
 Subscription.find(SUBSCRIPTION_ID).user_requested_cancellation_at
 ```
 
-### Cancel all active subscriptions for a user
+### CAUTION: Cancel all active subscriptions for a creator
 
 ```ruby
 User.find_by_email("creator@example.com").links.each do |product|

@@ -821,7 +821,7 @@ const PaymentsPage = (props: Props) => {
       ) : null}
       <form ref={formRef}>
         {props.payouts_paused_by !== null ? (
-          <div className="warning" role="status" style={{ marginBottom: "var(--spacer-7)" }}>
+          <div role="status" className="warning mx-8 mb-12">
             <p>
               {props.payouts_paused_by === "stripe" ? (
                 <strong>
@@ -845,7 +845,7 @@ const PaymentsPage = (props: Props) => {
           </div>
         ) : null}
 
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Verification</h2>
           </header>
@@ -885,7 +885,7 @@ const PaymentsPage = (props: Props) => {
         ) : null}
 
         {errorMessage ? (
-          <div className="paragraphs" style={{ marginBottom: "var(--spacer-7)" }}>
+          <div className="mb-12 px-8">
             <div role="status" className="danger">
               {errorMessage.code === "stripe_error" ? (
                 <div>Your account could not be updated due to an error with Stripe.</div>
@@ -895,7 +895,7 @@ const PaymentsPage = (props: Props) => {
             </div>
           </div>
         ) : null}
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Payout schedule</h2>
           </header>
@@ -980,7 +980,7 @@ const PaymentsPage = (props: Props) => {
           </section>
         </section>
 
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Payout method</h2>
             <div>

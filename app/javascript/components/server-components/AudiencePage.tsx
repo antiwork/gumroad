@@ -73,7 +73,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
       }
     >
       {hasContent ? (
-        <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div className="space-y-8 p-4 md:p-8">
           <AudienceQuickStats totalFollowers={total_follower_count} newFollowers={data?.new_followers ?? null} />
           {data ? (
             <AudienceChart data={data} />
@@ -85,7 +85,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
           )}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
