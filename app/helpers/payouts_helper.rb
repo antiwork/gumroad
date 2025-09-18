@@ -92,14 +92,15 @@ module PayoutsHelper
     payout_period_data[:is_processing] = payment.processing?
     payout_period_data[:arrival_date] = payment.arrival_date ? formatted_payout_date(Time.zone.at(payment.arrival_date)) : nil
     payout_period_data[:status] = payment.state
-    if payment.failed?
-      payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
-      payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
-    end
     payout_period_data[:payment_external_id] = payment.external_id
     payout_period_data[:type] = payment.payout_type || Payouts::PAYOUT_TYPE_STANDARD
 
     payout_period_data[:payout_note] = nil
+
+    if payment.failed?
+      payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
+      payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
+    end
 
     balance_ids = payment.balances.map(&:id)
     carried_over_balance_ids = []
@@ -130,6 +131,7 @@ module PayoutsHelper
           cents = Balance.where(id: new_balance_ids).sum(:holding_amount_cents)
           next if cents.zero?
           total_cents += cents
+          # For each failed payout, we'll display the amount that was carried over from that payout
           items << {
             failed_on: formatted_payout_date(failed_p.created_at),
             carried_over_cents: cents,
