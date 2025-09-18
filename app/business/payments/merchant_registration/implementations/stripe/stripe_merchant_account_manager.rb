@@ -78,6 +78,13 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, person_params)
     end
 
+    # Create guardian person for users under 18
+    if user_compliance_info.user.under_18? && user_compliance_info.guardian_verification_required?
+      guardian_params = guardian_person_hash(user_compliance_info, passphrase)
+      guardian_params.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
+      Stripe::Account.create_person(stripe_account.id, guardian_params)
+    end
+
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
     # It is a property on the `person` entity associated with the Stripe::Account.
     # Ref: https://stripe.com/docs/api/persons/object#person_object-full_name_aliases
@@ -489,6 +496,70 @@ module StripeMerchantAccountManager
 
       hash.deep_values_strip!
     end
+  end
+
+  def self.guardian_person_hash(user_compliance_info, passphrase)
+    return unless user_compliance_info.present? && user_compliance_info.user.under_18?
+
+    guardian_tax_id = nil
+    if user_compliance_info.guardian_individual_tax_id.present?
+      begin
+        guardian_tax_id = user_compliance_info.guardian_individual_tax_id.decrypt(passphrase)
+      rescue => e
+        # In development, we might not have proper encryption keys
+        Rails.logger.warn "Failed to decrypt guardian tax ID: #{e.message}"
+        guardian_tax_id = nil
+      end
+    end
+
+    hash = {
+      first_name: user_compliance_info.guardian_first_name,
+      last_name: user_compliance_info.guardian_last_name,
+      phone: user_compliance_info.guardian_phone,
+
+      dob: {
+        day: user_compliance_info.guardian_date_of_birth.try(:day),
+        month: user_compliance_info.guardian_date_of_birth.try(:month),
+        year: user_compliance_info.guardian_date_of_birth.try(:year)
+      }
+    }
+
+    # Add address information
+    if user_compliance_info.guardian_country.present?
+      guardian_country_code = Compliance::Countries.find_by_name(user_compliance_info.guardian_country)&.alpha2
+
+      hash.deep_merge!({
+        address: {
+          line1: user_compliance_info.guardian_street_address,
+          line2: nil,
+          city: user_compliance_info.guardian_city,
+          state: user_compliance_info.guardian_state,
+          postal_code: user_compliance_info.guardian_zip_code,
+          country: guardian_country_code
+        }
+      })
+    end
+
+    # Add tax ID information based on country
+    if guardian_tax_id.present?
+      if user_compliance_info.guardian_country.present?
+        guardian_country_code = Compliance::Countries.find_by_name(user_compliance_info.guardian_country)&.alpha2
+
+        # For US accounts, only submit the Personal Tax ID if it's longer than four digits
+        if guardian_country_code == Compliance::Countries::USA.alpha2
+          if guardian_tax_id.length > 4
+            hash.deep_merge!(id_number: guardian_tax_id)
+          elsif guardian_tax_id.length == 4
+            hash.deep_merge!(ssn_last_4: guardian_tax_id.last(4))
+          end
+        else
+          # For non-US accounts, always submit the Personal Tax ID
+          hash.deep_merge!(id_number: guardian_tax_id)
+        end
+      end
+    end
+
+    hash.deep_values_strip!
   end
 
   def self.company_hash(user_compliance_info, passphrase)

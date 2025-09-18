@@ -71,6 +71,7 @@ class User < ApplicationRecord
   has_many :offer_codes
   has_many :user_compliance_infos
   has_many :user_compliance_info_requests
+  has_many :guardian_compliance_info_requests
   has_many :workflows, foreign_key: :seller_id
   has_many :merchant_accounts
   has_many :shipping_destinations
@@ -825,6 +826,12 @@ class User < ApplicationRecord
     return false if sales.successful.where(merchant_account_id: stripe_account.id).exists?
 
     true
+  end
+
+  def under_18?
+    return false unless alive_user_compliance_info&.birthday
+
+    alive_user_compliance_info.birthday > 18.years.ago
   end
 
   def show_refund_fee_notice?

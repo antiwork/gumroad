@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
+ActiveRecord::Schema[7.1].define(version: 2025_09_18_140056) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -914,6 +914,21 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
     t.index ["giftee_purchase_id"], name: "index_gifts_on_giftee_purchase_id"
     t.index ["gifter_email"], name: "index_gifts_on_gifter_email"
     t.index ["gifter_purchase_id"], name: "index_gifts_on_gifter_purchase_id"
+  end
+
+  create_table "guardian_compliance_info_requests", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "field_needed", null: false
+    t.string "state", default: "requested", null: false
+    t.datetime "due_at"
+    t.datetime "provided_at"
+    t.text "json_data"
+    t.integer "flags", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "field_needed"], name: "idx_guardian_comp_req_user_field"
+    t.index ["user_id", "state"], name: "idx_guardian_comp_req_user_state"
+    t.index ["user_id"], name: "index_guardian_compliance_info_requests_on_user_id"
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2424,6 +2439,20 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
     t.string "first_name"
     t.string "last_name"
     t.string "stripe_identity_document_id"
+    t.string "guardian_first_name"
+    t.string "guardian_last_name"
+    t.date "guardian_date_of_birth"
+    t.string "guardian_relationship"
+    t.string "guardian_street_address"
+    t.string "guardian_city"
+    t.string "guardian_state"
+    t.string "guardian_zip_code"
+    t.string "guardian_country"
+    t.string "guardian_phone"
+    t.binary "guardian_individual_tax_id"
+    t.boolean "guardian_stripe_processing_tos_accepted", default: false
+    t.boolean "guardian_stripe_tos_accepted", default: false
+    t.string "guardian_verification_status", default: "not_required"
     t.index ["user_id"], name: "index_user_compliance_info_on_user_id"
   end
 
@@ -2718,4 +2747,5 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "guardian_compliance_info_requests", "users"
 end

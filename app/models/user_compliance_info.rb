@@ -8,7 +8,7 @@ class UserComplianceInfo < ApplicationRecord
   include UserComplianceInfo::BusinessTypes
   include JsonData
 
-  stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, on: :create
+  stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
 
@@ -25,12 +25,18 @@ class UserComplianceInfo < ApplicationRecord
                           public_key: OpenSSL::PKey.read(GlobalConfig.get("STRONGBOX_GENERAL"),
                                                          GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
                           private_key: GlobalConfig.get("STRONGBOX_GENERAL")
+  encrypt_with_public_key :guardian_individual_tax_id,
+                          symmetric: :never,
+                          public_key: OpenSSL::PKey.read(GlobalConfig.get("STRONGBOX_GENERAL"),
+                                                         GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
+                          private_key: GlobalConfig.get("STRONGBOX_GENERAL")
   serialize :verticals, type: Array, coder: YAML
 
   validate :birthday_is_over_minimum_age
 
   after_create_commit :handle_stripe_compliance_info
   after_create_commit :handle_compliance_info_request
+  after_create_commit :handle_guardian_compliance_info_request
 
   scope :country, ->(country) { where(country:) }
 
@@ -162,6 +168,28 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_tax_id : individual_tax_id
   end
 
+  # Guardian-related methods
+  def guardian_first_and_last_name
+    "#{guardian_first_name} #{guardian_last_name}".squeeze(" ").strip
+  end
+
+  def guardian_verification_required?
+    user.under_18? && GuardianComplianceInfoRequest.requires_guardian_verification?(self)
+  end
+
+  def guardian_verification_complete?
+    return true unless guardian_verification_required?
+
+    user.guardian_compliance_info_requests.requested.empty?
+  end
+
+  def guardian_verification_status
+    return 'not_required' unless guardian_verification_required?
+    return 'complete' if guardian_verification_complete?
+    return 'pending' if user.guardian_compliance_info_requests.requested.any?
+    'incomplete'
+  end
+
   private
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create
@@ -169,6 +197,10 @@ class UserComplianceInfo < ApplicationRecord
 
     def handle_compliance_info_request
       UserComplianceInfoRequest.handle_new_user_compliance_info(self)
+    end
+
+    def handle_guardian_compliance_info_request
+      GuardianComplianceInfoRequest.handle_new_guardian_compliance_info(self)
     end
 
     def birthday_is_over_minimum_age
