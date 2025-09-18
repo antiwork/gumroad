@@ -8,9 +8,9 @@ http_interactions:
       string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"AZ","to_zip":"85144","shipping":0.0,"line_items":[{"quantity":1,"unit_price":500.0,"discount":0,"product_tax_code":null}],"nexus_addresses":[{"country":"US","state":"AZ"}]}'
     headers:
       User-Agent:
-      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
-        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
-        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      - 'TaxJar/Ruby (Darwin Harbakshs-MacBook-Air.local 24.5.0 Darwin Kernel Version
+        24.5.0: Tue Apr 22 19:48:46 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8103
+        arm64; ruby 3.4.3-p32; OpenSSL 3.5.1 1 Jul 2025) taxjar-ruby/3.0.4'
       Authorization:
       - Bearer <TAXJAR_API_KEY>
       X-Api-Version:
@@ -27,33 +27,33 @@ http_interactions:
       message: OK
     headers:
       Content-Type:
-      - application/json
+      - application/json; charset=utf-8
       Content-Length:
-      - '1066'
+      - '1090'
       Connection:
       - close
       Date:
-      - Thu, 16 Jan 2025 08:56:17 GMT
+      - Thu, 18 Sep 2025 09:44:56 GMT
       X-Amzn-Trace-Id:
-      - Root=1-6788c9b1-3210288e710c453a352a4e0f
+      - Root=1-68cbd498-1949c4d938fdb43d65e4f7bb
       X-Amzn-Requestid:
-      - 5d0a571d-9a50-48c8-8660-5cdddcd48645
+      - 00f52a4e-fe83-49dc-81a9-b4336cc79e24
       Access-Control-Allow-Origin:
       - https://developers.taxjar.com
       X-Amz-Apigw-Id:
-      - EeRzzGkeoAMEKww=
+      - RF4n7HruoAMEPlw=
       X-Cache:
       - Miss from cloudfront
       Via:
-      - 1.1 aa21c20510bfbf8775a7f197b29b63ce.cloudfront.net (CloudFront)
+      - 1.1 8f2a8d0800eb3d1942ab5a7177177e20.cloudfront.net (CloudFront)
       X-Amz-Cf-Pop:
-      - LAX54-P7
+      - BOM78-P3
       X-Amz-Cf-Id:
-      - ylqvFYBkBl51jeD8O0JSGXIIzw4qKdkhE09Fklhae1D8NxY29wCzXg==
+      - PwwtLW5-B6sAh3ojeP-QnGyrsaCZHb1-vgdPX-9UUlR_uRvsHgDRKg==
     body:
       encoding: UTF-8
-      string: '{"tax":{"order_total_amount":500.0,"shipping":0.0,"taxable_amount":500.0,"amount_to_collect":33.5,"rate":0.067,"has_nexus":true,"freight_taxable":false,"tax_source":"origin","jurisdictions":{"country":"US","state":"AZ","county":"PINAL"},"breakdown":{"taxable_amount":500.0,"tax_collectable":33.5,"combined_tax_rate":0.067,"state_taxable_amount":500.0,"state_tax_rate":0.056,"state_tax_collectable":28.0,"county_taxable_amount":500.0,"county_tax_rate":0.011,"county_tax_collectable":5.5,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_tax_collectable":0.0,"line_items":[{"id":"1","taxable_amount":500.0,"tax_collectable":33.5,"combined_tax_rate":0.067,"state_taxable_amount":500.0,"state_sales_tax_rate":0.056,"state_amount":28.0,"county_taxable_amount":500.0,"county_tax_rate":0.011,"county_amount":5.5,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_amount":0.0}]}}}'
-  recorded_at: Thu, 16 Jan 2025 08:56:17 GMT
+      string: '{"tax":{"freight_taxable":false,"tax_source":"origin","rate":0.107,"jurisdictions":{"state":"AZ","city":"KEARNY","country":"US","county":"PINAL"},"shipping":0.0,"taxable_amount":500.0,"has_nexus":true,"order_total_amount":500.0,"breakdown":{"line_items":[{"id":"1","tax_collectable":53.5,"taxable_amount":500.0,"combined_tax_rate":0.107,"state_taxable_amount":500.0,"county_taxable_amount":500.0,"city_taxable_amount":500.0,"special_district_taxable_amount":0.0,"city_tax_rate":0.04,"county_tax_rate":0.011,"special_tax_rate":0.0,"special_district_amount":0.0,"city_amount":20.0,"county_amount":5.5,"state_amount":28.0,"state_sales_tax_rate":0.056}],"tax_collectable":53.5,"taxable_amount":500.0,"combined_tax_rate":0.107,"state_taxable_amount":500.0,"state_tax_collectable":28.0,"county_taxable_amount":500.0,"county_tax_collectable":5.5,"city_taxable_amount":500.0,"city_tax_collectable":20.0,"special_district_taxable_amount":0.0,"special_district_tax_collectable":0.0,"city_tax_rate":0.04,"county_tax_rate":0.011,"special_tax_rate":0.0,"state_tax_rate":0.056},"amount_to_collect":53.5}}'
+  recorded_at: Thu, 18 Sep 2025 09:44:56 GMT
 - request:
     method: post
     uri: https://api.sandbox.taxjar.com/v2/taxes
@@ -62,9 +62,9 @@ http_interactions:
       string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"AZ","to_zip":"85144","shipping":0.0,"line_items":[{"quantity":1,"unit_price":550.0,"discount":0,"product_tax_code":null}],"nexus_addresses":[{"country":"US","state":"AZ"}]}'
     headers:
       User-Agent:
-      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
-        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
-        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      - 'TaxJar/Ruby (Darwin Harbakshs-MacBook-Air.local 24.5.0 Darwin Kernel Version
+        24.5.0: Tue Apr 22 19:48:46 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8103
+        arm64; ruby 3.4.3-p32; OpenSSL 3.5.1 1 Jul 2025) taxjar-ruby/3.0.4'
       Authorization:
       - Bearer <TAXJAR_API_KEY>
       X-Api-Version:
@@ -81,100 +81,31 @@ http_interactions:
       message: OK
     headers:
       Content-Type:
-      - application/json
+      - application/json; charset=utf-8
       Content-Length:
-      - '1071'
+      - '1095'
       Connection:
       - close
       Date:
-      - Thu, 16 Jan 2025 08:56:54 GMT
+      - Thu, 18 Sep 2025 09:44:57 GMT
       X-Amzn-Trace-Id:
-      - Root=1-6788c9d6-0454548c459902c4722a867e
+      - Root=1-68cbd499-2592cf4f4f9390102ea25a14
       X-Amzn-Requestid:
-      - adf7c9af-129f-46f3-b572-3b892926743c
+      - dc5d6374-57a6-4bde-97fd-09713e089d4a
       Access-Control-Allow-Origin:
       - https://developers.taxjar.com
       X-Amz-Apigw-Id:
-      - EeR5lGP_oAMEvGw=
+      - RF4oEH5jIAMEbRw=
       X-Cache:
       - Miss from cloudfront
       Via:
-      - 1.1 ab1f4fd410c7ecbe71f55bb75237ff94.cloudfront.net (CloudFront)
+      - 1.1 6e48a3459a8c258ff452e61bbedaba5a.cloudfront.net (CloudFront)
       X-Amz-Cf-Pop:
-      - LAX54-P7
+      - BOM78-P3
       X-Amz-Cf-Id:
-      - qOHNrpN7cs8p1IIskrYggeGF9fx7o26laryOMmiZCBEvYQRZt8ideQ==
+      - bD5zwnWgTd6gmjYAvr7YVCCkohVXInA4EhX3Zi_zuFLnqHaR-HlgqQ==
     body:
       encoding: UTF-8
-      string: '{"tax":{"order_total_amount":550.0,"shipping":0.0,"taxable_amount":550.0,"amount_to_collect":36.85,"rate":0.067,"has_nexus":true,"freight_taxable":false,"tax_source":"origin","jurisdictions":{"country":"US","state":"AZ","county":"PINAL"},"breakdown":{"taxable_amount":550.0,"tax_collectable":36.85,"combined_tax_rate":0.067,"state_taxable_amount":550.0,"state_tax_rate":0.056,"state_tax_collectable":30.8,"county_taxable_amount":550.0,"county_tax_rate":0.011,"county_tax_collectable":6.05,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_tax_collectable":0.0,"line_items":[{"id":"1","taxable_amount":550.0,"tax_collectable":36.85,"combined_tax_rate":0.067,"state_taxable_amount":550.0,"state_sales_tax_rate":0.056,"state_amount":30.8,"county_taxable_amount":550.0,"county_tax_rate":0.011,"county_amount":6.05,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_amount":0.0}]}}}'
-  recorded_at: Thu, 16 Jan 2025 08:56:54 GMT
-- request:
-    method: post
-    uri: https://api.easypost.com/v2/addresses
-    body:
-      encoding: UTF-8
-      string: '{"verify":["delivery"],"street1":"3029 W Sherman Rd","city":"San Tan
-        Valley","state":"AZ","zip":"85144","country":"US"}'
-    headers:
-      Accept-Encoding:
-      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
-      Accept:
-      - "*/*"
-      User-Agent:
-      - EasyPost/v2 RubyClient/6.4.1 Ruby/3.3.4-p94 OS/Darwin OSVersion/22 OSArch/arm64
-      Host:
-      - api.easypost.com
-      Content-Type:
-      - application/json
-      Authorization:
-      - Bearer <EASYPOST_API_KEY>
-  response:
-    status:
-      code: 201
-      message: Created
-    headers:
-      X-Frame-Options:
-      - SAMEORIGIN
-      X-Xss-Protection:
-      - 1; mode=block
-      X-Content-Type-Options:
-      - nosniff
-      X-Download-Options:
-      - noopen
-      X-Permitted-Cross-Domain-Policies:
-      - none
-      Referrer-Policy:
-      - strict-origin-when-cross-origin
-      X-Ep-Request-Uuid:
-      - 705390e96788c9f7eeab6404001b349e
-      Cache-Control:
-      - private, no-cache, no-store
-      Pragma:
-      - no-cache
-      Expires:
-      - '0'
-      Location:
-      - "/api/v2/addresses/adr_e9013a3ad3e711efa21bac1f6bc539ae"
-      Content-Type:
-      - application/json; charset=utf-8
-      X-Runtime:
-      - '0.054393'
-      Transfer-Encoding:
-      - chunked
-      X-Node:
-      - bigweb53nuq
-      X-Version-Label:
-      - easypost-202501152123-fa225eeacf-master
-      X-Backend:
-      - easypost
-      X-Proxied:
-      - extlb2nuq 99aac35317
-      - intlb3nuq 51d74985a2
-      Strict-Transport-Security:
-      - max-age=31536000; includeSubDomains; preload
-    body:
-      encoding: ASCII-8BIT
-      string: '{"id":"adr_e9013a3ad3e711efa21bac1f6bc539ae","object":"Address","created_at":"2025-01-16T08:57:27+00:00","updated_at":"2025-01-16T08:57:27+00:00","name":null,"company":null,"street1":"3029
-        W SHERMAN RD","street2":"","city":"SAN TAN VALLEY","state":"AZ","zip":"85144-4289","country":"US","phone":null,"email":null,"mode":"test","carrier_facility":null,"residential":true,"federal_tax_id":null,"state_tax_id":null,"verifications":{"delivery":{"success":true,"errors":[],"details":{"latitude":null,"longitude":null,"time_zone":null}}}}'
-  recorded_at: Thu, 16 Jan 2025 08:57:27 GMT
+      string: '{"tax":{"freight_taxable":false,"tax_source":"origin","rate":0.107,"jurisdictions":{"state":"AZ","city":"KEARNY","country":"US","county":"PINAL"},"shipping":0.0,"taxable_amount":550.0,"has_nexus":true,"order_total_amount":550.0,"breakdown":{"line_items":[{"id":"1","tax_collectable":58.85,"taxable_amount":550.0,"combined_tax_rate":0.107,"state_taxable_amount":550.0,"county_taxable_amount":550.0,"city_taxable_amount":550.0,"special_district_taxable_amount":0.0,"city_tax_rate":0.04,"county_tax_rate":0.011,"special_tax_rate":0.0,"special_district_amount":0.0,"city_amount":22.0,"county_amount":6.05,"state_amount":30.8,"state_sales_tax_rate":0.056}],"tax_collectable":58.85,"taxable_amount":550.0,"combined_tax_rate":0.107,"state_taxable_amount":550.0,"state_tax_collectable":30.8,"county_taxable_amount":550.0,"county_tax_collectable":6.05,"city_taxable_amount":550.0,"city_tax_collectable":22.0,"special_district_taxable_amount":0.0,"special_district_tax_collectable":0.0,"city_tax_rate":0.04,"county_tax_rate":0.011,"special_tax_rate":0.0,"state_tax_rate":0.056},"amount_to_collect":58.85}}'
+  recorded_at: Thu, 18 Sep 2025 09:44:57 GMT
 recorded_with: VCR 6.2.0
