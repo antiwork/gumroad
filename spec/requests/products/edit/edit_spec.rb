@@ -147,9 +147,12 @@ describe("Product Edit Scenario", type: :system, js: true) do
     fill_in "Fixed amount", with: "1"
     click_on "Insert"
 
-    within_section "Sample product", section_element: :article do
-      expect(page).to have_text("5.0 (1)", normalize_ws: true)
-      expect(page).to have_text("$10 $9")
+    # Scope to the rich text editor's textarea and match the upsell card's productid
+    within ".textarea" do
+      within_section "Sample product", section_element: :article, productid: product.external_id do
+        expect(page).to have_text("5.0 (1)", normalize_ws: true)
+        expect(page).to have_text("$10 $9")
+      end
     end
 
     click_on "Save"
