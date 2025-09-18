@@ -1,32 +1,27 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
-import { Select } from "$app/components/Select";
-import { Toggle } from "$app/components/Toggle";
+import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 
 interface GuardianInformationSectionProps {
   complianceInfo: {
-    guardian_first_name?: string;
-    guardian_last_name?: string;
-    guardian_date_of_birth?: string;
-    guardian_relationship?: string;
-    guardian_street_address?: string;
-    guardian_city?: string;
-    guardian_state?: string;
-    guardian_zip_code?: string;
-    guardian_country?: string;
-    guardian_phone?: string;
-    guardian_individual_tax_id?: string;
+    guardian_first_name?: string | null;
+    guardian_last_name?: string | null;
+    guardian_email?: string | null;
+    guardian_phone?: string | null;
+    guardian_street_address?: string | null;
+    guardian_city?: string | null;
+    guardian_state?: string | null;
+    guardian_zip_code?: string | null;
+    guardian_date_of_birth?: string | null;
+    guardian_individual_tax_id?: string | null;
     guardian_stripe_processing_tos_accepted?: boolean;
     guardian_stripe_tos_accepted?: boolean;
-    guardian_verification_status?: string;
+    guardian_verification_status?: string | null;
   };
   updateComplianceInfo: (updates: Partial<any>) => void;
   isFormDisabled: boolean;
-  countries: Record<string, string>;
   states: {
     us: { code: string; name: string }[];
     ca: { code: string; name: string }[];
@@ -38,16 +33,17 @@ interface GuardianInformationSectionProps {
   };
   errorFieldNames: Set<string>;
   isVisible: boolean;
+  userCountryCode?: string | null;
 }
 
 const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
   complianceInfo,
   updateComplianceInfo,
   isFormDisabled,
-  countries,
   states,
   errorFieldNames,
   isVisible,
+  userCountryCode,
 }) => {
   const uid = React.useId();
 
@@ -55,21 +51,8 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
     return null;
   }
 
-  const guardianCountryCode = complianceInfo.guardian_country
-    ? Object.keys(countries).find((code) => countries[code] === complianceInfo.guardian_country)
-    : null;
-
-  const availableStates = guardianCountryCode
-    ? states[guardianCountryCode.toLowerCase() as keyof typeof states] || []
-    : [];
-
-  const relationshipOptions = [
-    { value: "parent", label: "Parent" },
-    { value: "legal_guardian", label: "Legal Guardian" },
-    { value: "grandparent", label: "Grandparent" },
-    { value: "sibling", label: "Sibling" },
-    { value: "other", label: "Other" },
-  ];
+  // Use the user's country for guardian state validation
+  const availableStates = userCountryCode ? states[userCountryCode.toLowerCase() as keyof typeof states] || [] : [];
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -100,24 +83,24 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
   return (
     <div className="space-y-6">
       <div className="border-gray-200 border-b pb-4">
-        <h3 className="text-gray-900 text-lg font-medium">Legal Guardian Information</h3>
+        <h3 className="text-gray-900 text-lg font-medium">Legal guardian's details</h3>
         <p className="text-gray-600 mt-1 text-sm">
-          Since you are under 18, we need information about your legal guardian to comply with financial regulations.
+          Because you're under 18, we need to verify your legal guardian's details to enable payments.
         </p>
-        {complianceInfo.guardian_verification_status && (
+        {complianceInfo.guardian_verification_status ? (
           <div className="mt-2">
             <span className={cx("text-sm font-medium", getStatusColor(complianceInfo.guardian_verification_status))}>
               Status: {getStatusText(complianceInfo.guardian_verification_status)}
             </span>
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         {/* Guardian Name */}
         <div>
           <label htmlFor={`${uid}-guardian-first-name`} className="text-gray-700 block text-sm font-medium">
-            Guardian First Name *
+            First name *
           </label>
           <input
             type="text"
@@ -134,7 +117,7 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
 
         <div>
           <label htmlFor={`${uid}-guardian-last-name`} className="text-gray-700 block text-sm font-medium">
-            Guardian Last Name *
+            Last name *
           </label>
           <input
             type="text"
@@ -149,89 +132,46 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
           />
         </div>
 
-        {/* Guardian Date of Birth */}
+        {/* Guardian Email */}
         <div>
-          <label className="text-gray-700 block text-sm font-medium">Guardian Date of Birth *</label>
-          <div className="mt-1 grid grid-cols-3 gap-3">
-            <Select
-              value={
-                complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth).getMonth() + 1
-                  : ""
-              }
-              onChange={(value) => {
-                const currentDate = complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth)
-                  : new Date();
-                const newDate = new Date(currentDate.getFullYear(), parseInt(value) - 1, currentDate.getDate());
-                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
-              }}
-              disabled={isFormDisabled}
-              options={Array.from({ length: 12 }, (_, i) => ({
-                value: (i + 1).toString(),
-                label: new Date(0, i).toLocaleString("default", { month: "long" }),
-              }))}
-              placeholder="Month"
-            />
-            <NumberInput
-              value={
-                complianceInfo.guardian_date_of_birth ? new Date(complianceInfo.guardian_date_of_birth).getDate() : ""
-              }
-              onChange={(value) => {
-                const currentDate = complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth)
-                  : new Date();
-                const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), parseInt(value) || 1);
-                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
-              }}
-              disabled={isFormDisabled}
-              placeholder="Day"
-              min={1}
-              max={31}
-            />
-            <NumberInput
-              value={
-                complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth).getFullYear()
-                  : ""
-              }
-              onChange={(value) => {
-                const currentDate = complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth)
-                  : new Date();
-                const newDate = new Date(
-                  parseInt(value) || new Date().getFullYear(),
-                  currentDate.getMonth(),
-                  currentDate.getDate(),
-                );
-                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
-              }}
-              disabled={isFormDisabled}
-              placeholder="Year"
-              min={1900}
-              max={new Date().getFullYear() - 18}
-            />
-          </div>
-        </div>
-
-        {/* Relationship */}
-        <div>
-          <label htmlFor={`${uid}-guardian-relationship`} className="text-gray-700 block text-sm font-medium">
-            Relationship to You *
+          <label htmlFor={`${uid}-guardian-email`} className="text-gray-700 block text-sm font-medium">
+            Email address *
           </label>
-          <Select
-            value={complianceInfo.guardian_relationship || ""}
-            onChange={(value) => updateComplianceInfo({ guardian_relationship: value })}
+          <input
+            type="email"
+            id={`${uid}-guardian-email`}
+            value={complianceInfo.guardian_email || ""}
+            onChange={(e) => updateComplianceInfo({ guardian_email: e.target.value })}
             disabled={isFormDisabled}
-            options={relationshipOptions}
-            placeholder="Select relationship"
+            className={cx(
+              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
+              errorFieldNames.has("guardian_email") && "border-red-300 focus:border-red-500 focus:ring-red-500",
+            )}
           />
         </div>
 
-        {/* Address */}
+        {/* Guardian Phone */}
+        <div>
+          <label htmlFor={`${uid}-guardian-phone`} className="text-gray-700 block text-sm font-medium">
+            Phone number *
+          </label>
+          <input
+            type="tel"
+            id={`${uid}-guardian-phone`}
+            value={complianceInfo.guardian_phone || ""}
+            onChange={(e) => updateComplianceInfo({ guardian_phone: e.target.value })}
+            disabled={isFormDisabled}
+            className={cx(
+              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
+              errorFieldNames.has("guardian_phone") && "border-red-300 focus:border-red-500 focus:ring-red-500",
+            )}
+          />
+        </div>
+
+        {/* Guardian Street Address */}
         <div className="sm:col-span-2">
           <label htmlFor={`${uid}-guardian-street-address`} className="text-gray-700 block text-sm font-medium">
-            Guardian Street Address *
+            Street address *
           </label>
           <input
             type="text"
@@ -249,7 +189,7 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
 
         <div>
           <label htmlFor={`${uid}-guardian-city`} className="text-gray-700 block text-sm font-medium">
-            Guardian City *
+            City *
           </label>
           <input
             type="text"
@@ -266,18 +206,19 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
 
         <div>
           <label htmlFor={`${uid}-guardian-state`} className="text-gray-700 block text-sm font-medium">
-            Guardian State/Province *
+            State *
           </label>
           {availableStates.length > 0 ? (
-            <Select
+            <TypeSafeOptionSelect
+              id={`${uid}-guardian-state`}
+              name="State"
               value={complianceInfo.guardian_state || ""}
               onChange={(value) => updateComplianceInfo({ guardian_state: value })}
               disabled={isFormDisabled}
               options={availableStates.map((state) => ({
-                value: state.code,
+                id: state.code,
                 label: state.name,
               }))}
-              placeholder="Select state/province"
             />
           ) : (
             <input
@@ -296,7 +237,7 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
 
         <div>
           <label htmlFor={`${uid}-guardian-zip-code`} className="text-gray-700 block text-sm font-medium">
-            Guardian ZIP/Postal Code *
+            Postal code *
           </label>
           <input
             type="text"
@@ -311,42 +252,94 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
           />
         </div>
 
+        {/* Guardian Date of Birth */}
         <div>
-          <label htmlFor={`${uid}-guardian-country`} className="text-gray-700 block text-sm font-medium">
-            Guardian Country *
-          </label>
-          <Select
-            value={guardianCountryCode || ""}
-            onChange={(value) => updateComplianceInfo({ guardian_country: countries[value] })}
-            disabled={isFormDisabled}
-            options={Object.entries(countries).map(([code, name]) => ({
-              value: code,
-              label: name,
-            }))}
-            placeholder="Select country"
-          />
+          <label className="text-gray-700 block text-sm font-medium">Date of birth *</label>
+          <div className="mt-1 grid grid-cols-3 gap-3">
+            <TypeSafeOptionSelect
+              id={`${uid}-guardian-month`}
+              name="Month"
+              value={
+                complianceInfo.guardian_date_of_birth
+                  ? (new Date(complianceInfo.guardian_date_of_birth).getMonth() + 1).toString()
+                  : ""
+              }
+              onChange={(value) => {
+                const currentDate = complianceInfo.guardian_date_of_birth
+                  ? new Date(complianceInfo.guardian_date_of_birth)
+                  : new Date();
+                const newDate = new Date(currentDate.getFullYear(), parseInt(value) - 1, currentDate.getDate());
+                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
+              }}
+              disabled={isFormDisabled}
+              options={Array.from({ length: 12 }, (_, i) => ({
+                id: (i + 1).toString(),
+                label: new Date(0, i).toLocaleString("default", { month: "long" }),
+              }))}
+            />
+            <NumberInput
+              value={
+                complianceInfo.guardian_date_of_birth ? new Date(complianceInfo.guardian_date_of_birth).getDate() : null
+              }
+              onChange={(value) => {
+                const currentDate = complianceInfo.guardian_date_of_birth
+                  ? new Date(complianceInfo.guardian_date_of_birth)
+                  : new Date();
+                const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), value || 1);
+                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
+              }}
+            >
+              {({ onChange, value }) => (
+                <input
+                  type="text"
+                  value={value}
+                  onChange={onChange}
+                  disabled={isFormDisabled}
+                  placeholder="Day"
+                  min={1}
+                  max={31}
+                  className="border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+              )}
+            </NumberInput>
+            <NumberInput
+              value={
+                complianceInfo.guardian_date_of_birth
+                  ? new Date(complianceInfo.guardian_date_of_birth).getFullYear()
+                  : null
+              }
+              onChange={(value) => {
+                const currentDate = complianceInfo.guardian_date_of_birth
+                  ? new Date(complianceInfo.guardian_date_of_birth)
+                  : new Date();
+                const newDate = new Date(
+                  value || new Date().getFullYear(),
+                  currentDate.getMonth(),
+                  currentDate.getDate(),
+                );
+                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
+              }}
+            >
+              {({ onChange, value }) => (
+                <input
+                  type="text"
+                  value={value}
+                  onChange={onChange}
+                  disabled={isFormDisabled}
+                  placeholder="Year"
+                  min={1900}
+                  max={new Date().getFullYear() - 18}
+                  className="border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+              )}
+            </NumberInput>
+          </div>
         </div>
 
-        <div>
-          <label htmlFor={`${uid}-guardian-phone`} className="text-gray-700 block text-sm font-medium">
-            Guardian Phone Number *
-          </label>
-          <input
-            type="tel"
-            id={`${uid}-guardian-phone`}
-            value={complianceInfo.guardian_phone || ""}
-            onChange={(e) => updateComplianceInfo({ guardian_phone: e.target.value })}
-            disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_phone") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
-          />
-        </div>
-
+        {/* Guardian Tax ID */}
         <div>
           <label htmlFor={`${uid}-guardian-tax-id`} className="text-gray-700 block text-sm font-medium">
-            Guardian Tax ID/SSN *
+            Last 4 digits of SSN *
           </label>
           <input
             type="text"
@@ -359,46 +352,48 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
               errorFieldNames.has("guardian_individual_tax_id") &&
                 "border-red-300 focus:border-red-500 focus:ring-red-500",
             )}
-            placeholder="Last 4 digits of SSN or full tax ID"
+            placeholder="Last 4 digits of SSN"
           />
         </div>
       </div>
 
       {/* Terms of Service */}
       <div className="border-gray-200 space-y-4 border-t pt-6">
-        <h4 className="text-md text-gray-900 font-medium">Legal Guardian Consent</h4>
-        <p className="text-gray-600 text-sm">
-          Your legal guardian must consent to your use of Gumroad's payment processing services.
-        </p>
-
         <div className="space-y-3">
           <div className="flex items-start">
             <div className="flex h-5 items-center">
-              <Toggle
-                checked={complianceInfo.guardian_stripe_processing_tos_accepted || false}
-                onChange={(checked) => updateComplianceInfo({ guardian_stripe_processing_tos_accepted: checked })}
+              <input
+                type="checkbox"
+                id={`${uid}-guardian-stripe-tos`}
+                checked={complianceInfo.guardian_stripe_tos_accepted || false}
+                onChange={(e) => updateComplianceInfo({ guardian_stripe_tos_accepted: e.target.checked })}
                 disabled={isFormDisabled}
+                className="border-gray-300 h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
               />
             </div>
             <div className="ml-3 text-sm">
-              <label className="text-gray-700 font-medium">Guardian agrees to Stripe's processing terms</label>
-              <p className="text-gray-500">
-                Your legal guardian acknowledges and agrees to Stripe's terms of service for payment processing.
-              </p>
+              <label htmlFor={`${uid}-guardian-stripe-tos`} className="text-gray-700">
+                I accept the Stripe Terms of Service as the legal guardian of the account holder.
+              </label>
             </div>
           </div>
 
           <div className="flex items-start">
             <div className="flex h-5 items-center">
-              <Toggle
-                checked={complianceInfo.guardian_stripe_tos_accepted || false}
-                onChange={(checked) => updateComplianceInfo({ guardian_stripe_tos_accepted: checked })}
+              <input
+                type="checkbox"
+                id={`${uid}-guardian-consent`}
+                checked={complianceInfo.guardian_stripe_processing_tos_accepted || false}
+                onChange={(e) => updateComplianceInfo({ guardian_stripe_processing_tos_accepted: e.target.checked })}
                 disabled={isFormDisabled}
+                className="border-gray-300 h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
               />
             </div>
             <div className="ml-3 text-sm">
-              <label className="text-gray-700 font-medium">Guardian agrees to Stripe's terms of service</label>
-              <p className="text-gray-500">Your legal guardian acknowledges and agrees to Stripe's terms of service.</p>
+              <label htmlFor={`${uid}-guardian-consent`} className="text-gray-700">
+                I acknowledge that I am the legal guardian of the account holder and consent to the collection and
+                processing of my information for verification purposes.
+              </label>
             </div>
           </div>
         </div>

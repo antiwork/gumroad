@@ -28,6 +28,7 @@ import BankAccountSection, {
   BankAccountDetails,
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
+import GuardianInformationSection from "$app/components/Settings/PaymentsPage/GuardianInformationSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
@@ -54,6 +55,7 @@ export type User = {
   can_connect_stripe: boolean;
   is_charged_paypal_payout_fee: boolean;
   joined_at: string;
+  is_under_18: boolean;
 };
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
@@ -97,6 +99,21 @@ export type ComplianceInfo = {
   business_building_number?: string | null;
   business_street_address_kanji?: string | null;
   business_street_address_kana?: string | null;
+  // Guardian fields
+  guardian_first_name?: string | null;
+  guardian_last_name?: string | null;
+  guardian_email?: string | null;
+  guardian_phone?: string | null;
+  guardian_street_address?: string | null;
+  guardian_city?: string | null;
+  guardian_state?: string | null;
+  guardian_zip_code?: string | null;
+  guardian_country?: string | null;
+  guardian_date_of_birth?: string | null;
+  guardian_individual_tax_id?: string | null;
+  guardian_stripe_processing_tos_accepted?: boolean;
+  guardian_stripe_tos_accepted?: boolean;
+  guardian_verification_status?: string;
 };
 
 type Props = {
@@ -201,7 +218,18 @@ export type FormFieldName =
   | "account_holder_full_name"
   | "account_number"
   | "account_number_confirmation"
-  | "paypal_email_address";
+  | "paypal_email_address"
+  | "guardian_first_name"
+  | "guardian_last_name"
+  | "guardian_email"
+  | "guardian_phone"
+  | "guardian_street_address"
+  | "guardian_city"
+  | "guardian_state"
+  | "guardian_zip_code"
+  | "guardian_country"
+  | "guardian_date_of_birth"
+  | "guardian_individual_tax_id";
 
 export type ErrorMessageInfo = {
   message: string;
@@ -564,6 +592,61 @@ const PaymentsPage = (props: Props) => {
     }
   };
 
+  const isUserUnder18 = () => {
+    if (props.user.is_under_18) return true;
+    if (complianceInfo.dob_year > 0 && complianceInfo.dob_month > 0 && complianceInfo.dob_day > 0) {
+      const birthDate = new Date(complianceInfo.dob_year, complianceInfo.dob_month - 1, complianceInfo.dob_day);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        return age - 1 < 18;
+      }
+      return age < 18;
+    }
+    return false;
+  };
+
+  const validateGuardianFields = () => {
+    if (!complianceInfo.guardian_first_name) {
+      markFieldInvalid("guardian_first_name");
+    }
+    if (!complianceInfo.guardian_last_name) {
+      markFieldInvalid("guardian_last_name");
+    }
+    if (!complianceInfo.guardian_email) {
+      markFieldInvalid("guardian_email");
+    }
+    if (!validatePhoneNumber(complianceInfo.guardian_phone || null, complianceInfo.guardian_country || null)) {
+      markFieldInvalid("guardian_phone");
+    }
+    if (!complianceInfo.guardian_street_address) {
+      markFieldInvalid("guardian_street_address");
+    }
+    if (!complianceInfo.guardian_city) {
+      markFieldInvalid("guardian_city");
+    }
+    if (
+      complianceInfo.guardian_country &&
+      complianceInfo.guardian_country in props.states &&
+      !complianceInfo.guardian_state
+    ) {
+      markFieldInvalid("guardian_state");
+    }
+    if (!complianceInfo.guardian_zip_code && complianceInfo.guardian_country !== "BW") {
+      markFieldInvalid("guardian_zip_code");
+    }
+    if (!complianceInfo.guardian_country) {
+      markFieldInvalid("guardian_country");
+    }
+    if (!complianceInfo.guardian_date_of_birth) {
+      markFieldInvalid("guardian_date_of_birth");
+    }
+    if (!complianceInfo.guardian_individual_tax_id) {
+      markFieldInvalid("guardian_individual_tax_id");
+    }
+  };
+
   const validateComplianceInfoFields = () => {
     if (!complianceInfo.first_name) {
       markFieldInvalid("first_name");
@@ -700,6 +783,11 @@ const PaymentsPage = (props: Props) => {
     }
 
     validateComplianceInfoFields();
+
+    // Validate guardian fields if user is under 18
+    if (isUserUnder18()) {
+      validateGuardianFields();
+    }
 
     return errorFieldNames.size === 0;
   };
@@ -1088,20 +1176,33 @@ const PaymentsPage = (props: Props) => {
               />
             ) : null}
             {selectedPayoutMethod !== "stripe" ? (
-              <AccountDetailsSection
-                user={props.user}
-                complianceInfo={complianceInfo}
-                updateComplianceInfo={updateComplianceInfo}
-                minDobYear={props.min_dob_year}
-                isFormDisabled={props.is_form_disabled}
-                countries={props.countries}
-                uaeBusinessTypes={props.uae_business_types}
-                indiaBusinessTypes={props.india_business_types}
-                canadaBusinessTypes={props.canada_business_types}
-                states={props.states}
-                errorFieldNames={errorFieldNames}
-                payoutMethod={selectedPayoutMethod}
-              />
+              <>
+                <AccountDetailsSection
+                  user={props.user}
+                  complianceInfo={complianceInfo}
+                  updateComplianceInfo={updateComplianceInfo}
+                  minDobYear={props.min_dob_year}
+                  isFormDisabled={props.is_form_disabled}
+                  countries={props.countries}
+                  uaeBusinessTypes={props.uae_business_types}
+                  indiaBusinessTypes={props.india_business_types}
+                  canadaBusinessTypes={props.canada_business_types}
+                  states={props.states}
+                  errorFieldNames={errorFieldNames}
+                  payoutMethod={selectedPayoutMethod}
+                />
+                {isUserUnder18() ? (
+                  <GuardianInformationSection
+                    complianceInfo={complianceInfo}
+                    updateComplianceInfo={updateComplianceInfo}
+                    isFormDisabled={props.is_form_disabled}
+                    states={props.states}
+                    errorFieldNames={errorFieldNames}
+                    isVisible={true}
+                    userCountryCode={props.user.country_code}
+                  />
+                ) : null}
+              </>
             ) : (
               <StripeConnectSection
                 stripeConnect={props.stripe_connect}

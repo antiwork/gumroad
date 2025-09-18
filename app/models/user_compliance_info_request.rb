@@ -78,10 +78,32 @@ class UserComplianceInfoRequest < ApplicationRecord
       requests = requests.only_needs_field_to_be_partially_provided if field_provided_in_part
       requests.find_each(&:mark_provided!)
     end
+
+    # Handle guardian fields for users under 18
+    handle_guardian_compliance_info(user_compliance_info)
   end
 
   def self.handle_new_bank_account(bank_account)
     bank_account.user.user_compliance_info_requests.requested.where(field_needed: UserComplianceInfoFields::BANK_ACCOUNT).find_each(&:mark_provided!)
+  end
+
+  def self.handle_guardian_compliance_info(user_compliance_info)
+    return unless user_compliance_info.user.under_18?
+
+    # Create compliance requests for guardian fields if they're missing
+    guardian_fields = %w[
+      guardian_first_name guardian_last_name guardian_email guardian_phone
+      guardian_street_address guardian_city guardian_date_of_birth
+    ]
+
+    guardian_fields.each do |field|
+      next if user_compliance_info.send(field).present?
+
+      user_compliance_info.user.user_compliance_info_requests.create!(
+        field_needed: field,
+        state: 'requested'
+      )
+    end
   end
 
   def verification_error_message

@@ -15,7 +15,6 @@ RSpec.describe UpdateUserComplianceInfo, "guardian fields", type: :service do
         guardian_dob_year: "1980",
         guardian_dob_month: "5",
         guardian_dob_day: "15",
-        guardian_relationship: "Parent",
         guardian_street_address: "123 Main St",
         guardian_city: "New York",
         guardian_state: "NY",
@@ -46,10 +45,10 @@ RSpec.describe UpdateUserComplianceInfo, "guardian fields", type: :service do
       expect(user_compliance_info.reload.guardian_date_of_birth).to eq(Date.new(1980, 5, 15))
     end
 
-    it "updates guardian relationship" do
+    it "updates guardian name" do
       result = service.process
       expect(result[:success]).to be true
-      expect(user_compliance_info.reload.guardian_relationship).to eq("Parent")
+      expect(user_compliance_info.reload.guardian_first_name).to eq("John")
     end
 
     it "updates guardian address fields" do

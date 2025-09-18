@@ -8,12 +8,29 @@ class UserComplianceInfo < ApplicationRecord
   include UserComplianceInfo::BusinessTypes
   include JsonData
 
-  stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
+  stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_email, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
 
   belongs_to :user, optional: true
   validates_presence_of :user
+
+  # Guardian field validations for users under 18
+  validates :guardian_first_name, presence: true, if: :user_under_18?
+  validates :guardian_last_name, presence: true, if: :user_under_18?
+  validates :guardian_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, if: :user_under_18?
+  validates :guardian_phone, presence: true, if: :user_under_18?
+  validates :guardian_street_address, presence: true, if: :user_under_18?
+  validates :guardian_city, presence: true, if: :user_under_18?
+  validates :guardian_state, presence: true, if: :guardian_state_required?
+  validates :guardian_zip_code, presence: true, if: :guardian_zip_code_required?
+  validates :guardian_date_of_birth, presence: true, if: :user_under_18?
+  validates :guardian_individual_tax_id, presence: true, if: :guardian_tax_id_required?
+  validates :guardian_stripe_tos_accepted, acceptance: true, if: :user_under_18?
+  validates :guardian_stripe_processing_tos_accepted, acceptance: true, if: :user_under_18?
+
+  validate :guardian_date_of_birth_must_be_valid, if: :user_under_18?
+  validate :guardian_must_be_18_or_older, if: :user_under_18?
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -173,24 +190,87 @@ class UserComplianceInfo < ApplicationRecord
     "#{guardian_first_name} #{guardian_last_name}".squeeze(" ").strip
   end
 
-  def guardian_verification_required?
-    user.under_18? && GuardianComplianceInfoRequest.requires_guardian_verification?(self)
+  def user_under_18?
+    user&.under_18? == true
   end
 
   def guardian_verification_complete?
-    return true unless guardian_verification_required?
+    return true unless user_under_18?
+    return false unless guardian_fields_complete?
 
-    user.guardian_compliance_info_requests.requested.empty?
+    guardian_verification_status == 'verified'
   end
 
   def guardian_verification_status
-    return 'not_required' unless guardian_verification_required?
-    return 'complete' if guardian_verification_complete?
-    return 'pending' if user.guardian_compliance_info_requests.requested.any?
-    'incomplete'
+    return 'not_required' unless user_under_18?
+    return 'incomplete' unless guardian_fields_complete?
+
+    # Check if we have a Stripe verification status
+    read_attribute(:guardian_verification_status).presence || 'pending'
+  end
+
+  def guardian_fields_complete?
+    return false unless user_under_18?
+
+    # Check required fields
+    required_fields = %w[guardian_first_name guardian_last_name guardian_email guardian_phone
+                        guardian_street_address guardian_city guardian_date_of_birth]
+
+    return false unless required_fields.all? { |field| send(field).present? }
+
+    # Check conditional fields
+    return false if guardian_state_required? && guardian_state.blank?
+    return false if guardian_zip_code_required? && guardian_zip_code.blank?
+    return false if guardian_tax_id_required? && guardian_individual_tax_id.blank?
+
+    true
+  end
+
+  # Helper methods for conditional validations
+  def guardian_state_required?
+    return false unless user_under_18?
+    return false unless user&.country_code.present?
+
+    user.country_code.in?(%w[US CA AU MX AE IR BR])
+  end
+
+  def guardian_zip_code_required?
+    return false unless user_under_18?
+    return false unless user&.country_code.present?
+
+    user.country_code != "BW"
+  end
+
+  def guardian_tax_id_required?
+    return false unless user_under_18?
+    return false unless user&.country_code.present?
+
+    user.country_code.in?(%w[US CA])
   end
 
   private
+
+  def guardian_date_of_birth_must_be_valid
+    return unless guardian_date_of_birth.present?
+
+    unless guardian_date_of_birth.is_a?(Date)
+      errors.add(:guardian_date_of_birth, "must be a valid date")
+      return
+    end
+
+    if guardian_date_of_birth > Date.current
+      errors.add(:guardian_date_of_birth, "cannot be in the future")
+    end
+  end
+
+  def guardian_must_be_18_or_older
+    return unless guardian_date_of_birth.present? && guardian_date_of_birth.is_a?(Date)
+
+    if guardian_date_of_birth > 18.years.ago
+      errors.add(:guardian_date_of_birth, "guardian must be 18 years or older")
+    end
+  end
+
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create
     end
