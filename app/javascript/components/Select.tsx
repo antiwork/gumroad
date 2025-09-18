@@ -131,6 +131,7 @@ const SelectInner = <IsMulti extends boolean>(
   );
 };
 
+/* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
 export const Select = React.forwardRef(SelectInner) as unknown as <IsMulti extends boolean>(
   props: Props<IsMulti> & {
     ref?: React.Ref<SelectInstance<Option, IsMulti, GroupBase<Option>>>;
