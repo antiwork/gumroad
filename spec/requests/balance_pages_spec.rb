@@ -1011,41 +1011,33 @@ describe "Balance Pages Scenario", js: true, type: :system do
       end
 
       it "shows carried over amounts from failed payouts in current payout period" do
-        # Create a failed payout first
         failed_payment = seller.payments.last
         failed_payment.update!(state: Payment::FAILED, failure_reason: "insufficient_funds")
 
-        # Create a new successful payout that includes the failed balance
         product = create(:product, user: seller)
         purchase = create(:purchase_in_progress, link: product, price_cents: 1000, seller: seller, purchase_state: "in_progress")
         purchase.update_balance_and_mark_successful!
 
-        # Create a new payout
         PayoutUsersService.new(date_string: Date.current, processor_type: PayoutProcessorType::STRIPE, user_ids: [seller.id]).process
 
         visit balance_path
 
-        # Check that the current payout shows carried over amounts
         current_payout_section = page.all("[aria-label='Payout period']").first
         expect(current_payout_section).to have_text("Carried over from", normalize_ws: true)
       end
 
       it "shows included in payout information for failed payouts that were later processed" do
-        # Create a failed payout first
         failed_payment = seller.payments.last
         failed_payment.update!(state: Payment::FAILED, failure_reason: "insufficient_funds")
 
-        # Create a new successful payout that includes the failed balance
         product = create(:product, user: seller)
         purchase = create(:purchase_in_progress, link: product, price_cents: 1000, seller: seller, purchase_state: "in_progress")
         purchase.update_balance_and_mark_successful!
 
-        # Create a new payout
         PayoutUsersService.new(date_string: Date.current, processor_type: PayoutProcessorType::STRIPE, user_ids: [seller.id]).process
 
         visit balance_path
 
-        # Check that the failed payout shows it was included in a later payout
         failed_section = page.all("[aria-label='Payout period']").last
         expect(failed_section).to have_text("Included in payout on", normalize_ws: true)
       end
