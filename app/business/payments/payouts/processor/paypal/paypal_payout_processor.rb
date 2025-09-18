@@ -349,6 +349,9 @@ class PaypalPayoutProcessor
       payment.mark_failed!
     elsif no_split_payments_are_processing
       # This means that no split payments are in the processing state. It also means that some of them have failed and some have succeeded.
+      # Mark as failed so the user can see what happened, but the helper will show appropriate message based on success/failure
+      payment.txn_id = SPLIT_PAYMENT_TXN_ID
+      payment.mark_failed! # Mark as failed since some parts failed, but the helper will show partial payout info
       Bugsnag.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
     end
   end

@@ -99,7 +99,12 @@ module PayoutsHelper
 
     if payment.failed?
       payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
-      payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
+    end
+
+    # Handle partial PayPal payouts where some parts succeeded and others failed
+    if payment.was_created_in_split_mode? && payment.split_payments_info.present?
+      partial_payout_info = calculate_partial_payout_info(payment)
+      payout_period_data.merge!(partial_payout_info) if partial_payout_info.present?
     end
 
     balance_ids = payment.balances.map(&:id)
@@ -293,6 +298,53 @@ module PayoutsHelper
       else
         nil
       end
+  end
+
+  def calculate_partial_payout_info(payment)
+    return {} unless payment.was_created_in_split_mode? && payment.split_payments_info.present?
+
+    split_payments = payment.split_payments_info
+    completed_payments = split_payments.select { |info| info["state"] == "completed" }
+    failed_payments = split_payments.select { |info| info["state"] == "failed" }
+    processing_payments = split_payments.select { |info| %w[processing pending].include?(info["state"]) }
+
+    return {} if processing_payments.any?
+
+    if completed_payments.any? && failed_payments.empty?
+      return {
+        is_multi_payment_success: true,
+        multi_payment_message: generate_multi_payment_success_message(completed_payments, payment)
+      }
+    end
+
+    if completed_payments.any? && failed_payments.any?
+      completed_amount_cents = completed_payments.sum { |info| info["amount_cents"] }
+      failed_amount_cents = failed_payments.sum { |info| info["amount_cents"] }
+
+      completed_date = completed_payments.first["completed_at"] || payment.created_at
+      formatted_completed_date = formatted_payout_date(completed_date)
+
+      return {
+        is_partial_payout: true,
+        partial_payout_status: "Partially failed",
+        partial_payout_completed_amount_cents: completed_amount_cents,
+        partial_payout_completed_displayed_amount: formatted_dollar_amount(completed_amount_cents),
+        partial_payout_failed_amount_cents: failed_amount_cents,
+        partial_payout_failed_displayed_amount: formatted_dollar_amount(failed_amount_cents),
+        partial_payout_completed_date: formatted_completed_date,
+        partial_payout_message: "This payout was partially processed. **#{formatted_dollar_amount(completed_amount_cents)}** was successfully paid via PayPal on **#{formatted_completed_date}**, but the **#{formatted_dollar_amount(failed_amount_cents)}** could not be sent due to PayPal limitations. It will be included in your next payout automatically."
+      }
+    end
+
+    {}
+  end
+
+  def generate_multi_payment_success_message(completed_payments, payment)
+    total_amount = completed_payments.sum { |info| info["amount_cents"] }
+    completed_date = completed_payments.first["completed_at"] || payment.created_at
+    formatted_date = formatted_payout_date(completed_date)
+
+    "This payout was paid in multiple payments: **#{formatted_dollar_amount(total_amount)}** was paid via PayPal on **#{formatted_date}**."
   end
 
   public

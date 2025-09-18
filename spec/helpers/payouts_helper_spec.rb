@@ -397,4 +397,315 @@ describe PayoutsHelper do
       end
     end
   end
+
+  describe "calculate_partial_payout_info" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true) }
+
+    context "when payment is not in split mode" do
+      it "returns empty hash" do
+        payment.was_created_in_split_mode = false
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when payment has no split payments info" do
+      it "returns empty hash" do
+        payment.split_payments_info = []
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when payment has nil split payments info" do
+      it "returns empty hash" do
+        payment.split_payments_info = nil
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when some payments are still processing" do
+      it "returns empty hash until all payments are resolved" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "processing", "amount_cents" => 3000 },
+          { "state" => "failed", "amount_cents" => 2000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when some payments are still pending" do
+      it "returns empty hash until all payments are resolved" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "pending", "amount_cents" => 3000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when all split payments eventually succeeded (blue info box scenario)" do
+      it "returns multi-payment success information with correct amounts" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "completed", "amount_cents" => 3000 },
+          { "state" => "completed", "amount_cents" => 2000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:is_multi_payment_success]).to be true
+        expect(result[:multi_payment_message]).to match /This payout was paid in multiple payments: \*\*\$100\.00\*\* was paid via PayPal on \*\*.*\*\*\./
+      end
+
+      it "uses completed_at date when available" do
+        completed_date = Date.parse("2024-11-10")
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000, "completed_at" => completed_date },
+          { "state" => "completed", "amount_cents" => 3000, "completed_at" => completed_date }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:multi_payment_message]).to include("November 10th, 2024")
+      end
+
+      it "falls back to payment created_at when completed_at is not available" do
+        payment.created_at = Date.parse("2024-11-10")
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "completed", "amount_cents" => 3000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:multi_payment_message]).to include("November 10th, 2024")
+      end
+    end
+
+    context "when some split payments succeeded and others failed (yellow warning box scenario)" do
+      it "returns partial payout information with correct calculations" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 3000 },
+          { "state" => "completed", "amount_cents" => 2000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:is_partial_payout]).to be true
+        expect(result[:partial_payout_completed_amount_cents]).to eq 7000
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$70.00"
+        expect(result[:partial_payout_failed_amount_cents]).to eq 3000
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$30.00"
+        expect(result[:partial_payout_status]).to eq "Partially failed"
+        expect(result[:partial_payout_message]).to match /This payout was partially processed\. \*\*\$70\.00\*\* was successfully paid via PayPal on \*\*.*\*\*, but the \*\*\$30\.00\*\* could not be sent due to PayPal limitations\. It will be included in your next payout automatically\./
+      end
+
+      it "handles single failed payment correctly" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 10000 },
+          { "state" => "failed", "amount_cents" => 5000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:partial_payout_completed_amount_cents]).to eq 10000
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$100.00"
+        expect(result[:partial_payout_failed_amount_cents]).to eq 5000
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$50.00"
+      end
+
+      it "handles multiple failed payments correctly" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 2000 },
+          { "state" => "failed", "amount_cents" => 3000 },
+          { "state" => "completed", "amount_cents" => 1000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:partial_payout_completed_amount_cents]).to eq 6000
+        expect(result[:partial_payout_failed_amount_cents]).to eq 5000
+      end
+
+      it "uses completed_at date when available for partial payouts" do
+        completed_date = Date.parse("2024-11-10")
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000, "completed_at" => completed_date },
+          { "state" => "failed", "amount_cents" => 3000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:partial_payout_message]).to include("November 10th, 2024")
+      end
+
+      it "falls back to payment created_at for partial payouts when completed_at is not available" do
+        payment.created_at = Date.parse("2024-11-10")
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 3000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:partial_payout_message]).to include("November 10th, 2024")
+      end
+    end
+
+    context "when all split payments failed" do
+      it "returns empty hash" do
+        payment.split_payments_info = [
+          { "state" => "failed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 3000 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when no split payments exist" do
+      it "returns empty hash" do
+        payment.split_payments_info = []
+        result = helper.calculate_partial_payout_info(payment)
+        expect(result).to eq({})
+      end
+    end
+
+    context "when split payments have zero amounts" do
+      it "handles zero amounts correctly" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 0 },
+          { "state" => "failed", "amount_cents" => 0 }
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:partial_payout_completed_amount_cents]).to eq 0
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$0.00"
+        expect(result[:partial_payout_failed_amount_cents]).to eq 0
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$0.00"
+      end
+    end
+
+    context "when split payments have mixed amounts" do
+      it "handles large amounts correctly" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 1000000 }, # $10,000
+          { "state" => "failed", "amount_cents" => 500000 }      # $5,000
+        ]
+        result = helper.calculate_partial_payout_info(payment)
+
+        expect(result[:partial_payout_completed_amount_cents]).to eq 1000000
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$10,000.00"
+        expect(result[:partial_payout_failed_amount_cents]).to eq 500000
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$5,000.00"
+      end
+    end
+  end
+
+  describe "generate_multi_payment_success_message" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user: user, created_at: Date.parse("2024-11-10")) }
+
+    it "generates correct message format" do
+      completed_payments = [
+        { "state" => "completed", "amount_cents" => 5000 },
+        { "state" => "completed", "amount_cents" => 3000 }
+      ]
+      result = helper.generate_multi_payment_success_message(completed_payments, payment)
+
+      expect(result).to match /This payout was paid in multiple payments: \*\*\$80\.00\*\* was paid via PayPal on \*\*November 10th, 2024\*\*\./
+    end
+
+    it "handles single payment correctly" do
+      completed_payments = [
+        { "state" => "completed", "amount_cents" => 10000 }
+      ]
+      result = helper.generate_multi_payment_success_message(completed_payments, payment)
+
+      expect(result).to match /This payout was paid in multiple payments: \*\*\$100\.00\*\* was paid via PayPal on \*\*November 10th, 2024\*\*\./
+    end
+
+    it "uses completed_at date when available" do
+      completed_date = Date.parse("2024-12-01")
+      completed_payments = [
+        { "state" => "completed", "amount_cents" => 5000, "completed_at" => completed_date }
+      ]
+      result = helper.generate_multi_payment_success_message(completed_payments, payment)
+
+      expect(result).to include("December 1st, 2024")
+    end
+  end
+
+  describe "integration with old_payout_period_data" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true) }
+
+    context "when payment has successful multi-payment scenario" do
+      it "includes multi-payment success info in payout period data" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "completed", "amount_cents" => 3000 }
+        ]
+
+        result = helper.old_payout_period_data(user: user, payment: payment)
+
+        expect(result[:is_multi_payment_success]).to be true
+        expect(result[:multi_payment_message]).to match /This payout was paid in multiple payments: \*\*\$80\.00\*\* was paid via PayPal on \*\*.*\*\*\./
+      end
+    end
+
+    context "when payment has partial failure scenario" do
+      it "includes partial payout info in payout period data" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 3000 }
+        ]
+
+        result = helper.old_payout_period_data(user: user, payment: payment)
+
+        expect(result[:is_partial_payout]).to be true
+        expect(result[:partial_payout_status]).to eq "Partially failed"
+        expect(result[:partial_payout_completed_amount_cents]).to eq 5000
+        expect(result[:partial_payout_failed_amount_cents]).to eq 3000
+        expect(result[:partial_payout_message]).to match /This payout was partially processed\. \*\*\$50\.00\*\* was successfully paid via PayPal on \*\*.*\*\*, but the \*\*\$30\.00\*\* could not be sent due to PayPal limitations\. It will be included in your next payout automatically\./
+      end
+    end
+
+    context "when payment is not in split mode" do
+      it "does not include partial payout info" do
+        payment.was_created_in_split_mode = false
+
+        result = helper.old_payout_period_data(user: user, payment: payment)
+
+        expect(result[:is_partial_payout]).to be_nil
+        expect(result[:is_multi_payment_success]).to be_nil
+      end
+    end
+
+    context "when payment has no split payments info" do
+      it "does not include partial payout info" do
+        payment.split_payments_info = nil
+
+        result = helper.old_payout_period_data(user: user, payment: payment)
+
+        expect(result[:is_partial_payout]).to be_nil
+        expect(result[:is_multi_payment_success]).to be_nil
+      end
+    end
+
+    context "when some payments are still processing" do
+      it "does not include partial payout info until all payments are resolved" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "processing", "amount_cents" => 3000 },
+          { "state" => "failed", "amount_cents" => 2000 }
+        ]
+
+        result = helper.old_payout_period_data(user: user, payment: payment)
+
+        expect(result[:is_partial_payout]).to be_nil
+        expect(result[:is_multi_payment_success]).to be_nil
+      end
+    end
+  end
 end

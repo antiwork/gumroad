@@ -217,6 +217,16 @@ type CurrentPeriodPayoutData = (
   carried_over_displayed_amount?: string;
   carried_over_items?: { failed_on: string; carried_over_cents: number; carried_over_displayed_amount: string }[];
   included_in_payout_on_items?: { included_on: string }[];
+  is_partial_payout?: boolean;
+  partial_payout_status?: string;
+  partial_payout_completed_amount_cents?: number;
+  partial_payout_completed_displayed_amount?: string;
+  partial_payout_failed_amount_cents?: number;
+  partial_payout_failed_displayed_amount?: string;
+  partial_payout_completed_date?: string;
+  partial_payout_message?: string;
+  is_multi_payment_success?: boolean;
+  multi_payment_message?: string;
 };
 
 type PastPeriodPayoutsData = {
@@ -253,6 +263,16 @@ type PastPeriodPayoutsData = {
   type: PayoutType;
   displayable_failure_reason?: string | null;
   requires_verification_to_resume?: boolean;
+  is_partial_payout?: boolean;
+  partial_payout_status?: string;
+  partial_payout_completed_amount_cents?: number;
+  partial_payout_completed_displayed_amount?: string;
+  partial_payout_failed_amount_cents?: number;
+  partial_payout_failed_displayed_amount?: string;
+  partial_payout_completed_date?: string;
+  partial_payout_message?: string;
+  is_multi_payment_success?: boolean;
+  multi_payment_message?: string;
 };
 
 export type BalancePageProps = {
@@ -353,10 +373,14 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         )}
         {payoutPeriodData.status === "failed" ? (
           <div className="pill small">
-            {Array.isArray(payoutPeriodData.included_in_payout_on_items) &&
-            payoutPeriodData.included_in_payout_on_items.length > 0
-              ? `Paid on ${payoutPeriodData.included_in_payout_on_items[0]?.included_on ?? ""}`
-              : "Failed"}
+            {"is_multi_payment_success" in payoutPeriodData && payoutPeriodData.is_multi_payment_success
+              ? "Fully paid"
+              : "is_partial_payout" in payoutPeriodData && payoutPeriodData.is_partial_payout
+                ? "Partially failed"
+                : Array.isArray(payoutPeriodData.included_in_payout_on_items) &&
+                    payoutPeriodData.included_in_payout_on_items.length > 0
+                  ? `Paid on ${payoutPeriodData.included_in_payout_on_items[0]?.included_on ?? ""}`
+                  : "Failed"}
           </div>
         ) : null}
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
@@ -399,6 +423,16 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                 : "."}
             </strong>
           </p>
+        </div>
+      ) : null}
+      {"is_multi_payment_success" in payoutPeriodData && payoutPeriodData.is_multi_payment_success ? (
+        <div className="info my-4" role="status">
+          <p>{payoutPeriodData.multi_payment_message}</p>
+        </div>
+      ) : null}
+      {"is_partial_payout" in payoutPeriodData && payoutPeriodData.is_partial_payout ? (
+        <div className="warning my-4" role="status">
+          <p>{payoutPeriodData.partial_payout_message}</p>
         </div>
       ) : null}
       <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>

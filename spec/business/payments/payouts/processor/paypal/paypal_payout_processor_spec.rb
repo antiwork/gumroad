@@ -1065,4 +1065,112 @@ describe PaypalPayoutProcessor do
       end.to raise_error(RuntimeError, error_message)
     end
   end
+
+  describe "update_split_payment_state" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true) }
+
+    context "when all split payments are completed" do
+      it "marks payment as completed" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "completed", "amount_cents" => 3000 }
+        ]
+
+        expect(payment).to receive(:mark_completed!)
+        expect(payment).to receive(:txn_id=).with(PaypalPayoutProcessor::SPLIT_PAYMENT_TXN_ID)
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+
+    context "when all split payments failed" do
+      it "marks payment as failed" do
+        payment.split_payments_info = [
+          { "state" => "failed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 3000 }
+        ]
+
+        expect(payment).to receive(:mark_failed!)
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+
+    context "when some split payments succeeded and others failed" do
+      it "marks payment as failed and notifies Bugsnag" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "failed", "amount_cents" => 3000 }
+        ]
+
+        expect(payment).to receive(:mark_failed!)
+        expect(payment).to receive(:txn_id=).with(PaypalPayoutProcessor::SPLIT_PAYMENT_TXN_ID)
+        expect(Bugsnag).to receive(:notify).with("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+
+    context "when some split payments are still processing" do
+      it "does not change payment state" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "processing", "amount_cents" => 3000 },
+          { "state" => "failed", "amount_cents" => 2000 }
+        ]
+
+        expect(payment).not_to receive(:mark_completed!)
+        expect(payment).not_to receive(:mark_failed!)
+        expect(Bugsnag).not_to receive(:notify)
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+
+    context "when some split payments are still pending" do
+      it "does not change payment state" do
+        payment.split_payments_info = [
+          { "state" => "completed", "amount_cents" => 5000 },
+          { "state" => "pending", "amount_cents" => 3000 }
+        ]
+
+        expect(payment).not_to receive(:mark_completed!)
+        expect(payment).not_to receive(:mark_failed!)
+        expect(Bugsnag).not_to receive(:notify)
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+
+    context "when all split payments are processing" do
+      it "does not change payment state" do
+        payment.split_payments_info = [
+          { "state" => "processing", "amount_cents" => 5000 },
+          { "state" => "processing", "amount_cents" => 3000 }
+        ]
+
+        expect(payment).not_to receive(:mark_completed!)
+        expect(payment).not_to receive(:mark_failed!)
+        expect(Bugsnag).not_to receive(:notify)
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+
+    context "when all split payments are pending" do
+      it "does not change payment state" do
+        payment.split_payments_info = [
+          { "state" => "pending", "amount_cents" => 5000 },
+          { "state" => "pending", "amount_cents" => 3000 }
+        ]
+
+        expect(payment).not_to receive(:mark_completed!)
+        expect(payment).not_to receive(:mark_failed!)
+        expect(Bugsnag).not_to receive(:notify)
+
+        described_class.update_split_payment_state(payment)
+      end
+    end
+  end
 end
