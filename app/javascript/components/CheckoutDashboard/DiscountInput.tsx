@@ -15,18 +15,21 @@ export const DiscountInput = ({
   currencyCode,
   currencyCodeSelector,
   disableFixedAmount,
+  ref,
 }: {
   discount: InputtedDiscount;
   setDiscount: (newDiscount: InputtedDiscount) => void;
   currencyCode: CurrencyCode;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void } | undefined;
   disableFixedAmount?: boolean;
+  ref?: React.RefObject<HTMLInputElement>;
 }) => {
   const fixedAmountFieldset = (
     <fieldset className={cx({ danger: discount.type === "cents" && discount.error })}>
       <div style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "auto 1fr", alignItems: "center" }}>
         <label>
           <input
+            ref={ref}
             type="radio"
             checked={discount.type === "cents"}
             onChange={(evt) => {

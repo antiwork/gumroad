@@ -10,9 +10,9 @@ type EmailConfirmationProps = {
 };
 
 const GenerateInvoiceConfirmationPage = ({ invoice_url }: EmailConfirmationProps) => (
-  <div className="stack single-page-form horizontal-form">
+  <main className="stack single-page-form horizontal-form">
     <EmailConfirmation invoice_url={invoice_url} />
-  </div>
+  </main>
 );
 
 const EmailConfirmation = ({ invoice_url }: EmailConfirmationProps) => (

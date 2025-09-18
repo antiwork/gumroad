@@ -1,5 +1,6 @@
 import cx from "classnames";
 import * as React from "react";
+import { GroupBase, SelectInstance } from "react-select";
 import { createCast, is } from "ts-safe-cast";
 
 import {
@@ -29,7 +30,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
-import { Select } from "$app/components/Select";
+import { Select, Option } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -715,6 +716,10 @@ const Form = ({
     },
   );
 
+  const nameFieldRef = React.useRef<HTMLInputElement>(null);
+  const codeFieldRef = React.useRef<HTMLInputElement>(null);
+  const selectedProductsFieldRef = React.useRef<SelectInstance<Option, true, GroupBase<Option>>>(null);
+
   const [universal, setUniversal] = React.useState(offerCode ? offerCode.products === null : false);
   const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
     value: offerCode?.products?.map(({ id }) => id) ?? [],
@@ -757,36 +762,45 @@ const Form = ({
   const uid = React.useId();
 
   const handleSubmit = () => {
-    if (
-      name.value === "" ||
-      code.value === "" ||
-      discount.value === null ||
-      (limitQuantity && maxQuantity.value === null) ||
-      (!hasNoEndDate && validAt > expiresAt.value) ||
-      (!universal && selectedProductIds.value.length === 0) ||
-      (hasMinimumQuantity && minimumQuantity.value === null) ||
-      (hasMinimumAmount && minimumAmount.value === null)
-    ) {
-      setName((prevName) => ({ ...prevName, error: prevName.value === "" }));
-      setCode((prevCode) => ({ ...prevCode, error: prevCode.value === "" }));
-      setDiscount((prevDiscount) => ({ ...prevDiscount, error: prevDiscount.value === null }));
-      setMaxQuantity((prevMaxQuantity) => ({
-        ...prevMaxQuantity,
-        error: limitQuantity && prevMaxQuantity.value === null,
-      }));
-      setExpiresAt((prevExpiresAt) => ({ ...prevExpiresAt, error: !hasNoEndDate && validAt > prevExpiresAt.value }));
-      setSelectedProductIds((prevSelectedProductIds) => ({
-        ...prevSelectedProductIds,
-        error: !universal && selectedProductIds.value.length === 0,
-      }));
-      setMinimumQuantity((prevMinimumQuantity) => ({
-        ...prevMinimumQuantity,
-        error: hasMinimumQuantity && prevMinimumQuantity.value === null,
-      }));
-      setMinimumAmount((prevMinimumAmount) => ({
-        ...prevMinimumAmount,
-        error: hasMinimumAmount && prevMinimumAmount.value === null,
-      }));
+    const isNameInvalid = name.value === "";
+    const isCodeInvalid = code.value === "";
+    const isDiscountInvalid = discount.value === null;
+    const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
+    const isExpiresAtInvalid = !hasNoEndDate && validAt > expiresAt.value;
+    const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
+    const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
+    const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
+
+    const hasValidationErrors =
+      isNameInvalid ||
+      isCodeInvalid ||
+      isDiscountInvalid ||
+      isMaxQuantityInvalid ||
+      isExpiresAtInvalid ||
+      isSelectedProductsInvalid ||
+      isMinimumQuantityInvalid ||
+      isMinimumAmountInvalid;
+
+    if (hasValidationErrors) {
+      setName((prev) => ({ ...prev, error: isNameInvalid }));
+      setCode((prev) => ({ ...prev, error: isCodeInvalid }));
+      setDiscount((prev) => ({ ...prev, error: isDiscountInvalid }));
+      setMaxQuantity((prev) => ({ ...prev, error: isMaxQuantityInvalid }));
+      setExpiresAt((prev) => ({ ...prev, error: isExpiresAtInvalid }));
+      setSelectedProductIds((prev) => ({ ...prev, error: isSelectedProductsInvalid }));
+      setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
+      setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
+
+      const invalidFieldRefs = [];
+      if (isNameInvalid) invalidFieldRefs.push(nameFieldRef);
+      if (isCodeInvalid) invalidFieldRefs.push(codeFieldRef);
+      if (isSelectedProductsInvalid) invalidFieldRefs.push(selectedProductsFieldRef);
+
+      if (invalidFieldRefs[0]?.current) {
+        invalidFieldRefs[0].current.focus();
+        showAlert("Please fill out the required fields.", "error");
+      }
+
       return;
     }
 
@@ -794,7 +808,7 @@ const Form = ({
       name: name.value,
       code: code.value,
       products: universal ? null : selectedProducts.map((product) => ({ ...product, uses: 0 })),
-      discount: { type: discount.type, value: discount.value },
+      discount: { type: discount.type, value: discount.value ?? 0 },
       limit: limitQuantity ? maxQuantity.value : null,
       currency_type: currencyCode,
       valid_at: limitValidity ? validAt.toISOString() : null,
@@ -846,6 +860,7 @@ const Form = ({
               id={`${uid}name`}
               placeholder="Black Friday"
               value={name.value}
+              ref={nameFieldRef}
               onChange={(evt) => setName({ value: evt.target.value })}
               aria-invalid={name.error}
             />
@@ -859,6 +874,7 @@ const Form = ({
                 type="text"
                 id={`${uid}code`}
                 value={code.value}
+                ref={codeFieldRef}
                 onChange={(evt) => setCode({ value: evt.target.value })}
                 aria-invalid={code.error}
                 readOnly={readOnlyCode}
@@ -877,6 +893,7 @@ const Form = ({
               <label htmlFor={`${uid}products`}>Products</label>
             </legend>
             <Select
+              ref={selectedProductsFieldRef}
               inputId={`${uid}products`}
               instanceId={`${uid}products`}
               options={products

@@ -245,7 +245,7 @@ const SubscriptionManager = ({
         state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
           ? null
           : state.status.paymentMethod.cardParamsResult.cardParams,
-      recaptchaResponse: state.status.recaptchaResponse,
+      recaptchaResponse: state.status.recaptchaResponse ?? null,
       declined: url.searchParams.get("declined") === "true",
       subscription_id: subscription.id,
       variants: selection.optionId ? [selection.optionId] : [],
