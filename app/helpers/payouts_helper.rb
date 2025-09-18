@@ -88,7 +88,7 @@ module PayoutsHelper
     payout_period_data[:payout_date_formatted] = formatted_payout_date(payment.created_at)
     payout_period_data[:payout_currency] = payment.currency
     payout_period_data[:payout_cents] = payment.amount_cents
-    payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_total_cents)
+    payout_period_data[:payout_displayed_amount] = payment.displayed_amount
     payout_period_data[:is_processing] = payment.processing?
     payout_period_data[:arrival_date] = payment.arrival_date ? formatted_payout_date(Time.zone.at(payment.arrival_date)) : nil
     payout_period_data[:status] = payment.state
