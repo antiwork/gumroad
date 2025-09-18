@@ -48,15 +48,13 @@ module PayoutsHelper
       # Calculate carried over amounts from failed payouts
       carried_over_balance_ids = calculate_carried_over_amounts(user, allowed_balance_ids, payout_period_data)
 
-      # Calculate sales breakdown
+      # Calculate new sales breakdown
       sales_balance_ids_for_breakdown = (allowed_balance_ids || []) - carried_over_balance_ids
       payout_period_data.merge!(payout_sales_data(user:, balance_ids: sales_balance_ids_for_breakdown,
                                                   start_date: user.payments.completed_or_processing.displayable.order("created_at DESC").first&.payout_period_end_date.try(:next),
                                                   end_date: payout_period_end_date))
 
       payout_period_data.merge!(payout_method_details(user:))
-      payout_period_data[:is_user_payable] = payout_period_data[:payout_cents].to_i >= minimum_payout_amount_cents
-
       payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
     else
       payout_period_data[:status] = "not_payable"
