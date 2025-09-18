@@ -43,13 +43,13 @@ module PayoutsHelper
 
       set_basic_payout_info(payout_period_data, user, payout_period_end_date)
 
-      allowed_balance_ids = filter_balances_for_verification(user, payout_period_data, payout_period_end_date)
+      balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
 
       # Calculate carried over amounts from failed payouts
-      carried_over_balance_ids = calculate_carried_over_amounts(user, allowed_balance_ids, payout_period_data)
+      carried_over_balance_ids = calculate_carried_over_amounts(user, balance_ids, payout_period_data)
 
       # Calculate new sales breakdown
-      sales_balance_ids_for_breakdown = (allowed_balance_ids || []) - carried_over_balance_ids
+      sales_balance_ids_for_breakdown = (balance_ids || []) - carried_over_balance_ids
       payout_period_data.merge!(payout_sales_data(user:, balance_ids: sales_balance_ids_for_breakdown,
                                                   start_date: user.payments.completed_or_processing.displayable.order("created_at DESC").first&.payout_period_end_date.try(:next),
                                                   end_date: payout_period_end_date))
@@ -227,30 +227,11 @@ module PayoutsHelper
     end
   end
 
-  def filter_balances_for_verification(user, payout_period_data, payout_period_end_date)
-    balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
-    allowed_balance_ids = balance_ids
-
-    if balance_ids.present?
-      # Check if user has pending compliance info requests that would block payouts
-      has_pending_verification = user.user_compliance_info_requests.requested.exists?
-
-      if has_pending_verification
-        # If verification is required at user level, no payouts should go through
-        allowed_balance_ids = []
-        payout_period_data[:payout_cents] = 0
-        payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(0)
-      end
-    end
-
-    allowed_balance_ids
-  end
-
-  def calculate_carried_over_amounts(user, allowed_balance_ids, payout_period_data)
+  def calculate_carried_over_amounts(user, balance_ids, payout_period_data)
     carried_over_balance_ids = []
 
-    if allowed_balance_ids.present?
-      earlier_failed_list = get_earlier_failed_payments(user, allowed_balance_ids, user.next_payout_date)
+    if balance_ids.present?
+      earlier_failed_list = get_earlier_failed_payments(user, balance_ids, user.next_payout_date)
 
       if earlier_failed_list.any?
         latest_failed = earlier_failed_list.max_by(&:created_at)
@@ -262,7 +243,7 @@ module PayoutsHelper
 
         earlier_failed_list.each do |failed_p|
           failed_ids = failed_p.balances.pluck(:id)
-          intersect_ids = allowed_balance_ids & failed_ids
+          intersect_ids = balance_ids & failed_ids
           next if intersect_ids.empty?
 
           # Only process balances that haven't been counted yet
