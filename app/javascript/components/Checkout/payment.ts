@@ -324,11 +324,12 @@ export function createReducer(initial: {
           if (state.status.type === "input") return;
           state.status = { type: "input", errors: new Set() };
           break;
-        case "set-recaptcha-response":
+        case "set-recaptcha-response": {
           if (state.status.type !== "captcha") return;
           const recaptchaData = action.recaptchaResponse ? { recaptchaResponse: action.recaptchaResponse } : {};
           state.status = { ...state.status, type: "finished", ...recaptchaData };
           break;
+        }
         case "set-payment-method": {
           if (state.status.type !== "starting") return;
           const errors = validatePaymentMethodIndependentFields(state);
