@@ -154,15 +154,6 @@ module Payment::FailureReason
     end
   end
 
-  def requires_verification_to_resume?
-    return false if failure_reason.blank?
-
-    if processor == PayoutProcessorType::PAYPAL
-      return ["PAYPAL 14763", "PAYPAL 14764"].include?(failure_reason)
-    end
-
-    false
-  end
 
   private
     def add_payment_failure_reason_comment

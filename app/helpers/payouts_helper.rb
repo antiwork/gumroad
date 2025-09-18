@@ -39,111 +39,33 @@ module PayoutsHelper
 
     if payout_period_data[:is_user_payable]
       payout_period_data[:status] = user.payouts_status
-
-      previous_payment = user.payments.completed_or_processing
-                             .displayable
-                             .order("created_at DESC")
-                             .first
-
       payout_period_end_date = current_payout_end_date(user)
 
-      payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
-      payout_period_data[:payout_currency] = user.currency_type
-      payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
-      payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
-      payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
-      payout_period_data[:type] = if user.payout_frequency == User::DAILY && Payouts.is_user_payable(user, payout_period_end_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
-        Payouts::PAYOUT_TYPE_INSTANT
-      else
-        Payouts::PAYOUT_TYPE_STANDARD
-      end
+      # Set basic payout information
+      set_basic_payout_info(payout_period_data, user, payout_period_end_date)
 
-      balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
+      # Handle verification requirements and balance filtering
+      allowed_balance_ids = filter_balances_for_verification(user, payout_period_data, payout_period_end_date)
 
-      allowed_balance_ids = balance_ids
-      if balance_ids.present?
-        verification_failed = user.payments
-          .failed
-          .joins(:balances)
-          .where("payments.created_at < ?", user.next_payout_date)
-          .where(balances: { id: balance_ids })
-          .distinct
-          .to_a
-          .select(&:requires_verification_to_resume?)
+      # Calculate carried over amounts from failed payouts
+      carried_over_balance_ids = calculate_carried_over_amounts(user, allowed_balance_ids, payout_period_data)
 
-        if verification_failed.any?
-          blocked_ids = verification_failed.flat_map { |p| p.balances.pluck(:id) } & balance_ids
-          if blocked_ids.any?
-            blocked_cents = Balance.where(id: blocked_ids).sum(:holding_amount_cents)
-            payout_period_data[:payout_cents] = payout_period_data[:payout_cents].to_i - blocked_cents
-            payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
-            allowed_balance_ids = balance_ids - blocked_ids
-          end
-        end
-      end
-
-      carried_over_balance_ids = []
-      if allowed_balance_ids.present?
-        earlier_failed_list = user.payments
-          .failed
-          .joins(:balances)
-          .where("payments.created_at < ?", user.next_payout_date)
-          .where(balances: { id: allowed_balance_ids })
-          .order("payments.created_at ASC")
-          .distinct
-          .to_a
-          .reject(&:requires_verification_to_resume?)
-
-        if earlier_failed_list.any?
-          latest_failed = earlier_failed_list.max_by(&:created_at)
-          payout_period_data[:carried_over_from_failed_on] = formatted_payout_date(latest_failed.created_at)
-
-          items = []
-          total_cents = 0
-          earlier_failed_list.each do |failed_p|
-            failed_ids = failed_p.balances.pluck(:id)
-            intersect_ids = allowed_balance_ids & failed_ids
-            next if intersect_ids.empty?
-            carried_over_balance_ids |= intersect_ids
-            cents = Balance.where(id: intersect_ids).sum(:holding_amount_cents)
-            next if cents.zero?
-            total_cents += cents
-            items << {
-              failed_on: formatted_payout_date(failed_p.created_at),
-              carried_over_cents: cents,
-              carried_over_displayed_amount: formatted_dollar_amount(cents)
-            }
-          end
-
-          if total_cents > 0
-            payout_period_data[:carried_over_cents] = total_cents
-            payout_period_data[:carried_over_displayed_amount] = formatted_dollar_amount(total_cents)
-            payout_period_data[:carried_over_items] = items
-          end
-        end
-      end
-
+      # Calculate sales breakdown
       sales_balance_ids_for_breakdown = (allowed_balance_ids || []) - carried_over_balance_ids
-
       payout_period_data.merge!(payout_sales_data(user:, balance_ids: sales_balance_ids_for_breakdown,
-                                                  start_date: previous_payment&.payout_period_end_date.try(:next),
+                                                  start_date: user.payments.completed_or_processing.displayable.order("created_at DESC").first&.payout_period_end_date.try(:next),
                                                   end_date: payout_period_end_date))
 
       payout_period_data.merge!(payout_method_details(user:))
-
       payout_period_data[:is_user_payable] = payout_period_data[:payout_cents].to_i >= minimum_payout_amount_cents
+
+      payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
     else
       payout_period_data[:status] = "not_payable"
     end
 
-    last_payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
-    payout_period_data[:payout_note] = \
-      if last_payout_note.present? && last_payout_note.created_at.to_i > user.payments.completed_or_processing.last&.created_at.to_i
-        last_payout_note.content.gsub("via Stripe ", "")
-      else
-        nil
-      end
-
+    # Add payout note if present
+    add_payout_note(payout_period_data, user)
     payout_period_data
   end
 
@@ -170,7 +92,7 @@ module PayoutsHelper
 
     payout_period_data[:payout_date_formatted] = formatted_payout_date(payment.created_at)
     payout_period_data[:payout_currency] = payment.currency
-    payout_total_cents = payment.balances.sum(:holding_amount_cents)
+    payout_total_cents = payment.amount_cents
     payout_period_data[:payout_cents] = payout_total_cents
     payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_total_cents)
     payout_period_data[:is_processing] = payment.processing?
@@ -178,7 +100,7 @@ module PayoutsHelper
     payout_period_data[:status] = payment.state
     if payment.failed?
       payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
-      payout_period_data[:requires_verification_to_resume] = payment.requires_verification_to_resume?
+      payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
     end
     payout_period_data[:payment_external_id] = payment.external_id
     payout_period_data[:type] = payment.payout_type || Payouts::PAYOUT_TYPE_STANDARD
@@ -188,17 +110,11 @@ module PayoutsHelper
     balance_ids = payment.balances.map(&:id)
     carried_over_balance_ids = []
 
-    if balance_ids.present? && payment.completed?
-      earlier_failed_list = user.payments
-        .failed
-        .joins(:balances)
-        .where("payments.created_at < ?", payment.created_at)
-        .where(balances: { id: balance_ids })
-        .order("payments.created_at ASC")
-        .distinct
+    if balance_ids.present? && (payment.completed? || payment.processing?)
+      earlier_failed_list = get_earlier_failed_payments(user, balance_ids, payment.created_at)
 
-      if earlier_failed_list.exists?
-        latest_failed = earlier_failed_list.order("payments.created_at DESC").first
+      if earlier_failed_list.any?
+        latest_failed = earlier_failed_list.max_by(&:created_at)
         payout_period_data[:carried_over_from_failed_on] = formatted_payout_date(latest_failed.created_at)
 
         items = []
@@ -237,18 +153,19 @@ module PayoutsHelper
     end
 
     if balance_ids.present? && payment.failed?
-      later_completed_list = user.payments
+      # Find the first completed payout that includes any of these failed balances
+      first_later_completed = user.payments
         .completed
         .joins(:balances)
         .where("payments.created_at > ?", payment.created_at)
         .where(balances: { id: balance_ids })
         .order("payments.created_at ASC")
-        .distinct
+        .first
 
-      if later_completed_list.exists?
-        payout_period_data[:included_in_payout_on_items] = later_completed_list.map do |lp|
-          { included_on: formatted_payout_date(lp.created_at) }
-        end
+      if first_later_completed.present?
+        payout_period_data[:included_in_payout_on_items] = [
+          { included_on: formatted_payout_date(first_later_completed.created_at) }
+        ]
       end
     end
 
@@ -285,6 +202,113 @@ module PayoutsHelper
       end
     end
   end
+
+  private
+
+  # Sets basic payout information like currency, amount, date, and type
+  def set_basic_payout_info(payout_period_data, user, payout_period_end_date)
+    previous_payment = user.payments.completed_or_processing
+                           .displayable
+                           .order("created_at DESC")
+                           .first
+
+    payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
+    payout_period_data[:payout_currency] = user.currency_type
+    payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
+    payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
+    payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
+    payout_period_data[:type] = if user.payout_frequency == User::DAILY && Payouts.is_user_payable(user, payout_period_end_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      Payouts::PAYOUT_TYPE_INSTANT
+    else
+      Payouts::PAYOUT_TYPE_STANDARD
+    end
+  end
+
+  # Filters balances based on user-level verification requirements
+  # Returns allowed balance IDs after checking for verification requirements
+  def filter_balances_for_verification(user, payout_period_data, payout_period_end_date)
+    balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
+    allowed_balance_ids = balance_ids
+
+    if balance_ids.present?
+      # Check if user has pending compliance info requests that would block payouts
+      has_pending_verification = user.user_compliance_info_requests.requested.exists?
+
+      if has_pending_verification
+        # If verification is required at user level, no payouts should go through
+        allowed_balance_ids = []
+        payout_period_data[:payout_cents] = 0
+        payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(0)
+      end
+    end
+
+    allowed_balance_ids
+  end
+
+  # Calculates carried over amounts from previously failed payouts
+  # Returns array of carried over balance IDs
+  def calculate_carried_over_amounts(user, allowed_balance_ids, payout_period_data)
+    carried_over_balance_ids = []
+
+    if allowed_balance_ids.present?
+      earlier_failed_list = get_earlier_failed_payments(user, allowed_balance_ids, user.next_payout_date)
+
+      if earlier_failed_list.any?
+        latest_failed = earlier_failed_list.max_by(&:created_at)
+        payout_period_data[:carried_over_from_failed_on] = formatted_payout_date(latest_failed.created_at)
+
+        items = []
+        total_cents = 0
+        earlier_failed_list.each do |failed_p|
+          failed_ids = failed_p.balances.pluck(:id)
+          intersect_ids = allowed_balance_ids & failed_ids
+          next if intersect_ids.empty?
+          carried_over_balance_ids |= intersect_ids
+          cents = Balance.where(id: intersect_ids).sum(:holding_amount_cents)
+          next if cents.zero?
+          total_cents += cents
+          items << {
+            failed_on: formatted_payout_date(failed_p.created_at),
+            carried_over_cents: cents,
+            carried_over_displayed_amount: formatted_dollar_amount(cents)
+          }
+        end
+
+        if total_cents > 0
+          payout_period_data[:carried_over_cents] = total_cents
+          payout_period_data[:carried_over_displayed_amount] = formatted_dollar_amount(total_cents)
+          payout_period_data[:carried_over_items] = items
+        end
+      end
+    end
+
+    carried_over_balance_ids
+  end
+
+  # Common method to get earlier failed payments for a given set of balance IDs
+  def get_earlier_failed_payments(user, balance_ids, cutoff_date)
+    user.payments
+      .failed
+      .joins(:balances)
+      .where("payments.created_at < ?", cutoff_date)
+      .where(balances: { id: balance_ids })
+      .order("payments.created_at ASC")
+      .distinct
+      .to_a
+  end
+
+  # Adds payout note if present and relevant
+  def add_payout_note(payout_period_data, user)
+    last_payout_note = user.comments.with_type_payout_note.where(author_id: GUMROAD_ADMIN_ID).where.not("content like 'Payout via PayPal%'").last
+    payout_period_data[:payout_note] = \
+      if last_payout_note.present? && last_payout_note.created_at.to_i > user.payments.completed_or_processing.last&.created_at.to_i
+        last_payout_note.content.gsub("via Stripe ", "")
+      else
+        nil
+      end
+  end
+
+  public
 
   def payout_method_details(user: nil, payment: nil)
     return {} if user.blank? && payment.blank?
