@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "noEmit": true,
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",               // ✅ switched from "bundler" to "node"
     "module": "es2020",
     "target": "es2021",
     "strict": true,
@@ -17,7 +17,8 @@
     "paths": {
       "$app/*": ["./app/javascript/*"]
     },
-    "typeRoots": ["./node_modules/@types", "./app/javascript/types"],
+    // ✅ removed restrictive "typeRoots"
+    // so TS can see types declared in node_modules packages
     "types": [
       "grecaptcha",
       "facebook-pixel",
