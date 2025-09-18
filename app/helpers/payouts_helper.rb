@@ -175,6 +175,8 @@ module PayoutsHelper
         payout_period_data[:included_in_payout_on_items] = [
           { included_on: formatted_payout_date(payout_included_in.created_at) }
         ]
+      else
+        payout_period_data[:requires_verification_to_resume] = user.user_compliance_info_requests.requested.exists?
       end
     end
 
