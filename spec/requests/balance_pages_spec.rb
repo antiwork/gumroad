@@ -1028,7 +1028,8 @@ describe "Balance Pages Scenario", js: true, type: :system do
         expect(failed_past_payout).to have_text("This payout failed due to the bank account has been closed. The balance has been carried over and will be included in your next payout.", normalize_ws: true)
 
         successful_past_payout = past_payouts[0]
-        expect(successful_past_payout).to have_text("Carried over from failed payout")
+        failed_date = failed_payout.payout_period_end_date.strftime("%B #{failed_payout.payout_period_end_date.day.ordinalize}, %Y")
+        expect(successful_past_payout).to have_text("Carried over from failed payout on #{failed_date} $7.91", normalize_ws: true)
       end
 
       def create_purchase(**attrs)

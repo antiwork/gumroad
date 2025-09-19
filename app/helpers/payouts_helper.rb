@@ -130,6 +130,9 @@ module PayoutsHelper
   end
 
   def payout_sales_data(user:, balance_ids:, start_date:, end_date:)
+    failed_balance_ids = user.failed_balance_ids(balance_ids)
+    balance_ids -= failed_balance_ids
+
     sales_data_from_balances = user.sales_data_for_balance_ids(balance_ids)
     paypal_sales_data = user.paypal_sales_data_for_duration(start_date:, end_date:)
     total_sales_data_for_payout = sales_data_from_balances.merge(paypal_sales_data) { |_key, value1, value2| value1 + value2 }
@@ -139,6 +142,9 @@ module PayoutsHelper
     total_sales_data_for_payout = total_sales_data_for_payout.merge(stripe_connect_sales_data) { |_key, value1, value2| value1 + value2 }
     stripe_connect_payout_cents = user.stripe_connect_payout_net_cents(stripe_connect_sales_data)
     total_sales_data_for_payout.merge({ stripe_connect_payout_cents: })
+
+    carried_over_payout_data = user.carried_over_data_for_balance_ids(failed_balance_ids)
+    total_sales_data_for_payout.merge(carried_over_payout_data)
   end
 
   def displayable_payout_period_range(previous_payment, payout_period_end_date)

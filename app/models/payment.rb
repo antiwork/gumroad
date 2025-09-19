@@ -193,13 +193,12 @@ class Payment < ApplicationRecord
   def payout_failure_reason
     return nil unless failure_reason.present?
 
-    puts "Payout failure reason: #{failure_reason}"
     if processor == PayoutProcessorType::PAYPAL
       reason = PAYPAL_FAILURE_SOLUTIONS[failure_reason]&.dig(:reason)
     elsif processor == PayoutProcessorType::STRIPE
       reason = STRIPE_FAILURE_SOLUTIONS[failure_reason]&.dig(:reason)
     else
-      reason = failure_reason
+      reason = "We were unable to process this payout"
     end
 
     reason

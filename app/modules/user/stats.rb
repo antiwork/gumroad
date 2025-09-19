@@ -284,9 +284,52 @@ module User::Stats
     refunded_affiliate_fee_cents + disputed_affiliate_fee_cents
   end
 
-  def carried_over_cents_from_failed_payout_for_balances(balance_ids)
-    failed_balance_ids = payments.failed.joins(:balances).where(balances: { id: balance_ids }).pluck("balances.id").uniq
-    Balance.where(id: failed_balance_ids).sum(:amount_cents)
+  def failed_balance_ids(balance_ids)
+    payments.failed
+      .joins(:balances)
+      .where(balances: { id: balance_ids })
+      .distinct
+      .pluck("balances.id")
+  end
+
+  def formatted_payment_date(date)
+    return "" if date.nil?
+    date.strftime("%B #{date.day.ordinalize}, %Y")
+  end
+
+  def carried_over_data_for_balance_ids(balance_ids)
+    return {} if balance_ids.empty?
+
+    failed_payments = payments.failed
+      .joins(:balances)
+      .where(balances: { id: balance_ids })
+      .order("payments.created_at ASC")
+      .includes(:balances)
+      .to_a
+
+    seen_balance_ids = Set.new
+    carried_over_entries = []
+
+    failed_payments.each do |payment|
+      matching_balances = payment.balances.select do |balance|
+        balance_ids.include?(balance.id) && !seen_balance_ids.include?(balance.id)
+      end
+
+      next if matching_balances.empty?
+
+      matching_balances.each { |b| seen_balance_ids << b.id }
+
+      sum_cents = matching_balances.sum(&:amount_cents)
+
+      carried_over_entries << {
+        carried_over_cents: sum_cents,
+        carried_over_failed_payout_date: formatted_payment_date(payment.payout_period_end_date),
+      }
+    end
+
+    {
+      carried_over_details: carried_over_entries
+    }
   end
 
   def sales_data_for_balance_ids(balance_ids)
@@ -304,7 +347,6 @@ module User::Stats
       taxes_cents: taxes_cents_for_balances(balance_ids),
       affiliate_credits_cents: affiliate_credit_cents_for_balances(balance_ids),
       affiliate_fees_cents: affiliate_fee_cents_for_balances(balance_ids),
-      carried_over_cents_from_failed_payout: carried_over_cents_from_failed_payout_for_balances(balance_ids),
       paypal_payout_cents: 0
     }
   end

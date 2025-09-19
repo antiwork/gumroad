@@ -407,18 +407,27 @@ describe PayoutsHelper do
 
       payout_data = self.payout_period_data(user, payment)
       expect(payout_data[:failure_reason]).to eq("the bank account has been closed")
-      expect(payout_data[:carried_over_cents_from_failed_payout]).to eq(10_00)
+      expect(payout_data[:carried_over_details].length).to eq(1)
+
+      carried_over_entry = payout_data[:carried_over_details].first
+      expect(carried_over_entry[:carried_over_cents]).to eq(10_00)
+      expect(carried_over_entry[:carried_over_failed_payout_date]).to eq(payment.payout_period_end_date.strftime("%B #{payment.payout_period_end_date.day.ordinalize}, %Y"))
     end
 
     it("shows the failure reason for failed payouts using paypal") do
       user = create(:user)
       payment = create(:payment, user:, amount_cents: 10_00, processor: PayoutProcessorType::PAYPAL, state: "failed", failure_reason: "PAYPAL 3015")
-      balance = create(:balance, user:, amount_cents: 10_00, date: 30.days.ago, state: "unpaid")
+      merchant_account = create(:merchant_account_paypal, user: user, charge_processor_merchant_id: "B66YJBBNCRW6L")
+      balance = create(:balance, user:, amount_cents: 10_00, date: 30.days.ago, state: "unpaid", merchant_account: merchant_account)
       payment.balances << balance
 
       payout_data = self.payout_period_data(user, payment)
       expect(payout_data[:failure_reason]).to eq("receiver's account is locked or inactive")
-      expect(payout_data[:carried_over_cents_from_failed_payout]).to eq(10_00)
+      expect(payout_data[:carried_over_details].length).to eq(1)
+
+      carried_over_entry = payout_data[:carried_over_details].first
+      expect(carried_over_entry[:carried_over_cents]).to eq(10_00)
+      expect(carried_over_entry[:carried_over_failed_payout_date]).to eq(payment.payout_period_end_date.strftime("%B #{payment.payout_period_end_date.day.ordinalize}, %Y"))
     end
   end
 end

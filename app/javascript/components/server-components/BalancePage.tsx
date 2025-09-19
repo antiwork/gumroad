@@ -181,6 +181,11 @@ type CurrentPayoutsDataWithUserNotPayable = {
   has_stripe_connect: boolean;
 };
 
+type CarriedOverDetails = {
+  carried_over_cents: number;
+  carried_over_failed_payout_date: string | null;
+};
+
 type CurrentPayoutStatus = "paused" | "payable" | "processing" | "completed" | "failed";
 type PayoutType = "standard" | "instant";
 
@@ -210,13 +215,13 @@ type CurrentPeriodPayoutData = (
   paypal_payout_cents: number;
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
-  carried_over_cents_from_failed_payout: number;
+  carried_over_details: CarriedOverDetails[] | null;
   failure_reason?: string | null;
   payout_note?: string | null;
 };
 
 type PastPeriodPayoutsData = {
-  status: "completed";
+  status: "completed" | "failed";
   should_be_shown_currencies_always: boolean;
   displayable_payout_period_range: string;
   payout_currency: string;
@@ -241,7 +246,7 @@ type PastPeriodPayoutsData = {
   paypal_payout_cents: number;
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
-  carried_over_cents_from_failed_payout: number;
+  carried_over_details: CarriedOverDetails[] | null;
   failure_reason?: string | null;
   type: PayoutType;
 };
@@ -319,6 +324,8 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         return `Next payout: ${payoutDateFormatted}`;
       case "paused":
         return "Next payout: paused";
+      case "failed":
+        return payoutDateFormatted;
       case "completed":
         return payoutDateFormatted;
     }
@@ -339,6 +346,15 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
           <div className="pill small">Instant</div>
         ) : null}
+
+        {payoutPeriodData.status === "failed" ? (
+          <div className="pill small">
+            {payoutPeriodData.paypal_payout_cents > 0 || payoutPeriodData.stripe_connect_payout_cents > 0
+              ? "Partially Failed"
+              : "Failed"}
+          </div>
+        ) : null}
+
         <span style={{ marginLeft: "auto" }}>{payoutPeriodData.displayable_payout_period_range}</span>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
           <WithTooltip position="top" tip="Export">
@@ -354,15 +370,42 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         ) : null}
       </div>
       {payoutPeriodData.status === "failed" ? (
-        <div className="warning my-3" role="status">
-          <p>
-            This payout failed due to{" "}
-            <span className="font-bold underline">
-              {payoutPeriodData.failure_reason ? payoutPeriodData.failure_reason : "Unknown error"}
-            </span>
-            . The balance has been carried over and will be included in your next payout.
-          </p>
-        </div>
+        payoutPeriodData.paypal_payout_cents > 0 || payoutPeriodData.stripe_connect_payout_cents > 0 ? (
+          <div className="warning my-3" role="status">
+            <p>
+              This payout was partially processed.
+              {payoutPeriodData.paypal_payout_cents > 0 ? (
+                <>
+                  {" "}
+                  <b>{formatDollarAmount(payoutPeriodData.paypal_payout_cents)}</b> was successfully paid via{" "}
+                  <b>Paypal</b>.
+                </>
+              ) : null}
+              {payoutPeriodData.stripe_connect_payout_cents > 0 ? (
+                <>
+                  {" "}
+                  <b>{formatDollarAmount(payoutPeriodData.stripe_connect_payout_cents)}</b> was successfully paid via{" "}
+                  <b>Stripe</b>.
+                </>
+              ) : null}{" "}
+              But the <b>{payoutPeriodData.payout_displayed_amount}</b> bank transfer failed due to{" "}
+              <span className="font-bold underline">
+                {payoutPeriodData.failure_reason ? payoutPeriodData.failure_reason : "Unknown error"}
+              </span>
+              . It will be included in your next payout.
+            </p>
+          </div>
+        ) : (
+          <div className="warning my-3" role="status">
+            <p>
+              This payout failed due to{" "}
+              <span className="font-bold underline">
+                {payoutPeriodData.failure_reason ? payoutPeriodData.failure_reason : "Unknown error"}
+              </span>
+              . The balance has been carried over and will be included in your next payout.
+            </p>
+          </div>
+        )
       ) : null}
       <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
         <div>
@@ -432,11 +475,15 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <div>{formatNegativeDollarAmount(payoutPeriodData.fees_cents)}</div>
           </div>
         )}
-        {payoutPeriodData.carried_over_cents_from_failed_payout > 0 ? (
-          <div>
-            <h4>Carried over from failed payout </h4>
-            <div>{formatDollarAmount(payoutPeriodData.carried_over_cents_from_failed_payout)}</div>
-          </div>
+        {payoutPeriodData.carried_over_details ? (
+          <>
+            {payoutPeriodData.carried_over_details.map((details) => (
+              <div key={details.carried_over_failed_payout_date}>
+                <h4>Carried over from failed payout on {details.carried_over_failed_payout_date} </h4>
+                <div>{formatDollarAmount(details.carried_over_cents)}</div>
+              </div>
+            ))}
+          </>
         ) : null}
         {payoutPeriodData.refunds_cents !== 0 ? (
           <div>
@@ -486,7 +533,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <div>{formatNegativeDollarAmount(payoutPeriodData.paypal_payout_cents)}</div>
           </div>
         ) : null}
-        {payoutPeriodData.stripe_connect_payout_cents !== 0 ? (
+        {payoutPeriodData.stripe_connect_payout_cents ? (
           <div>
             <h4>
               <a href="/help/article/330-stripe-connect" target="_blank" rel="noreferrer">
