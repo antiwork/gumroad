@@ -17,7 +17,8 @@ class ForfeitBalanceService
       Credit.create_for_balance_forfeit!(
         user:,
         merchant_account:,
-        amount_cents: -balances.sum(&:amount_cents)
+        amount_cents: -balances.sum(&:amount_cents),
+        reason: "forfeited_balance_on_#{reason}"
       )
 
       balances.each(&:mark_forfeited!)
@@ -46,6 +47,8 @@ class ForfeitBalanceService
         "Account closed"
       when :country_change
         "Country changed"
+      when :payout_method_change
+        "Payout method changed"
       end
     end
 
@@ -61,7 +64,13 @@ class ForfeitBalanceService
     def balances_to_forfeit_on_country_change
       user.unpaid_balances.where.not(merchant_account_id: [
                                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                                       MerchantAccount.gumroad(PaypalChargeProcessor.charge_processor_id),
                                        MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id)
                                      ])
+    end
+
+    # Forfeiting is only needed if balance is in a Gumroad-controlled Stripe account
+    def balances_to_forfeit_on_payout_method_change
+      balances_to_forfeit_on_country_change
     end
 end

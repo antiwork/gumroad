@@ -212,7 +212,7 @@ describe SettingsPresenter do
                                                  custom_domain_verification_status: { message: "example.com domain is correctly configured!", success: true },
                                                  applications: [],
                                                  allow_deactivation: true,
-                                                 formatted_balance_to_forfeit: nil,
+                                                 formatted_balance_to_forfeit_on_account_deletion: nil,
                                                })
       end
     end
@@ -234,7 +234,7 @@ describe SettingsPresenter do
                                                  custom_domain_verification_status: nil,
                                                  applications: [],
                                                  allow_deactivation: true,
-                                                 formatted_balance_to_forfeit: nil,
+                                                 formatted_balance_to_forfeit_on_account_deletion: nil,
                                                })
       end
     end
@@ -255,7 +255,7 @@ describe SettingsPresenter do
                                                  custom_domain_verification_status: { message: "Domain verification failed. Please make sure you have correctly configured the DNS record for example.com.", success: false },
                                                  applications: [],
                                                  allow_deactivation: true,
-                                                 formatted_balance_to_forfeit: Money.new(2500, :usd).format(no_cents_if_whole: true),
+                                                 formatted_balance_to_forfeit_on_account_deletion: Money.new(2500, :usd).format(no_cents_if_whole: true),
                                                })
       end
     end
@@ -560,7 +560,8 @@ describe SettingsPresenter do
           br: Compliance::Countries.subdivisions_for_select(Compliance::Countries::BRA.alpha2).map { |code, name| { code:, name: } },
         },
         saved_card: nil,
-        formatted_balance_to_forfeit: nil,
+        formatted_balance_to_forfeit_on_country_change: nil,
+        formatted_balance_to_forfeit_on_payout_method_change: nil,
         payouts_paused_internally: false,
         payouts_paused_by: nil,
         payouts_paused_for_reason: nil,
