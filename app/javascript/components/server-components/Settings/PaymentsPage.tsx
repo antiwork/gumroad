@@ -908,11 +908,20 @@ const PaymentsPage = (props: Props) => {
       });
 
       const parsedResponse = cast<
-        { success: true } | { success: false; error_message: string; error_code?: string | null }
+        | { success: true; guardian_verification_status?: string }
+        | { success: false; error_message: string; error_code?: string | null }
       >(await response.json());
       if (parsedResponse.success) {
         showAlert("Thanks! You're all set.", "success");
-        window.location.reload();
+
+        if (parsedResponse.guardian_verification_status) {
+          setComplianceInfo((prev) => ({
+            ...prev,
+            guardian_verification_status: parsedResponse.guardian_verification_status as string,
+          }));
+        } else {
+          window.location.reload();
+        }
       } else {
         setErrorMessage({ message: parsedResponse.error_message, code: parsedResponse.error_code ?? null });
       }
