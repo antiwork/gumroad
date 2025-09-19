@@ -239,13 +239,32 @@ module StripeMerchantAccountManager
       person["relationship"]["owner"] == false
     end
 
-    guardian_params = guardian_person_hash(user_compliance_info, passphrase)
-    guardian_params.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
+    current_attributes = guardian_person_hash(user_compliance_info, passphrase)
+    current_attributes.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
 
     if guardian_person
-      Stripe::Account.update_person(stripe_account.id, guardian_person.id, guardian_params)
+      current_guardian_data = Stripe::Account.retrieve_person(stripe_account.id, guardian_person.id)
+
+      last_attributes = {
+        first_name: current_guardian_data["first_name"],
+        last_name: current_guardian_data["last_name"],
+        email: current_guardian_data["email"],
+        phone: current_guardian_data["phone"],
+        dob: current_guardian_data["dob"],
+        address: current_guardian_data["address"],
+        id_number: current_guardian_data["id_number"],
+        ssn_last_4: current_guardian_data["ssn_last_4"]
+      }
+
+      diff_attributes = get_diff_attributes(current_attributes, last_attributes)
+
+      diff_attributes[:relationship] = current_attributes[:relationship]
+
+      if diff_attributes.keys.any? { |key| key != :relationship }
+        Stripe::Account.update_person(stripe_account.id, guardian_person.id, diff_attributes)
+      end
     else
-      Stripe::Account.create_person(stripe_account.id, guardian_params)
+      Stripe::Account.create_person(stripe_account.id, current_attributes)
     end
   rescue Stripe::StripeError => e
     Rails.logger.error "Failed to update guardian person for user #{user.id}: #{e.message}"
@@ -711,10 +730,14 @@ module StripeMerchantAccountManager
     return unless merchant_account
 
     user = merchant_account.user
-    return unless user&.under_18?
+    return unless user
 
-    if stripe_person["relationship"] && stripe_person["relationship"]["representative"] == true
-      handle_guardian_person_verification_update(user, stripe_person, stripe_previous_attributes)
+    if stripe_person["relationship"] &&
+       stripe_person["relationship"]["representative"] == true &&
+       stripe_person["relationship"]["owner"] == false
+      if user.under_18?
+        handle_guardian_person_verification_update(user, stripe_person, stripe_previous_attributes)
+      end
     end
   end
 

@@ -666,7 +666,7 @@ const PaymentsPage = (props: Props) => {
 
     const hasTaxIdIfRequired = !(
       complianceInfo.country !== null &&
-      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
+      props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
       !props.user.individual_tax_id_entered &&
       !complianceInfo.guardian_individual_tax_id
     );
@@ -693,10 +693,10 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.guardian_city) {
       markFieldInvalid("guardian_city");
     }
-    if (props.user.country_code && props.user.country_code in props.states && !complianceInfo.guardian_state) {
+    if (complianceInfo.country && complianceInfo.country in props.states && !complianceInfo.guardian_state) {
       markFieldInvalid("guardian_state");
     }
-    if (!complianceInfo.guardian_zip_code && props.user.country_code !== "BW") {
+    if (!complianceInfo.guardian_zip_code && complianceInfo.country !== "BW") {
       markFieldInvalid("guardian_zip_code");
     }
     if (!complianceInfo.guardian_dob_month) {
@@ -708,9 +708,46 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.guardian_dob_year) {
       markFieldInvalid("guardian_dob_year");
     }
+
+    if (complianceInfo.guardian_dob_month && complianceInfo.guardian_dob_day && complianceInfo.guardian_dob_year) {
+      const guardianBirthDate = new Date(
+        complianceInfo.guardian_dob_year,
+        complianceInfo.guardian_dob_month - 1,
+        complianceInfo.guardian_dob_day,
+      );
+      const today = new Date();
+
+      if (
+        guardianBirthDate.getFullYear() !== complianceInfo.guardian_dob_year ||
+        guardianBirthDate.getMonth() !== complianceInfo.guardian_dob_month - 1 ||
+        guardianBirthDate.getDate() !== complianceInfo.guardian_dob_day
+      ) {
+        markFieldInvalid("guardian_dob_month");
+        markFieldInvalid("guardian_dob_day");
+        markFieldInvalid("guardian_dob_year");
+        setErrorMessage({ message: "Please enter a valid date of birth." });
+      } else if (guardianBirthDate > today) {
+        markFieldInvalid("guardian_dob_month");
+        markFieldInvalid("guardian_dob_day");
+        markFieldInvalid("guardian_dob_year");
+        setErrorMessage({ message: "Date of birth cannot be in the future." });
+      } else {
+        const age = today.getFullYear() - guardianBirthDate.getFullYear();
+        const monthDiff = today.getMonth() - guardianBirthDate.getMonth();
+        const actualAge =
+          monthDiff < 0 || (monthDiff === 0 && today.getDate() < guardianBirthDate.getDate()) ? age - 1 : age;
+
+        if (actualAge < 18) {
+          markFieldInvalid("guardian_dob_month");
+          markFieldInvalid("guardian_dob_day");
+          markFieldInvalid("guardian_dob_year");
+          setErrorMessage({ message: "Guardian must be 18 years or older." });
+        }
+      }
+    }
     if (
       complianceInfo.country !== null &&
-      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
+      props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
       !props.user.individual_tax_id_entered &&
       !complianceInfo.guardian_individual_tax_id
     ) {
@@ -770,7 +807,7 @@ const PaymentsPage = (props: Props) => {
     }
     if (
       complianceInfo.country !== null &&
-      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
+      props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
       !props.user.individual_tax_id_entered &&
       !complianceInfo.individual_tax_id
     ) {
