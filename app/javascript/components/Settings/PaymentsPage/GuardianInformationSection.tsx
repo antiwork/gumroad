@@ -1,49 +1,20 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { NumberInput } from "$app/components/NumberInput";
-import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { ComplianceInfo, FormFieldName } from "$app/components/server-components/Settings/PaymentsPage";
 
-interface GuardianInformationSectionProps {
-  complianceInfo: {
-    guardian_first_name?: string | null;
-    guardian_last_name?: string | null;
-    guardian_email?: string | null;
-    guardian_phone?: string | null;
-    guardian_street_address?: string | null;
-    guardian_city?: string | null;
-    guardian_state?: string | null;
-    guardian_zip_code?: string | null;
-    guardian_date_of_birth?: string | null;
-    guardian_individual_tax_id?: string | null;
-    guardian_stripe_processing_tos_accepted?: boolean;
-    guardian_stripe_tos_accepted?: boolean;
-    guardian_verification_status?: string | null;
-  };
-  updateComplianceInfo: (updates: Partial<any>) => void;
-  isFormDisabled: boolean;
-  states: {
-    us: { code: string; name: string }[];
-    ca: { code: string; name: string }[];
-    au: { code: string; name: string }[];
-    mx: { code: string; name: string }[];
-    ae: { code: string; name: string }[];
-    ir: { code: string; name: string }[];
-    br: { code: string; name: string }[];
-  };
-  errorFieldNames: Set<string>;
-  isVisible: boolean;
-  userCountryCode?: string | null;
-}
-
-const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
+const GuardianInformationSection = ({
   complianceInfo,
   updateComplianceInfo,
   isFormDisabled,
-  states,
   errorFieldNames,
   isVisible,
-  userCountryCode,
+}: {
+  complianceInfo: ComplianceInfo;
+  updateComplianceInfo: (newComplianceInfo: Partial<ComplianceInfo>) => void;
+  isFormDisabled: boolean;
+  errorFieldNames: Set<FormFieldName>;
+  isVisible: boolean;
 }) => {
   const uid = React.useId();
 
@@ -51,354 +22,235 @@ const GuardianInformationSection: React.FC<GuardianInformationSectionProps> = ({
     return null;
   }
 
-  // Use the user's country for guardian state validation
-  const availableStates = userCountryCode ? states[userCountryCode.toLowerCase() as keyof typeof states] || [] : [];
-
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case "complete":
-        return "text-green-600";
-      case "pending":
-        return "text-yellow-600";
-      case "incomplete":
-        return "text-red-600";
-      default:
-        return "text-gray-600";
-    }
-  };
-
-  const getStatusText = (status?: string) => {
-    switch (status) {
-      case "complete":
-        return "Verification Complete";
-      case "pending":
-        return "Verification Pending";
-      case "incomplete":
-        return "Verification Incomplete";
-      default:
-        return "Not Required";
-    }
-  };
+  const currentYear = new Date().getFullYear();
 
   return (
-    <div className="space-y-6">
-      <div className="border-gray-200 border-b pb-4">
-        <h3 className="text-gray-900 text-lg font-medium">Legal guardian's details</h3>
-        <p className="text-gray-600 mt-1 text-sm">
-          Because you're under 18, we need to verify your legal guardian's details to enable payments.
-        </p>
-        {complianceInfo.guardian_verification_status ? (
-          <div className="mt-2">
-            <span className={cx("text-sm font-medium", getStatusColor(complianceInfo.guardian_verification_status))}>
-              Status: {getStatusText(complianceInfo.guardian_verification_status)}
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        {/* Guardian Name */}
-        <div>
-          <label htmlFor={`${uid}-guardian-first-name`} className="text-gray-700 block text-sm font-medium">
-            First name *
-          </label>
+    <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+      <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_first_name") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-first-name`}>First name</label>
+          </legend>
           <input
-            type="text"
             id={`${uid}-guardian-first-name`}
+            type="text"
+            placeholder="First name"
             value={complianceInfo.guardian_first_name || ""}
             onChange={(e) => updateComplianceInfo({ guardian_first_name: e.target.value })}
             disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_first_name") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
+            aria-invalid={errorFieldNames.has("guardian_first_name")}
           />
-        </div>
+          <small>Include middle name if it appears on ID.</small>
+        </fieldset>
 
-        <div>
-          <label htmlFor={`${uid}-guardian-last-name`} className="text-gray-700 block text-sm font-medium">
-            Last name *
-          </label>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_last_name") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-last-name`}>Last name</label>
+          </legend>
           <input
-            type="text"
             id={`${uid}-guardian-last-name`}
+            type="text"
+            placeholder="Last name"
             value={complianceInfo.guardian_last_name || ""}
             onChange={(e) => updateComplianceInfo({ guardian_last_name: e.target.value })}
             disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_last_name") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
+            aria-invalid={errorFieldNames.has("guardian_last_name")}
           />
-        </div>
+        </fieldset>
+      </div>
 
-        {/* Guardian Email */}
-        <div>
-          <label htmlFor={`${uid}-guardian-email`} className="text-gray-700 block text-sm font-medium">
-            Email address *
-          </label>
+      <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_email") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-email`}>Email address</label>
+          </legend>
           <input
-            type="email"
             id={`${uid}-guardian-email`}
+            type="email"
+            placeholder="Email address"
             value={complianceInfo.guardian_email || ""}
             onChange={(e) => updateComplianceInfo({ guardian_email: e.target.value })}
             disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_email") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
+            aria-invalid={errorFieldNames.has("guardian_email")}
           />
-        </div>
+        </fieldset>
 
-        {/* Guardian Phone */}
-        <div>
-          <label htmlFor={`${uid}-guardian-phone`} className="text-gray-700 block text-sm font-medium">
-            Phone number *
-          </label>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_phone") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-phone`}>Phone number</label>
+          </legend>
           <input
-            type="tel"
             id={`${uid}-guardian-phone`}
+            type="tel"
+            placeholder="Phone number"
             value={complianceInfo.guardian_phone || ""}
             onChange={(e) => updateComplianceInfo({ guardian_phone: e.target.value })}
             disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_phone") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
+            aria-invalid={errorFieldNames.has("guardian_phone")}
           />
-        </div>
+        </fieldset>
+      </div>
 
-        {/* Guardian Street Address */}
-        <div className="sm:col-span-2">
-          <label htmlFor={`${uid}-guardian-street-address`} className="text-gray-700 block text-sm font-medium">
-            Street address *
-          </label>
-          <input
-            type="text"
-            id={`${uid}-guardian-street-address`}
-            value={complianceInfo.guardian_street_address || ""}
-            onChange={(e) => updateComplianceInfo({ guardian_street_address: e.target.value })}
-            disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_street_address") &&
-                "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
-          />
-        </div>
+      <fieldset className={cx({ danger: errorFieldNames.has("guardian_street_address") })}>
+        <legend>
+          <label htmlFor={`${uid}-guardian-address`}>Address</label>
+        </legend>
+        <input
+          id={`${uid}-guardian-address`}
+          type="text"
+          placeholder="Street address"
+          value={complianceInfo.guardian_street_address || ""}
+          onChange={(e) => updateComplianceInfo({ guardian_street_address: e.target.value })}
+          disabled={isFormDisabled}
+          aria-invalid={errorFieldNames.has("guardian_street_address")}
+        />
+      </fieldset>
 
-        <div>
-          <label htmlFor={`${uid}-guardian-city`} className="text-gray-700 block text-sm font-medium">
-            City *
-          </label>
+      <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_city") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-city`}>City</label>
+          </legend>
           <input
-            type="text"
             id={`${uid}-guardian-city`}
+            type="text"
+            placeholder="City"
             value={complianceInfo.guardian_city || ""}
             onChange={(e) => updateComplianceInfo({ guardian_city: e.target.value })}
             disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_city") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
+            aria-invalid={errorFieldNames.has("guardian_city")}
           />
-        </div>
+        </fieldset>
 
-        <div>
-          <label htmlFor={`${uid}-guardian-state`} className="text-gray-700 block text-sm font-medium">
-            State *
-          </label>
-          {availableStates.length > 0 ? (
-            <TypeSafeOptionSelect
-              id={`${uid}-guardian-state`}
-              name="State"
-              value={complianceInfo.guardian_state || ""}
-              onChange={(value) => updateComplianceInfo({ guardian_state: value })}
-              disabled={isFormDisabled}
-              options={availableStates.map((state) => ({
-                id: state.code,
-                label: state.name,
-              }))}
-            />
-          ) : (
-            <input
-              type="text"
-              id={`${uid}-guardian-state`}
-              value={complianceInfo.guardian_state || ""}
-              onChange={(e) => updateComplianceInfo({ guardian_state: e.target.value })}
-              disabled={isFormDisabled}
-              className={cx(
-                "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-                errorFieldNames.has("guardian_state") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-              )}
-            />
-          )}
-        </div>
-
-        <div>
-          <label htmlFor={`${uid}-guardian-zip-code`} className="text-gray-700 block text-sm font-medium">
-            Postal code *
-          </label>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_zip_code") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-zip`}>Postal code</label>
+          </legend>
           <input
+            id={`${uid}-guardian-zip`}
             type="text"
-            id={`${uid}-guardian-zip-code`}
+            placeholder="Postal code"
             value={complianceInfo.guardian_zip_code || ""}
             onChange={(e) => updateComplianceInfo({ guardian_zip_code: e.target.value })}
             disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_zip_code") && "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
+            aria-invalid={errorFieldNames.has("guardian_zip_code")}
           />
-        </div>
+        </fieldset>
+      </div>
 
-        {/* Guardian Date of Birth */}
-        <div>
-          <label className="text-gray-700 block text-sm font-medium">Date of birth *</label>
-          <div className="mt-1 grid grid-cols-3 gap-3">
-            <TypeSafeOptionSelect
-              id={`${uid}-guardian-month`}
-              name="Month"
-              value={
-                complianceInfo.guardian_date_of_birth
-                  ? (new Date(complianceInfo.guardian_date_of_birth).getMonth() + 1).toString()
-                  : ""
-              }
-              onChange={(value) => {
-                const currentDate = complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth)
-                  : new Date();
-                const newDate = new Date(currentDate.getFullYear(), parseInt(value) - 1, currentDate.getDate());
-                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
-              }}
+      <fieldset>
+        <legend>
+          <label>Date of Birth</label>
+        </legend>
+        <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_dob_day") })}>
+            <select
+              id={`${uid}-guardian-dob-day`}
               disabled={isFormDisabled}
-              options={Array.from({ length: 12 }, (_, i) => ({
-                id: (i + 1).toString(),
-                label: new Date(0, i).toLocaleString("default", { month: "long" }),
-              }))}
+              required
+              aria-label="Day"
+              aria-invalid={errorFieldNames.has("guardian_dob_day")}
+              value={complianceInfo.guardian_dob_day || "Day"}
+              onChange={(evt) => updateComplianceInfo({ guardian_dob_day: Number(evt.target.value) })}
+            >
+              <option disabled>Day</option>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_dob_month") })}>
+            <select
+              id={`${uid}-guardian-dob-month`}
+              disabled={isFormDisabled}
+              required
+              aria-label="Month"
+              aria-invalid={errorFieldNames.has("guardian_dob_month")}
+              value={complianceInfo.guardian_dob_month || "Month"}
+              onChange={(evt) => updateComplianceInfo({ guardian_dob_month: Number(evt.target.value) })}
+            >
+              <option disabled>Month</option>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                <option key={month} value={month}>
+                  {month}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_dob_year") })}>
+            <select
+              id={`${uid}-guardian-dob-year`}
+              disabled={isFormDisabled}
+              required
+              aria-label="Year"
+              aria-invalid={errorFieldNames.has("guardian_dob_year")}
+              value={complianceInfo.guardian_dob_year || "Year"}
+              onChange={(evt) => updateComplianceInfo({ guardian_dob_year: Number(evt.target.value) })}
+            >
+              <option disabled>Year</option>
+              {Array.from({ length: 100 }, (_, i) => currentYear - i).map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        </div>
+      </fieldset>
+
+      <fieldset className={cx({ danger: errorFieldNames.has("guardian_individual_tax_id") })}>
+        <legend>
+          <label htmlFor={`${uid}-guardian-ssn`}>Last 4 digits of SSN</label>
+        </legend>
+        <input
+          id={`${uid}-guardian-ssn`}
+          type="text"
+          placeholder="****"
+          maxLength={4}
+          value={complianceInfo.guardian_individual_tax_id || ""}
+          onChange={(e) => updateComplianceInfo({ guardian_individual_tax_id: e.target.value })}
+          disabled={isFormDisabled}
+          aria-invalid={errorFieldNames.has("guardian_individual_tax_id")}
+        />
+      </fieldset>
+
+      <fieldset>
+        <legend>
+          <label htmlFor={`${uid}-guardian-stripe-tos`}>
+            <input
+              id={`${uid}-guardian-stripe-tos`}
+              type="checkbox"
+              checked={complianceInfo.guardian_stripe_tos_accepted || false}
+              onChange={(e) => updateComplianceInfo({ guardian_stripe_tos_accepted: e.target.checked })}
+              disabled={isFormDisabled}
             />
-            <NumberInput
-              value={
-                complianceInfo.guardian_date_of_birth ? new Date(complianceInfo.guardian_date_of_birth).getDate() : null
-              }
-              onChange={(value) => {
-                const currentDate = complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth)
-                  : new Date();
-                const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), value || 1);
-                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
-              }}
-            >
-              {({ onChange, value }) => (
-                <input
-                  type="text"
-                  value={value}
-                  onChange={onChange}
-                  disabled={isFormDisabled}
-                  placeholder="Day"
-                  min={1}
-                  max={31}
-                  className="border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                />
-              )}
-            </NumberInput>
-            <NumberInput
-              value={
-                complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth).getFullYear()
-                  : null
-              }
-              onChange={(value) => {
-                const currentDate = complianceInfo.guardian_date_of_birth
-                  ? new Date(complianceInfo.guardian_date_of_birth)
-                  : new Date();
-                const newDate = new Date(
-                  value || new Date().getFullYear(),
-                  currentDate.getMonth(),
-                  currentDate.getDate(),
-                );
-                updateComplianceInfo({ guardian_date_of_birth: newDate.toISOString().split("T")[0] });
-              }}
-            >
-              {({ onChange, value }) => (
-                <input
-                  type="text"
-                  value={value}
-                  onChange={onChange}
-                  disabled={isFormDisabled}
-                  placeholder="Year"
-                  min={1900}
-                  max={new Date().getFullYear() - 18}
-                  className="border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                />
-              )}
-            </NumberInput>
-          </div>
-        </div>
-
-        {/* Guardian Tax ID */}
-        <div>
-          <label htmlFor={`${uid}-guardian-tax-id`} className="text-gray-700 block text-sm font-medium">
-            Last 4 digits of SSN *
+            I accept the{" "}
+            <a href="https://stripe.com/legal" target="_blank" rel="noreferrer">
+              Stripe Terms of Service
+            </a>{" "}
+            as the legal guardian of the account holder.
           </label>
-          <input
-            type="text"
-            id={`${uid}-guardian-tax-id`}
-            value={complianceInfo.guardian_individual_tax_id || ""}
-            onChange={(e) => updateComplianceInfo({ guardian_individual_tax_id: e.target.value })}
-            disabled={isFormDisabled}
-            className={cx(
-              "border-gray-300 mt-1 block w-full rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm",
-              errorFieldNames.has("guardian_individual_tax_id") &&
-                "border-red-300 focus:border-red-500 focus:ring-red-500",
-            )}
-            placeholder="Last 4 digits of SSN"
-          />
-        </div>
-      </div>
+        </legend>
+      </fieldset>
 
-      {/* Terms of Service */}
-      <div className="border-gray-200 space-y-4 border-t pt-6">
-        <div className="space-y-3">
-          <div className="flex items-start">
-            <div className="flex h-5 items-center">
-              <input
-                type="checkbox"
-                id={`${uid}-guardian-stripe-tos`}
-                checked={complianceInfo.guardian_stripe_tos_accepted || false}
-                onChange={(e) => updateComplianceInfo({ guardian_stripe_tos_accepted: e.target.checked })}
-                disabled={isFormDisabled}
-                className="border-gray-300 h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
-              />
-            </div>
-            <div className="ml-3 text-sm">
-              <label htmlFor={`${uid}-guardian-stripe-tos`} className="text-gray-700">
-                I accept the Stripe Terms of Service as the legal guardian of the account holder.
-              </label>
-            </div>
-          </div>
-
-          <div className="flex items-start">
-            <div className="flex h-5 items-center">
-              <input
-                type="checkbox"
-                id={`${uid}-guardian-consent`}
-                checked={complianceInfo.guardian_stripe_processing_tos_accepted || false}
-                onChange={(e) => updateComplianceInfo({ guardian_stripe_processing_tos_accepted: e.target.checked })}
-                disabled={isFormDisabled}
-                className="border-gray-300 h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
-              />
-            </div>
-            <div className="ml-3 text-sm">
-              <label htmlFor={`${uid}-guardian-consent`} className="text-gray-700">
-                I acknowledge that I am the legal guardian of the account holder and consent to the collection and
-                processing of my information for verification purposes.
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <fieldset>
+        <legend>
+          <label htmlFor={`${uid}-guardian-consent`}>
+            <input
+              id={`${uid}-guardian-consent`}
+              type="checkbox"
+              checked={complianceInfo.guardian_stripe_processing_tos_accepted || false}
+              onChange={(e) => updateComplianceInfo({ guardian_stripe_processing_tos_accepted: e.target.checked })}
+              disabled={isFormDisabled}
+            />
+            I acknowledge that I am the legal guardian of the account holder and consent to the collection and
+            processing of my information for verification purposes.
+          </label>
+        </legend>
+      </fieldset>
+    </section>
   );
 };
 

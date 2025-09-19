@@ -109,6 +109,9 @@ export type ComplianceInfo = {
   guardian_state?: string | null;
   guardian_zip_code?: string | null;
   guardian_date_of_birth?: string | null;
+  guardian_dob_month?: number;
+  guardian_dob_day?: number;
+  guardian_dob_year?: number;
   guardian_individual_tax_id?: string | null;
   guardian_stripe_processing_tos_accepted?: boolean;
   guardian_stripe_tos_accepted?: boolean;
@@ -227,6 +230,9 @@ export type FormFieldName =
   | "guardian_state"
   | "guardian_zip_code"
   | "guardian_date_of_birth"
+  | "guardian_dob_month"
+  | "guardian_dob_day"
+  | "guardian_dob_year"
   | "guardian_individual_tax_id";
 
 export type ErrorMessageInfo = {
@@ -282,6 +288,57 @@ const PaymentsPage = (props: Props) => {
       setIsUpdateCountryConfirmed(false);
       setShowUpdateCountryConfirmationModal(true);
     }
+
+    // Check if user is becoming 18+ and clear guardian fields
+    const updatedInfo = { ...complianceInfo, ...newComplianceInfo };
+
+    // Construct guardian_date_of_birth string from separate fields
+    if (updatedInfo.guardian_dob_month && updatedInfo.guardian_dob_day && updatedInfo.guardian_dob_year) {
+      const month = updatedInfo.guardian_dob_month.toString().padStart(2, "0");
+      const day = updatedInfo.guardian_dob_day.toString().padStart(2, "0");
+      const year = updatedInfo.guardian_dob_year.toString();
+      updatedInfo.guardian_date_of_birth = `${year}-${month}-${day}`;
+    } else {
+      updatedInfo.guardian_date_of_birth = null;
+    }
+
+    const willBe18Plus =
+      updatedInfo.dob_year > 0 &&
+      updatedInfo.dob_month > 0 &&
+      updatedInfo.dob_day > 0 &&
+      (() => {
+        const birthDate = new Date(updatedInfo.dob_year, updatedInfo.dob_month - 1, updatedInfo.dob_day);
+        const today = new Date();
+        const age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          return age - 1 >= 18;
+        }
+        return age >= 18;
+      })();
+
+    if (willBe18Plus) {
+      // Clear guardian fields when user becomes 18+
+      newComplianceInfo = {
+        ...newComplianceInfo,
+        guardian_first_name: null,
+        guardian_last_name: null,
+        guardian_email: null,
+        guardian_phone: null,
+        guardian_street_address: null,
+        guardian_city: null,
+        guardian_state: null,
+        guardian_zip_code: null,
+        guardian_date_of_birth: null,
+        guardian_dob_month: 0,
+        guardian_dob_day: 0,
+        guardian_dob_year: 0,
+        guardian_individual_tax_id: null,
+        guardian_stripe_tos_accepted: false,
+        guardian_stripe_processing_tos_accepted: false,
+      };
+    }
+
     setComplianceInfo((prevComplianceInfo) => ({ ...prevComplianceInfo, ...newComplianceInfo }));
     setErrorFieldNames(new Set());
   };
@@ -591,7 +648,7 @@ const PaymentsPage = (props: Props) => {
   };
 
   const isUserUnder18 = () => {
-    if (props.user.is_under_18) return true;
+    // Prioritize current form's birth year over server flag
     if (complianceInfo.dob_year > 0 && complianceInfo.dob_month > 0 && complianceInfo.dob_day > 0) {
       const birthDate = new Date(complianceInfo.dob_year, complianceInfo.dob_month - 1, complianceInfo.dob_day);
       const today = new Date();
@@ -602,8 +659,26 @@ const PaymentsPage = (props: Props) => {
       }
       return age < 18;
     }
-    return false;
+    // Fall back to server flag if no birth date in form
+    return props.user.is_under_18;
   };
+
+  const hasGuardianDetails = () =>
+    !!(
+      complianceInfo.guardian_first_name &&
+      complianceInfo.guardian_last_name &&
+      complianceInfo.guardian_email &&
+      complianceInfo.guardian_phone &&
+      complianceInfo.guardian_street_address &&
+      complianceInfo.guardian_city &&
+      complianceInfo.guardian_zip_code &&
+      complianceInfo.guardian_dob_month &&
+      complianceInfo.guardian_dob_day &&
+      complianceInfo.guardian_dob_year &&
+      complianceInfo.guardian_individual_tax_id &&
+      complianceInfo.guardian_stripe_tos_accepted &&
+      complianceInfo.guardian_stripe_processing_tos_accepted
+    );
 
   const validateGuardianFields = () => {
     if (!complianceInfo.guardian_first_name) {
@@ -630,8 +705,14 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.guardian_zip_code && props.user.country_code !== "BW") {
       markFieldInvalid("guardian_zip_code");
     }
-    if (!complianceInfo.guardian_date_of_birth) {
-      markFieldInvalid("guardian_date_of_birth");
+    if (!complianceInfo.guardian_dob_month) {
+      markFieldInvalid("guardian_dob_month");
+    }
+    if (!complianceInfo.guardian_dob_day) {
+      markFieldInvalid("guardian_dob_day");
+    }
+    if (!complianceInfo.guardian_dob_year) {
+      markFieldInvalid("guardian_dob_year");
     }
     if (!complianceInfo.guardian_individual_tax_id) {
       markFieldInvalid("guardian_individual_tax_id");
@@ -930,6 +1011,22 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
+          ) : isUserUnder18() && !hasGuardianDetails() ? (
+            <div role="status" className="warning">
+              <div>
+                <p className="mb-3">
+                  You're under 18, so we need your <strong>legal guardian's details</strong> to enable payments.
+                </p>
+                <Button
+                  onClick={() => {
+                    const guardianSection = document.querySelector("[data-guardian-section]");
+                    guardianSection?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                >
+                  Add guardian details
+                </Button>
+              </div>
+            </div>
           ) : (
             <div className="flex flex-col">
               <div role="status" className="success">
@@ -1167,33 +1264,20 @@ const PaymentsPage = (props: Props) => {
               />
             ) : null}
             {selectedPayoutMethod !== "stripe" ? (
-              <>
-                <AccountDetailsSection
-                  user={props.user}
-                  complianceInfo={complianceInfo}
-                  updateComplianceInfo={updateComplianceInfo}
-                  minDobYear={props.min_dob_year}
-                  isFormDisabled={props.is_form_disabled}
-                  countries={props.countries}
-                  uaeBusinessTypes={props.uae_business_types}
-                  indiaBusinessTypes={props.india_business_types}
-                  canadaBusinessTypes={props.canada_business_types}
-                  states={props.states}
-                  errorFieldNames={errorFieldNames}
-                  payoutMethod={selectedPayoutMethod}
-                />
-                {isUserUnder18() ? (
-                  <GuardianInformationSection
-                    complianceInfo={complianceInfo}
-                    updateComplianceInfo={updateComplianceInfo}
-                    isFormDisabled={props.is_form_disabled}
-                    states={props.states}
-                    errorFieldNames={errorFieldNames}
-                    isVisible
-                    userCountryCode={props.user.country_code}
-                  />
-                ) : null}
-              </>
+              <AccountDetailsSection
+                user={props.user}
+                complianceInfo={complianceInfo}
+                updateComplianceInfo={updateComplianceInfo}
+                minDobYear={props.min_dob_year}
+                isFormDisabled={props.is_form_disabled}
+                countries={props.countries}
+                uaeBusinessTypes={props.uae_business_types}
+                indiaBusinessTypes={props.india_business_types}
+                canadaBusinessTypes={props.canada_business_types}
+                states={props.states}
+                errorFieldNames={errorFieldNames}
+                payoutMethod={selectedPayoutMethod}
+              />
             ) : (
               <StripeConnectSection
                 stripeConnect={props.stripe_connect}
@@ -1203,6 +1287,23 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
+        {selectedPayoutMethod !== "stripe" && isUserUnder18() && (
+          <section className="!p-4 md:!p-8" data-guardian-section>
+            <header>
+              <h2>Legal guardian’s details</h2>
+              <div>Because you're under 18, we need to verify your legal guardian's details to enable payments.</div>
+            </header>
+            <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+              <GuardianInformationSection
+                complianceInfo={complianceInfo}
+                updateComplianceInfo={updateComplianceInfo}
+                isFormDisabled={props.is_form_disabled}
+                errorFieldNames={errorFieldNames}
+                isVisible
+              />
+            </section>
+          </section>
+        )}
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}

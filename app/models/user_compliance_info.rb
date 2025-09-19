@@ -280,7 +280,7 @@ class UserComplianceInfo < ApplicationRecord
     end
 
     def handle_guardian_compliance_info_request
-      GuardianComplianceInfoRequest.handle_new_guardian_compliance_info(self)
+      UserComplianceInfoRequest.handle_guardian_compliance_info(self)
     end
 
     def birthday_is_over_minimum_age
