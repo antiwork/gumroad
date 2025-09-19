@@ -99,7 +99,6 @@ export type ComplianceInfo = {
   business_building_number?: string | null;
   business_street_address_kanji?: string | null;
   business_street_address_kana?: string | null;
-  // Guardian fields
   guardian_first_name?: string | null;
   guardian_last_name?: string | null;
   guardian_email?: string | null;
@@ -108,7 +107,6 @@ export type ComplianceInfo = {
   guardian_city?: string | null;
   guardian_state?: string | null;
   guardian_zip_code?: string | null;
-  guardian_date_of_birth?: string | null;
   guardian_dob_month?: number;
   guardian_dob_day?: number;
   guardian_dob_year?: number;
@@ -229,7 +227,6 @@ export type FormFieldName =
   | "guardian_city"
   | "guardian_state"
   | "guardian_zip_code"
-  | "guardian_date_of_birth"
   | "guardian_dob_month"
   | "guardian_dob_day"
   | "guardian_dob_year"
@@ -292,16 +289,6 @@ const PaymentsPage = (props: Props) => {
     // Check if user is becoming 18+ and clear guardian fields
     const updatedInfo = { ...complianceInfo, ...newComplianceInfo };
 
-    // Construct guardian_date_of_birth string from separate fields
-    if (updatedInfo.guardian_dob_month && updatedInfo.guardian_dob_day && updatedInfo.guardian_dob_year) {
-      const month = updatedInfo.guardian_dob_month.toString().padStart(2, "0");
-      const day = updatedInfo.guardian_dob_day.toString().padStart(2, "0");
-      const year = updatedInfo.guardian_dob_year.toString();
-      updatedInfo.guardian_date_of_birth = `${year}-${month}-${day}`;
-    } else {
-      updatedInfo.guardian_date_of_birth = null;
-    }
-
     const willBe18Plus =
       updatedInfo.dob_year > 0 &&
       updatedInfo.dob_month > 0 &&
@@ -329,7 +316,6 @@ const PaymentsPage = (props: Props) => {
         guardian_city: null,
         guardian_state: null,
         guardian_zip_code: null,
-        guardian_date_of_birth: null,
         guardian_dob_month: 0,
         guardian_dob_day: 0,
         guardian_dob_year: 0,
@@ -917,7 +903,7 @@ const PaymentsPage = (props: Props) => {
         if (parsedResponse.guardian_verification_status) {
           setComplianceInfo((prev) => ({
             ...prev,
-            guardian_verification_status: parsedResponse.guardian_verification_status as string,
+            guardian_verification_status: parsedResponse.guardian_verification_status!,
           }));
         } else {
           window.location.reload();

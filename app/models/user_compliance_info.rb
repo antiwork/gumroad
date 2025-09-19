@@ -217,11 +217,12 @@ class UserComplianceInfo < ApplicationRecord
   def guardian_fields_complete?
     return false unless user_under_18?
 
-    # Check required guardian fields (same validation logic as individual)
     required_fields = %w[guardian_first_name guardian_last_name guardian_email guardian_phone
-                        guardian_street_address guardian_city guardian_date_of_birth]
+                        guardian_street_address guardian_city]
 
     return false unless required_fields.all? { |field| send(field).present? }
+
+    return false if guardian_date_of_birth.blank?
 
     # Check conditional fields using the same logic as individual
     return false if guardian_state_required? && guardian_state.blank?
