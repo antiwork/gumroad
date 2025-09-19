@@ -205,10 +205,15 @@ class UserComplianceInfo < ApplicationRecord
 
   def guardian_verification_status
     return 'not_required' unless user_under_18?
-    return 'incomplete' unless guardian_fields_complete?
 
-    # Check if we have a Stripe verification status
-    read_attribute(:guardian_verification_status).presence || 'pending'
+    # Use read_attribute to avoid any potential circular references
+    status = read_attribute(:guardian_verification_status)
+    return status if status.present?
+
+    # Check if guardian fields are complete using direct attribute access
+    return 'incomplete' unless guardian_fields_complete_safe?
+
+    'pending'
   end
 
   def guardian_fields_complete?
@@ -224,6 +229,32 @@ class UserComplianceInfo < ApplicationRecord
     return false if guardian_state_required? && guardian_state.blank?
     return false if guardian_zip_code_required? && guardian_zip_code.blank?
     return false if guardian_tax_id_required? && guardian_individual_tax_id.blank?
+
+    true
+  end
+
+  def guardian_fields_complete_safe?
+    return false unless user_under_18?
+
+    # Check required fields using direct attribute access to avoid circular references
+    return false unless read_attribute(:guardian_first_name).present?
+    return false unless read_attribute(:guardian_last_name).present?
+    return false unless read_attribute(:guardian_email).present?
+    return false unless read_attribute(:guardian_phone).present?
+    return false unless read_attribute(:guardian_street_address).present?
+    return false unless read_attribute(:guardian_city).present?
+    return false unless read_attribute(:guardian_date_of_birth).present?
+
+    # Check conditional fields using direct attribute access
+    if guardian_state_required? && read_attribute(:guardian_state).blank?
+      return false
+    end
+    if guardian_zip_code_required? && read_attribute(:guardian_zip_code).blank?
+      return false
+    end
+    if guardian_tax_id_required? && read_attribute(:guardian_individual_tax_id).blank?
+      return false
+    end
 
     true
   end
