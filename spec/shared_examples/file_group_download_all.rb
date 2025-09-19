@@ -106,8 +106,8 @@ RSpec.shared_examples_for "a product with 'Download all' buttons on file embed g
       select_disclosure "Download all" do
         click_on "Download as ZIP"
       end
-      wait_for_ajax
     end
+    expect(page).to have_current_path "https://example.com/zip-archive.zip"
   end
 
   it "downloads the individual file when pressing 'Download all' for a file embed group with only 1 downloadable file" do

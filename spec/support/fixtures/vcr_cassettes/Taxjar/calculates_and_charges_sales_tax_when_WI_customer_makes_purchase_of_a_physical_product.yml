@@ -8,9 +8,9 @@ http_interactions:
       string: '{"from_country":"US","from_state":"CA","from_zip":"94104","to_country":"US","to_state":"WI","to_zip":"53703","shipping":0.0,"line_items":[{"quantity":1,"unit_price":100.0,"discount":0,"product_tax_code":null}],"nexus_addresses":[{"country":"US","state":"WI"}]}'
     headers:
       User-Agent:
-      - 'TaxJar/Ruby (Darwin Curtiss-MacBook-Pro.local 22.3.0 Darwin Kernel Version
-        22.3.0: Mon Jan 30 20:38:37 PST 2023; root:xnu-8792.81.3~2/RELEASE_ARM64_T6000
-        arm64; ruby 3.3.4-p94; OpenSSL 3.3.1 4 Jun 2024) taxjar-ruby/3.0.4'
+      - 'TaxJar/Ruby (Darwin Harbakshs-MacBook-Air.local 24.5.0 Darwin Kernel Version
+        24.5.0: Tue Apr 22 19:48:46 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8103
+        arm64; ruby 3.4.3-p32; OpenSSL 3.5.1 1 Jul 2025) taxjar-ruby/3.0.4'
       Authorization:
       - Bearer <TAXJAR_API_KEY>
       X-Api-Version:
@@ -27,31 +27,32 @@ http_interactions:
       message: OK
     headers:
       Content-Type:
-      - application/json
+      - application/json; charset=utf-8
       Content-Length:
-      - '1453'
+      - '1460'
       Connection:
       - close
       Date:
-      - Sat, 18 Jan 2025 22:55:51 GMT
+      - Thu, 18 Sep 2025 09:53:54 GMT
       X-Amzn-Trace-Id:
-      - Root=1-678c3177-3f8c75db639ae80f7144a63f
+      - Root=1-68cbd6b2-5eb3e1886f343394393ba14a
       X-Amzn-Requestid:
-      - b89d587e-0839-4287-9b8b-bbc02015f3c7
+      - f5d6ad5e-b088-415f-8b09-2a976b9ee08a
       Access-Control-Allow-Origin:
       - https://developers.taxjar.com
       X-Amz-Apigw-Id:
-      - EmyqwHsCIAMEoEw=
+      - RF58AE1XIAMEm8w=
       X-Cache:
       - Miss from cloudfront
       Via:
-      - 1.1 aa21c20510bfbf8775a7f197b29b63ce.cloudfront.net (CloudFront)
+      - 1.1 474a987f2cb8373a0505e9e4aad940fc.cloudfront.net (CloudFront)
       X-Amz-Cf-Pop:
-      - LAX54-P7
+      - BOM78-P3
       X-Amz-Cf-Id:
-      - GDeHdNKQjqbXnV5TYbF2SRc-EV_56CxUJQ7RRcOJLLiGWRN97_LV6w==
+      - kpvZH06yBxxRMBsTFCDfTLFR2c5b-Zxsp6Z_QOWiyNzutdXQxMwX1w==
     body:
       encoding: UTF-8
-      string: '{"tax":{"order_total_amount":100.0,"shipping":0.0,"taxable_amount":100.0,"amount_to_collect":5.5,"rate":0.055,"has_nexus":true,"freight_taxable":true,"tax_source":"destination","jurisdictions":{"country":"US","state":"WI","county":"DANE","city":"MADISON"},"breakdown":{"taxable_amount":100.0,"tax_collectable":5.5,"combined_tax_rate":0.055,"state_taxable_amount":100.0,"state_tax_rate":0.05,"state_tax_collectable":5.0,"county_taxable_amount":100.0,"county_tax_rate":0.005,"county_tax_collectable":0.5,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_tax_collectable":0.0,"shipping":{"taxable_amount":0.0,"tax_collectable":0.0,"combined_tax_rate":0.055,"state_taxable_amount":0.0,"state_sales_tax_rate":0.05,"state_amount":0.0,"county_taxable_amount":0.0,"county_tax_rate":0.005,"county_amount":0.0,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_amount":0.0},"line_items":[{"id":"1","taxable_amount":100.0,"tax_collectable":5.5,"combined_tax_rate":0.055,"state_taxable_amount":100.0,"state_sales_tax_rate":0.05,"state_amount":5.0,"county_taxable_amount":100.0,"county_tax_rate":0.005,"county_amount":0.5,"city_taxable_amount":0.0,"city_tax_rate":0.0,"city_amount":0.0,"special_district_taxable_amount":0.0,"special_tax_rate":0.0,"special_district_amount":0.0}]}}}'
-  recorded_at: Sat, 18 Jan 2025 22:55:51 GMT
+      string: '{"tax":{"rate":0.055,"freight_taxable":true,"tax_source":"destination","shipping":0.0,"taxable_amount":100.0,"jurisdictions":{"state":"WI","city":"MADISON","country":"US","county":"DANE
+        COUNTY"},"breakdown":{"line_items":[{"id":"1","tax_collectable":5.5,"taxable_amount":100.0,"combined_tax_rate":0.055,"state_taxable_amount":100.0,"county_taxable_amount":100.0,"city_taxable_amount":0.0,"special_district_taxable_amount":0.0,"city_tax_rate":0.0,"county_tax_rate":0.005,"special_tax_rate":0.0,"special_district_amount":0.0,"city_amount":0.0,"county_amount":0.5,"state_amount":5.0,"state_sales_tax_rate":0.05}],"shipping":{"tax_collectable":0.0,"taxable_amount":0.0,"combined_tax_rate":0.055,"state_taxable_amount":0.0,"county_taxable_amount":0.0,"city_taxable_amount":0.0,"city_tax_rate":0.0,"county_tax_rate":0.005,"special_tax_rate":0.0,"special_district_amount":0.0,"special_taxable_amount":0.0,"city_amount":0.0,"county_amount":0.0,"state_amount":0.0,"state_sales_tax_rate":0.05},"tax_collectable":5.5,"taxable_amount":100.0,"combined_tax_rate":0.055,"state_taxable_amount":100.0,"state_tax_collectable":5.0,"county_taxable_amount":100.0,"county_tax_collectable":0.5,"city_taxable_amount":0.0,"city_tax_collectable":0.0,"special_district_taxable_amount":0.0,"special_district_tax_collectable":0.0,"city_tax_rate":0.0,"county_tax_rate":0.005,"special_tax_rate":0.0,"state_tax_rate":0.05},"has_nexus":true,"amount_to_collect":5.5,"order_total_amount":100.0}}'
+  recorded_at: Thu, 18 Sep 2025 09:53:54 GMT
 recorded_with: VCR 6.2.0

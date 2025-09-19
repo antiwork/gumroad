@@ -1200,13 +1200,17 @@ export const PaymentForm = ({
     }
 
     if (state.status.type === "captcha") {
-      recaptcha
-        .execute()
-        .then((recaptchaResponse) => dispatch({ type: "set-recaptcha-response", recaptchaResponse }))
-        .catch((e: unknown) => {
-          assert(e instanceof RecaptchaCancelledError);
-          dispatch({ type: "cancel" });
-        });
+      if ((process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && state.recaptchaKey === null) {
+        dispatch({ type: "set-recaptcha-response" });
+      } else {
+        recaptcha
+          .execute()
+          .then((recaptchaResponse) => dispatch({ type: "set-recaptcha-response", recaptchaResponse }))
+          .catch((e: unknown) => {
+            assert(e instanceof RecaptchaCancelledError);
+            dispatch({ type: "cancel" });
+          });
+      }
     }
   }, [state.status.type]);
 

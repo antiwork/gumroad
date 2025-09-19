@@ -201,7 +201,8 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
 
     before do
       disputed_purchase.create_purchase_refund_policy!(
-        title: "Refund policy",
+        title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+        max_refund_period_in_days: 30,
         fine_print: "This is the fine print."
       )
 

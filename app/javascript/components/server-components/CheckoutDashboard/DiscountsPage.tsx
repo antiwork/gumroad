@@ -1,5 +1,6 @@
 import cx from "classnames";
 import * as React from "react";
+import { GroupBase, SelectInstance } from "react-select";
 import { createCast, is } from "ts-safe-cast";
 
 import {
@@ -29,7 +30,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
-import { Select } from "$app/components/Select";
+import { Select, Option } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -40,8 +41,6 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriver";
 
 import placeholder from "$assets/images/placeholders/discounts.png";
-import { GroupBase, SelectInstance } from "react-select";
-import { Option } from "$app/components/Select";
 
 type Product = {
   id: string;
@@ -809,7 +808,7 @@ const Form = ({
       name: name.value,
       code: code.value,
       products: universal ? null : selectedProducts.map((product) => ({ ...product, uses: 0 })),
-      discount: { type: discount.type, value: discount.value as number },
+      discount: { type: discount.type, value: discount.value ?? 0 },
       limit: limitQuantity ? maxQuantity.value : null,
       currency_type: currencyCode,
       valid_at: limitValidity ? validAt.toISOString() : null,

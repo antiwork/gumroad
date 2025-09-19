@@ -102,7 +102,7 @@ describe "User profile page", type: :system, js: true do
     end
 
     context "without user logged in" do
-      it "displays sections correctly" do
+      it "displays sections correctly", :elasticsearch_wait_for_refresh do
         create(:seller_profile_products_section, seller:, header: "Section 1", product: @product1)
         create(:seller_profile_products_section, seller:, header: "Section 1", shown_products: [@product1.id, @product2.id, @product3.id, @product4.id])
         create(:seller_profile_products_section, seller:, header: "Section 2", shown_products: [@product1.id, @product4.id], default_product_sort: ProductSortKey::PRICE_DESCENDING)
