@@ -381,6 +381,7 @@ describe Api::V2::SalesController do
       @purchase.process!
       @purchase.update_balance_and_mark_successful!
       @params = { id: @purchase.external_id }
+      allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(1000_00)
     end
 
     describe "when logged in with refund_sales scope" do
@@ -517,6 +518,25 @@ describe Api::V2::SalesController do
           expect(response.parsed_body).to eq({
             success: false,
             message: "Refund amount cannot be greater than the purchase price."
+          }.as_json)
+        end
+
+        it "does nothing if refund amount is more than the available balance" do
+          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(99_99)
+
+          expect(@purchase.price_cents).to eq 100_00
+          expect(@purchase.refunded?).to be_falsey
+
+          put :refund, params: @params
+
+          @purchase.reload
+          expect(@purchase.refunded?).to be_falsey
+          expect(@purchase.stripe_partially_refunded?).to be_falsey
+
+
+          expect(response.parsed_body).to eq({
+            success: false,
+            message: "You do not have sufficient balance to make this refund."
           }.as_json)
         end
       end
