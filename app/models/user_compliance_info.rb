@@ -191,7 +191,9 @@ class UserComplianceInfo < ApplicationRecord
   end
 
   def user_under_18?
-    user&.under_18? == true
+    return false unless birthday.present?
+
+    birthday > 18.years.ago
   end
 
   def guardian_verification_complete?
@@ -229,23 +231,23 @@ class UserComplianceInfo < ApplicationRecord
   # Helper methods for conditional validations
   def guardian_state_required?
     return false unless user_under_18?
-    return false unless user&.country_code.present?
+    return false unless country_code.present?
 
-    user.country_code.in?(%w[US CA AU MX AE IR BR])
+    country_code.in?(%w[US CA AU MX AE IR BR])
   end
 
   def guardian_zip_code_required?
     return false unless user_under_18?
-    return false unless user&.country_code.present?
+    return false unless country_code.present?
 
-    user.country_code != "BW"
+    country_code != "BW"
   end
 
   def guardian_tax_id_required?
     return false unless user_under_18?
-    return false unless user&.country_code.present?
+    return false unless country_code.present?
 
-    user.country_code.in?(%w[US CA])
+    country_code.in?(%w[US CA])
   end
 
   private

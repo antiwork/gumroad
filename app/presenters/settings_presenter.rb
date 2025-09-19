@@ -322,6 +322,22 @@ class SettingsPresenter
         dob_month: user_compliance_info.birthday.try(:month).to_i,
         dob_day: user_compliance_info.birthday.try(:day).to_i,
         dob_year: user_compliance_info.birthday.try(:year).to_i,
+        guardian_first_name: user_compliance_info.guardian_first_name,
+        guardian_last_name: user_compliance_info.guardian_last_name,
+        guardian_email: user_compliance_info.guardian_email,
+        guardian_phone: user_compliance_info.guardian_phone,
+        guardian_street_address: user_compliance_info.guardian_street_address,
+        guardian_city: user_compliance_info.guardian_city,
+        guardian_state: user_compliance_info.guardian_state,
+        guardian_zip_code: user_compliance_info.guardian_zip_code,
+        guardian_date_of_birth: user_compliance_info.guardian_date_of_birth&.strftime("%Y-%m-%d"),
+        guardian_dob_month: user_compliance_info.guardian_date_of_birth&.month,
+        guardian_dob_day: user_compliance_info.guardian_date_of_birth&.day,
+        guardian_dob_year: user_compliance_info.guardian_date_of_birth&.year,
+        guardian_individual_tax_id: user_compliance_info.guardian_individual_tax_id,
+        guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
+        guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
+        guardian_verification_status: user_compliance_info.guardian_verification_status,
       }
     end
 

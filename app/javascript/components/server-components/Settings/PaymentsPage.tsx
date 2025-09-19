@@ -1011,6 +1011,13 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
+          ) : isUserUnder18() && complianceInfo.guardian_verification_status === "pending" ? (
+            <div role="status" className="info">
+              <div>
+                <strong>Stripe is verifying your information.</strong> You'll get an email once the verification is
+                complete. If additional information is needed, we'll contact your legal guardian directly.
+              </div>
+            </div>
           ) : isUserUnder18() && !hasGuardianDetails() ? (
             <div role="status" className="warning">
               <div>
@@ -1290,7 +1297,7 @@ const PaymentsPage = (props: Props) => {
         {selectedPayoutMethod !== "stripe" && isUserUnder18() && (
           <section className="!p-4 md:!p-8" data-guardian-section>
             <header>
-              <h2>Legal guardian’s details</h2>
+              <h2>Legal guardian's details</h2>
               <div>Because you're under 18, we need to verify your legal guardian's details to enable payments.</div>
             </header>
             <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
