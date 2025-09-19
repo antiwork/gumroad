@@ -1,7 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { ComplianceInfo, FormFieldName } from "$app/components/server-components/Settings/PaymentsPage";
+import { ComplianceInfo, FormFieldName, User } from "$app/components/server-components/Settings/PaymentsPage";
 
 const GuardianInformationSection = ({
   complianceInfo,
@@ -16,7 +16,7 @@ const GuardianInformationSection = ({
   isFormDisabled: boolean;
   errorFieldNames: Set<FormFieldName>;
   isVisible: boolean;
-  user: any;
+  user: User;
 }) => {
   const uid = React.useId();
 
