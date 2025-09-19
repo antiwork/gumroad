@@ -79,7 +79,6 @@ class UserComplianceInfoRequest < ApplicationRecord
       requests.find_each(&:mark_provided!)
     end
 
-    # Handle guardian fields for users under 18
     handle_guardian_compliance_info(user_compliance_info)
   end
 

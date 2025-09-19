@@ -15,7 +15,6 @@ class UserComplianceInfo < ApplicationRecord
   belongs_to :user, optional: true
   validates_presence_of :user
 
-  # Guardian field validations for users under 18
   validates :guardian_first_name, presence: true, if: :user_under_18?
   validates :guardian_last_name, presence: true, if: :user_under_18?
   validates :guardian_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, if: :user_under_18?
@@ -187,7 +186,6 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_tax_id : individual_tax_id
   end
 
-  # Guardian-related methods
   def guardian_first_and_last_name
     "#{guardian_first_name} #{guardian_last_name}".squeeze(" ").strip
   end
@@ -208,12 +206,10 @@ class UserComplianceInfo < ApplicationRecord
   def guardian_verification_status
     return 'not_required' unless user_under_18?
 
-    # Use read_attribute to avoid any potential circular references
     status = read_attribute(:guardian_verification_status)
     return status if status.present?
 
-    # Check if guardian fields are complete using direct attribute access
-    return 'incomplete' unless guardian_fields_complete_safe?
+    return 'incomplete' unless guardian_fields_complete?
 
     'pending'
   end
@@ -221,13 +217,13 @@ class UserComplianceInfo < ApplicationRecord
   def guardian_fields_complete?
     return false unless user_under_18?
 
-    # Check required fields
+    # Check required guardian fields (same validation logic as individual)
     required_fields = %w[guardian_first_name guardian_last_name guardian_email guardian_phone
                         guardian_street_address guardian_city guardian_date_of_birth]
 
     return false unless required_fields.all? { |field| send(field).present? }
 
-    # Check conditional fields
+    # Check conditional fields using the same logic as individual
     return false if guardian_state_required? && guardian_state.blank?
     return false if guardian_zip_code_required? && guardian_zip_code.blank?
     return false if guardian_tax_id_required? && guardian_individual_tax_id.blank?
@@ -235,33 +231,6 @@ class UserComplianceInfo < ApplicationRecord
     true
   end
 
-  def guardian_fields_complete_safe?
-    return false unless user_under_18?
-
-    # Check required fields using direct attribute access to avoid circular references
-    return false unless read_attribute(:guardian_first_name).present?
-    return false unless read_attribute(:guardian_last_name).present?
-    return false unless read_attribute(:guardian_email).present?
-    return false unless read_attribute(:guardian_phone).present?
-    return false unless read_attribute(:guardian_street_address).present?
-    return false unless read_attribute(:guardian_city).present?
-    return false unless read_attribute(:guardian_date_of_birth).present?
-
-    # Check conditional fields using direct attribute access
-    if guardian_state_required? && read_attribute(:guardian_state).blank?
-      return false
-    end
-    if guardian_zip_code_required? && read_attribute(:guardian_zip_code).blank?
-      return false
-    end
-    if guardian_tax_id_required? && read_attribute(:guardian_individual_tax_id).blank?
-      return false
-    end
-
-    true
-  end
-
-  # Helper methods for conditional validations
   def guardian_state_required?
     return false unless user_under_18?
     return false unless country_code.present?
@@ -280,7 +249,6 @@ class UserComplianceInfo < ApplicationRecord
     return false unless user_under_18?
     return false unless country_code.present?
 
-    # Use the same countries that require individual tax ID (same as SettingsPresenter)
     individual_tax_id_needed_countries = [
       Compliance::Countries::USA.alpha2,
       Compliance::Countries::CAN.alpha2,
@@ -310,8 +278,56 @@ class UserComplianceInfo < ApplicationRecord
   def guardian_verification_required?
     return false unless user_under_18?
 
-    # Guardian verification is required if all required guardian fields are complete
-    guardian_fields_complete_safe?
+    guardian_fields_complete?
+  end
+
+  # Create person hash for guardian using the same logic as individual
+  def guardian_person_hash(passphrase)
+    # Decrypt tax ID safely
+    personal_tax_id = nil
+    if guardian_individual_tax_id.present?
+      begin
+        personal_tax_id = guardian_individual_tax_id.decrypt(passphrase)
+      rescue => e
+        Rails.logger.warn "Failed to decrypt guardian tax ID: #{e.message}"
+        personal_tax_id = nil
+      end
+    end
+
+    hash = {
+      first_name: guardian_first_name,
+      last_name: guardian_last_name,
+      email: guardian_email,
+      phone: guardian_phone,
+      dob: {
+        day: guardian_date_of_birth.try(:day),
+        month: guardian_date_of_birth.try(:month),
+        year: guardian_date_of_birth.try(:year)
+      }
+    }
+
+    # Add address using the same logic as individual
+    hash.deep_merge!({
+      address: {
+        line1: guardian_street_address,
+        line2: nil,
+        city: guardian_city,
+        state: guardian_state,
+        postal_code: guardian_zip_code,
+        country: country_code
+      }
+    })
+
+    # Add tax ID using the same logic as individual
+    if personal_tax_id && (country_code != Compliance::Countries::USA.alpha2 || personal_tax_id.length > 4)
+      hash.deep_merge!(id_number: personal_tax_id)
+    end
+
+    if country_code == Compliance::Countries::USA.alpha2 && personal_tax_id && personal_tax_id.length == 4
+      hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
+    end
+
+    hash
   end
 
   private
@@ -385,7 +401,7 @@ class UserComplianceInfo < ApplicationRecord
       return unless guardian_fields_changed
 
       # Update status based on field completion
-      if guardian_fields_complete_safe?
+      if guardian_fields_complete?
         # Only set to pending if not already verified
         if read_attribute(:guardian_verification_status) != "verified"
           update_column(:guardian_verification_status, "pending")
@@ -398,12 +414,41 @@ class UserComplianceInfo < ApplicationRecord
       end
     end
 
+
     def submit_guardian_to_stripe
       return unless user.merchant_accounts.stripe.alive.any?
 
-      # Queue a job to submit guardian information to Stripe
-      SubmitGuardianToStripeWorker.perform_async(user.id)
+      # Create guardian person hash using the same logic as individual
+      passphrase = GlobalConfig.get("STRONGBOX_GENERAL")
+      person_hash = guardian_person_hash(passphrase)
+
+      # Submit to Stripe
+      begin
+        stripe_account = user.stripe_account
+        stripe_person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_hash)
+
+        # Update guardian verification status based on response
+        case stripe_person.verification.status
+        when "verified"
+          update_column(:guardian_verification_status, "verified")
+          Rails.logger.info "Guardian verification completed for user #{user.id}"
+        when "pending"
+          update_column(:guardian_verification_status, "pending")
+          Rails.logger.info "Guardian verification pending for user #{user.id}"
+        when "unverified"
+          update_column(:guardian_verification_status, "incomplete")
+          Rails.logger.warn "Guardian verification failed for user #{user.id}"
+        end
+
+      rescue Stripe::StripeError => e
+        Rails.logger.error "Stripe error submitting guardian for user #{user.id}: #{e.message}"
+        update_column(:guardian_verification_status, "incomplete")
+      rescue => e
+        Rails.logger.error "Failed to submit guardian to Stripe for user #{user.id}: #{e.message}"
+        update_column(:guardian_verification_status, "incomplete")
+      end
     end
+
 
     def birthday_is_over_minimum_age
       errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
