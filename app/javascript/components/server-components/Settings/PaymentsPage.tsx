@@ -1302,7 +1302,7 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
-        {selectedPayoutMethod !== "stripe" && isUserUnder18() && (
+        {selectedPayoutMethod === "stripe" && isUserUnder18() && (
           <section className="!p-4 md:!p-8" data-guardian-section>
             <header>
               <h2>Legal guardian's details</h2>
