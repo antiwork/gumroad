@@ -505,7 +505,6 @@ module StripeMerchantAccountManager
       begin
         guardian_tax_id = user_compliance_info.guardian_individual_tax_id.decrypt(passphrase)
       rescue => e
-        # In development, we might not have proper encryption keys
         Rails.logger.warn "Failed to decrypt guardian tax ID: #{e.message}"
         guardian_tax_id = nil
       end

@@ -44,22 +44,7 @@ module StripeUserComplianceInfoFieldMap
     "company.address.country" => UserComplianceInfoFields::LegalEntity::Address::COUNTRY,
     "company.phone" => UserComplianceInfoFields::Business::PHONE_NUMBER,
 
-    "external_account" => UserComplianceInfoFields::BANK_ACCOUNT,
-
-    # Guardian fields for users under 18
-    "guardian.first_name" => GuardianComplianceInfoFields::FIRST_NAME,
-    "guardian.last_name" => GuardianComplianceInfoFields::LAST_NAME,
-    "guardian.dob.day" => GuardianComplianceInfoFields::DATE_OF_BIRTH,
-    "guardian.dob.month" => GuardianComplianceInfoFields::DATE_OF_BIRTH,
-    "guardian.dob.year" => GuardianComplianceInfoFields::DATE_OF_BIRTH,
-    "guardian.relationship" => GuardianComplianceInfoFields::RELATIONSHIP,
-    "guardian.id_number" => GuardianComplianceInfoFields::TAX_ID,
-    "guardian.phone" => GuardianComplianceInfoFields::PHONE_NUMBER,
-    "guardian.address.line1" => GuardianComplianceInfoFields::Address::STREET,
-    "guardian.address.city" => GuardianComplianceInfoFields::Address::CITY,
-    "guardian.address.state" => GuardianComplianceInfoFields::Address::STATE,
-    "guardian.address.postal_code" => GuardianComplianceInfoFields::Address::ZIP_CODE,
-    "guardian.address.country" => GuardianComplianceInfoFields::Address::COUNTRY
+    "external_account" => UserComplianceInfoFields::BANK_ACCOUNT
   }.freeze
 
   MAP_STRIPE_FIELD_TO_OPTIONS = {
