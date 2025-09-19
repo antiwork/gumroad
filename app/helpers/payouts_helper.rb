@@ -141,7 +141,7 @@ module PayoutsHelper
     stripe_connect_sales_data = user.stripe_connect_sales_data_for_duration(start_date:, end_date:)
     total_sales_data_for_payout = total_sales_data_for_payout.merge(stripe_connect_sales_data) { |_key, value1, value2| value1 + value2 }
     stripe_connect_payout_cents = user.stripe_connect_payout_net_cents(stripe_connect_sales_data)
-    total_sales_data_for_payout.merge({ stripe_connect_payout_cents: })
+    total_sales_data_for_payout = total_sales_data_for_payout.merge({ stripe_connect_payout_cents: })
 
     carried_over_payout_data = user.carried_over_data_for_balance_ids(failed_balance_ids)
     total_sales_data_for_payout.merge(carried_over_payout_data)
