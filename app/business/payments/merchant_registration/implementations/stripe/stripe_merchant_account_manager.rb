@@ -78,7 +78,7 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, person_params)
     end
 
-    if user_compliance_info.user.under_18? && user_compliance_info.guardian_verification_required?
+    if user_compliance_info.user.under_18? && user_compliance_info.guardian_fields_complete?
       guardian_params = guardian_person_hash(user_compliance_info, passphrase)
       guardian_params.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
       Stripe::Account.create_person(stripe_account.id, guardian_params)

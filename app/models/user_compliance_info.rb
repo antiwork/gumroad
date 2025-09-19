@@ -186,9 +186,6 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_tax_id : individual_tax_id
   end
 
-  def guardian_first_and_last_name
-    "#{guardian_first_name} #{guardian_last_name}".squeeze(" ").strip
-  end
 
   def user_under_18?
     return false unless birthday.present?
@@ -196,12 +193,6 @@ class UserComplianceInfo < ApplicationRecord
     birthday > 18.years.ago
   end
 
-  def guardian_verification_complete?
-    return true unless user_under_18?
-    return false unless guardian_fields_complete?
-
-    guardian_verification_status == 'verified'
-  end
 
   def guardian_verification_status
     return 'not_required' unless user_under_18?
@@ -274,61 +265,6 @@ class UserComplianceInfo < ApplicationRecord
     ]
 
     country_code.in?(individual_tax_id_needed_countries)
-  end
-
-  def guardian_verification_required?
-    return false unless user_under_18?
-
-    guardian_fields_complete?
-  end
-
-  # Create person hash for guardian using the same logic as individual
-  def guardian_person_hash(passphrase)
-    # Decrypt tax ID safely
-    personal_tax_id = nil
-    if guardian_individual_tax_id.present?
-      begin
-        personal_tax_id = guardian_individual_tax_id.decrypt(passphrase)
-      rescue => e
-        Rails.logger.warn "Failed to decrypt guardian tax ID: #{e.message}"
-        personal_tax_id = nil
-      end
-    end
-
-    hash = {
-      first_name: guardian_first_name,
-      last_name: guardian_last_name,
-      email: guardian_email,
-      phone: guardian_phone,
-      dob: {
-        day: guardian_date_of_birth.try(:day),
-        month: guardian_date_of_birth.try(:month),
-        year: guardian_date_of_birth.try(:year)
-      }
-    }
-
-    # Add address using the same logic as individual
-    hash.deep_merge!({
-      address: {
-        line1: guardian_street_address,
-        line2: nil,
-        city: guardian_city,
-        state: guardian_state,
-        postal_code: guardian_zip_code,
-        country: country_code
-      }
-    })
-
-    # Add tax ID using the same logic as individual
-    if personal_tax_id && (country_code != Compliance::Countries::USA.alpha2 || personal_tax_id.length > 4)
-      hash.deep_merge!(id_number: personal_tax_id)
-    end
-
-    if country_code == Compliance::Countries::USA.alpha2 && personal_tax_id && personal_tax_id.length == 4
-      hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
-    end
-
-    hash
   end
 
   private
@@ -406,50 +342,11 @@ class UserComplianceInfo < ApplicationRecord
         # Only set to pending if not already verified
         if read_attribute(:guardian_verification_status) != "verified"
           update_column(:guardian_verification_status, "pending")
-
-          # Submit guardian information to Stripe for verification
-          submit_guardian_to_stripe
         end
       else
         update_column(:guardian_verification_status, "incomplete")
       end
     end
-
-
-    def submit_guardian_to_stripe
-      return unless user.merchant_accounts.stripe.alive.any?
-
-      # Create guardian person hash using the same logic as individual
-      passphrase = GlobalConfig.get("STRONGBOX_GENERAL")
-      person_hash = guardian_person_hash(passphrase)
-
-      # Submit to Stripe
-      begin
-        stripe_account = user.stripe_account
-        stripe_person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_hash)
-
-        # Update guardian verification status based on response
-        case stripe_person.verification.status
-        when "verified"
-          update_column(:guardian_verification_status, "verified")
-          Rails.logger.info "Guardian verification completed for user #{user.id}"
-        when "pending"
-          update_column(:guardian_verification_status, "pending")
-          Rails.logger.info "Guardian verification pending for user #{user.id}"
-        when "unverified"
-          update_column(:guardian_verification_status, "incomplete")
-          Rails.logger.warn "Guardian verification failed for user #{user.id}"
-        end
-
-      rescue Stripe::StripeError => e
-        Rails.logger.error "Stripe error submitting guardian for user #{user.id}: #{e.message}"
-        update_column(:guardian_verification_status, "incomplete")
-      rescue => e
-        Rails.logger.error "Failed to submit guardian to Stripe for user #{user.id}: #{e.message}"
-        update_column(:guardian_verification_status, "incomplete")
-      end
-    end
-
 
     def birthday_is_over_minimum_age
       errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
