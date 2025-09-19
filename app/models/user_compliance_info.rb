@@ -54,6 +54,8 @@ class UserComplianceInfo < ApplicationRecord
   after_create_commit :handle_stripe_compliance_info
   after_create_commit :handle_compliance_info_request
   after_create_commit :handle_guardian_compliance_info_request
+  before_save :clear_guardian_info_if_user_is_18_or_older
+  after_save :update_guardian_verification_status
 
   scope :country, ->(country) { where(country:) }
 
@@ -281,6 +283,13 @@ class UserComplianceInfo < ApplicationRecord
     country_code.in?(%w[US CA])
   end
 
+  def guardian_verification_required?
+    return false unless user_under_18?
+
+    # Guardian verification is required if all required guardian fields are complete
+    guardian_fields_complete_safe?
+  end
+
   private
 
   def guardian_date_of_birth_must_be_valid
@@ -314,6 +323,62 @@ class UserComplianceInfo < ApplicationRecord
 
     def handle_guardian_compliance_info_request
       UserComplianceInfoRequest.handle_guardian_compliance_info(self)
+    end
+
+    def clear_guardian_info_if_user_is_18_or_older
+      return unless birthday.present? && birthday <= 18.years.ago
+      return unless saved_change_to_birthday? || new_record?
+
+      # Clear all guardian fields when user becomes 18 or older
+      self.guardian_first_name = nil
+      self.guardian_last_name = nil
+      self.guardian_email = nil
+      self.guardian_phone = nil
+      self.guardian_street_address = nil
+      self.guardian_city = nil
+      self.guardian_state = nil
+      self.guardian_zip_code = nil
+      self.guardian_date_of_birth = nil
+      self.guardian_individual_tax_id = nil
+      self.guardian_stripe_tos_accepted = false
+      self.guardian_stripe_processing_tos_accepted = false
+      self.guardian_verification_status = "not_required"
+    end
+
+    def update_guardian_verification_status
+      return unless user_under_18?
+      return if read_attribute(:guardian_verification_status) == "verified"
+
+      # Check if any guardian fields have changed
+      guardian_fields = %w[
+        guardian_first_name guardian_last_name guardian_email guardian_phone
+        guardian_street_address guardian_city guardian_state guardian_zip_code
+        guardian_date_of_birth guardian_individual_tax_id guardian_stripe_tos_accepted
+        guardian_stripe_processing_tos_accepted
+      ]
+
+      guardian_fields_changed = guardian_fields.any? { |field| saved_change_to_attribute?(field) }
+      return unless guardian_fields_changed
+
+      # Update status based on field completion
+      if guardian_fields_complete_safe?
+        # Only set to pending if not already verified
+        if read_attribute(:guardian_verification_status) != "verified"
+          update_column(:guardian_verification_status, "pending")
+
+          # Submit guardian information to Stripe for verification
+          submit_guardian_to_stripe
+        end
+      else
+        update_column(:guardian_verification_status, "incomplete")
+      end
+    end
+
+    def submit_guardian_to_stripe
+      return unless user.merchant_accounts.stripe.alive.any?
+
+      # Queue a job to submit guardian information to Stripe
+      SubmitGuardianToStripeWorker.perform_async(user.id)
     end
 
     def birthday_is_over_minimum_age

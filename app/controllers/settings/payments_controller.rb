@@ -78,7 +78,9 @@ class Settings::PaymentsController < Sellers::BaseController
       flash[:notice] = "Thanks! You're all set."
     end
 
-    render json: { success: true }
+    # Return updated props so the frontend can refresh the guardian verification status
+    updated_props = SettingsPresenter.new(pundit_user:).payments_props(remote_ip: request.remote_ip)
+    render json: { success: true, updated_props: updated_props }
   end
 
   def set_country

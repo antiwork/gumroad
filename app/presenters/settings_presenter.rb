@@ -331,13 +331,13 @@ class SettingsPresenter
         guardian_state: user_compliance_info.guardian_state,
         guardian_zip_code: user_compliance_info.guardian_zip_code,
         guardian_date_of_birth: user_compliance_info.guardian_date_of_birth&.strftime("%Y-%m-%d"),
-        guardian_dob_month: user_compliance_info.guardian_date_of_birth&.month,
-        guardian_dob_day: user_compliance_info.guardian_date_of_birth&.day,
-        guardian_dob_year: user_compliance_info.guardian_date_of_birth&.year,
+        guardian_dob_month: user_compliance_info.guardian_date_of_birth&.month || 0,
+        guardian_dob_day: user_compliance_info.guardian_date_of_birth&.day || 0,
+        guardian_dob_year: user_compliance_info.guardian_date_of_birth&.year || 0,
         guardian_individual_tax_id: user_compliance_info.read_attribute(:guardian_individual_tax_id)&.present? ? "***" : nil,
         guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
         guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
-        guardian_verification_status: user_compliance_info.guardian_verification_status,
+        guardian_verification_status: user_compliance_info.read_attribute(:guardian_verification_status),
       }
     end
 
