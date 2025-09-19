@@ -533,7 +533,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <div>{formatNegativeDollarAmount(payoutPeriodData.paypal_payout_cents)}</div>
           </div>
         ) : null}
-        {payoutPeriodData.stripe_connect_payout_cents ? (
+        {payoutPeriodData.stripe_connect_payout_cents !== 0 ? (
           <div>
             <h4>
               <a href="/help/article/330-stripe-connect" target="_blank" rel="noreferrer">
