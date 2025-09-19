@@ -1,7 +1,6 @@
 import { produce } from "immer";
 import * as React from "react";
 import { createCast, is } from "ts-safe-cast";
-
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
@@ -315,6 +314,19 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     }
   });
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEnteredQuery(e.target.value);
+    dispatch({ type: "set-search", search: { query: e.target.value } });
+  };
+
+  const handleSearchBlur = () => {
+    dispatch({ type: "update-search", search: { query: enteredQuery } });
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
+  };
+
   return (
     <Layout
       selectedTab="purchases"
@@ -392,10 +404,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                         className="search-products"
                         placeholder="Search products"
                         value={enteredQuery}
-                        onChange={(e) => setEnteredQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
-                        }}
+                        onChange={handleSearchChange}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
                       />
                     </div>
                   </div>
