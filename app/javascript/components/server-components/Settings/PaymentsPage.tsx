@@ -913,9 +913,10 @@ const PaymentsPage = (props: Props) => {
         showAlert("Thanks! You're all set.", "success");
 
         if (parsedResponse.guardian_verification_status) {
+          const status = parsedResponse.guardian_verification_status;
           setComplianceInfo((prev) => ({
             ...prev,
-            guardian_verification_status: parsedResponse.guardian_verification_status!,
+            guardian_verification_status: status,
           }));
         } else {
           window.location.reload();
