@@ -89,7 +89,6 @@ class UserComplianceInfoRequest < ApplicationRecord
   def self.handle_guardian_compliance_info(user_compliance_info)
     return unless user_compliance_info.user.under_18?
 
-    # Create compliance requests for guardian fields if they're missing
     guardian_fields = %w[
       guardian_first_name guardian_last_name guardian_email guardian_phone
       guardian_street_address guardian_city guardian_date_of_birth
