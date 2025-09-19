@@ -10,6 +10,7 @@ const GuardianInformationSection = ({
   errorFieldNames,
   isVisible,
   user,
+  states,
 }: {
   complianceInfo: ComplianceInfo;
   updateComplianceInfo: (newComplianceInfo: Partial<ComplianceInfo>) => void;
@@ -17,6 +18,15 @@ const GuardianInformationSection = ({
   errorFieldNames: Set<FormFieldName>;
   isVisible: boolean;
   user: User;
+  states: {
+    us: { code: string; name: string }[];
+    ca: { code: string; name: string }[];
+    au: { code: string; name: string }[];
+    mx: { code: string; name: string }[];
+    ae: { code: string; name: string }[];
+    ir: { code: string; name: string }[];
+    br: { code: string; name: string }[];
+  };
 }) => {
   const uid = React.useId();
 
@@ -123,6 +133,155 @@ const GuardianInformationSection = ({
             aria-invalid={errorFieldNames.has("guardian_city")}
           />
         </fieldset>
+
+        {complianceInfo.country === "US" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-state`}>State</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-state`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "State"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>State</option>
+              {states.us.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : complianceInfo.country === "CA" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-province`}>Province</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-province`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "Province"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>Province</option>
+              {states.ca.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : complianceInfo.country === "AU" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-state`}>State</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-state`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "State"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>State</option>
+              {states.au.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : complianceInfo.country === "MX" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-state`}>State</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-state`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "State"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>State</option>
+              {states.mx.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : complianceInfo.country === "AE" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-province`}>Province</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-province`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "Province"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>Province</option>
+              {states.ae.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : complianceInfo.country === "IE" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-county`}>County</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-county`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "County"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>County</option>
+              {states.ir.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : complianceInfo.country === "BR" ? (
+          <fieldset className={cx({ danger: errorFieldNames.has("guardian_state") })}>
+            <legend>
+              <label htmlFor={`${uid}-guardian-state`}>State</label>
+            </legend>
+            <select
+              id={`${uid}-guardian-state`}
+              required
+              disabled={isFormDisabled}
+              aria-invalid={errorFieldNames.has("guardian_state")}
+              value={complianceInfo.guardian_state || "State"}
+              onChange={(evt) => updateComplianceInfo({ guardian_state: evt.target.value })}
+            >
+              <option disabled>State</option>
+              {states.br.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        ) : null}
 
         <fieldset className={cx({ danger: errorFieldNames.has("guardian_zip_code") })}>
           <legend>

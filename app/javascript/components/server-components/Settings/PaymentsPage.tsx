@@ -1308,6 +1308,7 @@ const PaymentsPage = (props: Props) => {
                 errorFieldNames={errorFieldNames}
                 isVisible
                 user={props.user}
+                states={props.states}
               />
             </section>
           </section>
