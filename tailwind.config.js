@@ -78,6 +78,9 @@ export default {
         DEFAULT: "0.25rem 0.25rem 0 currentColor",
         lg: "0.5rem 0.5rem 0 currentColor",
       },
+      spacing: {
+        "product-page": "75.25rem",
+      },
     },
   },
   plugins: [scopedPreflightPlugin(".scoped-tailwind-preflight")],

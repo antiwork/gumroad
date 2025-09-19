@@ -9,13 +9,25 @@ describe Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies do
   let(:purchase_4) { create(:purchase) }
 
   let!(:purchase_refund_policy_1) do
-    purchase_1.create_purchase_refund_policy!(title: "30-day money back guarantee", max_refund_period_in_days: nil)
+    purchase_1.create_purchase_refund_policy!(
+      title: "30-day money back guarantee",
+      max_refund_period_in_days: nil,
+      created_at: PurchaseRefundPolicy::MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON - 1.day
+    )
   end
   let!(:purchase_refund_policy_2) do
-    purchase_2.create_purchase_refund_policy!(title: "7-day money back guarantee", max_refund_period_in_days: nil)
+    purchase_2.create_purchase_refund_policy!(
+      title: "7-day money back guarantee",
+      max_refund_period_in_days: nil,
+      created_at: PurchaseRefundPolicy::MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON - 1.day
+    )
   end
   let!(:purchase_refund_policy_3) do
-    purchase_3.create_purchase_refund_policy!(title: "No refunds allowed", max_refund_period_in_days: nil)
+    purchase_3.create_purchase_refund_policy!(
+      title: "No refunds allowed",
+      max_refund_period_in_days: nil,
+      created_at: PurchaseRefundPolicy::MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON - 1.day
+    )
   end
   let!(:purchase_refund_policy_already_set) do
     purchase_4.create_purchase_refund_policy!(title: "14-day money back guarantee", max_refund_period_in_days: 14)
@@ -46,14 +58,16 @@ describe Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies do
       let!(:purchase_refund_policy) do
         purchase.create_purchase_refund_policy!(
           title: "30-day money back guarantee",
-          max_refund_period_in_days: 30
+          max_refund_period_in_days: 30,
+          created_at: PurchaseRefundPolicy::MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON - 1.day
         )
       end
       let(:new_purchase) { create(:purchase, link: product) }
       let!(:new_purchase_refund_policy) do
         new_purchase.create_purchase_refund_policy!(
           title: "30-day money back guarantee",
-          max_refund_period_in_days: nil
+          max_refund_period_in_days: nil,
+          created_at: PurchaseRefundPolicy::MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON - 1.day
         )
       end
       let(:service_with_reuse) { described_class.new(max_id: new_purchase_refund_policy.id) }
@@ -82,7 +96,11 @@ describe Onetime::SetMaxAllowedRefundPeriodForPurchaseRefundPolicies do
     context "when title doesn't match any known pattern" do
       let(:purchase_unknown) { create(:purchase) }
       let!(:purchase_refund_policy_unknown) do
-        purchase_unknown.create_purchase_refund_policy!(title: "Custom refund policy", max_refund_period_in_days: nil)
+        purchase_unknown.create_purchase_refund_policy!(
+          title: "Custom refund policy",
+          max_refund_period_in_days: nil,
+          created_at: PurchaseRefundPolicy::MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON - 1.day
+        )
       end
       let(:service_with_unknown) { described_class.new(max_id: purchase_refund_policy_unknown.id) }
 

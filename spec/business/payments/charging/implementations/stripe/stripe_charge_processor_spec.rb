@@ -306,7 +306,8 @@ describe StripeChargeProcessor, :vcr do
       dispute = create(:dispute_formalized, purchase: disputed_purchase)
 
       disputed_purchase.create_purchase_refund_policy!(
-        title: "Refund policy",
+        title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+        max_refund_period_in_days: 30,
         fine_print: "This is the fine print."
       )
 
