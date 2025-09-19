@@ -11,7 +11,6 @@ class AddGuardianFieldsToUserComplianceInfo < ActiveRecord::Migration[7.1]
     add_column :user_compliance_info, :guardian_zip_code, :string
     add_column :user_compliance_info, :guardian_country, :string
     add_column :user_compliance_info, :guardian_date_of_birth, :date
-    add_column :user_compliance_info, :guardian_relationship, :string
     add_column :user_compliance_info, :guardian_individual_tax_id, :binary
     add_column :user_compliance_info, :guardian_stripe_tos_accepted, :boolean, default: false
     add_column :user_compliance_info, :guardian_stripe_processing_tos_accepted, :boolean, default: false

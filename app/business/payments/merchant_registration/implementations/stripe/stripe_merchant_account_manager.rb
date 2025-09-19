@@ -78,7 +78,6 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, person_params)
     end
 
-    # Create guardian person for users under 18
     if user_compliance_info.user.under_18? && user_compliance_info.guardian_verification_required?
       guardian_params = guardian_person_hash(user_compliance_info, passphrase)
       guardian_params.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
@@ -525,8 +524,7 @@ module StripeMerchantAccountManager
       }
     }
 
-    # Add address information using user's country
-    if user_compliance_info.user.country_code.present?
+    if user_compliance_info.country_code.present?
       hash.deep_merge!({
         address: {
           line1: user_compliance_info.guardian_street_address,
@@ -534,22 +532,19 @@ module StripeMerchantAccountManager
           city: user_compliance_info.guardian_city,
           state: user_compliance_info.guardian_state,
           postal_code: user_compliance_info.guardian_zip_code,
-          country: user_compliance_info.user.country_code
+          country: user_compliance_info.country_code
         }
       })
     end
 
-    # Add tax ID information based on user's country
     if guardian_tax_id.present?
-      # For US accounts, only submit the Personal Tax ID if it's longer than four digits
-      if user_compliance_info.user.country_code == Compliance::Countries::USA.alpha2
+      if user_compliance_info.country_code == Compliance::Countries::USA.alpha2
         if guardian_tax_id.length > 4
           hash.deep_merge!(id_number: guardian_tax_id)
         elsif guardian_tax_id.length == 4
           hash.deep_merge!(ssn_last_4: guardian_tax_id.last(4))
         end
       else
-        # For non-US accounts, always submit the Personal Tax ID
         hash.deep_merge!(id_number: guardian_tax_id)
       end
     end
@@ -690,21 +685,17 @@ module StripeMerchantAccountManager
     user = merchant_account.user
     return unless user&.under_18?
 
-    # Check if this is a guardian person (has representative relationship)
     if stripe_person["relationship"] && stripe_person["relationship"]["representative"] == true
       handle_guardian_person_verification_update(user, stripe_person, stripe_previous_attributes)
     end
   end
 
   def self.handle_guardian_person_verification_update(user, stripe_person, stripe_previous_attributes)
-    # Update guardian verification status based on Stripe person verification
     user_compliance_info = user.fetch_or_build_user_compliance_info
 
-    # Check if verification status changed
     if stripe_previous_attributes["verification"] != stripe_person["verification"]
       case stripe_person["verification"]["status"]
       when "verified"
-        # Mark all guardian compliance requests as provided
         guardian_fields = %w[
           guardian_first_name guardian_last_name guardian_email guardian_phone
           guardian_street_address guardian_city guardian_date_of_birth
@@ -714,7 +705,6 @@ module StripeMerchantAccountManager
             .where(field_needed: guardian_fields)
             .find_each(&:mark_provided!)
 
-        # Update verification status
         user_compliance_info.update!(guardian_verification_status: "verified")
 
         Rails.logger.info "Guardian verification completed for user #{user.id}"
