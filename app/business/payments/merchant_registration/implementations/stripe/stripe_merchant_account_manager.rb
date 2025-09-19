@@ -197,6 +197,10 @@ module StripeMerchantAccountManager
     if user_compliance_info.is_business?
       update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
     end
+
+    if user_compliance_info.user.under_18? && user_compliance_info.guardian_fields_complete?
+      update_guardian_person(user, stripe_account, passphrase)
+    end
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
@@ -222,6 +226,31 @@ module StripeMerchantAccountManager
     end
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+  end
+
+  def self.update_guardian_person(user, stripe_account, passphrase)
+    user_compliance_info = user.alive_user_compliance_info
+
+    persons = Stripe::Account.list_persons(stripe_account.id)["data"]
+
+    guardian_person = persons.find do |person|
+      person["relationship"] &&
+      person["relationship"]["representative"] == true &&
+      person["relationship"]["owner"] == false
+    end
+
+    guardian_params = guardian_person_hash(user_compliance_info, passphrase)
+    guardian_params.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
+
+    if guardian_person
+      Stripe::Account.update_person(stripe_account.id, guardian_person.id, guardian_params)
+    else
+      Stripe::Account.create_person(stripe_account.id, guardian_params)
+    end
+  rescue Stripe::StripeError => e
+    Rails.logger.error "Failed to update guardian person for user #{user.id}: #{e.message}"
+    Bugsnag.notify(e)
+    raise
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
