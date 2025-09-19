@@ -108,7 +108,6 @@ export type ComplianceInfo = {
   guardian_city?: string | null;
   guardian_state?: string | null;
   guardian_zip_code?: string | null;
-  guardian_country?: string | null;
   guardian_date_of_birth?: string | null;
   guardian_individual_tax_id?: string | null;
   guardian_stripe_processing_tos_accepted?: boolean;
@@ -227,7 +226,6 @@ export type FormFieldName =
   | "guardian_city"
   | "guardian_state"
   | "guardian_zip_code"
-  | "guardian_country"
   | "guardian_date_of_birth"
   | "guardian_individual_tax_id";
 
@@ -617,7 +615,7 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.guardian_email) {
       markFieldInvalid("guardian_email");
     }
-    if (!validatePhoneNumber(complianceInfo.guardian_phone || null, complianceInfo.guardian_country || null)) {
+    if (!validatePhoneNumber(complianceInfo.guardian_phone || null, props.user.country_code)) {
       markFieldInvalid("guardian_phone");
     }
     if (!complianceInfo.guardian_street_address) {
@@ -626,18 +624,11 @@ const PaymentsPage = (props: Props) => {
     if (!complianceInfo.guardian_city) {
       markFieldInvalid("guardian_city");
     }
-    if (
-      complianceInfo.guardian_country &&
-      complianceInfo.guardian_country in props.states &&
-      !complianceInfo.guardian_state
-    ) {
+    if (props.user.country_code && props.user.country_code in props.states && !complianceInfo.guardian_state) {
       markFieldInvalid("guardian_state");
     }
-    if (!complianceInfo.guardian_zip_code && complianceInfo.guardian_country !== "BW") {
+    if (!complianceInfo.guardian_zip_code && props.user.country_code !== "BW") {
       markFieldInvalid("guardian_zip_code");
-    }
-    if (!complianceInfo.guardian_country) {
-      markFieldInvalid("guardian_country");
     }
     if (!complianceInfo.guardian_date_of_birth) {
       markFieldInvalid("guardian_date_of_birth");
@@ -1198,7 +1189,7 @@ const PaymentsPage = (props: Props) => {
                     isFormDisabled={props.is_form_disabled}
                     states={props.states}
                     errorFieldNames={errorFieldNames}
-                    isVisible={true}
+                    isVisible
                     userCountryCode={props.user.country_code}
                   />
                 ) : null}
