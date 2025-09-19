@@ -280,7 +280,31 @@ class UserComplianceInfo < ApplicationRecord
     return false unless user_under_18?
     return false unless country_code.present?
 
-    country_code.in?(%w[US CA])
+    # Use the same countries that require individual tax ID (same as SettingsPresenter)
+    individual_tax_id_needed_countries = [
+      Compliance::Countries::USA.alpha2,
+      Compliance::Countries::CAN.alpha2,
+      Compliance::Countries::HKG.alpha2,
+      Compliance::Countries::SGP.alpha2,
+      Compliance::Countries::ARE.alpha2,
+      Compliance::Countries::MEX.alpha2,
+      Compliance::Countries::BGD.alpha2,
+      Compliance::Countries::MOZ.alpha2,
+      Compliance::Countries::URY.alpha2,
+      Compliance::Countries::ARG.alpha2,
+      Compliance::Countries::PER.alpha2,
+      Compliance::Countries::CRI.alpha2,
+      Compliance::Countries::CHL.alpha2,
+      Compliance::Countries::COL.alpha2,
+      Compliance::Countries::GTM.alpha2,
+      Compliance::Countries::DOM.alpha2,
+      Compliance::Countries::BOL.alpha2,
+      Compliance::Countries::KAZ.alpha2,
+      Compliance::Countries::PRY.alpha2,
+      Compliance::Countries::PAK.alpha2
+    ]
+
+    country_code.in?(individual_tax_id_needed_countries)
   end
 
   def guardian_verification_required?

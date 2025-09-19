@@ -1307,6 +1307,7 @@ const PaymentsPage = (props: Props) => {
                 isFormDisabled={props.is_form_disabled}
                 errorFieldNames={errorFieldNames}
                 isVisible
+                user={props.user}
               />
             </section>
           </section>

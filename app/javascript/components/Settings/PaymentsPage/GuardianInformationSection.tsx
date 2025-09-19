@@ -9,12 +9,14 @@ const GuardianInformationSection = ({
   isFormDisabled,
   errorFieldNames,
   isVisible,
+  user,
 }: {
   complianceInfo: ComplianceInfo;
   updateComplianceInfo: (newComplianceInfo: Partial<ComplianceInfo>) => void;
   isFormDisabled: boolean;
   errorFieldNames: Set<FormFieldName>;
   isVisible: boolean;
+  user: any;
 }) => {
   const uid = React.useId();
 
@@ -200,21 +202,25 @@ const GuardianInformationSection = ({
         </div>
       </fieldset>
 
-      <fieldset className={cx({ danger: errorFieldNames.has("guardian_individual_tax_id") })}>
-        <legend>
-          <label htmlFor={`${uid}-guardian-ssn`}>Last 4 digits of SSN</label>
-        </legend>
-        <input
-          id={`${uid}-guardian-ssn`}
-          type="text"
-          placeholder="****"
-          maxLength={4}
-          value={complianceInfo.guardian_individual_tax_id || ""}
-          onChange={(e) => updateComplianceInfo({ guardian_individual_tax_id: e.target.value })}
-          disabled={isFormDisabled}
-          aria-invalid={errorFieldNames.has("guardian_individual_tax_id")}
-        />
-      </fieldset>
+      {complianceInfo.country !== null && user.individual_tax_id_needed_countries.includes(complianceInfo.country) ? (
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_individual_tax_id") })}>
+          <legend>
+            <label htmlFor={`${uid}-guardian-ssn`}>
+              {complianceInfo.country === "US" ? "Last 4 digits of SSN" : "Last 4 digits of SIN"}
+            </label>
+          </legend>
+          <input
+            id={`${uid}-guardian-ssn`}
+            type="text"
+            placeholder="****"
+            maxLength={4}
+            value={complianceInfo.guardian_individual_tax_id || ""}
+            onChange={(e) => updateComplianceInfo({ guardian_individual_tax_id: e.target.value })}
+            disabled={isFormDisabled}
+            aria-invalid={errorFieldNames.has("guardian_individual_tax_id")}
+          />
+        </fieldset>
+      ) : null}
 
       <fieldset>
         <legend>
