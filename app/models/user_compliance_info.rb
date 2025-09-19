@@ -282,7 +282,6 @@ class UserComplianceInfo < ApplicationRecord
       return unless birthday.present? && birthday <= 18.years.ago
       return unless saved_change_to_birthday? || new_record?
 
-      # Clear all guardian fields when user becomes 18 or older
       self.guardian_first_name = nil
       self.guardian_last_name = nil
       self.guardian_email = nil
@@ -302,7 +301,6 @@ class UserComplianceInfo < ApplicationRecord
       return unless user_under_18?
       return if read_attribute(:guardian_verification_status) == "verified"
 
-      # Check if any guardian fields have changed
       guardian_fields = %w[
         guardian_first_name guardian_last_name guardian_email guardian_phone
         guardian_street_address guardian_city guardian_state guardian_zip_code
@@ -313,9 +311,7 @@ class UserComplianceInfo < ApplicationRecord
       guardian_fields_changed = guardian_fields.any? { |field| saved_change_to_attribute?(field) }
       return unless guardian_fields_changed
 
-      # Update status based on field completion
       if guardian_fields_complete?
-        # Only set to pending if not already verified
         if read_attribute(:guardian_verification_status) != "verified"
           update_column(:guardian_verification_status, "pending")
         end
