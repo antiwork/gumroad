@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_09_19_085345) do
+ActiveRecord::Schema[7.1].define(version: 2025_09_19_215156) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2442,7 +2442,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_19_085345) do
     t.string "guardian_first_name"
     t.string "guardian_last_name"
     t.date "guardian_date_of_birth"
-    t.string "guardian_relationship"
     t.string "guardian_street_address"
     t.string "guardian_city"
     t.string "guardian_state"
