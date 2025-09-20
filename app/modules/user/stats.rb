@@ -303,6 +303,7 @@ module User::Stats
     failed_payments = payments.failed
       .joins(:balances)
       .where(balances: { id: balance_ids })
+      .unscope(:order)
       .order("payments.created_at ASC")
       .includes(:balances)
       .to_a

@@ -429,5 +429,38 @@ describe PayoutsHelper do
       expect(carried_over_entry[:carried_over_cents]).to eq(10_00)
       expect(carried_over_entry[:carried_over_failed_payout_date]).to eq(payment.payout_period_end_date.strftime("%B #{payment.payout_period_end_date.day.ordinalize}, %Y"))
     end
+
+
+    it("tracks which payment the carried-over balance is from") do
+      user = create(:user)
+      payment = create(:payment, user:, amount_cents: 10_00, processor: PayoutProcessorType::PAYPAL, state: "failed", failure_reason: "PAYPAL 3015", payout_period_end_date: 20.days.ago, created_at: 20.days.ago)
+      merchant_account = create(:merchant_account_paypal, user: user, charge_processor_merchant_id: "B66YJBBNCRW6L")
+      balance = create(:balance, user:, amount_cents: 10_00, date: 20.days.ago, state: "unpaid", merchant_account: merchant_account)
+      payment.balances << balance
+
+      payment2 = create(:payment, user:, amount_cents: 12_00, processor: PayoutProcessorType::PAYPAL, state: "failed", failure_reason: "PAYPAL 3015", payout_period_end_date: 10.days.ago, created_at: 10.days.ago)
+      balance2 = create(:balance, user:, amount_cents: 12_00, date: 10.days.ago, state: "unpaid", merchant_account: merchant_account)
+      payment2.balances << [balance, balance2]
+
+      payout_data = self.payout_period_data(user, payment)
+      expect(payout_data[:failure_reason]).to eq("receiver's account is locked or inactive")
+      expect(payout_data[:carried_over_details].length).to eq(1)
+
+      first_carried_over_entry = payout_data[:carried_over_details].first
+      expect(first_carried_over_entry[:carried_over_cents]).to eq(10_00)
+      expect(first_carried_over_entry[:carried_over_failed_payout_date]).to eq(payment.payout_period_end_date.strftime("%B #{payment.payout_period_end_date.day.ordinalize}, %Y"))
+
+      payout_data = self.payout_period_data(user, payment2)
+      expect(payout_data[:failure_reason]).to eq("receiver's account is locked or inactive")
+      expect(payout_data[:carried_over_details].length).to eq(2)
+
+      first_carried_over_entry = payout_data[:carried_over_details].first
+      expect(first_carried_over_entry[:carried_over_cents]).to eq(10_00)
+      expect(first_carried_over_entry[:carried_over_failed_payout_date]).to eq(payment.payout_period_end_date.strftime("%B #{payment.payout_period_end_date.day.ordinalize}, %Y"))
+
+      second_carried_over_entry = payout_data[:carried_over_details].second
+      expect(second_carried_over_entry[:carried_over_cents]).to eq(12_00)
+      expect(second_carried_over_entry[:carried_over_failed_payout_date]).to eq(payment2.payout_period_end_date.strftime("%B #{payment2.payout_period_end_date.day.ordinalize}, %Y"))
+    end
   end
 end
