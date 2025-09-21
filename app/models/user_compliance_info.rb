@@ -68,7 +68,6 @@ class UserComplianceInfo < ApplicationRecord
 
   after_create_commit :handle_stripe_compliance_info
   after_create_commit :handle_compliance_info_request
-  after_create_commit :handle_guardian_compliance_info_request
   before_save :clear_guardian_info_if_user_is_18_or_older
 
   scope :country, ->(country) { where(country:) }
@@ -279,9 +278,6 @@ class UserComplianceInfo < ApplicationRecord
       UserComplianceInfoRequest.handle_new_user_compliance_info(self)
     end
 
-    def handle_guardian_compliance_info_request
-      UserComplianceInfoRequest.handle_guardian_compliance_info(self)
-    end
 
     def clear_guardian_info_if_user_is_18_or_older
       return unless birthday.present? && birthday <= 18.years.ago
