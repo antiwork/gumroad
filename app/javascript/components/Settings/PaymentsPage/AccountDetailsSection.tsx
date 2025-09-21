@@ -12,6 +12,9 @@ import {
   User,
 } from "$app/components/server-components/Settings/PaymentsPage";
 
+import StateSelector, { getStateLabel } from "./StateSelector";
+import TaxIdInput from "./TaxIdInput";
+
 const AccountDetailsSection = ({
   user,
   complianceInfo,
@@ -312,131 +315,21 @@ const AccountDetailsSection = ({
                 onChange={(evt) => updateComplianceInfo({ business_city: evt.target.value })}
               />
             </fieldset>
-            {complianceInfo.business_country === "US" ? (
+            {complianceInfo.business_country ? (
               <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
                 <legend>
-                  <label htmlFor={`${uid}-business-state`}>State</label>
+                  <label htmlFor={`${uid}-business-state`}>{getStateLabel(complianceInfo.business_country)}</label>
                 </legend>
-                <select
-                  id={`${uid}-business-state`}
+                <StateSelector
+                  country={complianceInfo.business_country}
+                  uid={`${uid}-business`}
+                  value={complianceInfo.business_state}
+                  isFormDisabled={isFormDisabled}
+                  hasError={errorFieldNames.has("business_state")}
+                  onChange={(value) => updateComplianceInfo({ business_state: value })}
                   required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
-                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
-                >
-                  <option disabled>State</option>
-                  {states.us.map((state) => (
-                    <option key={state.code} value={state.code}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-            ) : complianceInfo.business_country === "CA" ? (
-              <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-province`}>Province</label>
-                </legend>
-                <select
-                  id={`${uid}-business-province`}
-                  required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "Province"}
-                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
-                >
-                  <option disabled>Province</option>
-                  {states.ca.map((state) => (
-                    <option key={state.code} value={state.code}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-            ) : complianceInfo.business_country === "AU" ? (
-              <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-state`}>State</label>
-                </legend>
-                <select
-                  id={`${uid}-business-state`}
-                  required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
-                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
-                >
-                  <option disabled>State</option>
-                  {states.au.map((state) => (
-                    <option key={state.code} value={state.code}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-            ) : complianceInfo.business_country === "MX" ? (
-              <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-state`}>State</label>
-                </legend>
-                <select
-                  id={`${uid}-business-state`}
-                  required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "State"}
-                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
-                >
-                  <option disabled>State</option>
-                  {states.mx.map((state) => (
-                    <option key={state.code} value={state.code}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-            ) : complianceInfo.business_country === "AE" ? (
-              <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-state`}>Province</label>
-                </legend>
-                <select
-                  id={`${uid}-business-state`}
-                  required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "Province"}
-                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
-                >
-                  <option disabled>Province</option>
-                  {states.ae.map((state) => (
-                    <option key={state.code} value={state.code}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </fieldset>
-            ) : complianceInfo.business_country === "IE" ? (
-              <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-county`}>County</label>
-                </legend>
-                <select
-                  id={`${uid}-business-county`}
-                  required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_state")}
-                  value={complianceInfo.business_state || "County"}
-                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
-                >
-                  <option disabled>County</option>
-                  {states.ir.map((state) => (
-                    <option key={state.code} value={state.code}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
+                  states={states}
+                />
               </fieldset>
             ) : null}
             <fieldset className={cx({ danger: errorFieldNames.has("business_zip_code") })}>
@@ -835,152 +728,21 @@ const AccountDetailsSection = ({
             onChange={(evt) => updateComplianceInfo({ city: evt.target.value })}
           />
         </fieldset>
-        {complianceInfo.country === "US" ? (
+        {complianceInfo.country ? (
           <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
             <legend>
-              <label htmlFor={`${uid}-creator-state`}>State</label>
+              <label htmlFor={`${uid}-creator-state`}>{getStateLabel(complianceInfo.country)}</label>
             </legend>
-            <select
-              id={`${uid}-creator-state`}
+            <StateSelector
+              country={complianceInfo.country}
+              uid={`${uid}-creator`}
+              value={complianceInfo.state}
+              isFormDisabled={isFormDisabled}
+              hasError={errorFieldNames.has("state")}
+              onChange={(value) => updateComplianceInfo({ state: value })}
               required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>State</option>
-              {states.us.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </fieldset>
-        ) : complianceInfo.country === "CA" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-province`}>Province</label>
-            </legend>
-            <select
-              id={`${uid}-creator-province`}
-              required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "Province"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>Province</option>
-              {states.ca.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </fieldset>
-        ) : complianceInfo.country === "AU" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-state`}>State</label>
-            </legend>
-            <select
-              id={`${uid}-creator-state`}
-              required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>State</option>
-              {states.au.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </fieldset>
-        ) : complianceInfo.country === "MX" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-state`}>State</label>
-            </legend>
-            <select
-              id={`${uid}-creator-state`}
-              required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>State</option>
-              {states.mx.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </fieldset>
-        ) : complianceInfo.country === "AE" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-province`}>Province</label>
-            </legend>
-            <select
-              id={`${uid}-creator-province`}
-              required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "Province"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>Province</option>
-              {states.ae.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </fieldset>
-        ) : complianceInfo.country === "IE" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-county`}>County</label>
-            </legend>
-            <select
-              id={`${uid}-creator-county`}
-              required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "County"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>County</option>
-              {states.ir.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </fieldset>
-        ) : complianceInfo.country === "BR" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-state`}>State</label>
-            </legend>
-            <select
-              id={`${uid}-creator-state`}
-              required
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("state")}
-              value={complianceInfo.state || "State"}
-              onChange={(evt) => updateComplianceInfo({ state: evt.target.value })}
-            >
-              <option disabled>State</option>
-              {states.br.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
+              states={states}
+            />
           </fieldset>
         ) : null}
         <fieldset className={cx({ danger: errorFieldNames.has("zip_code") })}>
@@ -1135,383 +897,17 @@ const AccountDetailsSection = ({
         user.individual_tax_id_needed_countries.includes(complianceInfo.business_country)) ||
       (complianceInfo.country !== null && user.individual_tax_id_needed_countries.includes(complianceInfo.country)) ? (
         <fieldset className={cx({ danger: errorFieldNames.has("individual_tax_id") })}>
-          {complianceInfo.country === "US" ? (
-            user.need_full_ssn ? (
-              <div>
-                <legend>
-                  <label htmlFor={`${uid}-social-security-number-full`}>Social Security Number</label>
-                </legend>
-                <input
-                  id={`${uid}-social-security-number-full`}
-                  type="text"
-                  minLength={9}
-                  maxLength={11}
-                  placeholder={user.individual_tax_id_entered ? "Hidden for security" : "•••-••-••••"}
-                  required
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("individual_tax_id")}
-                  onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-                />
-              </div>
-            ) : (
-              <div>
-                <legend>
-                  <label htmlFor={`${uid}-social-security-number`}>Last 4 digits of SSN</label>
-                </legend>
-                <input
-                  id={`${uid}-social-security-number`}
-                  type="text"
-                  minLength={4}
-                  maxLength={4}
-                  placeholder={user.individual_tax_id_entered ? "Hidden for security" : "••••"}
-                  required
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("individual_tax_id")}
-                  onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-                />
-              </div>
-            )
-          ) : complianceInfo.country === "CA" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-social-insurance-number`}>Social Insurance Number</label>
-              </legend>
-              <input
-                id={`${uid}-social-insurance-number`}
-                type="text"
-                minLength={9}
-                maxLength={9}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "•••••••••"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "CO" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-colombia-id-number`}>Cédula de Ciudadanía (CC)</label>
-              </legend>
-              <input
-                id={`${uid}-colombia-id-number`}
-                type="text"
-                minLength={13}
-                maxLength={13}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "1.123.123.123"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "UY" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-uruguay-id-number`}>Cédula de Identidad (CI)</label>
-              </legend>
-              <input
-                id={`${uid}-uruguay-id-number`}
-                type="text"
-                minLength={11}
-                maxLength={11}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "1.123.123-1"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "HK" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-hong-kong-id-number`}>Hong Kong ID Number</label>
-              </legend>
-              <input
-                id={`${uid}-hong-kong-id-number`}
-                type="text"
-                minLength={8}
-                maxLength={9}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "SG" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-singapore-id-number`}>NRIC number / FIN</label>
-              </legend>
-              <input
-                id={`${uid}-singapore-id-number`}
-                type="text"
-                minLength={9}
-                maxLength={9}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "AE" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-uae-id-number`}>Emirates ID</label>
-              </legend>
-              <input
-                id={`${uid}-uae-id-number`}
-                type="text"
-                minLength={15}
-                maxLength={15}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789123456"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "MX" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-mexico-id-number`}>Personal RFC</label>
-              </legend>
-              <input
-                id={`${uid}-mexico-id-number`}
-                type="text"
-                minLength={13}
-                maxLength={13}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "1234567891234"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "KZ" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-kazakhstan-id-number`}>Individual identification number (IIN)</label>
-              </legend>
-              <input
-                id={`${uid}-kazakhstan-id-number`}
-                type="text"
-                minLength={9}
-                maxLength={12}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "AR" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-argentina-id-number`}>CUIL</label>
-              </legend>
-              <input
-                id={`${uid}-argentina-id-number`}
-                type="text"
-                minLength={13}
-                maxLength={13}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "12-12345678-1"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "PE" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-peru-id-number`}>DNI number</label>
-              </legend>
-              <input
-                id={`${uid}-peru-id-number`}
-                type="text"
-                minLength={10}
-                maxLength={10}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "12345678-9"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "PK" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-snic`}>National Identity Card Number (SNIC or CNIC)</label>
-              </legend>
-              <input
-                id={`${uid}-snic`}
-                type="text"
-                minLength={13}
-                maxLength={13}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "•••••••••"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "CR" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-costa-rica-id-number`}>Tax Identification Number</label>
-              </legend>
-              <input
-                id={`${uid}-costa-rica-id-number`}
-                type="text"
-                minLength={9}
-                maxLength={12}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "1234567890"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "CL" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-chile-id-number`}>Rol Único Tributario (RUT)</label>
-              </legend>
-              <input
-                id={`${uid}-chile-id-number`}
-                type="text"
-                minLength={8}
-                maxLength={9}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "DO" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-dominican-republic-id-number`}>Cédula de identidad y electoral (CIE)</label>
-              </legend>
-              <input
-                id={`${uid}-dominican-republic-id-number`}
-                type="text"
-                minLength={13}
-                maxLength={13}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123-1234567-1"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "BO" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-bolivia-id-number`}>Cédula de Identidad (CI)</label>
-              </legend>
-              <input
-                id={`${uid}-bolivia-id-number`}
-                type="text"
-                minLength={8}
-                maxLength={8}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "12345678"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "PY" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-paraguay-id-number`}>Cédula de Identidad (CI)</label>
-              </legend>
-              <input
-                id={`${uid}-paraguay-id-number`}
-                type="text"
-                minLength={7}
-                maxLength={7}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "1234567"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "BD" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-bangladesh-id-number`}>Personal ID number</label>
-              </legend>
-              <input
-                id={`${uid}-bangladesh-id-number`}
-                type="text"
-                minLength={1}
-                maxLength={20}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "MZ" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-mozambique-id-number`}>Mozambique Taxpayer Single ID Number (NUIT)</label>
-              </legend>
-              <input
-                id={`${uid}-mozambique-id-number`}
-                type="text"
-                minLength={9}
-                maxLength={9}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123456789"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "GT" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-guatemala-id-number`}>Número de Identificación Tributaria (NIT)</label>
-              </legend>
-              <input
-                id={`${uid}-guatemala-id-number`}
-                type="text"
-                minLength={8}
-                maxLength={12}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "1234567-8"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : complianceInfo.country === "BR" ? (
-            <div>
-              <legend>
-                <label htmlFor={`${uid}-brazil-id-number`}>Cadastro de Pessoas Físicas (CPF)</label>
-              </legend>
-              <input
-                id={`${uid}-brazil-id-number`}
-                type="text"
-                minLength={11}
-                maxLength={14}
-                placeholder={user.individual_tax_id_entered ? "Hidden for security" : "123.456.789-00"}
-                required
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
-            </div>
-          ) : null}
+          <TaxIdInput
+            country={complianceInfo.country}
+            uid={uid}
+            value={complianceInfo.individual_tax_id || null}
+            isEntered={user.individual_tax_id_entered}
+            isFormDisabled={isFormDisabled}
+            hasError={errorFieldNames.has("individual_tax_id")}
+            onChange={(value) => updateComplianceInfo({ individual_tax_id: value })}
+            required
+            needFullSsn={user.need_full_ssn}
+          />
         </fieldset>
       ) : null}
     </section>
