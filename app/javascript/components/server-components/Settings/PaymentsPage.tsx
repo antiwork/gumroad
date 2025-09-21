@@ -594,7 +594,6 @@ const PaymentsPage = (props: Props) => {
   };
 
   const isUserUnder18 = () => {
-    // Prioritize current form's birth year over server flag
     if (complianceInfo.dob_year > 0 && complianceInfo.dob_month > 0 && complianceInfo.dob_day > 0) {
       const birthDate = new Date(complianceInfo.dob_year, complianceInfo.dob_month - 1, complianceInfo.dob_day);
       const today = new Date();

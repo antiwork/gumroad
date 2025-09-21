@@ -1,5 +1,7 @@
 import cx from "classnames";
+import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
 import { ComplianceInfo, FormFieldName, User } from "$app/components/server-components/Settings/PaymentsPage";
 
@@ -36,6 +38,15 @@ const GuardianInformationSection = ({
 
   const currentYear = new Date().getFullYear();
 
+  const formatPhoneNumber = (phoneNumber: string, country_code: string | null) => {
+    try {
+      const countryCode: CountryCode = cast(country_code);
+      return parsePhoneNumber(phoneNumber, countryCode).format("E.164");
+    } catch {
+      return phoneNumber;
+    }
+  };
+
   return (
     <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
       <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
@@ -51,6 +62,7 @@ const GuardianInformationSection = ({
             onChange={(e) => updateComplianceInfo({ guardian_first_name: e.target.value })}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("guardian_first_name")}
+            required
           />
           <small>Include middle name if it appears on ID.</small>
         </fieldset>
@@ -67,6 +79,7 @@ const GuardianInformationSection = ({
             onChange={(e) => updateComplianceInfo({ guardian_last_name: e.target.value })}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("guardian_last_name")}
+            required
           />
         </fieldset>
       </div>
@@ -84,6 +97,7 @@ const GuardianInformationSection = ({
             onChange={(e) => updateComplianceInfo({ guardian_email: e.target.value })}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("guardian_email")}
+            required
           />
         </fieldset>
 
@@ -96,9 +110,14 @@ const GuardianInformationSection = ({
             type="tel"
             placeholder="Phone number"
             value={complianceInfo.guardian_phone || ""}
-            onChange={(e) => updateComplianceInfo({ guardian_phone: e.target.value })}
+            onChange={(e) =>
+              updateComplianceInfo({
+                guardian_phone: formatPhoneNumber(e.target.value, complianceInfo.country),
+              })
+            }
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("guardian_phone")}
+            required
           />
         </fieldset>
       </div>
@@ -115,6 +134,7 @@ const GuardianInformationSection = ({
           onChange={(e) => updateComplianceInfo({ guardian_street_address: e.target.value })}
           disabled={isFormDisabled}
           aria-invalid={errorFieldNames.has("guardian_street_address")}
+          required
         />
       </fieldset>
 
@@ -131,6 +151,7 @@ const GuardianInformationSection = ({
             onChange={(e) => updateComplianceInfo({ guardian_city: e.target.value })}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("guardian_city")}
+            required
           />
         </fieldset>
 
@@ -295,6 +316,7 @@ const GuardianInformationSection = ({
             onChange={(e) => updateComplianceInfo({ guardian_zip_code: e.target.value })}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("guardian_zip_code")}
+            required
           />
         </fieldset>
       </div>
@@ -363,21 +385,383 @@ const GuardianInformationSection = ({
 
       {complianceInfo.country !== null && user.individual_tax_id_needed_countries.includes(complianceInfo.country) ? (
         <fieldset className={cx({ danger: errorFieldNames.has("guardian_tax_id") })}>
-          <legend>
-            <label htmlFor={`${uid}-guardian-ssn`}>
-              {complianceInfo.country === "US" ? "Last 4 digits of SSN" : "Last 4 digits of SIN"}
-            </label>
-          </legend>
-          <input
-            id={`${uid}-guardian-ssn`}
-            type="text"
-            placeholder="****"
-            maxLength={4}
-            value={complianceInfo.guardian_tax_id || ""}
-            onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
-            disabled={isFormDisabled}
-            aria-invalid={errorFieldNames.has("guardian_tax_id")}
-          />
+          {complianceInfo.country === "US" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-social-security-number`}>Last 4 digits of SSN</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-social-security-number`}
+                type="text"
+                minLength={4}
+                maxLength={4}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "••••"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "CA" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-social-insurance-number`}>Social Insurance Number</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-social-insurance-number`}
+                type="text"
+                minLength={9}
+                maxLength={9}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "•••••••••"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "CO" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-colombia-id-number`}>Cédula de Ciudadanía (CC)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-colombia-id-number`}
+                type="text"
+                minLength={13}
+                maxLength={13}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "1.123.123.123"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "UY" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-uruguay-id-number`}>Cédula de Identidad (CI)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-uruguay-id-number`}
+                type="text"
+                minLength={11}
+                maxLength={11}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "1.123.123-1"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "HK" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-hong-kong-id-number`}>Hong Kong ID Number</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-hong-kong-id-number`}
+                type="text"
+                minLength={8}
+                maxLength={9}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "SG" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-singapore-id-number`}>NRIC number / FIN</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-singapore-id-number`}
+                type="text"
+                minLength={9}
+                maxLength={9}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "AE" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-uae-id-number`}>Emirates ID</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-uae-id-number`}
+                type="text"
+                minLength={15}
+                maxLength={15}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789123456"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "MX" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-mexico-id-number`}>Personal RFC</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-mexico-id-number`}
+                type="text"
+                minLength={13}
+                maxLength={13}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "1234567891234"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "KZ" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-kazakhstan-id-number`}>Individual identification number (IIN)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-kazakhstan-id-number`}
+                type="text"
+                minLength={9}
+                maxLength={12}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "AR" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-argentina-id-number`}>CUIL</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-argentina-id-number`}
+                type="text"
+                minLength={13}
+                maxLength={13}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "12-12345678-1"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "PE" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-peru-id-number`}>DNI number</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-peru-id-number`}
+                type="text"
+                minLength={10}
+                maxLength={10}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "12345678-9"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "PK" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-snic`}>National Identity Card Number (SNIC or CNIC)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-snic`}
+                type="text"
+                minLength={13}
+                maxLength={13}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "•••••••••"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "CR" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-costa-rica-id-number`}>Tax Identification Number</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-costa-rica-id-number`}
+                type="text"
+                minLength={9}
+                maxLength={12}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "1234567890"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "CL" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-chile-id-number`}>Rol Único Tributario (RUT)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-chile-id-number`}
+                type="text"
+                minLength={8}
+                maxLength={9}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "DO" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-dominican-republic-id-number`}>
+                  Cédula de identidad y electoral (CIE)
+                </label>
+              </legend>
+              <input
+                id={`${uid}-guardian-dominican-republic-id-number`}
+                type="text"
+                minLength={13}
+                maxLength={13}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123-1234567-1"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "BO" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-bolivia-id-number`}>Cédula de Identidad (CI)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-bolivia-id-number`}
+                type="text"
+                minLength={8}
+                maxLength={8}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "12345678"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "PY" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-paraguay-id-number`}>Cédula de Identidad (CI)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-paraguay-id-number`}
+                type="text"
+                minLength={7}
+                maxLength={7}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "1234567"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "BD" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-bangladesh-id-number`}>Personal ID number</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-bangladesh-id-number`}
+                type="text"
+                minLength={1}
+                maxLength={20}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "MZ" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-mozambique-id-number`}>
+                  Mozambique Taxpayer Single ID Number (NUIT)
+                </label>
+              </legend>
+              <input
+                id={`${uid}-guardian-mozambique-id-number`}
+                type="text"
+                minLength={9}
+                maxLength={9}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123456789"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "GT" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-guatemala-id-number`}>Número de Identificación Tributaria (NIT)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-guatemala-id-number`}
+                type="text"
+                minLength={8}
+                maxLength={12}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "1234567-8"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : complianceInfo.country === "BR" ? (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-brazil-id-number`}>Cadastro de Pessoas Físicas (CPF)</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-brazil-id-number`}
+                type="text"
+                minLength={11}
+                maxLength={14}
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "123.456.789-00"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          ) : (
+            <div>
+              <legend>
+                <label htmlFor={`${uid}-guardian-tax-id`}>Tax ID</label>
+              </legend>
+              <input
+                id={`${uid}-guardian-tax-id`}
+                type="text"
+                placeholder={complianceInfo.guardian_tax_id ? "Hidden for security" : "•••••••••"}
+                required
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("guardian_tax_id")}
+                onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
+              />
+            </div>
+          )}
         </fieldset>
       ) : null}
 
