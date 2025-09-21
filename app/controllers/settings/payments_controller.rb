@@ -80,8 +80,7 @@ class Settings::PaymentsController < Sellers::BaseController
 
     compliance_info = current_seller.fetch_or_build_user_compliance_info
     render json: {
-      success: true,
-      guardian_verification_status: compliance_info.guardian_verification_status
+      success: true
     }
   end
 

@@ -403,7 +403,6 @@ RSpec.describe UserComplianceInfo, type: :model do
           guardian_individual_tax_id: "1234",
           guardian_stripe_tos_accepted: true,
           guardian_stripe_processing_tos_accepted: true,
-          guardian_verification_status: "pending"
         )
 
         # Simulate user turning 18
@@ -423,7 +422,6 @@ RSpec.describe UserComplianceInfo, type: :model do
         expect(user_compliance_info.guardian_individual_tax_id.decrypt(nil)).to eq("*encrypted*")
         expect(user_compliance_info.guardian_stripe_tos_accepted).to be false
         expect(user_compliance_info.guardian_stripe_processing_tos_accepted).to be false
-        expect(user_compliance_info.guardian_verification_status).to eq("not_required")
       end
 
       it "does not clear guardian info when user is still under 18" do
@@ -440,42 +438,6 @@ RSpec.describe UserComplianceInfo, type: :model do
       end
     end
 
-    describe "update_guardian_verification_status" do
-      it "updates status to pending when guardian fields are complete" do
-        user_compliance_info.update!(
-          guardian_first_name: "John",
-          guardian_last_name: "Doe",
-          guardian_email: "john@example.com",
-          guardian_phone: "+1234567890",
-          guardian_street_address: "123 Main St",
-          guardian_city: "Anytown",
-          guardian_date_of_birth: 30.years.ago,
-          guardian_stripe_tos_accepted: true,
-          guardian_stripe_processing_tos_accepted: true
-        )
-
-        expect(user_compliance_info.guardian_verification_status).to eq("pending")
-      end
-
-      it "updates status to incomplete when guardian fields are not complete" do
-        # Use update_column to bypass validations and simulate incomplete data
-        user_compliance_info.update_column(:guardian_email, nil)
-        user_compliance_info.update_column(:guardian_phone, nil)
-
-        # Trigger the callback that updates verification status
-        user_compliance_info.send(:update_guardian_verification_status)
-
-        expect(user_compliance_info.guardian_verification_status).to eq("incomplete")
-      end
-
-      it "does not update status when user is 18 or older" do
-        adult_user = create(:user)
-        adult_compliance_info = create(:user_compliance_info, user: adult_user, birthday: 20.years.ago, country: "United States")
-
-        adult_compliance_info.update!(guardian_first_name: "John")
-        expect(adult_compliance_info.guardian_verification_status).to eq("not_required")
-      end
-    end
   end
 end
 

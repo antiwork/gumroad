@@ -113,7 +113,6 @@ export type ComplianceInfo = {
   guardian_individual_tax_id?: string | null;
   guardian_stripe_processing_tos_accepted?: boolean;
   guardian_stripe_tos_accepted?: boolean;
-  guardian_verification_status?: string;
 };
 
 type Props = {
@@ -943,21 +942,12 @@ const PaymentsPage = (props: Props) => {
       });
 
       const parsedResponse = cast<
-        | { success: true; guardian_verification_status?: string }
-        | { success: false; error_message: string; error_code?: string | null }
+        { success: true } | { success: false; error_message: string; error_code?: string | null }
       >(await response.json());
       if (parsedResponse.success) {
         showAlert("Thanks! You're all set.", "success");
 
-        if (parsedResponse.guardian_verification_status) {
-          const status = parsedResponse.guardian_verification_status;
-          setComplianceInfo((prev) => ({
-            ...prev,
-            guardian_verification_status: status,
-          }));
-        } else {
-          window.location.reload();
-        }
+        window.location.reload();
       } else {
         setErrorMessage({ message: parsedResponse.error_message, code: parsedResponse.error_code ?? null });
       }
@@ -1056,12 +1046,10 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
-          ) : isUserUnder18() &&
-            selectedPayoutMethod !== "stripe" &&
-            complianceInfo.guardian_verification_status === "pending" ? (
+          ) : isUserUnder18() && selectedPayoutMethod !== "stripe" ? (
             <div role="status" className="info">
               <div>
-                <strong>Stripe is verifying your information.</strong> You'll get an email once the verification is
+                <strong>We are verifying your information.</strong> You'll get an email once the verification is
                 complete. If additional information is needed, we'll contact your legal guardian directly.
               </div>
             </div>

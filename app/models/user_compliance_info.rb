@@ -22,7 +22,6 @@ class UserComplianceInfo < ApplicationRecord
   attr_mutable :guardian_individual_tax_id
   attr_mutable :guardian_stripe_tos_accepted
   attr_mutable :guardian_stripe_processing_tos_accepted
-  attr_mutable :guardian_verification_status
   attr_mutable :birthday
 
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_email, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
@@ -71,7 +70,6 @@ class UserComplianceInfo < ApplicationRecord
   after_create_commit :handle_compliance_info_request
   after_create_commit :handle_guardian_compliance_info_request
   before_save :clear_guardian_info_if_user_is_18_or_older
-  after_save :update_guardian_verification_status
 
   scope :country, ->(country) { where(country:) }
 
@@ -211,16 +209,6 @@ class UserComplianceInfo < ApplicationRecord
   end
 
 
-  def guardian_verification_status
-    return 'not_required' unless user_under_18?
-
-    status = read_attribute(:guardian_verification_status)
-    return status if status.present?
-
-    return 'incomplete' unless guardian_fields_complete?
-
-    'pending'
-  end
 
   def guardian_fields_complete?
     return false unless user_under_18?
@@ -311,31 +299,8 @@ class UserComplianceInfo < ApplicationRecord
       self.guardian_individual_tax_id = nil
       self.guardian_stripe_tos_accepted = false
       self.guardian_stripe_processing_tos_accepted = false
-      self.guardian_verification_status = "not_required"
     end
 
-    def update_guardian_verification_status
-      return unless user_under_18?
-      return if read_attribute(:guardian_verification_status) == "verified"
-
-      guardian_fields = %w[
-        guardian_first_name guardian_last_name guardian_email guardian_phone
-        guardian_street_address guardian_city guardian_state guardian_zip_code
-        guardian_date_of_birth guardian_individual_tax_id guardian_stripe_tos_accepted
-        guardian_stripe_processing_tos_accepted
-      ]
-
-      guardian_fields_changed = guardian_fields.any? { |field| saved_change_to_attribute?(field) }
-      return unless guardian_fields_changed
-
-      if guardian_fields_complete?
-        if read_attribute(:guardian_verification_status) != "verified"
-          update_column(:guardian_verification_status, "pending")
-        end
-      else
-        update_column(:guardian_verification_status, "incomplete")
-      end
-    end
 
     def birthday_is_over_minimum_age
       errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago

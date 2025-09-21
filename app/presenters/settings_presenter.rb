@@ -318,7 +318,6 @@ class SettingsPresenter
         guardian_individual_tax_id: user_compliance_info.guardian_individual_tax_id&.present? ? "***" : nil,
         guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
         guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
-        guardian_verification_status: user_compliance_info.guardian_verification_status,
       }
     end
 

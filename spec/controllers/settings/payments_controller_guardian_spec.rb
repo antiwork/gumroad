@@ -65,7 +65,6 @@ RSpec.describe Settings::PaymentsController, type: :controller do
           guardian_individual_tax_id: user_compliance_info.guardian_individual_tax_id&.present? ? "***" : nil,
           guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
           guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
-          guardian_verification_status: user_compliance_info.guardian_verification_status
         )
       end
 
@@ -112,8 +111,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
           expect(response).to be_successful
           expect(JSON.parse(response.body)).to include(
-            "success" => true,
-            "guardian_verification_status" => "pending"
+            "success" => true
           )
 
           # The main functionality is that the controller returns a successful response
@@ -125,8 +123,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
           expect(response).to be_successful
           expect(JSON.parse(response.body)).to include(
-            "success" => true,
-            "guardian_verification_status" => "pending"
+            "success" => true
           )
         end
 
@@ -140,8 +137,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
           expect(response).to be_successful
           expect(JSON.parse(response.body)).to include(
-            "success" => true,
-            "guardian_verification_status" => "pending"
+            "success" => true
           )
         end
       end
@@ -180,8 +176,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
           expect(response).to be_successful
           expect(JSON.parse(response.body)).to include(
-            "success" => true,
-            "guardian_verification_status" => "pending"
+            "success" => true
           )
         end
       end
@@ -255,8 +250,7 @@ RSpec.describe Settings::PaymentsController, type: :controller do
 
           expect(response).to be_successful
           expect(JSON.parse(response.body)).to include(
-            "success" => true,
-            "guardian_verification_status" => "not_required"
+            "success" => true
           )
         end
       end
