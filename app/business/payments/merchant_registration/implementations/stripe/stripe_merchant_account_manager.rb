@@ -78,7 +78,6 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, person_params)
     end
 
-
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
     # It is a property on the `person` entity associated with the Stripe::Account.
     # Ref: https://stripe.com/docs/api/persons/object#person_object-full_name_aliases
@@ -192,7 +191,6 @@ module StripeMerchantAccountManager
     if user_compliance_info.is_business?
       update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
     end
-
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
@@ -219,7 +217,6 @@ module StripeMerchantAccountManager
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
   end
-
 
   def self.get_diff_attributes(current_attributes, last_attributes)
     # Stripe will error if we send unchanged data for locked fields of a verified user.
@@ -310,7 +307,7 @@ module StripeMerchantAccountManager
     # It's really important we don't have two merchant accounts per user, so we do this check on the master database
     # to ensure we're looking at the latest data.
     ActiveRecord::Base.connection.stick_to_primary!
-    user.stripe_connect_account.present?
+    user.stripe_account.present?
   end
 
   private_class_method
@@ -422,10 +419,7 @@ module StripeMerchantAccountManager
   private_class_method
   def self.person_hash(user_compliance_info, passphrase)
     if user_compliance_info
-      personal_tax_id = nil
-      if user_compliance_info.individual_tax_id.present?
-        personal_tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
-      end
+      personal_tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
 
       hash = {
         first_name: user_compliance_info.first_name,
@@ -497,7 +491,6 @@ module StripeMerchantAccountManager
     end
   end
 
-
   def self.company_hash(user_compliance_info, passphrase)
     return unless user_compliance_info.present?
 
@@ -567,9 +560,6 @@ module StripeMerchantAccountManager
       handle_stripe_event_account_deauthorized(stripe_event)
     when "capability.updated"
       handle_stripe_event_capability_updated(stripe_event)
-    when "person.created", "person.updated"
-      handle_stripe_event_person_updated(stripe_event)
-    end
   end
 
   def self.handle_stripe_event_account_deauthorized(stripe_event)
@@ -615,24 +605,6 @@ module StripeMerchantAccountManager
     stripe_account = Stripe::Account.retrieve(stripe_account_id)
     handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)
   end
-
-  def self.handle_stripe_event_person_updated(stripe_event)
-    stripe_event_id = stripe_event["id"]
-    stripe_person = stripe_event["data"]["object"]
-    stripe_previous_attributes = stripe_event["data"]["previous_attributes"] || {}
-    raise "Stripe Event #{stripe_event_id} does not contain a 'person' object." if stripe_person["object"] != "person"
-
-    stripe_account_id = stripe_person["account"]
-    merchant_account = MerchantAccount.where(charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                                             charge_processor_merchant_id: stripe_account_id)
-                                      .alive.charge_processor_alive.last
-    return unless merchant_account
-
-    user = merchant_account.user
-    return unless user
-
-  end
-
 
   def self.handle_stripe_event_account_updated(stripe_event)
     stripe_event_id = stripe_event["id"]

@@ -78,10 +78,7 @@ class Settings::PaymentsController < Sellers::BaseController
       flash[:notice] = "Thanks! You're all set."
     end
 
-    compliance_info = current_seller.fetch_or_build_user_compliance_info
-    render json: {
-      success: true
-    }
+    render json: { success: true }
   end
 
   def set_country
