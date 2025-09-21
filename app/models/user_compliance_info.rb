@@ -8,21 +8,6 @@ class UserComplianceInfo < ApplicationRecord
   include UserComplianceInfo::BusinessTypes
   include JsonData
 
-  # Guardian fields need to be mutable for updates
-  attr_mutable :guardian_first_name
-  attr_mutable :guardian_last_name
-  attr_mutable :guardian_email
-  attr_mutable :guardian_phone
-  attr_mutable :guardian_street_address
-  attr_mutable :guardian_city
-  attr_mutable :guardian_state
-  attr_mutable :guardian_zip_code
-  attr_mutable :guardian_country
-  attr_mutable :guardian_date_of_birth
-  attr_mutable :guardian_individual_tax_id
-  attr_mutable :guardian_stripe_tos_accepted
-  attr_mutable :guardian_stripe_processing_tos_accepted
-  attr_mutable :birthday
 
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_email, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
 
@@ -31,21 +16,6 @@ class UserComplianceInfo < ApplicationRecord
   belongs_to :user, optional: true
   validates_presence_of :user
 
-  validates :guardian_first_name, presence: true, if: :user_under_18?
-  validates :guardian_last_name, presence: true, if: :user_under_18?
-  validates :guardian_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }, if: :user_under_18?
-  validates :guardian_phone, presence: true, if: :user_under_18?
-  validates :guardian_street_address, presence: true, if: :user_under_18?
-  validates :guardian_city, presence: true, if: :user_under_18?
-  validates :guardian_state, presence: true, if: :guardian_state_required?
-  validates :guardian_zip_code, presence: true, if: :guardian_zip_code_required?
-  validates :guardian_date_of_birth, presence: true, if: :user_under_18?
-  validates :guardian_individual_tax_id, presence: true, if: :guardian_tax_id_required?
-  validates :guardian_stripe_tos_accepted, acceptance: true, if: :user_under_18?
-  validates :guardian_stripe_processing_tos_accepted, acceptance: true, if: :user_under_18?
-
-  validate :guardian_date_of_birth_must_be_valid, if: :user_under_18?
-  validate :guardian_must_be_18_or_older, if: :user_under_18?
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -217,56 +187,13 @@ class UserComplianceInfo < ApplicationRecord
 
     return false if guardian_date_of_birth.blank?
 
-    return false if guardian_state_required? && guardian_state.blank?
-    return false if guardian_zip_code_required? && guardian_zip_code.blank?
-    return false if guardian_tax_id_required? && guardian_individual_tax_id.blank?
-
     true
   end
 
-  def guardian_state_required?
-    return false unless user_under_18?
-    return false unless country_code.present?
 
-    country_code.in?(%w[US CA AU MX AE IR BR])
-  end
-
-  def guardian_zip_code_required?
-    return false unless user_under_18?
-    return false unless country_code.present?
-
-    country_code != "BW"
-  end
-
-  def guardian_tax_id_required?
-    return false unless user_under_18?
-    return false unless country_code.present?
-
-    country_code.in?(User::Compliance::INDIVIDUAL_TAX_ID_NEEDED_COUNTRIES)
-  end
 
   private
 
-  def guardian_date_of_birth_must_be_valid
-    return unless guardian_date_of_birth.present?
-
-    unless guardian_date_of_birth.is_a?(Date)
-      errors.add(:guardian_date_of_birth, "must be a valid date")
-      return
-    end
-
-    if guardian_date_of_birth > Date.current
-      errors.add(:guardian_date_of_birth, "cannot be in the future")
-    end
-  end
-
-  def guardian_must_be_18_or_older
-    return unless guardian_date_of_birth.present? && guardian_date_of_birth.is_a?(Date)
-
-    if guardian_date_of_birth > 18.years.ago
-      errors.add(:guardian_date_of_birth, "guardian must be 18 years or older")
-    end
-  end
 
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create
