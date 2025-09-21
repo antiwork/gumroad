@@ -8,14 +8,12 @@ class UserComplianceInfo < ApplicationRecord
   include UserComplianceInfo::BusinessTypes
   include JsonData
 
-
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_email, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
 
   belongs_to :user, optional: true
   validates_presence_of :user
-
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -170,7 +168,6 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_tax_id : individual_tax_id
   end
 
-
   def user_under_18?
     return false unless birthday.present?
 
@@ -190,11 +187,7 @@ class UserComplianceInfo < ApplicationRecord
     true
   end
 
-
-
   private
-
-
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create
     end
@@ -202,7 +195,6 @@ class UserComplianceInfo < ApplicationRecord
     def handle_compliance_info_request
       UserComplianceInfoRequest.handle_new_user_compliance_info(self)
     end
-
 
     def clear_guardian_info_if_user_is_18_or_older
       return unless birthday.present? && birthday <= 18.years.ago
