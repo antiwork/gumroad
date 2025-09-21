@@ -65,7 +65,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
           </Button>
         }
       >
-        <div className="paragraphs" onClick={(e) => e.stopPropagation()}>
+        <div className="paragraphs">
           <fieldset className={cx({ danger: !!error })}>
             <legend>
               <label htmlFor={`${uid}country`}>Country</label>

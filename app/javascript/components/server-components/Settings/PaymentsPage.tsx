@@ -1046,13 +1046,6 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
-          ) : isUserUnder18() && selectedPayoutMethod !== "stripe" ? (
-            <div role="status" className="info">
-              <div>
-                <strong>We are verifying your information.</strong> You'll get an email once the verification is
-                complete. If additional information is needed, we'll contact your legal guardian directly.
-              </div>
-            </div>
           ) : isUserUnder18() && selectedPayoutMethod !== "stripe" && !hasGuardianDetails() ? (
             <div role="status" className="warning">
               <div>

@@ -285,7 +285,7 @@ class UserComplianceInfo < ApplicationRecord
 
     def clear_guardian_info_if_user_is_18_or_older
       return unless birthday.present? && birthday <= 18.years.ago
-      return unless saved_change_to_birthday?
+      return unless saved_change_to_birthday? || birthday_changed?
 
       self.guardian_first_name = nil
       self.guardian_last_name = nil
@@ -300,7 +300,6 @@ class UserComplianceInfo < ApplicationRecord
       self.guardian_stripe_tos_accepted = false
       self.guardian_stripe_processing_tos_accepted = false
     end
-
 
     def birthday_is_over_minimum_age
       errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
