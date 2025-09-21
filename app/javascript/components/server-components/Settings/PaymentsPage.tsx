@@ -285,45 +285,6 @@ const PaymentsPage = (props: Props) => {
       setShowUpdateCountryConfirmationModal(true);
     }
 
-    // Check if user is becoming 18+ and clear guardian fields
-    const updatedInfo = { ...complianceInfo, ...newComplianceInfo };
-
-    const willBe18Plus =
-      updatedInfo.dob_year > 0 &&
-      updatedInfo.dob_month > 0 &&
-      updatedInfo.dob_day > 0 &&
-      (() => {
-        const birthDate = new Date(updatedInfo.dob_year, updatedInfo.dob_month - 1, updatedInfo.dob_day);
-        const today = new Date();
-        const age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-          return age - 1 >= 18;
-        }
-        return age >= 18;
-      })();
-
-    if (willBe18Plus) {
-      // Clear guardian fields when user becomes 18+
-      newComplianceInfo = {
-        ...newComplianceInfo,
-        guardian_first_name: null,
-        guardian_last_name: null,
-        guardian_email: null,
-        guardian_phone: null,
-        guardian_street_address: null,
-        guardian_city: null,
-        guardian_state: null,
-        guardian_zip_code: null,
-        guardian_dob_month: 0,
-        guardian_dob_day: 0,
-        guardian_dob_year: 0,
-        guardian_tax_id: null,
-        guardian_stripe_tos_accepted: false,
-        guardian_stripe_processing_tos_accepted: false,
-      };
-    }
-
     setComplianceInfo((prevComplianceInfo) => ({ ...prevComplianceInfo, ...newComplianceInfo }));
     setErrorFieldNames(new Set());
   };
@@ -665,7 +626,7 @@ const PaymentsPage = (props: Props) => {
 
     const hasTaxIdIfRequired = !(
       complianceInfo.country !== null &&
-      props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
+      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
       !props.user.individual_tax_id_entered &&
       !complianceInfo.guardian_tax_id
     );
@@ -746,7 +707,7 @@ const PaymentsPage = (props: Props) => {
     }
     if (
       complianceInfo.country !== null &&
-      props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
+      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
       !props.user.individual_tax_id_entered &&
       !complianceInfo.guardian_tax_id
     ) {
@@ -806,7 +767,7 @@ const PaymentsPage = (props: Props) => {
     }
     if (
       complianceInfo.country !== null &&
-      props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
+      complianceInfo.country in props.user.individual_tax_id_needed_countries &&
       !props.user.individual_tax_id_entered &&
       !complianceInfo.individual_tax_id
     ) {
