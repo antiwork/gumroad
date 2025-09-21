@@ -560,6 +560,7 @@ module StripeMerchantAccountManager
       handle_stripe_event_account_deauthorized(stripe_event)
     when "capability.updated"
       handle_stripe_event_capability_updated(stripe_event)
+    end
   end
 
   def self.handle_stripe_event_account_deauthorized(stripe_event)
