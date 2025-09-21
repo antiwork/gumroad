@@ -2433,7 +2433,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_19_215156) do
     t.string "guardian_zip_code"
     t.string "guardian_country"
     t.string "guardian_phone"
-    t.binary "guardian_individual_tax_id"
+    t.binary "guardian_tax_id"
     t.boolean "guardian_stripe_processing_tos_accepted", default: false
     t.boolean "guardian_stripe_tos_accepted", default: false
     t.string "guardian_email"

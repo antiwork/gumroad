@@ -334,7 +334,7 @@ class SettingsPresenter
         guardian_dob_month: user_compliance_info.guardian_date_of_birth&.month || 0,
         guardian_dob_day: user_compliance_info.guardian_date_of_birth&.day || 0,
         guardian_dob_year: user_compliance_info.guardian_date_of_birth&.year || 0,
-        guardian_individual_tax_id: user_compliance_info.guardian_individual_tax_id&.present? ? "***" : nil,
+        guardian_tax_id: user_compliance_info.guardian_tax_id&.present? ? "***" : nil,
         guardian_stripe_tos_accepted: user_compliance_info.guardian_stripe_tos_accepted,
         guardian_stripe_processing_tos_accepted: user_compliance_info.guardian_stripe_processing_tos_accepted,
       }

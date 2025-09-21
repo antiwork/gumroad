@@ -25,7 +25,7 @@ class UserComplianceInfo < ApplicationRecord
                           public_key: OpenSSL::PKey.read(GlobalConfig.get("STRONGBOX_GENERAL"),
                                                          GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
                           private_key: GlobalConfig.get("STRONGBOX_GENERAL")
-  encrypt_with_public_key :guardian_individual_tax_id,
+  encrypt_with_public_key :guardian_tax_id,
                           symmetric: :never,
                           public_key: OpenSSL::PKey.read(GlobalConfig.get("STRONGBOX_GENERAL"),
                                                          GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).public_key,
@@ -209,7 +209,7 @@ class UserComplianceInfo < ApplicationRecord
       self.guardian_state = nil
       self.guardian_zip_code = nil
       self.guardian_date_of_birth = nil
-      self.guardian_individual_tax_id = nil
+      self.guardian_tax_id = nil
       self.guardian_stripe_tos_accepted = false
       self.guardian_stripe_processing_tos_accepted = false
     end

@@ -362,7 +362,7 @@ const GuardianInformationSection = ({
       </fieldset>
 
       {complianceInfo.country !== null && user.individual_tax_id_needed_countries.includes(complianceInfo.country) ? (
-        <fieldset className={cx({ danger: errorFieldNames.has("guardian_individual_tax_id") })}>
+        <fieldset className={cx({ danger: errorFieldNames.has("guardian_tax_id") })}>
           <legend>
             <label htmlFor={`${uid}-guardian-ssn`}>
               {complianceInfo.country === "US" ? "Last 4 digits of SSN" : "Last 4 digits of SIN"}
@@ -373,10 +373,10 @@ const GuardianInformationSection = ({
             type="text"
             placeholder="****"
             maxLength={4}
-            value={complianceInfo.guardian_individual_tax_id || ""}
-            onChange={(e) => updateComplianceInfo({ guardian_individual_tax_id: e.target.value })}
+            value={complianceInfo.guardian_tax_id || ""}
+            onChange={(e) => updateComplianceInfo({ guardian_tax_id: e.target.value })}
             disabled={isFormDisabled}
-            aria-invalid={errorFieldNames.has("guardian_individual_tax_id")}
+            aria-invalid={errorFieldNames.has("guardian_tax_id")}
           />
         </fieldset>
       ) : null}

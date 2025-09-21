@@ -110,7 +110,7 @@ export type ComplianceInfo = {
   guardian_dob_month?: number;
   guardian_dob_day?: number;
   guardian_dob_year?: number;
-  guardian_individual_tax_id?: string | null;
+  guardian_tax_id?: string | null;
   guardian_stripe_processing_tos_accepted?: boolean;
   guardian_stripe_tos_accepted?: boolean;
 };
@@ -229,7 +229,7 @@ export type FormFieldName =
   | "guardian_dob_month"
   | "guardian_dob_day"
   | "guardian_dob_year"
-  | "guardian_individual_tax_id";
+  | "guardian_tax_id";
 
 export type ErrorMessageInfo = {
   message: string;
@@ -318,7 +318,7 @@ const PaymentsPage = (props: Props) => {
         guardian_dob_month: 0,
         guardian_dob_day: 0,
         guardian_dob_year: 0,
-        guardian_individual_tax_id: null,
+        guardian_tax_id: null,
         guardian_stripe_tos_accepted: false,
         guardian_stripe_processing_tos_accepted: false,
       };
@@ -667,7 +667,7 @@ const PaymentsPage = (props: Props) => {
       complianceInfo.country !== null &&
       props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
       !props.user.individual_tax_id_entered &&
-      !complianceInfo.guardian_individual_tax_id
+      !complianceInfo.guardian_tax_id
     );
 
     return hasRequiredFields && hasTaxIdIfRequired;
@@ -748,9 +748,9 @@ const PaymentsPage = (props: Props) => {
       complianceInfo.country !== null &&
       props.user.individual_tax_id_needed_countries.includes(complianceInfo.country) &&
       !props.user.individual_tax_id_entered &&
-      !complianceInfo.guardian_individual_tax_id
+      !complianceInfo.guardian_tax_id
     ) {
-      markFieldInvalid("guardian_individual_tax_id");
+      markFieldInvalid("guardian_tax_id");
     }
   };
 

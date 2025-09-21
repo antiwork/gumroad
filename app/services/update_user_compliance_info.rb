@@ -50,20 +50,18 @@ class UpdateUserComplianceInfo
         new_compliance_info.job_title =               compliance_params[:job_title]               if compliance_params[:job_title].present?
         new_compliance_info.nationality =             compliance_params[:nationality]             if compliance_params[:nationality].present?
         new_compliance_info.business_vat_id_number =  compliance_params[:business_vat_id_number]  if compliance_params[:business_vat_id_number].present?
-
-        # Guardian fields
-        new_compliance_info.guardian_first_name =              compliance_params[:guardian_first_name]              if compliance_params[:guardian_first_name].present?
-        new_compliance_info.guardian_last_name =               compliance_params[:guardian_last_name]               if compliance_params[:guardian_last_name].present?
-        new_compliance_info.guardian_email =                   compliance_params[:guardian_email]                   if compliance_params[:guardian_email].present?
-        new_compliance_info.guardian_date_of_birth =           Date.new(compliance_params[:guardian_dob_year].to_i, compliance_params[:guardian_dob_month].to_i, compliance_params[:guardian_dob_day].to_i) if compliance_params[:guardian_dob_year].present? && compliance_params[:guardian_dob_year].to_i > 0
-        new_compliance_info.guardian_street_address =          compliance_params[:guardian_street_address]          if compliance_params[:guardian_street_address].present?
-        new_compliance_info.guardian_city =                    compliance_params[:guardian_city]                    if compliance_params[:guardian_city].present?
-        new_compliance_info.guardian_state =                   compliance_params[:guardian_state]                   if compliance_params[:guardian_state].present?
-        new_compliance_info.guardian_zip_code =                compliance_params[:guardian_zip_code]                if compliance_params[:guardian_zip_code].present?
-        new_compliance_info.guardian_phone =                   compliance_params[:guardian_phone]                   if compliance_params[:guardian_phone].present?
-        new_compliance_info.guardian_individual_tax_id =       compliance_params[:guardian_individual_tax_id]       if compliance_params[:guardian_individual_tax_id].present?
+        new_compliance_info.guardian_first_name =     compliance_params[:guardian_first_name]              if compliance_params[:guardian_first_name].present?
+        new_compliance_info.guardian_last_name =      compliance_params[:guardian_last_name]               if compliance_params[:guardian_last_name].present?
+        new_compliance_info.guardian_email =          compliance_params[:guardian_email]                   if compliance_params[:guardian_email].present?
+        new_compliance_info.guardian_date_of_birth =  Date.new(compliance_params[:guardian_dob_year].to_i, compliance_params[:guardian_dob_month].to_i, compliance_params[:guardian_dob_day].to_i) if compliance_params[:guardian_dob_year].present? && compliance_params[:guardian_dob_year].to_i > 0
+        new_compliance_info.guardian_street_address = compliance_params[:guardian_street_address]          if compliance_params[:guardian_street_address].present?
+        new_compliance_info.guardian_city =           compliance_params[:guardian_city]                    if compliance_params[:guardian_city].present?
+        new_compliance_info.guardian_state =          compliance_params[:guardian_state]                   if compliance_params[:guardian_state].present?
+        new_compliance_info.guardian_zip_code =       compliance_params[:guardian_zip_code]                if compliance_params[:guardian_zip_code].present?
+        new_compliance_info.guardian_phone =          compliance_params[:guardian_phone]                   if compliance_params[:guardian_phone].present?
+        new_compliance_info.guardian_tax_id = compliance_params[:guardian_tax_id]       if compliance_params[:guardian_tax_id].present?
         new_compliance_info.guardian_stripe_processing_tos_accepted = compliance_params[:guardian_stripe_processing_tos_accepted] unless compliance_params[:guardian_stripe_processing_tos_accepted].nil?
-        new_compliance_info.guardian_stripe_tos_accepted =     compliance_params[:guardian_stripe_tos_accepted]     unless compliance_params[:guardian_stripe_tos_accepted].nil?
+        new_compliance_info.guardian_stripe_tos_accepted = compliance_params[:guardian_stripe_tos_accepted]     unless compliance_params[:guardian_stripe_tos_accepted].nil?
       end
 
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
