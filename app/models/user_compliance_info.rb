@@ -207,8 +207,6 @@ class UserComplianceInfo < ApplicationRecord
     birthday > 18.years.ago
   end
 
-
-
   def guardian_fields_complete?
     return false unless user_under_18?
 
