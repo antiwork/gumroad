@@ -78,11 +78,6 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, person_params)
     end
 
-    if user_compliance_info.user.under_18? && user_compliance_info.guardian_fields_complete?
-      guardian_params = guardian_person_hash(user_compliance_info, passphrase)
-      guardian_params.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
-      Stripe::Account.create_person(stripe_account.id, guardian_params)
-    end
 
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
     # It is a property on the `person` entity associated with the Stripe::Account.
@@ -198,9 +193,6 @@ module StripeMerchantAccountManager
       update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase)
     end
 
-    if user_compliance_info.user.under_18? && user_compliance_info.guardian_fields_complete?
-      update_guardian_person(user, stripe_account, passphrase)
-    end
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
@@ -228,49 +220,6 @@ module StripeMerchantAccountManager
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
   end
 
-  def self.update_guardian_person(user, stripe_account, passphrase)
-    user_compliance_info = user.alive_user_compliance_info
-
-    persons = Stripe::Account.list_persons(stripe_account.id)["data"]
-
-    guardian_person = persons.find do |person|
-      person["relationship"] &&
-      person["relationship"]["representative"] == true &&
-      person["relationship"]["owner"] == false
-    end
-
-    current_attributes = guardian_person_hash(user_compliance_info, passphrase)
-    current_attributes.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
-
-    if guardian_person
-      current_guardian_data = Stripe::Account.retrieve_person(stripe_account.id, guardian_person["id"])
-
-      last_attributes = {
-        first_name: current_guardian_data["first_name"],
-        last_name: current_guardian_data["last_name"],
-        email: current_guardian_data["email"],
-        phone: current_guardian_data["phone"],
-        dob: current_guardian_data["dob"],
-        address: current_guardian_data["address"],
-        id_number: current_guardian_data["id_number"],
-        ssn_last_4: current_guardian_data["ssn_last_4"]
-      }
-
-      diff_attributes = get_diff_attributes(current_attributes, last_attributes)
-
-      diff_attributes[:relationship] = current_attributes[:relationship]
-
-      if diff_attributes.keys.any? { |key| key != :relationship }
-        Stripe::Account.update_person(stripe_account.id, guardian_person["id"], diff_attributes)
-      end
-    else
-      Stripe::Account.create_person(stripe_account.id, current_attributes)
-    end
-  rescue Stripe::StripeError => e
-    Rails.logger.error "Failed to update guardian person for user #{user.id}: #{e.message}"
-    Bugsnag.notify(e)
-    raise
-  end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
     # Stripe will error if we send unchanged data for locked fields of a verified user.
@@ -361,7 +310,7 @@ module StripeMerchantAccountManager
     # It's really important we don't have two merchant accounts per user, so we do this check on the master database
     # to ensure we're looking at the latest data.
     ActiveRecord::Base.connection.stick_to_primary!
-    user.stripe_account.present?
+    user.stripe_connect_account.present?
   end
 
   private_class_method
@@ -548,59 +497,6 @@ module StripeMerchantAccountManager
     end
   end
 
-  def self.guardian_person_hash(user_compliance_info, passphrase)
-    return unless user_compliance_info.present? && user_compliance_info.user.under_18?
-
-    guardian_tax_id = nil
-    if user_compliance_info.guardian_individual_tax_id.present?
-      begin
-        guardian_tax_id = user_compliance_info.guardian_individual_tax_id.decrypt(passphrase)
-      rescue => e
-        Rails.logger.warn "Failed to decrypt guardian tax ID: #{e.message}"
-        guardian_tax_id = nil
-      end
-    end
-
-    hash = {
-      first_name: user_compliance_info.guardian_first_name,
-      last_name: user_compliance_info.guardian_last_name,
-      email: user_compliance_info.guardian_email,
-      phone: user_compliance_info.guardian_phone,
-
-      dob: {
-        day: user_compliance_info.guardian_date_of_birth.try(:day),
-        month: user_compliance_info.guardian_date_of_birth.try(:month),
-        year: user_compliance_info.guardian_date_of_birth.try(:year)
-      }
-    }
-
-    if user_compliance_info.country.present?
-      hash.deep_merge!({
-        address: {
-          line1: user_compliance_info.guardian_street_address,
-          line2: nil,
-          city: user_compliance_info.guardian_city,
-          state: user_compliance_info.guardian_state,
-          postal_code: user_compliance_info.guardian_zip_code,
-          country: user_compliance_info.country_code
-        }
-      })
-    end
-
-    if guardian_tax_id.present?
-      if user_compliance_info.country_code == Compliance::Countries::USA.alpha2
-        if guardian_tax_id.length > 4
-          hash.deep_merge!(id_number: guardian_tax_id)
-        elsif guardian_tax_id.length == 4
-          hash.deep_merge!(ssn_last_4: guardian_tax_id.last(4))
-        end
-      else
-        hash.deep_merge!(id_number: guardian_tax_id)
-      end
-    end
-
-    hash.deep_values_strip!
-  end
 
   def self.company_hash(user_compliance_info, passphrase)
     return unless user_compliance_info.present?
@@ -735,40 +631,8 @@ module StripeMerchantAccountManager
     user = merchant_account.user
     return unless user
 
-    if stripe_person["relationship"] &&
-       stripe_person["relationship"]["representative"] == true &&
-       stripe_person["relationship"]["owner"] == false
-      if user.under_18?
-        handle_guardian_person_verification_update(user, stripe_person, stripe_previous_attributes)
-      end
-    end
   end
 
-  def self.handle_guardian_person_verification_update(user, stripe_person, stripe_previous_attributes)
-    user_compliance_info = user.fetch_or_build_user_compliance_info
-
-    if stripe_previous_attributes["verification"] != stripe_person["verification"]
-      case stripe_person["verification"]["status"]
-      when "verified"
-        guardian_fields = %w[
-          guardian_first_name guardian_last_name guardian_email guardian_phone
-          guardian_street_address guardian_city guardian_date_of_birth
-        ]
-
-        user.user_compliance_info_requests.requested
-            .where(field_needed: guardian_fields)
-            .find_each(&:mark_provided!)
-
-        user_compliance_info.update!(guardian_verification_status: "verified")
-
-        Rails.logger.info "Guardian verification completed for user #{user.id}"
-      when "pending"
-        user_compliance_info.update!(guardian_verification_status: "pending")
-      when "unverified"
-        user_compliance_info.update!(guardian_verification_status: "incomplete")
-      end
-    end
-  end
 
   def self.handle_stripe_event_account_updated(stripe_event)
     stripe_event_id = stripe_event["id"]
