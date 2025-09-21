@@ -8,6 +8,23 @@ class UserComplianceInfo < ApplicationRecord
   include UserComplianceInfo::BusinessTypes
   include JsonData
 
+  # Guardian fields need to be mutable for updates
+  attr_mutable :guardian_first_name
+  attr_mutable :guardian_last_name
+  attr_mutable :guardian_email
+  attr_mutable :guardian_phone
+  attr_mutable :guardian_street_address
+  attr_mutable :guardian_city
+  attr_mutable :guardian_state
+  attr_mutable :guardian_zip_code
+  attr_mutable :guardian_country
+  attr_mutable :guardian_date_of_birth
+  attr_mutable :guardian_individual_tax_id
+  attr_mutable :guardian_stripe_tos_accepted
+  attr_mutable :guardian_stripe_processing_tos_accepted
+  attr_mutable :guardian_verification_status
+  attr_mutable :birthday
+
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, :guardian_first_name, :guardian_last_name, :guardian_email, :guardian_street_address, :guardian_city, :guardian_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
@@ -280,7 +297,7 @@ class UserComplianceInfo < ApplicationRecord
 
     def clear_guardian_info_if_user_is_18_or_older
       return unless birthday.present? && birthday <= 18.years.ago
-      return unless saved_change_to_birthday? || new_record?
+      return unless saved_change_to_birthday?
 
       self.guardian_first_name = nil
       self.guardian_last_name = nil

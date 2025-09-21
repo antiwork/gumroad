@@ -243,7 +243,7 @@ module StripeMerchantAccountManager
     current_attributes.deep_merge!(relationship: { representative: true, owner: false, title: "Legal Guardian" })
 
     if guardian_person
-      current_guardian_data = Stripe::Account.retrieve_person(stripe_account.id, guardian_person.id)
+      current_guardian_data = Stripe::Account.retrieve_person(stripe_account.id, guardian_person["id"])
 
       last_attributes = {
         first_name: current_guardian_data["first_name"],
@@ -261,7 +261,7 @@ module StripeMerchantAccountManager
       diff_attributes[:relationship] = current_attributes[:relationship]
 
       if diff_attributes.keys.any? { |key| key != :relationship }
-        Stripe::Account.update_person(stripe_account.id, guardian_person.id, diff_attributes)
+        Stripe::Account.update_person(stripe_account.id, guardian_person["id"], diff_attributes)
       end
     else
       Stripe::Account.create_person(stripe_account.id, current_attributes)
@@ -473,7 +473,10 @@ module StripeMerchantAccountManager
   private_class_method
   def self.person_hash(user_compliance_info, passphrase)
     if user_compliance_info
-      personal_tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
+      personal_tax_id = nil
+      if user_compliance_info.individual_tax_id.present?
+        personal_tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
+      end
 
       hash = {
         first_name: user_compliance_info.first_name,
@@ -571,7 +574,7 @@ module StripeMerchantAccountManager
       }
     }
 
-    if user_compliance_info.country_code.present?
+    if user_compliance_info.country.present?
       hash.deep_merge!({
         address: {
           line1: user_compliance_info.guardian_street_address,
