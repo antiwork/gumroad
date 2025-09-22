@@ -4,7 +4,6 @@ class LibraryController < Sellers::BaseController
   skip_before_action :check_suspended
 
   before_action :check_user_confirmed, only: [:index]
-  before_action :set_body_id_as_app
   before_action :set_purchase, only: [:archive, :unarchive, :delete]
 
   RESEND_CONFIRMATION_EMAIL_TIME_LIMIT = 24.hours
@@ -17,6 +16,14 @@ class LibraryController < Sellers::BaseController
     @title = "Library"
     @body_class = "library-container"
     @purchase_results, @creator_counts, @bundles = LibraryPresenter.new(logged_in_user).library_cards
+
+    render inertia: "Library/index",
+           props: inertia_props(
+             results: @purchase_results,
+             creator_counts: @creator_counts,
+             bundles: @bundles,
+             reviews_page_enabled: Feature.active?(:reviews_page, logged_in_user)
+           )
   end
 
   def archive

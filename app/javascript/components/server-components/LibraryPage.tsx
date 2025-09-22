@@ -1,13 +1,12 @@
 import { produce } from "immer";
 import * as React from "react";
-import { createCast, is } from "ts-safe-cast";
+import { is } from "ts-safe-cast";
 
 import { deletePurchasedProduct, setPurchaseArchived } from "$app/data/library";
 import { ProductNativeType } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -162,7 +161,7 @@ export const DeleteProductModal = ({
   );
 };
 
-type Props = {
+export type LibraryPageProps = {
   results: Result[];
   creators: { id: string; name: string; count: number }[];
   bundles: { id: string; label: string }[];
@@ -236,7 +235,13 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
   showArchivedOnly: rawParams.get("show_archived_only") === "true",
 });
 
-const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, following_wishlists_enabled }: Props) => {
+const LibraryPage = ({
+  results,
+  creators,
+  bundles,
+  reviews_page_enabled,
+  following_wishlists_enabled,
+}: LibraryPageProps) => {
   const originalLocation = useOriginalLocation();
   const discoverUrl = useDiscoverUrl();
   const [state, dispatch] = React.useReducer(reducer, null, () => ({
@@ -555,4 +560,4 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
   );
 };
 
-export default register({ component: LibraryPage, propParser: createCast() });
+export default LibraryPage;
