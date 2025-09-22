@@ -3,6 +3,10 @@
 require "spec_helper"
 
 describe PurchaseRefundPolicy do
+  it { is_expected.to belong_to(:purchase) }
+  it { is_expected.to have_one(:link).through(:purchase) }
+  it { is_expected.to have_one(:product_refund_policy).through(:link) }
+
   describe "validations" do
     it "validates presence" do
       refund_policy = PurchaseRefundPolicy.new
