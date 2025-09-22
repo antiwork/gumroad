@@ -1,6 +1,5 @@
 class AddGuardianFieldsToUserComplianceInfo < ActiveRecord::Migration[7.1]
   def change
-    # Add all guardian fields needed for users under 18
     add_column :user_compliance_info, :guardian_first_name, :string
     add_column :user_compliance_info, :guardian_last_name, :string
     add_column :user_compliance_info, :guardian_email, :string

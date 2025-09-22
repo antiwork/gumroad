@@ -37,7 +37,7 @@ module StripeMerchantAccountManager
       user_compliance_info = user.alive_user_compliance_info
       bank_account = user.active_bank_account
 
-      if user_compliance_info.user_under_18? && !user_compliance_info.guardian_fields_complete?
+      if user_compliance_info.user.under_18? && !user_compliance_info.guardian_fields_complete?
         raise MerchantRegistrationUserNotReadyError.new(user.id, "guardian information incomplete for minor")
       end
 
@@ -80,8 +80,8 @@ module StripeMerchantAccountManager
       person_params = person_hash(user_compliance_info, passphrase)
       person_params.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
       Stripe::Account.create_person(stripe_account.id, person_params)
-    elsif user_compliance_info.user_under_18?
-      guardian_params = guardian_person_hash(user_compliance_info, passphrase)
+    elsif user_compliance_info.user.under_18?
+      guardian_params = person_hash(user_compliance_info, passphrase, person_type: :guardian)
       Stripe::Account.create_person(stripe_account.id, guardian_params)
 
       minor_params = person_hash(user_compliance_info, passphrase)
@@ -211,11 +211,9 @@ module StripeMerchantAccountManager
     last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
     user_compliance_info = user.alive_user_compliance_info
 
-    if user_compliance_info.user_under_18?
-      # Handle guardian and minor person updates
+    if user_compliance_info.user.under_18?
       update_guardian_and_minor_persons(user, stripe_account, stripe_persons, last_user_compliance_info, user_compliance_info, passphrase)
     else
-      # Handle regular business person updates
       stripe_person = stripe_persons.last
       current_attributes = person_hash(user_compliance_info, passphrase)
       current_attributes.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
@@ -229,8 +227,6 @@ module StripeMerchantAccountManager
       end
 
       if diff_attributes[:dob].present?
-        # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
-        # must be submitted if any part of it is changing.
         diff_attributes[:dob] = current_attributes[:dob]
       end
 
@@ -240,14 +236,12 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.update_guardian_and_minor_persons(user, stripe_account, stripe_persons, last_user_compliance_info, user_compliance_info, passphrase)
-    # Find guardian and minor persons from Stripe
-    # Guardian is typically the first person created, minor is the second
     guardian_person = stripe_persons.first
     minor_person = stripe_persons.last
 
     if guardian_person
-      current_guardian_attributes = guardian_person_hash(user_compliance_info, passphrase)
-      last_guardian_attributes = last_user_compliance_info ? guardian_person_hash(last_user_compliance_info, passphrase) : nil
+      current_guardian_attributes = person_hash(user_compliance_info, passphrase, person_type: :guardian)
+      last_guardian_attributes = last_user_compliance_info ? person_hash(last_user_compliance_info, passphrase, person_type: :guardian) : nil
 
       diff_guardian_attributes = current_guardian_attributes
       if last_guardian_attributes
@@ -482,20 +476,44 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.person_hash(user_compliance_info, passphrase)
+  def self.person_hash(user_compliance_info, passphrase, person_type: :individual)
     if user_compliance_info
-      personal_tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
+      # Determine field names based on person type
+      if person_type == :guardian
+        first_name = user_compliance_info.guardian_first_name
+        last_name = user_compliance_info.guardian_last_name
+        email = user_compliance_info.guardian_email
+        phone = user_compliance_info.guardian_phone
+        birthday = user_compliance_info.guardian_date_of_birth
+        street_address = user_compliance_info.guardian_street_address
+        city = user_compliance_info.guardian_city
+        state = user_compliance_info.guardian_state
+        zip_code = user_compliance_info.guardian_zip_code
+        tax_id = user_compliance_info.guardian_tax_id&.decrypt
+        nationality = user_compliance_info.nationality
+      else
+        first_name = user_compliance_info.first_name
+        last_name = user_compliance_info.last_name
+        email = user_compliance_info.user.email
+        phone = user_compliance_info.phone
+        birthday = user_compliance_info.birthday
+        street_address = user_compliance_info.street_address
+        city = user_compliance_info.city
+        state = user_compliance_info.state
+        zip_code = user_compliance_info.zip_code
+        tax_id = user_compliance_info.individual_tax_id.decrypt(passphrase)
+        nationality = user_compliance_info.nationality
+      end
 
       hash = {
-        first_name: user_compliance_info.first_name,
-        last_name: user_compliance_info.last_name,
-        email: user_compliance_info.user.email,
-        phone: user_compliance_info.phone,
-
+        first_name: first_name,
+        last_name: last_name,
+        email: email,
+        phone: phone,
         dob: {
-          day: user_compliance_info.birthday.try(:day),
-          month: user_compliance_info.birthday.try(:month),
-          year: user_compliance_info.birthday.try(:year)
+          day: birthday.try(:day),
+          month: birthday.try(:month),
+          year: birthday.try(:year)
         }
       }
 
@@ -504,30 +522,33 @@ module StripeMerchantAccountManager
       end
 
       if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
-        hash.deep_merge!({
-                           first_name_kanji: user_compliance_info.first_name_kanji,
-                           last_name_kanji: user_compliance_info.last_name_kanji,
-                           first_name_kana: user_compliance_info.first_name_kana,
-                           last_name_kana: user_compliance_info.last_name_kana,
-                           address_kanji: {
-                             line1: user_compliance_info.building_number,
-                             line2: user_compliance_info.street_address_kanji,
-                             postal_code: user_compliance_info.zip_code
-                           },
-                           address_kana: {
-                             line1: user_compliance_info.building_number,
-                             line2: user_compliance_info.street_address_kana,
-                             postal_code: user_compliance_info.zip_code
-                           }
-                         })
+        # Japanese fields are only available for individual persons, not guardians
+        if person_type == :individual
+          hash.deep_merge!({
+                             first_name_kanji: user_compliance_info.first_name_kanji,
+                             last_name_kanji: user_compliance_info.last_name_kanji,
+                             first_name_kana: user_compliance_info.first_name_kana,
+                             last_name_kana: user_compliance_info.last_name_kana,
+                             address_kanji: {
+                               line1: user_compliance_info.building_number,
+                               line2: user_compliance_info.street_address_kanji,
+                               postal_code: zip_code
+                             },
+                             address_kana: {
+                               line1: user_compliance_info.building_number,
+                               line2: user_compliance_info.street_address_kana,
+                               postal_code: zip_code
+                             }
+                           })
+        end
       else
         hash.deep_merge!({
                            address: {
-                             line1: user_compliance_info.street_address,
+                             line1: street_address,
                              line2: nil,
-                             city: user_compliance_info.city,
-                             state: user_compliance_info.state,
-                             postal_code: user_compliance_info.zip_code,
+                             city: city,
+                             state: state,
+                             postal_code: zip_code,
                              country: user_compliance_info.country_code
                            },
                          })
@@ -535,86 +556,27 @@ module StripeMerchantAccountManager
 
       # For US accounts, only submit the Personal Tax ID if it's longer than four digits, otherwise the field contains the SSN Last 4.
       # For non-US accounts, always submit the Personal Tax ID.
-      if personal_tax_id && (user_compliance_info.country_code != Compliance::Countries::USA.alpha2 || personal_tax_id.length > 4)
-        hash.deep_merge!(id_number: personal_tax_id)
+      if tax_id && (user_compliance_info.country_code != Compliance::Countries::USA.alpha2 || tax_id.length > 4)
+        hash.deep_merge!(id_number: tax_id)
       end
 
       # For US accounts, only submit the SSN Last 4 if we have enough digits in the Tax ID to get the last 4.
       # For non-US accounts, never submit this field, it is for US accounts only.
-      if user_compliance_info.country_code == Compliance::Countries::USA.alpha2 && personal_tax_id && personal_tax_id.length == 4
-        hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
+      if user_compliance_info.country_code == Compliance::Countries::USA.alpha2 && tax_id && tax_id.length == 4
+        hash.deep_merge!(ssn_last_4: tax_id.last(4))
       end
 
       if [Compliance::Countries::ARE.alpha2,
           Compliance::Countries::SGP.alpha2,
           Compliance::Countries::BGD.alpha2,
           Compliance::Countries::PAK.alpha2].include?(user_compliance_info.country_code)
-        hash.deep_merge!(nationality: user_compliance_info.nationality)
+        hash.deep_merge!(nationality: nationality)
       end
 
       hash.deep_values_strip!
     end
   end
 
-  private_class_method
-  def self.guardian_person_hash(user_compliance_info, passphrase)
-    return unless user_compliance_info.present? && user_compliance_info.user_under_18?
-
-    guardian_tax_id = user_compliance_info.guardian_tax_id&.decrypt(passphrase)
-
-    hash = {
-      first_name: user_compliance_info.guardian_first_name,
-      last_name: user_compliance_info.guardian_last_name,
-      email: user_compliance_info.guardian_email,
-      phone: user_compliance_info.guardian_phone,
-      dob: {
-        day: user_compliance_info.guardian_date_of_birth&.day,
-        month: user_compliance_info.guardian_date_of_birth&.month,
-        year: user_compliance_info.guardian_date_of_birth&.year
-      }
-    }
-
-    if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
-      hash.deep_merge!({
-        address: {
-          line1: user_compliance_info.guardian_street_address,
-          line2: nil,
-          city: user_compliance_info.guardian_city,
-          state: user_compliance_info.guardian_state,
-          postal_code: user_compliance_info.guardian_zip_code,
-          country: user_compliance_info.country_code
-        }
-      })
-    else
-      hash.deep_merge!({
-        address: {
-          line1: user_compliance_info.guardian_street_address,
-          line2: nil,
-          city: user_compliance_info.guardian_city,
-          state: user_compliance_info.guardian_state,
-          postal_code: user_compliance_info.guardian_zip_code,
-          country: user_compliance_info.country_code
-        }
-      })
-    end
-
-    if guardian_tax_id && (user_compliance_info.country_code != Compliance::Countries::USA.alpha2 || guardian_tax_id.length > 4)
-      hash.deep_merge!(id_number: guardian_tax_id)
-    end
-
-    if user_compliance_info.country_code == Compliance::Countries::USA.alpha2 && guardian_tax_id && guardian_tax_id.length == 4
-      hash.deep_merge!(ssn_last_4: guardian_tax_id.last(4))
-    end
-
-    if [Compliance::Countries::ARE.alpha2,
-        Compliance::Countries::SGP.alpha2,
-        Compliance::Countries::BGD.alpha2,
-        Compliance::Countries::PAK.alpha2].include?(user_compliance_info.country_code)
-      hash.deep_merge!(nationality: user_compliance_info.guardian_nationality || user_compliance_info.nationality)
-    end
-
-    hash.deep_values_strip!
-  end
 
   def self.company_hash(user_compliance_info, passphrase)
     return unless user_compliance_info.present?

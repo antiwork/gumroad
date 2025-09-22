@@ -168,14 +168,8 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_tax_id : individual_tax_id
   end
 
-  def user_under_18?
-    return false unless birthday.present?
-
-    birthday > 18.years.ago
-  end
-
   def guardian_fields_complete?
-    return false unless user_under_18?
+    return false unless user.under_18?
 
     required_fields = %w[guardian_first_name guardian_last_name guardian_email guardian_phone
                         guardian_street_address guardian_city]
@@ -188,7 +182,7 @@ class UserComplianceInfo < ApplicationRecord
   end
 
   def mark_guardian_verified!
-    return unless user_under_18?
+    return unless user.under_18?
 
     saved, new_compliance_info = dup_and_save do |new_info|
       new_info.guardian_verified = true

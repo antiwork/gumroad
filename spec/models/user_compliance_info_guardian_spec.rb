@@ -11,7 +11,7 @@ RSpec.describe UserComplianceInfo, type: :model do
         let(:user_compliance_info) { create(:user_compliance_info, birthday: nil) }
 
         it "returns false" do
-          expect(user_compliance_info.user_under_18?).to be false
+          expect(user_compliance_info.user.under_18?).to be false
         end
       end
 
@@ -19,7 +19,7 @@ RSpec.describe UserComplianceInfo, type: :model do
         let(:user_compliance_info) { create(:user_compliance_info, birthday: 16.years.ago) }
 
         it "returns true" do
-          expect(user_compliance_info.user_under_18?).to be true
+          expect(user_compliance_info.user.under_18?).to be true
         end
       end
 
@@ -27,7 +27,7 @@ RSpec.describe UserComplianceInfo, type: :model do
         let(:user_compliance_info) { create(:user_compliance_info, birthday: 18.years.ago) }
 
         it "returns false" do
-          expect(user_compliance_info.user_under_18?).to be false
+          expect(user_compliance_info.user.under_18?).to be false
         end
       end
 
@@ -35,7 +35,7 @@ RSpec.describe UserComplianceInfo, type: :model do
         let(:user_compliance_info) { create(:user_compliance_info, birthday: 19.years.ago) }
 
         it "returns false" do
-          expect(user_compliance_info.user_under_18?).to be false
+          expect(user_compliance_info.user.under_18?).to be false
         end
       end
     end

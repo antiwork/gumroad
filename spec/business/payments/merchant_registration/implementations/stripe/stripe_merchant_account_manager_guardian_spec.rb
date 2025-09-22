@@ -5,7 +5,7 @@ require "spec_helper"
 describe StripeMerchantAccountManager, :guardian_functionality do
   let(:user) { create(:user) }
   let(:passphrase) { "test_passphrase" }
-  let(:user_compliance_info) { create(:user_compliance_info, user: user) }
+  let(:user_compliance_info) { create(:user_compliance_info, user: user, country: "US") }
 
   describe ".create_account with guardian information" do
     context "when user is under 18 with complete guardian information" do
@@ -13,6 +13,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
         create(:user_compliance_info,
           user: user,
           birthday: 15.years.ago,
+          country: "United States",
           guardian_first_name: "John",
           guardian_last_name: "Doe",
           guardian_email: "guardian@example.com",
@@ -50,6 +51,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
         incomplete_user_compliance_info = create(:user_compliance_info,
           user: user,
           birthday: 15.years.ago,
+          country: "United States",
           guardian_first_name: "John",
           guardian_last_name: "Doe"
           # Missing other guardian fields
@@ -67,7 +69,8 @@ describe StripeMerchantAccountManager, :guardian_functionality do
       let(:user_compliance_info) do
         create(:user_compliance_info,
           user: user,
-          birthday: 20.years.ago
+          birthday: 20.years.ago,
+          country: "US"
         )
       end
 
@@ -90,11 +93,12 @@ describe StripeMerchantAccountManager, :guardian_functionality do
     end
   end
 
-  describe ".guardian_person_hash" do
+  describe ".person_hash" do
     let(:user_compliance_info) do
       create(:user_compliance_info,
         user: user,
         birthday: 15.years.ago,
+        country: "United States",
         guardian_first_name: "John",
         guardian_last_name: "Doe",
         guardian_email: "guardian@example.com",
@@ -109,13 +113,27 @@ describe StripeMerchantAccountManager, :guardian_functionality do
     end
 
     it "returns nil for users 18 or older" do
-      user_compliance_info.update!(birthday: 20.years.ago)
-      result = described_class.send(:guardian_person_hash, user_compliance_info, passphrase)
+      # Create a new compliance info for a user who is 20 years old
+      adult_compliance_info = create(:user_compliance_info,
+        user: user,
+        birthday: 20.years.ago,
+        guardian_first_name: "Guardian",
+        guardian_last_name: "Name",
+        guardian_email: "guardian@example.com",
+        guardian_phone: "+1234567890",
+        guardian_street_address: "123 Main St",
+        guardian_city: "Anytown",
+        guardian_state: "CA",
+        guardian_zip_code: "12345",
+        guardian_date_of_birth: 40.years.ago,
+        guardian_tax_id: "123456789"
+      )
+      result = described_class.send(:person_hash, adult_compliance_info, passphrase, person_type: :guardian)
       expect(result).to be_nil
     end
 
     it "returns guardian information hash for users under 18" do
-      result = described_class.send(:guardian_person_hash, user_compliance_info, passphrase)
+      result = described_class.send(:person_hash, user_compliance_info, passphrase, person_type: :guardian)
 
       expect(result[:first_name]).to eq("John")
       expect(result[:last_name]).to eq("Doe")
@@ -132,22 +150,64 @@ describe StripeMerchantAccountManager, :guardian_functionality do
     end
 
     it "includes tax ID information for non-US guardians" do
-      user_compliance_info.update!(country: "CA")
-      result = described_class.send(:guardian_person_hash, user_compliance_info, passphrase)
+      canadian_compliance_info = create(:user_compliance_info,
+        user: user,
+        birthday: 15.years.ago,
+        country: "Canada",
+        guardian_first_name: "John",
+        guardian_last_name: "Doe",
+        guardian_email: "guardian@example.com",
+        guardian_phone: "+1234567890",
+        guardian_street_address: "123 Main St",
+        guardian_city: "Anytown",
+        guardian_state: "ON",
+        guardian_zip_code: "K1A 0A6",
+        guardian_date_of_birth: 40.years.ago,
+        guardian_tax_id: "123456789"
+      )
+      result = described_class.send(:person_hash, canadian_compliance_info, passphrase, person_type: :guardian)
 
       expect(result[:id_number]).to eq("123456789")
     end
 
     it "includes SSN last 4 for US guardians with 4-digit tax ID" do
-      user_compliance_info.update!(guardian_tax_id: "1234")
-      result = described_class.send(:guardian_person_hash, user_compliance_info, passphrase)
+      us_compliance_info = create(:user_compliance_info,
+        user: user,
+        birthday: 15.years.ago,
+        country: "United States",
+        guardian_first_name: "John",
+        guardian_last_name: "Doe",
+        guardian_email: "guardian@example.com",
+        guardian_phone: "+1234567890",
+        guardian_street_address: "123 Main St",
+        guardian_city: "Anytown",
+        guardian_state: "CA",
+        guardian_zip_code: "12345",
+        guardian_date_of_birth: 40.years.ago,
+        guardian_tax_id: "1234"
+      )
+      result = described_class.send(:person_hash, us_compliance_info, passphrase, person_type: :guardian)
 
       expect(result[:ssn_last_4]).to eq("1234")
     end
 
     it "handles missing guardian tax ID gracefully" do
-      user_compliance_info.update!(guardian_tax_id: nil)
-      result = described_class.send(:guardian_person_hash, user_compliance_info, passphrase)
+      no_tax_id_compliance_info = create(:user_compliance_info,
+        user: user,
+        birthday: 15.years.ago,
+        country: "United States",
+        guardian_first_name: "John",
+        guardian_last_name: "Doe",
+        guardian_email: "guardian@example.com",
+        guardian_phone: "+1234567890",
+        guardian_street_address: "123 Main St",
+        guardian_city: "Anytown",
+        guardian_state: "CA",
+        guardian_zip_code: "12345",
+        guardian_date_of_birth: 40.years.ago,
+        guardian_tax_id: nil
+      )
+      result = described_class.send(:person_hash, no_tax_id_compliance_info, passphrase, person_type: :guardian)
 
       expect(result[:id_number]).to be_nil
       expect(result[:ssn_last_4]).to be_nil
@@ -161,6 +221,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
       create(:user_compliance_info,
         user: user,
         birthday: 15.years.ago,
+        country: "United States",
         guardian_first_name: "John",
         guardian_last_name: "Doe",
         guardian_email: "guardian@example.com",
@@ -176,7 +237,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
 
     before do
       allow(user).to receive(:alive_user_compliance_info).and_return(user_compliance_info)
-      allow(Stripe::Account).to receive(:list_persons).with(stripe_account.id).and_return(double(data: stripe_persons))
+      allow(Stripe::Account).to receive(:list_persons).with(stripe_account.id).and_return({"data" => stripe_persons})
     end
 
     context "when user is under 18" do
@@ -196,11 +257,25 @@ describe StripeMerchantAccountManager, :guardian_functionality do
     end
 
     context "when user is 18 or older" do
-      before do
-        user_compliance_info.update!(birthday: 20.years.ago)
+      let(:adult_user_compliance_info) do
+        create(:user_compliance_info,
+          user: user,
+          birthday: 20.years.ago,
+          guardian_first_name: "John",
+          guardian_last_name: "Doe",
+          guardian_email: "guardian@example.com",
+          guardian_phone: "+1234567890",
+          guardian_street_address: "123 Main St",
+          guardian_city: "Anytown",
+          guardian_state: "CA",
+          guardian_zip_code: "12345",
+          guardian_date_of_birth: 40.years.ago,
+          guardian_tax_id: "123456789"
+        )
       end
 
       it "updates only the minor person" do
+        allow(user).to receive(:alive_user_compliance_info).and_return(adult_user_compliance_info)
         expect(Stripe::Account).to receive(:update_person).with(stripe_account.id, "person_minor", anything).once
 
         described_class.update_person(user, stripe_account, nil, passphrase)
@@ -215,6 +290,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
       create(:user_compliance_info,
         user: user,
         birthday: 15.years.ago,
+        country: "United States",
         guardian_first_name: "John",
         guardian_last_name: "Doe",
         guardian_email: "guardian@example.com",
@@ -265,6 +341,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
       create(:user_compliance_info,
         user: user,
         birthday: 15.years.ago,
+        country: "United States",
         guardian_first_name: "John",
         guardian_last_name: "Doe",
         guardian_email: "john@example.com",
