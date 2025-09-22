@@ -1068,7 +1068,7 @@ describe PaypalPayoutProcessor do
 
   describe "update_split_payment_state" do
     let(:user) { create(:user) }
-    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true) }
+    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true, split_payments_info: [{ "state" => "pending", "amount_cents" => 100 }]) }
 
     context "when all split payments are completed" do
       it "marks payment as completed" do

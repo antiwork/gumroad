@@ -400,7 +400,7 @@ describe PayoutsHelper do
 
   describe "calculate_partial_payout_info" do
     let(:user) { create(:user) }
-    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true) }
+    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true, split_payments_info: [{ "state" => "pending", "amount_cents" => 100 }]) }
 
     context "when payment is not in split mode" do
       it "returns empty hash" do
@@ -459,7 +459,7 @@ describe PayoutsHelper do
         result = helper.calculate_partial_payout_info(payment)
 
         expect(result[:is_multi_payment_success]).to be true
-        expect(result[:multi_payment_message]).to match /This payout was paid in multiple payments: \*\*\$100\.00\*\* was paid via PayPal on \*\*.*\*\*\./
+        expect(result[:multi_payment_message]).to match /This payout was paid in multiple payments: \*\*\$100\*\* was paid via PayPal on \*\*.*\*\*\./
       end
 
       it "uses completed_at date when available" do
@@ -496,11 +496,11 @@ describe PayoutsHelper do
 
         expect(result[:is_partial_payout]).to be true
         expect(result[:partial_payout_completed_amount_cents]).to eq 7000
-        expect(result[:partial_payout_completed_displayed_amount]).to eq "$70.00"
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$70"
         expect(result[:partial_payout_failed_amount_cents]).to eq 3000
-        expect(result[:partial_payout_failed_displayed_amount]).to eq "$30.00"
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$30"
         expect(result[:partial_payout_status]).to eq "Partially failed"
-        expect(result[:partial_payout_message]).to match /This payout was partially processed\. \*\*\$70\.00\*\* was successfully paid via PayPal on \*\*.*\*\*, but the \*\*\$30\.00\*\* could not be sent due to PayPal limitations\. It will be included in your next payout automatically\./
+        expect(result[:partial_payout_message]).to match /This payout was partially processed\. \*\*\$70\*\* was successfully paid via PayPal on \*\*.*\*\*, but the \*\*\$30\*\* could not be sent due to PayPal limitations\. It will be included in your next payout automatically\./
       end
 
       it "handles single failed payment correctly" do
@@ -511,9 +511,9 @@ describe PayoutsHelper do
         result = helper.calculate_partial_payout_info(payment)
 
         expect(result[:partial_payout_completed_amount_cents]).to eq 10000
-        expect(result[:partial_payout_completed_displayed_amount]).to eq "$100.00"
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$100"
         expect(result[:partial_payout_failed_amount_cents]).to eq 5000
-        expect(result[:partial_payout_failed_displayed_amount]).to eq "$50.00"
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$50"
       end
 
       it "handles multiple failed payments correctly" do
@@ -580,9 +580,9 @@ describe PayoutsHelper do
         result = helper.calculate_partial_payout_info(payment)
 
         expect(result[:partial_payout_completed_amount_cents]).to eq 0
-        expect(result[:partial_payout_completed_displayed_amount]).to eq "$0.00"
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$0"
         expect(result[:partial_payout_failed_amount_cents]).to eq 0
-        expect(result[:partial_payout_failed_displayed_amount]).to eq "$0.00"
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$0"
       end
     end
 
@@ -595,9 +595,9 @@ describe PayoutsHelper do
         result = helper.calculate_partial_payout_info(payment)
 
         expect(result[:partial_payout_completed_amount_cents]).to eq 1000000
-        expect(result[:partial_payout_completed_displayed_amount]).to eq "$10,000.00"
+        expect(result[:partial_payout_completed_displayed_amount]).to eq "$10,000"
         expect(result[:partial_payout_failed_amount_cents]).to eq 500000
-        expect(result[:partial_payout_failed_displayed_amount]).to eq "$5,000.00"
+        expect(result[:partial_payout_failed_displayed_amount]).to eq "$5,000"
       end
     end
   end
@@ -613,7 +613,7 @@ describe PayoutsHelper do
       ]
       result = helper.generate_multi_payment_success_message(completed_payments, payment)
 
-      expect(result).to match /This payout was paid in multiple payments: \*\*\$80\.00\*\* was paid via PayPal on \*\*November 10th, 2024\*\*\./
+      expect(result).to match /This payout was paid in multiple payments: \*\*\$80\*\* was paid via PayPal on \*\*November 10th, 2024\*\*\./
     end
 
     it "handles single payment correctly" do
@@ -622,7 +622,7 @@ describe PayoutsHelper do
       ]
       result = helper.generate_multi_payment_success_message(completed_payments, payment)
 
-      expect(result).to match /This payout was paid in multiple payments: \*\*\$100\.00\*\* was paid via PayPal on \*\*November 10th, 2024\*\*\./
+      expect(result).to match /This payout was paid in multiple payments: \*\*\$100\*\* was paid via PayPal on \*\*November 10th, 2024\*\*\./
     end
 
     it "uses completed_at date when available" do
@@ -638,7 +638,7 @@ describe PayoutsHelper do
 
   describe "integration with old_payout_period_data" do
     let(:user) { create(:user) }
-    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true) }
+    let(:payment) { create(:payment, user: user, was_created_in_split_mode: true, split_payments_info: [{ "state" => "pending", "amount_cents" => 100 }]) }
 
     context "when payment has successful multi-payment scenario" do
       it "includes multi-payment success info in payout period data" do
@@ -650,7 +650,7 @@ describe PayoutsHelper do
         result = helper.old_payout_period_data(user: user, payment: payment)
 
         expect(result[:is_multi_payment_success]).to be true
-        expect(result[:multi_payment_message]).to match /This payout was paid in multiple payments: \*\*\$80\.00\*\* was paid via PayPal on \*\*.*\*\*\./
+        expect(result[:multi_payment_message]).to match /This payout was paid in multiple payments: \*\*\$80\*\* was paid via PayPal on \*\*.*\*\*\./
       end
     end
 
@@ -667,7 +667,7 @@ describe PayoutsHelper do
         expect(result[:partial_payout_status]).to eq "Partially failed"
         expect(result[:partial_payout_completed_amount_cents]).to eq 5000
         expect(result[:partial_payout_failed_amount_cents]).to eq 3000
-        expect(result[:partial_payout_message]).to match /This payout was partially processed\. \*\*\$50\.00\*\* was successfully paid via PayPal on \*\*.*\*\*, but the \*\*\$30\.00\*\* could not be sent due to PayPal limitations\. It will be included in your next payout automatically\./
+        expect(result[:partial_payout_message]).to match /This payout was partially processed\. \*\*\$50\*\* was successfully paid via PayPal on \*\*.*\*\*, but the \*\*\$30\*\* could not be sent due to PayPal limitations\. It will be included in your next payout automatically\./
       end
     end
 
