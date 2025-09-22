@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 class PurchaseRefundPolicy < ApplicationRecord
-  belongs_to :purchase, optional: true
+  belongs_to :purchase
   has_one :link, through: :purchase
   has_one :product_refund_policy, through: :link
 
   stripped_fields :title, :fine_print
 
-  validates :purchase, presence: true, uniqueness: true
+  validates :purchase, uniqueness: true
   validates :title, presence: true
 
   # This is the date when we switched to product-level refund policies, and started enforcing
