@@ -1,8 +1,6 @@
 import React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Membership, Product } from "$app/data/products";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -13,19 +11,21 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import ProductsPage from "./ProductsPage";
 
+export type ArchivedProductsPageProps = {
+  memberships: Membership[];
+  memberships_pagination: PaginationProps;
+  products: Product[];
+  products_pagination: PaginationProps;
+  can_create_product: boolean;
+};
+
 export const ArchivedProductsPage = ({
   memberships,
   memberships_pagination: membershipsPagination,
   products,
   products_pagination: productsPagination,
   can_create_product: canCreateProduct,
-}: {
-  memberships: Membership[];
-  memberships_pagination: PaginationProps;
-  products: Product[];
-  products_pagination: PaginationProps;
-  can_create_product: boolean;
-}) => {
+}: ArchivedProductsPageProps) => {
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
   const [query, setQuery] = React.useState<string | null>(null);
@@ -84,4 +84,4 @@ export const ArchivedProductsPage = ({
   );
 };
 
-export default register({ component: ArchivedProductsPage, propParser: createCast() });
+export default ArchivedProductsPage;

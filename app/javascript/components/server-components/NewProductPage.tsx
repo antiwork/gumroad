@@ -2,7 +2,7 @@ import cx from "classnames";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 import { useState } from "react";
-import { cast, createCast, is } from "ts-safe-cast";
+import { cast, is } from "ts-safe-cast";
 
 import { CreateProductData, RecurringProductType, createProduct } from "$app/data/products";
 import { ProductNativeType, ProductServiceType } from "$app/parsers/product";
@@ -14,7 +14,6 @@ import {
   recurrenceIds,
 } from "$app/utils/recurringPricing";
 import { assertResponseError, request } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -30,6 +29,17 @@ const defaultRecurrence: RecurrenceId = "monthly";
 
 const MIN_AI_PROMPT_LENGTH = 10;
 
+export type NewProductPageProps = {
+  current_seller_currency_code: CurrencyCode;
+  native_product_types: ProductNativeType[];
+  service_product_types: ProductServiceType[];
+  release_at_date: string;
+  show_orientation_text: boolean;
+  eligible_for_service_products: boolean;
+  ai_generation_enabled: boolean;
+  ai_promo_dismissed: boolean;
+};
+
 const NewProductPage = ({
   current_seller_currency_code,
   native_product_types,
@@ -39,16 +49,7 @@ const NewProductPage = ({
   eligible_for_service_products,
   ai_generation_enabled,
   ai_promo_dismissed,
-}: {
-  current_seller_currency_code: CurrencyCode;
-  native_product_types: ProductNativeType[];
-  service_product_types: ProductServiceType[];
-  release_at_date: string;
-  show_orientation_text: boolean;
-  eligible_for_service_products: boolean;
-  ai_generation_enabled: boolean;
-  ai_promo_dismissed: boolean;
-}) => {
+}: NewProductPageProps) => {
   const formUID = React.useId();
 
   const nameInputRef = React.useRef<HTMLInputElement>(null);
@@ -515,4 +516,4 @@ const ProductTypeSelector = ({
   </div>
 );
 
-export default register({ component: NewProductPage, propParser: createCast() });
+export default NewProductPage;

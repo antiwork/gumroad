@@ -1,11 +1,9 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -14,7 +12,6 @@ import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Stats as StatsComponent } from "$app/components/Stats";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -43,7 +40,7 @@ type Stats = {
   total_affiliated_creators: number;
 };
 
-type Props = {
+export type AffiliatedPageProps = {
   pagination: PaginationProps;
   affiliated_products: AffiliatedProduct[];
   stats: Stats;
@@ -231,7 +228,7 @@ const AffiliatedPage = ({
   archived_tab_visible: archivedTabVisible,
   pagination: initialPaginationState,
   affiliates_disabled_reason: affiliatesDisabledReason,
-}: Props) => {
+}: AffiliatedPageProps) => {
   const url = new URL(useOriginalLocation());
   const [isShowingGlobalAffiliates, setIsShowingGlobalAffiliates] = React.useState(
     url.searchParams.get("affiliates") === "true",
@@ -264,7 +261,7 @@ const AffiliatedPage = ({
     } catch (e) {
       if (e instanceof AbortError) return;
       assertResponseError(e);
-      showAlert(e.message, "error");
+      // showAlert(e.message, "error");
     }
   };
   const debouncedLoadAffiliatedProducts = useDebouncedCallback(asyncVoid(loadAffiliatedProducts), 500);
@@ -362,4 +359,4 @@ const AffiliatedPage = ({
   );
 };
 
-export default register({ component: AffiliatedPage, propParser: createCast() });
+export default AffiliatedPage;

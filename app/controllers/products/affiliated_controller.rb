@@ -11,7 +11,7 @@ class Products::AffiliatedController < Sellers::BaseController
                                              sort: affiliated_products_params[:sort])
                                         .affiliated_products_page_props
     respond_to do |format|
-      format.html
+      format.html { render inertia: "Products/Affiliated/index", props: inertia_props(affiliated_page_props: @props) }
       format.json { render json: @props }
     end
   end

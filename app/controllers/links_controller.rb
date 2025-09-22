@@ -99,6 +99,9 @@ class LinksController < ApplicationController
 
     @react_new_product_page_props = ProductPresenter.new_page_props(current_seller:)
     @title = "What are you creating?"
+
+    render inertia: "Products/New/index",
+           props: inertia_props(new_product_page_props: @react_new_product_page_props)
   end
 
   def create
@@ -611,7 +614,12 @@ class LinksController < ApplicationController
     end
 
     def paged_params
-      params.permit(:page, sort: [:key, :direction])
+      if params.respond_to?(:permit)
+        params.permit(:page, sort: [:key, :direction])
+      else
+        # Convert to ActionController::Parameters-like object
+        ActionController::Parameters.new(params).permit(:page, sort: [:key, :direction])
+      end
     end
 
     def paginated_memberships(page:, query: nil)

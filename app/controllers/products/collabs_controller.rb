@@ -8,7 +8,7 @@ class Products::CollabsController < Sellers::BaseController
     @props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
 
     respond_to do |format|
-      format.html
+      format.html { render inertia: "Products/Collabs/index", props: inertia_props(collab_products_page_props: @props) }
       format.json { render json: @props }
     end
   end

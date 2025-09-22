@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -21,21 +22,29 @@ export const ProductsLayout = ({
   <div>
     <PageHeader title={title || "Products"} actions={ctaButton}>
       <Tabs>
-        <Tab isSelected={selectedTab === "products"} href={Routes.products_path()}>
-          All products
+        <Tab isSelected={selectedTab === "products"}>
+          <Link className="no-underline" href={Routes.products_path()}>
+            All products
+          </Link>
         </Tab>
 
-        <Tab isSelected={selectedTab === "affiliated"} href={Routes.products_affiliated_index_path()}>
-          Affiliated
+        <Tab isSelected={selectedTab === "affiliated"}>
+          <Link className="no-underline" href={Routes.products_affiliated_index_path()}>
+            Affiliated
+          </Link>
         </Tab>
 
-        <Tab isSelected={selectedTab === "collabs"} href={Routes.products_collabs_path()}>
-          Collabs
+        <Tab isSelected={selectedTab === "collabs"}>
+          <Link className="no-underline" href={Routes.products_collabs_path()}>
+            Collabs
+          </Link>
         </Tab>
 
         {archivedTabVisible ? (
-          <Tab isSelected={selectedTab === "archived"} href={Routes.products_archived_index_path()}>
-            Archived
+          <Tab isSelected={selectedTab === "archived"}>
+            <Link className="no-underline" href={Routes.products_archived_index_path()}>
+              Archived
+            </Link>
           </Tab>
         ) : null}
       </Tabs>

@@ -1,9 +1,7 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Membership, Product } from "$app/data/collabs";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { NavigationButton } from "$app/components/Button";
 import { PaginationProps } from "$app/components/Pagination";
@@ -104,4 +102,4 @@ const CollabsPage = ({
   );
 };
 
-export default register({ component: CollabsPage, propParser: createCast() });
+export default CollabsPage;

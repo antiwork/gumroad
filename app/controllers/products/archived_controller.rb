@@ -24,6 +24,9 @@ class Products::ArchivedController < Sellers::BaseController
     ).page_props
 
     @title = "Archived products"
+
+    render inertia: "Products/Archived/index",
+           props: inertia_props(archived_products_page_props: @react_products_page_props)
   end
 
   def products_paged
@@ -80,7 +83,12 @@ class Products::ArchivedController < Sellers::BaseController
 
   private
     def paged_params
-      params.permit(:page, sort: [:key, :direction])
+      if params.respond_to?(:permit)
+        params.permit(:page, sort: [:key, :direction])
+      else
+        # Convert to ActionController::Parameters-like object
+        ActionController::Parameters.new(params).permit(:page, sort: [:key, :direction])
+      end
     end
 
     def paginated_memberships(page:, query: nil)
