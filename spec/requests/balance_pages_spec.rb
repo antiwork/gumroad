@@ -884,6 +884,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
       let!(:now) { Time.current }
       let!(:payout_date) { 1.week.ago }
       let(:payout_processor_type) { PayoutProcessorType::STRIPE }
+      let(:seller) { create(:named_seller, country: "US") }
 
       before do
         MerchantAccount.find_or_create_by!(user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
