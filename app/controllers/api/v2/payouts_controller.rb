@@ -33,8 +33,8 @@ class Api::V2::PayoutsController < Api::V2::BaseController
     paginated_payouts = paginated_payouts.where(where_page_data) if where_page_data
     paginated_payouts = paginated_payouts.limit(RESULTS_PER_PAGE + 1).to_a
 
-    current_resource_owner.upcoming_payout_amounts.each do |payout_date, payout_amount|
-      if include_upcoming_payout?(payout_date, end_date)
+    if params[:page_key].blank? && params[:include_upcoming] != "false"
+      current_resource_owner.upcoming_payout_amounts.filter { end_date.nil? || end_date >= _1 }.each do |payout_date, payout_amount|
         paginated_payouts.unshift(
           Payment.new(
             amount_cents: payout_amount,
@@ -80,9 +80,5 @@ class Api::V2::PayoutsController < Api::V2::BaseController
       payouts = payouts.where("created_at >= ?", start_date) if start_date
       payouts = payouts.where("created_at < ?", end_date) if end_date
       payouts.order(created_at: :desc, id: :desc)
-    end
-
-    def include_upcoming_payout?(payout_date, end_date)
-      params[:page_key].blank? && params[:include_upcoming] != "false" && payout_date && (end_date.nil? || end_date >= payout_date)
     end
 end
