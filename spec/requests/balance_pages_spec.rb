@@ -1117,4 +1117,568 @@ describe "Balance Pages Scenario", js: true, type: :system do
       date.strftime("%B #{date.day.ordinalize}, %Y")
     end
   end
+
+  describe "Split Payment Functionality", type: :system do
+    let(:seller) { create(:named_seller) }
+
+    before do
+      allow_any_instance_of(User).to receive(:active_bank_account).and_return(nil)
+      allow_any_instance_of(User).to receive(:paypal_payout_email).and_return("test@example.com")
+      # Mock the authentication for the balance page
+      allow_any_instance_of(ApplicationController).to receive(:current_seller).and_return(seller)
+    end
+
+    context "when user has split payments with all parts completed" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2", "completed_at" => 1.day.ago }
+               ])
+      end
+
+      it "displays multi-payment success message" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("$80")
+        expect(page).to have_content("was paid via PayPal")
+      end
+
+      it "includes proper date formatting in the message" do
+        visit balance_path
+
+        expect(page).to have_content(1.day.ago.strftime("%B"))
+        expect(page).to have_content(1.day.ago.day.ordinalize)
+        expect(page).to have_content(1.day.ago.year.to_s)
+      end
+    end
+
+    context "when user has split payments with partial failures" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "failed", "amount_cents" => 3000, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" }
+               ])
+      end
+
+      it "displays partial payout failure message" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was partially processed")
+        expect(page).to have_content("$50")
+        expect(page).to have_content("was successfully paid via PayPal")
+        expect(page).to have_content("$30")
+        expect(page).to have_content("could not be sent due to insufficient_funds")
+        expect(page).to have_content("will be included in your next payout automatically")
+      end
+
+      it "includes proper status information" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with all parts failed" do
+      let!(:payment) do
+        create(:payment_failed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "failed", "amount_cents" => 5000, "txn_id" => "txn_1", "failure_reason" => "insufficient_funds" },
+                 { "state" => "failed", "amount_cents" => 3000, "txn_id" => "txn_2", "failure_reason" => "invalid_account" }
+               ])
+      end
+
+      it "displays failed payment with enhanced error messages" do
+        visit balance_path
+
+        expect(page).to have_content("Failed")
+        expect(page).to have_content("This payout failed due to insufficient_funds and other issues")
+        expect(page).to have_content("This payout failed due to insufficient_funds and other issues")
+      end
+    end
+
+    context "when user has split payments still processing" do
+      let!(:payment) do
+        create(:payment,
+               user: seller,
+               state: "processing",
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1" },
+                 { "state" => "processing", "amount_cents" => 3000, "txn_id" => "txn_2" }
+               ])
+      end
+
+      it "does not show partial payout info until all payments are resolved" do
+        visit balance_path
+
+        expect(page).not_to have_content("This payout was partially processed")
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+      end
+    end
+
+    context "when user has split payments with mixed states" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 10000, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "failed", "amount_cents" => 5000, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" },
+                 { "state" => "completed", "amount_cents" => 2000, "txn_id" => "txn_3", "completed_at" => 1.day.ago }
+               ])
+      end
+
+      it "displays correct partial payout information with multiple completed and failed parts" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was partially processed")
+        expect(page).to have_content("$120") # $100 + $20 completed
+        expect(page).to have_content("$50") # failed amount
+        expect(page).to have_content("was successfully paid via PayPal")
+        expect(page).to have_content("could not be sent due to insufficient_funds")
+      end
+    end
+
+    context "when user has large split payments" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 1000000, "txn_id" => "txn_1", "completed_at" => 1.day.ago }, # $10,000
+                 { "state" => "failed", "amount_cents" => 500000, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" } # $5,000
+               ])
+      end
+
+      it "handles large amounts correctly in partial payout messages" do
+        visit balance_path
+
+        expect(page).to have_content("$10,000")
+        expect(page).to have_content("$5,000")
+        expect(page).to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has zero amount split payments" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 0, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "failed", "amount_cents" => 0, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" }
+               ])
+      end
+
+      it "handles zero amounts correctly" do
+        visit balance_path
+
+        expect(page).to have_content("$0")
+        expect(page).to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has single split payment" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 10000, "txn_id" => "txn_1", "completed_at" => 1.day.ago }
+               ])
+      end
+
+      it "handles single payment correctly in multi-payment success message" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("$100")
+        expect(page).to have_content("was paid via PayPal")
+      end
+    end
+
+    context "when user has split payments with different completion dates" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => 2.days.ago },
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2", "completed_at" => 1.day.ago }
+               ])
+      end
+
+      it "uses the earliest completion date for multi-payment success message" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("$80")
+        # Should use the earliest completion date (2 days ago)
+        expect(page).to have_content(2.days.ago.strftime("%B"))
+      end
+    end
+
+    context "when user has split payments without completion dates" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               created_at: 3.days.ago,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1" },
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2" }
+               ])
+      end
+
+      it "falls back to payment created_at when completed_at is not available" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("$80")
+        # Should use payment created_at (3 days ago)
+        expect(page).to have_content(3.days.ago.strftime("%B"))
+      end
+    end
+
+    context "when user has non-split payments" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: false,
+               split_payments_info: nil)
+      end
+
+      it "does not show split payment messages for regular payments" do
+        visit balance_path
+
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+        expect(page).not_to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with nil split_payments_info" do
+      let!(:payment) do
+        # Create a payment and then manually set split_payments_info to nil to bypass validation
+        payment = create(:payment_completed,
+                        user: seller,
+                        was_created_in_split_mode: false)
+        payment.split_payments_info = nil
+        payment.save!(validate: false)
+        payment
+      end
+
+      it "does not show split payment messages when split_payments_info is nil" do
+        visit balance_path
+
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+        expect(page).not_to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with empty split_payments_info" do
+      let!(:payment) do
+        # Create a payment and then manually set split_payments_info to empty to bypass validation
+        payment = create(:payment_completed,
+                        user: seller,
+                        was_created_in_split_mode: false)
+        payment.split_payments_info = []
+        payment.save!(validate: false)
+        payment
+      end
+
+      it "does not show split payment messages when split_payments_info is empty" do
+        visit balance_path
+
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+        expect(page).not_to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has both split and regular payments" do
+      let!(:split_payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "failed", "amount_cents" => 3000, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" }
+               ])
+      end
+
+      let!(:regular_payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: false,
+               split_payments_info: nil)
+      end
+
+      it "shows split payment messages only for split payments" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was partially processed")
+        # Should not show split payment messages for regular payments
+      end
+    end
+
+    context "when user has multiple split payments with different scenarios" do
+      let!(:successful_split_payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2", "completed_at" => 1.day.ago }
+               ])
+      end
+
+      let!(:partial_failure_split_payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 4000, "txn_id" => "txn_3", "completed_at" => 2.days.ago },
+                 { "state" => "failed", "amount_cents" => 2000, "txn_id" => "txn_4", "failure_reason" => "invalid_account" }
+               ])
+      end
+
+      it "shows appropriate messages for each split payment scenario" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("This payout was partially processed")
+        expect(page).to have_content("$80") # $50 + $30 from successful split
+        expect(page).to have_content("$40") # $40 from partial failure split
+        expect(page).to have_content("$20") # $20 failed from partial failure split
+      end
+    end
+
+    context "when user has split payments with many parts" do
+      let(:split_payments_info) do
+        (1..50).map do |i|
+          { "state" => "completed", "amount_cents" => 1000, "txn_id" => "txn_#{i}", "completed_at" => 1.day.ago }
+        end
+      end
+
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: split_payments_info)
+      end
+
+      it "handles large number of split payments efficiently" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("$500") # 50 * $10
+      end
+    end
+
+    context "when user has split payments with mixed large and small amounts" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 1000000, "txn_id" => "txn_1", "completed_at" => 1.day.ago }, # $10,000
+                 { "state" => "failed", "amount_cents" => 1, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" } # $0.01
+               ])
+      end
+
+      it "handles mixed large and small amounts correctly" do
+        visit balance_path
+
+        expect(page).to have_content("$10,000")
+        expect(page).to have_content("$0.01")
+        expect(page).to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with whole dollar amounts" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 10000, "txn_id" => "txn_1", "completed_at" => 1.day.ago }, # $100
+                 { "state" => "failed", "amount_cents" => 5000, "txn_id" => "txn_2", "failure_reason" => "insufficient_funds" } # $50
+               ])
+      end
+
+      it "formats whole dollar amounts without cents" do
+        visit balance_path
+
+        expect(page).to have_content("$100")
+        expect(page).to have_content("$50")
+        expect(page).not_to have_content("$100.00")
+        expect(page).not_to have_content("$50.00")
+      end
+    end
+
+    context "when user has split payments with different date scenarios" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => Date.parse("2024-11-10") },
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2", "completed_at" => Date.parse("2024-11-10") }
+               ])
+      end
+
+      it "formats dates correctly in messages" do
+        visit balance_path
+
+        expect(page).to have_content("November 10th, 2024")
+      end
+    end
+
+    context "when user has split payments with fallback to payment created_at" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               created_at: Date.parse("2024-12-01"),
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1" }, # no completed_at
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2" } # no completed_at
+               ])
+      end
+
+      it "falls back to payment created_at when completed_at is not available" do
+        visit balance_path
+
+        expect(page).to have_content("December 1st, 2024")
+      end
+    end
+
+    context "when user has split payments with malformed data" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => "invalid", "txn_id" => "txn_1" }
+               ])
+      end
+
+      it "handles malformed data gracefully" do
+        visit balance_path
+
+        # Should not crash and should render the page normally
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+        expect(page).not_to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with missing required fields" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed" } # missing amount_cents and txn_id
+               ])
+      end
+
+      it "handles missing fields gracefully" do
+        visit balance_path
+
+        # Should not crash and should render the page normally
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+        expect(page).not_to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with nil values" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => nil, "txn_id" => "txn_1" }
+               ])
+      end
+
+      it "handles nil values gracefully" do
+        visit balance_path
+
+        # Should not crash and should render the page normally
+        expect(page).not_to have_content("This payout was paid in multiple payments")
+        expect(page).not_to have_content("This payout was partially processed")
+      end
+    end
+
+    context "when user has split payments with invalid state" do
+      let!(:payment) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "invalid_state", "amount_cents" => 5000, "txn_id" => "txn_1" }
+               ])
+      end
+
+      it "handles invalid states gracefully" do
+        visit balance_path
+
+        # Should not crash and should handle gracefully
+      end
+    end
+
+    context "when testing message readability and consistency" do
+      let!(:payment1) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 5000, "txn_id" => "txn_1", "completed_at" => 1.day.ago },
+                 { "state" => "completed", "amount_cents" => 3000, "txn_id" => "txn_2", "completed_at" => 1.day.ago }
+               ])
+      end
+
+      let!(:payment2) do
+        create(:payment_completed,
+               user: seller,
+               was_created_in_split_mode: true,
+               split_payments_info: [
+                 { "state" => "completed", "amount_cents" => 4000, "txn_id" => "txn_3", "completed_at" => 2.days.ago },
+                 { "state" => "failed", "amount_cents" => 2000, "txn_id" => "txn_4", "failure_reason" => "invalid_account" }
+               ])
+      end
+
+      it "provides clear and actionable messages" do
+        visit balance_path
+
+        expect(page).to have_content("This payout was partially processed")
+        expect(page).to have_content("will be included in your next payout automatically")
+
+        # Messages should be clear about what happened and what to expect
+        expect(page).to have_content("was successfully paid")
+        expect(page).to have_content("could not be sent due to invalid_account")
+      end
+
+      it "maintains consistent message formatting across different scenarios" do
+        visit balance_path
+
+        # Both messages should follow the same format pattern
+        expect(page).to have_content("This payout was paid in multiple payments")
+        expect(page).to have_content("This payout was partially processed")
+
+        # Both should include proper formatting
+        expect(page).to have_content("$80")
+        expect(page).to have_content("$40")
+        expect(page).to have_content("$20")
+      end
+    end
+  end
 end

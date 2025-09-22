@@ -7,7 +7,9 @@ module PayoutsHelper
 
   def formatted_payout_date(payout_date)
     return "" if payout_date.nil?
-    payout_date.strftime("%B #{payout_date.day.ordinalize}, %Y")
+    date_obj = payout_date.is_a?(String) ? Time.zone.parse(payout_date) : payout_date
+    return "" if date_obj.nil?
+    date_obj.strftime("%B #{date_obj.day.ordinalize}, %Y")
   end
 
   def payout_period_data(user, payment = nil)
@@ -98,7 +100,21 @@ module PayoutsHelper
     payout_period_data[:payout_note] = nil
 
     if payment.failed?
-      payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
+      if payment.was_created_in_split_mode? && payment.split_payments_info.present?
+        failure_reasons = payment.split_payments_info
+                                .select { |info| info["state"] == "failed" && info["failure_reason"].present? }
+                                .map { |info| info["failure_reason"] }
+                                .uniq
+
+        if failure_reasons.any?
+          primary_failure_reason = failure_reasons.first
+          payout_period_data[:displayable_failure_reason] = format_split_payment_failure_reason(primary_failure_reason, failure_reasons)
+        else
+          payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
+        end
+      else
+        payout_period_data[:displayable_failure_reason] = payment.displayable_failure_reason
+      end
     end
 
     # Handle partial PayPal payouts where some parts succeeded and others failed
@@ -215,8 +231,23 @@ module PayoutsHelper
   end
 
   def generate_multi_payment_success_message(completed_payments, payment)
-    total_amount = completed_payments.sum { |info| info["amount_cents"] }
-    completed_date = completed_payments.first["completed_at"] || payment.created_at
+    total_amount = completed_payments.sum do |info|
+      amount = info["amount_cents"]
+      case amount
+      when Integer
+        amount
+      when String
+        amount.to_i
+      when nil
+        0
+      else
+        0
+      end
+    end
+
+    return nil if total_amount == 0
+
+    completed_date = completed_payments.first&.dig("completed_at") || payment.created_at
     formatted_date = formatted_payout_date(completed_date)
 
     "This payout was paid in multiple payments: **#{formatted_dollar_amount(total_amount)}** was paid via PayPal on **#{formatted_date}**."
@@ -233,18 +264,61 @@ module PayoutsHelper
     return {} if processing_payments.any?
 
     if completed_payments.any? && failed_payments.empty?
+      multi_payment_message = generate_multi_payment_success_message(completed_payments, payment)
+      return {} if multi_payment_message.nil?
+
       return {
         is_multi_payment_success: true,
-        multi_payment_message: generate_multi_payment_success_message(completed_payments, payment)
+        multi_payment_message: multi_payment_message
       }
     end
 
     if completed_payments.any? && failed_payments.any?
-      completed_amount_cents = completed_payments.sum { |info| info["amount_cents"] }
-      failed_amount_cents = failed_payments.sum { |info| info["amount_cents"] }
+      completed_amount_cents = completed_payments.sum do |info|
+        amount = info["amount_cents"]
+        case amount
+        when Integer
+          amount
+        when String
+          amount.to_i
+        when nil
+          0
+        else
+          0
+        end
+      end
 
-      completed_date = completed_payments.first["completed_at"] || payment.created_at
+      failed_amount_cents = failed_payments.sum do |info|
+        amount = info["amount_cents"]
+        case amount
+        when Integer
+          amount
+        when String
+          amount.to_i
+        when nil
+          0
+        else
+          0
+        end
+      end
+
+      completed_date = completed_payments.first&.dig("completed_at") || payment.created_at
       formatted_completed_date = formatted_payout_date(completed_date)
+
+      failure_reasons = failed_payments.map { |info| info["failure_reason"] }.compact.uniq
+      failure_reason_text = if failure_reasons.any?
+        primary_reason = failure_reasons.first
+        temp_payment = Payment.new(failure_reason: primary_reason, processor: PayoutProcessorType::PAYPAL)
+        formatted_reason = temp_payment.displayable_failure_reason || primary_reason.tr("_", " ")
+
+        if failure_reasons.length > 1
+          "#{formatted_reason} and other issues"
+        else
+          formatted_reason
+        end
+      else
+        "PayPal limitations"
+      end
 
       return {
         is_partial_payout: true,
@@ -254,7 +328,7 @@ module PayoutsHelper
         partial_payout_failed_amount_cents: failed_amount_cents,
         partial_payout_failed_displayed_amount: formatted_dollar_amount(failed_amount_cents),
         partial_payout_completed_date: formatted_completed_date,
-        partial_payout_message: "This payout was partially processed. **#{formatted_dollar_amount(completed_amount_cents)}** was successfully paid via PayPal on **#{formatted_completed_date}**, but the **#{formatted_dollar_amount(failed_amount_cents)}** could not be sent due to PayPal limitations. It will be included in your next payout automatically."
+        partial_payout_message: "This payout was partially processed. **#{formatted_dollar_amount(completed_amount_cents)}** was successfully paid via PayPal on **#{formatted_completed_date}**, but the **#{formatted_dollar_amount(failed_amount_cents)}** could not be sent due to #{failure_reason_text}. It will be included in your next payout automatically."
       }
     end
 
@@ -262,6 +336,17 @@ module PayoutsHelper
   end
 
   private
+
+  def format_split_payment_failure_reason(primary_failure_reason, all_failure_reasons)
+    temp_payment = Payment.new(failure_reason: primary_failure_reason, processor: PayoutProcessorType::PAYPAL)
+    formatted_reason = temp_payment.displayable_failure_reason
+
+    if all_failure_reasons.length > 1
+      "#{formatted_reason} and other issues"
+    else
+      formatted_reason
+    end
+  end
 
   def set_basic_payout_info(payout_period_data, user, payout_period_end_date)
     previous_payment = user.payments.completed_or_processing
