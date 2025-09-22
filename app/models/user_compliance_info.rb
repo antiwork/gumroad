@@ -187,6 +187,16 @@ class UserComplianceInfo < ApplicationRecord
     true
   end
 
+  def mark_guardian_verified!
+    return unless user_under_18?
+
+    saved, new_compliance_info = dup_and_save do |new_info|
+      new_info.guardian_verified = true
+    end
+
+    new_compliance_info if saved
+  end
+
   private
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create
@@ -212,6 +222,7 @@ class UserComplianceInfo < ApplicationRecord
       self.guardian_tax_id = nil
       self.guardian_stripe_tos_accepted = false
       self.guardian_stripe_processing_tos_accepted = false
+      self.guardian_verified = false
     end
 
     def birthday_is_over_minimum_age

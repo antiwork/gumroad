@@ -136,7 +136,8 @@ RSpec.describe UserComplianceInfo, type: :model do
           guardian_date_of_birth: 40.years.ago,
           guardian_tax_id: "123456789",
           guardian_stripe_tos_accepted: true,
-          guardian_stripe_processing_tos_accepted: true
+          guardian_stripe_processing_tos_accepted: true,
+          guardian_verified: false
         )
 
         # Simulate the UpdateUserComplianceInfo service behavior
@@ -232,6 +233,50 @@ RSpec.describe UserComplianceInfo, type: :model do
         it "returns true when all individual fields and guardian fields are complete" do
           expect(user_compliance_info.has_completed_compliance_info?).to be true
         end
+      end
+    end
+  end
+
+  describe "#mark_guardian_verified!" do
+    context "when user is under 18" do
+      it "marks guardian as verified" do
+        compliance_info = create(:user_compliance_info,
+          user: user,
+          birthday: 17.years.ago,
+          guardian_first_name: "John",
+          guardian_last_name: "Doe",
+          guardian_email: "john@example.com",
+          guardian_phone: "+1234567890",
+          guardian_street_address: "123 Main St",
+          guardian_city: "Anytown",
+          guardian_state: "CA",
+          guardian_zip_code: "12345",
+          guardian_date_of_birth: 40.years.ago,
+          guardian_tax_id: "123456789",
+          guardian_stripe_tos_accepted: true,
+          guardian_stripe_processing_tos_accepted: true,
+          guardian_verified: false
+        )
+
+        new_compliance_info = compliance_info.mark_guardian_verified!
+
+        expect(new_compliance_info).to be_present
+        expect(new_compliance_info.guardian_verified).to be true
+        expect(new_compliance_info.id).not_to eq(compliance_info.id)
+      end
+    end
+
+    context "when user is 18 or older" do
+      it "returns nil" do
+        compliance_info = create(:user_compliance_info,
+          user: user,
+          birthday: 18.years.ago,
+          guardian_verified: false
+        )
+
+        result = compliance_info.mark_guardian_verified!
+
+        expect(result).to be_nil
       end
     end
   end

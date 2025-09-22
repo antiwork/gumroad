@@ -23,6 +23,7 @@ describe StripeMerchantAccountManager, :guardian_functionality do
           guardian_zip_code: "12345",
           guardian_date_of_birth: 40.years.ago,
           guardian_tax_id: "123456789",
+          guardian_verified: false,
           guardian_stripe_tos_accepted: true,
           guardian_stripe_processing_tos_accepted: true
         )
@@ -256,6 +257,39 @@ describe StripeMerchantAccountManager, :guardian_functionality do
       expect(Stripe::Account).not_to receive(:update_person)
 
       described_class.send(:update_guardian_and_minor_persons, user, stripe_account, empty_persons, nil, user_compliance_info, passphrase)
+    end
+  end
+
+  describe "guardian verification tracking" do
+    let(:user_compliance_info) do
+      create(:user_compliance_info,
+        user: user,
+        birthday: 15.years.ago,
+        guardian_first_name: "John",
+        guardian_last_name: "Doe",
+        guardian_email: "john@example.com",
+        guardian_phone: "+1234567890",
+        guardian_street_address: "123 Main St",
+        guardian_city: "Anytown",
+        guardian_state: "CA",
+        guardian_zip_code: "12345",
+        guardian_date_of_birth: 40.years.ago,
+        guardian_tax_id: "123456789",
+        guardian_verified: false,
+        guardian_stripe_tos_accepted: true,
+        guardian_stripe_processing_tos_accepted: true
+      )
+    end
+
+    it "marks guardian as verified after successful Stripe account creation" do
+      expect(Stripe::Account).to receive(:create).and_return(double(id: "acct_test"))
+      expect(Stripe::Account).to receive(:create_person).twice
+
+      described_class.create_account(user, passphrase: passphrase)
+
+      # Verify guardian is marked as verified
+      updated_compliance_info = user.reload.alive_user_compliance_info
+      expect(updated_compliance_info.guardian_verified).to be true
     end
   end
 end

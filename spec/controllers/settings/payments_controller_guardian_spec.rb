@@ -64,7 +64,8 @@ RSpec.describe Settings::PaymentsController, type: :controller do
           guardian_dob_year: 40.years.ago.year,
           guardian_tax_id: nil,  # No guardian tax ID set in test data
           guardian_stripe_tos_accepted: true,
-          guardian_stripe_processing_tos_accepted: true
+          guardian_stripe_processing_tos_accepted: true,
+          guardian_verified: false
         )
       end
 

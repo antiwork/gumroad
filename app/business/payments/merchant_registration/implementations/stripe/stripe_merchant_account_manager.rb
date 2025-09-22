@@ -87,6 +87,8 @@ module StripeMerchantAccountManager
       minor_params = person_hash(user_compliance_info, passphrase)
       minor_params.deep_merge!(relationship: { representative: true, owner: true })
       Stripe::Account.create_person(stripe_account.id, minor_params)
+
+      user_compliance_info.mark_guardian_verified!
     end
 
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.

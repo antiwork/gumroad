@@ -14,5 +14,6 @@ class AddGuardianFieldsToUserComplianceInfo < ActiveRecord::Migration[7.1]
     add_column :user_compliance_info, :guardian_tax_id, :binary
     add_column :user_compliance_info, :guardian_stripe_tos_accepted, :boolean, default: false
     add_column :user_compliance_info, :guardian_stripe_processing_tos_accepted, :boolean, default: false
+    add_column :user_compliance_info, :guardian_verified, :boolean, default: false
   end
 end

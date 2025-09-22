@@ -113,6 +113,7 @@ export type ComplianceInfo = {
   guardian_tax_id?: string | null;
   guardian_stripe_processing_tos_accepted?: boolean;
   guardian_stripe_tos_accepted?: boolean;
+  guardian_verified?: boolean;
 };
 
 type Props = {
@@ -1006,6 +1007,15 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
+          ) : isUserUnder18() && hasGuardianDetails() && !complianceInfo.guardian_verified ? (
+            <div role="status" className="info">
+              <div>
+                <p className="mb-3">
+                  Stripe is verifying your guardian's information. You'll get an email once the verification is
+                  complete. If additional information is needed, we'll contact your legal guardian directly.
+                </p>
+              </div>
+            </div>
           ) : isUserUnder18() && selectedPayoutMethod !== "stripe" && !hasGuardianDetails() ? (
             <div role="status" className="warning">
               <div>
