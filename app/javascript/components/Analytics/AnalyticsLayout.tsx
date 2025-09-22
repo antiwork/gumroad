@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -21,15 +22,21 @@ export const AnalyticsLayout = ({
     <div>
       <PageHeader title="Analytics" actions={actions}>
         <Tabs>
-          <Tab href={Routes.audience_dashboard_path()} isSelected={selectedTab === "following"}>
-            Following
+          <Tab isSelected={selectedTab === "following"}>
+            <Link className="no-underline" href={Routes.audience_dashboard_path()}>
+              Following
+            </Link>
           </Tab>
-          <Tab href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"}>
-            Sales
+          <Tab isSelected={selectedTab === "sales"}>
+            <Link className="no-underline" href={Routes.sales_dashboard_path()}>
+              Sales
+            </Link>
           </Tab>
           {user.policies.utm_link.index ? (
-            <Tab href={Routes.utm_links_dashboard_path()} isSelected={selectedTab === "utm_links"}>
-              Links
+            <Tab isSelected={selectedTab === "utm_links"}>
+              <Link className="no-underline" href={Routes.utm_links_dashboard_path()}>
+                Links
+              </Link>
             </Tab>
           ) : null}
         </Tabs>
