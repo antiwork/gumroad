@@ -62,6 +62,13 @@ class UpdateUserComplianceInfo
         new_compliance_info.guardian_tax_id = compliance_params[:guardian_tax_id]       if compliance_params[:guardian_tax_id].present?
         new_compliance_info.guardian_stripe_processing_tos_accepted = compliance_params[:guardian_stripe_processing_tos_accepted] unless compliance_params[:guardian_stripe_processing_tos_accepted].nil?
         new_compliance_info.guardian_stripe_tos_accepted = compliance_params[:guardian_stripe_tos_accepted]     unless compliance_params[:guardian_stripe_tos_accepted].nil?
+
+        if compliance_params[:guardian_first_name].present? &&
+           compliance_params[:guardian_last_name].present? &&
+           compliance_params[:guardian_email].present? &&
+           old_compliance_info.guardian_verified.nil?
+          new_compliance_info.guardian_verified = false
+        end
       end
 
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved

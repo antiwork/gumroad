@@ -238,6 +238,8 @@ RSpec.describe UserComplianceInfo, type: :model do
   end
 
   describe "#mark_guardian_verified!" do
+    let(:user) { create(:user) }
+
     context "when user is under 18" do
       it "marks guardian as verified" do
         compliance_info = create(:user_compliance_info,

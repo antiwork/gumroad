@@ -222,7 +222,7 @@ class UserComplianceInfo < ApplicationRecord
       self.guardian_tax_id = nil
       self.guardian_stripe_tos_accepted = false
       self.guardian_stripe_processing_tos_accepted = false
-      self.guardian_verified = false
+      self.guardian_verified = nil
     end
 
     def birthday_is_over_minimum_age

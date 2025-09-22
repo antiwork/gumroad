@@ -113,7 +113,7 @@ export type ComplianceInfo = {
   guardian_tax_id?: string | null;
   guardian_stripe_processing_tos_accepted?: boolean;
   guardian_stripe_tos_accepted?: boolean;
-  guardian_verified?: boolean;
+  guardian_verified?: boolean | null;
 };
 
 type Props = {
@@ -1007,7 +1007,7 @@ const PaymentsPage = (props: Props) => {
           </header>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
-          ) : isUserUnder18() && hasGuardianDetails() && !complianceInfo.guardian_verified ? (
+          ) : isUserUnder18() && hasGuardianDetails() && complianceInfo.guardian_verified === false ? (
             <div role="status" className="info">
               <div>
                 <p className="mb-3">
