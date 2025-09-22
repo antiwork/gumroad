@@ -37,6 +37,10 @@ module StripeMerchantAccountManager
       user_compliance_info = user.alive_user_compliance_info
       bank_account = user.active_bank_account
 
+      if user_compliance_info.user_under_18? && !user_compliance_info.guardian_fields_complete?
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "guardian information incomplete for minor")
+      end
+
       country_code = user_compliance_info.legal_entity_country_code
       raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a legal entity country") if country_code.blank?
       country = Country.new(country_code)
@@ -76,6 +80,13 @@ module StripeMerchantAccountManager
       person_params = person_hash(user_compliance_info, passphrase)
       person_params.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
       Stripe::Account.create_person(stripe_account.id, person_params)
+    elsif user_compliance_info.user_under_18?
+      guardian_params = guardian_person_hash(user_compliance_info, passphrase)
+      Stripe::Account.create_person(stripe_account.id, guardian_params)
+
+      minor_params = person_hash(user_compliance_info, passphrase)
+      minor_params.deep_merge!(relationship: { representative: true, owner: true })
+      Stripe::Account.create_person(stripe_account.id, minor_params)
     end
 
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
@@ -194,28 +205,80 @@ module StripeMerchantAccountManager
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase)
-    stripe_person = Stripe::Account.list_persons(stripe_account.id)["data"].last
+    stripe_persons = Stripe::Account.list_persons(stripe_account.id)["data"]
     last_user_compliance_info = UserComplianceInfo.find_by_external_id(last_user_compliance_info_id)
     user_compliance_info = user.alive_user_compliance_info
 
-    current_attributes = person_hash(user_compliance_info, passphrase)
-    current_attributes.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
-    diff_attributes = current_attributes
-    last_attributes = person_hash(last_user_compliance_info, passphrase)
+    if user_compliance_info.user_under_18?
+      # Handle guardian and minor person updates
+      update_guardian_and_minor_persons(user, stripe_account, stripe_persons, last_user_compliance_info, user_compliance_info, passphrase)
+    else
+      # Handle regular business person updates
+      stripe_person = stripe_persons.last
+      current_attributes = person_hash(user_compliance_info, passphrase)
+      current_attributes.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
+      diff_attributes = current_attributes
+      last_attributes = person_hash(last_user_compliance_info, passphrase)
 
-    if last_attributes
-      last_attributes[:email] = nil
-      last_attributes[:phone] = nil
-      diff_attributes = get_diff_attributes(current_attributes, last_attributes)
+      if last_attributes
+        last_attributes[:email] = nil
+        last_attributes[:phone] = nil
+        diff_attributes = get_diff_attributes(current_attributes, last_attributes)
+      end
+
+      if diff_attributes[:dob].present?
+        # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
+        # must be submitted if any part of it is changing.
+        diff_attributes[:dob] = current_attributes[:dob]
+      end
+
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+    end
+  end
+
+  private_class_method
+  def self.update_guardian_and_minor_persons(user, stripe_account, stripe_persons, last_user_compliance_info, user_compliance_info, passphrase)
+    # Find guardian and minor persons from Stripe
+    # Guardian is typically the first person created, minor is the second
+    guardian_person = stripe_persons.first
+    minor_person = stripe_persons.last
+
+    if guardian_person
+      current_guardian_attributes = guardian_person_hash(user_compliance_info, passphrase)
+      last_guardian_attributes = last_user_compliance_info ? guardian_person_hash(last_user_compliance_info, passphrase) : nil
+
+      diff_guardian_attributes = current_guardian_attributes
+      if last_guardian_attributes
+        last_guardian_attributes[:email] = nil
+        last_guardian_attributes[:phone] = nil
+        diff_guardian_attributes = get_diff_attributes(current_guardian_attributes, last_guardian_attributes)
+      end
+
+      if diff_guardian_attributes[:dob].present?
+        diff_guardian_attributes[:dob] = current_guardian_attributes[:dob]
+      end
+
+      Stripe::Account.update_person(stripe_account.id, guardian_person.id, diff_guardian_attributes) unless diff_guardian_attributes.empty?
     end
 
-    if diff_attributes[:dob].present?
-      # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
-      # must be submitted if any part of it is changing.
-      diff_attributes[:dob] = current_attributes[:dob]
-    end
+    if minor_person
+      current_minor_attributes = person_hash(user_compliance_info, passphrase)
+      current_minor_attributes.deep_merge!(relationship: { representative: true, owner: true })
+      last_minor_attributes = last_user_compliance_info ? person_hash(last_user_compliance_info, passphrase) : nil
 
-    Stripe::Account.update_person(stripe_account.id, stripe_person.id, diff_attributes)
+      diff_minor_attributes = current_minor_attributes
+      if last_minor_attributes
+        last_minor_attributes[:email] = nil
+        last_minor_attributes[:phone] = nil
+        diff_minor_attributes = get_diff_attributes(current_minor_attributes, last_minor_attributes)
+      end
+
+      if diff_minor_attributes[:dob].present?
+        diff_minor_attributes[:dob] = current_minor_attributes[:dob]
+      end
+
+      Stripe::Account.update_person(stripe_account.id, minor_person.id, diff_minor_attributes) unless diff_minor_attributes.empty?
+    end
   end
 
   def self.get_diff_attributes(current_attributes, last_attributes)
@@ -489,6 +552,66 @@ module StripeMerchantAccountManager
 
       hash.deep_values_strip!
     end
+  end
+
+  private_class_method
+  def self.guardian_person_hash(user_compliance_info, passphrase)
+    return unless user_compliance_info.present? && user_compliance_info.user_under_18?
+
+    guardian_tax_id = user_compliance_info.guardian_tax_id&.decrypt(passphrase)
+
+    hash = {
+      first_name: user_compliance_info.guardian_first_name,
+      last_name: user_compliance_info.guardian_last_name,
+      email: user_compliance_info.guardian_email,
+      phone: user_compliance_info.guardian_phone,
+      dob: {
+        day: user_compliance_info.guardian_date_of_birth&.day,
+        month: user_compliance_info.guardian_date_of_birth&.month,
+        year: user_compliance_info.guardian_date_of_birth&.year
+      }
+    }
+
+    if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
+      hash.deep_merge!({
+        address: {
+          line1: user_compliance_info.guardian_street_address,
+          line2: nil,
+          city: user_compliance_info.guardian_city,
+          state: user_compliance_info.guardian_state,
+          postal_code: user_compliance_info.guardian_zip_code,
+          country: user_compliance_info.country_code
+        }
+      })
+    else
+      hash.deep_merge!({
+        address: {
+          line1: user_compliance_info.guardian_street_address,
+          line2: nil,
+          city: user_compliance_info.guardian_city,
+          state: user_compliance_info.guardian_state,
+          postal_code: user_compliance_info.guardian_zip_code,
+          country: user_compliance_info.country_code
+        }
+      })
+    end
+
+    if guardian_tax_id && (user_compliance_info.country_code != Compliance::Countries::USA.alpha2 || guardian_tax_id.length > 4)
+      hash.deep_merge!(id_number: guardian_tax_id)
+    end
+
+    if user_compliance_info.country_code == Compliance::Countries::USA.alpha2 && guardian_tax_id && guardian_tax_id.length == 4
+      hash.deep_merge!(ssn_last_4: guardian_tax_id.last(4))
+    end
+
+    if [Compliance::Countries::ARE.alpha2,
+        Compliance::Countries::SGP.alpha2,
+        Compliance::Countries::BGD.alpha2,
+        Compliance::Countries::PAK.alpha2].include?(user_compliance_info.country_code)
+      hash.deep_merge!(nationality: user_compliance_info.guardian_nationality || user_compliance_info.nationality)
+    end
+
+    hash.deep_values_strip!
   end
 
   def self.company_hash(user_compliance_info, passphrase)
