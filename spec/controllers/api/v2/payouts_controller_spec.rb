@@ -191,8 +191,34 @@ describe Api::V2::PayoutsController do
           expect(upcoming_payouts.length).to eq(1)
           upcoming_payout = upcoming_payouts.first
           expect(upcoming_payout["amount"]).to eq("15.00")
-          expect(upcoming_payout["currency"]).to eq(@seller.currency_type)
+          expect(upcoming_payout["currency"]).to eq(Currency::USD)
           expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
+          expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+          expect(upcoming_payout["processed_at"]).to be_nil
+        end
+
+        it "indicates which payment processor will be used" do
+          @seller.update!(payment_address: "test@example.com")
+
+          get :index, params: @params
+
+          upcoming_payout = response.parsed_body["payouts"].first
+          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payout["payment_processor"]).to eq(PayoutProcessorType::PAYPAL)
+          expect(upcoming_payout["bank_account_visual"]).to be_nil
+          expect(upcoming_payout["paypal_email"]).to eq("test@example.com")
+
+          @seller.active_bank_account&.destroy!
+          bank_account = create(:uk_bank_account, user: @seller)
+          @seller.update!(payment_address: nil)
+
+          get :index, params: @params
+
+          upcoming_payout = response.parsed_body["payouts"].first
+          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payout["payment_processor"]).to eq(PayoutProcessorType::STRIPE)
+          expect(upcoming_payout["bank_account_visual"]).to eq(bank_account.account_number_visual)
+          expect(upcoming_payout["paypal_email"]).to be_nil
         end
 
         it "includes upcoming payout when end_date is after current payout end date" do
@@ -284,7 +310,7 @@ describe Api::V2::PayoutsController do
         end
 
         it "reflects current unpaid balance up to payout period end date" do
-          create(:balance, user: @seller, amount_cents: 5_00, date: Date.current + 2.days, state: "unpaid")
+          create(:balance, user: @seller, amount_cents: 5_00, date: Date.parse("2025-09-08"), state: "unpaid")
 
           get :index, params: @params
 
