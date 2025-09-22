@@ -11,6 +11,9 @@ class Checkout::UpsellsController < Sellers::BaseController
     @title = "Upsells"
     pagination, upsells = fetch_upsells
     @upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
+
+    render inertia: "Checkout/Upsells/index",
+           props: inertia_props(upsells_page_props: @upsells_props)
   end
 
   def paged
@@ -188,7 +191,12 @@ class Checkout::UpsellsController < Sellers::BaseController
     end
 
     def paged_params
-      params.permit(:page, sort: [:key, :direction])
+      if params.respond_to?(:permit)
+        params.permit(:page, sort: [:key, :direction])
+      else
+        # Convert to ActionController::Parameters-like object
+        ActionController::Parameters.new(params).permit(:page, sort: [:key, :direction])
+      end
     end
 
     def fetch_upsells

@@ -1,7 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
-import { createCast, is } from "ts-safe-cast";
+import { is } from "ts-safe-cast";
 
 import {
   OfferCodeStatistics,
@@ -14,7 +14,6 @@ import {
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
@@ -123,17 +122,14 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
 
 const year = new Date().getFullYear();
 
-const DiscountsPage = ({
-  offer_codes,
-  pages,
-  products,
-  pagination: initialPagination,
-}: {
-  pages: Page[];
+export type DiscountsPageProps = {
   offer_codes: OfferCode[];
+  pages: Page[];
   products: Product[];
   pagination: PaginationProps;
-}) => {
+};
+
+const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagination }: DiscountsPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [{ offerCodes, pagination }, setState] = React.useState<{
     offerCodes: OfferCode[];
@@ -1144,4 +1140,4 @@ const Form = ({
   );
 };
 
-export default register({ component: DiscountsPage, propParser: createCast() });
+export default DiscountsPage;

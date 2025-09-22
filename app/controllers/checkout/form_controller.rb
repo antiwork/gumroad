@@ -6,6 +6,9 @@ class Checkout::FormController < Sellers::BaseController
 
     @title = "Checkout form"
     @form_props = Checkout::FormPresenter.new(pundit_user:).form_props
+
+    render inertia: "Checkout/Form/index",
+           props: inertia_props(form_page_props: @form_props)
   end
 
   def update

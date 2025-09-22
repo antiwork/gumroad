@@ -1,6 +1,5 @@
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import {
   createUpsell,
@@ -18,7 +17,6 @@ import { PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
@@ -78,12 +76,14 @@ export type QueryParams = {
 const formatOfferedProductName = (productName: string, variantName?: string) =>
   `${productName}${variantName ? ` - ${variantName}` : ""}`;
 
-const UpsellsPage = (props: {
+export type UpsellsPageProps = {
   pages: Page[];
   upsells: Upsell[];
   products: { id: string; name: string; has_multiple_versions: boolean; native_type: ProductNativeType }[];
   pagination: PaginationProps;
-}) => {
+};
+
+const UpsellsPage = (props: UpsellsPageProps) => {
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
 
@@ -961,4 +961,4 @@ const Form = ({
   );
 };
 
-export default register({ component: UpsellsPage, propParser: createCast() });
+export default UpsellsPage;

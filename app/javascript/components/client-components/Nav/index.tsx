@@ -104,7 +104,7 @@ export const Nav = (props: Props) => {
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
         ) : null}
-        <NavLink
+        <ClientNavLink
           text="Checkout"
           icon="cart3-fill"
           href={Routes.checkout_discounts_url(routeParams)}

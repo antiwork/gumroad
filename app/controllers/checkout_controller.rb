@@ -7,6 +7,9 @@ class CheckoutController < ApplicationController
     @hide_layouts = true
     @on_checkout_page = true
     @checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
+
+    render inertia: "Checkout/index",
+           props: inertia_props(checkout_page_props: @checkout_presenter.checkout_props)
   end
 
   private

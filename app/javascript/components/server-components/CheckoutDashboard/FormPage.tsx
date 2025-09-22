@@ -1,6 +1,5 @@
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { CustomField, updateCheckoutForm } from "$app/data/checkout_form";
 import { RecommendationType } from "$app/data/recommended_products";
@@ -9,7 +8,6 @@ import { assertDefined } from "$app/utils/assert";
 import { PLACEHOLDER_CARD_PRODUCT, PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
@@ -26,6 +24,15 @@ export type SimpleProduct = { id: string; name: string; archived: boolean };
 
 let lastKey = 0;
 
+export type FormPageProps = {
+  pages: Page[];
+  user: { display_offer_code_field: boolean; recommendation_type: RecommendationType; tipping_enabled: boolean };
+  cart_item: CartItem | null;
+  card_product: CardProduct | null;
+  custom_fields: CustomField[];
+  products: SimpleProduct[];
+};
+
 const FormPage = ({
   pages,
   user: { display_offer_code_field, recommendation_type, tipping_enabled },
@@ -33,14 +40,7 @@ const FormPage = ({
   card_product,
   custom_fields,
   products,
-}: {
-  pages: Page[];
-  user: { display_offer_code_field: boolean; recommendation_type: RecommendationType; tipping_enabled: boolean };
-  cart_item: CartItem | null;
-  card_product: CardProduct | null;
-  custom_fields: CustomField[];
-  products: SimpleProduct[];
-}) => {
+}: FormPageProps) => {
   const loggedInUser = useLoggedInUser();
 
   const cartItem = cart_item ?? PLACEHOLDER_CART_ITEM;
@@ -366,4 +366,4 @@ const FormPage = ({
   );
 };
 
-export default register({ component: FormPage, propParser: createCast() });
+export default FormPage;

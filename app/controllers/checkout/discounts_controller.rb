@@ -13,6 +13,9 @@ class Checkout::DiscountsController < Sellers::BaseController
     @title = "Discounts"
     pagination, offer_codes = fetch_offer_codes
     @presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
+
+    render inertia: "Checkout/Discounts/index",
+           props: inertia_props(discounts_page_props: @presenter.discounts_props)
   end
 
   def paged
@@ -90,7 +93,12 @@ class Checkout::DiscountsController < Sellers::BaseController
     end
 
     def paged_params
-      params.permit(:page, sort: [:key, :direction])
+      if params.respond_to?(:permit)
+        params.permit(:page, sort: [:key, :direction])
+      else
+        # Convert to ActionController::Parameters-like object
+        ActionController::Parameters.new(params).permit(:page, sort: [:key, :direction])
+      end
     end
 
     def clean_params

@@ -1,6 +1,6 @@
 import reverse from "lodash/reverse";
 import * as React from "react";
-import { createCast, cast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { SurchargesResponse } from "$app/data/customer_surcharge";
 import { startOrderCreation } from "$app/data/order";
@@ -16,7 +16,6 @@ import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
 import { Button } from "$app/components/Button";
@@ -71,7 +70,7 @@ const GUMROAD_PARAMS = [
   "pay_in_installments",
 ];
 
-type Props = {
+export type CheckoutPageProps = {
   discover_url: string;
   countries: Record<string, string>;
   us_states: string[];
@@ -156,7 +155,7 @@ export const CheckoutPage = ({
   tip_options,
   default_tip_option,
   ...props
-}: Props) => {
+}: CheckoutPageProps) => {
   const user = useLoggedInUser();
   const email = props.cart?.email ?? user?.email ?? "";
   const [cart, setCart] = React.useState<CartState>(() => {
@@ -773,4 +772,4 @@ export const UpsellModal = ({
   );
 };
 
-export default register({ component: CheckoutPage, propParser: createCast() });
+export default CheckoutPage;
