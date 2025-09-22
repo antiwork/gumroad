@@ -171,7 +171,7 @@ describe Api::V2::PayoutsController do
         before do
           # Set up seller with unpaid balance and payout capability
           create(:ach_account, user: @seller)
-          create(:balance, user: @seller, amount_cents: 15_00, date: Date.current, state: "unpaid")
+          create(:balance, user: @seller, amount_cents: 15_00, date: Date.parse("2025-09-10"), state: "unpaid")
           create(:bank, routing_number: "110000000", name: "Bank of America")
         end
 
@@ -186,9 +186,10 @@ describe Api::V2::PayoutsController do
           get :index, params: @params
 
           payouts = response.parsed_body["payouts"]
-          upcoming_payout = payouts.first
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
 
-          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
           expect(upcoming_payout["amount"]).to eq("15.00")
           expect(upcoming_payout["currency"]).to eq(@seller.currency_type)
           expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
@@ -201,9 +202,9 @@ describe Api::V2::PayoutsController do
           get :index, params: @params
 
           payouts = response.parsed_body["payouts"]
-          upcoming_payout = payouts.first
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
 
-          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payouts.length).to be >= 1
           expect(payouts.length).to be >= 1
         end
 
@@ -241,15 +242,19 @@ describe Api::V2::PayoutsController do
           expect(payouts.none? { |p| p["id"].nil? }).to be true
         end
 
-        it "positions upcoming payout first in the results list" do
+        it "positions upcoming payouts first in the results list" do
           older_payout = create(:payment_completed, user: @seller, created_at: 2.days.ago)
 
           get :index, params: @params
 
           payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+          completed_payouts = payouts.select { |p| p["id"].present? }
+
+          expect(upcoming_payouts.length).to eq(1)
           expect(payouts.first["id"]).to be_nil
-          expect(payouts.second["id"]).to eq(@payout.external_id)
-          expect(payouts.third["id"]).to eq(older_payout.external_id)
+          expect(completed_payouts.first["id"]).to eq(@payout.external_id)
+          expect(completed_payouts.second["id"]).to eq(older_payout.external_id)
         end
 
         it "includes upcoming payout along with completed payouts up to page limit" do
@@ -258,12 +263,12 @@ describe Api::V2::PayoutsController do
           get :index, params: @params
 
           payouts = response.parsed_body["payouts"]
-          upcoming_payout = payouts.first
-
-          expect(upcoming_payout["id"]).to be_nil
-          expect(payouts.length).to be <= Api::V2::PayoutsController::RESULTS_PER_PAGE
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
           completed_payouts = payouts.select { |p| p["id"].present? }
-          expect(completed_payouts.length).to eq([@seller.payments.displayable.count, Api::V2::PayoutsController::RESULTS_PER_PAGE - 1].min)
+
+          expect(upcoming_payouts.length).to eq(1)
+          expect(payouts.length).to be <= Api::V2::PayoutsController::RESULTS_PER_PAGE
+          expect(completed_payouts.length).to eq([@seller.payments.displayable.count, Api::V2::PayoutsController::RESULTS_PER_PAGE - upcoming_payouts.length].min)
         end
 
         it "does not include upcoming payout when user has no unpaid balance" do
@@ -283,8 +288,11 @@ describe Api::V2::PayoutsController do
 
           get :index, params: @params
 
-          upcoming_payout = response.parsed_body["payouts"].first
-          expect(upcoming_payout["id"]).to be_nil
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
           expect(upcoming_payout["amount"]).to eq("20.00")
         end
 
@@ -306,8 +314,11 @@ describe Api::V2::PayoutsController do
 
           get :index, params: @params
 
-          upcoming_payout = response.parsed_body["payouts"].first
-          expect(upcoming_payout["id"]).to be_nil
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
           expect(upcoming_payout["status"]).to eq(User::PAYOUTS_STATUS_PAUSED)
         end
 
@@ -320,11 +331,28 @@ describe Api::V2::PayoutsController do
           get :index, params: @params
 
           payouts = response.parsed_body["payouts"]
-          upcoming_payout = payouts.first
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
 
-          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
           expect(upcoming_payout["amount"]).to eq("15.00")
           expect(payouts.length).to eq(2)
+        end
+
+        it "handles multiple upcoming payouts correctly" do
+          create(:balance, user: @seller, amount_cents: 20_00, date: Date.new(2025, 9, 15), state: "unpaid")
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(2)
+
+          expect(upcoming_payouts.first["amount"]).to eq("20.00")
+          expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-26").iso8601)
+          expect(upcoming_payouts.second["amount"]).to eq("15.00")
+          expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
         end
       end
     end
