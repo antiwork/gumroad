@@ -10,6 +10,8 @@ import ReactSelect, {
   DropdownIndicatorProps,
   ControlProps,
   ClearIndicatorProps,
+  GroupBase,
+  SelectInstance,
 } from "react-select";
 
 import { escapeRegExp } from "$app/utils";
@@ -50,7 +52,11 @@ export type Props<IsMulti extends boolean = boolean> = Omit<
   maxLength?: number;
 };
 
-export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.ReactElement = (props) => {
+// Forward a ref to react-select so parents can call .focus(), .blur(), etc.
+const SelectInner = <IsMulti extends boolean>(
+  props: Props<IsMulti>,
+  ref: React.ForwardedRef<SelectInstance<Option, IsMulti, GroupBase<Option>>>,
+) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [focusedOptionId, setFocusedOptionId] = React.useState<null | string>(null);
 
@@ -79,6 +85,7 @@ export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.R
     <CustomPropsContext.Provider value={customProps}>
       <ReactSelect
         {...props}
+        ref={ref}
         isOptionDisabled={(option) => option.disabled ?? false}
         instanceId={props.inputId ?? menuListId}
         className={cx("combobox", props.className)}
@@ -123,6 +130,13 @@ export const Select: <IsMulti extends boolean>(props: Props<IsMulti>) => React.R
     </CustomPropsContext.Provider>
   );
 };
+
+/* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */
+export const Select = React.forwardRef(SelectInner) as unknown as <IsMulti extends boolean>(
+  props: Props<IsMulti> & {
+    ref?: React.Ref<SelectInstance<Option, IsMulti, GroupBase<Option>>>;
+  },
+) => React.ReactElement;
 
 // Regex groupings are important to be kept in sync with `formatOptionLabel` method
 const filterRegex = (query: string) => new RegExp(`(.*?)(${escapeRegExp(query)})(.*)`, "iu");

@@ -15,7 +15,8 @@ describe("Purchase product page", type: :system, js: true) do
   describe "Refund policy" do
     before do
       purchase.create_purchase_refund_policy!(
-        title: "This is a product-level refund policy",
+        title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+        max_refund_period_in_days: 30,
         fine_print: "This is the fine print of the refund policy."
       )
     end
@@ -23,8 +24,8 @@ describe("Purchase product page", type: :system, js: true) do
     it "renders refund policy" do
       visit purchase_product_path(purchase.external_id)
 
-      click_on("This is a product-level refund policy")
-      within_modal "This is a product-level refund policy" do
+      click_on("30-day money back guarantee")
+      within_modal "30-day money back guarantee" do
         expect(page).to have_text("This is the fine print of the refund policy.")
       end
     end
@@ -35,7 +36,7 @@ describe("Purchase product page", type: :system, js: true) do
           visit purchase_product_path(purchase.external_id, anchor: "refund-policy")
         end.to change { Event.count }.by(1)
 
-        within_modal "This is a product-level refund policy" do
+        within_modal "30-day money back guarantee" do
           expect(page).to have_text("This is the fine print of the refund policy.")
         end
 

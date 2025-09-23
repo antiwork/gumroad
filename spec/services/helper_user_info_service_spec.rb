@@ -118,7 +118,8 @@ describe HelperUserInfoService do
         product = create(:product)
         purchase = create(:purchase, purchaser: user, link: product, created_at: 1.day.ago)
         purchase.create_purchase_refund_policy!(
-          title: "This is a product-level refund policy",
+          title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+          max_refund_period_in_days: 30,
           fine_print: "This is the fine print of the refund policy."
         )
         result = described_class.new(email: user.email).customer_info

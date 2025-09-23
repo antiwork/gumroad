@@ -129,7 +129,7 @@ class UrlRedirectPresenter
         rich_content_pages:,
         posts: posts(rich_content_pages),
         video_transcoding_info:,
-        custom_receipt: product&.custom_receipt? ? Rinku.auto_link(simple_format(product.custom_receipt), :all, %(target="_blank" rel="noopener noreferrer nofollow")).html_safe : nil,
+        custom_receipt: nil,
         discord: purchase.present? && DiscordIntegration.is_enabled_for(purchase) ? {
           connected: DiscordIntegration.discord_user_id_for(purchase).present?
         } : nil,

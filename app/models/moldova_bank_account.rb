@@ -3,7 +3,7 @@
 class MoldovaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "MD"
 
-  BANK_CODE_FORMAT_REGEX = /^[A-Z]{4}MDMD[A-Z0-9]{3}$/
+  BANK_CODE_FORMAT_REGEX = /^[A-Z0-9]{4}MD[A-Z0-9]{5}$/
   ACCOUNT_NUMBER_FORMAT_REGEX = /^MD\d{2}[A-Z0-9]{20}$/
   private_constant :BANK_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 

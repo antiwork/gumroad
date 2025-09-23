@@ -8,6 +8,7 @@ import { incrementPostViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { CommentsMetadataProvider, PostCommentsSection } from "$app/components/Post/PostCommentsSection";
 import { Layout } from "$app/components/Profile/Layout";
@@ -68,16 +69,16 @@ const PostPage = ({
 
   return (
     <Layout className="reader" creatorProfile={creator_profile}>
-      <header>
+      <header className="grid gap-2 border-b border-border px-4 py-8">
         <h1>{subject}</h1>
         <time>{publishedAtFormatted}</time>
       </header>
-      <article style={{ display: "grid", gap: "var(--spacer-6)" }}>
+      <article className="grid gap-8 border-b border-border p-4 pt-8 lg:pb-8 lg:pt-12">
         {pageLoaded ? null : <LoadingSpinner width="2em" />}
         <EditorContent className="rich-text" editor={editor} />
 
         {call_to_action || download_url ? (
-          <div style={{ display: "grid" }}>
+          <div className="mb-4 grid">
             {call_to_action ? (
               <p>
                 <a
@@ -116,16 +117,25 @@ const PostPage = ({
       {recent_posts.length > 0 ? (
         <>
           {recent_posts.map((post) => (
-            <a key={post.slug} href={Routes.custom_domain_view_post_path(post.slug, { purchase_id })}>
+            <a
+              key={post.slug}
+              href={Routes.custom_domain_view_post_path(post.slug, { purchase_id })}
+              className="flex justify-between border-b border-border px-4 py-8 no-underline lg:py-12"
+            >
               <div>
                 <h2>{post.name}</h2>
                 <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
               </div>
+              <Icon name="arrow-diagonal-up-right" className="text-lg" />
             </a>
           ))}
           {has_posts_on_profile ? (
-            <a href={Routes.root_path()}>
+            <a
+              href={Routes.root_path()}
+              className="flex justify-between border-b border-border px-4 py-8 no-underline lg:py-12"
+            >
               <h2>See all posts from {creator_profile.name}</h2>
+              <Icon name="arrow-diagonal-up-right" className="text-lg" />
             </a>
           ) : null}
         </>

@@ -5,7 +5,6 @@ class Settings::ProfileController < Sellers::BaseController
 
   def show
     @title = "Settings"
-    @body_class = "fixed-aside"
     @profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
     @settings_presenter = SettingsPresenter.new(pundit_user:)
 

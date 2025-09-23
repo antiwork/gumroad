@@ -1,7 +1,7 @@
 <%= render("shared/recaptcha_script") %>
 <%= load_pack("subscription_magic_link") %>
 
-<div class="modals-container" style="display: contents">
+<div class="modals-container flex flex-1">
   <div class="modal gr-auth showing squished" style="display: contents">
     <%= react_component "SubscriptionManagerMagicLink", props: @react_component_props, prerender: true %>
   </div>

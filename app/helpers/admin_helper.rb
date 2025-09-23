@@ -3,6 +3,16 @@
 module AdminHelper
   include IconHelper
 
+  def purchase_refund_policy_tooltip(purchase_refund_policy)
+    return nil unless purchase_refund_policy.different_than_product_refund_policy?
+
+    title = purchase_refund_policy.product_refund_policy&.title || "None"
+
+    with_tooltip(tip: "Current refund policy: #{title}") do
+      icon("solid-shield-exclamation", style: "color: rgb(var(--warning))")
+    end
+  end
+
   def user_name(user)
     user.name.presence || "User " + user.id.to_s
   end

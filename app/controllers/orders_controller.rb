@@ -75,7 +75,20 @@ class OrdersController < ApplicationController
     end
 
     def skip_recaptcha?
-      (action_name == "create" && params.fetch(:line_items, {}).all? { |product| !Link.find_by(unique_permalink: product["permalink"]).require_captcha? && product["perceived_price_cents"].to_s == "0" }) || valid_wallet_payment?
+      site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
+      return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
+      return true if action_name == "create" && all_free_products_without_captcha?
+      return true if valid_wallet_payment?
+
+      false
+    end
+
+    def all_free_products_without_captcha?
+      line_items = params.fetch(:line_items, {})
+      line_items.all? do |product|
+        product_link = Link.find_by(unique_permalink: product["permalink"])
+        !product_link.require_captcha? && product["perceived_price_cents"].to_s == "0"
+      end
     end
 
     def valid_wallet_payment?

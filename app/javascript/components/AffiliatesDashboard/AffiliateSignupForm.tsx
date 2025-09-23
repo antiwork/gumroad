@@ -99,7 +99,7 @@ export const AffiliateSignupForm = () => {
       }
     >
       {products.length === 0 ? (
-        <section>
+        <section className="!p-4 md:!p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholderImage} />
@@ -117,7 +117,7 @@ export const AffiliateSignupForm = () => {
         </section>
       ) : (
         <form>
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Affiliate link</h2>
               <div>
@@ -156,7 +156,7 @@ export const AffiliateSignupForm = () => {
               )}
             </fieldset>
           </section>
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Affiliate products</h2>
               <p>Enable specific products you want your affiliates to earn a commission with.</p>
@@ -183,7 +183,7 @@ export const AffiliateSignupForm = () => {
               </tbody>
             </table>
           </section>
-          <section>
+          <section className="!p-4 md:!p-8">
             <header>
               <h2>Gumroad Affiliate Program</h2>
               <div>

@@ -46,6 +46,10 @@ select[multiple].chosen-fallback {
     padding-left: $body-padding-desktop-center;
     padding-right: $body-padding-desktop-center;
   }
+  .discover.custom-sections > section {
+    padding-left: $body-padding-desktop-center;
+    padding-right: $body-padding-desktop-center;
+  }
 }
 
 [role="tree"] [role="treeitem"].sortable-ghost {

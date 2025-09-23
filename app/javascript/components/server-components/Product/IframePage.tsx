@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Product, useSelectionFromUrl, Props as ProductProps } from "$app/components/Product";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -10,7 +11,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 const IframePage = (props: ProductProps) => {
   useRunOnce(() => window.parent.postMessage({ type: "loaded" }, "*"));
   useRunOnce(() => window.parent.postMessage({ type: "translations", translations: { close: "Close" } }, "*"));
-  const mainRef = React.useRef<HTMLElement>(null);
+  const mainRef = React.useRef<HTMLDivElement>(null);
   const dimensions = useElementDimensions(mainRef);
   React.useEffect(() => {
     if (dimensions) window.parent.postMessage({ type: "height", height: dimensions.height }, "*");
@@ -19,7 +20,7 @@ const IframePage = (props: ProductProps) => {
 
   return (
     <div>
-      <main ref={mainRef}>
+      <div ref={mainRef}>
         <section>
           <Product
             {...props}
@@ -29,10 +30,8 @@ const IframePage = (props: ProductProps) => {
             ctaLabel="Add to cart"
           />
         </section>
-        <footer style={{ borderTop: "none", padding: 0 }}>
-          Powered by <span className="logo-full" />
-        </footer>
-      </main>
+        <PoweredByFooter className="p-0" />
+      </div>
     </div>
   );
 };

@@ -185,9 +185,9 @@ export const Layout: React.FC<{
   };
 
   return (
-    <main className={cx("discover", className)}>
+    <div className={cx("discover", className)}>
       <header
-        className="hero border-t-0 lg:pe-16 lg:ps-16"
+        className="hero relative z-20 border-b border-t-0 border-border bg-body px-4 py-8 lg:pe-16 lg:ps-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
       >
         <div className="flex w-full flex-col gap-4">
@@ -207,7 +207,7 @@ export const Layout: React.FC<{
         ) : null}
       </header>
       {children}
-    </main>
+    </div>
   );
 };
 
@@ -220,7 +220,7 @@ const TaxonomyCategoryBreadcrumbs = ({
   taxonomies: Taxonomy[];
   onClickTaxonomy: (taxonomySlugPath?: string) => void;
 }) => (
-  <div role="navigation" className="breadcrumbs" aria-label="Breadcrumbs">
+  <div role="navigation" className="breadcrumbs mt-4" aria-label="Breadcrumbs">
     <ol itemScope itemType="https://schema.org/BreadcrumbList">
       {taxonomyPath.split("/").map((slug, index, breadcrumbs) => {
         const taxonomySlugPath = breadcrumbs.slice(0, index + 1).join("/");

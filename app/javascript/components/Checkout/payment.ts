@@ -79,9 +79,9 @@ export type State = {
     | { type: "validating" }
     | { type: "starting" }
     | { type: "captcha"; paymentMethod: PurchasePaymentMethod }
-    | { type: "finished"; recaptchaResponse: string; paymentMethod: PurchasePaymentMethod };
+    | { type: "finished"; recaptchaResponse?: string; paymentMethod: PurchasePaymentMethod };
   payLabel?: string;
-  recaptchaKey: string;
+  recaptchaKey: string | null;
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
@@ -116,7 +116,7 @@ type PublicAction =
   | { type: "offer" }
   | { type: "validate" }
   | { type: "start-payment" }
-  | { type: "set-recaptcha-response"; recaptchaResponse: string }
+  | { type: "set-recaptcha-response"; recaptchaResponse?: string }
   | { type: "set-payment-method"; paymentMethod: PurchasePaymentMethod }
   | { type: "acknowledge-email-typo"; email: string }
   | {
@@ -234,7 +234,7 @@ export function createReducer(initial: {
   products: Product[];
   fullName?: string;
   payLabel?: string;
-  recaptchaKey: string;
+  recaptchaKey: string | null;
   paypalClientId: string;
   gift: Gift | null;
   requireEmailTypoAcknowledgment: boolean;
@@ -324,10 +324,12 @@ export function createReducer(initial: {
           if (state.status.type === "input") return;
           state.status = { type: "input", errors: new Set() };
           break;
-        case "set-recaptcha-response":
+        case "set-recaptcha-response": {
           if (state.status.type !== "captcha") return;
-          state.status = { ...state.status, type: "finished", recaptchaResponse: action.recaptchaResponse };
+          const recaptchaData = action.recaptchaResponse ? { recaptchaResponse: action.recaptchaResponse } : {};
+          state.status = { ...state.status, type: "finished", ...recaptchaData };
           break;
+        }
         case "set-payment-method": {
           if (state.status.type !== "starting") return;
           const errors = validatePaymentMethodIndependentFields(state);

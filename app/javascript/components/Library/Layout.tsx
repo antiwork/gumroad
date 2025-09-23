@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
 
 export const Layout = ({
@@ -15,39 +17,34 @@ export const Layout = ({
   followingWishlistsEnabled: boolean;
   children: React.ReactNode;
 }) => {
-  const ref = React.useRef<HTMLElement>(null);
+  const ref = React.useRef<HTMLDivElement>(null);
 
   useOnScrollToBottom(ref, () => onScrollToBottom?.(), 30);
 
   return (
-    <main className="library" ref={ref}>
-      <header>
-        <h1>Library</h1>
-        <div role="tablist">
-          <a href={Routes.library_path()} role="tab" aria-selected={selectedTab === "purchases"}>
+    <div className="library" ref={ref}>
+      <PageHeader title="Library">
+        <Tabs>
+          <Tab href={Routes.library_path()} isSelected={selectedTab === "purchases"}>
             Purchases
-          </a>
-          <a href={Routes.wishlists_path()} role="tab" aria-selected={selectedTab === "wishlists"}>
+          </Tab>
+          <Tab href={Routes.wishlists_path()} isSelected={selectedTab === "wishlists"}>
             {followingWishlistsEnabled ? "Saved" : "Wishlists"}
-          </a>
+          </Tab>
           {followingWishlistsEnabled ? (
-            <a
-              href={Routes.wishlists_following_index_path()}
-              role="tab"
-              aria-selected={selectedTab === "following_wishlists"}
-            >
+            <Tab href={Routes.wishlists_following_index_path()} isSelected={selectedTab === "following_wishlists"}>
               Following
-            </a>
+            </Tab>
           ) : null}
           {reviewsPageEnabled ? (
-            <a href={Routes.reviews_path()} role="tab" aria-selected={selectedTab === "reviews"}>
+            <Tab href={Routes.reviews_path()} isSelected={selectedTab === "reviews"}>
               Reviews
-            </a>
+            </Tab>
           ) : null}
-        </div>
-      </header>
+        </Tabs>
+      </PageHeader>
       {children}
-    </main>
+    </div>
   );
 };
 Layout.displayName = "Layout";

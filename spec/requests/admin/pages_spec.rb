@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe "Admin Pages Scenario", type: :system, js: true do
-  let(:admin) { create(:named_user, :admin, has_risk_privilege: true) }
+  let(:admin) { create(:named_user, :admin) }
 
   before do
     allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)

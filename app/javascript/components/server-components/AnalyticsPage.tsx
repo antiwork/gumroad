@@ -152,6 +152,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
             <select
               aria-label="Aggregate by"
               onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
+              className="w-auto"
             >
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>
@@ -163,7 +164,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
       }
     >
       {hasContent ? (
-        <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div className="space-y-8 p-4 md:p-8">
           <SalesQuickStats total={mainData?.total} />
           {mainData ? (
             <>
@@ -202,7 +203,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
           )}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />
@@ -213,7 +214,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
               you see what's working, and what could be working better.
             </p>
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
-              Learn more about the analytics dashboard.
+              Learn more about the analytics dashboard
             </a>
           </div>
         </div>
