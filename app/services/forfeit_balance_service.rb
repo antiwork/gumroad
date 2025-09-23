@@ -13,16 +13,7 @@ class ForfeitBalanceService
   def process
     return unless balance_amount_cents_to_forfeit > 0
 
-    balances_to_forfeit.group_by(&:merchant_account).each do |merchant_account, balances|
-      Credit.create_for_balance_forfeit!(
-        user:,
-        merchant_account:,
-        amount_cents: -balances.sum(&:amount_cents),
-        reason: "forfeited_balance_on_#{reason}"
-      )
-
-      balances.each(&:mark_forfeited!)
-    end
+    balances_to_forfeit.each(&:mark_forfeited!)
 
     balance_ids = balances_to_forfeit.ids.join(", ")
     user.comments.create!(

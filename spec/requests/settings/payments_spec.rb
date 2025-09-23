@@ -887,8 +887,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Your country has been updated!")
           expect(balance.reload.unpaid?).to be false
           expect(balance.forfeited?).to be true
-          expect(@user.credits.last.amount_cents).to eq(-123_45)
-          expect(@user.credits.last.reason).to eq("forfeited_balance_on_country_change")
+          expect(@user.reload.credits.last).to be nil
         end
       end
     end
@@ -990,8 +989,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(@user.payment_address).to eq "uaecr@gumroad.com"
           expect(balance.reload.unpaid?).to be false
           expect(balance.reload.forfeited?).to be true
-          expect(@user.credits.last.amount_cents).to eq(-123_45)
-          expect(@user.credits.last.reason).to eq("forfeited_balance_on_payout_method_change")
+          expect(@user.reload.credits.last).to be nil
         end
       end
     end

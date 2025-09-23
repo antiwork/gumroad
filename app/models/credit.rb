@@ -24,7 +24,6 @@ class Credit < ApplicationRecord
   validate :validate_associated_entity
 
   attr_json_data_accessor :stripe_loan_paydown_id
-  attr_json_data_accessor :reason
 
   def self.create_for_credit!(user:, amount_cents:, crediting_user:)
     credit = new
@@ -410,17 +409,6 @@ class Credit < ApplicationRecord
     )
 
     credit.balance = balance_transaction.balance
-    credit.save!
-    credit
-  end
-
-  def self.create_for_balance_forfeit!(user:, amount_cents:, merchant_account:, reason: nil)
-    credit = new
-    credit.user = user
-    credit.merchant_account = merchant_account
-    credit.amount_cents = amount_cents
-    credit.crediting_user = User.find(GUMROAD_ADMIN_ID)
-    credit.reason = reason if reason.present?
     credit.save!
     credit
   end
