@@ -302,6 +302,22 @@ describe RecurringChargeWorker, :vcr do
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(0)
       end
     end
+
+    describe "integrations" do
+      it "enqueues integrations update if tier has changed" do
+        described_class.new.perform(@subscription.id)
+
+        expect(UpdateIntegrationsOnTierChangeWorker).to have_enqueued_sidekiq_job(@subscription.id)
+      end
+
+      it "does not enqueue integrations update if tier has not changed" do
+        @plan_change.update!(tier: @original_tier)
+
+        described_class.new.perform(@subscription.id)
+
+        expect(UpdateIntegrationsOnTierChangeWorker.jobs.size).to eq(0)
+      end
+    end
   end
 
   describe "non-tiered subscription has a pending plan change" do

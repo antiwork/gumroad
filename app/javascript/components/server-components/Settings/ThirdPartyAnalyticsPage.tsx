@@ -68,7 +68,7 @@ const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, produc
       canUpdate={loggedInUser?.policies.settings_third_party_analytics_user.update || false}
     >
       <form>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Third-party analytics</h2>
             <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
@@ -135,7 +135,7 @@ const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, produc
             </div>
           </Details>
         </section>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Domain verification</h2>
           </header>
@@ -175,7 +175,7 @@ const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, produc
             </div>
           </Details>
         </section>
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Snippets</h2>
             <div>Add custom JavaScript to pages in the checkout flow.</div>

@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO="${REPO:-antiwork/gumroad}"
 INTERACTIVE="${INTERACTIVE:-true}"
+PR_LIMIT="${PR_LIMIT:-25}"
 PR_NUMBERS=()
 
 RED='\033[0;31m'
@@ -93,7 +94,7 @@ check_prerequisites() {
 }
 
 get_external_prs() {
-  local prs=$(gh pr list --repo "$REPO" --state open --json number,title,headRefName,author,isCrossRepository)
+  local prs=$(gh pr list --repo "$REPO" --state open --limit "$PR_LIMIT" --json number,title,headRefName,author,isCrossRepository)
   echo "$prs" | jq -c '.[] | select(.isCrossRepository == true)' 2>/dev/null || echo "$prs" | jq -c '.[]'
 }
 
@@ -186,8 +187,16 @@ create_test_branch() {
   local current_branch=$(git branch --show-current)
 
   git show-ref --verify --quiet "refs/remotes/origin/$new_branch" && {
-    echo "Branch $new_branch already exists, skipping"
-    return 0
+    echo "Branch $new_branch already exists."
+    read -p "Do you want to delete and recreate it? (y/N): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+      git branch -D "$new_branch" 2>/dev/null
+      git push origin --delete "$new_branch" 2>/dev/null
+      echo "Deleted local and remote branch $new_branch. Recreating..."
+    else
+      echo "Skipping $new_branch."
+      return 0
+    fi
   }
 
   gh pr checkout "$pr_number" --repo "$REPO" || return 1
@@ -234,7 +243,7 @@ main() {
 case "${1:-}" in
   -h|--help)
     echo "Usage: $0 [PR_NUMBERS...]"
-    echo "Environment: REPO (default: antiwork/gumroad), INTERACTIVE (default: true)"
+    echo "Environment: REPO (default: antiwork/gumroad), INTERACTIVE (default: true), PR_LIMIT (default: 25)"
     exit 0
     ;;
   *)

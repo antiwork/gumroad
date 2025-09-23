@@ -2,6 +2,7 @@ import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
 import { CardProduct } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { register } from "$app/utils/serverComponentUtil";
 
@@ -11,6 +12,7 @@ import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
+import { PageHeader } from "$app/components/ui/PageHeader";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -43,7 +45,7 @@ export type WishlistProps = {
   discover_opted_out: boolean | null;
   checkout_enabled: boolean;
   items: WishlistItem[];
-  topLevel?: boolean;
+  isDiscover?: boolean;
 };
 
 const formatName = ({ product, option, recurrence }: WishlistItem) => {
@@ -79,6 +81,7 @@ export const Wishlist = ({
   discover_opted_out,
   checkout_enabled,
   items: initialItems,
+  isDiscover,
 }: WishlistProps) => {
   const [name, setName] = React.useState(initialName);
   const [description, setDescription] = React.useState(initialDescription);
@@ -87,34 +90,38 @@ export const Wishlist = ({
 
   return (
     <>
-      <header>
-        <h1>{name}</h1>
-        <div className="actions">
-          <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
-            <Button aria-label="Copy link">
-              <Icon name="link" />
-            </Button>
-          </CopyToClipboard>
-          {can_edit ? (
-            <Button onClick={() => setIsEditing(true)}>
-              <Icon name="pencil" />
-              Edit
-            </Button>
-          ) : null}
-          {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
-          <WithTooltip
-            tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}
-          >
-            <NavigationButton
-              color="accent"
-              href={Routes.checkout_index_url({ params: { wishlist: id } })}
-              disabled={!checkout_enabled}
+      <PageHeader
+        className={isDiscover ? "lg:px-16" : ""}
+        title={name}
+        actions={
+          <>
+            <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
+              <Button aria-label="Copy link">
+                <Icon name="link" />
+              </Button>
+            </CopyToClipboard>
+            {can_edit ? (
+              <Button onClick={() => setIsEditing(true)}>
+                <Icon name="pencil" />
+                Edit
+              </Button>
+            ) : null}
+            {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
+            <WithTooltip
+              tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}
             >
-              <Icon name="cart3-fill" />
-              Buy this wishlist
-            </NavigationButton>
-          </WithTooltip>
-        </div>
+              <NavigationButton
+                color="accent"
+                href={Routes.checkout_index_url({ params: { wishlist: id } })}
+                disabled={!checkout_enabled}
+              >
+                <Icon name="cart3-fill" />
+                Buy this wishlist
+              </NavigationButton>
+            </WithTooltip>
+          </>
+        }
+      >
         {user ? (
           <a style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} href={user.profile_url}>
             <img className="user-avatar" src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
@@ -122,8 +129,8 @@ export const Wishlist = ({
           </a>
         ) : null}
         {description ? <h4>{description}</h4> : null}
-      </header>
-      <section>
+      </PageHeader>
+      <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
         <div className="product-card-grid">
           {items.map((item) => (
             <Card

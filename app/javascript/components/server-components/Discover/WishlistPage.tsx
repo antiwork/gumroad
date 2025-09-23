@@ -7,12 +7,12 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Layout } from "$app/components/Discover/Layout";
 import { Wishlist, WishlistProps } from "$app/components/Wishlist";
 
-const DiscoverWishlistPage: React.FC<WishlistProps & { taxonomies_for_nav: Taxonomy[] }> = ({
+const DiscoverWishlistPage: React.FC<Omit<WishlistProps, "isDiscover"> & { taxonomies_for_nav: Taxonomy[] }> = ({
   taxonomies_for_nav,
   ...props
 }) => (
   <Layout taxonomiesForNav={taxonomies_for_nav}>
-    <Wishlist {...props} />
+    <Wishlist isDiscover {...props} />
   </Layout>
 );
 

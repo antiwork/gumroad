@@ -82,9 +82,9 @@ export const ProductTab = () => {
 
   return (
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
-      <main className="squished">
+      <div className="squished">
         <form>
-          <section>
+          <section className="!p-4 md:!p-8">
             {showAiNotification ? (
               <div
                 role="status"
@@ -157,14 +157,14 @@ export const ProductTab = () => {
           </section>
           {isCoffee ? (
             <>
-              <section>
+              <section className="!p-4 md:!p-8">
                 <h2>Pricing</h2>
                 <SuggestedAmountsEditor
                   versions={product.variants}
                   onChange={(variants) => updateProduct({ variants })}
                 />
               </section>
-              <section>
+              <section className="!p-4 md:!p-8">
                 <h2>Settings</h2>
                 <CustomButtonTextOptionInput
                   value={product.custom_button_text_option}
@@ -187,7 +187,7 @@ export const ProductTab = () => {
                 permalink={uniquePermalink}
                 nativeType={product.native_type}
               />
-              <section>
+              <section className="!p-4 md:!p-8">
                 <h2>Product info</h2>
                 {product.native_type !== "membership" ? (
                   <CustomButtonTextOptionInput
@@ -207,7 +207,7 @@ export const ProductTab = () => {
                   setFileAttributes={(file_attributes) => updateProduct({ file_attributes })}
                 />
               </section>
-              <section>
+              <section className="!p-4 md:!p-8">
                 <h2>Integrations</h2>
                 <fieldset>
                   {product.community_chat_enabled === null ? null : (
@@ -259,13 +259,13 @@ export const ProductTab = () => {
                 </fieldset>
               </section>
               {product.native_type === "membership" ? (
-                <section>
+                <section className="!p-4 md:!p-8">
                   <h2>Tiers</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
                 </section>
               ) : (
                 <>
-                  <section>
+                  <section className="!p-4 md:!p-8">
                     <h2>Pricing</h2>
                     <PriceEditor
                       priceCents={product.price_cents}
@@ -307,7 +307,7 @@ export const ProductTab = () => {
                   </section>
                   {product.native_type === "call" ? (
                     <>
-                      <section>
+                      <section className="!p-4 md:!p-8">
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
                           <a
@@ -323,7 +323,7 @@ export const ProductTab = () => {
                           onChange={(variants) => updateProduct({ variants })}
                         />
                       </section>
-                      <section>
+                      <section className="!p-4 md:!p-8">
                         <h2>Available hours</h2>
                         <AvailabilityEditor
                           availabilities={product.availabilities}
@@ -331,7 +331,7 @@ export const ProductTab = () => {
                         />
                       </section>
                       {product.call_limitation_info ? (
-                        <section>
+                        <section className="!p-4 md:!p-8">
                           <h2>Call limitations</h2>
                           <CallLimitationsEditor
                             callLimitations={product.call_limitation_info}
@@ -341,7 +341,7 @@ export const ProductTab = () => {
                       ) : null}
                     </>
                   ) : (
-                    <section aria-label="Version editor">
+                    <section aria-label="Version editor" className="!p-4 md:!p-8">
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <h2>{product.native_type === "physical" ? "Variants" : "Versions"}</h2>
                         <a
@@ -366,7 +366,7 @@ export const ProductTab = () => {
                   onChange={(shipping_destinations) => updateProduct({ shipping_destinations })}
                 />
               ) : null}
-              <section>
+              <section className="!p-4 md:!p-8">
                 <h2>Settings</h2>
                 <fieldset>
                   {product.native_type === "membership" ? (
@@ -482,7 +482,7 @@ export const ProductTab = () => {
             </>
           )}
         </form>
-      </main>
+      </div>
     </Layout>
   );
 };

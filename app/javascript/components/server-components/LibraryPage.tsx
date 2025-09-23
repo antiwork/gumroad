@@ -60,6 +60,7 @@ export const Card = ({
   onDelete: (confirm?: boolean) => void;
 }) => {
   const { product, purchase } = result;
+  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
 
   const toggleArchived = asyncVoid(async () => {
     const data = { purchase_id: result.purchase.id, is_archived: !result.purchase.is_archived };
@@ -67,6 +68,7 @@ export const Card = ({
       await setPurchaseArchived(data);
       onArchive();
       showAlert(result.purchase.is_archived ? "Product unarchived!" : "Product archived!", "success");
+      setIsPopoverOpen(false);
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
@@ -99,7 +101,12 @@ export const Card = ({
         ) : (
           <div className="user" />
         )}
-        <Popover aria-label="Open product action menu" trigger={<Icon name="three-dots" />}>
+        <Popover
+          aria-label="Open product action menu"
+          trigger={<Icon name="three-dots" />}
+          open={isPopoverOpen}
+          onToggle={setIsPopoverOpen}
+        >
           <div role="menu">
             <div role="menuitem" onClick={toggleArchived}>
               <Icon name="archive" />
@@ -308,6 +315,19 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     }
   });
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEnteredQuery(e.target.value);
+    dispatch({ type: "set-search", search: { query: e.target.value } });
+  };
+
+  const handleSearchBlur = () => {
+    dispatch({ type: "update-search", search: { query: enteredQuery } });
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
+  };
+
   return (
     <Layout
       selectedTab="purchases"
@@ -315,7 +335,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
       reviewsPageEnabled={reviews_page_enabled}
       followingWishlistsEnabled={following_wishlists_enabled}
     >
-      <section className="products-section__container">
+      <section className="space-y-4 p-4 md:p-8">
         {state.results.length === 0 || showArchivedNotice ? (
           <div className="placeholder">
             {state.results.length === 0 ? (
@@ -385,10 +405,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                         className="search-products"
                         placeholder="Search products"
                         value={enteredQuery}
-                        onChange={(e) => setEnteredQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
-                        }}
+                        onChange={handleSearchChange}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
                       />
                     </div>
                   </div>
@@ -470,9 +489,11 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                           />
                         </label>
                       ))}
-                      <div className="centered" style={{ alignSelf: "center" }}>
+                      <div>
                         {creators.length > 5 && !showingAllCreators ? (
-                          <Button onClick={() => setShowingAllCreators(true)}>Load more...</Button>
+                          <button className="link" onClick={() => setShowingAllCreators(true)}>
+                            Show more
+                          </button>
                         ) : null}
                       </div>
                     </fieldset>
@@ -526,11 +547,6 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             setDeleting(null);
           }}
         />
-        <div style={{ marginTop: "20px", textAlign: "center" }}>
-          <a href="/help/article/198-your-gumroad-library" target="_blank" rel="noreferrer">
-            Need help with your Library?
-          </a>
-        </div>
       </section>
     </Layout>
   );

@@ -89,6 +89,16 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1/users" : "http://localhost:3000/api/v1/users"
 
     begin
+      if user.suspended?
+        render json: {
+          success: true,
+          status: "Suspended",
+          updated_at: user.comments.where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED]).order(created_at: :desc).first&.created_at,
+          appeal_url: nil
+        }
+        return
+      end
+
       response = HTTParty.get(
         "#{iffy_url}?email=#{CGI.escape(params[:email])}",
         headers: {
@@ -103,13 +113,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
           status: user_data["actionStatus"],
           updated_at: user_data["actionStatusCreatedAt"],
           appeal_url: user_data["appealUrl"]
-        }
-      elsif user.suspended?
-        render json: {
-          success: true,
-          status: "Suspended",
-          updated_at: user.comments.where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED]).order(created_at: :desc).first&.created_at,
-          appeal_url: nil
         }
       else
         render json: {

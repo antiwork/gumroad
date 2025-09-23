@@ -35,7 +35,7 @@ const WorkflowList = () => {
   return (
     <Layout title="Workflows" actions={newWorkflowButton}>
       {workflows.length > 0 ? (
-        <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div className="space-y-8 p-4 md:p-8">
           {workflows.map((workflow) => (
             <WorkflowRow
               key={workflow.external_id}
@@ -90,7 +90,7 @@ const WorkflowList = () => {
           ) : null}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />

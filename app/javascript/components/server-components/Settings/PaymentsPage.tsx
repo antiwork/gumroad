@@ -16,6 +16,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/server-components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/server-components/CountrySelectionModal";
 import { StripeConnectEmbeddedNotificationBanner } from "$app/components/server-components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { CreditCardForm } from "$app/components/server-components/Settings/CreditCardForm";
@@ -142,7 +143,8 @@ type Props = {
     br: { code: string; name: string }[];
   };
   saved_card: SavedCreditCard | null;
-  formatted_balance_to_forfeit: string | null;
+  formatted_balance_to_forfeit_on_country_change: string | null;
+  formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   payouts_paused_for_reason: string | null;
@@ -216,6 +218,7 @@ const PaymentsPage = (props: Props) => {
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
   const markFieldInvalid = (fieldName: FormFieldName) => setErrorFieldNames(new Set(errorFieldNames.add(fieldName)));
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
+  const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
 
   const [selectedPayoutMethod, setSelectedPayoutMethod] = React.useState<PayoutMethod>(
     props.stripe_connect.has_connected_stripe
@@ -722,6 +725,15 @@ const PaymentsPage = (props: Props) => {
           cardData = { stripe_error: e.stripeError };
         }
       }
+    } else if (
+      selectedPayoutMethod === "paypal" &&
+      props.bank_account_details.account_number_visual !== null &&
+      props.formatted_balance_to_forfeit_on_payout_method_change !== null &&
+      !isPayoutMethodChangeConfirmed
+    ) {
+      setShowPayoutMethodChangeConfirmationModal(true);
+      setIsSaving(false);
+      return;
     }
 
     let data = {
@@ -783,6 +795,21 @@ const PaymentsPage = (props: Props) => {
     ? props.countries[complianceInfo.updated_country_code]
     : null;
 
+  const [showPayoutMethodChangeConfirmationModal, setShowPayoutMethodChangeConfirmationModal] = React.useState(false);
+  const cancelPayoutMethodChange = () => {
+    setShowPayoutMethodChangeConfirmationModal(false);
+    setIsPayoutMethodChangeConfirmed(false);
+  };
+  const confirmPayoutMethodChange = () => {
+    setShowPayoutMethodChangeConfirmationModal(false);
+    setIsPayoutMethodChangeConfirmed(true);
+  };
+  React.useEffect(() => {
+    if (isPayoutMethodChangeConfirmed) {
+      handleSave();
+    }
+  }, [isPayoutMethodChangeConfirmed]);
+
   const payoutsPausedToggle = (
     <fieldset>
       <Toggle
@@ -813,15 +840,23 @@ const PaymentsPage = (props: Props) => {
       {updatedCountry ? (
         <UpdateCountryConfirmationModal
           country={updatedCountry}
-          balance={props.formatted_balance_to_forfeit}
+          balance={props.formatted_balance_to_forfeit_on_country_change}
           open={showUpdateCountryConfirmationModal}
           onConfirm={confirmUpdateCountry}
           onClose={cancelUpdateCountry}
         />
       ) : null}
+      {showPayoutMethodChangeConfirmationModal ? (
+        <ConfirmBalanceForfeitOnPayoutMethodChangeModal
+          balance={props.formatted_balance_to_forfeit_on_payout_method_change}
+          open={showPayoutMethodChangeConfirmationModal}
+          onConfirm={confirmPayoutMethodChange}
+          onClose={cancelPayoutMethodChange}
+        />
+      ) : null}
       <form ref={formRef}>
         {props.payouts_paused_by !== null ? (
-          <div className="warning" role="status" style={{ marginBottom: "var(--spacer-7)" }}>
+          <div role="status" className="warning mx-8 mb-12">
             <p>
               {props.payouts_paused_by === "stripe" ? (
                 <strong>
@@ -845,7 +880,7 @@ const PaymentsPage = (props: Props) => {
           </div>
         ) : null}
 
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Verification</h2>
           </header>
@@ -885,7 +920,7 @@ const PaymentsPage = (props: Props) => {
         ) : null}
 
         {errorMessage ? (
-          <div className="paragraphs" style={{ marginBottom: "var(--spacer-7)" }}>
+          <div className="mb-12 px-8">
             <div role="status" className="danger">
               {errorMessage.code === "stripe_error" ? (
                 <div>Your account could not be updated due to an error with Stripe.</div>
@@ -895,7 +930,7 @@ const PaymentsPage = (props: Props) => {
             </div>
           </div>
         ) : null}
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Payout schedule</h2>
           </header>
@@ -980,7 +1015,7 @@ const PaymentsPage = (props: Props) => {
           </section>
         </section>
 
-        <section>
+        <section className="!p-4 md:!p-8">
           <header>
             <h2>Payout method</h2>
             <div>

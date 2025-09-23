@@ -385,6 +385,7 @@ describe PurchasesController, :vcr do
           @p1.mark_successful!
 
           @obfuscated_id = ObfuscateIds.encrypt(@p1.id)
+          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(100_00)
         end
 
         it "issues a partial refund when partial amount is passed as param" do

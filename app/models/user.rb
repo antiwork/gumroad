@@ -236,8 +236,8 @@ class User < ApplicationRecord
             26 => :collect_eu_vat,
             27 => :is_eu_vat_exclusive,
             28 => :is_team_member,
-            29 => :has_payout_privilege,
-            30 => :has_risk_privilege,
+            29 => :DEPRECATED_has_payout_privilege,
+            30 => :DEPRECATED_has_risk_privilege,
             31 => :disable_paypal_sales,
             32 => :all_adult_products,
             33 => :enable_free_downloads_email,
@@ -305,6 +305,7 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :suspend_sellers_other_accounts
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
 
     after_transition any => :compliant, :do => :enable_refunds!
 
@@ -981,27 +982,6 @@ class User < ApplicationRecord
     (seller_communities + buyer_communities).map do
       _1.resource.alive? && Feature.active?(:communities, _1.seller) && _1.resource.community_chat_enabled? ? _1.id : nil
     end.compact.uniq
-  end
-
-  def transfer_stripe_balance_to_gumroad_account!
-    return if stripe_account.blank? || unpaid_balances.where(merchant_account_id: stripe_account.id).blank?
-
-    ActiveRecord::Base.transaction do
-      balances_to_transfer = unpaid_balances.where(merchant_account_id: stripe_account.id)
-
-      # Add a negative credit to make zero the balance currently held against creator's Stripe account.
-      amount_cents_usd = balances_to_transfer.sum(:amount_cents)
-      amount_cents_holding_currency = balances_to_transfer.sum(:holding_amount_cents)
-      Credit.create_for_balance_change_on_stripe_account!(amount_cents_holding_currency: -amount_cents_holding_currency,
-                                                          merchant_account: stripe_account,
-                                                          amount_cents_usd: -amount_cents_usd)
-
-      # Add a positive credit for the same amount against Gumroad's Stripe account.
-      Credit.create_for_credit!(user: self, amount_cents: amount_cents_usd, crediting_user: User.find(GUMROAD_ADMIN_ID))
-
-      # Actually transfer the money from creator's Stripe account to Gumroad's Stripe account.
-      TransferStripeConnectAccountBalanceToGumroadJob.perform_async(stripe_account.id, amount_cents_usd)
-    end
   end
 
   def paypal_payout_email

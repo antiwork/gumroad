@@ -3,7 +3,6 @@ import {
   RouterProvider,
   createBrowserRouter,
   json,
-  Link,
   RouteObject,
   useLocation,
   useRouteError,
@@ -22,6 +21,8 @@ import WorkflowEmails from "$app/components/server-components/WorkflowsPage/Work
 import WorkflowForm, { WorkflowTrigger } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
 import WorkflowList from "$app/components/server-components/WorkflowsPage/WorkflowList";
 import { Toggle } from "$app/components/Toggle";
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 type LayoutProps = {
   title: string;
@@ -31,31 +32,23 @@ type LayoutProps = {
   preview?: React.ReactNode;
 };
 
-export const Layout = ({ title, actions, navigation, children, preview }: LayoutProps) => {
-  const { pathname } = useLocation();
-  const [pageLoaded, setPageLoaded] = React.useState(false);
-
-  React.useEffect(() => {
-    const bodyClassList = document.querySelector("body")?.classList;
-    if (bodyClassList) bodyClassList[preview ? "add" : "remove"]("fixed-aside");
-
-    setPageLoaded(true);
-  }, [pathname]);
-
-  if (!pageLoaded) return null;
-
-  return (
-    <>
-      <header className="sticky-top">
-        <h1>{title}</h1>
-        {actions ? <div className="actions">{actions}</div> : null}
-        {navigation ?? null}
-      </header>
-      <main>{children}</main>
-      {preview ? <aside aria-label="Preview">{preview}</aside> : null}
-    </>
-  );
-};
+export const Layout = ({ title, actions, navigation, children, preview }: LayoutProps) => (
+  <>
+    <PageHeader className="sticky-top" title={title} actions={actions}>
+      {navigation ?? null}
+    </PageHeader>
+    {preview ? (
+      <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
+        <div>{children}</div>
+        <aside className="hidden lg:block" aria-label="Preview">
+          {preview}
+        </aside>
+      </div>
+    ) : (
+      <div>{children}</div>
+    )}
+  </>
+);
 
 type PublishButtonProps = {
   isPublished: boolean;
@@ -123,29 +116,27 @@ export const EditPageNavigation = (props: { workflowExternalId: string }) => {
   const { pathname } = useLocation();
 
   return (
-    <div role="tablist">
-      <Link
-        to={`/workflows/${props.workflowExternalId}/edit`}
-        role="tab"
-        aria-selected={pathname === `/workflows/${props.workflowExternalId}/edit`}
+    <Tabs>
+      <Tab
+        href={`/workflows/${props.workflowExternalId}/edit`}
+        isSelected={pathname === `/workflows/${props.workflowExternalId}/edit`}
       >
         Details
-      </Link>
-      <Link
-        to={`/workflows/${props.workflowExternalId}/emails`}
-        role="tab"
-        aria-selected={pathname === `/workflows/${props.workflowExternalId}/emails`}
+      </Tab>
+      <Tab
+        href={`/workflows/${props.workflowExternalId}/emails`}
+        isSelected={pathname === `/workflows/${props.workflowExternalId}/emails`}
       >
         Emails
-      </Link>
-    </div>
+      </Tab>
+    </Tabs>
   );
 };
 
 const ErrorBoundary = () => {
   const error = useRouteError();
   return (
-    <main>
+    <div>
       <div>
         <div className="placeholder">
           <p>
@@ -155,7 +146,7 @@ const ErrorBoundary = () => {
           </p>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

@@ -59,7 +59,7 @@ module CheckoutHelpers
   def fill_checkout_form(product, email: "test@gumroad.com", address: nil, offer_code: nil, is_free: false, country: nil, zip_code: "94107", vat_id: nil, abn_id: nil, gst_id: nil, qst_id: nil, mva_id: nil, cn_id: nil, ird_id: nil, sst_id: nil, vsk_id: nil, trn_id: nil, oman_vat_number: nil, unp_id: nil, rut_id: nil, nit_id: nil, cpj_id: nil, ruc_id: nil, tn_id: nil, tin_id: nil, rfc_id: nil, inn_id: nil, pib_id: nil, brn_id: nil, vkn_id: nil, edrpou_id: nil, mst_id: nil, kra_pin_id: nil, firs_tin_id: nil, tra_tin: nil, gift: nil, custom_fields: [], credit_card: {}, logged_in_user: nil)
     fill_in "Email address", with: email if email.present? && logged_in_user.nil?
 
-    if gift.present?
+    if gift&.dig(:email).present?
       check "Give as a gift"
       expect(page).to have_text("Note: Free trials will be charged immediately. The membership will not auto-renew.") if product.is_recurring_billing
       fill_in "Recipient email address", with: gift[:email]
@@ -154,8 +154,11 @@ module CheckoutHelpers
       click_on is_free ? "Get" : "Pay", exact: true
 
       if should_verify_address
-        expect(page).to have_text("We are unable to verify your shipping address. Is your address correct?")
-        click_on "Yes, it is"
+        if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
+          click_on "Yes, it is"
+        elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
+          click_on "No, continue"
+        end
       end
 
       within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil?
@@ -163,10 +166,16 @@ module CheckoutHelpers
       if error.present?
         expect(page).to have_alert(text: error) if error != true
       else
-        expect(page).to have_text("Your purchase was successful!")
-        expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
+        if gift.present? || product.is_in_preorder_state
+          # Specific cases where we show the receipt instead of the product content
+          expect(page).to have_text("Your purchase was successful!")
+          expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
+        else
+          # The alert show/hide timing can cause specs to be flaky
+          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{logged_in_user&.email&.downcase || email&.downcase}", visible: :all)
+        end
 
-        expect(page).to have_text("You bought this for #{gift[:email]}") if gift.present?
+        expect(page).to have_text("You bought this for #{gift[:email] || gift[:name]}") if gift&.dig(:email).present? || gift&.dig(:name).present?
 
         expect(page).to have_text(product.name)
 

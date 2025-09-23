@@ -5,6 +5,9 @@ require "spec_helper"
 describe SyncStuckPurchasesJob, :vcr do
   describe "#perform" do
     let(:product) { create(:product) }
+    before do
+      stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
+    end
 
     it "does not sync any purchases if there are none in progress" do
       create(:failed_purchase, link: product, created_at: 12.hours.ago)
@@ -108,6 +111,8 @@ describe SyncStuckPurchasesJob, :vcr do
       end
 
       it "syncs the in progress purchase and then refunds it if the new purchase state is successful" do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(100_00)
+
         stuck_in_progress_purchase_that_will_succeed_when_synced = travel_to(Time.current - 12.hours) do
           purchase = create(:purchase, link: product, email: successful_purchase.email, purchase_state: "in_progress", chargeable: create(:chargeable))
           purchase.process!
@@ -160,6 +165,8 @@ describe SyncStuckPurchasesJob, :vcr do
       end
 
       it "syncs the in progress purchase and then refunds it if the new purchase state is successful for the same variant of the product" do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(100_00)
+
         stuck_in_progress_purchase_that_will_succeed_when_synced = travel_to(Time.current - 12.hours) do
           purchase = create(:purchase, link: product_with_digital_versions, email: successful_purchase_of_variant.email, purchase_state: "in_progress", variant_attributes: [product_with_digital_versions.variants.last], chargeable: create(:chargeable))
           purchase.process!

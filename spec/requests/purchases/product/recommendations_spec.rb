@@ -115,7 +115,7 @@ describe "RecommendationsScenario", type: :system, js: true do
   describe "more like this" do
     let(:seller1) { create(:recommendable_user) }
     let(:seller2) { create(:named_user, recommendation_type: User::RecommendationType::NO_RECOMMENDATIONS) }
-    let(:buyer) { create(:buyer_user) }
+    let(:buyer) { create(:user) }
 
     let(:seller1_products) do
       build_list :product, 5, user: seller1 do |product, i|

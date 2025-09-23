@@ -26,7 +26,6 @@ import {
 } from "$app/components/server-components/DownloadPage/WithContent";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { NativeAppLink, TrackClick } from "./Interactions";
@@ -75,18 +74,6 @@ export type FolderItem = {
 type Props = { content_items: (FileItem | FolderItem)[] };
 export const FileList = ({ content_items }: Props) => {
   const [playingAudioForId, setPlayingAudioForId] = React.useState<null | string>(null);
-
-  useRunOnce(() => {
-    if (
-      content_items
-        .flatMap((item) => (item.type === "folder" ? item.children : item))
-        .some(({ processing }) => processing)
-    )
-      showAlert(
-        "This product includes a file that's being processed. You'll be able to download it shortly.",
-        "warning",
-      );
-  });
 
   const getFileRow = (file: FileItem) => (
     <FileRow
@@ -163,9 +150,7 @@ export const FileRow = ({
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" resourceId={file.id}>
-      <NavigationButton disabled={file.processing} href={downloadUrl}>
-        Download
-      </NavigationButton>
+      <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
   const streamUrl = file.stream_url;
@@ -257,15 +242,7 @@ export const FileRow = ({
           </div>
         ) : null}
 
-        {downloadButton ? (
-          file.processing ? (
-            <WithTooltip tip="This file will be ready to download shortly." position="bottom">
-              {downloadButton}
-            </WithTooltip>
-          ) : (
-            downloadButton
-          )
-        ) : null}
+        {downloadButton}
 
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" resourceId={file.id}>

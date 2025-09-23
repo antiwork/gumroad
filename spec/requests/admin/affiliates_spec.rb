@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe "Admin::AffiliatesController Scenario", type: :system, js: true do
-  let(:admin) { create(:admin_user, has_risk_privilege: true) }
+  let(:admin) { create(:admin_user) }
   let(:affiliate_user) { create(:affiliate_user) }
 
   before do

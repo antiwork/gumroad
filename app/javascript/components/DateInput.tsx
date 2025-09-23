@@ -4,7 +4,13 @@ import * as React from "react";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 
-type Props = { value: Date | null; onChange?: (date: Date | null) => void; min?: Date; max?: Date; withTime?: true };
+type Props = {
+  value: Date | null;
+  onChange?: (date: Date | null) => void;
+  min?: Date | undefined;
+  max?: Date | undefined;
+  withTime?: true;
+};
 
 export const DateInput = ({
   value,
@@ -29,6 +35,7 @@ export const DateInput = ({
   const input = (
     <input
       ref={ref}
+      className="appearance-none"
       type={withTime ? "datetime-local" : "date"}
       {...rest}
       defaultValue={formatDate(value)}
@@ -48,6 +55,6 @@ export const DateInput = ({
       <div className="pill">{formatInTimeZone(value ?? new Date(), seller.timeZone.name, "z")}</div>
     </div>
   ) : (
-    input
+    <div className="input">{input}</div>
   );
 };

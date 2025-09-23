@@ -107,8 +107,8 @@ describe ReceiptPresenter::ItemInfo do
           purchase.link.update!(custom_receipt: "Here is a link to https://example.com")
         end
 
-        it "returns formatted custom receipt note" do
-          expect(props[:custom_receipt_note]).to eq("<p>Here is a link to <a href=\"https://example.com\">https://example.com</a></p>")
+        it "returns nil" do
+          expect(props[:custom_receipt_note]).to be_nil
         end
 
         context "when the purchase has a gift note" do
@@ -485,7 +485,8 @@ describe ReceiptPresenter::ItemInfo do
       context "when the purchase has a refund policy" do
         before do
           purchase.create_purchase_refund_policy!(
-            title: "This is a product-level refund policy",
+            title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            max_refund_period_in_days: 30,
             fine_print: "This is the fine print of the refund policy."
           )
         end
@@ -494,7 +495,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$14.99" },
-              { label: "This is a product-level refund policy", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
             ]
           )
         end
@@ -507,7 +508,8 @@ describe ReceiptPresenter::ItemInfo do
 
         before do
           gifter_purchase.create_purchase_refund_policy!(
-            title: "This is a product-level refund policy",
+            title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            max_refund_period_in_days: 30,
             fine_print: "This is the fine print of the refund policy."
           )
         end
@@ -517,7 +519,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$1" },
-              { label: "This is a product-level refund policy", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
             ]
           )
         end
@@ -531,7 +533,8 @@ describe ReceiptPresenter::ItemInfo do
 
         before do
           purchase.create_purchase_refund_policy!(
-            title: "Bundle refund policy",
+            title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            max_refund_period_in_days: 30,
             fine_print: "Bundle fine print."
           )
           purchase.create_artifacts_and_send_receipt!
@@ -545,7 +548,7 @@ describe ReceiptPresenter::ItemInfo do
                 label: "Bundle",
                 value: link_to("Bundle product", bundle.long_url, target: "_blank")
               },
-              { label: "Bundle refund policy", value: "Bundle fine print." },
+              { label: "30-day money back guarantee", value: "Bundle fine print." },
             ]
           )
         end
@@ -561,7 +564,8 @@ describe ReceiptPresenter::ItemInfo do
 
         before do
           gifter_purchase.create_purchase_refund_policy!(
-            title: "Bundle gift refund policy",
+            title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            max_refund_period_in_days: 30,
             fine_print: "Bundle gift fine print."
           )
           purchase.create_artifacts_and_send_receipt!
@@ -575,7 +579,7 @@ describe ReceiptPresenter::ItemInfo do
                 label: "Bundle",
                 value: link_to("Bundle product", bundle.long_url, target: "_blank")
               },
-              { label: "Bundle gift refund policy", value: "Bundle gift fine print." },
+              { label: "30-day money back guarantee", value: "Bundle gift fine print." },
             ]
           )
         end
@@ -596,7 +600,8 @@ describe ReceiptPresenter::ItemInfo do
       context "when the purchase has a refund policy" do
         before do
           purchase.create_purchase_refund_policy!(
-            title: "This is a product-level refund policy",
+            title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            max_refund_period_in_days: 30,
             fine_print: "This is the fine print of the refund policy."
           )
         end
@@ -605,7 +610,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$14.99" },
-              { label: "This is a product-level refund policy", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
             ]
           )
         end
@@ -618,7 +623,8 @@ describe ReceiptPresenter::ItemInfo do
 
         before do
           gifter_purchase.create_purchase_refund_policy!(
-            title: "This is a product-level refund policy",
+            title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+            max_refund_period_in_days: 30,
             fine_print: "This is the fine print of the refund policy."
           )
         end
@@ -628,7 +634,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$1" },
-              { label: "This is a product-level refund policy", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
             ]
           )
         end

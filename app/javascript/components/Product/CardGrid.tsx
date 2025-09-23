@@ -140,7 +140,7 @@ const FilterCheckboxes = ({
       ))}
       {filters.length > 5 && !showingAll ? (
         <button className="link" onClick={() => setShowingAll(true)}>
-          Load more...
+          Show more
         </button>
       ) : null}
     </>
@@ -351,7 +351,8 @@ export const CardGrid = ({
       ) : (
         <div>
           <div className="product-card-grid" ref={gridRef}>
-            {results?.products.map((result) => <Card key={result.permalink} product={result} />) ??
+            {/* The first 4 images are above the fold, so we eagerily load them */}
+            {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)
                 .map((_, i) => <div key={i} className="dummy" />)}

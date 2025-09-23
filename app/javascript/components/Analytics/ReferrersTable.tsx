@@ -34,7 +34,7 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
 
   return (
     <section className="paragraphs">
-      <table style={{ tableLayout: "fixed" }}>
+      <table>
         <caption>
           <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
             Referrer
@@ -64,7 +64,7 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
         </tbody>
       </table>
       {items.length > maxRowsShown && (
-        <Button onClick={() => setMaxRowsShown(maxRowsShown + ROWS_PER_PAGE)} style={{ display: "flex" }}>
+        <Button onClick={() => setMaxRowsShown(maxRowsShown + ROWS_PER_PAGE)} className="flex">
           Show more
         </Button>
       )}

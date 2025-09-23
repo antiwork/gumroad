@@ -2,6 +2,10 @@ name: Tests
 
 on:
   push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'production-*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -79,16 +83,14 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            lib/GeoIP2-City.mmdb
             config/credentials.yml.enc
             config/certs/development_com.GRD.iOSCreator.pem
             config/certs/production_com.GRD.iOSCreator.pem
-          key: s3-files-${{ hashFiles('**/*.mmdb', '**/credentials.yml.enc', '**/development_com.GRD.iOSCreator.pem') }}-2025-06-17
+          key: s3-files-${{ hashFiles('**/credentials.yml.enc', '**/development_com.GRD.iOSCreator.pem') }}-2025-06-17
       - name: Download files from S3
         if: steps.cache-s3-files.outputs.cache-hit != 'true'
         run: |
           for file in \
-            "GeoIP2-City.mmdb:lib/GeoIP2-City.mmdb" \
             "credentials.yml.enc:config/credentials.yml.enc" \
             "certs/development_com.GRD.iOSCreator.pem:config/certs/development_com.GRD.iOSCreator.pem" \
             "certs/development_com.GRD.iOSCreator.pem:config/certs/production_com.GRD.iOSCreator.pem"; do
@@ -321,7 +323,7 @@ jobs:
           KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
           KNAPSACK_PRO_LOG_LEVEL: info
           KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
-          KNAPSACK_PRO_TEST_FILE_PATTERN: 'spec/requests/**/*_spec.rb'
+          KNAPSACK_PRO_TEST_FILE_PATTERN: "spec/requests/**/*_spec.rb"
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.ref_name }}
           KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
@@ -332,7 +334,13 @@ jobs:
           IN_DOCKER: true
           WEB_REPO: quay.io/gumroad/web
         run: |
+          # Create local directory for artifacts
+          mkdir -p ./capybara-artifacts
+          chmod 777 ./capybara-artifacts
+
+          # Run tests with volume mount to capture capybara artifacts
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -e RAILS_MASTER_KEY \
             -e RUBY_YJIT_ENABLE \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
@@ -352,6 +360,14 @@ jobs:
             $WEB_REPO:test-${{ github.sha }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         timeout-minutes: 20
+      - name: Archive capybara artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capybara-screenshots-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: ./capybara-artifacts/*.png
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Clean up
         if: always()
         run: |

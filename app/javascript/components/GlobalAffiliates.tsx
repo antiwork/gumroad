@@ -25,7 +25,7 @@ const DiscoverLinkSection = ({
   const baseDiscoverUrl = useDiscoverUrl();
   const discoverUrl = `${baseDiscoverUrl}?${affiliateQueryParam}=${globalAffiliateId}`;
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <header>
         <h2>Affiliate link</h2>
         <p>Earn 10% for each referral sale made by your link.</p>
@@ -66,7 +66,7 @@ const LinkGenerationSection = ({
   const [hasError, setHasError] = React.useState(false);
 
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <header>
         <h2>Affiliate link generator</h2>
         <p>
@@ -147,7 +147,7 @@ const ProductEligibilitySection = ({
   });
 
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <header>
         <h2>How to know if a product is eligible</h2>
         <p>
