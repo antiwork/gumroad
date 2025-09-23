@@ -308,7 +308,7 @@ export const Checkout = ({
                         onChange={(e) => {
                           const value = e.target.value.toUpperCase();
                           // Only allow letters, numbers, dashes, and underscores
-                          const validValue = value.replace(/[^A-Z0-9\-_]/g, "");
+                          const validValue = value.replace(/[^A-Z0-9\-_]/gu, "");
                           setNewDiscountCode(validValue);
                         }}
                       />

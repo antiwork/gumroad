@@ -284,35 +284,32 @@ const DiscountsPage = ({
       pages={pages}
       actions={
         <>
-          {
-            offerCodes.length > 0 ? (
-              <Popover
-                open={isSearchPopoverOpen}
-                onToggle={setIsSearchPopoverOpen}
-                aria-label="Search"
-                trigger={
-                  <div className="button">
-                    <Icon name="solid-search" />
-                  </div>
-                }
-              >
-                <div className="input">
+          {offerCodes.length > 0 ? (
+            <Popover
+              open={isSearchPopoverOpen}
+              onToggle={setIsSearchPopoverOpen}
+              aria-label="Search"
+              trigger={
+                <div className="button">
                   <Icon name="solid-search" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="Search"
-                    value={searchQuery ?? ""}
-                    onChange={(evt) => {
-                      setSearchQuery(evt.target.value);
-                      debouncedLoadDiscounts();
-                    }}
-                  />
                 </div>
-              </Popover>
-              ):
-              null
-          }
+              }
+            >
+              <div className="input">
+                <Icon name="solid-search" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search"
+                  value={searchQuery ?? ""}
+                  onChange={(evt) => {
+                    setSearchQuery(evt.target.value);
+                    debouncedLoadDiscounts();
+                  }}
+                />
+              </div>
+            </Popover>
+          ) : null}
 
           <Button
             color="accent"
@@ -883,7 +880,7 @@ const Form = ({
                 onChange={(evt) => {
                   const value = evt.target.value.toUpperCase();
                   // Only allow letters, numbers, dashes, and underscores
-                  const validValue = value.replace(/[^A-Z0-9\-_]/g, "");
+                  const validValue = value.replace(/[^A-Z0-9\-_]/gu, "");
                   setCode({ value: validValue });
                 }}
                 ref={codeFieldRef}
