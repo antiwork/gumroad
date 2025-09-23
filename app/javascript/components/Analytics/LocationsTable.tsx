@@ -191,7 +191,7 @@ export const LocationsTable = ({
   const [selected, setSelected] = React.useState("world");
 
   const caption = (
-    <div style={{ display: "flex", justifyContent: "space-between" }}>
+    <div className="flex justify-between">
       Locations
       <SelectPopover
         options={[

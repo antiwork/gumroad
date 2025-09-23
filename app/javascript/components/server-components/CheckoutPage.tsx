@@ -83,7 +83,7 @@ type Props = {
   state: string | null;
   address: { street: string | null; city: string | null; zip: string | null } | null;
   saved_credit_card: SavedCreditCard | null;
-  recaptcha_key: string;
+  recaptcha_key: string | null;
   paypal_client_id: string;
   cart: CartState | null;
   max_allowed_cart_products: number;
@@ -382,7 +382,7 @@ export const CheckoutPage = ({
           url_parameters: window.location.search,
           locale: navigator.language,
         },
-        recaptchaResponse: state.status.recaptchaResponse,
+        recaptchaResponse: state.status.recaptchaResponse ?? null,
         lineItems: cart.items.map((item) => {
           const discounted = getDiscountedPrice(cart, item);
 

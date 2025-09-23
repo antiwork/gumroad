@@ -245,7 +245,7 @@ const SubscriptionManager = ({
         state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
           ? null
           : state.status.paymentMethod.cardParamsResult.cardParams,
-      recaptchaResponse: state.status.recaptchaResponse,
+      recaptchaResponse: state.status.recaptchaResponse ?? null,
       declined: url.searchParams.get("declined") === "true",
       subscription_id: subscription.id,
       variants: selection.optionId ? [selection.optionId] : [],
@@ -327,7 +327,7 @@ const SubscriptionManager = ({
       : null;
 
   return (
-    <main className="stack input-group">
+    <div className="stack input-group mx-auto my-8 max-w-2xl">
       <header>
         {`Manage ${subscriptionEntity}`}
         <h2>{product.name}</h2>
@@ -383,7 +383,7 @@ const SubscriptionManager = ({
           </Button>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 };
 

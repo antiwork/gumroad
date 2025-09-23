@@ -34,7 +34,7 @@ const PayPalEmailSection = ({
           PayPal payouts are subject to a 2% processing fee.
         </div>
       ) : null}
-      <div>{feeInfoText}</div>
+      <div className="whitespace-pre-line">{feeInfoText}</div>
       <div>
         {countrySupportsNativePayouts && !isFormDisabled ? (
           <button className="link" onClick={() => updatePayoutMethod("bank")}>

@@ -166,7 +166,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
       }
     >
       {hasContent ? (
-        <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+        <div className="space-y-8 p-4 md:p-8">
           <SalesQuickStats total={mainData?.total} />
           {mainData ? (
             <>
@@ -205,7 +205,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
           )}
         </div>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <figure>
               <img src={placeholder} />

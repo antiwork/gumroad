@@ -47,10 +47,7 @@ class ReceiptPresenter::ItemInfo
     end
 
     def custom_receipt_note
-      return if purchase.link.custom_receipt.blank?
-      return if purchase.is_gift_receiver_purchase && purchase.gift_note.present?
-
-      Rinku.auto_link(simple_format(purchase.link.custom_receipt))
+      nil
     end
 
     def free_trial_purchase_note

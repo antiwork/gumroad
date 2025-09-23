@@ -20,7 +20,7 @@ export function ConversationList({
 
   if (conversations.length === 0) {
     return (
-      <section>
+      <section className="p-4 md:p-8">
         <div className="placeholder">
           <figure>
             <img src={placeholderImage} />
@@ -39,7 +39,7 @@ export function ConversationList({
   }
 
   return (
-    <div>
+    <div className="p-4 md:p-8">
       <table>
         <thead>
           <tr>

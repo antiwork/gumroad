@@ -17,7 +17,7 @@ import { CommunityView } from "./CommunityView";
 const ErrorBoundary = () => {
   const error = useRouteError();
   return (
-    <main>
+    <div>
       <div>
         <div className="placeholder">
           <p>
@@ -27,7 +27,7 @@ const ErrorBoundary = () => {
           </p>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

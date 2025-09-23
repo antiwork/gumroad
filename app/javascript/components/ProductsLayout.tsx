@@ -1,5 +1,8 @@
 import * as React from "react";
 
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
+
 export type Tab = "products" | "discover" | "affiliated" | "collabs" | "archived";
 
 export const ProductsLayout = ({
@@ -15,32 +18,28 @@ export const ProductsLayout = ({
   children: React.ReactNode;
   archivedTabVisible: boolean;
 }) => (
-  <main>
-    <header>
-      <h1>{title || "Products"}</h1>
-
-      {ctaButton ? <div className="actions">{ctaButton}</div> : null}
-
-      <div role="tablist">
-        <a aria-selected={selectedTab === "products"} href={Routes.products_path()} role="tab">
+  <div>
+    <PageHeader title={title || "Products"} actions={ctaButton}>
+      <Tabs>
+        <Tab isSelected={selectedTab === "products"} href={Routes.products_path()}>
           All products
-        </a>
+        </Tab>
 
-        <a aria-selected={selectedTab === "affiliated"} href={Routes.products_affiliated_index_path()} role="tab">
+        <Tab isSelected={selectedTab === "affiliated"} href={Routes.products_affiliated_index_path()}>
           Affiliated
-        </a>
+        </Tab>
 
-        <a aria-selected={selectedTab === "collabs"} href={Routes.products_collabs_path()} role="tab">
+        <Tab isSelected={selectedTab === "collabs"} href={Routes.products_collabs_path()}>
           Collabs
-        </a>
+        </Tab>
 
         {archivedTabVisible ? (
-          <a aria-selected={selectedTab === "archived"} href={Routes.products_archived_index_path()} role="tab">
+          <Tab isSelected={selectedTab === "archived"} href={Routes.products_archived_index_path()}>
             Archived
-          </a>
+          </Tab>
         ) : null}
-      </div>
-    </header>
+      </Tabs>
+    </PageHeader>
     {children}
-  </main>
+  </div>
 );

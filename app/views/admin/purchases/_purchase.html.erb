@@ -258,11 +258,7 @@
           <strong>
             <% purchase.purchase_refund_policy.tap do |purchase_refund_policy| %>
               <%= purchase_refund_policy.title %>
-              <% if purchase_refund_policy.different_than_product_refund_policy? %>
-                <%= with_tooltip(tip: "Current refund policy: #{purchase_refund_policy.product_refund_policy_title}") do %>
-                  <%= icon("solid-shield-exclamation", style: "color: rgb(var(--warning))") %>
-                <% end %>
-              <% end %>
+              <%= purchase_refund_policy_tooltip(purchase_refund_policy) %>
             <% end %>
           </strong>
           <% if purchase.purchase_refund_policy.fine_print.present? %>
