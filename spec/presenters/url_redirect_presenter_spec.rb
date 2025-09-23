@@ -191,7 +191,7 @@ describe UrlRedirectPresenter do
     it "includes 'custom_receipt' in props" do
       @product.update!(custom_receipt: "Lorem ipsum <b>dolor</b> sit amet https://example.com")
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
-      expect(instance.download_page_with_content_props[:content][:custom_receipt]).to eq(%(<p>Lorem ipsum <b>dolor</b> sit amet <a href="https://example.com" target="_blank" rel="noopener noreferrer nofollow">https://example.com</a></p>))
+      expect(instance.download_page_with_content_props[:content][:custom_receipt]).to be_nil
     end
 
     it "includes 'discord' in props" do

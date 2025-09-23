@@ -608,7 +608,7 @@ describe("Download Page", type: :system, js: true) do
   end
 
   describe "thank you note text" do
-    it "renders in a paragraph if custom receipt text exists" do
+    it "does not render custom receipt text even if it exists" do
       custom_receipt_text = "Thanks for your purchase! https://example.com"
       product = create(:product, custom_receipt: custom_receipt_text)
       purchase = create(:purchase, email: "test@tynt.com", link: product)
@@ -616,8 +616,7 @@ describe("Download Page", type: :system, js: true) do
 
       visit url_redirect.download_page_url
 
-      expect(page).to have_selector("p")
-      expect(page).to have_text(custom_receipt_text)
+      expect(page).to_not have_text(custom_receipt_text)
     end
 
     it "does not render a paragraph if there is no custom receipt text" do

@@ -205,11 +205,11 @@ const NewProductPage = ({
         window.location.href = redirectTo;
       } else {
         showAlert(responseData.error_message, "error");
-        setIsSubmitting(false);
       }
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
+    } finally {
       setIsSubmitting(false);
     }
   };

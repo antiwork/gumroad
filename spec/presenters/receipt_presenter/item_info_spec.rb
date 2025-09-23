@@ -107,8 +107,8 @@ describe ReceiptPresenter::ItemInfo do
           purchase.link.update!(custom_receipt: "Here is a link to https://example.com")
         end
 
-        it "returns formatted custom receipt note" do
-          expect(props[:custom_receipt_note]).to eq("<p>Here is a link to <a href=\"https://example.com\">https://example.com</a></p>")
+        it "returns nil" do
+          expect(props[:custom_receipt_note]).to be_nil
         end
 
         context "when the purchase has a gift note" do

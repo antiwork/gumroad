@@ -11,6 +11,7 @@ describe("Checkout upsells page", type: :system, js: true) do
   let!(:upsell1) { create(:upsell, product: product1, variant: product1.alive_variants.second, name: "Upsell 1", seller:, cross_sell: true, offer_code: create(:offer_code, user: seller, products: [product1]), updated_at: 2.days.ago) }
   let!(:upsell2) { create(:upsell, product: product2, name: "Upsell 2", seller:, updated_at: 1.day.ago) }
   let!(:upsell2_variant) { create(:upsell_variant, upsell: upsell2, selected_variant: product2.alive_variants.first, offered_variant: product2.alive_variants.second) }
+  let!(:universal_upsell) { create(:upsell, product: product1, name: "Universal Upsell", seller:, cross_sell: true, universal: true) }
 
   before do
     product1.alive_variants.second.update!(price_difference_cents: 500)
@@ -94,6 +95,14 @@ describe("Checkout upsells page", type: :system, js: true) do
         expect(page).to have_button("Duplicate")
         expect(page).to have_button("Delete")
       end
+
+      universal_upsell_row = find(:table_row, { "Upsell" => "Universal Upsell" })
+      universal_upsell_row.click
+      within_section "Universal Upsell", section_element: :aside do
+        within_section "Selected products" do
+          expect(page).to have_content("All products")
+        end
+      end
     end
 
     context "when the creator has no upsells" do
@@ -111,7 +120,10 @@ describe("Checkout upsells page", type: :system, js: true) do
     end
 
     describe "sorting and pagination" do
-      before { stub_const("Checkout::UpsellsController::PER_PAGE", 1) }
+      before do
+        stub_const("Checkout::UpsellsController::PER_PAGE", 1)
+        universal_upsell.destroy!
+      end
 
       it "sorts and paginates the upsells" do
         visit checkout_upsells_path
