@@ -315,6 +315,19 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     }
   });
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEnteredQuery(e.target.value);
+    dispatch({ type: "set-search", search: { query: e.target.value } });
+  };
+
+  const handleSearchBlur = () => {
+    dispatch({ type: "update-search", search: { query: enteredQuery } });
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
+  };
+
   return (
     <Layout
       selectedTab="purchases"
@@ -392,10 +405,9 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                         className="search-products"
                         placeholder="Search products"
                         value={enteredQuery}
-                        onChange={(e) => setEnteredQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
-                        }}
+                        onChange={handleSearchChange}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
                       />
                     </div>
                   </div>
@@ -477,9 +489,11 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                           />
                         </label>
                       ))}
-                      <div className="centered" style={{ alignSelf: "center" }}>
+                      <div>
                         {creators.length > 5 && !showingAllCreators ? (
-                          <Button onClick={() => setShowingAllCreators(true)}>Load more...</Button>
+                          <button className="link" onClick={() => setShowingAllCreators(true)}>
+                            Show more
+                          </button>
                         ) : null}
                       </div>
                     </fieldset>
@@ -533,11 +547,6 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             setDeleting(null);
           }}
         />
-        <div style={{ marginTop: "20px", textAlign: "center" }}>
-          <a href="/help/article/198-your-gumroad-library" target="_blank" rel="noreferrer">
-            Need help with your Library?
-          </a>
-        </div>
       </section>
     </Layout>
   );

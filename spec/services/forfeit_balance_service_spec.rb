@@ -6,10 +6,6 @@ describe ForfeitBalanceService do
   let(:user) { create(:named_user) }
   let(:merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-  before do
-    stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)  # For negative credits
-  end
-
   context "country_change" do
     before do
       @service = ForfeitBalanceService.new(user:, reason: :country_change)
@@ -44,11 +40,10 @@ describe ForfeitBalanceService do
           expect(comment.content).to eq("Balance of $10.50 has been forfeited. Reason: Country changed. Balance IDs: #{Balance.last.id}")
         end
 
-        it "adds a negative credit" do
+        it "does not add a negative credit" do
           @service.process
 
-          credit = user.credits.last
-          expect(credit.amount_cents).to eq(-@balance.amount_cents)
+          expect(user.reload.credits.last).to be nil
         end
       end
     end
@@ -110,12 +105,10 @@ describe ForfeitBalanceService do
           expect(comment.content).to eq("Balance of $8.76 has been forfeited. Reason: Account closed. Balance IDs: #{Balance.last.id}")
         end
 
-        it "adds a negative credit" do
+        it "does not add a negative credit" do
           @service.process
 
-          credit = user.credits.last
-          expect(credit.amount_cents).to eq(-@balance.amount_cents)
-          expect(credit.merchant_account).to eq(@balance.merchant_account)
+          expect(user.reload.credits.last).to be nil
         end
       end
 

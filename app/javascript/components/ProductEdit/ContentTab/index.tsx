@@ -66,9 +66,9 @@ import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
 
 const PageTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
-  <Tabs ref={ref} className="pagelist">
+  <div ref={ref} role="tablist" className="pagelist">
     {children}
-  </Tabs>
+  </div>
 ));
 PageTabList.displayName = "PageTabList";
 

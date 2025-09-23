@@ -205,11 +205,11 @@ const NewProductPage = ({
         window.location.href = redirectTo;
       } else {
         showAlert(responseData.error_message, "error");
-        setIsSubmitting(false);
       }
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -379,11 +379,15 @@ const NewProductPage = ({
                     ref={priceInputRef}
                     id={`price-${formUID}`}
                     type="text"
+                    inputMode="decimal"
                     maxLength={10}
                     placeholder="Price your product"
                     value={price}
                     onChange={(e) => {
-                      setPrice(e.target.value);
+                      let newValue = e.target.value;
+                      newValue = newValue.replace(/[.,]+/gu, ".");
+                      newValue = newValue.replace(/[^0-9.]/gu, "");
+                      setPrice(newValue);
                       errors.delete("price");
                     }}
                     autoComplete="off"

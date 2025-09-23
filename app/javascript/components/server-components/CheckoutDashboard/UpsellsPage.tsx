@@ -406,16 +406,22 @@ const UpsellDrawer = ({
       {selectedUpsell.cross_sell ? (
         <section className="stack">
           <h3>Selected products</h3>
-          {selectedUpsell.selected_products.map(({ id, name }) => (
-            <div key={id}>
-              <div>
-                <h5>{name}</h5>
-                {statistics
-                  ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
-                  : null}
-              </div>
+          {selectedUpsell.universal ? (
+            <div>
+              <h5>All products</h5>
             </div>
-          ))}
+          ) : (
+            selectedUpsell.selected_products.map(({ id, name }) => (
+              <div key={id}>
+                <div>
+                  <h5>{name}</h5>
+                  {statistics
+                    ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
+                    : null}
+                </div>
+              </div>
+            ))
+          )}
         </section>
       ) : (
         <section className="stack">

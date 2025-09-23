@@ -149,7 +149,7 @@ describe ProductReviewStat do
       "average_rating" => 2.3
     )
 
-    purchase.refund_and_save!(nil)
+    purchase.refund_and_save!(create(:admin_user).id)
 
     expect(review_stat.reload.attributes).to include(
       "ratings_of_one_count" => 1,

@@ -37,11 +37,15 @@ class Purchase
         return false
       end
 
-      if seller.refunds_disabled?
-        refunding_user = User.find(refunding_user_id) if refunding_user_id.present?
-
-        unless refunding_user&.is_team_member?
+      if refunding_user_id.blank? || !User.find(refunding_user_id)&.is_team_member?
+        if seller.refunds_disabled?
           errors.add :base, "Refunds are temporarily disabled in your account."
+          return false
+        end
+
+        amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
+        if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
+          errors.add :base, "Your balance is insufficient to process this refund."
           return false
         end
       end
@@ -77,7 +81,6 @@ class Purchase
                                                 paypal_order_purchase_unit_refund:,
                                                 is_for_fraud:)
         logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
-
         purchase_event = Event.where(purchase_id: id, event_name: "purchase").last
         unless purchase_event.nil?
           Event.create(

@@ -523,9 +523,14 @@ class PurchasesController < ApplicationController
     end
 
     def skip_recaptcha?
-      (action_name == "update_subscription" && params[:perceived_upgrade_price_cents].to_s == "0") ||
-        (action_name.in?(["update_subscription", "charge_preorder"]) && params[:use_existing_card]) ||
-        valid_wallet_payment?
+      site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
+
+      return true if (Rails.env.development? || Rails.env.test?) && site_key.blank?
+      return true if action_name == "update_subscription" && params[:perceived_upgrade_price_cents].to_s == "0"
+      return true if action_name.in?(["update_subscription", "charge_preorder"]) && params[:use_existing_card]
+      return true if valid_wallet_payment?
+
+      false
     end
 
     def valid_wallet_payment?

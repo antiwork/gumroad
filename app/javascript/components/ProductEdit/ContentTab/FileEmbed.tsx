@@ -215,7 +215,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     if (thumbnail) uploadThumbnail(thumbnail);
   };
   const thumbnailInput = (
-    <input type="file" accept="jpeg,jpg,png,gif" onChange={(e) => onThumbnailSelected(e.target.files)} />
+    <input type="file" accept=".jpg,.jpeg,.png,.gif" onChange={(e) => onThumbnailSelected(e.target.files)} />
   );
 
   const removeSubtitle = (url: string) =>
@@ -498,11 +498,12 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     role="menuitem"
                     onClick={() => {
                       editor.commands.command(({ tr }) => {
+                        const targetState = !node.attrs.collapsed;
                         tr.doc.descendants((node, pos) => {
-                          if (node.type.name === FileEmbed.name) {
+                          if (node.type.name === FileEmbed.name && node.attrs.collapsed !== targetState) {
                             tr.setNodeMarkup(pos, null, {
                               ...node.attrs,
-                              collapsed: !node.attrs.collapsed,
+                              collapsed: targetState,
                             });
                           }
                         });

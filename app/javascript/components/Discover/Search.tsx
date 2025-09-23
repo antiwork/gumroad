@@ -71,6 +71,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
           <input
             {...props}
             type="search"
+            className="!cursor-text"
             placeholder="Search products"
             aria-label="Search products"
             value={enteredQuery}

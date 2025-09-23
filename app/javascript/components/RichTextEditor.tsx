@@ -502,7 +502,7 @@ export const RichTextEditorToolbar = ({
             ) : null}
           </>
         )}
-        <div style={{ display: "flex", marginLeft: "auto" }}>
+        <div className="ml-auto flex">
           <MenuItem
             name="Undo last change"
             icon="undo"

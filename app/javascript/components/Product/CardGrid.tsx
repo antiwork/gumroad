@@ -140,7 +140,7 @@ const FilterCheckboxes = ({
       ))}
       {filters.length > 5 && !showingAll ? (
         <button className="link" onClick={() => setShowingAll(true)}>
-          Load more...
+          Show more
         </button>
       ) : null}
     </>
