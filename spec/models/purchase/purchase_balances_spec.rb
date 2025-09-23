@@ -12,6 +12,7 @@ describe "PurchaseBalances", :vcr  do
 
   describe "proper Balance creation and association with purchases" do
     let(:physical) { false }
+    let(:admin_user) { create(:admin_user) }
 
     before do
       @user = create(:user)
@@ -60,14 +61,14 @@ describe "PurchaseBalances", :vcr  do
         purchase_balance_1 = @purchase_1.purchase_success_balance
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_1.refund_and_save!(nil)
+          @purchase_1.refund_and_save!(admin_user.id)
         end
 
         refund_balance_1 = @purchase_1.reload.purchase_refund_balance
         expect(refund_balance_1).to eq purchase_balance_1
 
         purchase_balance_2 = @purchase_2.purchase_success_balance
-        @purchase_2.refund_and_save!(nil)
+        @purchase_2.refund_and_save!(admin_user.id)
         refund_balance_2 = @purchase_2.reload.purchase_refund_balance
         expect(refund_balance_2).to eq purchase_balance_2
       end
@@ -84,14 +85,14 @@ describe "PurchaseBalances", :vcr  do
         create(:balance, user: @user, merchant_account: @purchase_2.merchant_account, date: Date.today)
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_1.refund_and_save!(nil)
+          @purchase_1.refund_and_save!(admin_user.id)
         end
 
         refund_balance_1 = @purchase_1.reload.purchase_refund_balance
         expect(refund_balance_1).to eq old_unpaid_balance_1
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_2.refund_and_save!(nil)
+          @purchase_2.refund_and_save!(admin_user.id)
         end
 
         refund_balance_2 = @purchase_2.reload.purchase_refund_balance
@@ -116,14 +117,14 @@ describe "PurchaseBalances", :vcr  do
         today_unpaid_balance_2 = create(:balance, user: @user, merchant_account: @purchase_2.merchant_account, date: Date.today)
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_1.refund_and_save!(nil)
+          @purchase_1.refund_and_save!(admin_user.id)
         end
 
         refund_balance_1 = @purchase_1.reload.purchase_refund_balance
         expect(refund_balance_1).to eq today_unpaid_balance_1
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_2.refund_and_save!(nil)
+          @purchase_2.refund_and_save!(admin_user.id)
         end
 
         refund_balance_2 = @purchase_2.reload.purchase_refund_balance
@@ -153,14 +154,14 @@ describe "PurchaseBalances", :vcr  do
       it "uses the same balance for refund/chargeback as the one used for the original purchase (if unpaid)" do
         purchase_balance_1 = @purchase_1.purchase_success_balance
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_1.refund_and_save!(nil)
+          @purchase_1.refund_and_save!(admin_user.id)
         end
         refund_balance_1 = @purchase_1.reload.purchase_refund_balance
         expect(refund_balance_1).to eq purchase_balance_1
 
         purchase_balance_2 = @purchase_2.purchase_success_balance
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_2.refund_and_save!(nil)
+          @purchase_2.refund_and_save!(admin_user.id)
         end
         refund_balance_2 = @purchase_2.reload.purchase_refund_balance
         expect(refund_balance_2).to eq purchase_balance_2
@@ -178,13 +179,13 @@ describe "PurchaseBalances", :vcr  do
         create(:balance, user: @user, merchant_account: @purchase_2.merchant_account, date: Date.today)
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_1.refund_and_save!(nil)
+          @purchase_1.refund_and_save!(admin_user.id)
         end
         refund_balance_1 = @purchase_1.reload.purchase_refund_balance
         expect(refund_balance_1).to eq old_unpaid_balance_1
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_2.refund_and_save!(nil)
+          @purchase_2.refund_and_save!(admin_user.id)
         end
         refund_balance_2 = @purchase_2.reload.purchase_refund_balance
         expect(refund_balance_2).to eq old_unpaid_balance_2
@@ -208,13 +209,13 @@ describe "PurchaseBalances", :vcr  do
         today_unpaid_balance_2 = create(:balance, user: @user, merchant_account: @purchase_2.merchant_account, date: Date.today)
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_1.refund_and_save!(nil)
+          @purchase_1.refund_and_save!(admin_user.id)
         end
         refund_balance_1 = @purchase_1.reload.purchase_refund_balance
         expect(refund_balance_1).to eq today_unpaid_balance_1
 
         travel_to(Time.zone.local(2023, 11, 27)) do
-          @purchase_2.refund_and_save!(nil)
+          @purchase_2.refund_and_save!(admin_user.id)
         end
         refund_balance_2 = @purchase_2.reload.purchase_refund_balance
         expect(refund_balance_2).to eq today_unpaid_balance_2

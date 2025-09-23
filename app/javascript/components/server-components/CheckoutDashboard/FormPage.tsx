@@ -112,7 +112,7 @@ const FormPage = ({
       <div className="fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <div>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
-            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <header className="flex items-center justify-between">
               <h2>Custom fields</h2>
               <a href="/help/article/101-designing-your-product-page" target="_blank" rel="noreferrer">
                 Learn more
@@ -131,7 +131,7 @@ const FormPage = ({
                         <legend>
                           <label htmlFor={`${uid}-${field.key}-type`}>Type of field</label>
                         </legend>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
+                        <div className="flex gap-2">
                           <TypeSafeOptionSelect
                             id={`${uid}-${field.key}-type`}
                             value={field.type}
@@ -252,7 +252,7 @@ const FormPage = ({
             </div>
           </section>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
-            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <header className="flex items-center justify-between">
               <h2>Discounts</h2>
               <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
                 Learn more
@@ -281,7 +281,7 @@ const FormPage = ({
             </fieldset>
           </section>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
-            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <header className="flex items-center justify-between">
               <h2>More like this recommendations</h2>
               <a href="/help/article/334-more-like-this" target="_blank" rel="noreferrer">
                 Learn more
@@ -337,7 +337,7 @@ const FormPage = ({
             </fieldset>
           </section>
           <section className="space-y-4 border-b border-border p-4 md:p-8">
-            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <header className="flex items-center justify-between">
               <h2>Tipping</h2>
               <a href="/help/article/345-tipping" target="_blank" rel="noreferrer">
                 Learn more

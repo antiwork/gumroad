@@ -545,11 +545,6 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             setDeleting(null);
           }}
         />
-        <div style={{ marginTop: "20px", textAlign: "center" }}>
-          <a href="/help/article/198-your-gumroad-library" target="_blank" rel="noreferrer">
-            Need help with your Library?
-          </a>
-        </div>
       </section>
     </Layout>
   );

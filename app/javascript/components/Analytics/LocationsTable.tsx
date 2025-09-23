@@ -190,14 +190,9 @@ export const LocationsTable = ({
   const [selected, setSelected] = React.useState("world");
 
   const caption = (
-    <div style={{ display: "flex", justifyContent: "space-between" }}>
+    <div className="flex justify-between">
       Locations
-      <select
-        aria-label="Locations"
-        style={{ width: "fit-content" }}
-        value={selected}
-        onChange={(ev) => setSelected(ev.target.value)}
-      >
+      <select aria-label="Locations" className="w-fit" value={selected} onChange={(ev) => setSelected(ev.target.value)}>
         <option value="world">World</option>
         <option value="us">United States</option>
       </select>

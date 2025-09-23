@@ -35,7 +35,7 @@ describe "PurchaseGifts", :vcr do
 
     it "sets the state of the giftee purchase to refunded when refunding gifter purchase" do
       @giftee_purchase.mark_gift_receiver_purchase_successful
-      @gifter_purchase.reload.refund_and_save!(nil)
+      @gifter_purchase.reload.refund_and_save!(create(:admin_user).id)
       @giftee_purchase.reload
       expect(@giftee_purchase.purchase_state).to eq("gift_receiver_purchase_successful")
       expect(@giftee_purchase.stripe_refunded).to be(true)

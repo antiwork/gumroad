@@ -294,9 +294,6 @@ const WithContent = ({
         ) : null
       }
     >
-      {content.custom_receipt ? (
-        <div className="rich-text" dangerouslySetInnerHTML={{ __html: content.custom_receipt }} />
-      ) : null}
       <PurchaseInfoProvider value={purchaseInfo}>
         <MediaUrlsProvider value={mediaUrlsValue}>
           <IsMobileAppViewProvider value={props.is_mobile_app_web_view}>

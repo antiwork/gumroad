@@ -29,7 +29,7 @@ type Props = {
   custom_domain_name: string;
   applications: Application[];
   allow_deactivation: boolean;
-  formatted_balance_to_forfeit: string | null;
+  formatted_balance_to_forfeit_on_account_deletion: string | null;
 };
 
 const AdvancedPage = (props: Props) => {
@@ -80,7 +80,9 @@ const AdvancedPage = (props: Props) => {
         <ApplicationsSection applications={props.applications} />
 
         {props.allow_deactivation ? (
-          <AccountDeletionSection formatted_balance_to_forfeit={props.formatted_balance_to_forfeit} />
+          <AccountDeletionSection
+            formatted_balance_to_forfeit_on_account_deletion={props.formatted_balance_to_forfeit_on_account_deletion}
+          />
         ) : null}
       </form>
     </Layout>

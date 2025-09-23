@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 class PurchaseRefundPolicy < ApplicationRecord
-  belongs_to :purchase, optional: true
+  belongs_to :purchase
+  has_one :link, through: :purchase
+  has_one :product_refund_policy, through: :link
 
   stripped_fields :title, :fine_print
 
-  validates :purchase, presence: true, uniqueness: true
+  validates :purchase, uniqueness: true
   validates :title, presence: true
 
   # This is the date when we switched to product-level refund policies, and started enforcing
@@ -22,7 +24,6 @@ class PurchaseRefundPolicy < ApplicationRecord
   validates :max_refund_period_in_days, presence: true, if: -> { (created_at || Time.current) > MAX_REFUND_PERIOD_IN_DAYS_INTRODUCED_ON }
 
   def different_than_product_refund_policy?
-    product_refund_policy = purchase.link.product_refund_policy
     return true if product_refund_policy.blank?
 
     if max_refund_period_in_days.present?
@@ -93,7 +94,6 @@ class PurchaseRefundPolicy < ApplicationRecord
 
   # Avoid calling AI if possible by checking the product refund policy, and previous purchase refund policies
   def determine_max_refund_period_in_days_from_previous_policy
-    product_refund_policy = purchase.link.product_refund_policy
     return product_refund_policy.max_refund_period_in_days if product_refund_policy&.title == title
 
     other_purchase_refund_policy = PurchaseRefundPolicy.joins(:purchase).where(purchases: { link_id: purchase.link_id }).where.not(id: id).where(title:).first
