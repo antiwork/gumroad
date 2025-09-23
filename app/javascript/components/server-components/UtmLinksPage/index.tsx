@@ -1,19 +1,10 @@
 import * as React from "react";
-import {
-  isRouteErrorResponse,
-  useRouteError,
-  RouteObject,
-  createBrowserRouter,
-  RouterProvider,
-  json,
-} from "react-router-dom";
-import { StaticRouterProvider } from "react-router-dom/server";
 
-import { getEditUtmLink, getNewUtmLink, getUtmLinks, SortKey } from "$app/data/utm_links";
-import { assertDefined } from "$app/utils/assert";
-import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
+import { SavedUtmLink, UtmLink, UtmLinkFormContext, SortKey } from "$app/data/utm_links";
 
+import { PaginationProps } from "$app/components/Pagination";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { useClientAlert, ClientAlert } from "$app/components/useClientAlert";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 import { UtmLinkForm } from "./UtmLinkForm";
@@ -33,23 +24,6 @@ export const UtmLinkLayout = ({
     {children}
   </div>
 );
-
-const ErrorBoundary = () => {
-  const error = useRouteError();
-  return (
-    <div>
-      <div className="p-4 md:p-8">
-        <div className="placeholder">
-          <p>
-            {isRouteErrorResponse(error) && error.status === 404
-              ? "The resource you're looking for doesn't exist."
-              : "Something went wrong."}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export const extractSortParam = (rawParams: URLSearchParams): Sort<SortKey> | null => {
   const column = rawParams.get("key");
@@ -72,59 +46,31 @@ export const extractSortParam = (rawParams: URLSearchParams): Sort<SortKey> | nu
   }
 };
 
-const routes: RouteObject[] = [
-  {
-    path: "/dashboard/utm_links",
-    element: <UtmLinkList />,
-    errorElement: <ErrorBoundary />,
-    loader: async ({ request }) => {
-      const url = new URL(request.url);
-      const query = url.searchParams.get("query") ?? null;
-      const page = url.searchParams.get("page");
-      const sort = extractSortParam(url.searchParams);
-      const data = await getUtmLinks({
-        query,
-        page: page ? parseInt(page, 10) : 1,
-        sort,
-        abortSignal: request.signal,
-      });
-      return json(data, { status: 200 });
-    },
-  },
-  {
-    path: "/dashboard/utm_links/new",
-    element: <UtmLinkForm />,
-    loader: async ({ request }) => {
-      const url = new URL(request.url);
-      const copyFrom = url.searchParams.get("copy_from");
-      const data = await getNewUtmLink({ abortSignal: request.signal, copyFrom });
-      return json(data, { status: 200 });
-    },
-  },
-  {
-    path: "/dashboard/utm_links/:id/edit",
-    element: <UtmLinkForm />,
-    loader: async ({ params, request }) => {
-      const data = await getEditUtmLink({
-        id: assertDefined(params.id, "UTM Link ID is required"),
-        abortSignal: request.signal,
-      });
-      return json(data, { status: 200 });
-    },
-  },
-];
-
-const UtmLinksPage = () => {
-  const router = createBrowserRouter(routes);
-
-  return <RouterProvider router={router} />;
+export type UtmLinksPageProps = {
+  utm_links: SavedUtmLink[];
+  pagination: PaginationProps;
+  context: UtmLinkFormContext;
+  utm_link?: UtmLink;
+  copy_from?: string;
 };
 
-const UtmLinksRouter = async (global: GlobalProps) => {
-  const { router, context } = await buildStaticRouter(global, routes);
-  const component = () => <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />;
-  component.displayName = "UtmLinksRouter";
-  return component;
+const UtmLinksPage = ({ utm_links, pagination, context, utm_link, copy_from }: UtmLinksPageProps) => {
+  const { alert, isVisible } = useClientAlert();
+
+  const currentPath = window.location.pathname;
+
+  return (
+    <>
+      <ClientAlert alert={alert} isVisible={isVisible} />
+      {currentPath === "/dashboard/utm_links/new" ? (
+        <UtmLinkForm context={context} utm_link={utm_link ?? null} {...(copy_from && { copy_from })} />
+      ) : /\/dashboard\/utm_links\/\d+\/edit$/u.exec(currentPath) ? (
+        <UtmLinkForm context={context} utm_link={utm_link ?? null} />
+      ) : (
+        <UtmLinkList utm_links={utm_links} pagination={pagination} />
+      )}
+    </>
+  );
 };
 
-export default register({ component: UtmLinksPage, ssrComponent: UtmLinksRouter, propParser: () => ({}) });
+export default UtmLinksPage;

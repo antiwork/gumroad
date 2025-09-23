@@ -1,6 +1,6 @@
+import { Link, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData, useNavigate } from "react-router-dom";
 import { cast, is } from "ts-safe-cast";
 
 import {
@@ -19,8 +19,8 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
-import { showAlert } from "$app/components/server-components/Alert";
 import { UtmLinkLayout } from "$app/components/server-components/UtmLinksPage";
+import { useClientAlert } from "$app/components/useClientAlert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
@@ -40,11 +40,10 @@ type ErrorInfo = { attrName: FieldAttrName; message: string };
 
 const duplicatedTitle = (title?: string) => (title ? `${title} (copy)` : "");
 
-export const UtmLinkForm = () => {
-  const { context, utm_link } = cast<{ context: UtmLinkFormContext; utm_link: UtmLink | null }>(useLoaderData());
+export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext; utm_link: UtmLink | null }) => {
+  const { showAlert } = useClientAlert();
   const isEditing = utm_link?.id !== undefined;
   const isDuplicating = utm_link !== null && utm_link.id === undefined;
-  const navigate = useNavigate();
   const uid = React.useId();
   const [title, setTitle] = React.useState(isDuplicating ? duplicatedTitle(utm_link.title) : (utm_link?.title ?? ""));
   const [destination, setDestination] = React.useState<UtmLinkDestinationOption | null>(
@@ -204,7 +203,7 @@ export const UtmLinkForm = () => {
       }
 
       showAlert(isEditing ? "Link updated!" : "Link created!", "success");
-      navigate("/dashboard/utm_links");
+      router.visit("/dashboard/utm_links");
     } catch (error) {
       const genericMessage = "Sorry, something went wrong. Please try again.";
       if (error instanceof ResponseError) {
@@ -234,7 +233,7 @@ export const UtmLinkForm = () => {
       title={isEditing ? "Edit link" : "Create link"}
       actions={
         <>
-          <Link to="/dashboard/utm_links" className="button">
+          <Link href="/dashboard/utm_links" className="button">
             <Icon name="x-square" />
             Cancel
           </Link>

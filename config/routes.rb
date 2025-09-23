@@ -398,7 +398,8 @@ Rails.application.routes.draw do
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
     get "/workflows/*other", to: "workflows#index" # route handled by react-router
     get "/emails/*other", to: "emails#index" # route handled by react-router
-    get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
+    get "/dashboard/utm_links/new", to: "utm_links#new"
+    get "/dashboard/utm_links/:id/edit", to: "utm_links#edit"
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect

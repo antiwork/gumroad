@@ -1,7 +1,6 @@
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 import ReactDOM from "react-dom";
-import { Link, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import {
   deleteUtmLink,
@@ -22,8 +21,8 @@ import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
-import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
+import { useClientAlert } from "$app/components/useClientAlert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -54,17 +53,18 @@ const utmLinkWithStats = (utmLink: SavedUtmLink, stats?: UtmLinkStats) => {
   return link;
 };
 
-const UtmLinkList = () => {
-  const navigation = useNavigation();
-  const navigate = useNavigate();
-  const revalidator = useRevalidator();
-  const { utm_links: utmLinks, pagination } = cast<{ utm_links: SavedUtmLink[]; pagination: PaginationProps }>(
-    useLoaderData(),
-  );
+const UtmLinkList = ({
+  utm_links: utmLinks,
+  pagination,
+}: {
+  utm_links: SavedUtmLink[];
+  pagination: PaginationProps;
+}) => {
+  const { showAlert } = useClientAlert();
   const [utmLinksStats, setUtmLinksStats] = React.useState<UtmLinksStats>({});
   const utmLinksWithStats = utmLinks.map((utmLink) => utmLinkWithStats(utmLink, utmLinksStats[utmLink.id]));
   const [selectedUtmLink, setSelectedUtmLink] = React.useState<SavedUtmLink | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = React.useState(() => new URLSearchParams(window.location.search));
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(
     () => extractSortParam(searchParams) || { key: "date", direction: "desc" },
   );
@@ -97,23 +97,19 @@ const UtmLinkList = () => {
   }, [utmLinks, searchParams]);
 
   const onChangePage = (newPage: number) => {
-    setSearchParams((prevState) => {
-      const params = new URLSearchParams(prevState);
-      params.set("page", newPage.toString());
-      return params;
-    });
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", newPage.toString());
+    router.get(`/dashboard/utm_links?${params.toString()}`);
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
-    setSearchParams((prevState) => {
-      const params = new URLSearchParams(prevState);
-      if (pagination.pages >= 1) params.delete("page");
-      if (newSort) {
-        params.set("key", newSort.key);
-        params.set("direction", newSort.direction);
-      }
-      return params;
-    });
+    const params = new URLSearchParams(window.location.search);
+    if (pagination.pages >= 1) params.delete("page");
+    if (newSort) {
+      params.set("key", newSort.key);
+      params.set("direction", newSort.direction);
+    }
+    router.get(`/dashboard/utm_links?${params.toString()}`);
     setSort(newSort);
   };
 
@@ -124,16 +120,14 @@ const UtmLinkList = () => {
   const onSearch = useDebouncedCallback((newQuery: string) => {
     if (query === newQuery) return;
 
-    setSearchParams((prevState) => {
-      const params = new URLSearchParams(prevState);
-      if (newQuery.length > 0) {
-        params.set("query", newQuery);
-      } else {
-        params.delete("query");
-      }
-      params.delete("page");
-      return params;
-    });
+    const params = new URLSearchParams(window.location.search);
+    if (newQuery.length > 0) {
+      params.set("query", newQuery);
+    } else {
+      params.delete("query");
+    }
+    params.delete("page");
+    router.get(`/dashboard/utm_links?${params.toString()}`);
   }, 500);
 
   return (
@@ -142,13 +136,13 @@ const UtmLinkList = () => {
       actions={
         <>
           <SearchBoxPopover initialQuery={query} onSearch={onSearch} />
-          <Link to="/dashboard/utm_links/new" className="button accent">
+          <Link href="/dashboard/utm_links/new" className="button accent">
             Create link
           </Link>
         </>
       }
     >
-      {navigation.state === "loading" && utmLinks.length === 0 ? (
+      {utmLinks.length === 0 ? (
         <div style={{ justifySelf: "center" }}>
           <Progress width="5rem" />
         </div>
@@ -219,11 +213,11 @@ const UtmLinkList = () => {
                   <td>
                     <UtmLinkActions link={link}>
                       <div role="menu">
-                        <div role="menuitem" onClick={() => navigate(editLinkPath(link))}>
+                        <div role="menuitem" onClick={() => router.visit(editLinkPath(link))}>
                           <Icon name="pencil" />
                           &ensp;Edit
                         </div>
-                        <div role="menuitem" onClick={() => navigate(duplicateLinkPath(link))}>
+                        <div role="menuitem" onClick={() => router.visit(duplicateLinkPath(link))}>
                           <Icon name="outline-duplicate" />
                           &ensp;Duplicate
                         </div>
@@ -280,7 +274,7 @@ const UtmLinkList = () => {
                         try {
                           setDeletingUtmLink({ ...deletingUtmLink, state: "deleting" });
                           await deleteUtmLink(deletingUtmLink.id);
-                          revalidator.revalidate();
+                          router.reload();
                           showAlert("Link deleted!", "success");
                         } catch (e) {
                           assertResponseError(e);
@@ -523,7 +517,7 @@ const UtmLinkDetails = ({
         </div>
       </section>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
-        <Link to={duplicateLinkPath(utmLink)} className="button">
+        <Link href={duplicateLinkPath(utmLink)} className="button">
           {" "}
           Duplicate
         </Link>
