@@ -5,5 +5,6 @@ FactoryBot.define do
     purchase
     title { "30-day money back guarantee" }
     fine_print { "This is a purchase-level refund policy" }
+    max_refund_period_in_days { 30 }
   end
 end

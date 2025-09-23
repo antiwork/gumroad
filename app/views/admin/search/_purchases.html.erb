@@ -29,11 +29,7 @@
                 <% purchase_refund_policy = purchase.purchase_refund_policy %>
                 <% if purchase_refund_policy.present? %>
                   <li>Refund policy: <%= purchase_refund_policy.title %>
-                    <% if purchase_refund_policy.different_than_product_refund_policy? %>
-                      <%= with_tooltip(tip: "Current refund policy: #{purchase_refund_policy.product_refund_policy_title}") do %>
-                        <%= icon("solid-shield-exclamation", style: "color: rgb(var(--warning))") %>
-                      <% end %>
-                    <% end %>
+                    <%= purchase_refund_policy_tooltip(purchase_refund_policy) %>
                   </li>
                 <% end %>
                 <li>Seller: <%= copy_to_clipboard(purchase.seller.email) %></li>
@@ -41,7 +37,9 @@
             </div>
           </td>
           <td data-label="By">
-            <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>
+            <%= copy_to_clipboard(purchase.email) do %>
+              <%= link_to(purchase.email, admin_search_purchases_path(query: purchase.email)) %>
+            <% end %>
             <small>
               <%= format_datetime_with_relative_tooltip(purchase.created_at) %>
             </small>

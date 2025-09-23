@@ -622,15 +622,16 @@ describe CustomerMailer do
 
       before do
         purchase.create_purchase_refund_policy!(
-          title: "Refund policy",
-          fine_print: "This is the fine print."
+          title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+          max_refund_period_in_days: 30,
+          fine_print: "This is the fine print.",
         )
       end
 
       it "includes the refund policy" do
         mail = CustomerMailer.receipt(purchase.id)
 
-        expect(mail.body.sanitized).to include("Refund policy")
+        expect(mail.body.sanitized).to include("30-day money back guarantee")
         expect(mail.body.sanitized).to include("This is the fine print.")
       end
     end
@@ -1280,6 +1281,29 @@ describe CustomerMailer do
       expect(mail.to).to eq(["kindle@kindle.com"])
       expect(mail.subject).to eq("convert")
       expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
+    end
+  end
+
+  describe "#files_ready_for_download" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product, seller:, email: "customer@example.com") }
+
+    before { purchase.create_url_redirect! }
+
+    it "sends the email with correct headers and content" do
+      mail = CustomerMailer.files_ready_for_download(purchase.id)
+
+      expect(mail.to).to eq(["customer@example.com"])
+      expect(mail.subject).to eq("Your files are ready for download!")
+      expect(mail[:from].value).to eq("#{seller.name} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>")
+      expect(mail[:reply_to].value).to eq(product.support_email_or_default)
+
+      body = mail.body.encoded
+      expect(body).to include("Your files are ready for download!")
+      expect(body).to include(product.name)
+      expect(body).to include(purchase.url_redirect.download_page_url)
+      expect(body).to include("Contact Seller by replying to this email.")
     end
   end
 end

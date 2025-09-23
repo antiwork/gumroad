@@ -19,6 +19,7 @@ type GlobalProps = {
     short_domain: string;
     discover_domain: string;
     third_party_analytics_domain: string;
+    api_domain: string;
   };
   user_agent_info: {
     is_mobile: boolean;
@@ -70,6 +71,7 @@ export default function AppWrapper({ children, global }: { children: React.React
           shortDomain: global.domain_settings.short_domain,
           discoverDomain: global.domain_settings.discover_domain,
           thirdPartyAnalyticsDomain: global.domain_settings.third_party_analytics_domain,
+          apiDomain: global.domain_settings.api_domain,
         }}
       >
         <UserAgentProvider
@@ -81,10 +83,10 @@ export default function AppWrapper({ children, global }: { children: React.React
           <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
             <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
               <SSRLocationProvider value={global.href}>
-                <div id="inertia-shell" className="override grid h-[100vh] grid-cols-1 grid-rows-1">
+                <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
                   <Nav title="Dashboard" />
                   {isRouteLoading ? <LoadingSkeleton /> : null}
-                  <div className={isRouteLoading ? "hidden" : "overflow-y-scroll"}>{children}</div>
+                  <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
                 </div>
               </SSRLocationProvider>
             </CurrentSellerProvider>

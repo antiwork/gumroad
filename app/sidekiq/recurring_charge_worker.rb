@@ -57,6 +57,8 @@ class RecurringChargeWorker
         plan_changes.map(&:mark_deleted!)
         override_params[:is_upgrade_purchase] = true # avoid double charged error
         subscription.reload
+
+        UpdateIntegrationsOnTierChangeWorker.perform_async(subscription.id) unless same_tier
       end
 
       subscription.charge!(override_params:)

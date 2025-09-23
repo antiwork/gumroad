@@ -17,6 +17,8 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -188,10 +190,11 @@ export const EditProfile = (props: Props) => {
   const reducer = React.useMemo(() => [{ ...props, sections: visibleSections }, dispatch] as const, [visibleSections]);
 
   const imageUploadSettings = useSectionImageUploadSettings();
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header>
+      <header className="grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <div role="toolbar" style={{ gridColumn: "unset" }}>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
@@ -226,12 +229,11 @@ export const EditProfile = (props: Props) => {
             <AutoLink text={props.bio} />
           </h1>
         ) : null}
-        <div role="tablist" aria-label="Profile Tabs">
+        <Tabs aria-label="Profile Tabs">
           {tabs.map((tab) => (
-            <div
-              role="tab"
+            <Tab
               key={tab.id}
-              aria-selected={tab === selectedTab}
+              isSelected={tab === selectedTab}
               onClick={() => {
                 if (imageUploadSettings.isUploading) {
                   showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
@@ -241,21 +243,12 @@ export const EditProfile = (props: Props) => {
               }}
             >
               {tab.name}
-            </div>
+            </Tab>
           ))}
-        </div>
+        </Tabs>
       </header>
-      <div
-        style={{
-          position: "fixed",
-          top: "var(--spacer-3)",
-          left: "var(--spacer-3)",
-          zIndex: "var(--z-index-above-overlay)",
-          padding: 0,
-          border: "none",
-        }}
-      >
-        <WithTooltip tip="Edit profile" position="right">
+      <div className="!fixed right-3 top-5 z-30 !p-0 lg:left-3 lg:right-auto lg:top-3">
+        <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"
             href={Routes.settings_profile_url({ host: appDomain })}
@@ -271,6 +264,7 @@ export const EditProfile = (props: Props) => {
             key={section.id}
             id={section.id}
             style={{ overflowAnchor: section.id === movedSectionId ? "none" : undefined }}
+            className="border-b border-border px-4 py-8 lg:py-16"
           >
             <AddSectionButton index={i} />
             <ImageUploadSettingsContext.Provider value={imageUploadSettings}>

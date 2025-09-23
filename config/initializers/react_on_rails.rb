@@ -17,6 +17,7 @@ module RenderingExtension
         short_domain: SHORT_DOMAIN,
         discover_domain: DISCOVER_DOMAIN,
         third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+        api_domain: API_DOMAIN,
       },
       user_agent_info: {
         is_mobile: view_context.controller.is_mobile?,
@@ -45,7 +46,8 @@ module RenderingExtension
         team_memberships: UserMembershipsPresenter.new(pundit_user:).props,
         policies: policies_props(pundit_user),
         is_gumroad_admin: user.is_team_member?,
-        is_impersonating:
+        is_impersonating:,
+        lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),
       }
     end
 

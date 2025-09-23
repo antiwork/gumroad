@@ -167,6 +167,10 @@ class UrlRedirect < ApplicationRecord
     alive_product_files.find_by_external_id(product_file_external_id) if product_file_external_id.present?
   end
 
+  def missing_stamped_pdf?(product_file)
+    !alive_stamped_pdfs.where(product_file_id: product_file.id).exists?
+  end
+
   def url
     "#{PROTOCOL}://#{DOMAIN}/r/#{token}"
   end

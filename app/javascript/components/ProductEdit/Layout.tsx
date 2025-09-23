@@ -4,6 +4,7 @@ import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 import { paramsToQueryString } from "$app/utils/url";
 
@@ -17,6 +18,8 @@ import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { newEmailPath } from "$app/components/server-components/EmailsPage";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -216,10 +219,11 @@ export const Layout = ({
       <NotifyAboutProductUpdatesAlert />
       {/* TODO: remove this legacy uploader stuff */}
       <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
-      <header className="sticky-top">
-        <h1>{product.name || "Untitled"}</h1>
-        <div className="actions">
-          {product.is_published ? (
+      <PageHeader
+        className="sticky-top"
+        title={product.name || "Untitled"}
+        actions={
+          product.is_published ? (
             <>
               <Button disabled={isBusy} onClick={() => void setPublished(false)}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
@@ -253,69 +257,83 @@ export const Layout = ({
                 </Button>
               </WithTooltip>
             </>
+          )
+        }
+      >
+        <div
+          className={classNames(
+            "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between",
+            headerActions && "mt-2",
           )}
-        </div>
-        <div role="tablist" style={{ gridColumn: 1 }}>
-          <Link to={rootPath} role="tab" aria-selected={tab === "product"} onClick={onTabClick}>
-            Product
-          </Link>
-          {!isCoffee ? (
-            <Link to={`${rootPath}/content`} role="tab" aria-selected={tab === "content"} onClick={onTabClick}>
-              Content
-            </Link>
-          ) : null}
-          <Link
-            to={`${rootPath}/share`}
-            role="tab"
-            aria-selected={tab === "share"}
-            onClick={(evt) => {
-              onTabClick(evt, () => {
-                if (!product.is_published) {
-                  evt.preventDefault();
-                  showAlert(
-                    "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                    "warning",
-                  );
-                }
-              });
-            }}
-          >
-            Share
-          </Link>
-        </div>
-        {headerActions}
-      </header>
-      {children}
-      {preview ? (
-        <aside aria-label="Preview">
-          <header>
-            <h2>Preview</h2>
-            <WithTooltip tip="Preview">
-              <NavigationButton
-                aria-label="Preview"
-                disabled={isBusy}
-                href={url}
+        >
+          <Tabs style={{ gridColumn: 1 }}>
+            <Tab asChild isSelected={tab === "product"}>
+              <Link to={rootPath} onClick={onTabClick}>
+                Product
+              </Link>
+            </Tab>
+            {!isCoffee ? (
+              <Tab asChild isSelected={tab === "content"}>
+                <Link to={`${rootPath}/content`} onClick={onTabClick}>
+                  Content
+                </Link>
+              </Tab>
+            ) : null}
+            <Tab asChild isSelected={tab === "share"}>
+              <Link
+                to={`${rootPath}/share`}
                 onClick={(evt) => {
-                  evt.preventDefault();
-                  void save().then(() => window.open(url, "_blank"));
+                  onTabClick(evt, () => {
+                    if (!product.is_published) {
+                      evt.preventDefault();
+                      showAlert(
+                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
+                        "warning",
+                      );
+                    }
+                  });
                 }}
               >
-                <Icon name="arrow-diagonal-up-right" />
-              </NavigationButton>
-            </WithTooltip>
-          </header>
-          <Preview
-            scaleFactor={0.4}
-            style={{
-              border: "var(--border)",
-              backgroundColor: "rgb(var(--filled))",
-              borderRadius: "var(--border-radius-2)",
-            }}
-          >
-            {preview}
-          </Preview>
-        </aside>
-      ) : null}
+                Share
+              </Link>
+            </Tab>
+          </Tabs>
+          {headerActions}
+        </div>
+      </PageHeader>
+      <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
+        {children}
+        {preview ? (
+          <aside aria-label="Preview" className="!sticky top-0 min-h-screen self-start overflow-y-auto">
+            <header>
+              <h2>Preview</h2>
+              <WithTooltip tip="Preview">
+                <NavigationButton
+                  aria-label="Preview"
+                  disabled={isBusy}
+                  href={url}
+                  onClick={(evt) => {
+                    evt.preventDefault();
+                    void save().then(() => window.open(url, "_blank"));
+                  }}
+                >
+                  <Icon name="arrow-diagonal-up-right" />
+                </NavigationButton>
+              </WithTooltip>
+            </header>
+            <Preview
+              scaleFactor={0.4}
+              style={{
+                border: "var(--border)",
+                backgroundColor: "rgb(var(--filled))",
+                borderRadius: "var(--border-radius-2)",
+              }}
+            >
+              {preview}
+            </Preview>
+          </aside>
+        ) : null}
+      </div>
     </>
   );
 };

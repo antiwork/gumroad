@@ -9,6 +9,7 @@ import FileUtils from "$app/utils/file";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -76,6 +77,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
 }
 
 export function ConversationDetail({ conversationSlug, onBack }: { conversationSlug: string; onBack: () => void }) {
+  const { apiDomain } = useDomains();
   const { data: conversation, isLoading, error, refetch } = useConversation(conversationSlug);
   const { mutateAsync: createMessage, isPending: isSubmitting } = useCreateMessage({
     onError: (error) => {
@@ -93,7 +95,12 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed) return;
-    await createMessage({ conversationSlug, content: trimmed, attachments });
+    await createMessage({
+      conversationSlug,
+      content: trimmed,
+      attachments,
+      customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+    });
     setInput("");
     setAttachments([]);
     void refetch();
@@ -103,15 +110,15 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
   if (error || !conversation) return <div>Something went wrong.</div>;
 
   return (
-    <main>
-      <header className="!gap-0">
+    <div>
+      <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
           <Icon name="arrow-left" /> Go back to Support tickets
         </a>
-        <h1>{conversation.subject}</h1>
+        <h1 className="text-2xl">{conversation.subject}</h1>
       </header>
 
-      <div>
+      <div className="p-4 md:p-8">
         <div role="list" className="rows mb-12 overflow-hidden" aria-label="Messages">
           {conversation.messages.map((message, index) => (
             <MessageListItem
@@ -180,6 +187,6 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
           </div>
         </form>
       </div>
-    </main>
+    </div>
   );
 }

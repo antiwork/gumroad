@@ -2,7 +2,7 @@
 
 .product-card-grid {
   --min-grid-absolute-size: #{size(9)};
-  --max-grid-relative-size: 25%;
+  --max-grid-relative-size: 20%;
 
   @extend .grid;
 

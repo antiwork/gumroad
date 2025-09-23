@@ -57,7 +57,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
             <span>
               {" "}
               For now, <a href={Routes.products_path()}>create a product</a> or{" "}
-              <a href={Routes.settings_profile_path()}>customize your profile</a>`
+              <a href={Routes.settings_profile_path()}>customize your profile</a>
             </span>
           ) : null}
         </p>

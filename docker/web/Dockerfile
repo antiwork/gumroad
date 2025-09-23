@@ -2,6 +2,9 @@
 ARG WEB_DOCKERFILE_FROM
 FROM ${WEB_DOCKERFILE_FROM}
 
+# Expire Docker images after 1 week in Quay
+LABEL quay.expires-after=1w
+
 ENV BUNDLE_PATH=/bundle_path
 ENV APP_DIR=/app
 

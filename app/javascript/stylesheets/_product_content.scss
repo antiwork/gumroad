@@ -1,6 +1,6 @@
 $dashed-accent-border: dashed $border-width full-color(accent);
 
-main.product-content {
+.product-content {
   header h1 {
     @include max-lines(2);
   }
@@ -72,7 +72,7 @@ main.product-content {
       container: sidebar-container / size;
       padding-top: spacer(6);
       display: grid;
-      grid-template: auto / 1fr 3fr;
+      grid-template: auto / 20rem 1fr;
 
       & > :first-child {
         position: sticky;

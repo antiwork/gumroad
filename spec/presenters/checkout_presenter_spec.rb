@@ -93,7 +93,7 @@ describe CheckoutPresenter do
             require_shipping: false,
             shippable_country_codes: [],
             custom_fields: [],
-            supports_paypal: "braintree",
+            supports_paypal: nil,
             has_offer_codes: false,
             has_tipping_enabled: false,
             analytics: product.analytics_data,
@@ -340,6 +340,8 @@ describe CheckoutPresenter do
       let!(:product) { create(:product) }
 
       it "returns nil for supports_paypal when the creator does not have their PayPal account connected" do
+        Feature.deactivate(:disable_braintree_sales)
+
         expect(@instance.checkout_props(params: { product: product.unique_permalink }, browser_guid:)[:add_products].first[:product][:supports_paypal]).to eq "braintree"
 
         Feature.activate(:disable_paypal_sales)
@@ -362,6 +364,7 @@ describe CheckoutPresenter do
     context "when PayPal Connect sales are disabled" do
       before do
         Feature.activate(:disable_paypal_connect_sales)
+        Feature.deactivate(:disable_braintree_sales)
       end
 
       context "when the product is a recurring subscription" do
@@ -517,7 +520,7 @@ describe CheckoutPresenter do
                                product: {
                                  name: @product.name,
                                  native_type: @product.native_type,
-                                 supports_paypal: "braintree",
+                                 supports_paypal: nil,
                                  creator: {
                                    id: @product.user.external_id,
                                    name: @product.user.username,

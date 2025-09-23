@@ -69,7 +69,7 @@ const ReviewsPage = ({
   return (
     <Layout selectedTab="reviews" followingWishlistsEnabled={following_wishlists_enabled}>
       {purchases.length ? (
-        <section className="paragraphs">
+        <section className="space-y-4 p-4 md:p-8">
           <h2>{`${purchases.length} ${purchases.length === 1 ? "product" : "products"} awaiting review`}</h2>
           <div
             className="grid"
@@ -125,7 +125,7 @@ const ReviewsPage = ({
           </div>
         </section>
       ) : reviews.length > 0 ? (
-        <section>
+        <section className="p-4 md:p-8">
           <div className="placeholder">
             <h2>You've reviewed all your products!</h2>
             <NavigationButton href={discoverUrl} color="accent">
@@ -134,7 +134,7 @@ const ReviewsPage = ({
           </div>
         </section>
       ) : null}
-      <section>
+      <section className="p-4 md:p-8">
         {reviews.length === 0 ? (
           <div className="placeholder">
             <figure>
@@ -146,7 +146,7 @@ const ReviewsPage = ({
               Discover products
             </NavigationButton>
             <a href="/help/article/344-rate-and-review-your-purchase" target="_blank" rel="noreferrer">
-              Learn more about reviews.
+              Learn more about reviews
             </a>
           </div>
         ) : (

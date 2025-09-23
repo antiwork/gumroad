@@ -648,6 +648,22 @@ describe "Sales page", type: :system, js: true do
         expect(purchase2.reload.can_contact).to eq(true)
       end
 
+      it "shows an error when entering an invalid email" do
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 2" }).click
+
+        within_section "Membership", section_element: :aside do
+          within_section "Email", section_element: :section do
+            expect(page).to have_text("customer2@gumroad.com")
+            click_on "Edit"
+            fill_in "Email", with: "invalid-email"
+            click_on "Save"
+          end
+        end
+
+        expect(page).to have_alert(text: "Please enter a valid email")
+      end
+
       context "customer has a Gumroad account" do
         before { purchase3.update!(purchaser: create(:user)) }
 
@@ -740,6 +756,8 @@ describe "Sales page", type: :system, js: true do
         end
         expect(page).to have_alert(text: "Email updated successfully.")
 
+        refresh
+        find(:table_row, { "Name" => "Customer 1" }).click
         within_section "Bundle", section_element: :aside do
           within_section "Content", section_element: :section do
             within_section "Bundle Product 1" do

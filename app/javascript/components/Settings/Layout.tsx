@@ -4,6 +4,8 @@ import * as React from "react";
 import { SettingPage as Page } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 const PAGE_TITLES = {
   main: "Settings",
@@ -24,29 +26,28 @@ type Props = {
   hasAside?: boolean;
   canUpdate?: boolean;
 };
-const Tab = ({ page, isCurrent }: { page: Page; isCurrent: boolean }) => (
-  <a role="tab" href={Routes[`settings_${page}_path`]()} aria-selected={isCurrent}>
-    {PAGE_TITLES[page]}
-  </a>
-);
 
 export const Layout = ({ onSave, pages, currentPage, children, hasAside, canUpdate }: Props) => (
   <>
-    <header className="sticky-top">
-      <h1>Settings</h1>
-      {onSave ? (
-        <div className="actions">
+    <PageHeader
+      className="sticky-top"
+      title="Settings"
+      actions={
+        onSave ? (
           <Button color="accent" onClick={onSave} disabled={!canUpdate}>
             Update settings
           </Button>
-        </div>
-      ) : null}
-      <div role="tablist">
+        ) : null
+      }
+    >
+      <Tabs>
         {pages.map((page) => (
-          <Tab page={page} key={page} isCurrent={currentPage === page} />
+          <Tab key={page} href={Routes[`settings_${page}_path`]()} isSelected={currentPage === page}>
+            {PAGE_TITLES[page]}
+          </Tab>
         ))}
-      </div>
-    </header>
-    <main className={cx({ squished: hasAside })}>{children}</main>
+      </Tabs>
+    </PageHeader>
+    <div className={cx({ squished: hasAside })}>{children}</div>
   </>
 );

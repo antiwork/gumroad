@@ -28,7 +28,7 @@ export const ShippingDestinationsEditor = ({
   };
 
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <header>
         <h2>Shipping destinations</h2>
       </header>

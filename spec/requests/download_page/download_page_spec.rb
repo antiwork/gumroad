@@ -608,7 +608,7 @@ describe("Download Page", type: :system, js: true) do
   end
 
   describe "thank you note text" do
-    it "renders in a paragraph if custom receipt text exists" do
+    it "does not render custom receipt text even if it exists" do
       custom_receipt_text = "Thanks for your purchase! https://example.com"
       product = create(:product, custom_receipt: custom_receipt_text)
       purchase = create(:purchase, email: "test@tynt.com", link: product)
@@ -616,8 +616,7 @@ describe("Download Page", type: :system, js: true) do
 
       visit url_redirect.download_page_url
 
-      expect(page).to have_selector("p")
-      expect(page).to have_text(custom_receipt_text)
+      expect(page).to_not have_text(custom_receipt_text)
     end
 
     it "does not render a paragraph if there is no custom receipt text" do
@@ -628,21 +627,6 @@ describe("Download Page", type: :system, js: true) do
       visit url_redirect.download_page_url
 
       expect(page).to_not have_selector("p")
-    end
-  end
-
-  context "when a PDF hasn't been stamped yet" do
-    it "displays an alert and disables the download button" do
-      product = create(:product)
-      create(:product_file, link: product, pdf_stamp_enabled: true)
-      purchase = create(:purchase, link: product)
-      url_redirect = create(:url_redirect, purchase:)
-
-      visit url_redirect.download_page_url
-      expect(page).to have_alert(text: "This product includes a file that's being processed. You'll be able to download it shortly.")
-      download_button = find_link("Download", inert: true)
-      download_button.hover
-      expect(download_button).to have_tooltip(text: "This file will be ready to download shortly.")
     end
   end
 
@@ -970,6 +954,22 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_link("Other Product", href: other_product.long_url(**url_options))
       expect(page).to have_link("Affiliate Product", href: affiliate_product.long_url(**url_options, affiliate_id: affiliate.external_id_numeric))
       expect(page).to have_link("Global Affiliate Product", href: global_affiliate_product.long_url(**url_options, affiliate_id: product.user.global_affiliate.external_id_numeric))
+    end
+  end
+
+  describe "stamped PDF download" do
+    it "shows a flash message when a stamped PDF is missing" do
+      product = create(:product)
+      create(:readable_document, link: product, pdf_stamp_enabled: true)
+      purchase = create(:purchase, link: product)
+      url_redirect = create(:url_redirect, purchase: purchase)
+      url_redirect.update!(is_done_pdf_stamping: true)
+
+      visit url_redirect.download_page_url
+      click_on "Download"
+
+      expect(page).to have_current_path(url_redirect.download_page_url)
+      expect(page).to have_text("We are preparing the file for download. You will receive an email when it is ready.")
     end
   end
 end

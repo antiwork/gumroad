@@ -183,8 +183,7 @@ describe "Wishlist show page", :js, type: :system do
     expect(page).to have_text("Wishlist User's email has been hidden for privacy purposes.")
     fill_in "Message", with: "Happy birthday!"
 
-    check_out(membership_product)
-    expect(page).to have_text("You bought this for Wishlist User.")
+    check_out(membership_product, gift: { name: "Wishlist User" })
     expect(Purchase.last).to have_attributes(
       link: membership_product,
       recommended_by: RecommendationType::WISHLIST_RECOMMENDATION,
