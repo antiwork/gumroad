@@ -1481,7 +1481,7 @@ describe "Sales page", type: :system, js: true do
               end
             end
           end
-          expect(page).to have_alert(text: "You do not have sufficient balance to make this refund.")
+          expect(page).to have_alert(text: "Your balance is insufficient to process this refund.")
 
           purchase1.reload
           expect(purchase1.stripe_partially_refunded?).to eq(false)

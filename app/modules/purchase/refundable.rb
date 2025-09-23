@@ -45,7 +45,7 @@ class Purchase
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "You do not have sufficient balance to make this refund."
+          errors.add :base, "Your balance is insufficient to process this refund."
           return false
         end
       end

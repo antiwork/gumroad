@@ -888,7 +888,7 @@ describe "PurchaseRefunds", :vcr do
 
           expect(ChargeProcessor).to_not receive(:refund!)
           purchase.reload.refund_and_save!(@user.id)
-          expect(purchase.errors[:base].first).to eq "You do not have sufficient balance to make this refund."
+          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund."
           expect(purchase.reload.stripe_refunded).to be false
           expect(purchase.refunds.last).to be nil
         end
@@ -902,7 +902,7 @@ describe "PurchaseRefunds", :vcr do
 
           expect(ChargeProcessor).to_not receive(:refund!)
           purchase.reload.refund_and_save!(@user.id)
-          expect(purchase.errors[:base].first).to eq "You do not have sufficient balance to make this refund."
+          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund."
           expect(purchase.reload.stripe_refunded).to be false
           expect(purchase.refunds.last).to be nil
         end
@@ -941,9 +941,7 @@ describe "PurchaseRefunds", :vcr do
       end
 
       context "when the refunding user is an admin" do
-        before do
-          @admin_user = create(:admin_user)
-        end
+        let(:admin_user) { create(:admin_user) }
 
         it "issues a refund if the purchase was made on Gumroad's Stripe account" do
           purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
@@ -952,7 +950,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.mark_successful!
 
           expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
-          purchase.reload.refund_and_save!(@admin_user.id)
+          purchase.reload.refund_and_save!(admin_user.id)
           expect(purchase.errors[:base].first).to be nil
           expect(purchase.reload.stripe_refunded).to be true
           expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
@@ -967,7 +965,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.mark_successful!
 
           expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
-          purchase.reload.refund_and_save!(@admin_user.id)
+          purchase.reload.refund_and_save!(admin_user.id)
           expect(purchase.errors[:base].first).to be nil
           expect(purchase.reload.stripe_refunded).to be true
           expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
@@ -983,7 +981,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.mark_successful!
           expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
 
-          purchase.reload.refund_and_save!(@admin_user.id)
+          purchase.reload.refund_and_save!(admin_user.id)
           expect(purchase.errors[:base].first).to be nil
           expect(purchase.reload.stripe_refunded).to be true
           expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
