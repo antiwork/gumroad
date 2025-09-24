@@ -31,10 +31,6 @@ export type Product = {
   unique_permalink: string;
 };
 
-export type ProductWithSelection = Product & {
-  selected: boolean;
-};
-
 export type AnalyticsTotal = {
   sales: number;
   views: number;
