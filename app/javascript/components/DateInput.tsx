@@ -35,6 +35,7 @@ export const DateInput = ({
   const input = (
     <input
       ref={ref}
+      className="appearance-none"
       type={withTime ? "datetime-local" : "date"}
       {...rest}
       defaultValue={formatDate(value)}
@@ -54,6 +55,6 @@ export const DateInput = ({
       <div className="pill">{formatInTimeZone(value ?? new Date(), seller.timeZone.name, "z")}</div>
     </div>
   ) : (
-    input
+    <div className="input">{input}</div>
   );
 };

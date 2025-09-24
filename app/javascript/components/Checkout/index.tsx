@@ -203,8 +203,9 @@ export const Checkout = ({
   const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-product-page">
       <PageHeader
+        className="border-none"
         title="Checkout"
         actions={
           isDesktop ? <NavigationButton href={cart.returnUrl ?? discoverUrl}>Continue shopping</NavigationButton> : null

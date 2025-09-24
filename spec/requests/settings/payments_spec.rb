@@ -841,6 +841,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       before do
         create(:ach_account_stripe_succeed, user: @user)
         create(:user_compliance_info, user: @user)
+        create(:merchant_account, user: @user, charge_processor_merchant_id: "acct_12345", country: "US", currency: "usd")
         @update_country = "United Kingdom"
       end
 
@@ -861,22 +862,134 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       end
 
       context "when creator has balance" do
-        before do
-          allow(@user).to receive(:formatted_balance_to_forfeit).and_return("$10.00")
+        it "shows confirmation modal for creator" do
+          balance = create(:balance,
+                           user: @user,
+                           merchant_account_id: @user.stripe_account.id,
+                           currency: "usd",
+                           amount_cents: 123_45,
+                           holding_currency: "usd",
+                           holding_amount_cents: 123_45)
+          stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
+
           visit settings_payments_path
           select(@update_country, from: "Country")
-        end
 
-        it "shows confirmation modal for creator" do
           within "dialog" do
             expect(page).to have_content "Confirm country change"
-            expect(page).to have_content "Due to limitations with our payments provider, switching your country to #{@update_country} means that you will have to forfeit your remaining balance of #{@user.formatted_balance_to_forfeit}"
+            expect(page).to have_content "Due to limitations with our payments provider, switching your country to #{@update_country} means that you will have to forfeit your remaining balance of #{@user.formatted_balance_to_forfeit(:country_change)}"
             expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
             fill_in "I understand", with: "I understand"
             click_on "Confirm"
           end
+
           wait_for_ajax
           expect(page).to have_alert(text: "Your country has been updated!")
+          expect(balance.reload.unpaid?).to be false
+          expect(balance.forfeited?).to be true
+          expect(@user.reload.credits.last).to be nil
+        end
+      end
+    end
+
+    describe "switch from bank payouts to PayPal" do
+      before do
+        create(:ach_account_stripe_succeed, user: @user)
+        create(:user_compliance_info_uae, user: @user)
+        create(:merchant_account, user: @user, charge_processor_merchant_id: "acct_1234", country: "AE", currency: "aed")
+      end
+
+      context "creator does not have balance that needs to be forfeited" do
+        it "does not show the confirmation modal and updates the payout method" do
+          visit settings_payments_path
+          choose "PayPal"
+
+          fill_in("First name", with: "barnabas")
+          fill_in("Last name", with: "barnabastein")
+          fill_in("Address", with: "address_full_match")
+          fill_in("City", with: "barnabasville")
+          select("Abu Dhabi", from: "Province")
+          fill_in("Phone number", with: "98765432")
+          fill_in("Postal code", with: "51133")
+
+          select("1", from: "Day")
+          select("1", from: "Month")
+          select("1980", from: "Year")
+          select("India", from: "Nationality")
+          fill_in("Emirates ID", with: "000000000000000")
+
+          expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+          fill_in("PayPal Email", with: "uaecr@gumroad.com")
+
+          click_on("Update settings")
+
+          wait_for_ajax
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(@user.reload.stripe_account).to be nil
+          expect(@user.active_bank_account).to be nil
+          expect(@user.payment_address).to eq "uaecr@gumroad.com"
+        end
+      end
+
+      context "when creator has balance that needs to be forfeited" do
+        it "shows confirmation modal and updates the payout method if confirmed" do
+          balance = create(:balance,
+                           user: @user,
+                           merchant_account_id: @user.stripe_account.id,
+                           currency: "usd",
+                           amount_cents: 123_45,
+                           holding_currency: "aed",
+                           holding_amount_cents: 150_00)
+          stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
+
+          visit settings_payments_path
+          choose "PayPal"
+
+          fill_in("First name", with: "barnabas")
+          fill_in("Last name", with: "barnabastein")
+          fill_in("Address", with: "address_full_match")
+          fill_in("City", with: "barnabasville")
+          select("Abu Dhabi", from: "Province")
+          fill_in("Phone number", with: "98765432")
+          fill_in("Postal code", with: "51133")
+
+          select("1", from: "Day")
+          select("1", from: "Month")
+          select("1980", from: "Year")
+          select("India", from: "Nationality")
+          fill_in("Emirates ID", with: "000000000000000")
+
+          expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+          fill_in("PayPal Email", with: "uaecr@gumroad.com")
+
+          click_on("Update settings")
+
+          within "dialog" do
+            expect(page).to have_content "Confirm payout method change"
+            expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
+            expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
+            click_on "Cancel"
+          end
+
+          expect(page).not_to have_content "Confirm payout method change"
+          click_on("Update settings")
+
+          within "dialog" do
+            expect(page).to have_content "Confirm payout method change"
+            expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
+            expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
+            fill_in "I understand", with: "I understand"
+            click_on "Confirm"
+          end
+
+          wait_for_ajax
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(@user.reload.stripe_account).to be nil
+          expect(@user.active_bank_account).to be nil
+          expect(@user.payment_address).to eq "uaecr@gumroad.com"
+          expect(balance.reload.unpaid?).to be false
+          expect(balance.reload.forfeited?).to be true
+          expect(@user.reload.credits.last).to be nil
         end
       end
     end

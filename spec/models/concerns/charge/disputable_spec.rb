@@ -90,10 +90,10 @@ describe Charge::Disputable, :vcr do
         before do
           membership_product = create(:membership_product)
           @membership_purchase_with_refund_policy = create(:membership_purchase, total_transaction_cents: 10_00, link: membership_product)
-          @membership_purchase_with_refund_policy.create_purchase_refund_policy!(title: "This is a product-level refund policy")
+          @membership_purchase_with_refund_policy.create_purchase_refund_policy!(title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30], max_refund_period_in_days: 30)
           product = create(:product)
           regular_purchase = create(:purchase, total_transaction_cents: 150_00, link: product)
-          regular_purchase.create_purchase_refund_policy!(title: "This is a product-level refund policy")
+          regular_purchase.create_purchase_refund_policy!(title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30], max_refund_period_in_days: 30)
 
           charge.purchases << create(:membership_purchase, total_transaction_cents: 100_00)
           charge.purchases << @membership_purchase_with_refund_policy
@@ -107,7 +107,7 @@ describe Charge::Disputable, :vcr do
         it "returns the purchase with highest total amount if there are multiple" do
           membership_product = create(:membership_product)
           membership_purchase_with_refund_policy = create(:membership_purchase, total_transaction_cents: 15_00, link: membership_product)
-          membership_purchase_with_refund_policy.create_purchase_refund_policy!(title: "This is a product-level refund policy")
+          membership_purchase_with_refund_policy.create_purchase_refund_policy!(title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30], max_refund_period_in_days: 30)
           charge.purchases << membership_purchase_with_refund_policy
 
           expect(charge.purchase_for_dispute_evidence).to eq membership_purchase_with_refund_policy
@@ -118,7 +118,7 @@ describe Charge::Disputable, :vcr do
         before do
           product = create(:product)
           @regular_purchase_with_refund_policy = create(:purchase, total_transaction_cents: 10_00, link: product)
-          @regular_purchase_with_refund_policy.create_purchase_refund_policy!(title: "This is a product-level refund policy")
+          @regular_purchase_with_refund_policy.create_purchase_refund_policy!(title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30], max_refund_period_in_days: 30)
 
           charge.purchases << create(:purchase, total_transaction_cents: 100_00, link: product)
           charge.purchases << @regular_purchase_with_refund_policy
@@ -131,7 +131,7 @@ describe Charge::Disputable, :vcr do
         it "returns the purchase with highest total amount if there are multiple" do
           product = create(:product)
           regular_purchase_with_refund_policy = create(:purchase, total_transaction_cents: 15_00, link: product)
-          regular_purchase_with_refund_policy.create_purchase_refund_policy!(title: "This is a product-level refund policy")
+          regular_purchase_with_refund_policy.create_purchase_refund_policy!(title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30], max_refund_period_in_days: 30)
           charge.purchases << regular_purchase_with_refund_policy
 
           expect(charge.purchase_for_dispute_evidence).to eq regular_purchase_with_refund_policy
@@ -144,7 +144,7 @@ describe Charge::Disputable, :vcr do
           @membership_purchase = create(:membership_purchase, total_transaction_cents: 10_00)
           charge.purchases << @membership_purchase
           regular_purchase_with_refund_policy = create(:purchase, total_transaction_cents: 100_00)
-          regular_purchase_with_refund_policy.create_purchase_refund_policy!(title: "This is a product-level refund policy")
+          regular_purchase_with_refund_policy.create_purchase_refund_policy!(title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30], max_refund_period_in_days: 30)
           charge.purchases << regular_purchase_with_refund_policy
         end
 

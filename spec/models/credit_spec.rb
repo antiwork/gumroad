@@ -400,21 +400,6 @@ describe Credit do
     end
   end
 
-  describe ".create_for_balance_forfeit!" do
-    let!(:user) { create(:user) }
-    let!(:merchant_account) { create(:merchant_account, user:) }
-
-    before do
-      stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
-    end
-
-    it "creates a negative credit for the balance" do
-      credit = Credit.create_for_balance_forfeit!(user:, merchant_account:, amount_cents: -898)
-      expect(credit.merchant_account).to eq(merchant_account)
-      expect(credit.amount_cents).to eq(-898)
-    end
-  end
-
   describe "create_for_balance_change_on_stripe_account!" do
     let!(:creator) { create(:user) }
     let!(:merchant_account) { create(:merchant_account, user: creator) }

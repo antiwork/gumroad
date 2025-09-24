@@ -130,7 +130,7 @@ class SettingsPresenter
         }
       end,
       allow_deactivation: Pundit.policy!(pundit_user, [:user]).deactivate?,
-      formatted_balance_to_forfeit: seller.formatted_balance_to_forfeit(:account_closure),
+      formatted_balance_to_forfeit_on_account_deletion: seller.formatted_balance_to_forfeit(:account_closure),
     }
   end
 
@@ -220,7 +220,8 @@ class SettingsPresenter
       canada_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.map { |code, name| { code:, name: } },
       states:,
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
-      formatted_balance_to_forfeit: seller.formatted_balance_to_forfeit(:country_change),
+      formatted_balance_to_forfeit_on_country_change: seller.formatted_balance_to_forfeit(:country_change),
+      formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
       payouts_paused_for_reason: seller.payouts_paused_for_reason,

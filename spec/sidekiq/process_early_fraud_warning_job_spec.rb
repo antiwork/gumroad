@@ -117,6 +117,7 @@ describe ProcessEarlyFraudWarningJob, :vcr do
         context "when the purchase is subscription contactable" do
           before do
             expect_any_instance_of(EarlyFraudWarning).to receive(:purchase_for_subscription_contactable?).and_return(true)
+            expect_any_instance_of(EarlyFraudWarning).to receive(:chargeable_refundable_for_fraud?).and_return(false)
           end
 
           it "sends email and resolves as customer contacted" do
@@ -146,6 +147,7 @@ describe ProcessEarlyFraudWarningJob, :vcr do
         context "when the purchase is not refundable for fraud" do
           before do
             expect_any_instance_of(EarlyFraudWarning).to receive(:purchase_for_subscription_contactable?).and_return(false)
+            expect_any_instance_of(EarlyFraudWarning).to receive(:chargeable_refundable_for_fraud?).and_return(false)
           end
 
           it_behaves_like "resolves as ignored"

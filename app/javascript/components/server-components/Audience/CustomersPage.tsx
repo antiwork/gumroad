@@ -729,12 +729,22 @@ const CustomerDrawer = ({
 
   const showCharges = subscription || commission;
   const [charges, setCharges] = React.useState<Charge[]>([]);
+  const [isLoadingCharges, setIsLoadingCharges] = React.useState(true);
   React.useEffect(() => {
-    if (showCharges)
-      getCharges(customer.id, customer.email).then(setCharges, (e: unknown) => {
-        assertResponseError(e);
-        showAlert(e.message, "error");
-      });
+    if (showCharges) {
+      setIsLoadingCharges(true);
+      getCharges(customer.id, customer.email)
+        .then((charges) => {
+          setCharges(charges);
+        })
+        .catch((e: unknown) => {
+          assertResponseError(e);
+          showAlert(e.message, "error");
+        })
+        .finally(() => {
+          setIsLoadingCharges(false);
+        });
+    }
   }, [commission?.status]);
 
   const isCoffee = customer.product.native_type === "coffee";
@@ -1172,6 +1182,7 @@ const CustomerDrawer = ({
           showRefundFeeNotice={showRefundFeeNotice}
           canPing={canPing}
           customerEmail={customer.email}
+          loading={isLoadingCharges}
         />
       ) : null}
       {commission ? (
@@ -2313,6 +2324,7 @@ const ChargesSection = ({
   showRefundFeeNotice,
   canPing,
   customerEmail,
+  loading,
 }: {
   charges: Charge[];
   remainingCharges: number | null;
@@ -2320,6 +2332,7 @@ const ChargesSection = ({
   showRefundFeeNotice: boolean;
   canPing: boolean;
   customerEmail: string;
+  loading: boolean;
 }) => {
   const updateCharge = (id: string, update: Partial<Charge>) =>
     onChange(charges.map((charge) => (charge.id === id ? { ...charge, ...update } : charge)));
@@ -2329,7 +2342,13 @@ const ChargesSection = ({
       <header>
         <h3>Charges</h3>
       </header>
-      {charges.length > 0 ? (
+      {loading ? (
+        <section>
+          <div className="text-center">
+            <Progress width="2em" />
+          </div>
+        </section>
+      ) : charges.length > 0 ? (
         <>
           {remainingCharges !== null ? (
             <section>
@@ -2351,9 +2370,7 @@ const ChargesSection = ({
         </>
       ) : (
         <section>
-          <div style={{ textAlign: "center" }}>
-            <Progress width="2em" />
-          </div>
+          <div>No charges yet</div>
         </section>
       )}
     </section>
