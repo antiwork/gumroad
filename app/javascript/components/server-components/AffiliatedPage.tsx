@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
 import { Icon } from "$app/components/Icons";
@@ -233,6 +234,7 @@ const AffiliatedPage = ({
   const [isShowingGlobalAffiliates, setIsShowingGlobalAffiliates] = React.useState(
     url.searchParams.get("affiliates") === "true",
   );
+  const { showAlert } = useClientAlert();
 
   useGlobalEventListener("popstate", () => {
     setIsShowingGlobalAffiliates(new URL(location.href).searchParams.get("affiliates") === "true");
@@ -261,7 +263,7 @@ const AffiliatedPage = ({
     } catch (e) {
       if (e instanceof AbortError) return;
       assertResponseError(e);
-      // showAlert(e.message, "error");
+      showAlert(e.message, "error");
     }
   };
   const debouncedLoadAffiliatedProducts = useDebouncedCallback(asyncVoid(loadAffiliatedProducts), 500);

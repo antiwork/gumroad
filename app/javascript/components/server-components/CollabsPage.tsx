@@ -14,15 +14,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
 
-const CollabsPage = ({
-  memberships,
-  memberships_pagination: membershipsPagination,
-  products,
-  products_pagination: productsPagination,
-  stats,
-  archived_tab_visible: archivedTabVisible,
-  collaborators_disabled_reason: collaboratorsDisabledReason,
-}: {
+export type CollabsPageProps = {
   memberships: Membership[];
   memberships_pagination: PaginationProps;
   products: Product[];
@@ -35,7 +27,17 @@ const CollabsPage = ({
   };
   archived_tab_visible: boolean;
   collaborators_disabled_reason: string | null;
-}) => {
+};
+
+const CollabsPage = ({
+  memberships,
+  memberships_pagination: membershipsPagination,
+  products,
+  products_pagination: productsPagination,
+  stats,
+  archived_tab_visible: archivedTabVisible,
+  collaborators_disabled_reason: collaboratorsDisabledReason,
+}: CollabsPageProps) => {
   const userAgentInfo = useUserAgentInfo();
 
   return (
