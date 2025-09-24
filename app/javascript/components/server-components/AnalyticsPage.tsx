@@ -23,6 +23,8 @@ import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 
 import placeholder from "$assets/images/placeholders/sales.png";
+import { Popover } from "$app/components/Popover";
+import { Icon } from "$app/components/Icons";
 
 export type Product = {
   name: string;
@@ -149,14 +151,41 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
       actions={
         hasContent ? (
           <>
-            <select
-              aria-label="Aggregate by"
-              onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
-              className="w-auto"
+            <Popover
+              trigger={
+                <span className="input">
+                  <div className="fake-input">
+                    {aggregateBy === "daily" ? "Daily" : "Monthly"}
+                  </div>
+                  <Icon name="outline-cheveron-down" />
+                </span>
+              }
             >
-              <option value="daily">Daily</option>
-              <option value="monthly">Monthly</option>
-            </select>
+              <div className="stack">
+                <div>
+                  <fieldset>
+                    <label>
+                      <input
+                        type="radio"
+                        name="aggregate"
+                        checked={aggregateBy === "daily"}
+                        onChange={() => setAggregateBy("daily")}
+                      />
+                      Daily
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="aggregate"
+                        checked={aggregateBy === "monthly"}
+                        onChange={() => setAggregateBy("monthly")}
+                      />
+                      Monthly
+                    </label>
+                  </fieldset>
+                </div>
+              </div>
+            </Popover>
             <ProductsPopover products={products} setProducts={setProducts} />
             <DateRangePicker {...dateRange} />
           </>
