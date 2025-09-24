@@ -6,9 +6,9 @@ import { variantLabel } from "$app/utils/labels";
 import { recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
-import { showAlert } from "$app/components/server-components/Alert";
 import { WishlistItem } from "$app/components/Wishlist";
 
 const WishlistItemCard = ({
@@ -21,6 +21,7 @@ const WishlistItemCard = ({
   onDelete: () => void;
 }) => {
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const { showAlert } = useClientAlert();
 
   const price = (product.price_cents + (option?.price_difference_cents || 0)) * quantity;
 
@@ -132,6 +133,7 @@ export const WishlistEditor = ({
   isDiscoverable: boolean;
   onClose: () => void;
 }) => {
+  const { showAlert } = useClientAlert();
   const [newName, setNewName] = React.useState(name);
   const [newDescription, setNewDescription] = React.useState(description ?? "");
   const uid = React.useId();

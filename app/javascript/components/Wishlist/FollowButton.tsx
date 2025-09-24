@@ -4,10 +4,10 @@ import { followWishlist, unfollowWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -23,6 +23,7 @@ export const useFollowWishlist = ({
   const location = useOriginalLocation();
   const loggedInUser = useLoggedInUser();
   const { appDomain } = useDomains();
+  const { showAlert } = useClientAlert();
 
   const [isFollowing, setIsFollowing] = React.useState(initialValue);
   const [isLoading, setIsLoading] = React.useState(false);

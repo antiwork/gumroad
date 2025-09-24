@@ -6,12 +6,13 @@ import { WishlistsSection } from "$app/data/profile_settings";
 import { fetchWishlists } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { useReducer, EditorSubmenu, SectionLayout, ProductList } from "$app/components/Profile/EditSections";
 import { WishlistsView } from "$app/components/Profile/Sections";
-import { showAlert } from "$app/components/server-components/Alert";
 import { CardWishlist, DummyCardGrid } from "$app/components/Wishlist/Card";
 
 export const WishlistsSectionView = ({ section }: { section: WishlistsSection }) => {
+  const { showAlert } = useClientAlert();
   const [state, dispatch] = useReducer();
   const uid = React.useId();
   const selectedWishlistsCount = state.wishlist_options.filter((wishlist) =>

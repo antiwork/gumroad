@@ -38,7 +38,6 @@ import DashboardPage from "$app/components/server-components/DashboardPage";
 import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
-import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
 import EmailsPage from "$app/components/server-components/EmailsPage";
@@ -60,14 +59,12 @@ import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeeP
 import ProfilePostPage from "$app/components/server-components/Profile/PostPage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import ProfileSettingsPage from "$app/components/server-components/Profile/SettingsPage";
-import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import PublicChargePage from "$app/components/server-components/Public/ChargePage";
 import PublicLicenseKeyPage from "$app/components/server-components/Public/LicenseKeyPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
 import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SubscribeReviewReminders from "$app/components/server-components/ReviewReminders/SubscribeReviewReminders";
 import UnsubscribeReviewReminders from "$app/components/server-components/ReviewReminders/UnsubscribeReviewReminders";
-import ReviewsPage from "$app/components/server-components/ReviewsPage";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import AdvancedSettingsPage from "$app/components/server-components/Settings/AdvancedPage";
 import ApplicationEditPage from "$app/components/server-components/Settings/AdvancedPage/EditApplicationPage";
@@ -86,9 +83,6 @@ import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import TwoFactorAuthenticationPage from "$app/components/server-components/TwoFactorAuthenticationPage";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
-import WishlistPage from "$app/components/server-components/WishlistPage";
-import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
-import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
 
 ReactOnRails.register({
@@ -132,7 +126,6 @@ ReactOnRails.register({
   DeveloperWidgetsPage,
   Discover,
   DiscoverProductPage,
-  DiscoverWishlistPage,
   DisputeEvidencePage,
   DownloadPageWithContent,
   DownloadPageWithoutContent,
@@ -158,10 +151,8 @@ ReactOnRails.register({
   ProfilePostPage,
   ProfileProductPage,
   ProfileSettingsPage,
-  ProfileWishlistPage,
   PublicChargePage,
   PublicLicenseKeyPage,
-  ReviewsPage,
   SecureRedirectPage,
   SignupPage,
   SubscribePage,
@@ -175,8 +166,5 @@ ReactOnRails.register({
   ThirdPartyAnalyticsSettingsPage,
   TwoFactorAuthenticationPage,
   VideoStreamPlayer,
-  WishlistPage,
-  WishlistsFollowingPage,
-  WishlistsPage,
   WorkflowsPage,
 });

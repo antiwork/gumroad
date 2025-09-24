@@ -1,8 +1,7 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { ProductNativeType } from "$app/parsers/product";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
@@ -45,15 +44,17 @@ type Review = {
 
 let newReviewId = 0;
 
+export type ReviewsPageProps = {
+  reviews: Review[];
+  purchases: { id: string; email_digest: string; product: Product }[];
+  following_wishlists_enabled: boolean;
+};
+
 const ReviewsPage = ({
   reviews: initialReviews,
   purchases: initialPurchases,
   following_wishlists_enabled,
-}: {
-  reviews: Review[];
-  purchases: { id: string; email_digest: string; product: Product }[];
-  following_wishlists_enabled: boolean;
-}) => {
+}: ReviewsPageProps) => {
   const discoverUrl = useDiscoverUrl();
 
   const [reviews, setReviews] = React.useState(initialReviews);
@@ -228,4 +229,4 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
   );
 };
 
-export default register({ component: ReviewsPage, propParser: createCast() });
+export default ReviewsPage;

@@ -1,15 +1,13 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { deleteWishlist, updateWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -23,15 +21,18 @@ type Wishlist = {
   discover_opted_out: boolean;
 };
 
+export type WishlistsPageProps = {
+  wishlists: Wishlist[];
+  reviews_page_enabled: boolean;
+  following_wishlists_enabled: boolean;
+};
+
 const WishlistsPage = ({
   wishlists: preloadedWishlists,
   reviews_page_enabled,
   following_wishlists_enabled,
-}: {
-  wishlists: Wishlist[];
-  reviews_page_enabled: boolean;
-  following_wishlists_enabled: boolean;
-}) => {
+}: WishlistsPageProps) => {
+  const { showAlert } = useClientAlert();
   const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
   const [deletingWishlist, setConfirmingDeleteWishlist] = React.useState<Wishlist | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -166,4 +167,4 @@ const WishlistsPage = ({
   );
 };
 
-export default register({ component: WishlistsPage, propParser: createCast() });
+export default WishlistsPage;

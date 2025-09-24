@@ -1,8 +1,6 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Taxonomy } from "$app/utils/discover";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { Wishlist, WishlistProps } from "$app/components/Wishlist";
@@ -16,4 +14,4 @@ const DiscoverWishlistPage: React.FC<Omit<WishlistProps, "isDiscover"> & { taxon
   </Layout>
 );
 
-export default register({ component: DiscoverWishlistPage, propParser: createCast() });
+export default DiscoverWishlistPage;

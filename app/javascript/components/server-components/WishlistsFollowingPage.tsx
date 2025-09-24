@@ -1,14 +1,12 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { unfollowWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover } from "$app/components/Popover";
-import { showAlert } from "$app/components/server-components/Alert";
 
 import placeholder from "$assets/images/placeholders/wishlists-following.png";
 
@@ -24,13 +22,16 @@ type Wishlist = {
   product_count: number;
 };
 
+export type WishlistsFollowingPageProps = {
+  wishlists: Wishlist[];
+  reviews_page_enabled: boolean;
+};
+
 const WishlistsFollowingPage = ({
   wishlists: preloadedWishlists,
   reviews_page_enabled,
-}: {
-  wishlists: Wishlist[];
-  reviews_page_enabled: boolean;
-}) => {
+}: WishlistsFollowingPageProps) => {
+  const { showAlert } = useClientAlert();
   const [wishlists, setWishlists] = React.useState<Wishlist[]>(preloadedWishlists);
 
   const destroy = async (wishlist: Wishlist) => {
@@ -110,4 +111,4 @@ const WishlistsFollowingPage = ({
   );
 };
 
-export default register({ component: WishlistsFollowingPage, propParser: createCast() });
+export default WishlistsFollowingPage;
