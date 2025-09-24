@@ -364,9 +364,9 @@ const PurchaseDeleteButton = ({
           </>
         }
       >
-        <>
+        <span className="inline">
           Are you sure you want to delete <b>{product_name ?? ""}</b>?
-        </>
+        </span>
       </Modal>
     </>
   );

@@ -359,7 +359,7 @@ describe "PurchaseRefunds", :vcr do
                                                           is_for_fraud: false).and_call_original
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
-        purchase.refund_and_save!(purchase.seller.id)
+        purchase.refund_and_save!(create(:admin_user).id)
 
         expect(charge_refund.transfer_reversal).to be nil
       end
@@ -815,13 +815,13 @@ describe "PurchaseRefunds", :vcr do
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_purchase_balance)
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_affiliate_credit_balance)
 
-          purchase.refund_and_save!(nil)
+          purchase.refund_and_save!(create(:admin_user).id)
         end
       end
 
       describe "dispute after a refund event does not decrement seller balance" do
         before do
-          purchase.refund_and_save!(nil)
+          purchase.refund_and_save!(create(:admin_user).id)
         end
 
         it "does not decrement balance from the user on such an event" do
@@ -868,6 +868,124 @@ describe "PurchaseRefunds", :vcr do
           expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, anything).and_call_original
 
           @purchase.refund_and_save!(@admin_user.id)
+        end
+      end
+    end
+
+    context "when creator's balance is less than the refund amount", :vcr do
+      let(:purchase) { create(:purchase_in_progress, link: create(:product, user: @user, price_cents: 25_00)) }
+
+      before do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
+      end
+
+      context "when the refunding user is not an admin"  do
+        it "doesn't issue a refund if the purchase was made on Gumroad's Stripe account" do
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id))
+          purchase.mark_successful!
+
+          expect(ChargeProcessor).to_not receive(:refund!)
+          purchase.reload.refund_and_save!(@user.id)
+          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund."
+          expect(purchase.reload.stripe_refunded).to be false
+          expect(purchase.refunds.last).to be nil
+        end
+
+        it "doesn't issue a refund if the purchase was made on Gumroad-managed Stripe account" do
+          stripe_account = create(:merchant_account_stripe, user: @user)
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(stripe_account)
+          purchase.mark_successful!
+
+          expect(ChargeProcessor).to_not receive(:refund!)
+          purchase.reload.refund_and_save!(@user.id)
+          expect(purchase.errors[:base].first).to eq "Your balance is insufficient to process this refund."
+          expect(purchase.reload.stripe_refunded).to be false
+          expect(purchase.refunds.last).to be nil
+        end
+
+        it "issues a refund if the purchase was made on creator's Stripe Connect account" do
+          @user.update!(check_merchant_account_is_linked: true)
+          stripe_connect_account = create(:merchant_account_stripe_connect, user: @user)
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(stripe_connect_account)
+          purchase.mark_successful!
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
+
+          purchase.reload.refund_and_save!(@user.id)
+          expect(purchase.errors[:base].first).to be nil
+          expect(purchase.reload.stripe_refunded).to be true
+          expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
+          expect(purchase.refunds.last.processor_refund_id).to be_present
+        end
+
+        it "issues a partial refund if the refund amount is not more than creator's balance" do
+          stripe_account = create(:merchant_account_stripe, user: @user)
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(stripe_account)
+          purchase.mark_successful!
+
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
+          purchase.reload.refund_and_save!(@user.id, amount_cents: 10_00)
+          expect(purchase.errors[:base].first).to be nil
+          expect(purchase.reload.stripe_partially_refunded).to be true
+          expect(purchase.reload.stripe_refunded).to be false
+          expect(purchase.refunds.last.total_transaction_cents).to eq(10_00)
+          expect(purchase.refunds.last.processor_refund_id).to be_present
+        end
+      end
+
+      context "when the refunding user is an admin" do
+        let(:admin_user) { create(:admin_user) }
+
+        it "issues a refund if the purchase was made on Gumroad's Stripe account" do
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id))
+          purchase.mark_successful!
+
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
+          purchase.reload.refund_and_save!(admin_user.id)
+          expect(purchase.errors[:base].first).to be nil
+          expect(purchase.reload.stripe_refunded).to be true
+          expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
+          expect(purchase.refunds.last.processor_refund_id).to be_present
+        end
+
+        it "issues a refund if the purchase was made on Gumroad-managed Stripe account" do
+          stripe_account = create(:merchant_account_stripe, user: @user)
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(stripe_account)
+          purchase.mark_successful!
+
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
+          purchase.reload.refund_and_save!(admin_user.id)
+          expect(purchase.errors[:base].first).to be nil
+          expect(purchase.reload.stripe_refunded).to be true
+          expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
+          expect(purchase.refunds.last.processor_refund_id).to be_present
+        end
+
+        it "issues a refund if the purchase was made on creator's Stripe Connect account" do
+          @user.update!(check_merchant_account_is_linked: true)
+          stripe_connect_account = create(:merchant_account_stripe_connect, user: @user)
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          expect(purchase.merchant_account).to eq(stripe_connect_account)
+          purchase.mark_successful!
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
+
+          purchase.reload.refund_and_save!(admin_user.id)
+          expect(purchase.errors[:base].first).to be nil
+          expect(purchase.reload.stripe_refunded).to be true
+          expect(purchase.refunds.last.total_transaction_cents).to eq(25_00)
+          expect(purchase.refunds.last.processor_refund_id).to be_present
         end
       end
     end
@@ -1003,7 +1121,7 @@ describe "PurchaseRefunds", :vcr do
 
         it "excludes the subscriber's review when refunding the first charge" do
           expect do
-            first_charge.refund_and_save!(original_purchase.seller_id)
+            first_charge.refund_and_save!(create(:admin_user).id)
           end.to change { original_purchase.reload.should_exclude_product_review? }.from(false).to(true)
         end
 
@@ -1133,7 +1251,7 @@ describe "PurchaseRefunds", :vcr do
     it "refunds the original purchase" do
       expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, hash_including(is_for_fraud: true)).and_call_original
       expect(@purchase.stripe_refunded).to_not be(true)
-      @purchase.refund_for_fraud!(@user.id)
+      @purchase.refund_for_fraud!(create(:admin_user).id)
       @purchase.reload
       expect(@purchase.stripe_refunded).to_not be(false)
       expect(@purchase.refunds).to_not be_empty
@@ -1145,7 +1263,7 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.charged_using_gumroad_merchant_account?).to be(true)
       expect(ChargeProcessor).to receive(:refund!).with(@purchase.charge_processor_id, @purchase.stripe_transaction_id, hash_including(is_for_fraud: true)).and_call_original
 
-      @purchase.refund_for_fraud!(@user.id)
+      @purchase.refund_for_fraud!(create(:admin_user).id)
 
       @purchase.reload
       expect(@purchase.stripe_refunded).to be(true)
@@ -1345,7 +1463,7 @@ describe "PurchaseRefunds", :vcr do
     end
 
     it "updates balance of affiliate user as well as seller", :vcr do
-      purchase.refund_and_save!(seller.id)
+      purchase.refund_and_save!(create(:admin_user).id)
       seller.reload
       affiliate_user.reload
       verify_balance(affiliate_user, 0)
@@ -1372,7 +1490,7 @@ describe "PurchaseRefunds", :vcr do
       end
       expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
-      purchase.refund_and_save!(seller.id)
+      purchase.refund_and_save!(create(:admin_user).id)
       flow_of_funds = charge_refund.flow_of_funds
 
       balance_transaction_1 = BalanceTransaction.where(user_id: affiliate_user.id).last
@@ -1409,7 +1527,7 @@ describe "PurchaseRefunds", :vcr do
       let(:affiliate) { create(:collaborator, affiliate_user:, seller:, affiliate_basis_points: 5000, products: [product]) }
 
       it "refunds the full affiliate credit (net of fees)" do
-        purchase.refund_and_save!(seller.id)
+        purchase.refund_and_save!(create(:admin_user).id)
         verify_balance(affiliate_user.reload, 0)
       end
     end
@@ -1419,7 +1537,7 @@ describe "PurchaseRefunds", :vcr do
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!).and_call_original
 
         seller_balance = seller.unpaid_balance_cents
-        purchase.refund_and_save!(seller.id, amount_cents: 600)
+        purchase.refund_and_save!(create(:admin_user).id, amount_cents: 600)
         seller.reload
         affiliate_user.reload
         # affiliate_basis_points: 1000, on 1000 cents, 600 cents refunded => 100 - 60% of 100 = 100 - 60 = 40
@@ -1488,7 +1606,7 @@ describe "PurchaseRefunds", :vcr do
         seller.reload
         affiliate_user.reload
 
-        purchase.refund_and_save!(seller.id)
+        purchase.refund_and_save!(create(:admin_user).id)
 
         # affiliate_partial_refunds total sum should tally up to actual credits
         expect(affiliate_user.affiliate_partial_refunds.sum(:amount_cents)).to eq(80)
@@ -1514,7 +1632,7 @@ describe "PurchaseRefunds", :vcr do
         it "refunds part of the fees" do
           seller_balance = seller.unpaid_balance_cents
 
-          purchase.refund_and_save!(seller.id, amount_cents: 400)
+          purchase.refund_and_save!(create(:admin_user).id, amount_cents: 400)
           seller.reload
           affiliate_user.reload
 
@@ -1572,7 +1690,7 @@ describe "PurchaseRefunds", :vcr do
 
       it "updates balance of affiliate user as well as seller" do
         travel_to(Time.zone.local(2023, 10, 6)) do
-          purchase.refund_and_save!(seller.id)
+          purchase.refund_and_save!(create(:admin_user).id)
         end
         seller.reload
         affiliate_user.reload
@@ -1600,7 +1718,7 @@ describe "PurchaseRefunds", :vcr do
         end
 
         travel_to(Time.zone.local(2023, 10, 6)) do
-          purchase.refund_and_save!(seller.id)
+          purchase.refund_and_save!(create(:admin_user).id)
         end
         flow_of_funds = charge_refund.flow_of_funds
 

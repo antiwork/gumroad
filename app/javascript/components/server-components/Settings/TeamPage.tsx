@@ -1,4 +1,6 @@
+import { cx } from "class-variance-authority";
 import * as React from "react";
+import { GroupBase, SelectInstance } from "react-select";
 import { cast, createCast } from "ts-safe-cast";
 
 import {
@@ -14,6 +16,7 @@ import {
   updateMember,
 } from "$app/data/settings/team";
 import { SettingPage } from "$app/parsers/settings";
+import { isValidEmail } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
@@ -79,19 +82,51 @@ const AddTeamMembersSection = ({
   const emailUID = React.useId();
   const roleUID = React.useId();
 
+  const emailFieldRef = React.useRef<HTMLInputElement>(null);
+  const roleFieldRef = React.useRef<SelectInstance<Option, false, GroupBase<Option>>>(null);
+
   const [teamInvitation, setTeamInvitation] = React.useState<TeamInvitation>({ email: "", role: null });
+  const [errors, setErrors] = React.useState<Map<string, string>>(new Map());
+
   const updateTeamInvitation = (update: Partial<TeamInvitation>) =>
     setTeamInvitation((prevTeamInvitation) => ({ ...prevTeamInvitation, ...update }));
+
+  const clearError = (errorKey: string) => {
+    if (errors.has(errorKey)) {
+      const newErrors = new Map(errors);
+      newErrors.delete(errorKey);
+      setErrors(newErrors);
+    }
+  };
+
   const [loading, setLoading] = React.useState(false);
 
   const onSubmit = asyncVoid(async () => {
+    const errors = new Map<string, string>();
+
+    if (!isValidEmail(teamInvitation.email)) {
+      errors.set("email", "Please enter a valid email address");
+      showAlert("Please enter a valid email address", "error");
+      emailFieldRef.current?.focus();
+    } else if (!teamInvitation.role) {
+      errors.set("role", "Please select a role");
+      showAlert("Please select a role", "error");
+      roleFieldRef.current?.focus();
+    }
+    setErrors(errors);
+    if (errors.size > 0) return;
+
     setLoading(true);
     const result = await createTeamInvitation(teamInvitation);
     if (result.success) {
       refreshMemberInfos();
       showAlert("Invitation sent!", "success");
       updateTeamInvitation({ email: "", role: null });
-    } else showAlert(result.error_message, "error");
+    } else {
+      showAlert(result.error_message, "error");
+      errors.set("error", result.error_message);
+    }
+    setErrors(errors);
     setLoading(false);
   });
 
@@ -111,24 +146,29 @@ const AddTeamMembersSection = ({
           gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
         }}
       >
-        <fieldset>
+        <fieldset className={cx({ danger: errors.has("email") })}>
           <legend>
             <label htmlFor={emailUID}>Email</label>
           </legend>
           <input
             id={emailUID}
             type="text"
+            ref={emailFieldRef}
             placeholder="Team member's email"
             className="required"
             value={teamInvitation.email}
-            onChange={(evt) => updateTeamInvitation({ email: evt.target.value })}
+            onChange={(evt) => {
+              updateTeamInvitation({ email: evt.target.value });
+              clearError("email");
+            }}
           />
         </fieldset>
-        <fieldset>
+        <fieldset className={cx({ danger: errors.has("role") })}>
           <legend>
             <label htmlFor={roleUID}>Role</label>
           </legend>
           <Select
+            ref={roleFieldRef}
             inputId={roleUID}
             instanceId={roleUID}
             options={options.filter((o) => o.id !== "owner")}
@@ -139,6 +179,7 @@ const AddTeamMembersSection = ({
             onChange={(evt) => {
               if (evt !== null) {
                 updateTeamInvitation({ role: evt.id });
+                clearError("role");
               }
             }}
           />

@@ -83,16 +83,14 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            lib/GeoIP2-City.mmdb
             config/credentials.yml.enc
             config/certs/development_com.GRD.iOSCreator.pem
             config/certs/production_com.GRD.iOSCreator.pem
-          key: s3-files-${{ hashFiles('**/*.mmdb', '**/credentials.yml.enc', '**/development_com.GRD.iOSCreator.pem') }}-2025-06-17
+          key: s3-files-${{ hashFiles('**/credentials.yml.enc', '**/development_com.GRD.iOSCreator.pem') }}-2025-06-17
       - name: Download files from S3
         if: steps.cache-s3-files.outputs.cache-hit != 'true'
         run: |
           for file in \
-            "GeoIP2-City.mmdb:lib/GeoIP2-City.mmdb" \
             "credentials.yml.enc:config/credentials.yml.enc" \
             "certs/development_com.GRD.iOSCreator.pem:config/certs/development_com.GRD.iOSCreator.pem" \
             "certs/development_com.GRD.iOSCreator.pem:config/certs/production_com.GRD.iOSCreator.pem"; do

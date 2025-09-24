@@ -399,8 +399,8 @@ export const CheckoutPage = ({
 
           const tipCents =
             item.pay_in_installments && item.product.installment_plan
-              ? computeTipForPrice(state, discountedPriceTotal)
-              : computeTipForPrice(state, discountedPriceToChargeNow);
+              ? computeTipForPrice(state, discountedPriceTotal, item.product.permalink)
+              : computeTipForPrice(state, discountedPriceToChargeNow, item.product.permalink);
 
           return {
             permalink: item.product.permalink,

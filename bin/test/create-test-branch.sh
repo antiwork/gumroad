@@ -187,8 +187,16 @@ create_test_branch() {
   local current_branch=$(git branch --show-current)
 
   git show-ref --verify --quiet "refs/remotes/origin/$new_branch" && {
-    echo "Branch $new_branch already exists, skipping"
-    return 0
+    echo "Branch $new_branch already exists."
+    read -p "Do you want to delete and recreate it? (y/N): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+      git branch -D "$new_branch" 2>/dev/null
+      git push origin --delete "$new_branch" 2>/dev/null
+      echo "Deleted local and remote branch $new_branch. Recreating..."
+    else
+      echo "Skipping $new_branch."
+      return 0
+    fi
   }
 
   gh pr checkout "$pr_number" --repo "$REPO" || return 1

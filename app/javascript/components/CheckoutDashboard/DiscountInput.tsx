@@ -26,7 +26,7 @@ export const DiscountInput = ({
 }) => {
   const fixedAmountFieldset = (
     <fieldset className={cx({ danger: discount.type === "cents" && discount.error })}>
-      <div style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "auto 1fr", alignItems: "center" }}>
+      <div className="grid items-center gap-4 md:!grid-cols-[auto,1fr]">
         <label>
           <input
             ref={ref}
@@ -61,7 +61,7 @@ export const DiscountInput = ({
       }}
     >
       <fieldset className={cx({ danger: discount.type === "percent" && discount.error })}>
-        <div style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "auto 1fr", alignItems: "center" }}>
+        <div className="grid items-center gap-4 md:!grid-cols-[auto,1fr]">
           <label>
             <input
               type="radio"
