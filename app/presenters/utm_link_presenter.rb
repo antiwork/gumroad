@@ -48,7 +48,7 @@ class UtmLinkPresenter
     attr_reader :seller, :utm_link
 
     def utm_link_form_context_props
-      products = *seller.products.includes(:user).alive.order(:name).map { destination_option(type: UtmLink.target_resource_types[:product_page], resource: _1) }
+      products = *seller.products.alive.order(:name).map { destination_option(type: UtmLink.target_resource_types[:product_page], resource: _1) }
       posts = *seller.installments.audience_type.shown_on_profile.not_workflow_installment.published.includes(:seller).order(:name).map { destination_option(type: UtmLink.target_resource_types[:post_page], resource: _1) }
       utm_fields_values = seller.utm_links.alive.pluck(:utm_campaign, :utm_medium, :utm_source, :utm_term, :utm_content)
         .each_with_object({

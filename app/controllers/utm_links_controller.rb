@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class UtmLinksController < Sellers::BaseController
-  before_action :set_body_id_as_app
-
   def index
     authorize UtmLink
 
@@ -26,13 +24,13 @@ class UtmLinksController < Sellers::BaseController
 
     context_data = UtmLinkPresenter.new(seller: current_seller).new_page_react_props
 
-    render inertia: "UtmLinks/index", props: {
+    render inertia: "UtmLinks/index", props: inertia_props(
       utm_links_props: {
         utm_links: utm_links_data[:utm_links],
         pagination: utm_links_data[:pagination],
         context: context_data[:context]
       }
-    }
+    )
   end
 
   def new
@@ -41,13 +39,13 @@ class UtmLinksController < Sellers::BaseController
     copy_from = params[:copy_from]
     utm_link_data = UtmLinkPresenter.new(seller: current_seller).new_page_react_props(copy_from: copy_from)
 
-    render inertia: "UtmLinks/index", props: {
+    render inertia: "UtmLinks/index", props: inertia_props(
       utm_links_props: {
         context: utm_link_data[:context],
         utm_link: utm_link_data[:utm_link],
         copy_from: copy_from
       }
-    }
+    )
   end
 
   def edit
@@ -58,12 +56,12 @@ class UtmLinksController < Sellers::BaseController
 
     utm_link_data = UtmLinkPresenter.new(seller: current_seller, utm_link: utm_link).edit_page_react_props
 
-    render inertia: "UtmLinks/index", props: {
+    render inertia: "UtmLinks/index", props: inertia_props(
       utm_links_props: {
         context: utm_link_data[:context],
         utm_link: utm_link_data[:utm_link]
       }
-    }
+    )
   end
 
   private
