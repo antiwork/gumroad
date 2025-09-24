@@ -154,6 +154,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 4")
         expect(page).to have_nth_table_row_record(3, "Customer 5")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 6")
         toggle_disclosure "Filter"
         click_on "Clear value"
@@ -172,6 +173,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 4")
         expect(page).to have_nth_table_row_record(3, "Customer 5")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 6")
         toggle_disclosure "Filter"
         fill_in "Paid less than", with: ""
@@ -182,6 +184,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 2")
         expect(page).to have_nth_table_row_record(3, "Customer 3")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 4")
         expect(page).to have_nth_table_row_record(2, "Customer 5")
         expect(page).to have_nth_table_row_record(3, "Customer 6")
