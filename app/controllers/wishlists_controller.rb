@@ -14,6 +14,15 @@ class WishlistsController < ApplicationController
       format.html do
         @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
         @wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+
+        render inertia: "Wishlists/index",
+               props: inertia_props(
+                 wishlists_props: {
+                   wishlists: @wishlists_props,
+                   reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
+                   following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)
+                 }
+               )
       end
       format.json do
         wishlists = current_seller.wishlists.alive.includes(:products).by_external_ids(params[:ids])
@@ -39,6 +48,24 @@ class WishlistsController < ApplicationController
     @show_user_favicon = true
     @wishlist_presenter = WishlistPresenter.new(wishlist:)
     @discover_props = { taxonomies_for_nav: } if params[:layout] == Product::Layout::DISCOVER
+
+    case params[:layout]
+    when Product::Layout::PROFILE
+      render inertia: "Profile/WishlistPage",
+             props: inertia_props(
+               wishlist_page_props: @wishlist_presenter.public_props(request:, pundit_user:)
+             )
+    when Product::Layout::DISCOVER
+      render inertia: "Discover/WishlistPage",
+             props: inertia_props(
+               wishlist_page_props: @wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by]).merge(@discover_props)
+             )
+    else
+      render inertia: "WishlistPage",
+             props: inertia_props(
+               wishlist_page_props: @wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by])
+             )
+    end
   end
 
   def update
