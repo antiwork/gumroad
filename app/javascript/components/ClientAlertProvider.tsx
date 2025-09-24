@@ -67,7 +67,6 @@ export const ClientAlertProvider = ({ children }: { children: React.ReactNode })
     setState((prev) => ({ ...prev, isVisible: false }));
   }, []);
 
-  // Cleanup timer on unmount
   React.useEffect(() => clearTimer, []);
 
   const value = React.useMemo(

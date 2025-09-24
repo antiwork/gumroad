@@ -236,9 +236,9 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
 });
 
 const LibraryPage = ({
-  results,
-  creators,
-  bundles,
+  results = [],
+  creators = [],
+  bundles = [],
   reviews_page_enabled,
   following_wishlists_enabled,
 }: LibraryPageProps) => {
