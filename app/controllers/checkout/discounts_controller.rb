@@ -93,12 +93,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     end
 
     def paged_params
-      if params.respond_to?(:permit)
-        params.permit(:page, sort: [:key, :direction])
-      else
-        # Convert to ActionController::Parameters-like object
-        ActionController::Parameters.new(params).permit(:page, sort: [:key, :direction])
-      end
+      params.permit(:page, sort: [:key, :direction])
     end
 
     def clean_params

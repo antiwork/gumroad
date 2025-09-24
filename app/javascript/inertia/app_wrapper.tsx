@@ -59,10 +59,23 @@ type GlobalProps = {
   locale: string;
 };
 
-export default function AppWrapper({ children, global }: { children: React.ReactNode; global: GlobalProps }) {
+function AppContent({ children }: { children: React.ReactNode }) {
   const isRouteLoading = useRouteLoading();
   const { alert, isVisible } = useClientAlert();
 
+  return (
+    <>
+      <ClientAlert alert={alert} isVisible={isVisible} />
+      <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
+        <Nav title="Dashboard" />
+        {isRouteLoading ? <LoadingSkeleton /> : null}
+        <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
+      </div>
+    </>
+  );
+}
+
+export default function AppWrapper({ children, global }: { children: React.ReactNode; global: GlobalProps }) {
   return (
     <DesignContextProvider value={global.design_settings}>
       <DomainSettingsProvider
@@ -86,12 +99,7 @@ export default function AppWrapper({ children, global }: { children: React.React
             <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
               <SSRLocationProvider value={global.href}>
                 <ClientAlertProvider>
-                  <ClientAlert alert={alert} isVisible={isVisible} />
-                  <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
-                    <Nav title="Dashboard" />
-                    {isRouteLoading ? <LoadingSkeleton /> : null}
-                    <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
-                  </div>
+                  <AppContent>{children}</AppContent>
                 </ClientAlertProvider>
               </SSRLocationProvider>
             </CurrentSellerProvider>
