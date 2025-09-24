@@ -9,3 +9,9 @@ export function applyOfferCodeToCents(offerCode: null | OfferCode, amountCents: 
   }
   return Math.round(Math.max(amountCents - offerCode.cents, 0));
 }
+
+export function sanitizeOfferCode(value: string): string {
+  const upperValue = value.toUpperCase();
+  // Only allow letters, numbers, dashes, and underscores
+  return upperValue.replace(/[^A-Z0-9\-_]/gu, "");
+}

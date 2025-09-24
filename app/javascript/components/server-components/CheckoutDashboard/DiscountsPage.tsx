@@ -12,6 +12,7 @@ import {
   updateDiscount,
 } from "$app/data/offer_code";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { sanitizeOfferCode } from "$app/utils/offer-code";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
@@ -878,10 +879,7 @@ const Form = ({
                 id={`${uid}code`}
                 value={code.value}
                 onChange={(evt) => {
-                  const value = evt.target.value.toUpperCase();
-                  // Only allow letters, numbers, dashes, and underscores
-                  const validValue = value.replace(/[^A-Z0-9\-_]/gu, "");
-                  setCode({ value: validValue });
+                  setCode({ value: sanitizeOfferCode(evt.target.value) });
                 }}
                 ref={codeFieldRef}
                 aria-invalid={code.error}
