@@ -13,7 +13,16 @@ type AlertState = {
   isVisible: boolean;
 };
 
-export const useClientAlert = () => {
+type ClientAlertContextType = {
+  alert: AlertPayload | null;
+  isVisible: boolean;
+  showAlert: (message: string, status: AlertStatus, options?: { html?: boolean }) => void;
+  hideAlert: () => void;
+};
+
+const ClientAlertContext = React.createContext<ClientAlertContextType | null>(null);
+
+export const ClientAlertProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = React.useState<AlertState>({
     alert: null,
     isVisible: false,
@@ -61,12 +70,25 @@ export const useClientAlert = () => {
   // Cleanup timer on unmount
   React.useEffect(() => clearTimer, []);
 
-  return {
-    alert: state.alert,
-    isVisible: state.isVisible,
-    showAlert,
-    hideAlert,
-  };
+  const value = React.useMemo(
+    () => ({
+      alert: state.alert,
+      isVisible: state.isVisible,
+      showAlert,
+      hideAlert,
+    }),
+    [state.alert, state.isVisible, showAlert, hideAlert],
+  );
+
+  return <ClientAlertContext.Provider value={value}>{children}</ClientAlertContext.Provider>;
+};
+
+export const useClientAlert = () => {
+  const context = React.useContext(ClientAlertContext);
+  if (!context) {
+    throw new Error("useClientAlert must be used within a ClientAlertProvider");
+  }
+  return context;
 };
 
 export const ClientAlert = ({ alert, isVisible }: { alert: AlertPayload | null; isVisible: boolean }) =>

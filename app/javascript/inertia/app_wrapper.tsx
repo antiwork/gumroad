@@ -1,6 +1,7 @@
 import React from "react";
 
 import { Nav } from "$app/components/client-components/Nav";
+import { ClientAlertProvider, useClientAlert, ClientAlert } from "$app/components/ClientAlertProvider";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
@@ -60,6 +61,7 @@ type GlobalProps = {
 
 export default function AppWrapper({ children, global }: { children: React.ReactNode; global: GlobalProps }) {
   const isRouteLoading = useRouteLoading();
+  const { alert, isVisible } = useClientAlert();
 
   return (
     <DesignContextProvider value={global.design_settings}>
@@ -83,11 +85,14 @@ export default function AppWrapper({ children, global }: { children: React.React
           <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
             <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
               <SSRLocationProvider value={global.href}>
-                <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
-                  <Nav title="Dashboard" />
-                  {isRouteLoading ? <LoadingSkeleton /> : null}
-                  <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
-                </div>
+                <ClientAlertProvider>
+                  <ClientAlert alert={alert} isVisible={isVisible} />
+                  <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
+                    <Nav title="Dashboard" />
+                    {isRouteLoading ? <LoadingSkeleton /> : null}
+                    <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
+                  </div>
+                </ClientAlertProvider>
               </SSRLocationProvider>
             </CurrentSellerProvider>
           </LoggedInUserProvider>

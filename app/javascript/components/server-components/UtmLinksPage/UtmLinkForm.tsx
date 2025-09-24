@@ -16,11 +16,11 @@ import { asyncVoid } from "$app/utils/promise";
 import { ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
 import { UtmLinkLayout } from "$app/components/server-components/UtmLinksPage";
-import { useClientAlert } from "$app/components/useClientAlert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;

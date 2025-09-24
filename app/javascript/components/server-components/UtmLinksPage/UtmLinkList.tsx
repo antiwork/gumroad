@@ -15,6 +15,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button, NavigationButton } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
@@ -22,7 +23,6 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
-import { useClientAlert } from "$app/components/useClientAlert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";

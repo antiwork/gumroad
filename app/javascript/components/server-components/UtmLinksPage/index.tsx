@@ -4,7 +4,6 @@ import { SavedUtmLink, UtmLink, UtmLinkFormContext, SortKey } from "$app/data/ut
 
 import { PaginationProps } from "$app/components/Pagination";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { useClientAlert, ClientAlert } from "$app/components/useClientAlert";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 import { UtmLinkForm } from "./UtmLinkForm";
@@ -55,21 +54,14 @@ export type UtmLinksPageProps = {
 };
 
 const UtmLinksPage = ({ utm_links, pagination, context, utm_link, copy_from }: UtmLinksPageProps) => {
-  const { alert, isVisible } = useClientAlert();
-
   const currentPath = window.location.pathname;
 
-  return (
-    <>
-      <ClientAlert alert={alert} isVisible={isVisible} />
-      {currentPath === "/dashboard/utm_links/new" ? (
-        <UtmLinkForm context={context} utm_link={utm_link ?? null} {...(copy_from && { copy_from })} />
-      ) : /\/dashboard\/utm_links\/\d+\/edit$/u.exec(currentPath) ? (
-        <UtmLinkForm context={context} utm_link={utm_link ?? null} />
-      ) : (
-        <UtmLinkList utm_links={utm_links} pagination={pagination} />
-      )}
-    </>
+  return currentPath === "/dashboard/utm_links/new" ? (
+    <UtmLinkForm context={context} utm_link={utm_link ?? null} {...(copy_from && { copy_from })} />
+  ) : /\/dashboard\/utm_links\/\d+\/edit$/u.exec(currentPath) ? (
+    <UtmLinkForm context={context} utm_link={utm_link ?? null} />
+  ) : (
+    <UtmLinkList utm_links={utm_links} pagination={pagination} />
   );
 };
 
