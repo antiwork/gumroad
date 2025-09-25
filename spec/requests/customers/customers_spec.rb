@@ -154,6 +154,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 4")
         expect(page).to have_nth_table_row_record(3, "Customer 5")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 6")
         toggle_disclosure "Filter"
         click_on "Clear value"
@@ -172,6 +173,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 4")
         expect(page).to have_nth_table_row_record(3, "Customer 5")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 6")
         toggle_disclosure "Filter"
         fill_in "Paid less than", with: ""
@@ -182,6 +184,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 2")
         expect(page).to have_nth_table_row_record(3, "Customer 3")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 4")
         expect(page).to have_nth_table_row_record(2, "Customer 5")
         expect(page).to have_nth_table_row_record(3, "Customer 6")
@@ -204,6 +207,39 @@ describe "Sales page", type: :system, js: true do
         expect(page).to_not have_button("3")
         uncheck "Show active customers only"
         expect(page).to have_button("3")
+      end
+
+      it "prevents selecting the same product in both bought and not bought filters" do
+        login_as seller
+        visit customers_path
+
+        toggle_disclosure "Filter"
+
+        select_combo_box_option search: "Product 1", from: "Customers who bought"
+
+        # product 1 should not be an option in the not bought (as it is already selected in the bought)
+        within_fieldset "Customers who have not bought" do
+          find("input", visible: :all).send_keys("Product 1")
+        end
+        expect(page).to have_no_selector("[role='option']", text: "Product 1")
+
+        expect(page).to have_nth_table_row_record(1, "Customer 1")
+        expect(page).to have_nth_table_row_record(2, "Customer 4")
+
+        within_fieldset "Customers who bought" do
+          click_on "Clear value"
+        end
+
+        select_combo_box_option search: "Product 1", from: "Customers who have not bought"
+
+        # product 1 should not be an option in the bought (as it is already selected in the not bought)
+        within_fieldset "Customers who bought" do
+          find("input", visible: :all).send_keys("Product 1")
+        end
+        expect(page).to have_no_selector("[role='option']", text: "Product 1")
+
+        expect(page).to have_nth_table_row_record(1, "Customer 2")
+        expect(page).to have_nth_table_row_record(2, "Customer 3")
       end
     end
 
@@ -1023,6 +1059,7 @@ describe "Sales page", type: :system, js: true do
         purchase2.mark_successful!
         purchase2.subscription.update!(charge_occurrence_count: 2, deactivated_at: Time.current)
         seller.update!(refund_fee_notice_shown: false)
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
       end
 
       it "allows management of subscription purchases" do
@@ -1237,6 +1274,7 @@ describe "Sales page", type: :system, js: true do
           deposit_purchase.process!
           deposit_purchase.mark_successful!
           commission.create_completion_purchase!
+          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
         end
 
         it "allows refunding commission purchases" do
@@ -1355,6 +1393,7 @@ describe "Sales page", type: :system, js: true do
         purchase3.update!(purchase_state: "in_progress", created_at: ActiveSupport::TimeZone[seller.timezone].local(2022, 1, 1), chargeable: create(:chargeable))
         purchase3.process!
         purchase3.mark_successful!
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
       end
 
       it "allows refunding a customer" do
@@ -1461,6 +1500,30 @@ describe "Sales page", type: :system, js: true do
           expect(purchase1.stripe_partially_refunded?).to eq(false)
           expect(purchase1.stripe_refunded?).to eq(true)
           expect(purchase1.amount_refundable_cents).to eq(0)
+        end
+
+        it "does not allow refunding a customer if the refund amount is more than the available balance" do
+          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10)
+
+          visit customers_path
+          find(:table_row, { "Name" => "Customer 1" }).click
+
+          within_section "Product 1", section_element: :aside do
+            within_section "Refund", section_element: :section do
+              expect(page).to have_field("1", with: "1")
+              click_on "Refund fully"
+              within_modal "Purchase refund" do
+                click_on "Confirm refund"
+              end
+            end
+          end
+          expect(page).to have_alert(text: "Your balance is insufficient to process this refund.")
+
+          purchase1.reload
+          expect(purchase1.stripe_partially_refunded?).to eq(false)
+          expect(purchase1.stripe_refunded?).to eq(false)
+          expect(purchase1.amount_refundable_cents).to eq(purchase1.price_cents)
+          expect(purchase1.refunds.last).to be nil
         end
       end
 

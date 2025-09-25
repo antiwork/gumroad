@@ -25,6 +25,7 @@ export const AdminSetCustomFeeForm = ({
           <input
             name="custom_fee_percent"
             type="number"
+            inputMode="decimal"
             min="0"
             max="100"
             step="0.1"

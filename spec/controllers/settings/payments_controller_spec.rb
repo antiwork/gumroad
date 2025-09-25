@@ -1017,7 +1017,7 @@ describe Settings::PaymentsController, :vcr do
         user.update!(payment_address: "")
         stripe_account = create(:merchant_account_stripe, user: user)
         create(:user_compliance_info_request, user: user, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
-        user.update!(payouts_paused_internally: true)
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         user.alive_user_compliance_info.dup_and_save { |nuci| nuci.country = "Brazil" }
 
         put :update, xhr: true, params: { payment_address: "sebastian@example.com" }
@@ -1026,6 +1026,8 @@ describe Settings::PaymentsController, :vcr do
         expect(stripe_account.reload.alive?).to be false
         expect(user.user_compliance_info_requests.requested.count).to eq(0)
         expect(user.payouts_paused_internally?).to be false
+        expect(user.payouts_paused_by).to be nil
+        expect(user.payouts_paused_by_source).to be nil
       end
 
       it "does not resume payouts if account is flagged or suspended" do

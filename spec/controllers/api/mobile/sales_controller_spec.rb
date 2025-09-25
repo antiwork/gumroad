@@ -68,6 +68,7 @@ describe Api::Mobile::SalesController, :vcr do
 
     context "when the purchase is refunded" do
       it "responds with HTTP success" do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
         @seller.update_attribute(:refund_fee_notice_shown, false)
         expect do
           patch :refund, params: @params.merge(id: @purchase.external_id)

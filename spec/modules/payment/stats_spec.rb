@@ -14,6 +14,7 @@ describe Payment::Stats, :vcr do
       WebMock.stub_request(:post, PAYPAL_ENDPOINT)
              .to_return(body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Success&VERSION=90%2e0&BUILD=4072860")
       allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+      allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(100_00)
     end
 
     it "calculates the revenue per link based on all purchases during the payout period, even with affiliate_credits" do

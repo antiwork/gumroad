@@ -63,7 +63,7 @@ describe OauthApplication do
     let(:doorkeeper_scopes) { Doorkeeper.configuration.scopes.map(&:to_sym) }
     let(:default_scopes) { Doorkeeper.configuration.default_scopes.map(&:to_sym) }
     let(:public_scopes) { Doorkeeper.configuration.public_scopes.map(&:to_sym) }
-    let(:private_scopes) { %i[mobile_api creator_api helper_api unfurl] }
+    let(:private_scopes) { %i[refund_sales mobile_api creator_api helper_api unfurl] }
 
     it "all public scopes are included in Doorkeeper's scopes" do
       public_scopes.each do |scope|

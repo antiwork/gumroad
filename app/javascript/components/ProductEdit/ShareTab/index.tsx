@@ -33,7 +33,7 @@ export const ShareTab = () => {
     <Layout preview={<ProductPreview />}>
       <div className="squished">
         <form>
-          <section className="!p-8">
+          <section className="!p-4 md:!p-8">
             <DiscoverEligibilityPromo />
             <header>
               <h2>Share</h2>
