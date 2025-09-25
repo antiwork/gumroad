@@ -19,6 +19,7 @@ export type UpsellPayload = {
   offerCode: { amount_cents: number } | { amount_percentage: number } | null;
   productIds: string[];
   upsellVariants: { selectedVariantId: string; offeredVariantId: string }[];
+  paused: boolean;
 };
 
 export const createUpsell = async ({
@@ -33,6 +34,7 @@ export const createUpsell = async ({
   offerCode,
   productIds,
   upsellVariants,
+  paused,
 }: UpsellPayload) => {
   const response = await request({
     method: "POST",
@@ -53,6 +55,7 @@ export const createUpsell = async ({
         selected_variant_id: selectedVariantId,
         offered_variant_id: offeredVariantId,
       })),
+      paused,
     },
   });
   const responseData = cast<
@@ -77,6 +80,7 @@ export const updateUpsell = async (
     offerCode,
     productIds,
     upsellVariants,
+    paused,
   }: UpsellPayload,
 ) => {
   const response = await request({
@@ -98,6 +102,7 @@ export const updateUpsell = async (
         selected_variant_id: selectedVariantId,
         offered_variant_id: offeredVariantId,
       })),
+      paused,
     },
   });
   const responseData = cast<

@@ -519,6 +519,7 @@ const Form = ({
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.name ?? "" });
   const [offerText, setOfferText] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.text ?? "" });
   const [offerDescription, setOfferDescription] = React.useState(upsell?.description ?? "");
+  const [paused, setPaused] = React.useState(upsell?.paused ?? false);
 
   const [cartItems, setCartItems] = React.useState<Record<string, ProductToAdd>>({});
 
@@ -638,6 +639,7 @@ const Form = ({
           : null,
       productIds: isCrossSell ? selectedProductIds.value : [],
       upsellVariants: !isCrossSell ? variants : [],
+      paused,
     });
   };
 
@@ -665,6 +667,8 @@ const Form = ({
   useLoadCartItem(selectedProductId.value);
   useLoadCartItem(offeredProductId.value);
   useLoadCartItem(selectedProductIds.value[0] ?? null);
+
+  const handlePausedChange = (evt: React.ChangeEvent<HTMLInputElement>) => setPaused(evt.target.value === "true");
 
   return (
     <>
@@ -728,6 +732,18 @@ const Form = ({
                 value={offerDescription}
                 onChange={(evt) => setOfferDescription(evt.target.value)}
               />
+            </fieldset>
+            <fieldset>
+              <legend>Status</legend>
+              <label>
+                <input type="radio" name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
+                Active
+              </label>
+              <label>
+                <input type="radio" name="paused" value="true" checked={paused} onChange={handlePausedChange} />
+                Paused
+              </label>
+              <small>Paused upsells will not appear at checkout. You can resume anytime.</small>
             </fieldset>
             <fieldset>
               <legend>Type of offer</legend>
