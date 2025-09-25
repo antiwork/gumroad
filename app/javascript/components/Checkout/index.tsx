@@ -7,6 +7,7 @@ import { isOpenTuple } from "$app/utils/array";
 import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
+import { sanitizeOfferCode } from "$app/utils/offer-code";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
@@ -34,7 +35,6 @@ import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, fi
 import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
-import { sanitizeOfferCode } from "$app/utils/offer-code";
 
 function formatPrice(price: number) {
   return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
@@ -307,8 +307,7 @@ export const Checkout = ({
                         value={newDiscountCode}
                         disabled={discountInputDisabled}
                         onChange={(e) => {
-                          const sanitizedCode = sanitizeOfferCode(e.target.value);
-                          setNewDiscountCode(sanitizedCode);
+                          setNewDiscountCode(sanitizeOfferCode(e.target.value));
                         }}
                       />
                       <Button type="submit" disabled={discountInputDisabled}>
