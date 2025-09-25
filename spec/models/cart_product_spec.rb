@@ -78,21 +78,27 @@ describe CartProduct do
   end
 
   describe "fixed_duration_months" do
-    it "can be set and retrieved" do
-      cart_product = build(:cart_product, fixed_duration_months: 12)
-      expect(cart_product.fixed_duration_months).to eq(12)
-    end
-
     it "can be nil for ongoing subscriptions" do
       cart_product = build(:cart_product, fixed_duration_months: nil)
       expect(cart_product.fixed_duration_months).to be_nil
       expect(cart_product).to be_valid
     end
 
-    it "persists when saved" do
-      cart_product = create(:cart_product, fixed_duration_months: 24)
-      cart_product.reload
-      expect(cart_product.fixed_duration_months).to eq(24)
+    it "requires recurrence when fixed_duration_months is present" do
+      cart_product = build(:cart_product, fixed_duration_months: 12, recurrence: nil)
+      expect(cart_product).not_to be_valid
+      expect(cart_product.errors[:recurrence]).to include("is required when a fixed duration is set")
+    end
+
+    it "requires fixed_duration_months to be a multiple of recurrence period" do
+      cart_product = build(:cart_product, fixed_duration_months: 6, recurrence: "yearly")
+      expect(cart_product).not_to be_valid
+      expect(cart_product.errors[:fixed_duration_months]).to include("must be a multiple of the recurrence period (12 months)")
+    end
+
+    it "is valid when fixed_duration_months matches recurrence period" do
+      cart_product = build(:cart_product, fixed_duration_months: 12, recurrence: "yearly")
+      expect(cart_product).to be_valid
     end
   end
 end

@@ -3,6 +3,7 @@
 class ProductPresenter::Card
   include Rails.application.routes.url_helpers
   include ProductsHelper
+  include BasePrice::Recurrence
 
   ASSOCIATIONS = [
     :alive_prices, :product_review_stat, :tiers, :variant_categories_alive,
@@ -21,6 +22,8 @@ class ProductPresenter::Card
 
   def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: true)
     default_recurrence = product.default_price_recurrence
+    recurrence_id = default_recurrence&.recurrence
+
     props = {
       id: product.external_id,
       permalink: product.unique_permalink,
@@ -39,7 +42,8 @@ class ProductPresenter::Card
       is_pay_what_you_want: product.has_customizable_price_option?,
       url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:),
       duration_in_months: product.duration_in_months,
-      recurrence: default_recurrence&.recurrence,
+      recurrence: recurrence_id,
+      recurrence_short_indicator: recurrence_id ? recurrence_short_indicator(recurrence_id) : nil,
     }
 
     if compute_description

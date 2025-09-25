@@ -5,28 +5,28 @@ require "spec_helper"
 describe VariantPrice do
   describe "associations" do
     it "belongs to a variant" do
-      price = create(:variant_price)
+      price = build(:variant_price)
       expect(price.variant).to be_a Variant
     end
   end
 
   describe "validations" do
     it "requires that the variant is present" do
-      invalid_price = create(:variant_price)
+      invalid_price = build(:variant_price)
       invalid_price.variant = nil
       expect(invalid_price).not_to be_valid
       expect(invalid_price.errors.full_messages).to include "Variant can't be blank"
     end
 
     it "requires that price_cents is present" do
-      invalid_price = create(:variant_price)
+      invalid_price = build(:variant_price)
       invalid_price.price_cents = nil
       expect(invalid_price).not_to be_valid
       expect(invalid_price.errors.full_messages).to include "Please provide a price for all selected payment options."
     end
 
     it "requires that currency is present" do
-      invalid_price = create(:variant_price)
+      invalid_price = build(:variant_price)
       invalid_price.currency = nil
       expect(invalid_price).not_to be_valid
       expect(invalid_price.errors.full_messages).to include "Currency can't be blank"
@@ -76,7 +76,7 @@ describe VariantPrice do
 
   describe "#price_formatted_without_symbol" do
     it "returns the formatted price without a symbol" do
-      price = create(:variant_price, price_cents: 299)
+      price = build(:variant_price, price_cents: 299)
 
       expect(price.price_formatted_without_symbol).to eq "2.99"
     end
@@ -92,7 +92,7 @@ describe VariantPrice do
 
   describe "#suggested_price_formatted_without_symbol" do
     it "returns the formatted suggested price without a symbol" do
-      price = create(:variant_price, suggested_price_cents: 299)
+      price = build(:variant_price, suggested_price_cents: 299)
 
       expect(price.suggested_price_formatted_without_symbol).to eq "2.99"
     end
@@ -107,12 +107,12 @@ describe VariantPrice do
   end
 
   describe "tier-specific duration functionality" do
-    let(:variant) { create(:variant) }
-    let(:variant_price) { create(:variant_price, variant: variant, recurrence: "monthly") }
+    let(:variant) { build(:variant) }
+    let(:variant_price) { build(:variant_price, variant: variant, recurrence: "monthly") }
 
     describe "#tier_name" do
       it "returns variant name when available" do
-        variant.update!(name: "Premium Tier")
+        variant.assign_attributes(name: "Premium Tier")
         expect(variant_price.tier_name).to eq "Premium Tier"
       end
 
@@ -124,7 +124,7 @@ describe VariantPrice do
 
     describe "#formatted_price_with_duration" do
       before do
-        variant_price.update!(
+        variant_price.assign_attributes(
           price_cents: 4999,
           fixed_duration_months: 12,
           recurrence: "monthly"
@@ -139,7 +139,7 @@ describe VariantPrice do
       end
 
       context "without fixed duration" do
-        before { variant_price.update!(fixed_duration_months: nil) }
+        before { variant_price.assign_attributes(fixed_duration_months: nil) }
 
         it "formats price without duration information" do
           result = variant_price.formatted_price_with_duration
@@ -150,30 +150,13 @@ describe VariantPrice do
       end
     end
 
-    describe "#subscription_summary" do
-      before do
-        variant.update!(name: "Premium")
-        variant_price.update!(
-          price_cents: 2999,
-          fixed_duration_months: 24,
-          recurrence: "monthly"
-        )
-      end
-
-      it "returns complete subscription summary" do
-        summary = variant_price.subscription_summary
-        expect(summary).to include("Premium")
-        expect(summary).to include("29.99")
-        expect(summary).to include("24 months")
-      end
-    end
 
     describe "duration validation" do
       context "when fixed duration is less than billing cycle" do
         it "adds validation error for yearly billing with 6 month duration" do
           variant_price.fixed_duration_months = 6
           variant_price.recurrence = "yearly"
-          
+
           expect(variant_price).not_to be_valid
           expect(variant_price.errors[:fixed_duration_months]).to include(
             "must be at least 12 months for yearly billing"
@@ -185,14 +168,14 @@ describe VariantPrice do
         it "validates successfully for yearly billing with 12 month duration" do
           variant_price.fixed_duration_months = 12
           variant_price.recurrence = "yearly"
-          
+
           expect(variant_price).to be_valid
         end
 
         it "validates successfully for yearly billing with 24 month duration" do
           variant_price.fixed_duration_months = 24
           variant_price.recurrence = "yearly"
-          
+
           expect(variant_price).to be_valid
         end
       end
@@ -206,11 +189,11 @@ describe VariantPrice do
     end
 
     describe "inheritance from BasePrice" do
-      let(:variant_price) { create(:variant_price, fixed_duration_months: 18, recurrence: "monthly") }
+      let(:variant_price) { build(:variant_price, fixed_duration_months: 18, recurrence: "monthly") }
 
       it "inherits duration calculation methods" do
         expect(variant_price.charge_occurrence_count).to eq 18
-        expect(variant_price.has_fixed_duration?).to be true
+        expect(variant_price.fixed_duration_months?).to be true
         expect(variant_price.duration_display).to eq "18 months"
       end
     end

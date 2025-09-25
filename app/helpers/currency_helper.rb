@@ -133,7 +133,7 @@ module CurrencyHelper
   # Should match formatRecurrenceWithDuration
   def recurrence_label(recurrence, duration_in_months)
     return if recurrence.blank?
-    number_of_months = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
+    number_of_months = number_of_months_in_recurrence(recurrence)
     base_formatted_label = recurrence_long_indicator(recurrence)
     return base_formatted_label if duration_in_months.blank?
 

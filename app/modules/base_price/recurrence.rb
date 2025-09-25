@@ -50,12 +50,16 @@ module BasePrice::Recurrence
     RECURRENCE_TO_NUMBER_OF_MONTHS[recurrence]
   end
 
+  def number_of_months_in_recurrence(recurrence)
+    self.class.number_of_months_in_recurrence(recurrence)
+  end
+
   def self.renewal_reminder_email_days(recurrence)
     RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS[recurrence]
   end
 
   def self.seconds_in_recurrence(recurrence)
-    number_of_months = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
+    number_of_months = number_of_months_in_recurrence(recurrence)
     number_of_months.months
   end
 
@@ -93,4 +97,5 @@ module BasePrice::Recurrence
     when "every_two_years" then "2-year"
     end
   end
+
 end

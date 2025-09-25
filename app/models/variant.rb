@@ -64,18 +64,15 @@ class Variant < BaseVariant
             # TODO: :product_edit_react cleanup
             price: price.price_formatted_without_symbol,
           }
+          recurrence_price_values[recurrence][:recurrence_short_indicator] = price.recurrence_short_indicator(recurrence)
           # TODO: :product_edit_react cleanup
           recurrence_price_values[recurrence][:suggested_price] = price.suggested_price_formatted_without_symbol if price.suggested_price_cents.present?
 
-          # Add duration information for edit mode
-          if price.has_fixed_duration?
-            recurrence_price_values[recurrence][:fixed_duration_months] = price.fixed_duration_months
-            recurrence_price_values[recurrence][:duration_display] = price.duration_display
-            recurrence_price_values[recurrence][:formatted_duration_with_recurrence] = price.formatted_duration_with_recurrence
-          end
+          add_fixed_duration_fields(recurrence_price_values[recurrence], price)
         else
           recurrence_price_values[recurrence] = {
-            enabled: false
+            enabled: false,
+            fixed_duration_months: nil,
           }
         end
       else
@@ -85,36 +82,31 @@ class Variant < BaseVariant
             price_cents:,
             suggested_price_cents: price.suggested_price_cents,
           }
+          recurrence_price_values[recurrence][:recurrence_short_indicator] = price.recurrence_short_indicator(recurrence)
 
-          # Add duration information for display mode
-          if price.has_fixed_duration?
-            recurrence_price_values[recurrence][:fixed_duration_months] = price.fixed_duration_months
-            recurrence_price_values[recurrence][:duration_display] = price.duration_display
-            recurrence_price_values[recurrence][:formatted_price_with_duration] = price.formatted_price_with_duration
-          end
+          add_fixed_duration_fields(recurrence_price_values[recurrence], price, include_formatted_price: true)
         end
       end
     end
     recurrence_price_values
   end
 
-  def variant_price_for_recurrence(recurrence)
-    alive_prices.is_buy.find_by(recurrence: recurrence)
-  end
+  private
+    def add_fixed_duration_fields(target_hash, price, include_formatted_price: false)
+      target_hash[:fixed_duration_months] = price.fixed_duration_months
+      return unless price.fixed_duration_months?
 
-  def has_fixed_duration_pricing?
-    alive_prices.is_buy.any?(&:has_fixed_duration?)
-  end
-
-  def duration_for_recurrence(recurrence)
-    price = variant_price_for_recurrence(recurrence)
-    price&.has_fixed_duration? ? price.fixed_duration_months : nil
-  end
-
-  def duration_display_for_recurrence(recurrence)
-    price = variant_price_for_recurrence(recurrence)
-    price&.has_fixed_duration? ? price.duration_display : "Ongoing"
-  end
+      target_hash[:duration_display] = price.duration_display
+      if include_formatted_price
+        target_hash[:formatted_price_with_duration] = price.formatted_price_with_duration
+      else
+        target_hash[:formatted_duration_with_recurrence] = price.formatted_duration_with_recurrence
+      end
+      target_hash[:fixed_duration_pricing_label] = price.fixed_duration_pricing_label
+    end
+    def variant_price_for_recurrence(recurrence)
+      alive_prices.is_buy.find_by(recurrence: recurrence)
+    end
 
   def self.create_or_update!(external_id, params)
     variant = external_id ? self.find_by_external_id(external_id) : self.new

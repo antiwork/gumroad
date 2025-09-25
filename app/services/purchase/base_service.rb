@@ -105,16 +105,15 @@ class Purchase::BaseService
     private
 
     def calculate_tier_specific_charge_occurrence_count
-      if purchase.tier && purchase.link.is_tiered_membership?
-        if (vp = purchase.tier.variant_price_for_recurrence(purchase.price.recurrence))&.has_fixed_duration?
-          return vp.charge_occurrence_count
-        end
+      if purchase.tier && purchase.link.is_tiered_membership? &&
+         (vp = purchase.tier.variant_price_for_recurrence(purchase.price.recurrence))&.fixed_duration_months?
+        return vp.charge_occurrence_count
       end
 
-      return purchase.price.charge_occurrence_count if purchase.price&.has_fixed_duration?
+      return purchase.price.charge_occurrence_count if purchase.price&.fixed_duration_months?
 
       if purchase.link.duration_in_months.present?
-        months = BasePrice::Recurrence.number_of_months_in_recurrence(purchase.price.recurrence)
+        months = number_of_months_in_recurrence(purchase.price.recurrence)
         return purchase.link.duration_in_months / months if months
       end
 

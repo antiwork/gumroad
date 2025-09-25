@@ -138,15 +138,12 @@ const TierEditor = ({
 
   const [isOpen, setIsOpen] = React.useState(true);
 
-  // Check if any enabled recurrence has a fixed duration
-  const existingFixedDuration = Object.values(tier.recurrence_price_values).find(
-    (value) => value.enabled && "fixed_duration_months" in value && value.fixed_duration_months != null,
-  );
-  const [hasFixedDuration, setHasFixedDuration] = React.useState(!!existingFixedDuration);
-  const existingMonths =
-    existingFixedDuration && "fixed_duration_months" in existingFixedDuration
-      ? existingFixedDuration.fixed_duration_months || 12
-      : 12;
+  const existingFixedDurationValue =
+    Object.values(tier.recurrence_price_values).find(
+      (value) => !!value.enabled && value.fixed_duration_months !== null,
+    ) ?? null;
+  const [hasFixedDuration, setHasFixedDuration] = React.useState<boolean>(existingFixedDurationValue !== null);
+  const existingMonths: number = existingFixedDurationValue?.fixed_duration_months ?? 12;
   const [fixedDurationMonths, setFixedDurationMonths] = React.useState<number>(existingMonths);
   const [durationUnit, setDurationUnit] = React.useState<"months" | "years">(
     existingMonths >= 12 && existingMonths % 12 === 0 ? "years" : "months",
@@ -167,22 +164,41 @@ const TierEditor = ({
       typeof tier.recurrence_price_values
     >(
       (acc, [recurrence, value]) => {
-        if (value.enabled) {
-          acc[recurrence] =
-            months !== null
-              ? { ...value, fixed_duration_months: months }
-              : (() => {
-                  const { fixed_duration_months, ...valueWithoutDuration } = value;
-                  return valueWithoutDuration;
-                })();
-        } else {
+        if (!value.enabled) {
           acc[recurrence] = value;
+        } else if (months !== null) {
+          acc[recurrence] = { ...value, fixed_duration_months: months };
+        } else {
+          const { fixed_duration_months, ...valueWithoutDuration } = value;
+          acc[recurrence] = valueWithoutDuration;
         }
         return acc;
       },
       { ...tier.recurrence_price_values },
     );
     updateTier({ recurrence_price_values: updatedRecurrencePriceValues });
+  };
+
+  const applyFixedDurationChange = (months: number | null) => {
+    setHasFixedDuration(months !== null);
+    if (months !== null) {
+      setFixedDurationMonths(months);
+    }
+    updateFixedDurationForAllRecurrences(months);
+  };
+
+  const handleFixedDurationToggle = (enabled: boolean) => {
+    applyFixedDurationChange(enabled ? fixedDurationMonths : null);
+  };
+
+  const handleDurationValueChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(evt.target.value, 10) || 1;
+    const months = durationUnit === "months" ? value : value * 12;
+    applyFixedDurationChange(months);
+  };
+
+  const updateDurationUnit = (newUnit: "months" | "years") => {
+    setDurationUnit(newUnit);
   };
 
   const defaultRecurrencePriceValue = product.subscription_duration
@@ -239,7 +255,7 @@ const TierEditor = ({
         </WithTooltip>
       </div>
       {isOpen ? (
-        <Drawer style={{ display: "grid", gap: "var(--spacer-5)" }}>
+        <Drawer className="grid gap-5">
           <fieldset>
             <label htmlFor={`${uid}-name`}>Name</label>
             <div className="input">
@@ -271,24 +287,10 @@ const TierEditor = ({
               {(inputProps) => <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />}
             </NumberInput>
           </fieldset>
-          <fieldset
-            style={{
-              display: "grid",
-              gap: "var(--spacer-3)",
-              gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-            }}
-          >
+          <fieldset className="grid gap-3 [grid-template-columns:repeat(auto-fit,max(var(--dynamic-grid),calc(50%-var(--spacer-3)/2)))]">
             <legend>Pricing</legend>
             {Object.entries(tier.recurrence_price_values).map(([recurrence, value]) => (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "max-content 1fr",
-                  alignItems: "center",
-                  gap: "var(--spacer-2)",
-                }}
-                key={recurrence}
-              >
+              <div className="grid items-center gap-2 [grid-template-columns:max-content_1fr]" key={recurrence}>
                 <input
                   type="checkbox"
                   role="switch"
@@ -322,13 +324,7 @@ const TierEditor = ({
             open={tier.customizable_price}
           >
             <div className="dropdown">
-              <div
-                style={{
-                  display: "grid",
-                  gap: "var(--spacer-3)",
-                  gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-                }}
-              >
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,max(var(--dynamic-grid),calc(50%-var(--spacer-3)/2)))]">
                 {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
                   value.enabled ? (
                     <React.Fragment key={recurrence}>
@@ -380,42 +376,26 @@ const TierEditor = ({
               ))}
             </fieldset>
           ) : null}
-          <Toggle
-            value={hasFixedDuration}
-            onChange={(enabled) => {
-              setHasFixedDuration(enabled);
-              updateFixedDurationForAllRecurrences(enabled ? fixedDurationMonths : null);
-            }}
-          >
+          <Toggle value={hasFixedDuration} onChange={handleFixedDurationToggle}>
             Require a minimum subscription period
           </Toggle>
           {hasFixedDuration ? (
             <div className="rounded-[var(--border-radius-1)] border border-[rgb(var(--parent-color)/var(--border-alpha))] p-4">
               <fieldset>
                 <label htmlFor={`${uid}-fixed-duration`}>Duration</label>
-                <div className="input" style={{ display: "flex", gap: "var(--spacer-2)", alignItems: "stretch" }}>
+                <div className="input flex items-stretch gap-2">
                   <input
                     id={`${uid}-fixed-duration`}
                     type="number"
                     min="1"
                     value={durationUnit === "months" ? fixedDurationMonths : Math.ceil(fixedDurationMonths / 12)}
-                    onChange={(evt) => {
-                      const value = parseInt(evt.target.value, 10) || 1;
-                      const months = durationUnit === "months" ? value : value * 12;
-                      setFixedDurationMonths(months);
-                      updateFixedDurationForAllRecurrences(months);
-                    }}
-                    style={{ flex: "1", padding: "var(--spacer-2)" }}
+                    onChange={handleDurationValueChange}
+                    className="flex-1 p-2"
                   />
-                  <label
-                    className="pill select"
-                    style={{ marginTop: "var(--spacer-2)", marginBottom: "var(--spacer-2)" }}
-                  >
+                  <label className="pill select my-2">
                     <span>{durationUnit === "months" ? "Months" : "Years"}</span>
                     <TypeSafeOptionSelect
-                      onChange={(newUnit: "months" | "years") => {
-                        setDurationUnit(newUnit);
-                      }}
+                      onChange={updateDurationUnit}
                       value={durationUnit}
                       aria-label="Duration unit"
                       options={[
@@ -510,7 +490,7 @@ You can modify or cancel your membership at any time.`;
       open={tier.apply_price_changes_to_existing_memberships}
     >
       <div className="dropdown">
-        <div style={{ display: "grid", gap: "var(--spacer-5)" }}>
+        <div className="grid gap-5">
           {initialEffectiveDate ? (
             <div role="alert" className="warning">
               You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}

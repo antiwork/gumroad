@@ -3,12 +3,12 @@
 require "spec_helper"
 
 describe "VariantPrice tier-specific fixed duration functionality" do
-  describe "#has_fixed_duration?" do
+  describe "#fixed_duration_months?" do
     context "when fixed_duration_months is present" do
       let(:price) { create(:variant_price, fixed_duration_months: 12) }
 
       it "returns true" do
-        expect(price.has_fixed_duration?).to be true
+        expect(price.fixed_duration_months?).to be true
       end
     end
 
@@ -16,7 +16,7 @@ describe "VariantPrice tier-specific fixed duration functionality" do
       let(:price) { create(:variant_price, fixed_duration_months: nil) }
 
       it "returns false" do
-        expect(price.has_fixed_duration?).to be false
+        expect(price.fixed_duration_months?).to be false
       end
     end
 

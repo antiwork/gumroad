@@ -112,14 +112,12 @@ class Subscription < ApplicationRecord
 
     json[:license_key] = license_key if license_key.present?
 
-    # Add tier-specific duration information
     if has_fixed_length?
       json[:fixed_duration_months] = current_subscription_duration_months
       json[:duration_display] = subscription_duration_display
       json[:remaining_charges] = [remaining_charges_count, 0].max
     end
 
-    # Add tier information for tiered memberships
     if tier.present?
       json[:tier_id] = tier.external_id
       json[:tier_name] = tier.name
@@ -748,38 +746,34 @@ class Subscription < ApplicationRecord
     has_fixed_length? ? [calculated_charge_occurrence_count - successful_purchases.count, 0].max : 0
   end
 
-  def tier_price
-    return nil unless tier.present? && recurrence.present?
-    tier.variant_price_for_recurrence(recurrence)
-  end
+  private
+    def tier_price
+      return nil unless tier.presence && recurrence.presence
+      tier.alive_prices.is_buy.find_by(recurrence: recurrence)
+    end
 
   def calculated_charge_occurrence_count
-    # For tier-specific durations, get from tier price
-    if tier_price&.has_fixed_duration?
+    if tier_price&.fixed_duration_months?
       tier_price.charge_occurrence_count
-    # For regular products, get from product price
-    elsif price&.has_fixed_duration?
+    elsif price&.fixed_duration_months?
       price.charge_occurrence_count
-    # Fall back to legacy charge_occurrence_count field
     else
       charge_occurrence_count
     end
   end
 
   def current_subscription_duration_months
-    if tier_price&.has_fixed_duration?
+    if tier_price&.fixed_duration_months?
       tier_price.fixed_duration_months
-    elsif price&.has_fixed_duration?
+    elsif price&.fixed_duration_months?
       price.fixed_duration_months
-    else
-      nil
     end
   end
 
   def subscription_duration_display
-    if tier_price&.has_fixed_duration?
+    if tier_price&.fixed_duration_months?
       tier_price.duration_display
-    elsif price&.has_fixed_duration?
+    elsif price&.fixed_duration_months?
       price.duration_display
     else
       "Ongoing"

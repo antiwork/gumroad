@@ -13,7 +13,7 @@ import {
   formatAmountPerRecurrence,
   recurrenceNames,
   recurrenceDurationLabels,
-  formatFixedDurationPricing,
+  getFixedDurationMonthsForRecurrence,
 } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
@@ -420,10 +420,8 @@ const CartItemComponent = ({
       return setError("You already have this item in your cart.");
     const index = cart.items.findIndex((i) => i === item);
     const items = cart.items.slice();
-    const selectedOption = item.product.options.find((option) => option.id === selection.optionId);
-    const fixedDurationMonths = selection.recurrence
-      ? (selectedOption?.recurrence_price_values?.[selection.recurrence]?.fixed_duration_months ?? null)
-      : null;
+    const selectedOption = item.product.options.find((option) => option.id === selection.optionId) ?? null;
+    const fixedDurationMonths = getFixedDurationMonthsForRecurrence(selectedOption, selection.recurrence);
     items[index] = {
       ...item,
       price: isPWYW ? (selection.price.value ?? priceCents) : priceCents,
@@ -468,8 +466,8 @@ const CartItemComponent = ({
               {item.recurrence ? (
                 <li>
                   <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-                  {typeof item.fixed_duration_months === "number"
-                    ? `, ${formatFixedDurationPricing(item.fixed_duration_months).replace(" at", "")}`
+                  {typeof item.fixed_duration_pricing_label === "string" && item.fixed_duration_pricing_label
+                    ? `, ${item.fixed_duration_pricing_label.replace(" at", "")}`
                     : ""}
                 </li>
               ) : null}

@@ -192,7 +192,7 @@ class CheckoutPresenter
         native_type: product.native_type,
         require_shipping: product.require_shipping?,
         recurrences: subscription.is_installment_plan ? [] : prices
-                       .sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
+                       .sort_by { |price| number_of_months_in_recurrence(price.recurrence) }
                        .map { |price| { id: price.external_id, recurrence: price.recurrence, price_cents: price.price_cents } },
         options:,
       },

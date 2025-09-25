@@ -8,8 +8,5 @@ FactoryBot.define do
     quantity { 1 }
     referrer { "direct" }
 
-    trait :with_fixed_duration do
-      fixed_duration_months { 12 }
-    end
   end
 end

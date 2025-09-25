@@ -65,21 +65,16 @@ export const formatRecurrenceWithDuration = (recurrenceId: RecurrenceId, product
   return `${baseFormattedLabel} x ${(productDuration / numberOfMonths).toFixed(0)}`;
 };
 
-export const formatFixedDurationPricing = (fixedDurationMonths: number): string => {
-  if (fixedDurationMonths <= 0) {
-    throw new Error("fixedDurationMonths must be a positive value");
-  }
-  if (fixedDurationMonths === 1) {
-    return `1-month plan at`;
-  }
-  if (fixedDurationMonths < 12) {
-    return `${fixedDurationMonths}-month plan at`;
-  }
-  if (fixedDurationMonths === 12) {
-    return `1-year plan at`;
-  }
-  if (fixedDurationMonths % 12 === 0) {
-    return `${fixedDurationMonths / 12}-year plan at`;
-  }
-  return `${fixedDurationMonths}-month plan at`;
+export const getFixedDurationMonthsForRecurrence = (
+  option: {
+    recurrence_price_values:
+      | {
+          [key in RecurrenceId]?: { fixed_duration_months?: number | null };
+        }
+      | null;
+  } | null,
+  recurrence: RecurrenceId | null,
+): number | null => {
+  if (!option || !recurrence) return null;
+  return option.recurrence_price_values?.[recurrence]?.fixed_duration_months ?? null;
 };

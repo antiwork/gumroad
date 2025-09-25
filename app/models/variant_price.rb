@@ -33,16 +33,13 @@ class VariantPrice < BasePrice
 
     return base_price if recurrence.blank?
 
-    if has_fixed_duration?
+    if fixed_duration_months?
       "#{base_price}#{recurrence_text} for #{duration_text}"
     else
       "#{base_price}#{recurrence_text}"
     end
   end
 
-  def subscription_summary
-    "#{tier_name} - #{formatted_price_with_duration}"
-  end
 
   private
     def display_price_for_price_cents(price_cents, additional_attrs = {})
@@ -66,7 +63,7 @@ class VariantPrice < BasePrice
     def fixed_duration_validation
       return if !fixed_duration_months.present? || !recurrence.present?
 
-      months_per_cycle = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
+      months_per_cycle = number_of_months_in_recurrence(recurrence)
       return if !months_per_cycle
 
       if fixed_duration_months < months_per_cycle
