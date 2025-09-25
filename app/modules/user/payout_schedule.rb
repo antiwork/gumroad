@@ -34,13 +34,21 @@ module User::PayoutSchedule
     upcoming_payout_date
   end
 
+  def current_payout_processor
+    if (paypal_payout_email.present? && active_bank_account.blank?) || !native_payouts_supported?
+      PayoutProcessorType::PAYPAL
+    else
+      PayoutProcessorType::STRIPE
+    end
+  end
+
   def upcoming_payout_amounts
     upcoming_payout_date = next_payout_date
     upcoming_amounts = {}
 
     while upcoming_payout_date
       payout_amount = payout_amount_for_payout_date(upcoming_payout_date) - upcoming_amounts.values.sum
-      break if payout_amount <= minimum_payout_amount_cents
+      break if payout_amount < minimum_payout_amount_cents
 
       upcoming_amounts[upcoming_payout_date] = payout_amount
       upcoming_payout_date = advance_payout_date(upcoming_payout_date)

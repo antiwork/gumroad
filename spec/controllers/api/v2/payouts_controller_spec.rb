@@ -198,6 +198,8 @@ describe Api::V2::PayoutsController do
         end
 
         it "indicates which payment processor will be used" do
+          create(:user_compliance_info, user: @seller, country: "United Kingdom")
+          @seller.active_bank_account&.destroy!
           @seller.update!(payment_address: "test@example.com")
 
           get :index, params: @params
@@ -208,7 +210,6 @@ describe Api::V2::PayoutsController do
           expect(upcoming_payout["bank_account_visual"]).to be_nil
           expect(upcoming_payout["paypal_email"]).to eq("test@example.com")
 
-          @seller.active_bank_account&.destroy!
           bank_account = create(:uk_bank_account, user: @seller)
           @seller.update!(payment_address: nil)
 

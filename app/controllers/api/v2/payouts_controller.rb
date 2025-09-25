@@ -41,9 +41,9 @@ class Api::V2::PayoutsController < Api::V2::BaseController
             currency: Currency::USD,
             state: current_resource_owner.payouts_status,
             created_at: payout_date,
-            processor: current_resource_owner.paypal_payout_email.present? ? PayoutProcessorType::PAYPAL : PayoutProcessorType::STRIPE,
-            bank_account: (current_resource_owner.active_bank_account if current_resource_owner.paypal_payout_email.blank?),
-            payment_address: (current_resource_owner.paypal_payout_email if current_resource_owner.paypal_payout_email.present?),
+            processor: current_resource_owner.current_payout_processor,
+            bank_account: (current_resource_owner.active_bank_account if current_resource_owner.current_payout_processor == PayoutProcessorType::STRIPE),
+            payment_address: (current_resource_owner.paypal_payout_email if current_resource_owner.current_payout_processor == PayoutProcessorType::PAYPAL),
           ).as_json.merge(id: nil)
         )
       end
