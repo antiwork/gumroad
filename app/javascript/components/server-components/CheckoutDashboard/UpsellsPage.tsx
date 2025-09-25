@@ -8,6 +8,8 @@ import {
   getCartItem,
   getPagedUpsells,
   getStatistics,
+  pauseUpsell,
+  resumeUpsell,
   updateUpsell,
   UpsellPayload,
   UpsellStatistics,
@@ -53,6 +55,7 @@ export type Upsell = {
   universal: boolean;
   cross_sell: boolean;
   replace_selected_products: boolean;
+  paused: boolean;
   product: {
     id: string;
     name: string;
@@ -196,6 +199,26 @@ const UpsellsPage = (props: {
     setIsLoading(false);
   });
 
+  const handleTogglePause = asyncVoid(async () => {
+    if (!selectedUpsell) return;
+    try {
+      setIsLoading(true);
+      if (selectedUpsell.paused) {
+        await resumeUpsell(selectedUpsell.id);
+        showAlert("Upsell resumed and will appear at checkout.", "success");
+      } else {
+        await pauseUpsell(selectedUpsell.id);
+        showAlert("Upsell paused and will not appear at checkout.", "success");
+      }
+      const updatedData = await getPagedUpsells(pagination.page, searchQuery, sort).response;
+      setState(updatedData);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsLoading(false);
+  });
+
   return view === "list" ? (
     <Layout
       currentPage="upsells"
@@ -256,7 +279,8 @@ const UpsellsPage = (props: {
                     >
                       <td>
                         <div>
-                          <div>
+                          <div className="flex items-center gap-2">
+                            {upsell.paused ? <span className="pill small">Paused</span> : null}
                             <b>{upsell.name}</b>
                           </div>
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
@@ -316,6 +340,7 @@ const UpsellsPage = (props: {
             onCreate={() => setView("create")}
             onEdit={() => setView("edit")}
             onDelete={handleDelete}
+            onTogglePause={handleTogglePause}
             onClose={handleCancel}
             isLoading={isLoading}
           />
@@ -349,6 +374,7 @@ const UpsellDrawer = ({
   onCreate,
   onEdit,
   onDelete,
+  onTogglePause,
   onClose,
   isLoading,
 }: {
@@ -357,6 +383,7 @@ const UpsellDrawer = ({
   onCreate: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onTogglePause: () => void;
   onClose: () => void;
   isLoading: boolean;
 }) => {
@@ -453,12 +480,16 @@ const UpsellDrawer = ({
           ))}
         </section>
       )}
-      <section className="grid auto-cols-fr grid-flow-col gap-4">
+      {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
+      <section style={{ display: "grid" }} className="grid-cols-2 gap-4 xl:grid-cols-4">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
         <Button onClick={onEdit} disabled={isLoading || isReadOnly}>
           Edit
+        </Button>
+        <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
+          {selectedUpsell.paused ? "Resume" : "Pause"}
         </Button>
         <Button onClick={onDelete} color="danger" disabled={isLoading || isReadOnly}>
           {isLoading ? "Deleting..." : "Delete"}

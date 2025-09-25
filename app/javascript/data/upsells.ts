@@ -122,6 +122,24 @@ export const deleteUpsell = async (id: string) => {
   return responseData;
 };
 
+export const pauseUpsell = async (id: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.checkout_upsell_pause_url(id),
+  });
+  if (!response.ok) throw new ResponseError();
+};
+
+export const resumeUpsell = async (id: string) => {
+  const response = await request({
+    method: "DELETE",
+    accept: "json",
+    url: Routes.checkout_upsell_pause_url(id),
+  });
+  if (!response.ok) throw new ResponseError();
+};
+
 export const getPagedUpsells = (page: number, query: string | null, sort: Sort<SortKey> | null) => {
   const abort = new AbortController();
   const response = request({
