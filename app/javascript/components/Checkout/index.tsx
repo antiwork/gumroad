@@ -34,6 +34,7 @@ import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, fi
 import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
+import { sanitizeOfferCode } from "$app/utils/offer-code";
 
 function formatPrice(price: number) {
   return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
@@ -306,10 +307,8 @@ export const Checkout = ({
                         value={newDiscountCode}
                         disabled={discountInputDisabled}
                         onChange={(e) => {
-                          const value = e.target.value.toUpperCase();
-                          // Only allow letters, numbers, dashes, and underscores
-                          const validValue = value.replace(/[^A-Z0-9\-_]/gu, "");
-                          setNewDiscountCode(validValue);
+                          const sanitizedCode = sanitizeOfferCode(e.target.value);
+                          setNewDiscountCode(sanitizedCode);
                         }}
                       />
                       <Button type="submit" disabled={discountInputDisabled}>
