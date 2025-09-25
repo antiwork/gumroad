@@ -337,10 +337,13 @@ jobs:
           # Create local directory for artifacts
           mkdir -p ./capybara-artifacts
           chmod 777 ./capybara-artifacts
+          mkdir -p ./test-logs
+          chmod 777 ./test-logs
 
-          # Run tests with volume mount to capture capybara artifacts
+          # Run tests with volume mount to capture capybara artifacts and test logs
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
+            -v "$(pwd)/test-logs:/app/log" \
             -e RAILS_MASTER_KEY \
             -e RUBY_YJIT_ENABLE \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
@@ -366,6 +369,14 @@ jobs:
         with:
           name: capybara-screenshots-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
           path: ./capybara-artifacts/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Archive test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
+          path: ./test-logs/test.log
           retention-days: 7
           if-no-files-found: ignore
       - name: Clean up
