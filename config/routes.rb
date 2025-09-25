@@ -484,6 +484,7 @@ Rails.application.routes.draw do
       end
       namespace :upsells do
         resources :products, only: [:index, :show]
+        resource :pause, only: [:create, :destroy]
       end
       resource :form, only: %i[show update], controller: :form
     end
