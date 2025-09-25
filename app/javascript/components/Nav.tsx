@@ -76,6 +76,7 @@ type Props = {
 
 export const Nav = ({ title, children, footer, compact }: Props) => {
   const [open, setOpen] = React.useState(false);
+  const handleClose = () => setOpen(false);
 
   return (
     <nav aria-label="Main" className={cx({ compact, open })}>
@@ -91,7 +92,7 @@ export const Nav = ({ title, children, footer, compact }: Props) => {
           <span className="logo-full">&nbsp;</span>
         </a>
       </header>
-      {children}
+      <div onClick={handleClose}>{children}</div>
       <footer>{footer}</footer>
     </nav>
   );
