@@ -384,11 +384,11 @@ describe Api::V2::SalesController do
       allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(1000_00)
     end
 
-    describe "when logged in with refund_sales scope" do
+    describe "when logged in with edit_sales scope" do
       before do
         @token = create("doorkeeper/access_token", application: @app,
                                                    resource_owner_id: @seller.id,
-                                                   scopes: "refund_sales")
+                                                   scopes: "edit_sales")
         @params.merge!(access_token: @token.token)
       end
 
@@ -595,6 +595,38 @@ describe Api::V2::SalesController do
       end
     end
 
+    describe "when logged in with refund_sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app,
+                                                   resource_owner_id: @seller.id,
+                                                   scopes: "refund_sales")
+        @params.merge!(access_token: @token.token)
+      end
+
+      context "when request for a full refund" do
+        it "refunds a sale fully" do
+          expect(@purchase.price_cents).to eq 100_00
+          expect(@purchase.refunded?).to be_falsey
+
+          put :refund, params: @params
+
+          @purchase.reload
+          expect(@purchase.refunded?).to be_truthy
+          expect(@purchase.refunds.last.refunding_user_id).to eq @product.user.id
+
+
+          expect(response.parsed_body["sale"]["refunded"]).to eq true
+          expect(response.parsed_body["sale"]["partially_refunded"]).to eq false
+          expect(response.parsed_body["sale"]["amount_refundable_in_currency"]).to eq "0"
+
+          expect(response.parsed_body).to eq({
+            success: true,
+            sale: @purchase.as_json(version: 2)
+          }.as_json)
+        end
+      end
+    end
+
     describe "when logged in with view_sales scope" do
       before do
         @token = create("doorkeeper/access_token", application: @app,
@@ -605,6 +637,58 @@ describe Api::V2::SalesController do
 
       it "the response is 403 forbidden for incorrect scope" do
         put :refund, params: @params
+        expect(response.code).to eq "403"
+      end
+    end
+  end
+
+  describe "POST 'resend_receipt'" do
+    before do
+      @sale = create(:purchase, seller: @seller, link: @product)
+      @params = { id: @sale.external_id }
+    end
+
+    describe "when logged in with edit_sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "edit_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "resends the receipt" do
+        post :resend_receipt, params: @params
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@sale.id).on("critical")
+      end
+
+      it "returns a not found error when sale does not exist" do
+        @params[:id] = "non-existent"
+        post :resend_receipt, params: @params
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("The sale was not found.")
+      end
+
+      it "returns a not found error when sale belongs to another user" do
+        other_user = create(:user)
+        other_product = create(:product, user: other_user)
+        other_sale = create(:purchase, seller: other_user, link: other_product)
+        @params[:id] = other_sale.external_id
+        post :resend_receipt, params: @params
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to eq("The sale was not found.")
+      end
+    end
+
+    describe "when logged in with incorrect scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "the response is 403 forbidden for incorrect scope" do
+        post :resend_receipt, params: @params
         expect(response.code).to eq "403"
       end
     end
