@@ -37,6 +37,7 @@ describe Checkout::UpsellsPresenter do
                      cross_sell: false,
                      replace_selected_products: false,
                      universal: false,
+                     paused: false,
                      discount: {
                        cents: 100,
                        product_ids: [product2.external_id],
@@ -73,6 +74,7 @@ describe Checkout::UpsellsPresenter do
                      cross_sell: true,
                      replace_selected_products: true,
                      universal: false,
+                     paused: false,
                      discount: nil,
                      product: {
                        id: product1.external_id,

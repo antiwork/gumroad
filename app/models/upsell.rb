@@ -47,6 +47,7 @@ class Upsell < ApplicationRecord
       universal:,
       text:,
       description:,
+      paused:,
       product: {
         id: product.external_id,
         name: product.name,
