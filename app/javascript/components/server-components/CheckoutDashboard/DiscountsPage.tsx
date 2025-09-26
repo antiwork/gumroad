@@ -359,7 +359,7 @@ const DiscountsPage = ({
                               style={{ marginRight: "var(--spacer-2)" }}
                               aria-label="Offer code"
                             >
-                              {offerCode.code.toUpperCase()}
+                              {offerCode.code}
                             </div>
                             <b>{offerCode.name}</b>
                           </div>
@@ -484,14 +484,14 @@ const DiscountsPage = ({
         {selectedOfferCode ? (
           <aside>
             <header>
-              <h2>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</h2>
+              <h2>{selectedOfferCode.name || selectedOfferCode.code}</h2>
               <button className="close" aria-label="Close" onClick={() => setSelectedOfferCodeId(null)} />
             </header>
             <section className="stack">
               <h3>Details</h3>
               <div>
                 <h5>Code</h5>
-                <div className="pill small">{selectedOfferCode.code.toUpperCase()}</div>
+                <div className="pill small">{selectedOfferCode.code}</div>
               </div>
               <div>
                 <h5>Discount</h5>

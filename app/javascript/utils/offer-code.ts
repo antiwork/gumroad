@@ -11,7 +11,6 @@ export function applyOfferCodeToCents(offerCode: null | OfferCode, amountCents: 
 }
 
 export function sanitizeOfferCode(value: string): string {
-  const upperValue = value.toUpperCase();
-  // Only allow letters, numbers, dashes, and underscores
-  return upperValue.replace(/[^A-Z0-9\-_]/gu, "");
+  // Only allow letters, numbers, dashes, and underscores (preserve case)
+  return value.replace(/[^A-Za-z0-9\-_]/gu, "");
 }
