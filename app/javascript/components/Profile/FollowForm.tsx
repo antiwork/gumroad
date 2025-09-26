@@ -74,9 +74,9 @@ export const FollowForm = ({
 };
 
 export const FollowFormBlock = ({ creatorProfile }: { creatorProfile: CreatorProfile }) => (
-  <div style={{ display: "grid", gap: "var(--spacer-8)", alignContent: "center", flexGrow: 1 }}>
+  <div className="flex grow flex-col justify-center gap-16 px-4 lg:px-0">
     <h1>Subscribe to receive email updates from {creatorProfile.name}.</h1>
-    <div style={{ maxWidth: "500px" }}>
+    <div className="max-w-lg">
       <FollowForm creatorProfile={creatorProfile} buttonColor="primary" />
     </div>
   </div>

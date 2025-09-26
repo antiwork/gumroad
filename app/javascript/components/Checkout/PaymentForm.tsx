@@ -54,6 +54,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PriceInput } from "$app/components/PriceInput";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Tabs } from "$app/components/ui/Tabs";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
@@ -1199,13 +1200,17 @@ export const PaymentForm = ({
     }
 
     if (state.status.type === "captcha") {
-      recaptcha
-        .execute()
-        .then((recaptchaResponse) => dispatch({ type: "set-recaptcha-response", recaptchaResponse }))
-        .catch((e: unknown) => {
-          assert(e instanceof RecaptchaCancelledError);
-          dispatch({ type: "cancel" });
-        });
+      if ((process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && state.recaptchaKey === null) {
+        dispatch({ type: "set-recaptcha-response" });
+      } else {
+        recaptcha
+          .execute()
+          .then((recaptchaResponse) => dispatch({ type: "set-recaptcha-response", recaptchaResponse }))
+          .catch((e: unknown) => {
+            assert(e instanceof RecaptchaCancelledError);
+            dispatch({ type: "cancel" });
+          });
+      }
     }
   }, [state.status.type]);
 
@@ -1231,11 +1236,11 @@ export const PaymentForm = ({
             <div className="paragraphs">
               <h4>Pay with</h4>
               {state.availablePaymentMethods.length > 1 ? (
-                <div role="tablist" className="tab-buttons small">
+                <Tabs>
                   {state.availablePaymentMethods.map((method) => (
                     <React.Fragment key={method.type}>{method.button}</React.Fragment>
                   ))}
-                </div>
+                </Tabs>
               ) : null}
             </div>
           </div>

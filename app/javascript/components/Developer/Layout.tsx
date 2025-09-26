@@ -1,5 +1,8 @@
 import * as React from "react";
 
+import { PageHeader } from "$app/components/ui/PageHeader";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
+
 const pageNames = {
   widgets: "Widgets",
   ping: "Ping",
@@ -13,17 +16,16 @@ export const Layout = ({
   currentPage: keyof typeof pageNames;
   children?: React.ReactNode;
 }) => (
-  <main>
-    <header>
-      <h1>{pageNames[currentPage]}</h1>
-      <div role="tablist">
+  <div>
+    <PageHeader title={pageNames[currentPage]}>
+      <Tabs>
         {Object.entries(pageNames).map(([page, name]) => (
-          <a role="tab" aria-selected={page === currentPage} href={Routes[`${page}_path`]()} key={page}>
+          <Tab key={page} isSelected={page === currentPage} href={Routes[`${page}_path`]()}>
             {name}
-          </a>
+          </Tab>
         ))}
-      </div>
-    </header>
+      </Tabs>
+    </PageHeader>
     {children}
-  </main>
+  </div>
 );

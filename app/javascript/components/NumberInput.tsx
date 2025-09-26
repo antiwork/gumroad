@@ -4,6 +4,7 @@ type Props = {
   children: (inputValueProps: {
     onChange: (evt: React.ChangeEvent<HTMLInputElement>) => void;
     value: string;
+    inputMode: "numeric" | "decimal";
   }) => React.ReactElement;
   onChange: (newValue: null | number) => void;
   value: null | number;
@@ -18,4 +19,5 @@ export const NumberInput = ({ children, onChange, value, decimal }: Props) =>
       onChange(value);
     },
     value: value != null ? value.toFixed(0) : "",
+    inputMode: decimal ? "decimal" : "numeric",
   });

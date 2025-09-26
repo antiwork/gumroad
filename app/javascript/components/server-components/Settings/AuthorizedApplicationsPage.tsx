@@ -30,6 +30,7 @@ type Scope =
   | "ifttt"
   | "mark_sales_as_shipped"
   | "refund_sales"
+  | "edit_sales"
   | "unfurl"
   | "view_profile"
   | "view_public"
@@ -44,6 +45,7 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   ifttt: "See your sales data.",
   mark_sales_as_shipped: "Mark your sales as shipped.",
   refund_sales: "Refund your sales.",
+  edit_sales: "Refund your sales and resend purchase receipts to customers.",
   unfurl: "Fetch public information of any product to preview it in Notion.",
   view_profile: "See your profile data.",
   view_public: "See your public information (name, Facebook profile, bio, Twitter handle).",
@@ -92,7 +94,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
   return (
     <Layout currentPage="authorized_applications" pages={props.settings_pages}>
       {applications.length > 0 ? (
-        <section>
+        <section className="!p-4 md:!p-8">
           <table>
             <caption>You've authorized the following applications to use your Gumroad account.</caption>
             <tbody>
@@ -174,7 +176,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
           ) : null}
         </section>
       ) : (
-        <div>
+        <div className="p-4 md:p-8">
           <div className="placeholder">
             <h3>Your account doesn't have any authorized applications.</h3>
             <p>Applications authorized to access your Gumroad account on your behalf will appear here.</p>

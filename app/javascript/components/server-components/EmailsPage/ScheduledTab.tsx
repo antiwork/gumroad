@@ -124,12 +124,12 @@ export const ScheduledTab = () => {
   };
 
   return (
-    <Layout selectedTab="scheduled">
-      <div>
+    <Layout selectedTab="scheduled" hasPosts={!!data?.installments.length}>
+      <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
             {Object.keys(installmentsByDate).map((date) => (
-              <table key={date} style={{ marginBottom: "var(--spacer-8)" }} aria-live="polite" aria-busy={isLoading}>
+              <table key={date} className="mb-16" aria-live="polite" aria-busy={isLoading}>
                 <caption>Scheduled for {date}</caption>
                 <thead>
                   <tr>
@@ -151,11 +151,11 @@ export const ScheduledTab = () => {
                       <td
                         data-label="Audience"
                         aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
-                        style={{ whiteSpace: "nowrap" }}
+                        className="whitespace-nowrap"
                       >
                         {audienceCountValue(audienceCounts, installment.external_id)}
                       </td>
-                      <td data-label="Delivery Time" style={{ whiteSpace: "nowrap" }}>
+                      <td data-label="Delivery Time" className="whitespace-nowrap">
                         {new Date(installment.to_be_published_at).toLocaleTimeString(userAgentInfo.locale, {
                           hour: "numeric",
                           minute: "numeric",
@@ -173,7 +173,7 @@ export const ScheduledTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <aside>
+              <aside className="!mt-0">
                 <header>
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
@@ -199,7 +199,7 @@ export const ScheduledTab = () => {
                     })}
                   </div>
                 </div>
-                <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
+                <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
                   {selectedInstallment.shown_on_profile ? (
                     <NavigationButton href={selectedInstallment.full_url} target="_blank" rel="noopener noreferrer">
@@ -208,7 +208,7 @@ export const ScheduledTab = () => {
                     </NavigationButton>
                   ) : null}
                 </div>
-                <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
+                <div className="grid grid-flow-col gap-4">
                   <NewEmailButton copyFrom={selectedInstallment.external_id} />
                   <EditEmailButton id={selectedInstallment.external_id} />
                   <Button

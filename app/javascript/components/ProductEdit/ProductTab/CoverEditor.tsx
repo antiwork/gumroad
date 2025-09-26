@@ -49,7 +49,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
@@ -272,6 +272,7 @@ const CoverTab = ({
   return (
     <Button
       onClick={onClick}
+      className="relative"
       style={{ cursor: "move", padding: hasThumbnail ? "unset" : undefined }}
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}

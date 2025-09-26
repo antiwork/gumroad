@@ -57,16 +57,21 @@ export type Section =
 export const PostsView = ({ posts }: { posts: Post[] }) => {
   const userAgentInfo = useUserAgentInfo();
   return (
-    <div className="big-links">
+    <>
       {posts.map((post) => (
-        <a key={post.slug} href={Routes.custom_domain_view_post_path(post.slug)}>
+        <a
+          key={post.slug}
+          href={Routes.custom_domain_view_post_path(post.slug)}
+          className="flex justify-between gap-4 border-b border-border py-8 no-underline first:pt-0 last:border-b-0 last:pb-0"
+        >
           <div>
             <h2>{post.name}</h2>
             <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
           </div>
+          <Icon name="arrow-diagonal-up-right" className="text-lg" />
         </a>
       ))}
-    </div>
+    </>
   );
 };
 
@@ -180,7 +185,7 @@ const PostsSectionView = ({ section }: { section: PostsSection }) => <PostsView 
 
 const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
   const editor = useRichTextEditor({ initialValue: section.text, editable: false });
-  return <EditorContent editor={editor} className="rich-text" />;
+  return <EditorContent editor={editor} className="rich-text -mb-4" />;
 };
 
 const SubscribeSectionView = ({
@@ -198,7 +203,7 @@ export type PageProps = {
 };
 
 export const Section = ({ section, creator_profile, currency_code }: { section: Section } & PageProps) => (
-  <section id={section.id}>
+  <section id={section.id} className="border-b border-border px-4 py-8 lg:py-16">
     {section.header ? <h2>{section.header}</h2> : null}
     {section.type === "SellerProfileProductsSection" ? (
       <ProductsSectionView section={section} creatorProfile={creator_profile} currencyCode={currency_code} />

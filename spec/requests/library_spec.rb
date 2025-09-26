@@ -379,7 +379,7 @@ describe("Library Scenario", type: :system, js: true) do
       expect_to_show_purchases_in_order([another_b, another_a, @j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
     end
 
-    it "limits the creator filter list to 5 with a load more" do
+    it "limits the creator filter list to 5 with a show more" do
       creator_2 = create(:named_user, name: "User 2")
       create(:purchase, link: create(:product, user: creator_2), purchaser: @user)
       create(:purchase, link: create(:product, user: creator_2), purchaser: @user)
@@ -415,9 +415,9 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_selector("label", text: creator_5.name)
       expect(page).to_not have_selector("label", text: creator_6.name)
 
-      find(".creator").click_on("Load more...")
+      find(".creator").click_on("Show more")
       expect(page).to have_selector("label", text: creator_6.name)
-      expect(find(".creator")).to_not have_text("Load more...")
+      expect(find(".creator")).to_not have_text("Show more")
     end
 
     it "sort the creator list by number of products" do

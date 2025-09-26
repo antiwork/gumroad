@@ -622,15 +622,16 @@ describe CustomerMailer do
 
       before do
         purchase.create_purchase_refund_policy!(
-          title: "Refund policy",
-          fine_print: "This is the fine print."
+          title: ProductRefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[30],
+          max_refund_period_in_days: 30,
+          fine_print: "This is the fine print.",
         )
       end
 
       it "includes the refund policy" do
         mail = CustomerMailer.receipt(purchase.id)
 
-        expect(mail.body.sanitized).to include("Refund policy")
+        expect(mail.body.sanitized).to include("30-day money back guarantee")
         expect(mail.body.sanitized).to include("This is the fine print.")
       end
     end

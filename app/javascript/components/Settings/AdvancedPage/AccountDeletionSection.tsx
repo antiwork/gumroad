@@ -8,7 +8,7 @@ import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type Props = {
-  formatted_balance_to_forfeit: string | null;
+  formatted_balance_to_forfeit_on_account_deletion: string | null;
 };
 
 const AccountDeletionSection = (props: Props) => {
@@ -32,7 +32,7 @@ const AccountDeletionSection = (props: Props) => {
   };
 
   return (
-    <section>
+    <section className="!p-4 md:!p-8">
       <header>
         <h2>Danger Zone</h2>
       </header>
@@ -58,14 +58,16 @@ const AccountDeletionSection = (props: Props) => {
           <>
             <Button onClick={() => setShowConfirmationModal(false)}>Cancel</Button>
             <Button color="danger" onClick={() => void performAccountDeletion()}>
-              {props.formatted_balance_to_forfeit ? "Yes, forfeit balance and delete" : "Yes, delete my account"}
+              {props.formatted_balance_to_forfeit_on_account_deletion
+                ? "Yes, forfeit balance and delete"
+                : "Yes, delete my account"}
             </Button>
           </>
         }
       >
         <p>
-          {props.formatted_balance_to_forfeit
-            ? `You have a balance of ${props.formatted_balance_to_forfeit}. To delete your account, you will need to forfeit your balance. `
+          {props.formatted_balance_to_forfeit_on_account_deletion
+            ? `You have a balance of ${props.formatted_balance_to_forfeit_on_account_deletion}. To delete your account, you will need to forfeit your balance. `
             : null}
           <span>
             Deleting your account will permanently delete all of your products and product files, as well as any credit

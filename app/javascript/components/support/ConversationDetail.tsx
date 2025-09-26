@@ -110,15 +110,15 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
   if (error || !conversation) return <div>Something went wrong.</div>;
 
   return (
-    <main>
-      <header className="!gap-0">
+    <div>
+      <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
           <Icon name="arrow-left" /> Go back to Support tickets
         </a>
-        <h1>{conversation.subject}</h1>
+        <h1 className="text-2xl">{conversation.subject}</h1>
       </header>
 
-      <div>
+      <div className="p-4 md:p-8">
         <div role="list" className="rows mb-12 overflow-hidden" aria-label="Messages">
           {conversation.messages.map((message, index) => (
             <MessageListItem
@@ -187,6 +187,6 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
           </div>
         </form>
       </div>
-    </main>
+    </div>
   );
 }

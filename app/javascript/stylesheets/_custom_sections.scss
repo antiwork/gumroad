@@ -85,4 +85,11 @@
       padding-top: 5rem;
     }
   }
+
+  &.product > * {
+    @media (min-width: 1024px) {
+      padding-left: $body-padding-desktop-center;
+      padding-right: $body-padding-desktop-center;
+    }
+  }
 }
