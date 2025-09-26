@@ -184,7 +184,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   end
 
   it "allows creating and deleting an upsell with variants in the product description" do
-    product = create(:product_with_digital_versions, user: seller, name: "Sample product", price_cents: 1000)
+    product = create(:product_with_digital_versions_with_price_difference_cents, user: seller, name: "Sample product", price_cents: 1000)
     variant1 = product.alive_variants.first
     variant2 = product.alive_variants.last
     create(:purchase, :with_review, link: product)
@@ -226,13 +226,22 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
     check "Add a discount to the offered product"
     choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
+    discount_amount_cents = 100
+    discount_amount = discount_amount_cents / 100.0
+    fill_in "Fixed amount", with: discount_amount
     click_on "Insert"
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_selector("span", text: "(#{variant1.name})")
       expect(page).to have_text("5.0 (1)", normalize_ws: true)
-      expect(page).to have_text("$10 $9")
+
+      price_cents = variant1.price_difference_cents + product.price_cents
+      price = price_cents / 100
+
+      discounted_price = price_cents - discount_amount_cents
+      discounted_price = discounted_price / 100
+
+      expect(page).to have_text("$#{price} $#{discounted_price}")
     end
 
     click_on "Save"

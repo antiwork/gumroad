@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Integrations::CircleIntegrationService do
+describe Integrations::CircleIntegrationService, :without_circle_rate_limit do
   let(:community_id) { 3512 }
   let(:space_group_id) { 43576 }
   let(:email) { "test_circle_integration@gumroad.com" }

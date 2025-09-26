@@ -4,6 +4,10 @@ dialog {
   box-shadow: box-shadow(2);
   border-radius: border-radius(1);
   padding: spacer(6);
+
+  @media (prefers-color-scheme: dark) {
+    box-shadow: none;
+  }
   // cannot use display: grid here because safari
   display: flex;
   flex-direction: column;
