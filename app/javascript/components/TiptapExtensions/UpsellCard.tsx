@@ -185,7 +185,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
                   <UpsellCardHeader product={product} variant={variant} />
                 </a>
               )}
-              <footer style={{ fontSize: "1rem" }}>
+              <footer className="text-base">
                 {product.review_count > 0 ? (
                   <div className="rating">
                     <Icon name="solid-star" />
