@@ -141,7 +141,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         </Button>
       </CommentTextarea>
       {nestedComments.length > 0 ? <hr /> : null}
-      <div className="override grid gap-5">
+      <div className="override grid gap-6">
         {nestedComments.map((comment) => (
           <CommentContainer
             key={comment.id}

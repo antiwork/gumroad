@@ -1087,7 +1087,7 @@ export const EmailForm = () => {
           </div>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <EvaporateUploaderProvider value={evaporateUploader}>
-              <div className="override grid gap-5">
+              <div className="override grid gap-6">
                 <fieldset className={cx({ danger: invalidFields.has("title") })}>
                   <input
                     ref={titleRef}
