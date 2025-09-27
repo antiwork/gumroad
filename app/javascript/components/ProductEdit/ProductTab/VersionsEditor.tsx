@@ -146,7 +146,7 @@ const VersionEditor = ({
         </WithTooltip>
       </div>
       {isOpen ? (
-        <Drawer className="grid gap-5">
+        <Drawer className="override grid gap-5">
           <fieldset>
             <label htmlFor={`${uid}-name`}>Name</label>
             <div className="input">

@@ -351,7 +351,7 @@ const DiscountsPage = ({
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
                       <td>
-                        <div className="grid gap-2">
+                        <div className="override grid gap-2">
                           <div>
                             <div className="pill small mr-2" aria-label="Offer code">
                               {offerCode.code.toUpperCase()}

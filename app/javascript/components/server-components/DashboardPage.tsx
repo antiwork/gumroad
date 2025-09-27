@@ -211,7 +211,7 @@ const ProductsTable = ({ sales }: TableProps) => {
 
   if (sales.every((b) => b.sales === 0)) {
     return (
-      <div className="grid gap-4">
+      <div className="override grid gap-4">
         <h2>Best selling</h2>
         <div className="placeholder">
           <p>
