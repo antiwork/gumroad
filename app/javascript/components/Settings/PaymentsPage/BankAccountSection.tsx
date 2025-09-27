@@ -922,7 +922,7 @@ const BankAccountSection = ({
   return (
     <>
       <div className="whitespace-pre-line">{feeInfoText}</div>
-      <section className="grid gap-6">
+      <section className="grid gap-8">
         <fieldset className={cx({ danger: errorFieldNames.has("account_holder_full_name") })}>
           <legend>
             <label htmlFor={`${uid}-account-holder-full-name`}>Pay to the order of</label>
