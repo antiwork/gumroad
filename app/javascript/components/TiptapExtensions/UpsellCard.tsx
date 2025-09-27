@@ -170,7 +170,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         data-drag-handle
       >
         {isLoading ? (
-          <div className="dummy" style={{ height: "8rem" }}></div>
+          <div className="dummy h-32"></div>
         ) : product ? (
           <article className="product-card horizontal">
             <figure>
