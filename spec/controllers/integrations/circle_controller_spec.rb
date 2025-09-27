@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 
-describe Integrations::CircleController, :vcr do
+describe Integrations::CircleController, :vcr, :without_circle_rate_limit do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:communities_list) do [

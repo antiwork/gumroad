@@ -44,8 +44,23 @@ type ProductOption = {
   name: string;
   description: string;
   duration_in_minutes: number | null;
+  price_difference_cents: number;
   is_pwyw: boolean;
 };
+
+type UpsellCardHeaderProps = {
+  product: Product;
+  variant: ProductOption | null;
+};
+
+const UpsellCardHeader = ({ product, variant }: UpsellCardHeaderProps) => (
+  <header>
+    <h3>
+      {product.name}
+      {variant ? <span className="text-muted ml-2">({variant.name})</span> : null}
+    </h3>
+  </header>
+);
 
 export const UpsellCard = TiptapNode.create({
   name: "upsellCard",
@@ -135,14 +150,10 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
     void fetchProduct();
   });
 
-  const header = (
-    <header>
-      <h3>
-        {product?.name}
-        {variant ? <span className="text-muted ml-2">({variant.name})</span> : null}
-      </h3>
-    </header>
-  );
+  const variantPrice = variant ? variant.price_difference_cents : 0;
+  const productPrice = product ? product.price_cents + variantPrice : 0;
+  const oldPrice = discount ? productPrice : undefined;
+  const price = discount ? applyOfferCodeToCents(discount, productPrice) : productPrice;
 
   return (
     <NodeViewWrapper>
@@ -168,10 +179,10 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
 
             <section>
               {isEditable ? (
-                header
+                <UpsellCardHeader product={product} variant={variant} />
               ) : (
                 <a href={getUpsellUrl(id ?? "", product.permalink)} className="stretched-link">
-                  {header}
+                  <UpsellCardHeader product={product} variant={variant} />
                 </a>
               )}
               <footer style={{ fontSize: "1rem" }}>
@@ -187,8 +198,8 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
                 <div>
                   <PriceTag
                     currencyCode={product.currency_code}
-                    oldPrice={discount ? product.price_cents : undefined}
-                    price={discount ? applyOfferCodeToCents(discount, product.price_cents) : product.price_cents}
+                    oldPrice={oldPrice}
+                    price={price}
                     isPayWhatYouWant={false}
                     isSalesLimited={false}
                   />

@@ -234,7 +234,7 @@ export const Layout = ({
                   <Icon name="link" />
                 </Button>
               </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL">
+              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
                 <Button>
                   <Icon name="cart-plus" />
                 </Button>

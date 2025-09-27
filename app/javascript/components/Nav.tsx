@@ -11,6 +11,14 @@ import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
+type NavContextValue = {
+  close: () => void;
+};
+
+const NavContext = React.createContext<NavContextValue | undefined>(undefined);
+
+export const useNav = () => React.useContext(NavContext);
+
 export const NavLink = ({
   text,
   icon,
@@ -76,24 +84,29 @@ type Props = {
 
 export const Nav = ({ title, children, footer, compact }: Props) => {
   const [open, setOpen] = React.useState(false);
+  const close = React.useCallback((): void => setOpen(false), []);
+  const toggle = React.useCallback((): void => setOpen((prev) => !prev), []);
+  const contextValue = React.useMemo<NavContextValue>(() => ({ close }), [close]);
 
   return (
-    <nav aria-label="Main" className={cx({ compact, open })}>
-      <div className="navbar">
-        <a href={Routes.root_url()}>
-          <span className="logo-g">&nbsp;</span>
-        </a>
-        <h1>{title}</h1>
-        <button className="toggle" onClick={() => setOpen(!open)} />
-      </div>
-      <header>
-        <a href={Routes.root_url()} aria-label="Dashboard">
-          <span className="logo-full">&nbsp;</span>
-        </a>
-      </header>
-      {children}
-      <footer>{footer}</footer>
-    </nav>
+    <NavContext.Provider value={contextValue}>
+      <nav aria-label="Main" className={cx({ compact, open })}>
+        <div className="navbar">
+          <a href={Routes.root_url()}>
+            <span className="logo-g">&nbsp;</span>
+          </a>
+          <h1>{title}</h1>
+          <button className="toggle" aria-label="Toggle navigation" onClick={toggle} />
+        </div>
+        <header>
+          <a href={Routes.root_url()} aria-label="Dashboard">
+            <span className="logo-full">&nbsp;</span>
+          </a>
+        </header>
+        {children}
+        <footer>{footer}</footer>
+      </nav>
+    </NavContext.Provider>
   );
 };
 

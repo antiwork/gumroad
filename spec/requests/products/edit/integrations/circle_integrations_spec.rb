@@ -3,7 +3,7 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 
-describe("Product Edit Integrations edit - Circle", type: :system, js: true) do
+describe("Product Edit Integrations edit - Circle", :without_circle_rate_limit, type: :system, js: true) do
   include ProductTieredPricingHelpers
   include ProductEditPageHelpers
 

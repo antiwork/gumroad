@@ -115,12 +115,7 @@ export const DraftsTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <table
-              aria-label="Drafts"
-              style={{ marginBottom: "var(--spacer-4)" }}
-              aria-live="polite"
-              aria-busy={isLoading}
-            >
+            <table aria-label="Drafts" className="mb-4" aria-live="polite" aria-busy={isLoading}>
               <thead>
                 <tr>
                   <th>Subject</th>
@@ -141,11 +136,11 @@ export const DraftsTab = () => {
                     <td
                       data-label="Audience"
                       aria-busy={audienceCountValue(audienceCounts, installment.external_id) === null}
-                      style={{ whiteSpace: "nowrap" }}
+                      className="whitespace-nowrap"
                     >
                       {audienceCountValue(audienceCounts, installment.external_id)}
                     </td>
-                    <td data-label="Last edited" style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="Last edited" className="whitespace-nowrap">
                       {formatDistanceToNow(installment.updated_at)} ago
                     </td>
                   </tr>
@@ -184,7 +179,7 @@ export const DraftsTab = () => {
                     })}
                   </div>
                 </div>
-                <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
+                <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
                   {selectedInstallment.shown_on_profile ? (
                     <NavigationButton href={selectedInstallment.full_url} target="_blank" rel="noopener noreferrer">
@@ -193,7 +188,7 @@ export const DraftsTab = () => {
                     </NavigationButton>
                   ) : null}
                 </div>
-                <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
+                <div className="grid grid-flow-col gap-4">
                   <NewEmailButton copyFrom={selectedInstallment.external_id} />
                   <EditEmailButton id={selectedInstallment.external_id} />
                   <Button

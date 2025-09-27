@@ -1,4 +1,5 @@
 import { enableMapSet, produce } from "immer";
+import groupBy from "lodash/groupBy";
 import * as React from "react";
 
 import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge";
@@ -139,7 +140,7 @@ export function requiresPayment(state: State) {
 
 export function requiresReusablePaymentMethod(state: State) {
   return (
-    [...new Set(state.products.map((product) => product.creator.id))].length > 1 ||
+    new Set(state.products.map((product) => product.creator.id)).size > 1 ||
     !!state.products[0]?.subscription_id ||
     state.products[0]?.nativeType === "commission"
   );
@@ -171,18 +172,29 @@ export function computeTip(state: State) {
   return Math.round((state.tip.percentage / 100) * getTotalPriceFromProducts(state));
 }
 
-export function computeTipForPrice(state: State, price: number) {
+export function computeTipForPrice(state: State, price: number, permalink: string | undefined = undefined) {
   if (!isTippingEnabled(state)) return null;
   if (state.tip.type === "fixed") {
     const totalPrice = getTotalPriceFromProducts(state);
     if (totalPrice === 0) {
-      return Math.round((state.tip.amount ?? 0) / state.products.length);
+      return computeTipForFreeCart(state, permalink);
     }
 
     return Math.round((state.tip.amount ?? 0) * (price / totalPrice));
   }
 
   return Math.round((state.tip.percentage / 100) * price);
+}
+
+function computeTipForFreeCart(state: State, permalink?: string): number {
+  if (state.tip.type !== "fixed" || !state.tip.amount) return 0;
+  // TODO (techdebt): Replace lodash `groupBy` with https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/groupBy
+  // when project upgrades to https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-7.html#support-for---target-es2024-and---lib-es2024
+  const creatorGroups = groupBy(state.products, (product) => product.creator.id);
+  if (Object.values(creatorGroups).some((products) => products[0]?.permalink === permalink)) {
+    return Math.round(state.tip.amount / Object.keys(creatorGroups).length);
+  }
+  return 0;
 }
 
 export function getTotalPrice(state: State) {
@@ -209,7 +221,10 @@ export const loadSurcharges = (state: State) => {
     products: state.products.map((item) => ({
       permalink: item.permalink,
       quantity: item.quantity,
-      price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + (computeTipForPrice(state, item.price) ?? 0)),
+      price:
+        item.hasFreeTrial && !isGift
+          ? 0
+          : Math.round(item.price + (computeTipForPrice(state, item.price, item.permalink) ?? 0)),
       subscription_id: item.subscription_id,
       recommended_by: item.recommended_by,
     })),

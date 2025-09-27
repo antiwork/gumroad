@@ -5246,7 +5246,7 @@ describe Link, :vcr do
   describe ".eligible_for_content_upsells" do
     let!(:regular_product) { create(:product_with_file_and_preview) }
     let!(:membership_product) { create(:membership_product) }
-    let!(:product_with_variants) { create(:product_with_digital_versions) }
+    let!(:product_with_variants) { create(:product_with_digital_versions_with_price_difference_cents) }
     let!(:archived_product) { create(:product, archived: true) }
 
     it "returns visible non-membership products including those with variants" do

@@ -1058,7 +1058,7 @@ const AccountDetailsSection = ({
               <option disabled>Month</option>
               {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
                 <option key={month} value={month}>
-                  {month}
+                  {new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}
                 </option>
               ))}
             </select>

@@ -287,7 +287,9 @@ const CustomersPage = ({
               <div className="stack" style={{ width: "35rem" }}>
                 <div>
                   <ProductSelect
-                    products={products}
+                    products={products.filter(
+                      (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
+                    )}
                     label="Customers who bought"
                     items={includedItems}
                     setItems={setIncludedItems}
@@ -295,7 +297,9 @@ const CustomersPage = ({
                 </div>
                 <div>
                   <ProductSelect
-                    products={products}
+                    products={products.filter(
+                      (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
+                    )}
                     label="Customers who have not bought"
                     items={excludedItems}
                     setItems={setExcludedItems}
