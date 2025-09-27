@@ -195,7 +195,7 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
               <input id={`${uid}-accessToken`} readOnly type="text" value={token} />
             </fieldset>
           ) : null}
-          <div style={{ display: "flex", gap: "var(--spacer-2)" }}>
+          <div className="flex gap-2">
             <Button color="accent" onClick={handleSubmit} disabled={isSubmitting || isUploadingIcon}>
               <span>{isSubmitting ? "Updating..." : "Update application"}</span>
             </Button>

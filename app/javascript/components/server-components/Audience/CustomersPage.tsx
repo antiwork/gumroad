@@ -888,7 +888,7 @@ const CustomerDrawer = ({
         />
       ) : null}
       <section className="stack">
-        <h3 style={{ display: "flex", gap: "var(--spacer-1)" }}>
+        <h3 className="flex gap-1">
           Order information
           {!subscription && customer.transaction_url_for_seller ? (
             <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction">

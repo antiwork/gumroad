@@ -101,7 +101,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
               {applications.map((application) => (
                 <tr key={application.id}>
                   <td>
-                    <div style={{ display: "flex", gap: "var(--spacer-3)" }}>
+                    <div className="flex gap-3">
                       <div>
                         <img
                           src={application.icon_url || placeholderAppIcon}
