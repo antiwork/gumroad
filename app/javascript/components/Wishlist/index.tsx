@@ -121,6 +121,7 @@ const WishlistItemCard = ({
               <WithTooltip position="top" tip="Remove this product">
                 <button
                   disabled={isDeleting}
+                  aria-label="Remove this product"
                   onClick={() => void destroy()}
                   style={{ padding: "var(--spacer-4)", display: "grid" }}
                 >
@@ -279,6 +280,15 @@ export const Wishlist = ({
             />
           ))}
         </div>
+
+        {can_edit && items.length === 0 ? (
+          <div className="placeholder">
+            <figure>
+              <Icon name="gift-fill" />
+            </figure>
+            Products from your wishlist will be displayed here
+          </div>
+        ) : null}
 
         {isEditing ? (
           <WishlistEditor
