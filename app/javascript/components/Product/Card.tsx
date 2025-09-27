@@ -14,11 +14,13 @@ export const Card = ({
   badge,
   footerAction,
   eager,
+  quantity,
 }: {
   product: CardProduct;
   badge?: React.ReactNode;
   footerAction?: React.ReactNode;
   eager?: boolean | undefined;
+  quantity?: number;
 }) => (
   <article className="product-card">
     <figure>
@@ -26,7 +28,7 @@ export const Card = ({
     </figure>
     {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
     <header>
-      <a href={product.url} className="stretched-link">
+      <a href={product.url} className="stretched-link inline-block">
         <h4 itemProp="name">{product.name}</h4>
       </a>
       {product.seller ? (
@@ -37,12 +39,17 @@ export const Card = ({
         />
       ) : null}
       {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
+      {quantity && quantity > 1 ? (
+        <span className="quantity">
+          <strong>Qty:</strong> {quantity}
+        </span>
+      ) : null}
     </header>
     <footer>
       <PriceTag
         url={product.url}
         currencyCode={product.currency_code}
-        price={product.price_cents}
+        price={product.price_cents * (quantity ?? 1)}
         isPayWhatYouWant={product.is_pay_what_you_want}
         isSalesLimited={product.is_sales_limited}
         recurrence={

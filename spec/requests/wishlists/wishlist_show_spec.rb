@@ -269,6 +269,11 @@ describe "Wishlist show page", :js, type: :system do
     login_as wishlist.user
     refresh
 
+    within find_product_card(wishlist.wishlist_products.first.product) do
+      expect(page).to have_text("$20")
+      expect(page).to have_text("Qty: 2")
+    end
+
     click_button "Edit"
 
     within_section wishlist.name, section_element: :aside do

@@ -150,7 +150,8 @@ article {
     }
 
     .user,
-    .rating {
+    .rating,
+    .quantity {
       @include font-size(1);
     }
 

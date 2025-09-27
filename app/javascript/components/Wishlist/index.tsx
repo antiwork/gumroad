@@ -136,6 +136,7 @@ export const Wishlist = ({
             <Card
               key={item.id}
               product={{ ...item.product, name: formatName(item) }}
+              quantity={item.quantity}
               footerAction={
                 item.purchasable && item.giftable ? (
                   <div style={{ padding: 0, display: "grid" }}>
