@@ -560,7 +560,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         style={{ maxHeight: "20rem", overflow: "auto", textAlign: "initial" }}
                       >
                         {selectingExistingFiles.isLoading ? (
-                          <div className="flex justify-center" style={{ minHeight: "10rem" }}>
+                          <div className="flex min-h-40 justify-center">
                             <LoadingSpinner width="2rem" />
                           </div>
                         ) : (
