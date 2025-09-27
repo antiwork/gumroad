@@ -23,8 +23,8 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
               value={label ?? ""}
               placeholder="Title"
               onChange={(evt) => updateAttributes({ label: evt.target.value })}
+              className="border-0"
               style={{
-                border: "none",
                 background: "none",
                 padding: 0,
                 margin: 0,
