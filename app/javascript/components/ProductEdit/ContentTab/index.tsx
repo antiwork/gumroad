@@ -686,7 +686,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             e.stopPropagation();
                             setInsertMenuState("inputs");
                           }}
-                          style={{ display: "flex", alignItems: "center" }}
+                          className="flex items-center"
                         >
                           <span className="icon icon-input-cursor-text" />
                           <span>Input</span>
