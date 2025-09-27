@@ -28,7 +28,7 @@ export const Card = ({
     </figure>
     {product.quantity_remaining != null ? <div className="ribbon">{`${product.quantity_remaining} left`}</div> : null}
     <header>
-      <a href={product.url} className="stretched-link inline-block">
+      <a href={product.url} className="stretched-link">
         <h4 itemProp="name">{product.name}</h4>
       </a>
       {product.seller ? (
