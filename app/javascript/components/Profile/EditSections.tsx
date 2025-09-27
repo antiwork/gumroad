@@ -316,7 +316,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
   );
 
   return (
-    <div className="paragraphs" style={{ maxHeight: "min(100vh, 500px)", overflow: "auto" }}>
+    <div className="paragraphs overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
       <fieldset>
         <legend>
           <label htmlFor={`${uid}-defaultProductSort`}>Default sort order</label>

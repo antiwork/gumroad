@@ -555,9 +555,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         }
                       />
                       <div
-                        className="rows"
+                        className="rows overflow-auto"
                         role="listbox"
-                        style={{ maxHeight: "20rem", overflow: "auto", textAlign: "initial" }}
+                        style={{ maxHeight: "20rem", textAlign: "initial" }}
                       >
                         {selectingExistingFiles.isLoading ? (
                           <div style={{ display: "flex", justifyContent: "center", minHeight: "10rem" }}>
