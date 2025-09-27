@@ -2562,7 +2562,7 @@ const CommissionSection = ({
         <h3>Files</h3>
       </header>
       <section>
-        <section style={{ display: "grid", gap: "var(--spacer-2)" }}>
+        <section className="grid gap-2">
           {commission.files.length ? (
             <div role="tree">
               {commission.files.map((file) => (

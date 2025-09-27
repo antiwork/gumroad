@@ -115,7 +115,7 @@ const ReviewsPage = ({
                           prevPurchases.filter((prevPurchase) => prevPurchase.id !== purchase.id),
                         );
                       }}
-                      style={{ display: "grid", gap: "var(--spacer-4)" }}
+                      className="grid gap-4"
                       ref={(el) => (inputRefs.current[purchase.id] = el)}
                     />
                   </section>

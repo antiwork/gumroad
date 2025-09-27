@@ -141,7 +141,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         </Button>
       </CommentTextarea>
       {nestedComments.length > 0 ? <hr /> : null}
-      <div style={{ display: "grid", gap: "var(--spacer-5)" }}>
+      <div className="grid gap-5">
         {nestedComments.map((comment) => (
           <CommentContainer
             key={comment.id}
@@ -250,7 +250,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
             {comment.is_editable || comment.is_deletable ? (
               <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
                 {(close) => (
-                  <div style={{ display: "grid", gap: "var(--spacer-3)" }} onClick={close}>
+                  <div className="grid gap-3" onClick={close}>
                     {comment.is_editable ? (
                       <Button onClick={() => setEditDraft(comment.content.original)}>Edit</Button>
                     ) : null}

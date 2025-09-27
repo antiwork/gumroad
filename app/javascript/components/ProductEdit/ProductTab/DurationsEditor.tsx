@@ -139,7 +139,7 @@ const DurationEditor = ({
         </WithTooltip>
       </div>
       {isOpen ? (
-        <Drawer style={{ display: "grid", gap: "var(--spacer-5)" }}>
+        <Drawer className="grid gap-5">
           <fieldset>
             <legend>
               <label htmlFor={`${uid}-duration`}>Duration</label>

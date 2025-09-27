@@ -28,7 +28,7 @@ const PayPalEmailSection = ({
 }) => {
   const uid = React.useId();
   return (
-    <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+    <section className="grid gap-6">
       {showPayPalPayoutsFeeNote ? (
         <div className="info" role="status">
           PayPal payouts are subject to a 2% processing fee.

@@ -437,7 +437,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
             <form
               autoComplete="off"
               onSubmit={handleSignupAndAddPurchaseToLibrary}
-              style={{ display: "grid", gap: "var(--spacer-4)" }}
+              className="grid gap-4"
             >
               <fieldset>
                 <input

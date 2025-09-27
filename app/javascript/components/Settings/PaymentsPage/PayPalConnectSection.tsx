@@ -92,7 +92,7 @@ const PayPalConnectSection = ({
         ) : paypalConnect.charge_processor_verified ? (
           <>
             <p>{connectAccountFeeInfoText}</p>
-            <div style={{ display: "grid", gap: "var(--spacer-6)" }}>
+            <div className="grid gap-6">
               <fieldset>
                 <legend>
                   <label>PayPal account</label>

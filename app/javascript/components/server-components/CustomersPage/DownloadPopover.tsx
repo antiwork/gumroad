@@ -31,7 +31,7 @@ export const DownloadPopover = ({ authenticityToken }: Props) => {
         action={Routes.export_purchases_path({ format: "csv" })}
         acceptCharset="UTF-8"
         method="post"
-        style={{ display: "grid", gap: "var(--spacer-3)" }}
+        className="grid gap-3"
       >
         <input type="hidden" name="utf8" value="✓" />
         <input type="hidden" name="authenticity_token" value={authenticityToken} />

@@ -53,7 +53,7 @@ const StripeConnectSection = ({
 
   return (
     <section>
-      <div style={{ display: "grid", gap: "var(--spacer-6)" }}>
+      <div className="grid gap-6">
         <div className="paragraphs">
           <div
             dangerouslySetInnerHTML={{
@@ -63,7 +63,7 @@ const StripeConnectSection = ({
           ></div>
         </div>
         {stripeConnect.has_connected_stripe ? (
-          <div style={{ display: "grid", gap: "var(--spacer-6)" }}>
+          <div className="grid gap-6">
             <fieldset>
               <legend>
                 <label>Stripe account</label>

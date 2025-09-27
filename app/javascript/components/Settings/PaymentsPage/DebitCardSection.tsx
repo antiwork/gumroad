@@ -20,7 +20,7 @@ const DebitCardSection = ({
 }) => (
   <>
     <div className="whitespace-pre-line">{feeInfoText}</div>
-    <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+    <section className="grid gap-6">
       <PayoutCreditCard saved_card={savedCard} is_form_disabled={isFormDisabled} setDebitCard={setDebitCard} />
     </section>
     {hasConnectedStripe ? (

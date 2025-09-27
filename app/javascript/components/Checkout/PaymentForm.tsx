@@ -236,7 +236,7 @@ const EmailAddress = () => {
             />
 
             {state.emailTypoSuggestion ? (
-              <div className="dropdown" style={{ display: "grid", gap: "var(--spacer-2)" }}>
+              <div className="dropdown grid gap-2">
                 <div>Did you mean {state.emailTypoSuggestion}?</div>
 
                 <div className="button-group">
