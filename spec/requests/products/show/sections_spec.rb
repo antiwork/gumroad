@@ -7,8 +7,10 @@ describe "Profile settings on product pages", type: :system, js: true do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
 
-  it "renders sections correctly when the user is logged out", :elasticsearch_wait_for_refresh do
+  it "renders sections correctly when the user is logged out" do
     products = create_list(:product, 3, user: seller)
+    Link.import(refresh: true, force: true)
+
     create(:seller_profile_products_section, seller:)
     section1 = create(:seller_profile_products_section, seller:, product:, header: "Section 1", shown_products: products.map(&:id))
 

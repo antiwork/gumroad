@@ -154,6 +154,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 4")
         expect(page).to have_nth_table_row_record(3, "Customer 5")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 6")
         toggle_disclosure "Filter"
         click_on "Clear value"
@@ -172,6 +173,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 4")
         expect(page).to have_nth_table_row_record(3, "Customer 5")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 6")
         toggle_disclosure "Filter"
         fill_in "Paid less than", with: ""
@@ -182,6 +184,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(2, "Customer 2")
         expect(page).to have_nth_table_row_record(3, "Customer 3")
         click_on "2"
+        expect(page).to have_selector("[aria-current='page']", text: "2")
         expect(page).to have_nth_table_row_record(1, "Customer 4")
         expect(page).to have_nth_table_row_record(2, "Customer 5")
         expect(page).to have_nth_table_row_record(3, "Customer 6")
@@ -204,6 +207,39 @@ describe "Sales page", type: :system, js: true do
         expect(page).to_not have_button("3")
         uncheck "Show active customers only"
         expect(page).to have_button("3")
+      end
+
+      it "prevents selecting the same product in both bought and not bought filters" do
+        login_as seller
+        visit customers_path
+
+        toggle_disclosure "Filter"
+
+        select_combo_box_option search: "Product 1", from: "Customers who bought"
+
+        # product 1 should not be an option in the not bought (as it is already selected in the bought)
+        within_fieldset "Customers who have not bought" do
+          find("input", visible: :all).send_keys("Product 1")
+        end
+        expect(page).to have_no_selector("[role='option']", text: "Product 1")
+
+        expect(page).to have_nth_table_row_record(1, "Customer 1")
+        expect(page).to have_nth_table_row_record(2, "Customer 4")
+
+        within_fieldset "Customers who bought" do
+          click_on "Clear value"
+        end
+
+        select_combo_box_option search: "Product 1", from: "Customers who have not bought"
+
+        # product 1 should not be an option in the bought (as it is already selected in the not bought)
+        within_fieldset "Customers who bought" do
+          find("input", visible: :all).send_keys("Product 1")
+        end
+        expect(page).to have_no_selector("[role='option']", text: "Product 1")
+
+        expect(page).to have_nth_table_row_record(1, "Customer 2")
+        expect(page).to have_nth_table_row_record(2, "Customer 3")
       end
     end
 

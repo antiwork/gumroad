@@ -31,11 +31,11 @@ describe "Dropbox uploads", type: :system, js: true do
     expect(product.reload.alive_product_files.count).to eq 2
     expect(product.alive_product_files.first.display_name).to eq("Download-Card")
     expect(product.alive_product_files.last.display_name).to eq("SmallTestFile")
-    expect(product.alive_rich_contents.sole.description).to match_array([
-                                                                          { "type" => "fileEmbed", "attrs" => { "id" => product.alive_product_files.first.external_id, "uid" => anything, "collapsed" => false } },
-                                                                          { "type" => "fileEmbed", "attrs" => { "id" => product.alive_product_files.last.external_id, "uid" => anything, "collapsed" => false } },
-                                                                          { "type" => "paragraph" }
-                                                                        ])
+    expected_content = product.alive_product_files.map do |file|
+      { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => anything, "collapsed" => false } }
+    end
+    expected_content << { "type" => "paragraph" }
+    expect(product.alive_rich_contents.sole.description).to match_array(expected_content)
   end
 
   it "allows to change dropbox file's name and description while the file is uploading" do

@@ -80,6 +80,31 @@ describe User::PayoutSchedule do
     end
   end
 
+  describe "#upcoming_payout_amounts" do
+    let(:user) { create(:user, payment_address: "bob1@example.com") }
+
+    around do |example|
+      travel_to(Date.new(2025, 9, 22)) do
+        example.run
+      end
+    end
+
+    context "when payout frequency is weekly" do
+      it "returns nothing if the user has no unpaid balance" do
+        expect(user.upcoming_payout_amounts).to eq({})
+      end
+
+      it "returns the correct upcoming payout amounts" do
+        create(:balance, user:, amount_cents: 100, date: Date.new(2025, 9, 17))
+        create(:balance, user:, amount_cents: 2000, date: Date.new(2025, 9, 18))
+        expect(user.upcoming_payout_amounts).to eq({ Date.new(2025, 9, 26) => 2100 })
+
+        create(:balance, user:, amount_cents: 2000, date: Date.new(2025, 9, 22))
+        expect(user.upcoming_payout_amounts).to eq({ Date.new(2025, 9, 26) => 2100, Date.new(2025, 10, 3) => 2000 })
+      end
+    end
+  end
+
   describe "#payout_amount_for_payout_date" do
     let(:user) { create(:user, payment_address: "bob1@example.com") }
 

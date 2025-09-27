@@ -210,6 +210,14 @@ My email is test@gmail.com <i>Reach out and say hi!</i>
       end
     end
 
+    factory :product_with_digital_versions_with_price_difference_cents do
+      after(:create) do |product|
+        category = create(:variant_category, title: "Category", link: product)
+        create(:variant, variant_category: category, name: "Untitled 1", price_difference_cents: 100)
+        create(:variant, variant_category: category, name: "Untitled 2", price_difference_cents: 200)
+      end
+    end
+
     factory :product_with_discord_integration do
       after(:create) do |product|
         integration = create(:discord_integration, server_id: "0")

@@ -112,6 +112,8 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
 
     context "Merchant migration enabled" do
       before do
+        allow(StripeMerchantAccountHelper).to receive(:ensure_charges_enabled).and_return(true)
+
         seller.check_merchant_account_is_linked = false
         seller.save!
         create(:ach_account_stripe_succeed, user: seller)
