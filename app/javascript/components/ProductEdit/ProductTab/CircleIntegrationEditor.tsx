@@ -135,7 +135,7 @@ export const CircleIntegrationEditor = ({
           </Button>
           {communities ? (
             communities.status === "fetching" ? (
-              <div style={{ display: "flex", justifyContent: "center" }}>
+              <div className="flex justify-center">
                 <LoadingSpinner />
               </div>
             ) : communities.status === "error" ? (
@@ -166,7 +166,7 @@ export const CircleIntegrationEditor = ({
           ) : null}
           {spaceGroups ? (
             spaceGroups.status === "fetching" ? (
-              <div style={{ display: "flex", justifyContent: "center" }}>
+              <div className="flex justify-center">
                 <LoadingSpinner />
               </div>
             ) : spaceGroups.status === "error" ? (
