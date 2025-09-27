@@ -351,13 +351,9 @@ const DiscountsPage = ({
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
                       <td>
-                        <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+                        <div className="grid gap-2">
                           <div>
-                            <div
-                              className="pill small"
-                              style={{ marginRight: "var(--spacer-2)" }}
-                              aria-label="Offer code"
-                            >
+                            <div className="pill small mr-2" aria-label="Offer code">
                               {offerCode.code.toUpperCase()}
                             </div>
                             <b>{offerCode.name}</b>
@@ -369,8 +365,8 @@ const DiscountsPage = ({
                       </td>
                       {statistics != null ? (
                         <>
-                          <td style={{ whiteSpace: "nowrap" }}>{formatRevenue(statistics.revenue_cents)}</td>
-                          <td style={{ whiteSpace: "nowrap" }}>{formatUses(statistics.uses.total, offerCode.limit)}</td>
+                          <td className="whitespace-nowrap">{formatRevenue(statistics.revenue_cents)}</td>
+                          <td className="whitespace-nowrap">{formatUses(statistics.uses.total, offerCode.limit)}</td>
                         </>
                       ) : (
                         <>
@@ -381,10 +377,8 @@ const DiscountsPage = ({
                       <td>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
                         expiresAt ? formatDate(expiresAt) : "No end date"
                       }`}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        <div
-                          style={{ display: "grid", gridTemplateColumns: "min-content 1fr", gap: "var(--spacer-2)" }}
-                        >
+                      <td className="whitespace-nowrap">
+                        <div className="grid grid-cols-[min-content_1fr] gap-2">
                           {validAt && currentDate < validAt ? (
                             <>Scheduled</>
                           ) : expiresAt && currentDate > expiresAt ? (
@@ -554,10 +548,7 @@ const DiscountsPage = ({
                       ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
                       : null;
                   return (
-                    <div
-                      key={product.id}
-                      style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}
-                    >
+                    <div key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
                       <div>
                         <h5>{product.name}</h5>
                         {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
@@ -576,7 +567,7 @@ const DiscountsPage = ({
                 })}
               </section>
             ) : null}
-            <section className="grid auto-cols-fr grid-flow-row sm:grid-flow-col" style={{ gap: "var(--spacer-4)" }}>
+            <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
               <Button onClick={() => setView("create")} disabled={!selectedOfferCode.can_update || isLoading}>
                 Duplicate
               </Button>
@@ -872,7 +863,7 @@ const Form = ({
             <legend>
               <label htmlFor={`${uid}code`}>Discount code</label>
             </legend>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
               <input
                 type="text"
                 id={`${uid}code`}
@@ -975,7 +966,7 @@ const Form = ({
               }
             />
           </fieldset>
-          <fieldset style={{ gap: "var(--spacer-4)" }}>
+          <fieldset className="gap-4">
             <legend>Settings</legend>
             <Details
               className="toggle"
