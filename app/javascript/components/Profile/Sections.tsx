@@ -57,16 +57,21 @@ export type Section =
 export const PostsView = ({ posts }: { posts: Post[] }) => {
   const userAgentInfo = useUserAgentInfo();
   return (
-    <div className="big-links">
+    <>
       {posts.map((post) => (
-        <a key={post.slug} href={Routes.custom_domain_view_post_path(post.slug)}>
+        <a
+          key={post.slug}
+          href={Routes.custom_domain_view_post_path(post.slug)}
+          className="flex justify-between gap-4 border-b border-border py-8 no-underline first:pt-0 last:border-b-0 last:pb-0"
+        >
           <div>
             <h2>{post.name}</h2>
             <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
           </div>
+          <Icon name="arrow-diagonal-up-right" className="text-lg" />
         </a>
       ))}
-    </div>
+    </>
   );
 };
 

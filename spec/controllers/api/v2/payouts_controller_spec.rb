@@ -166,6 +166,222 @@ describe Api::V2::PayoutsController do
 
         expect(newest_index).to be < oldest_index
       end
+
+      describe "upcoming payout functionality" do
+        before do
+          # Set up seller with unpaid balance and payout capability
+          create(:ach_account, user: @seller)
+          create(:balance, user: @seller, amount_cents: 15_00, date: Date.parse("2025-09-10"), state: "unpaid")
+          create(:bank, routing_number: "110000000", name: "Bank of America")
+        end
+
+        around do |example|
+          # Exactly which days are in the upcoming payout may depend on the day of the week, so make sure it's consistent
+          travel_to(Time.zone.parse("2025-09-15 12:00:00")) do
+            example.run
+          end
+        end
+
+        it "includes upcoming payout when no pagination and no date filtering" do
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
+          expect(upcoming_payout["amount"]).to eq("15.00")
+          expect(upcoming_payout["currency"]).to eq(Currency::USD)
+          expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
+          expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+          expect(upcoming_payout["processed_at"]).to be_nil
+        end
+
+        it "indicates which payment processor will be used" do
+          create(:user_compliance_info, user: @seller, country: "United Kingdom")
+          @seller.active_bank_account&.destroy!
+          @seller.update!(payment_address: "test@example.com")
+
+          get :index, params: @params
+
+          upcoming_payout = response.parsed_body["payouts"].first
+          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payout["payment_processor"]).to eq(PayoutProcessorType::PAYPAL)
+          expect(upcoming_payout["bank_account_visual"]).to be_nil
+          expect(upcoming_payout["paypal_email"]).to eq("test@example.com")
+
+          bank_account = create(:uk_bank_account, user: @seller)
+          @seller.update!(payment_address: nil)
+
+          get :index, params: @params
+
+          upcoming_payout = response.parsed_body["payouts"].first
+          expect(upcoming_payout["id"]).to be_nil
+          expect(upcoming_payout["payment_processor"]).to eq(PayoutProcessorType::STRIPE)
+          expect(upcoming_payout["bank_account_visual"]).to eq(bank_account.account_number_visual)
+          expect(upcoming_payout["paypal_email"]).to be_nil
+        end
+
+        it "includes upcoming payout when end_date is after current payout end date" do
+          future_date = 1.month.from_now.strftime("%Y-%m-%d")
+          @params.merge!(before: future_date)
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to be >= 1
+          expect(payouts.length).to be >= 1
+        end
+
+        it "does not include upcoming payout when include_upcoming is false" do
+          @params.merge!(include_upcoming: "false")
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          expect(payouts).to be_all { |p| p["id"].present? }
+        end
+
+        it "does not include upcoming payout when using pagination" do
+          @params.merge!(page_key: "#{Time.current.to_fs(:usec)}-#{ObfuscateIds.encrypt_numeric(123)}")
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          payout_ids = payouts.map { |p| p["id"] }
+
+          expect(payout_ids).not_to include(nil)
+          expect(payouts.none? { |p| p["id"].nil? }).to be true
+        end
+
+        it "does not include upcoming payout when end_date is before current payout end date" do
+          past_date = 1.week.ago.strftime("%Y-%m-%d")
+          @params.merge!(before: past_date)
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          payout_ids = payouts.map { |p| p["id"] }
+
+          expect(payout_ids).not_to include(nil)
+          expect(payouts.none? { |p| p["id"].nil? }).to be true
+        end
+
+        it "positions upcoming payouts first in the results list" do
+          older_payout = create(:payment_completed, user: @seller, created_at: 2.days.ago)
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+          completed_payouts = payouts.select { |p| p["id"].present? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          expect(payouts.first["id"]).to be_nil
+          expect(completed_payouts.first["id"]).to eq(@payout.external_id)
+          expect(completed_payouts.second["id"]).to eq(older_payout.external_id)
+        end
+
+        it "includes upcoming payout along with completed payouts up to page limit" do
+          create_list(:payment_completed, 5, user: @seller, created_at: 1.week.ago)
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+          completed_payouts = payouts.select { |p| p["id"].present? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          expect(payouts.length).to be <= Api::V2::PayoutsController::RESULTS_PER_PAGE
+          expect(completed_payouts.length).to eq([@seller.payments.displayable.count, Api::V2::PayoutsController::RESULTS_PER_PAGE - upcoming_payouts.length].min)
+        end
+
+        it "does not include upcoming payout when user has no unpaid balance" do
+          @seller.balances.delete_all
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          payout_ids = payouts.map { |p| p["id"] }
+
+          expect(payout_ids).not_to include(nil)
+          expect(payouts.none? { |p| p["id"].nil? }).to be true
+        end
+
+        it "reflects current unpaid balance up to payout period end date" do
+          create(:balance, user: @seller, amount_cents: 5_00, date: Date.parse("2025-09-08"), state: "unpaid")
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
+          expect(upcoming_payout["amount"]).to eq("20.00")
+        end
+
+        it "does not include upcoming payout when user is not payable due to minimum threshold" do
+          @seller.balances.delete_all
+          create(:balance, user: @seller, amount_cents: 5_00, date: Date.current, state: "unpaid") # Below $10 minimum
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          payout_ids = payouts.map { |p| p["id"] }
+
+          expect(payout_ids).not_to include(nil)
+          expect(payouts.none? { |p| p["id"].nil? }).to be true
+        end
+
+        it "includes upcoming payout with paused status when payouts are paused" do
+          @seller.update!(payouts_paused_internally: true)
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
+          expect(upcoming_payout["status"]).to eq(User::PAYOUTS_STATUS_PAUSED)
+        end
+
+        it "includes upcoming payout when the date range includes it" do
+          start_date = 1.week.ago.strftime("%Y-%m-%d")
+          end_date = 1.week.from_now.strftime("%Y-%m-%d")
+
+          @params.merge!(after: start_date, before: end_date)
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(1)
+          upcoming_payout = upcoming_payouts.first
+          expect(upcoming_payout["amount"]).to eq("15.00")
+          expect(payouts.length).to eq(2)
+        end
+
+        it "handles multiple upcoming payouts correctly" do
+          create(:balance, user: @seller, amount_cents: 20_00, date: Date.new(2025, 9, 15), state: "unpaid")
+
+          get :index, params: @params
+
+          payouts = response.parsed_body["payouts"]
+          upcoming_payouts = payouts.select { |p| p["id"].nil? }
+
+          expect(upcoming_payouts.length).to eq(2)
+
+          expect(upcoming_payouts.first["amount"]).to eq("20.00")
+          expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-26").iso8601)
+          expect(upcoming_payouts.second["amount"]).to eq("15.00")
+          expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
+        end
+      end
     end
 
     describe "when logged in with public scope" do

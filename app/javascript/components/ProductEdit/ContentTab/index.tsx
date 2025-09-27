@@ -555,12 +555,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         }
                       />
                       <div
-                        className="rows"
+                        className="rows overflow-auto"
                         role="listbox"
-                        style={{ maxHeight: "20rem", overflow: "auto", textAlign: "initial" }}
+                        style={{ maxHeight: "20rem", textAlign: "initial" }}
                       >
                         {selectingExistingFiles.isLoading ? (
-                          <div style={{ display: "flex", justifyContent: "center", minHeight: "10rem" }}>
+                          <div className="flex min-h-40 justify-center">
                             <LoadingSpinner width="2rem" />
                           </div>
                         ) : (
@@ -686,7 +686,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             e.stopPropagation();
                             setInsertMenuState("inputs");
                           }}
-                          style={{ display: "flex", alignItems: "center" }}
+                          className="flex items-center"
                         >
                           <span className="icon icon-input-cursor-text" />
                           <span>Input</span>

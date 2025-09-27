@@ -857,7 +857,7 @@ export const EmailForm = () => {
                   context.profile_sections.length > 0 ? (
                     <>
                       {context.profile_sections.map((section) => (
-                        <label key={section.id} style={{ width: "fit-content" }}>
+                        <label key={section.id} className="w-fit">
                           <input
                             type="checkbox"
                             role="switch"

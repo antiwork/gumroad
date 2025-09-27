@@ -66,6 +66,7 @@ export const Layout = ({
       updateBundle({ is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
       if (tab === "share") navigate(`/bundles/${id}/content`);
+      else if (published) navigate(`/bundles/${id}/share`);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -142,11 +143,7 @@ export const Layout = ({
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button
-                  color="accent"
-                  disabled={isBusy}
-                  onClick={() => void setPublished(true).then(() => navigate(`/bundles/${id}/share`))}
-                >
+                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>

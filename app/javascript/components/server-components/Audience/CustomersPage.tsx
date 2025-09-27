@@ -287,7 +287,9 @@ const CustomersPage = ({
               <div className="stack" style={{ width: "35rem" }}>
                 <div>
                   <ProductSelect
-                    products={products}
+                    products={products.filter(
+                      (product) => !excludedItems.find((excludedItem) => product.id === excludedItem.id),
+                    )}
                     label="Customers who bought"
                     items={includedItems}
                     setItems={setIncludedItems}
@@ -295,7 +297,9 @@ const CustomersPage = ({
                 </div>
                 <div>
                   <ProductSelect
-                    products={products}
+                    products={products.filter(
+                      (product) => !includedItems.find((includedItem) => product.id === includedItem.id),
+                    )}
                     label="Customers who have not bought"
                     items={excludedItems}
                     setItems={setExcludedItems}
@@ -884,7 +888,7 @@ const CustomerDrawer = ({
         />
       ) : null}
       <section className="stack">
-        <h3 style={{ display: "flex", gap: "var(--spacer-1)" }}>
+        <h3 className="flex gap-1">
           Order information
           {!subscription && customer.transaction_url_for_seller ? (
             <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction">
@@ -1040,7 +1044,7 @@ const CustomerDrawer = ({
             ))
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1226,7 +1230,7 @@ const CustomerDrawer = ({
             </>
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1291,7 +1295,7 @@ const CustomerDrawer = ({
             </>
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1859,7 +1863,7 @@ const OptionSection = ({
             </>
           )
         ) : (
-          <div style={{ textAlign: "center" }}>
+          <div className="text-center">
             <Progress width="2em" />
           </div>
         )}

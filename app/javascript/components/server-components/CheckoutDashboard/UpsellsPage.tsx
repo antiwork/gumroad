@@ -453,7 +453,7 @@ const UpsellDrawer = ({
           ))}
         </section>
       )}
-      <section style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
+      <section className="grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
@@ -840,10 +840,7 @@ const Form = ({
                   />
                 </fieldset>
                 {selectedProduct ? (
-                  <div
-                    style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "var(--spacer-2)" }}
-                    aria-label="Upsell versions"
-                  >
+                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
                     <div />
                     <b>Version to offer</b>

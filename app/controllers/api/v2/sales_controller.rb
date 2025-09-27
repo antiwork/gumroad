@@ -3,7 +3,8 @@
 class Api::V2::SalesController < Api::V2::BaseController
   before_action(only: [:index, :show]) { doorkeeper_authorize! :view_sales }
   before_action(only: [:mark_as_shipped]) { doorkeeper_authorize! :mark_sales_as_shipped }
-  before_action(only: [:refund]) { doorkeeper_authorize! :refund_sales }
+  before_action(only: [:refund]) { doorkeeper_authorize! :refund_sales, :edit_sales }
+  before_action(only: [:resend_receipt]) { doorkeeper_authorize! :edit_sales }
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10
@@ -117,6 +118,14 @@ class Api::V2::SalesController < Api::V2::BaseController
     else
       error_with_sale(purchase)
     end
+  end
+
+  def resend_receipt
+    purchase = current_resource_owner.sales.find_by_external_id(params[:id])
+    return error_with_sale if purchase.nil?
+
+    purchase.resend_receipt
+    render_response(true)
   end
 
   private

@@ -30,7 +30,7 @@ export const Chart = ({
   const uid = React.useId();
   return (
     <section className="chart" aria-describedby={tooltip ? uid : undefined}>
-      <div style={{ position: "relative" }}>
+      <div className="relative">
         <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} ref={containerRef}>
           <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} {...props} />
         </ResponsiveContainer>

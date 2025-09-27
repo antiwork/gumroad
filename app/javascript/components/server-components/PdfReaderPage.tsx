@@ -247,7 +247,7 @@ export const PdfReaderPage = ({
           </div>
         </div>
 
-        <div className="main" role="document" style={{ position: "relative", overflow: "auto" }}>
+        <div className="main relative overflow-auto" role="document">
           <div className="pdf-reader-container">
             <div ref={contentRef} style={{ position: "absolute", height: "100%", width: "100%" }}>
               <div className="pdfViewer"></div>

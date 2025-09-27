@@ -57,7 +57,7 @@ export const Card = ({
 );
 
 export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
-  <article className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
+  <article className={cx("product-card horizontal relative", { big })}>
     <figure>
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </figure>

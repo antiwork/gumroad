@@ -6,7 +6,7 @@
   and the client-side version for Inertia-powered views. Once the migration is complete, the server-side navbar will be phased out.
 */
 
-import { Link } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
 import { escapeRegExp } from "$app/utils";
@@ -17,7 +17,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink } from "$app/components/Nav";
+import { Nav as NavFramework, NavLink, useNav } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -65,6 +65,18 @@ export const ClientNavLink = ({
   );
 };
 
+const CloseOnNavigate = () => {
+  const nav = useNav();
+  const close = nav?.close;
+
+  React.useEffect(() => {
+    if (!close) return;
+    return router.on("navigate", close);
+  }, [close]);
+
+  return null;
+};
+
 export const Nav = (props: Props) => {
   const routeParams = { host: useAppDomain() };
   const loggedInUser = useLoggedInUser();
@@ -93,6 +105,7 @@ export const Nav = (props: Props) => {
 
   return (
     <NavFramework footer={<NavbarFooter />} {...props}>
+      <CloseOnNavigate />
       <section>
         <ClientNavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <ClientNavLink

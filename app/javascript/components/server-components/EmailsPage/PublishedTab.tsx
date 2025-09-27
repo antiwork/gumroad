@@ -97,12 +97,7 @@ export const PublishedTab = () => {
       <div className="space-y-4 p-4 md:p-8">
         {installments.length > 0 ? (
           <>
-            <table
-              aria-label="Published"
-              aria-live="polite"
-              aria-busy={isLoading}
-              style={{ marginBottom: "var(--spacer-4)" }}
-            >
+            <table aria-label="Published" aria-live="polite" aria-busy={isLoading} className="mb-4">
               <thead>
                 <tr>
                   <th>Subject</th>
@@ -112,11 +107,7 @@ export const PublishedTab = () => {
                   <th>Clicks</th>
                   <th>
                     Views{" "}
-                    <div
-                      className="has-tooltip top"
-                      aria-describedby={`views-tooltip-${uid}`}
-                      style={{ whiteSpace: "normal" }}
-                    >
+                    <div className="has-tooltip top whitespace-normal" aria-describedby={`views-tooltip-${uid}`}>
                       <Icon name="info-circle" />
                       <div role="tooltip" id={`views-tooltip-${uid}`}>
                         Views only apply to emails published on your profile.
@@ -133,7 +124,7 @@ export const PublishedTab = () => {
                     onClick={() => setSelectedInstallmentId(installment.external_id)}
                   >
                     <td data-label="Subject">{installment.name}</td>
-                    <td data-label="Date" style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="Date" className="whitespace-nowrap">
                       {new Date(installment.published_at).toLocaleDateString(userAgentInfo.locale, {
                         day: "numeric",
                         month: "short",
@@ -141,31 +132,24 @@ export const PublishedTab = () => {
                         timeZone: currentSeller.timeZone.name,
                       })}
                     </td>
-                    <td data-label="Emailed" style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="Emailed" className="whitespace-nowrap">
                       {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
                     </td>
-                    <td data-label="Opened" style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="Opened" className="whitespace-nowrap">
                       {installment.send_emails
                         ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
                         : "n/a"}
                     </td>
-                    <td data-label="Clicks" style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="Clicks" className="whitespace-nowrap">
                       {installment.clicked_urls.length > 0 ? (
                         <span className="has-tooltip" aria-describedby={`url-clicks-${installment.external_id}`}>
                           {formatStatNumber({ value: installment.click_count })}
-                          <div
-                            role="tooltip"
-                            id={`url-clicks-${installment.external_id}`}
-                            style={{ padding: 0, width: "20rem" }}
-                          >
+                          <div role="tooltip" id={`url-clicks-${installment.external_id}`} className="w-[20rem] p-0">
                             <table>
                               <tbody>
                                 {installment.clicked_urls.map(({ url, count }) => (
                                   <tr key={`${installment.external_id}-${url}`}>
-                                    <th
-                                      scope="row"
-                                      style={{ whiteSpace: "break-spaces", maxWidth: "calc(20rem * 0.7)" }}
-                                    >
+                                    <th scope="row" className="max-w-[calc(20rem*0.7)] whitespace-break-spaces">
                                       {url}
                                     </th>
                                     <td>{formatStatNumber({ value: count })}</td>
@@ -179,7 +163,7 @@ export const PublishedTab = () => {
                         formatStatNumber({ value: installment.click_count })
                       )}
                     </td>
-                    <td data-label="Views" style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="Views" className="whitespace-nowrap">
                       {formatStatNumber({
                         value: installment.view_count,
                         placeholder: "n/a",
@@ -237,7 +221,7 @@ export const PublishedTab = () => {
                     })}
                   </div>
                 </div>
-                <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
+                <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
                   {selectedInstallment.shown_on_profile ? (
                     <NavigationButton href={selectedInstallment.full_url} target="_blank" rel="noopener noreferrer">
@@ -246,7 +230,7 @@ export const PublishedTab = () => {
                     </NavigationButton>
                   ) : null}
                 </div>
-                <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
+                <div className="grid grid-flow-col gap-4">
                   <NewEmailButton copyFrom={selectedInstallment.external_id} />
                   <EditEmailButton id={selectedInstallment.external_id} />
                   <Button
