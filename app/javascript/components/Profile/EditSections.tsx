@@ -166,7 +166,7 @@ export const EditorMenu = ({
             <button onClick={() => setMenuState("menu")} aria-label="Go back">
               <Icon name="outline-cheveron-left" />
             </button>
-            <div style={{ textAlign: "center" }}>{activeSubmenu.props.heading}</div>
+            <div className="text-center">{activeSubmenu.props.heading}</div>
           </h4>
           {activeSubmenu}
         </div>

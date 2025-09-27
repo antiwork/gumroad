@@ -1044,7 +1044,7 @@ const CustomerDrawer = ({
             ))
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1230,7 +1230,7 @@ const CustomerDrawer = ({
             </>
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1295,7 +1295,7 @@ const CustomerDrawer = ({
             </>
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1863,7 +1863,7 @@ const OptionSection = ({
             </>
           )
         ) : (
-          <div style={{ textAlign: "center" }}>
+          <div className="text-center">
             <Progress width="2em" />
           </div>
         )}
