@@ -84,7 +84,7 @@ class Variant < BaseVariant
           }
           recurrence_price_values[recurrence][:recurrence_short_indicator] = price.recurrence_short_indicator(recurrence)
 
-          add_fixed_duration_fields(recurrence_price_values[recurrence], price, include_formatted_price: true)
+          add_fixed_duration_fields(recurrence_price_values[recurrence], price, include_formatted_price: true, include_nil: false)
         end
       end
     end
@@ -92,8 +92,10 @@ class Variant < BaseVariant
   end
 
   private
-    def add_fixed_duration_fields(target_hash, price, include_formatted_price: false)
-      target_hash[:fixed_duration_months] = price.fixed_duration_months
+    def add_fixed_duration_fields(target_hash, price, include_formatted_price: false, include_nil: true)
+      if include_nil || price.fixed_duration_months?
+        target_hash[:fixed_duration_months] = price.fixed_duration_months
+      end
       return unless price.fixed_duration_months?
 
       target_hash[:duration_display] = price.duration_display
