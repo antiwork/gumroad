@@ -4,6 +4,7 @@ module BasePrice::FixedDuration
   extend ActiveSupport::Concern
 
   included do
+    validate :fixed_duration_must_be_multiple_of_recurrence_period
   end
 
   def charge_occurrence_count

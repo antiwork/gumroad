@@ -649,7 +649,7 @@ class Link < ApplicationRecord
   def recurrences
     is_recurring_billing ? {
       default: default_price_recurrence.recurrence,
-      enabled: prices.alive.is_buy.sort_by { |price| number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
+      enabled: prices.alive.is_buy.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
     } : nil
   end
 
