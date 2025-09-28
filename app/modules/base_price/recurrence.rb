@@ -51,7 +51,7 @@ module BasePrice::Recurrence
   end
 
   def number_of_months_in_recurrence(recurrence)
-    self.class.number_of_months_in_recurrence(recurrence)
+    BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
   end
 
   def self.renewal_reminder_email_days(recurrence)

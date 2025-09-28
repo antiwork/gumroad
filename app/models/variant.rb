@@ -134,6 +134,8 @@ class Variant < BaseVariant
     variant
   end
 
+  public
+
   def disabling_apply_price_changes_to_existing_members?(params)
     apply_price_changes_to_existing_memberships? && !params[:apply_price_changes_to_existing_memberships]
   end
@@ -144,7 +146,8 @@ class Variant < BaseVariant
   end
 
   private
-    def set_position
+
+  def set_position
       return if self.position_in_category.present?
       return unless variant_category
       previous = variant_category.variants.alive.in_order.last

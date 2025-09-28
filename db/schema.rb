@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
+ActiveRecord::Schema[7.1].define(version: 2025_09_28_205329) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -415,6 +415,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
     t.index ["cart_id", "product_id", "deleted_at"], name: "index_cart_products_on_cart_id_and_product_id_and_deleted_at", unique: true
     t.index ["cart_id"], name: "index_cart_products_on_cart_id"
     t.index ["product_id"], name: "index_cart_products_on_product_id"
+    t.check_constraint "(`fixed_duration_months` is null) or (`fixed_duration_months` > 0)", name: "cart_products_fixed_duration_months_gt_zero"
   end
 
   create_table "carts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1355,9 +1356,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_08_21_014630) do
     t.integer "variant_id"
     t.integer "suggested_price_cents"
     t.integer "fixed_duration_months"
-    t.index ["fixed_duration_months"], name: "index_prices_on_fixed_duration_months"
     t.index ["link_id"], name: "index_prices_on_link_id"
     t.index ["variant_id"], name: "index_prices_on_variant_id"
+    t.check_constraint "(`fixed_duration_months` is null) or (`fixed_duration_months` > 0)", name: "prices_fixed_duration_months_gt_zero"
   end
 
   create_table "processor_payment_intents", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

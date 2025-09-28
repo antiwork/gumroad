@@ -58,11 +58,11 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
             subscription_price_change_effective_date: null,
             subscription_price_change_message: null,
             recurrence_price_values: {
-              monthly: { enabled: false },
-              quarterly: { enabled: false },
-              biannually: { enabled: false },
-              yearly: { enabled: false },
-              every_two_years: { enabled: false },
+              monthly: { enabled: false, fixed_duration_months: null },
+              quarterly: { enabled: false, fixed_duration_months: null },
+              biannually: { enabled: false, fixed_duration_months: null },
+              yearly: { enabled: false, fixed_duration_months: null },
+              every_two_years: { enabled: false, fixed_duration_months: null },
             },
             integrations: { discord: false, circle: false, google_calendar: false },
             newlyAdded: true,
@@ -169,8 +169,7 @@ const TierEditor = ({
         } else if (months !== null) {
           acc[recurrence] = { ...value, fixed_duration_months: months };
         } else {
-          const { fixed_duration_months, ...valueWithoutDuration } = value;
-          acc[recurrence] = valueWithoutDuration;
+          acc[recurrence] = { ...value, fixed_duration_months: null };
         }
         return acc;
       },
