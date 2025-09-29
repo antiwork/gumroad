@@ -199,11 +199,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
               </tbody>
             </table>
             {page * per_page < totalFilteredCount ? (
-              <Button
-                color="primary"
-                onClick={() => void loadFollowers(searchQuery, page + 1)}
-                style={{ marginTop: "var(--spacer-5)" }}
-              >
+              <Button color="primary" onClick={() => void loadFollowers(searchQuery, page + 1)} className="mt-6">
                 Load more
               </Button>
             ) : null}
@@ -222,7 +218,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                         color="danger"
                         onClick={() => void removeFollower(selectedFollower.id)}
                         disabled={removing}
-                        style={{ marginTop: "var(--spacer-2)" }}
+                        className="mt-2"
                       >
                         {removing ? "Removing..." : "Remove follower"}
                       </Button>

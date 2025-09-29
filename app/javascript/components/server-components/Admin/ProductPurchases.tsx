@@ -85,7 +85,7 @@ const AdminProductPurchases = ({
                     </ul>
                   </small>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div className="text-right">
                   <a href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</a>
                   <small>{purchase.created}</small>
                 </div>

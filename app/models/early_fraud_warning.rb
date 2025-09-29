@@ -71,13 +71,10 @@ class EarlyFraudWarning < ApplicationRecord
     # Ignore
   end
 
-  ELIGIBLE_CHARGE_RISK_LEVELS_FOR_REFUND = [CHARGE_RISK_LEVEL_ELEVATED, CHARGE_RISK_LEVEL_HIGHEST].freeze
   def chargeable_refundable_for_fraud?
     return false if chargeable.created_at.before?(ELIGIBLE_DISPUTE_WINDOW_DURATION.ago)
 
-    chargeable.buyer_blocked? ||
-    charge_risk_level.in?(ELIGIBLE_CHARGE_RISK_LEVELS_FOR_REFUND) ||
-    (receipt_email_info.present? && receipt_email_info.state == "bounced")
+    true
   end
 
   ELIGIBLE_EMAIL_INFO_STATES_FOR_SUBSCRIPTION_CONTACTABLE = %w(sent delivered opened).freeze

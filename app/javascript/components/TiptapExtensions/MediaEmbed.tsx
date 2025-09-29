@@ -153,7 +153,7 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
                   inputRef.current.value = "";
                   onEmbedReceived?.(data);
                 } else {
-                  inputRef.current.focus();
+                  onClose();
                   showAlert(
                     type === "embed"
                       ? "Sorry, we couldn't embed this media. Please make sure the URL points to an embeddable media type."

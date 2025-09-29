@@ -73,7 +73,7 @@ export const CallLimitationsEditor = ({
             </div>
           )}
         </NumberInput>
-        <small>Minimum amount of notice required when booking a call</small>
+        <small>Minimum notice time required when booking a call</small>
       </fieldset>
       <fieldset>
         <label htmlFor={`${uid}-daily-limit`}>Daily limit</label>

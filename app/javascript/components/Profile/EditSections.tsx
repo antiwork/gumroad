@@ -166,7 +166,7 @@ export const EditorMenu = ({
             <button onClick={() => setMenuState("menu")} aria-label="Go back">
               <Icon name="outline-cheveron-left" />
             </button>
-            <div style={{ textAlign: "center" }}>{activeSubmenu.props.heading}</div>
+            <div className="text-center">{activeSubmenu.props.heading}</div>
           </h4>
           {activeSubmenu}
         </div>
@@ -281,7 +281,7 @@ export const SectionLayout = ({
           <Icon name="arrow-down" />
         </button>
       </div>
-      <div ref={scrollRef} style={{ position: "absolute" }} />
+      <div ref={scrollRef} className="absolute" />
       <div className="mx-auto w-full max-w-6xl">{children}</div>
     </>
   );
@@ -316,7 +316,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
   );
 
   return (
-    <div className="paragraphs" style={{ maxHeight: "min(100vh, 500px)", overflow: "auto" }}>
+    <div className="paragraphs overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
       <fieldset>
         <legend>
           <label htmlFor={`${uid}-defaultProductSort`}>Default sort order</label>
@@ -565,7 +565,7 @@ const FeaturedProductSectionView = ({ section }: { section: FeaturedProductSecti
       {props ? (
         <FeaturedProductView props={props} />
       ) : section.featured_product_id ? (
-        <section className="dummy" style={{ height: "32rem" }} />
+        <section className="dummy h-[32rem]" />
       ) : null}
     </SectionLayout>
   );

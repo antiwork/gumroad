@@ -152,7 +152,7 @@ export const Layout = ({
       if (tab === "share") {
         if (product.native_type === "coffee") navigate.current(rootPath);
         else navigate.current(`${rootPath}/content`);
-      } else {
+      } else if (published) {
         navigate.current(`${rootPath}/share`);
       }
     } catch (e) {
@@ -234,7 +234,7 @@ export const Layout = ({
                   <Icon name="link" />
                 </Button>
               </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL">
+              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
                 <Button>
                   <Icon name="cart-plus" />
                 </Button>

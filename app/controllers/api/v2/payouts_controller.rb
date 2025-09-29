@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Api::V2::PayoutsController < Api::V2::BaseController
+  include PayoutsHelper
+
   before_action -> { doorkeeper_authorize!(:view_payouts) }
 
   RESULTS_PER_PAGE = 10
@@ -30,6 +32,22 @@ class Api::V2::PayoutsController < Api::V2::BaseController
     paginated_payouts = filter_payouts(start_date: start_date, end_date: end_date)
     paginated_payouts = paginated_payouts.where(where_page_data) if where_page_data
     paginated_payouts = paginated_payouts.limit(RESULTS_PER_PAGE + 1).to_a
+
+    if params[:page_key].blank? && params[:include_upcoming] != "false"
+      current_resource_owner.upcoming_payout_amounts.filter { end_date.nil? || end_date >= _1 }.each do |payout_date, payout_amount|
+        paginated_payouts.unshift(
+          Payment.new(
+            amount_cents: payout_amount,
+            currency: Currency::USD,
+            state: current_resource_owner.payouts_status,
+            created_at: payout_date,
+            processor: current_resource_owner.current_payout_processor,
+            bank_account: (current_resource_owner.active_bank_account if current_resource_owner.current_payout_processor == PayoutProcessorType::STRIPE),
+            payment_address: (current_resource_owner.paypal_payout_email if current_resource_owner.current_payout_processor == PayoutProcessorType::PAYPAL),
+          ).as_json.merge(id: nil)
+        )
+      end
+    end
 
     has_next_page = paginated_payouts.size > RESULTS_PER_PAGE
     paginated_payouts = paginated_payouts.first(RESULTS_PER_PAGE)

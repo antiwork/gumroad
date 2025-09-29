@@ -312,7 +312,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
 
             <span>
               By{" "}
-              <a href={creator.profile_url} target="_blank" style={{ position: "relative" }} rel="noreferrer">
+              <a href={creator.profile_url} target="_blank" className="relative" rel="noreferrer">
                 {creator.name}
               </a>
             </span>
@@ -364,9 +364,9 @@ const PurchaseDeleteButton = ({
           </>
         }
       >
-        <>
+        <span className="inline">
           Are you sure you want to delete <b>{product_name ?? ""}</b>?
-        </>
+        </span>
       </Modal>
     </>
   );

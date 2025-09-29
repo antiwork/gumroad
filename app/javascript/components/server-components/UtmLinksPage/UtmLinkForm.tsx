@@ -307,7 +307,7 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
                   ref={permalinkRef}
                 />
               </div>
-              <div style={{ display: "flex", gap: "var(--spacer-2)" }}>
+              <div className="flex gap-2">
                 <CopyToClipboard
                   copyTooltip="Copy short link"
                   text={`${shortUrlProtocol}//${shortUrlPrefix}${permalink}`}

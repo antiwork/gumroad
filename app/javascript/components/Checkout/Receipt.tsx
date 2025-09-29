@@ -265,7 +265,7 @@ export const Receipt = ({
   return (
     <div className="stack mx-auto my-8 max-w-2xl">
       <header>
-        <h4 style={{ position: "relative" }}>
+        <h4 className="relative">
           Checkout
           <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
             <Icon name="x-circle" />

@@ -66,9 +66,9 @@ describe EarlyFraudWarning do
 
   describe "#chargeable_refundable_for_fraud?" do
     RSpec.shared_examples "for a Chargeable" do
-      context "when not eligible" do
-        it "returns false" do
-          expect(early_fraud_warning.chargeable_refundable_for_fraud?).to eq(false)
+      context "when eligible" do
+        it "returns true" do
+          expect(early_fraud_warning.chargeable_refundable_for_fraud?).to eq(true)
         end
       end
 
@@ -80,44 +80,6 @@ describe EarlyFraudWarning do
 
         it "returns false" do
           expect(early_fraud_warning.chargeable_refundable_for_fraud?).to eq(false)
-        end
-      end
-
-      context "when the buyer is blocked" do
-        before do
-          expect_any_instance_of(chargeable.class).to receive(:buyer_blocked?).and_return(true)
-        end
-
-        it "returns true" do
-          expect(early_fraud_warning.chargeable_refundable_for_fraud?).to eq(true)
-        end
-      end
-
-      context "when the buyer is not blocked" do
-        before do
-          expect_any_instance_of(chargeable.class).to receive(:buyer_blocked?).and_return(false)
-        end
-
-        EarlyFraudWarning::ELIGIBLE_CHARGE_RISK_LEVELS_FOR_REFUND.each do |charge_risk_level|
-          context "when the charge risk level is #{charge_risk_level}" do
-            before do
-              early_fraud_warning.update!(charge_risk_level:)
-            end
-
-            it "returns true" do
-              expect(early_fraud_warning.chargeable_refundable_for_fraud?).to eq(true)
-            end
-          end
-        end
-
-        context "when the receipt email is bounced" do
-          before do
-            expect_any_instance_of(chargeable.class).to receive(:receipt_email_info).and_return(OpenStruct.new(state: "bounced"))
-          end
-
-          it "returns true" do
-            expect(early_fraud_warning.chargeable_refundable_for_fraud?).to eq(true)
-          end
         end
       end
     end

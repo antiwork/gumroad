@@ -77,7 +77,7 @@ export const Card = ({
   const name = purchase.variants ? `${product.name} - ${purchase.variants}` : product.name;
 
   return (
-    <article className="product-card" style={{ position: "relative" }}>
+    <article className="product-card relative">
       <figure>
         <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
       </figure>
@@ -90,7 +90,7 @@ export const Card = ({
           <h3 itemProp="name">{name}</h3>
         )}
       </header>
-      <footer style={{ position: "relative" }}>
+      <footer className="relative">
         {product.creator ? (
           <AuthorByline
             name={product.creator.name}
@@ -476,7 +476,7 @@ const LibraryPage = ({
                       {(showingAllCreators ? creators : creators.slice(0, 5)).map((creator) => (
                         <label key={creator.id}>
                           {creator.name}
-                          <span className="text-muted" style={{ flexShrink: 0 }}>{`(${creator.count})`}</span>
+                          <span className="text-muted flex-shrink-0">{`(${creator.count})`}</span>
                           <input
                             type="checkbox"
                             checked={state.search.creators.includes(creator.id)}
@@ -494,9 +494,11 @@ const LibraryPage = ({
                           />
                         </label>
                       ))}
-                      <div className="centered" style={{ alignSelf: "center" }}>
+                      <div>
                         {creators.length > 5 && !showingAllCreators ? (
-                          <Button onClick={() => setShowingAllCreators(true)}>Load more...</Button>
+                          <button className="link" onClick={() => setShowingAllCreators(true)}>
+                            Show more
+                          </button>
                         ) : null}
                       </div>
                     </fieldset>
@@ -550,11 +552,6 @@ const LibraryPage = ({
             setDeleting(null);
           }}
         />
-        <div style={{ marginTop: "20px", textAlign: "center" }}>
-          <a href="/help/article/198-your-gumroad-library" target="_blank" rel="noreferrer">
-            Need help with your Library?
-          </a>
-        </div>
       </section>
     </Layout>
   );
