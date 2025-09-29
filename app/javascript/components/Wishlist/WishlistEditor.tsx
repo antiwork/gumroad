@@ -43,7 +43,7 @@ export const WishlistEditor = ({
   };
 
   return (
-    <aside>
+    <aside className="z-30">
       <header>
         <div>
           <h2>{newName || "Untitled"}</h2>
