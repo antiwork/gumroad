@@ -266,6 +266,7 @@ const UpsellsPage = (props: {
                   <th {...thProps("name")}>Upsell</th>
                   <th {...thProps("revenue")}>Revenue</th>
                   <th {...thProps("uses")}>Uses</th>
+                  <th {...thProps("uses")}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -279,8 +280,7 @@ const UpsellsPage = (props: {
                     >
                       <td>
                         <div>
-                          <div className="flex items-center gap-2">
-                            {upsell.paused ? <span className="pill small">Paused</span> : null}
+                          <div>
                             <b>{upsell.name}</b>
                           </div>
                           <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
@@ -305,6 +305,7 @@ const UpsellsPage = (props: {
                           <td aria-busy> </td>
                         </>
                       )}
+                      <td>{upsell.paused ? "Paused" : "Live"}</td>
                     </tr>
                   );
                 })}
@@ -429,6 +430,16 @@ const UpsellDrawer = ({
             </div>
           </>
         ) : null}
+        <div>
+          <h5>Status</h5>
+          <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
+        </div>
+      </section>
+      {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
+      <section style={{ display: "grid" }} className="auto-cols-fr grid-flow-col gap-4">
+        <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
+          {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
+        </Button>
       </section>
       {selectedUpsell.cross_sell ? (
         <section className="stack">
@@ -481,15 +492,12 @@ const UpsellDrawer = ({
         </section>
       )}
       {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
-      <section style={{ display: "grid" }} className="grid-cols-2 gap-4 xl:grid-cols-4">
+      <section style={{ display: "grid" }} className="auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
         <Button onClick={onEdit} disabled={isLoading || isReadOnly}>
           Edit
-        </Button>
-        <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
-          {selectedUpsell.paused ? "Resume" : "Pause"}
         </Button>
         <Button onClick={onDelete} color="danger" disabled={isLoading || isReadOnly}>
           {isLoading ? "Deleting..." : "Delete"}
@@ -737,7 +745,7 @@ const Form = ({
               <legend>Status</legend>
               <label>
                 <input type="radio" name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
-                Active
+                Live
               </label>
               <label>
                 <input type="radio" name="paused" value="true" checked={paused} onChange={handlePausedChange} />
