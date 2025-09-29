@@ -678,7 +678,7 @@ const DiscountsPage = ({
   );
 };
 
-const generateCode = () => Math.random().toString(36).substring(2, 9).toUpperCase();
+const generateCode = () => Math.random().toString(36).substring(2, 9);
 const Form = ({
   title,
   offerCode,
@@ -869,9 +869,7 @@ const Form = ({
                 type="text"
                 id={`${uid}code`}
                 value={code.value}
-                onChange={(evt) => {
-                  setCode({ value: sanitizeOfferCode(evt.target.value) });
-                }}
+                onChange={(evt) => setCode({ value: sanitizeOfferCode(evt.target.value) })}
                 ref={codeFieldRef}
                 aria-invalid={code.error}
                 readOnly={readOnlyCode}

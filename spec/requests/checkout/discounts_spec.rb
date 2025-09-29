@@ -139,6 +139,16 @@ describe("Checkout discounts page", type: :system, js: true) do
   end
 
   describe "creating offer codes" do
+    it "sanitizes discount code input as you type" do
+      visit checkout_discounts_path
+      click_on "New discount"
+
+      fill_in "Discount code", with: " My Code-123_!? "
+
+      # The code should be sanitized to only include letters, numbers, dashes, and underscores
+      expect(find_field("Discount code").value).to eq("MyCode-123_")
+    end
+
     describe "percentage offer code" do
       it "creates the offer code" do
         visit checkout_discounts_path

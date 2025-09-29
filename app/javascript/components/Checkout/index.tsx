@@ -306,9 +306,7 @@ export const Checkout = ({
                         placeholder="Discount code"
                         value={newDiscountCode}
                         disabled={discountInputDisabled}
-                        onChange={(e) => {
-                          setNewDiscountCode(sanitizeOfferCode(e.target.value));
-                        }}
+                        onChange={(e) => setNewDiscountCode(sanitizeOfferCode(e.target.value))}
                       />
                       <Button type="submit" disabled={discountInputDisabled}>
                         Apply
