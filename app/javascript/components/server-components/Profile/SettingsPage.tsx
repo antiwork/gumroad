@@ -185,7 +185,7 @@ const SettingsPage = ({ creator_profile, profile_settings, settings_pages, ...pr
                 )}
               </div>
             </fieldset>
-            <div style={{ display: "flex", gap: "var(--spacer-4)" }}>
+            <div className="flex gap-4">
               <fieldset>
                 <legend>
                   <label htmlFor={`${uid}-backgroundColor`}>Background color</label>

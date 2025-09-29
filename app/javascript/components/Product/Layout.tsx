@@ -246,10 +246,10 @@ const CtaBar = ({
   return (
     <section
       aria-label="Product information bar"
+      className="border-0"
       style={{
         overflow: "hidden",
         padding: 0,
-        border: "none",
         height: visible ? height : 0,
         transition: "var(--transition-duration)",
         flexShrink: 0,

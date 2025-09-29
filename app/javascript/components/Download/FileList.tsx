@@ -531,11 +531,11 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
           <meter
             value={latestMediaLocation / file.duration}
+            className="border-0"
             style={{
               ...{
                 background: "var(--active-bg)",
                 height: "var(--spacer-1)",
-                border: "none",
               },
               ...(isPlaying ? {} : { "--optimum-value-background": "currentColor" }),
             }}

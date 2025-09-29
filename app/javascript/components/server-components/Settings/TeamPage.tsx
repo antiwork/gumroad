@@ -185,7 +185,7 @@ const AddTeamMembersSection = ({
           />
         </fieldset>
       </div>
-      <Button color="primary" style={{ width: "fit-content" }} disabled={loading} onClick={onSubmit}>
+      <Button color="primary" className="w-fit" disabled={loading} onClick={onSubmit}>
         {loading ? (
           <>
             <LoadingSpinner color="grey" /> Sending invitation

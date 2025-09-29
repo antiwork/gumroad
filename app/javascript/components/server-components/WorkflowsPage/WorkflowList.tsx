@@ -118,7 +118,7 @@ const WorkflowRow = ({
   onDelete: () => void;
 }) => {
   const header = (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div className="flex items-center">
       <h3 style={{ marginRight: "auto" }}>{workflow.name}</h3>
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
         {workflow.published ? <small>Published</small> : <small>Unpublished</small>}

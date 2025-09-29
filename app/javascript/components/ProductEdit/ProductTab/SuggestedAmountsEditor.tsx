@@ -83,7 +83,7 @@ const SuggestedAmountEditor = ({
   const { currencyType } = useProductEditContext();
 
   return (
-    <section style={{ display: "flex", gap: "var(--spacer-2)" }}>
+    <section className="flex gap-2">
       <PriceInput
         currencyCode={currencyType}
         cents={version.price_difference_cents}

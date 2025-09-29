@@ -477,7 +477,7 @@ const AffiliatesTab = () => {
                     <caption>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         Affiliates
-                        <div style={{ fontSize: "1rem" }}>
+                        <div className="text-base">
                           <WithTooltip tip="Export" position="top">
                             <a href={Routes.export_affiliates_path()} className="button primary" aria-label="Export">
                               <Icon name="download" />

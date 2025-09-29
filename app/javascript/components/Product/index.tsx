@@ -830,7 +830,7 @@ const RefundPolicyInfo = ({ refundPolicy, permalink }: { refundPolicy: RefundPol
   };
   return (
     <>
-      <div style={{ textAlign: "center" }}>
+      <div className="text-center">
         {refundPolicy.fine_print ? (
           <a href={HASH} onClick={() => setViewingRefundPolicy(true)}>
             {refundPolicy.title}

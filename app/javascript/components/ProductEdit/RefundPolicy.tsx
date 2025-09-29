@@ -62,11 +62,10 @@ export const RefundPolicySelector = ({
                 onToggle={setIsPopoverOpen}
               >
                 <div
-                  className="paragraphs"
+                  className="paragraphs font-normal"
                   style={{
                     width: "20rem",
                     maxWidth: "100%",
-                    fontWeight: "initial",
                   }}
                 >
                   <Select

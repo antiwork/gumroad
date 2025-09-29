@@ -57,12 +57,7 @@ export const PriceTag = ({
   const tooltipUid = React.useId();
 
   return (
-    <div
-      itemScope
-      itemProp="offers"
-      itemType="https://schema.org/Offer"
-      style={{ display: "flex", alignItems: "center" }}
-    >
+    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
       <div className={`has-tooltip ${tooltipPosition}`} aria-describedby={tooltipUid}>
         <div
           className="price"
