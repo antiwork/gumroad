@@ -70,7 +70,7 @@ export const DiscordButton = ({
   };
 
   return loading ? (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div className="flex items-center">
       <LoadingSpinner width="2em" />
     </div>
   ) : (

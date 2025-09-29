@@ -610,7 +610,7 @@ const EmailPreview = ({
   return (
     <section className="paragraphs" ref={selfRef}>
       <div role="separator">
-        <div style={{ display: "flex", gap: "var(--spacer-2)" }}>
+        <div className="flex gap-2">
           <Icon name="outline-clock" />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}

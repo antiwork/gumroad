@@ -102,7 +102,7 @@ const Card = ({
   nativeType: ProductNativeType;
   creator: Creator | null;
 }) => (
-  <article className="product-card" style={{ position: "relative" }}>
+  <article className="product-card relative">
     <figure>
       <Thumbnail url={thumbnailUrl} nativeType={nativeType} />
     </figure>
@@ -115,7 +115,7 @@ const Card = ({
         <h3 itemProp="name">{name}</h3>
       )}
     </header>
-    <footer style={{ position: "relative" }}>
+    <footer className="relative">
       {creator ? (
         <AuthorByline name={creator.name} profileUrl={creator.profile_url} avatarUrl={creator.avatar_url} />
       ) : (

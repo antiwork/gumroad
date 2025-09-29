@@ -143,7 +143,7 @@ export const Wishlist = ({
                       <a
                         aria-label="Gift this product"
                         href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
-                        style={{ padding: "var(--spacer-4)", display: "grid" }}
+                        className="grid p-4"
                       >
                         <Icon name="gift-fill" />
                       </a>

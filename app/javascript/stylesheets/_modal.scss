@@ -5,9 +5,6 @@ dialog {
   border-radius: border-radius(1);
   padding: spacer(6);
 
-  @media (prefers-color-scheme: dark) {
-    box-shadow: none;
-  }
   // cannot use display: grid here because safari
   display: flex;
   flex-direction: column;
@@ -20,6 +17,10 @@ dialog {
   min-width: size(20);
   max-width: size(43.75);
   gap: spacer(4);
+
+  @media (prefers-color-scheme: dark) {
+    box-shadow: none;
+  }
 
   &::backdrop {
     background: $backdrop-bg;

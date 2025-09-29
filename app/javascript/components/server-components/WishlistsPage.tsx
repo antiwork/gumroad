@@ -82,7 +82,7 @@ const WishlistsPage = ({
                   Discoverable&nbsp;
                   <WithTooltip
                     tip={
-                      <span style={{ fontWeight: "normal", textWrap: "initial" }}>
+                      <span className="font-normal" style={{ textWrap: "initial" }}>
                         May be recommended on Gumroad Discover. You will receive an affiliate commission for any sales.
                       </span>
                     }

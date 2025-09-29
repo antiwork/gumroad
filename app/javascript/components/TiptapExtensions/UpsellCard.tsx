@@ -170,7 +170,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         data-drag-handle
       >
         {isLoading ? (
-          <div className="dummy" style={{ height: "8rem" }}></div>
+          <div className="dummy h-32"></div>
         ) : product ? (
           <article className="product-card horizontal">
             <figure>
@@ -185,7 +185,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
                   <UpsellCardHeader product={product} variant={variant} />
                 </a>
               )}
-              <footer style={{ fontSize: "1rem" }}>
+              <footer className="text-base">
                 {product.review_count > 0 ? (
                   <div className="rating">
                     <Icon name="solid-star" />

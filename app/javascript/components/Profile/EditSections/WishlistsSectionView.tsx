@@ -59,7 +59,7 @@ export const WishlistsSectionView = ({ section }: { section: WishlistsSection })
           heading="Wishlists"
           text={`${selectedWishlistsCount} ${selectedWishlistsCount === 1 ? "wishlist" : "wishlists"}`}
         >
-          <div className="paragraphs" style={{ maxHeight: "min(100vh, 500px)", overflow: "auto" }}>
+          <div className="paragraphs overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
             {wishlists.length > 0 ? (
               <Sortable list={wishlists} setList={setWishlists} tag={ProductList} handle="[aria-grabbed]">
                 {wishlists.map((wishlist) => (

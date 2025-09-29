@@ -395,7 +395,7 @@ const NewProductPage = ({
                   />
 
                   {isRecurringBilling ? (
-                    <label className="pill select" style={{ border: "unset" }}>
+                    <label className="pill select border-0">
                       <span>{recurrenceLabels[subscriptionDuration || defaultRecurrence]}</span>
                       <TypeSafeOptionSelect
                         onChange={(newSubscriptionDuration) => {

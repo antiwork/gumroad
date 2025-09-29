@@ -1,5 +1,11 @@
 <%= load_pack("admin_review") %>
 
+<% if user.deleted? %>
+  <div role="alert" class="danger">
+    <strong>Account Deleted:</strong> This user account was deleted on <%= format_datetime_with_relative_tooltip(user.deleted_at) %>.
+  </div>
+<% end %>
+
 <div class="paragraphs css-tabs">
   <!-- Hidden radio buttons for state management -->
   <% show_products_tab = params[:page].present? && params[:page].to_i >= 2 %>
