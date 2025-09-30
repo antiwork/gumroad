@@ -272,7 +272,7 @@ const Discover = (props: Props) => {
                 <fieldset role="group">
                   {range(4, 0).map((number) => (
                     <label key={number}>
-                      <span className="rating">
+                      <span className="flex items-center flex-shrink-0 gap-1">
                         <RatingStars rating={number} />
                         and up
                       </span>
