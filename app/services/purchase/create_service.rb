@@ -88,7 +88,7 @@ class Purchase::CreateService < Purchase::BaseService
       end
 
       if params[:accepted_offer].present?
-        upsell = Upsell.alive.find_by_external_id(params[:accepted_offer][:id])
+        upsell = Upsell.available_to_customers.find_by_external_id(params[:accepted_offer][:id])
         raise Purchase::PurchaseInvalid, "Sorry, this offer is no longer available." unless upsell.present?
         if upsell.cross_sell?
           if upsell.not_replace_selected_products?

@@ -21,6 +21,7 @@ describe Checkout::UpsellsController do
     "cross_sell",
     "replace_selected_products",
     "universal",
+    "paused",
     "text",
     "description",
     "product",
@@ -140,6 +141,7 @@ describe Checkout::UpsellsController do
           description: "You'll enjoy a range of exclusive features, including...",
           cross_sell: false,
           replace_selected_products: false,
+          paused: true,
           product_id: product1.external_id,
           upsell_variants: [{ selected_variant_id: product1.alive_variants.first.external_id, offered_variant_id: product1.alive_variants.second.external_id }],
         }, as: :json
@@ -158,6 +160,7 @@ describe Checkout::UpsellsController do
       expect(upsell.description).to eq("You'll enjoy a range of exclusive features, including...")
       expect(upsell.cross_sell).to eq(false)
       expect(upsell.replace_selected_products).to eq(false)
+      expect(upsell.paused).to eq(true)
       expect(upsell.product).to eq(product1)
       expect(upsell.variant).to eq(nil)
       expect(upsell.upsell_variants.first.selected_variant).to eq(product1.alive_variants.first)
@@ -174,6 +177,7 @@ describe Checkout::UpsellsController do
             description: "You'll enjoy a range of exclusive features, including...",
             cross_sell: true,
             replace_selected_products: true,
+            paused: false,
             product_id: product1.external_id,
             variant_id: product1.alive_variants.first.external_id,
             product_ids: [product2.external_id],
@@ -194,6 +198,7 @@ describe Checkout::UpsellsController do
         expect(upsell.description).to eq("You'll enjoy a range of exclusive features, including...")
         expect(upsell.cross_sell).to eq(true)
         expect(upsell.replace_selected_products).to eq(true)
+        expect(upsell.paused).to eq(false)
         expect(upsell.product).to eq(product1)
         expect(upsell.variant).to eq(product1.alive_variants.first)
         expect(upsell.selected_products).to eq([product2])
@@ -265,6 +270,7 @@ describe Checkout::UpsellsController do
           description: "You'll enjoy a range of exclusive features, including...",
           cross_sell: false,
           replace_selected_products: false,
+          paused: true,
           product_id: product1.external_id,
           upsell_variants: [{ selected_variant_id: product1.alive_variants.first.external_id, offered_variant_id: product1.alive_variants.second.external_id }],
         }, as: :json
@@ -274,6 +280,7 @@ describe Checkout::UpsellsController do
         .and change { upsell1.description }.from("This offer will only last for a few weeks.").to("You'll enjoy a range of exclusive features, including...")
         .and change { upsell1.cross_sell }.from(true).to(false)
         .and change { upsell1.replace_selected_products }.from(true).to(false)
+        .and change { upsell1.paused }.from(false).to(true)
         .and change { upsell1.upsell_variants.length }.from(0).to(1)
         .and change { upsell1.variant }.from(product1.alive_variants.second).to(nil)
 
@@ -297,6 +304,7 @@ describe Checkout::UpsellsController do
           description: "You'll enjoy a range of exclusive features, including...",
           cross_sell: true,
           replace_selected_products: false,
+          paused: false,
           product_id: product1.external_id,
           variant_id: product1.alive_variants.first.external_id,
           product_ids: [product2.external_id],

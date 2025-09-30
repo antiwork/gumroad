@@ -61,6 +61,16 @@ describe("Product checkout with upsells", type: :system, js: true) do
       expect(purchase.upsell_purchase).to be_nil
       expect(purchase.variant_attributes.first).to eq(upsell_product.alive_variants.first)
     end
+
+    context "when the upsell is paused" do
+      before { upsell.update!(paused: true) }
+
+      it "doesn't offer the upsell at checkout" do
+        visit upsell_product.long_url
+        add_to_cart(upsell_product, option: "Untitled 1")
+        check_out(upsell_product)
+      end
+    end
   end
 
   context "when the product has a cross-sell" do
@@ -151,6 +161,16 @@ describe("Product checkout with upsells", type: :system, js: true) do
       purchase = Purchase.last
       expect(purchase.upsell_purchase).to be_nil
       expect(purchase.variant_attributes.first).to eq(selected_product.alive_variants.first)
+    end
+
+    context "when the cross-sell is paused" do
+      before { cross_sell.update!(paused: true) }
+
+      it "doesn't offer the cross-sell at checkout" do
+        visit selected_product.long_url
+        add_to_cart(selected_product)
+        check_out(selected_product)
+      end
     end
 
     context "when the buyer has a better discount code" do
