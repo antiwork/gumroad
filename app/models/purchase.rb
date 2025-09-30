@@ -70,6 +70,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :installment_payment_schedule_cents
 
   belongs_to :link, optional: true
   has_one :url_redirect
@@ -3386,6 +3387,13 @@ class Purchase < ApplicationRecord
       return unless is_installment_payment
 
       nth_installment = subscription&.purchases&.successful&.count || 0
+
+      # snapshot of the schedule captured at time of original purchase,
+      schedule_snapshot = installment_payment_schedule_cents.presence || subscription&.original_purchase&.installment_payment_schedule_cents
+      if schedule_snapshot.present? && schedule_snapshot.is_a?(Array)
+        return schedule_snapshot[nth_installment] || schedule_snapshot.last
+      end
+
       installment_payments = fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
       installment_payments[nth_installment] || installment_payments.last
     end

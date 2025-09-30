@@ -50,6 +50,12 @@ class Purchase::BaseService
         price: purchase.price,
         installment_plan: purchase.is_installment_payment ? purchase.link.installment_plan : nil
       )
+      # snapshot the installment schedule so price doesn't change mid subscription
+      if purchase.is_installment_payment
+        schedule = purchase.link.installment_plan.calculate_installment_payment_price_cents(purchase.displayed_price_cents)
+        purchase.installment_payment_schedule_cents = schedule
+      end
+
       subscription.save!
       subscription.purchases << [purchase, giftee_purchase].compact
     end
