@@ -23,7 +23,7 @@ export const Tabs = ({
   };
 
   return (
-    <div className="tab-buttons" role="tablist">
+    <div className="grid grid-flow-col gap-3 sm:grid-flow-col" role="tablist">
       <Button
         onClick={(evt) => selectTab(evt, "overlay")}
         className={cx(tab === "overlay" ? "selected" : null)}

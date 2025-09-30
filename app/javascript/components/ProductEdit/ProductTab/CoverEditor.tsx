@@ -154,7 +154,7 @@ const CoverUploader = ({
       <Progress />
     ) : (
       <div style={{ width: "100%" }}>
-        <div className="tab-buttons small" role="tablist">
+        <div className="grid grid-flow-col flex-col items-center gap-3 text-center sm:grid-flow-col" role="tablist">
           <label className="button" role="tab">
             <input
               type="file"
@@ -239,7 +239,7 @@ const CoversTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivEl
   <div
     ref={ref}
     role="tablist"
-    className="tab-buttons scrollable"
+    className="grid grid-flow-col gap-3 overflow-x-auto pb-4 pl-[var(--button-hover-transform-length)] pt-[var(--button-hover-transform-length)]"
     style={
       /*
         `overflow-y: visible` would be interpreted as `overflow-y: auto` since `overflow-x` is `auto` on this element
