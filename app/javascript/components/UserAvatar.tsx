@@ -2,8 +2,8 @@ import cx from "classnames";
 import * as React from "react";
 
 type UserAvatarProps = {
-  src: string | undefined;
-  alt?: string;
+  src?: string | undefined;
+  alt?: string | undefined;
   className?: string;
   style?: React.CSSProperties;
 };
