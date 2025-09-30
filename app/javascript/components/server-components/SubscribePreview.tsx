@@ -11,15 +11,13 @@ type Props = {
 };
 
 export const SubscribePreview = ({ avatar_url, title }: Props) => (
-  <div className="subscribe-preview">
-    <img className="user-avatar" src={avatar_url} />
-    <section>
-      <span className="logo-full" />
-      <h1>{title}</h1>
-      <div>
-        <Button color="accent">Subscribe</Button>
-      </div>
-    </section>
+  <div className="w-full h-full grid items-center p-8 gap-8" style={{ gridTemplateColumns: '27.5% 1fr' }}>
+    <img className="w-full aspect-square border border-gray-300 flex-shrink-0" style={{ borderRadius: '10rem' }} src={avatar_url} />
+    <div className="grid gap-3">
+      <span className="logo-full text-sm opacity-20" />
+      <h1 className="text-3xl leading-tight overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', fontSize: '2rem' }}>{title}</h1>
+      <Button color="accent" className="w-fit">Subscribe</Button>
+    </div>
   </div>
 );
 
