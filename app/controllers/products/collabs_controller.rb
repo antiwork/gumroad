@@ -5,11 +5,12 @@ class Products::CollabsController < Sellers::BaseController
 
   def index
     @title = "Products"
-    @props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
+    props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
 
-    respond_to do |format|
-      format.html { render inertia: "Products/Collabs/index", props: inertia_props(collab_products_page_props: @props) }
-      format.json { render json: @props }
+    if request.format.json?
+      render json: props
+    else
+      render inertia: "Products/Collabs/index", props: inertia_props(**props)
     end
   end
 

@@ -1,12 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { default as AnalyticsPage, AnalyticsPageProps } from "$app/components/server-components/AnalyticsPage";
+import { default as AnalyticsPage, AnalyticsPageProps } from "$app/components/AnalyticsPage";
 
 function Analytics() {
-  const { analytics_props } = usePage<{ analytics_props: AnalyticsPageProps }>().props;
+  const { products, country_codes, state_names } = usePage<AnalyticsPageProps>().props;
 
-  return <AnalyticsPage {...analytics_props} />;
+  return <AnalyticsPage products={products} country_codes={country_codes} state_names={state_names} />;
 }
 
 export default Analytics;

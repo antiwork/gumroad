@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import * as React from "react";
 
 type AlertStatus = "success" | "error" | "info" | "warning" | "danger";
@@ -94,14 +95,13 @@ export const ClientAlert = ({ alert, isVisible }: { alert: AlertPayload | null; 
   alert ? (
     <div
       role="alert"
-      className={`bg-filled fixed left-1/2 top-4 min-w-max max-w-sm px-4 py-2 ${
-        alert.status
-      } ${isVisible ? "visible" : "invisible"}`}
-      style={{
-        transform: `translateX(-50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
-        transition: "all 0.3s ease-out 0.5s",
-        zIndex: "var(--z-index-tooltip)",
-      }}
+      className={classNames("bg-filled fixed left-1/2 top-4 z-[30] min-w-max max-w-sm px-4 py-2", alert.status, {
+        visible: isVisible,
+        invisible: !isVisible,
+        "translate-x-[-50%] translate-y-0 transition-all delay-500 duration-300 ease-out": isVisible,
+        "translate-x-[-50%] translate-y-[-calc(100%+var(--spacer-4))] transition-all delay-500 duration-300 ease-out":
+          !isVisible,
+      })}
       dangerouslySetInnerHTML={alert.html ? { __html: alert.message } : undefined}
     >
       {!alert.html ? alert.message : null}

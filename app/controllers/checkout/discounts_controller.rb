@@ -12,10 +12,10 @@ class Checkout::DiscountsController < Sellers::BaseController
 
     @title = "Discounts"
     pagination, offer_codes = fetch_offer_codes
-    @presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
+    presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
 
     render inertia: "Checkout/Discounts/index",
-           props: inertia_props(discounts_page_props: @presenter.discounts_props)
+           props: inertia_props(**presenter.discounts_props)
   end
 
   def paged

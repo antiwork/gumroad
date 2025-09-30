@@ -49,20 +49,24 @@ export type UtmLinksPageProps = {
   utm_links: SavedUtmLink[];
   pagination: PaginationProps;
   context: UtmLinkFormContext;
-  utm_link?: UtmLink;
-  copy_from?: string;
+  utm_link?: UtmLink | undefined;
+  copy_from?: string | undefined;
 };
 
 const UtmLinksPage = ({ utm_links, pagination, context, utm_link, copy_from }: UtmLinksPageProps) => {
   const currentPath = window.location.pathname;
+  const newUtmLinkPath = "/dashboard/utm_links/new";
+  const editUtmLinkRegex = /\/dashboard\/utm_links\/\d+\/edit$/u;
 
-  return currentPath === "/dashboard/utm_links/new" ? (
-    <UtmLinkForm context={context} utm_link={utm_link ?? null} {...(copy_from && { copy_from })} />
-  ) : /\/dashboard\/utm_links\/\d+\/edit$/u.exec(currentPath) ? (
-    <UtmLinkForm context={context} utm_link={utm_link ?? null} />
-  ) : (
-    <UtmLinkList utm_links={utm_links} pagination={pagination} />
-  );
+  if (currentPath === newUtmLinkPath) {
+    return <UtmLinkForm context={context} utm_link={utm_link ?? null} {...(copy_from && { copy_from })} />;
+  }
+
+  if (editUtmLinkRegex.test(currentPath)) {
+    return <UtmLinkForm context={context} utm_link={utm_link ?? null} />;
+  }
+
+  return <UtmLinkList utm_links={utm_links} pagination={pagination} />;
 };
 
 export default UtmLinksPage;

@@ -5,14 +5,16 @@ class Products::AffiliatedController < Sellers::BaseController
 
   def index
     @title = "Products"
-    @props = AffiliatedProductsPresenter.new(current_seller,
-                                             query: affiliated_products_params[:query],
-                                             page: affiliated_products_params[:page],
-                                             sort: affiliated_products_params[:sort])
-                                        .affiliated_products_page_props
-    respond_to do |format|
-      format.html { render inertia: "Products/Affiliated/index", props: inertia_props(affiliated_page_props: @props) }
-      format.json { render json: @props }
+    props = AffiliatedProductsPresenter.new(current_seller,
+                                           query: affiliated_products_params[:query],
+                                           page: affiliated_products_params[:page],
+                                           sort: affiliated_products_params[:sort])
+                                      .affiliated_products_page_props
+
+    if request.format.json?
+      render json: props
+    else
+      render inertia: "Products/Affiliated/index", props: inertia_props(**props)
     end
   end
 

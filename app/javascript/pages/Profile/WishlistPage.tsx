@@ -1,15 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import {
-  default as ProfileWishlistPage,
-  ProfileWishlistPageProps,
-} from "$app/components/server-components/Profile/WishlistPage";
+import { default as ProfileWishlistPage, ProfileWishlistPageProps } from "$app/components/Profile/WishlistPage";
 
 function ProfileWishlistPageIndex() {
-  const { wishlist_page_props } = usePage<{ wishlist_page_props: ProfileWishlistPageProps }>().props;
+  const props = usePage<ProfileWishlistPageProps>().props;
 
-  return <ProfileWishlistPage {...wishlist_page_props} />;
+  return <ProfileWishlistPage {...props} />;
 }
 
 export default ProfileWishlistPageIndex;

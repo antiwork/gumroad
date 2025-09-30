@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -8,7 +9,6 @@ import {
   Link,
   redirect,
   useNavigation,
-  useNavigate,
   useLoaderData,
   useRevalidator,
 } from "react-router-dom";
@@ -33,13 +33,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { IncomingCollaborators } from "$app/components/CollaboratorsPage/IncomingCollaborators";
+import { Layout } from "$app/components/CollaboratorsPage/Layout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { IncomingCollaborators } from "$app/components/server-components/CollaboratorsPage/IncomingCollaborators";
-import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -307,7 +307,6 @@ type CollaboratorProduct = CollaboratorFormProduct & {
 };
 
 const CollaboratorForm = () => {
-  const navigate = useNavigate();
   const navigation = useNavigation();
 
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = React.useState(false);
@@ -451,7 +450,7 @@ const CollaboratorForm = () => {
             email: collaboratorEmail.value,
           }));
       showAlert("Changes saved!", "success");
-      navigate("/collaborators");
+      router.get(Routes.collaborators_path());
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -469,7 +468,7 @@ const CollaboratorForm = () => {
       title={isEditing ? formData.name : "New collaborator"}
       headerActions={
         <>
-          <Link to="/collaborators" className="button" inert={navigation.state !== "idle"}>
+          <Link to={Routes.collaborators_path()} className="button" inert={navigation.state !== "idle"}>
             <Icon name="x-square" />
             Cancel
           </Link>
@@ -479,7 +478,11 @@ const CollaboratorForm = () => {
               onClick={handleSubmit}
               disabled={formData.collaborators_disabled_reason !== null || isSaving}
             >
-              {isSaving ? "Saving..." : isEditing ? "Save changes" : "Add collaborator"}
+              {(() => {
+                if (isSaving) return "Saving...";
+                if (isEditing) return "Save changes";
+                return "Add collaborator";
+              })()}
             </Button>
           </WithTooltip>
         </>

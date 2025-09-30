@@ -22,18 +22,18 @@ export const AnalyticsLayout = ({
     <div>
       <PageHeader title="Analytics" actions={actions}>
         <Tabs>
-          <Tab isSelected={selectedTab === "following"}>
+          <Tab isSelected={selectedTab === "following"} asChild>
             <Link className="no-underline" href={Routes.audience_dashboard_path()}>
               Following
             </Link>
           </Tab>
-          <Tab isSelected={selectedTab === "sales"}>
+          <Tab isSelected={selectedTab === "sales"} asChild>
             <Link className="no-underline" href={Routes.sales_dashboard_path()}>
               Sales
             </Link>
           </Tab>
           {user.policies.utm_link.index ? (
-            <Tab isSelected={selectedTab === "utm_links"}>
+            <Tab isSelected={selectedTab === "utm_links"} asChild>
               <Link className="no-underline" href={Routes.utm_links_dashboard_path()}>
                 Links
               </Link>

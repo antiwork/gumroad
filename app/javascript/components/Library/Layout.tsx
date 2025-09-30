@@ -26,25 +26,25 @@ export const Layout = ({
     <div className="library" ref={ref}>
       <PageHeader title="Library">
         <Tabs>
-          <Tab isSelected={selectedTab === "purchases"}>
+          <Tab isSelected={selectedTab === "purchases"} asChild>
             <Link className="no-underline" href={Routes.library_path()}>
               Purchases
             </Link>
           </Tab>
-          <Tab isSelected={selectedTab === "wishlists"}>
+          <Tab isSelected={selectedTab === "wishlists"} asChild>
             <Link className="no-underline" href={Routes.wishlists_path()}>
               {followingWishlistsEnabled ? "Saved" : "Wishlists"}
             </Link>
           </Tab>
           {followingWishlistsEnabled ? (
-            <Tab isSelected={selectedTab === "following_wishlists"}>
+            <Tab isSelected={selectedTab === "following_wishlists"} asChild>
               <Link className="no-underline" href={Routes.wishlists_following_index_path()}>
                 Following
               </Link>
             </Tab>
           ) : null}
           {reviewsPageEnabled ? (
-            <Tab isSelected={selectedTab === "reviews"}>
+            <Tab isSelected={selectedTab === "reviews"} asChild>
               <Link className="no-underline" href={Routes.reviews_path()}>
                 Reviews
               </Link>

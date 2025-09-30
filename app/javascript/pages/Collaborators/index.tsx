@@ -1,6 +1,6 @@
 import React from "react";
 
-import CollaboratorsPage from "../../components/server-components/CollaboratorsPage";
+import CollaboratorsPage from "$app/components/CollaboratorsPage";
 
 function index() {
   return <CollaboratorsPage />;

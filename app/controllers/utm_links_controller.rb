@@ -15,21 +15,14 @@ class UtmLinksController < Sellers::BaseController
       { key: "date", direction: "desc" }
     end
 
-    utm_links_data = PaginatedUtmLinksPresenter.new(
-      seller: current_seller,
-      query: query,
-      page: page,
-      sort: sort
-    ).props
+    utm_links_data = PaginatedUtmLinksPresenter.new(seller: current_seller, query:, page:, sort:).props
 
     context_data = UtmLinkPresenter.new(seller: current_seller).new_page_react_props
 
     render inertia: "UtmLinks/index", props: inertia_props(
-      utm_links_props: {
-        utm_links: utm_links_data[:utm_links],
-        pagination: utm_links_data[:pagination],
-        context: context_data[:context]
-      }
+      utm_links: utm_links_data[:utm_links],
+      pagination: utm_links_data[:pagination],
+      context: context_data[:context]
     )
   end
 
@@ -40,11 +33,9 @@ class UtmLinksController < Sellers::BaseController
     utm_link_data = UtmLinkPresenter.new(seller: current_seller).new_page_react_props(copy_from: copy_from)
 
     render inertia: "UtmLinks/index", props: inertia_props(
-      utm_links_props: {
-        context: utm_link_data[:context],
-        utm_link: utm_link_data[:utm_link],
-        copy_from: copy_from
-      }
+      context: utm_link_data[:context],
+      utm_link: utm_link_data[:utm_link],
+      copy_from: copy_from
     )
   end
 
@@ -57,10 +48,8 @@ class UtmLinksController < Sellers::BaseController
     utm_link_data = UtmLinkPresenter.new(seller: current_seller, utm_link: utm_link).edit_page_react_props
 
     render inertia: "UtmLinks/index", props: inertia_props(
-      utm_links_props: {
-        context: utm_link_data[:context],
-        utm_link: utm_link_data[:utm_link]
-      }
+      context: utm_link_data[:context],
+      utm_link: utm_link_data[:utm_link]
     )
   end
 

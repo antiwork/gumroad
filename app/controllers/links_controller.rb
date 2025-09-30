@@ -37,8 +37,8 @@ class LinksController < ApplicationController
     @guid = SecureRandom.hex
     @title = "Products"
 
-    @memberships_pagination, @memberships = paginated_memberships(page: 1)
-    @products_pagination, @products = paginated_products(page: 1)
+    memberships_pagination, memberships = paginated_memberships(page: 1)
+    products_pagination, products = paginated_products(page: 1)
 
     @price = current_seller.links.last.try(:price_formatted_without_dollar_sign) ||
              Money.new(DEFAULT_PRICE, current_seller.currency_type).format(
@@ -46,29 +46,17 @@ class LinksController < ApplicationController
              )
 
     @user_compliance_info = current_seller.fetch_or_build_user_compliance_info
-    @react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships: @memberships,
-      memberships_pagination: @memberships_pagination,
-      products: @products,
-      products_pagination: @products_pagination
-    ).page_props
+    react_products_page_props = DashboardProductsPagePresenter.new(pundit_user:, memberships:, memberships_pagination:, products:, products_pagination:).page_props
 
     render inertia: "Products/index",
-           props: inertia_props(react_products_page_props: @react_products_page_props)
+           props: inertia_props(**react_products_page_props)
   end
 
   def memberships_paged
     authorize Link, :index?
 
     pagination, memberships = paginated_memberships(page: paged_params[:page].to_i, query: params[:query])
-    react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships:,
-      memberships_pagination: pagination,
-      products: nil,
-      products_pagination: nil)
-    .memberships_table_props
+    react_products_page_props = DashboardProductsPagePresenter.new(pundit_user:, memberships:, memberships_pagination: pagination, products: nil, products_pagination: nil).memberships_table_props
 
     render json: {
       pagination: react_products_page_props[:memberships_pagination],
@@ -80,13 +68,7 @@ class LinksController < ApplicationController
     authorize Link, :index?
 
     pagination, products = paginated_products(page: paged_params[:page].to_i, query: params[:query])
-    react_products_page_props = DashboardProductsPagePresenter.new(
-      pundit_user:,
-      memberships: nil,
-      memberships_pagination: nil,
-      products:,
-      products_pagination: pagination
-    ).products_table_props
+    react_products_page_props = DashboardProductsPagePresenter.new(pundit_user:, memberships: nil, memberships_pagination: nil, products:, products_pagination: pagination).products_table_props
 
     render json: {
       pagination: react_products_page_props[:products_pagination],
@@ -97,11 +79,11 @@ class LinksController < ApplicationController
   def new
     authorize Link
 
-    @react_new_product_page_props = ProductPresenter.new_page_props(current_seller:)
+    react_new_product_page_props = ProductPresenter.new_page_props(current_seller:)
     @title = "What are you creating?"
 
     render inertia: "Products/New/index",
-           props: inertia_props(new_product_page_props: @react_new_product_page_props)
+           props: inertia_props(**react_new_product_page_props)
   end
 
   def create
@@ -191,7 +173,7 @@ class LinksController < ApplicationController
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
     presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
-    @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
+    # Product props are not used in this action
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
@@ -202,9 +184,7 @@ class LinksController < ApplicationController
       )
     end
 
-    if params[:layout] == Product::Layout::DISCOVER
-      @discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
-    end
+    # Discover props are not used in this action
 
     set_noindex_header if !@product.alive?
     respond_to do |format|
@@ -614,7 +594,9 @@ class LinksController < ApplicationController
     end
 
     def paged_params
-      params.permit(:page, sort: [:key, :direction])
+      # Ensure params is ActionController::Parameters
+      params_hash = params.is_a?(Hash) ? ActionController::Parameters.new(params) : params
+      params_hash.permit(:page, sort: [:key, :direction])
     end
 
     def paginated_memberships(page:, query: nil)

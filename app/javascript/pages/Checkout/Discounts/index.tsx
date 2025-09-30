@@ -1,15 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import {
-  default as DiscountsPage,
-  DiscountsPageProps,
-} from "$app/components/server-components/CheckoutDashboard/DiscountsPage";
+import { default as DiscountsPage, DiscountsPageProps } from "$app/components/CheckoutDashboard/DiscountsPage";
 
 function Discounts() {
-  const { discounts_page_props } = usePage<{ discounts_page_props: DiscountsPageProps }>().props;
+  const { offer_codes, pages, products, pagination } = usePage<DiscountsPageProps>().props;
 
-  return <DiscountsPage {...discounts_page_props} />;
+  return <DiscountsPage offer_codes={offer_codes} pages={pages} products={products} pagination={pagination} />;
 }
 
 export default Discounts;

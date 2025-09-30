@@ -10,10 +10,10 @@ class Checkout::UpsellsController < Sellers::BaseController
 
     @title = "Upsells"
     pagination, upsells = fetch_upsells
-    @upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
+    upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
 
     render inertia: "Checkout/Upsells/index",
-           props: inertia_props(upsells_page_props: @upsells_props)
+           props: inertia_props(**upsells_props)
   end
 
   def paged

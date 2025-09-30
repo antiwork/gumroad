@@ -45,7 +45,7 @@ export type WishlistProps = {
   discover_opted_out: boolean | null;
   checkout_enabled: boolean;
   items: WishlistItem[];
-  isDiscover?: boolean;
+  isDiscover?: boolean | undefined;
 };
 
 const formatName = ({ product, option, recurrence }: WishlistItem) => {

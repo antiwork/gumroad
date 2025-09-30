@@ -1,15 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import {
-  default as WishlistsFollowingPage,
-  WishlistsFollowingPageProps,
-} from "$app/components/server-components/WishlistsFollowingPage";
+import { default as WishlistsFollowingPage, WishlistsFollowingPageProps } from "$app/components/WishlistsFollowingPage";
 
 function WishlistsFollowing() {
-  const { wishlists_following_props } = usePage<{ wishlists_following_props: WishlistsFollowingPageProps }>().props;
+  const { wishlists, reviews_page_enabled } = usePage<WishlistsFollowingPageProps>().props;
 
-  return <WishlistsFollowingPage {...wishlists_following_props} />;
+  return <WishlistsFollowingPage wishlists={wishlists} reviews_page_enabled={reviews_page_enabled} />;
 }
 
 export default WishlistsFollowing;

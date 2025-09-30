@@ -1,9 +1,9 @@
 import * as React from "react";
 
+import { Product } from "$app/components/AnalyticsPage";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
-import { Product } from "$app/components/server-components/AnalyticsPage";
 
 export type ProductOption = Product & { selected: boolean };
 

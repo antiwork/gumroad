@@ -15,13 +15,13 @@ class LibraryController < Sellers::BaseController
     @on_library_page = true
     @title = "Library"
     @body_class = "library-container"
-    @purchase_results, @creator_counts, @bundles = LibraryPresenter.new(logged_in_user).library_cards
+    purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
 
     render inertia: "Library/index",
            props: inertia_props(
-             results: @purchase_results,
-             creator_counts: @creator_counts,
-             bundles: @bundles,
+             results: purchase_results,
+             creator_counts: creator_counts,
+             bundles: bundles,
              reviews_page_enabled: Feature.active?(:reviews_page, logged_in_user)
            )
   end

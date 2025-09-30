@@ -3,8 +3,8 @@ import { cast } from "ts-safe-cast";
 import { request, ResponseError } from "$app/utils/request";
 
 import { ProductToAdd } from "$app/components/Checkout/cartState";
+import { Upsell, SortKey } from "$app/components/CheckoutDashboard/UpsellsPage";
 import { PaginationProps } from "$app/components/Pagination";
-import { Upsell, SortKey } from "$app/components/server-components/CheckoutDashboard/UpsellsPage";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 export type UpsellPayload = {

@@ -5,11 +5,11 @@ import { ProductNativeType } from "$app/parsers/product";
 import { Creator } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { CreateAccountForm } from "$app/components/Checkout/Receipt";
+import { Result } from "$app/components/CheckoutPage";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Result } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useRunOnce } from "$app/components/useRunOnce";
 

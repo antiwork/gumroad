@@ -1,13 +1,13 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { default as WishlistPage } from "$app/components/server-components/WishlistPage";
 import { WishlistProps } from "$app/components/Wishlist";
+import { default as WishlistPage } from "$app/components/WishlistPage";
 
 function WishlistPageIndex() {
-  const { wishlist_page_props } = usePage<{ wishlist_page_props: WishlistProps }>().props;
+  const props = usePage<WishlistProps>().props;
 
-  return <WishlistPage {...wishlist_page_props} />;
+  return <WishlistPage {...props} />;
 }
 
 export default WishlistPageIndex;

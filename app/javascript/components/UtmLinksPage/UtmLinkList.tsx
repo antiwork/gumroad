@@ -22,10 +22,10 @@ import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
-import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
+import { extractSortParam } from "$app/components/UtmLinksPage";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
@@ -99,7 +99,7 @@ const UtmLinkList = ({
   const onChangePage = (newPage: number) => {
     const params = new URLSearchParams(window.location.search);
     params.set("page", newPage.toString());
-    router.get(`/dashboard/utm_links?${params.toString()}`);
+    router.get(`${Routes.utm_links_dashboard_path()}?${params.toString()}`);
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
@@ -109,7 +109,7 @@ const UtmLinkList = ({
       params.set("key", newSort.key);
       params.set("direction", newSort.direction);
     }
-    router.get(`/dashboard/utm_links?${params.toString()}`);
+    router.get(`${Routes.utm_links_dashboard_path()}?${params.toString()}`);
     setSort(newSort);
   };
 
@@ -127,7 +127,7 @@ const UtmLinkList = ({
       params.delete("query");
     }
     params.delete("page");
-    router.get(`/dashboard/utm_links?${params.toString()}`);
+    router.get(`${Routes.utm_links_dashboard_path()}?${params.toString()}`);
   }, 500);
 
   return (
@@ -213,11 +213,11 @@ const UtmLinkList = ({
                   <td>
                     <UtmLinkActions link={link}>
                       <div role="menu">
-                        <div role="menuitem" onClick={() => router.visit(editLinkPath(link))}>
+                        <div role="menuitem" onClick={() => router.get(editLinkPath(link))}>
                           <Icon name="pencil" />
                           &ensp;Edit
                         </div>
-                        <div role="menuitem" onClick={() => router.visit(duplicateLinkPath(link))}>
+                        <div role="menuitem" onClick={() => router.get(duplicateLinkPath(link))}>
                           <Icon name="outline-duplicate" />
                           &ensp;Duplicate
                         </div>

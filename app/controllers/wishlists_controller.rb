@@ -13,15 +13,13 @@ class WishlistsController < ApplicationController
     respond_to do |format|
       format.html do
         @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
-        @wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+        wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
 
         render inertia: "Wishlists/index",
                props: inertia_props(
-                 wishlists_props: {
-                   wishlists: @wishlists_props,
-                   reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
-                   following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)
-                 }
+                 wishlists: wishlists_props,
+                 reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
+                 following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)
                )
       end
       format.json do
@@ -40,32 +38,11 @@ class WishlistsController < ApplicationController
   end
 
   def show
-    wishlist = user_by_domain(request.host).wishlists.alive.find_by_url_slug(params[:id])
-    e404 if wishlist.blank?
+    find_wishlist
+    wishlist_presenter = WishlistPresenter.new(wishlist: @wishlist)
 
-    @user = wishlist.user
-    @title = wishlist.name
-    @show_user_favicon = true
-    @wishlist_presenter = WishlistPresenter.new(wishlist:)
-    @discover_props = { taxonomies_for_nav: } if params[:layout] == Product::Layout::DISCOVER
-
-    case params[:layout]
-    when Product::Layout::PROFILE
-      render inertia: "Profile/WishlistPage",
-             props: inertia_props(
-               wishlist_page_props: @wishlist_presenter.public_props(request:, pundit_user:)
-             )
-    when Product::Layout::DISCOVER
-      render inertia: "Discover/WishlistPage",
-             props: inertia_props(
-               wishlist_page_props: @wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by]).merge(@discover_props)
-             )
-    else
-      render inertia: "WishlistPage",
-             props: inertia_props(
-               wishlist_page_props: @wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by])
-             )
-    end
+    render inertia: "WishlistPage",
+           props: inertia_props(**wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by]))
   end
 
   def update
@@ -90,4 +67,14 @@ class WishlistsController < ApplicationController
 
     head :no_content
   end
+
+  private
+    def find_wishlist
+      @wishlist = user_by_domain(request.host).wishlists.alive.find_by_url_slug(params[:id])
+      e404 if @wishlist.blank?
+
+      @user = @wishlist.user
+      @title = @wishlist.name
+      @show_user_favicon = true
+    end
 end

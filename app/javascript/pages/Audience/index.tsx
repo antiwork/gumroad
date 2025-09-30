@@ -1,12 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { default as AudiencePage, AudiencePageProps } from "$app/components/server-components/AudiencePage";
+import { default as AudiencePage } from "$app/components/AudiencePage";
 
 function Audience() {
-  const { audience_props } = usePage<{ audience_props: AudiencePageProps }>().props;
+  const { total_follower_count } = usePage<{ total_follower_count: number }>().props;
 
-  return <AudiencePage {...audience_props} />;
+  return <AudiencePage total_follower_count={total_follower_count} />;
 }
 
 export default Audience;

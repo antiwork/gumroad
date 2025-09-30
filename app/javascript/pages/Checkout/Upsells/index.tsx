@@ -1,15 +1,12 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import {
-  default as UpsellsPage,
-  UpsellsPageProps,
-} from "$app/components/server-components/CheckoutDashboard/UpsellsPage";
+import { default as UpsellsPage, UpsellsPageProps } from "$app/components/CheckoutDashboard/UpsellsPage";
 
 function Upsells() {
-  const { upsells_page_props } = usePage<{ upsells_page_props: UpsellsPageProps }>().props;
+  const { pages, upsells, products, pagination } = usePage<UpsellsPageProps>().props;
 
-  return <UpsellsPage {...upsells_page_props} />;
+  return <UpsellsPage pages={pages} upsells={upsells} products={products} pagination={pagination} />;
 }
 
 export default Upsells;

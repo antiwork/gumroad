@@ -20,7 +20,7 @@ import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Select } from "$app/components/Select";
-import { UtmLinkLayout } from "$app/components/server-components/UtmLinksPage";
+import { UtmLinkLayout } from "$app/components/UtmLinksPage";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const MAX_UTM_PARAM_LENGTH = 200;
@@ -203,7 +203,7 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
       }
 
       showAlert(isEditing ? "Link updated!" : "Link created!", "success");
-      router.visit("/dashboard/utm_links");
+      router.get(Routes.utm_links_dashboard_path());
     } catch (error) {
       const genericMessage = "Sorry, something went wrong. Please try again.";
       if (error instanceof ResponseError) {
@@ -233,12 +233,16 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
       title={isEditing ? "Edit link" : "Create link"}
       actions={
         <>
-          <Link href="/dashboard/utm_links" className="button">
+          <Link href={Routes.utm_links_dashboard_path()} className="button">
             <Icon name="x-square" />
             Cancel
           </Link>
           <Button color="accent" onClick={submit} disabled={isSaving}>
-            {isSaving ? "Saving..." : isEditing ? "Save changes" : "Add link"}
+            {(() => {
+              if (isSaving) return "Saving...";
+              if (isEditing) return "Save changes";
+              return "Add link";
+            })()}
           </Button>
         </>
       }

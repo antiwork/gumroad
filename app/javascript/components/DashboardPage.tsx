@@ -58,7 +58,7 @@ export type DashboardPageProps = {
     total: string;
   };
   activity_items: ActivityItem[];
-  stripe_verification_message?: string | null;
+  stripe_verification_message?: string | undefined;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
 };
