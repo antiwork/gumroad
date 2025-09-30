@@ -805,7 +805,7 @@ Rails.application.routes.draw do
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
-    resources :utm_links, only: [:index, :new, :edit], path: 'dashboard/utm_links', as: :dashboard_utm_links
+    resources :utm_links, only: [:index, :new, :edit], path: "dashboard/utm_links", as: :dashboard_utm_links
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address

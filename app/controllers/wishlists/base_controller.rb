@@ -6,5 +6,4 @@ class Wishlists::BaseController < ApplicationController
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
   before_action :hide_layouts, only: :show
-
 end

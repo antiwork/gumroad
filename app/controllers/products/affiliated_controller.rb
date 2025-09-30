@@ -5,9 +5,9 @@ class Products::AffiliatedController < Sellers::BaseController
 
   def index
     props = AffiliatedProductsPresenter.new(current_seller,
-                                           query: affiliated_products_params[:query],
-                                           page: affiliated_products_params[:page],
-                                           sort: affiliated_products_params[:sort])
+                                            query: affiliated_products_params[:query],
+                                            page: affiliated_products_params[:page],
+                                            sort: affiliated_products_params[:sort])
                                       .affiliated_products_page_props
 
     if request.format.json?

@@ -8,10 +8,10 @@ RSpec.describe "Inertia Analytics Page", type: :system, js: true do
   before do
     sign_in seller
     allow_any_instance_of(AnalyticsPresenter).to receive(:page_props).and_return({
-                                                                                     products: [],
-                                                                                     country_codes: {},
-                                                                                     state_names: []
-                                                                                   })
+                                                                                   products: [],
+                                                                                   country_codes: {},
+                                                                                   state_names: []
+                                                                                 })
   end
 
   describe "Analytics page" do

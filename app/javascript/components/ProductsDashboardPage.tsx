@@ -7,9 +7,8 @@ import { Icon } from "$app/components/Icons";
 import { PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
-import { WithTooltip } from "$app/components/WithTooltip";
-
 import ProductsPage from "$app/components/ProductsPage";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/product_nudge.svg";
 
