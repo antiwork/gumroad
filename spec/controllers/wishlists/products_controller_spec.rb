@@ -151,6 +151,36 @@ describe Wishlists::ProductsController do
     end
   end
 
+  describe "GET index" do
+    it "lists the products in the wishlist" do
+      wishlist_product1 = create(:wishlist_product, wishlist:)
+      wishlist_product2 = create(:wishlist_product, wishlist:)
+      create(:wishlist_product) # another wishlist product
+
+      get :index, params: { wishlist_id: wishlist.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["items"].map { |wp| wp["id"] }).to match_array([wishlist_product1.external_id, wishlist_product2.external_id])
+    end
+
+    context "when logged out" do
+      before do
+        sign_out(user)
+      end
+
+      it "lists the products in the wishlist" do
+        wishlist_product1 = create(:wishlist_product, wishlist:)
+        wishlist_product2 = create(:wishlist_product, wishlist:)
+        create(:wishlist_product) # another wishlist product
+
+        get :index, params: { wishlist_id: wishlist.external_id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["items"].map { |wp| wp["id"] }).to match_array([wishlist_product1.external_id, wishlist_product2.external_id])
+      end
+    end
+  end
+
   describe "DELETE destroy" do
     let(:wishlist_product) { create(:wishlist_product, wishlist:) }
 

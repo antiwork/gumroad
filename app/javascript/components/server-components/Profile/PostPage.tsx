@@ -69,11 +69,11 @@ const PostPage = ({
 
   return (
     <Layout className="reader" creatorProfile={creator_profile}>
-      <header className="grid gap-2 border-b border-border px-4 py-8">
+      <header className="override grid gap-2 border-b border-border px-4 py-8">
         <h1>{subject}</h1>
         <time>{publishedAtFormatted}</time>
       </header>
-      <article className="grid gap-8 border-b border-border p-4 pt-8 lg:pb-8 lg:pt-12">
+      <article className="override grid gap-8 border-b border-border p-4 pt-8 lg:pb-8 lg:pt-12">
         {pageLoaded ? null : <LoadingSpinner width="2em" />}
         <EditorContent className="rich-text" editor={editor} />
 

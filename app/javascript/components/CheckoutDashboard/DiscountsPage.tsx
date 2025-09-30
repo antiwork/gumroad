@@ -322,7 +322,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
     >
       <section className="p-4 md:p-8">
         {offerCodes.length > 0 ? (
-          <>
+          <section className="paragraphs">
             <table aria-live="polite" aria-busy={isLoading}>
               <thead>
                 <tr>
@@ -347,7 +347,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
                       <td>
-                        <div className="grid gap-2">
+                        <div className="override grid gap-2">
                           <div>
                             <div className="pill small mr-2" aria-label="Offer code">
                               {offerCode.code.toUpperCase()}
@@ -423,7 +423,8 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                                 role="menuitem"
                                 className="danger"
                                 inert={!offerCode.can_update || isLoading}
-                                onClick={asyncVoid(async () => {
+                                onClick={asyncVoid(async (e) => {
+                                  e.stopPropagation();
                                   try {
                                     setIsLoading(true);
                                     setPopoverOfferCodeId(null);
@@ -453,7 +454,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                 pagination={pagination}
               />
             ) : null}
-          </>
+          </section>
         ) : (
           <div className="placeholder">
             <figure>

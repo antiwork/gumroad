@@ -1,8 +1,14 @@
 # frozen_string_literal: true
 
 class Wishlists::ProductsController < ApplicationController
-  before_action :authenticate_user!
-  after_action :verify_authorized
+  before_action :authenticate_user!, except: :index
+  after_action :verify_authorized, except: :index
+
+  def index
+    wishlist = Wishlist.find_by_external_id!(params[:wishlist_id])
+
+    render json: WishlistPresenter.new(wishlist:).public_items(request:, pundit_user:, page: params[:page])
+  end
 
   def create
     wishlist = current_seller.wishlists.find_by_external_id!(params[:wishlist_id])

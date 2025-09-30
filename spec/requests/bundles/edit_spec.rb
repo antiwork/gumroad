@@ -73,8 +73,11 @@ describe("Bundle edit page", type: :system, js: true) do
     in_preview { expect(page).to have_text("To summarize, I am a bundle.") }
 
     click_on "Add detail"
-    fill_in "Attribute", with: "Attribute"
-    fill_in "Value", with: "Value"
+    within_fieldset "Additional details" do
+      inputs = all("input[type='text']")
+      inputs[0].fill_in with: "Attribute"
+      inputs[1].fill_in with: "Value"
+    end
     in_preview { expect(page).to have_text("Attribute Value", normalize_ws: true) }
 
     in_preview { expect(page).to_not have_text("20 left") }

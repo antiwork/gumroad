@@ -171,7 +171,7 @@ const FileEmbedGroupNodeView = ({
                     </div>
                   }
                 >
-                  <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+                  <div className="override grid gap-2">
                     {downloading ? (
                       <Button disabled>
                         <LoadingSpinner />

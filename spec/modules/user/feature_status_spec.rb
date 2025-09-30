@@ -168,6 +168,12 @@ describe User::FeatureStatus do
 
       expect(seller.can_publish_products?).to be true
     end
+
+    it "returns true if user is admin team member without any payment methods" do
+      seller.update!(is_team_member: true)
+
+      expect(seller.can_publish_products?).to be true
+    end
   end
 
   describe "#paypal_connect_allowed?" do

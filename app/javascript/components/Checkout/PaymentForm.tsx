@@ -48,6 +48,7 @@ import {
   requiresReusablePaymentMethod,
   isSubmitDisabled,
   isTippingEnabled,
+  getTotalPriceFromProducts,
 } from "$app/components/Checkout/payment";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -236,7 +237,7 @@ const EmailAddress = () => {
             />
 
             {state.emailTypoSuggestion ? (
-              <div className="dropdown" style={{ display: "grid", gap: "var(--spacer-2)" }}>
+              <div className="dropdown override grid gap-2">
                 <div>Did you mean {state.emailTypoSuggestion}?</div>
 
                 <div className="button-group">
@@ -727,7 +728,7 @@ const CreditCard = () => {
 const TipSelector = () => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
-  const showPercentageOptions = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal > 0 : true;
+  const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
 
   React.useEffect(() => {
     if (!showPercentageOptions && state.tip.type === "percentage")

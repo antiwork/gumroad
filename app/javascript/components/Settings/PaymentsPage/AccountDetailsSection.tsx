@@ -59,7 +59,7 @@ const AccountDetailsSection = ({
   };
 
   return (
-    <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+    <section className="override grid gap-8">
       <section>
         <fieldset>
           <legend>
@@ -102,7 +102,7 @@ const AccountDetailsSection = ({
         </div>
       </section>
       {complianceInfo.is_business ? (
-        <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+        <section className="override grid gap-8">
           <div
             style={{
               display: "grid",
@@ -629,7 +629,7 @@ const AccountDetailsSection = ({
           </fieldset>
         </section>
       ) : null}
-      <section style={{ display: "grid", gap: "var(--spacer-6)" }}>
+      <section className="override grid gap-8">
         {payoutMethod !== "paypal" && user.country_code === "AE" && !complianceInfo.is_business ? (
           <div role="status" className="danger">
             <div>Individual accounts from the UAE are not supported. Please use a business account.</div>

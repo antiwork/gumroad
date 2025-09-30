@@ -438,7 +438,7 @@ const CustomersPage = ({
       />
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
-          <>
+          <section className="paragraphs">
             <table aria-live="polite" aria-busy={isLoading}>
               <caption>{`All sales (${count})`}</caption>
               <thead>
@@ -551,7 +551,7 @@ const CustomersPage = ({
             {pagination && pagination.pages > 1 ? (
               <Pagination onChangePage={asyncVoid(loadCustomers)} pagination={pagination} />
             ) : null}
-          </>
+          </section>
         ) : (
           <div className="placeholder">
             <figure>
@@ -2562,7 +2562,7 @@ const CommissionSection = ({
         <h3>Files</h3>
       </header>
       <section>
-        <section style={{ display: "grid", gap: "var(--spacer-2)" }}>
+        <section className="override grid gap-2">
           {commission.files.length ? (
             <div role="tree">
               {commission.files.map((file) => (

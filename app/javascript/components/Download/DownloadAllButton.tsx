@@ -15,7 +15,7 @@ export const DownloadAllButton = ({ zip_path, files }: Props) => (
       </div>
     }
   >
-    <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+    <div className="override grid gap-2">
       <NavigationButton href={zip_path}>
         <Icon name="file-earmark-binary-fill" />
         Download as ZIP

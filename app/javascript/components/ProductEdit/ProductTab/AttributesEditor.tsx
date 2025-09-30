@@ -78,14 +78,12 @@ const AttributeEditor = ({
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr max-content", gap: "var(--spacer-2)" }}>
     <input
       type="text"
-      placeholder="Attribute"
       value={attribute.name}
       onChange={(evt) => onUpdate?.({ name: evt.target.value })}
       disabled={!onUpdate}
     />
     <input
       type="text"
-      placeholder="Value"
       value={attribute.value}
       onChange={(evt) => onUpdate?.({ value: evt.target.value })}
       disabled={!onUpdate}

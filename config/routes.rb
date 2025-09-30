@@ -1122,7 +1122,7 @@ Rails.application.routes.draw do
     end
 
     resources :wishlists, only: [:index, :create, :show, :update] do
-      resources :products, only: [:create, :destroy], controller: "wishlists/products"
+      resources :products, only: [:create, :destroy, :index], controller: "wishlists/products"
       resource :followers, only: [:create, :destroy], controller: "wishlists/followers"
     end
 

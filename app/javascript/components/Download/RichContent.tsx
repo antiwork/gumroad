@@ -359,7 +359,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
         </div>
       }
     >
-      <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+      <div className="override grid gap-2">
         {isArchiving ? (
           <Button contentEditable={false} disabled>
             <LoadingSpinner />

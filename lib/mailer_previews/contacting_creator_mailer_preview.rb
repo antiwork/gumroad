@@ -188,6 +188,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.review_submitted(ProductReview.last&.id)
   end
 
+  def flagged_for_explicit_nsfw_tos_violation
+    ContactingCreatorMailer.flagged_for_explicit_nsfw_tos_violation(User.last&.id)
+  end
+
   def upcoming_call_reminder
     ContactingCreatorMailer.upcoming_call_reminder(Call.last&.id)
   end

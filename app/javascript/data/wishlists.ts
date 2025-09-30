@@ -2,6 +2,7 @@ import { cast } from "ts-safe-cast";
 
 import { ResponseError, request } from "$app/utils/request";
 
+import { WishlistItem } from "$app/components/Wishlist";
 import { CardWishlist } from "$app/components/Wishlist/Card";
 
 export type Wishlist = {
@@ -16,6 +17,37 @@ export const createWishlist = async () => {
     accept: "json",
   });
   return cast<{ wishlist: Wishlist }>(await response.json());
+};
+
+type FetchPaginatedWishlistItemsArgs = {
+  wishlist_id: string;
+  page: number | null;
+};
+
+type PaginatedWishlistItems = {
+  items: WishlistItem[];
+  pagination: {
+    count: number;
+    items: number;
+    page: number;
+    pages: number;
+    prev: number | null;
+    next: number | null;
+    last: number;
+  };
+};
+
+export const fetchPaginatedWishlistItems = async ({
+  wishlist_id,
+  page,
+}: FetchPaginatedWishlistItemsArgs): Promise<PaginatedWishlistItems> => {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.wishlist_products_path(wishlist_id, { page }),
+  });
+  if (!response.ok) throw new ResponseError();
+  return cast<PaginatedWishlistItems>(await response.json());
 };
 
 export const addToWishlist = async ({

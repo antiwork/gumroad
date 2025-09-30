@@ -236,7 +236,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
     >
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
-          <>
+          <section className="paragraphs">
             <table aria-busy={isLoading} aria-label="Upsells">
               <thead>
                 <tr>
@@ -292,7 +292,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                 pagination={pagination}
               />
             ) : null}
-          </>
+          </section>
         ) : (
           <div className="placeholder">
             <figure>

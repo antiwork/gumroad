@@ -332,14 +332,11 @@ const TeamMembersSection = ({
               </td>
               <td data-label="Role">
                 {memberInfo.leave_team_option ? (
-                  <Button
-                    color="danger"
-                    disabled={loading}
-                    style={{ float: "right" }}
-                    onClick={() => setConfirming(memberInfo)}
-                  >
-                    {memberInfo.leave_team_option.label}
-                  </Button>
+                  <div className="flex justify-end">
+                    <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>
+                      {memberInfo.leave_team_option.label}
+                    </Button>
+                  </div>
                 ) : (
                   <Select
                     instanceId={memberInfo.id}

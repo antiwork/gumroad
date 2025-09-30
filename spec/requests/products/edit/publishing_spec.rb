@@ -141,5 +141,22 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
         expect(@product.published?).to be(true)
       end
     end
+
+    context "when user is admin team member" do
+      before do
+        seller.update!(is_team_member: true)
+      end
+
+      it "allows publishing a product without payment method setup" do
+        visit edit_link_path(@product.unique_permalink)
+        click_on "Save and continue"
+        wait_for_ajax
+        click_on "Publish and continue"
+        wait_for_ajax
+        expect(page).to have_button("Unpublish")
+        expect(@product.reload.alive?).to be(true)
+        expect(@product.published?).to be(true)
+      end
+    end
   end
 end
