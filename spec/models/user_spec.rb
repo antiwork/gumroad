@@ -1891,6 +1891,63 @@ describe User, :vcr do
         expect(CreateStripeApplePayDomainWorker).to have_enqueued_sidekiq_job(@user.id)
       end
     end
+
+    describe "#flagged_for_explicit_nsfw?" do
+      it "returns true when user is flagged for TOS violation with explicit NSFW reason" do
+        @user.update!(tos_violation_reason: Compliance::EXPLICIT_NSFW_TOS_VIOLATION_REASON)
+        @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id, content: "Flagged for policy violation")
+
+        expect(@user.flagged_for_explicit_nsfw?).to be(true)
+      end
+
+      it "returns false when user is flagged for TOS violation with different reason" do
+        @user.update!(tos_violation_reason: "intellectual property infringement")
+        @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
+
+        expect(@user.flagged_for_explicit_nsfw?).to be(false)
+      end
+
+      it "returns false when user is not flagged for TOS violation" do
+        expect(@user.flagged_for_explicit_nsfw?).to be(false)
+      end
+    end
+
+    describe "#flag_for_explicit_nsfw_tos_violation!" do
+      it "flags user for TOS violation with explicit NSFW reason" do
+        expect do
+          @user.flag_for_explicit_nsfw_tos_violation!(author_id: @admin_user.id)
+        end.to change { @user.reload.user_risk_state }.from("not_reviewed").to("flagged_for_tos_violation")
+
+        expect(@user.tos_violation_reason).to eq(Compliance::EXPLICIT_NSFW_TOS_VIOLATION_REASON)
+      end
+
+      it "unpublishes all alive products" do
+        expect(@product_1.alive?).to be(true)
+        expect(@product_2.alive?).to be(true)
+
+        @user.flag_for_explicit_nsfw_tos_violation!(author_id: @admin_user.id)
+
+        expect(@product_1.reload.alive?).to be(false)
+        expect(@product_2.reload.alive?).to be(false)
+        expect(@product_1.is_unpublished_by_admin?).to be(true)
+        expect(@product_2.is_unpublished_by_admin?).to be(true)
+      end
+
+      it "sends flagged for explicit NSFW email" do
+        expect do
+          @user.flag_for_explicit_nsfw_tos_violation!(author_id: @admin_user.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :flagged_for_explicit_nsfw_tos_violation).with(@user.id)
+      end
+
+      it "adds appropriate comment" do
+        expect do
+          @user.flag_for_explicit_nsfw_tos_violation!(author_id: @admin_user.id)
+        end.to change { @user.comments.count }.by(1)
+
+        comment = @user.comments.last
+        expect(comment.content).to include("All products were unpublished because this user was selling prohibited content.")
+      end
+    end
   end
 
   describe "purchasing_power_parity_limit" do
