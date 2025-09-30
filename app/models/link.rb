@@ -144,11 +144,11 @@ class Link < ApplicationRecord
   has_many :product_cached_values, foreign_key: :product_id
   has_one :upsell, -> { upsell.alive }, foreign_key: :product_id
   has_many :upsell_variants, through: :upsell
-  has_many :cross_sells, ->(link) {
+  has_many :available_cross_sells, ->(link) {
     includes(:selected_products)
       .where(selected_products: { id: link.id })
       .or(where(universal: true))
-  }, through: :user, source: :cross_sells
+  }, through: :user, source: :available_cross_sells
   has_and_belongs_to_many :custom_fields, join_table: "custom_fields_products", foreign_key: "product_id"
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"

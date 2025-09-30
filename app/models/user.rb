@@ -94,7 +94,7 @@ class User < ApplicationRecord
   has_many :stripe_apple_pay_domains
   has_one :global_affiliate, -> { alive }, foreign_key: :affiliate_user_id, autosave: true
   has_many :upsells, foreign_key: :seller_id
-  has_many :cross_sells, -> { cross_sell.alive }, foreign_key: :seller_id, class_name: "Upsell"
+  has_many :available_cross_sells, -> { cross_sell.alive.available_to_customers }, foreign_key: :seller_id, class_name: "Upsell"
   has_many :blocked_customer_objects, foreign_key: :seller_id
   has_one :seller_profile, foreign_key: :seller_id
   has_many :seller_profile_sections, foreign_key: :seller_id

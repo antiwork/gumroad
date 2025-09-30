@@ -125,7 +125,7 @@ class CheckoutPresenter
       accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount } : nil,
     }
     if include_cross_sells
-      value[:product][:cross_sells] = product.cross_sells.filter_map do |cross_sell|
+      value[:product][:cross_sells] = product.available_cross_sells.filter_map do |cross_sell|
         next unless cross_sell.product.alive? &&
           (cross_sell.product.remaining_for_sale_count.nil? || cross_sell.product.remaining_for_sale_count > 0) &&
           (cross_sell.variant.blank? || cross_sell.variant.available?) &&
