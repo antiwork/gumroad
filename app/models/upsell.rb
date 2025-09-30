@@ -37,6 +37,7 @@ class Upsell < ApplicationRecord
 
   scope :upsell, -> { where(cross_sell: false) }
   scope :cross_sell, -> { where(cross_sell: true) }
+  scope :available_to_customers, -> { alive.where(paused: false) }
 
   def as_json(options = {})
     {
@@ -47,6 +48,7 @@ class Upsell < ApplicationRecord
       universal:,
       text:,
       description:,
+      paused:,
       product: {
         id: product.external_id,
         name: product.name,

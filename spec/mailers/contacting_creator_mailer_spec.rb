@@ -1969,4 +1969,27 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).not_to include "webhooks"
     end
   end
+
+  describe "#flagged_for_explicit_nsfw_tos_violation" do
+    let(:seller) { create(:named_seller) }
+
+    it "has the correct subject and body" do
+      travel_to(Date.parse("2024-03-28")) do
+        mail = ContactingCreatorMailer.flagged_for_explicit_nsfw_tos_violation(seller.id)
+
+        expect(mail.to).to eq([seller.email])
+        expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+        expect(mail.subject).to eq("Your account has been temporarily suspended for selling sexually explicit / fetish-related content")
+
+        expect(mail.body.encoded).to include("Hey,")
+        expect(mail.body.encoded).to include("We want to first thank you for choosing Gumroad. We're really excited to help you get paid for your work and grow your business.")
+        expect(mail.body.encoded).to include("However, due to more stringent banking regulations, we can no longer allow sexually explicit or fetish-oriented materials to be sold on Gumroad, and it looks like at least one of your products could be considered in violation of these rules.")
+        expect(mail.body.encoded).to include("As a result, we've temporarily paused sales of the affected products and payouts for your account.")
+        expect(mail.body.encoded).to include("Your account will be permanently suspended in 10 days, on 7 April, if your storefront is not updated to be compliant by then.")
+        expect(mail.body.encoded).to include("Of course, we will pay you out your remaining balance. Your existing customers' purchases will not be affected by this.")
+        expect(mail.body.encoded).to include("We're super sorry about the inconvenience!")
+        expect(mail.body.encoded).to include("Sahil and the Gumroad team")
+      end
+    end
+  end
 end

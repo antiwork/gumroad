@@ -8,6 +8,8 @@ import {
   getCartItem,
   getPagedUpsells,
   getStatistics,
+  pauseUpsell,
+  resumeUpsell,
   updateUpsell,
   UpsellPayload,
   UpsellStatistics,
@@ -53,6 +55,7 @@ export type Upsell = {
   universal: boolean;
   cross_sell: boolean;
   replace_selected_products: boolean;
+  paused: boolean;
   product: {
     id: string;
     name: string;
@@ -196,6 +199,26 @@ const UpsellsPage = (props: {
     setIsLoading(false);
   });
 
+  const handleTogglePause = asyncVoid(async () => {
+    if (!selectedUpsell) return;
+    try {
+      setIsLoading(true);
+      if (selectedUpsell.paused) {
+        await resumeUpsell(selectedUpsell.id);
+        showAlert("Upsell resumed and will appear at checkout.", "success");
+      } else {
+        await pauseUpsell(selectedUpsell.id);
+        showAlert("Upsell paused and will not appear at checkout.", "success");
+      }
+      const updatedData = await getPagedUpsells(pagination.page, searchQuery, sort).response;
+      setState(updatedData);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsLoading(false);
+  });
+
   return view === "list" ? (
     <Layout
       currentPage="upsells"
@@ -243,6 +266,7 @@ const UpsellsPage = (props: {
                   <th {...thProps("name")}>Upsell</th>
                   <th {...thProps("revenue")}>Revenue</th>
                   <th {...thProps("uses")}>Uses</th>
+                  <th {...thProps("uses")}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,6 +305,7 @@ const UpsellsPage = (props: {
                           <td aria-busy> </td>
                         </>
                       )}
+                      <td>{upsell.paused ? "Paused" : "Live"}</td>
                     </tr>
                   );
                 })}
@@ -316,6 +341,7 @@ const UpsellsPage = (props: {
             onCreate={() => setView("create")}
             onEdit={() => setView("edit")}
             onDelete={handleDelete}
+            onTogglePause={handleTogglePause}
             onClose={handleCancel}
             isLoading={isLoading}
           />
@@ -349,6 +375,7 @@ const UpsellDrawer = ({
   onCreate,
   onEdit,
   onDelete,
+  onTogglePause,
   onClose,
   isLoading,
 }: {
@@ -357,6 +384,7 @@ const UpsellDrawer = ({
   onCreate: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onTogglePause: () => void;
   onClose: () => void;
   isLoading: boolean;
 }) => {
@@ -402,6 +430,16 @@ const UpsellDrawer = ({
             </div>
           </>
         ) : null}
+        <div>
+          <h5>Status</h5>
+          <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
+        </div>
+      </section>
+      {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
+      <section style={{ display: "grid" }} className="auto-cols-fr grid-flow-col gap-4">
+        <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
+          {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
+        </Button>
       </section>
       {selectedUpsell.cross_sell ? (
         <section className="stack">
@@ -453,7 +491,8 @@ const UpsellDrawer = ({
           ))}
         </section>
       )}
-      <section className="grid auto-cols-fr grid-flow-col gap-4">
+      {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
+      <section style={{ display: "grid" }} className="auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
@@ -488,6 +527,7 @@ const Form = ({
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.name ?? "" });
   const [offerText, setOfferText] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.text ?? "" });
   const [offerDescription, setOfferDescription] = React.useState(upsell?.description ?? "");
+  const [paused, setPaused] = React.useState(upsell?.paused ?? false);
 
   const [cartItems, setCartItems] = React.useState<Record<string, ProductToAdd>>({});
 
@@ -607,6 +647,7 @@ const Form = ({
           : null,
       productIds: isCrossSell ? selectedProductIds.value : [],
       upsellVariants: !isCrossSell ? variants : [],
+      paused,
     });
   };
 
@@ -634,6 +675,8 @@ const Form = ({
   useLoadCartItem(selectedProductId.value);
   useLoadCartItem(offeredProductId.value);
   useLoadCartItem(selectedProductIds.value[0] ?? null);
+
+  const handlePausedChange = (evt: React.ChangeEvent<HTMLInputElement>) => setPaused(evt.target.value === "true");
 
   return (
     <>
@@ -697,6 +740,18 @@ const Form = ({
                 value={offerDescription}
                 onChange={(evt) => setOfferDescription(evt.target.value)}
               />
+            </fieldset>
+            <fieldset>
+              <legend>Status</legend>
+              <label>
+                <input type="radio" name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
+                Live
+              </label>
+              <label>
+                <input type="radio" name="paused" value="true" checked={paused} onChange={handlePausedChange} />
+                Paused
+              </label>
+              <small>Paused upsells will not appear at checkout. You can resume anytime.</small>
             </fieldset>
             <fieldset>
               <legend>Type of offer</legend>
