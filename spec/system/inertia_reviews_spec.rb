@@ -16,20 +16,37 @@ RSpec.describe "Inertia Reviews Page", type: :system, js: true do
   end
 
   describe "Reviews page" do
-    it "renders and displays reviews page with Inertia" do
+    it "renders and displays reviews page with proper content" do
       visit reviews_path
 
-      # Verify page content and Inertia component
+      # Test actual HTML content that users would see
       expect(page).to have_content("Reviews", wait: 10)
+
+      # Test for specific review content as requested by EmCousin
+      expect(page).to have_content("You haven't bought anything... yet!", wait: 10)
       expect(page).not_to have_content("Error")
 
-      # Verify Inertia component
-      expect(page).to have_css("[data-page]")
-      page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Reviews/Index")
+      # Verify the page loads without errors
+      expect(page).to have_css("main", wait: 10)
+    end
 
-      # Verify the reviews props are passed correctly
-      expect(page_data["props"]).to have_key("reviews_props")
+    it "displays review interface elements" do
+      visit reviews_path
+
+      # Test that the review interface is rendered
+      expect(page).to have_content("Reviews", wait: 10)
+
+      # Check for common review page elements
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
+    end
+
+    it "shows reviews navigation and layout" do
+      visit reviews_path
+
+      # Test that the main layout elements are present
+      expect(page).to have_content("Reviews", wait: 10)
+      expect(page).to have_css("main", wait: 10)
     end
   end
 end

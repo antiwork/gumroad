@@ -7,7 +7,7 @@ class CheckoutController < ApplicationController
     checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
 
     render inertia: "Checkout/Index",
-           props: inertia_props(**checkout_presenter.checkout_props)
+           props: inertia_props(**checkout_presenter.checkout_props(params: params, browser_guid: cookies[:_gumroad_guid]))
   end
 
   private

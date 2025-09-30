@@ -13,7 +13,7 @@ class Products::ArchivedController < Sellers::BaseController
     memberships_pagination, memberships = paginated_memberships(page: 1)
     products_pagination, products = paginated_products(page: 1)
 
-    redirect_to products_url if memberships.none? && products.none?
+    redirect_to products_url and return if memberships.none? && products.none?
 
     react_products_page_props = DashboardProductsPagePresenter.new(
       pundit_user:,
