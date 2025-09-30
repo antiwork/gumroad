@@ -395,8 +395,9 @@ describe "Product creation", type: :system, js: true do
             expect(page).to have_image("Thumbnail image", src: product.thumbnail.url)
           end
           within_fieldset "Additional details" do
-            expect(page).to have_field("Attribute", with: "Pages")
-            expect(page).to have_field("Value", with: "4")
+            inputs = all("input[type='text']")
+            expect(inputs[0].value).to eq("Pages")
+            expect(inputs[1].value).to eq("4")
           end
           within_section "Pricing", section_element: :section do
             expect(page).to have_field("Amount", with: "29.99")

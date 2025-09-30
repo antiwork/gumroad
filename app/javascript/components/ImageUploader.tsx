@@ -35,13 +35,13 @@ export const ImageUploader = ({
     defaultImageUrl && `linear-gradient(${overlayColor}, ${overlayColor}), url(${defaultImageUrl}) center / cover`;
 
   return (
-    <div className="image-uploader">
+    <div className="override grid grid-cols-[12.5rem_1fr] gap-5">
       {uploading ? (
-        <div className="placeholder">
+        <div className="placeholder aspect-square items-center">
           <Progress width="2rem" />
         </div>
       ) : imageUrl == null ? (
-        <div className="placeholder" style={{ background }}>
+        <div className="placeholder aspect-square items-center" style={{ background }}>
           <label className="button primary">
             <input
               type="file"
@@ -63,9 +63,16 @@ export const ImageUploader = ({
           </label>
         </div>
       ) : (
-        <figure>
-          <img alt={imageAlt} src={imageUrl} />
-          <Button color="primary" small className="remove" aria-label="Remove" onClick={onRemove} disabled={disabled}>
+        <figure className="relative aspect-square">
+          <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded border border-border bg-background" />
+          <Button
+            color="primary"
+            small
+            className="absolute right-2 top-2"
+            aria-label="Remove"
+            onClick={onRemove}
+            disabled={disabled}
+          >
             <Icon name="trash2" />
           </Button>
         </figure>
