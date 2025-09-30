@@ -11,21 +11,18 @@ class WishlistsController < ApplicationController
   def index
     authorize Wishlist
 
-    respond_to do |format|
-      format.html do
-        wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+    wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
 
-        render inertia: "Wishlists/Index",
-               props: inertia_props(
-                 wishlists: wishlists_props,
-                 reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
-                 following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)
-               )
-      end
-      format.json do
-        wishlists = current_seller.wishlists.alive.includes(:products).by_external_ids(params[:ids])
-        render json: WishlistPresenter.cards_props(wishlists:, pundit_user:, layout: Product::Layout::PROFILE)
-      end
+    if request.format.json?
+      wishlists = current_seller.wishlists.alive.includes(:products).by_external_ids(params[:ids])
+      render json: WishlistPresenter.cards_props(wishlists:, pundit_user:, layout: Product::Layout::PROFILE)
+    else
+      render inertia: "Wishlists/Index",
+             props: inertia_props(
+               wishlists: wishlists_props,
+               reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
+               following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)
+             )
     end
   end
 

@@ -173,7 +173,7 @@ class LinksController < ApplicationController
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
     presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
-    # Product props are not used in this action
+    @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
@@ -184,7 +184,9 @@ class LinksController < ApplicationController
       )
     end
 
-    # Discover props are not used in this action
+    if params[:layout] == Product::Layout::DISCOVER
+      @discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
+    end
 
     set_noindex_header if !@product.alive?
     respond_to do |format|
@@ -594,9 +596,7 @@ class LinksController < ApplicationController
     end
 
     def paged_params
-      # Ensure params is ActionController::Parameters
-      params_hash = params.is_a?(Hash) ? ActionController::Parameters.new(params) : params
-      params_hash.permit(:page, sort: [:key, :direction])
+      params.permit(:page, sort: [:key, :direction])
     end
 
     def paginated_memberships(page:, query: nil)

@@ -18,6 +18,7 @@ function WishlistPageIndex() {
     checkout_enabled,
     items,
     isDiscover,
+    pagination,
   } = usePage<WishlistProps>().props;
 
   return (
@@ -34,6 +35,7 @@ function WishlistPageIndex() {
       checkout_enabled={checkout_enabled}
       items={items}
       isDiscover={isDiscover}
+      pagination={pagination}
     />
   );
 }

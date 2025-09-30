@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 class Wishlists::DiscoverController < Wishlists::BaseController
+  before_action :find_wishlist, only: :show
+
   def show
-    find_wishlist
     wishlist_presenter = WishlistPresenter.new(wishlist: @wishlist)
     discover_props = { taxonomies_for_nav: }
 
