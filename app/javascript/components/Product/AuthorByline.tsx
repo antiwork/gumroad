@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { UserAvatar } from "$app/components/UserAvatar";
+
 export const AuthorByline = ({
   name,
   profileUrl,
@@ -10,7 +12,7 @@ export const AuthorByline = ({
   avatarUrl?: string | undefined;
 }) => (
   <a href={profileUrl} target="_blank" className="user relative" rel="noreferrer">
-    {avatarUrl ? <img className="user-avatar" src={avatarUrl} /> : null}
+    {avatarUrl ? <UserAvatar src={avatarUrl} /> : null}
     {name}
   </a>
 );

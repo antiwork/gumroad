@@ -17,6 +17,7 @@ import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { UserAvatar } from "$app/components/UserAvatar";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -258,7 +259,7 @@ export const Wishlist = ({
       >
         {user ? (
           <a style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} href={user.profile_url}>
-            <img className="user-avatar" src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
+            <UserAvatar src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
             <h4>{user.name}</h4>
           </a>
         ) : null}

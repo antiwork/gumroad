@@ -13,6 +13,7 @@ import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 function MessageListItem({ message, isLastMessage }: { message: Message; isLastMessage: boolean }) {
   const [isExpanded, setIsExpanded] = React.useState(isLastMessage);
@@ -25,7 +26,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         className="content peer cursor-pointer p-4 hover:bg-[var(--active-bg)] peer-hover:bg-[var(--active-bg)]"
         onClick={() => setIsExpanded((v) => !v)}
       >
-        <img className={cx("user-avatar !w-9", image === pinkIcon ? "!border-none" : "")} src={image} />
+        <UserAvatar className={cx("!w-9", image === pinkIcon ? "!border-none" : "")} src={image} />
         <div className={`font-bold ${isExpanded ? "flex-1" : ""}`}>
           {message.role === "user" ? (currentSeller?.name ?? "You") : message.staffName || startCase(message.role)}
         </div>

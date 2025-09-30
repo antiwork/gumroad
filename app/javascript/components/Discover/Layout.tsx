@@ -11,6 +11,7 @@ import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 const UserActionButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();
@@ -150,7 +151,7 @@ export const Layout: React.FC<{
   const cartButton = <CartNavigationButton className="link-button flex-shrink-0" />;
   const avatarElement = currentSeller ? (
     <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard" className="flex-shrink-0">
-      <img className="user-avatar" src={currentSeller.avatarUrl} />
+      <UserAvatar src={currentSeller.avatarUrl} />
     </a>
   ) : null;
 

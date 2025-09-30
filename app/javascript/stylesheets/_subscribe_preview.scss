@@ -7,10 +7,6 @@
   padding: spacer(5);
   gap: spacer(5);
 
-  .user-avatar {
-    width: 100%;
-  }
-
   > :last-child {
     display: grid;
     gap: spacer(3);

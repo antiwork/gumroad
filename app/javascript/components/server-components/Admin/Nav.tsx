@@ -7,6 +7,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavLink, NavLinkDropdownItem, UnbecomeDropdownItem } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 type ImpersonatedUser = {
   name: string;
@@ -33,7 +34,7 @@ export const Nav = ({ title, current_user }: Props) => {
           position="top"
           trigger={
             <>
-              <img className="user-avatar" src={current_user.avatar_url} alt="Your avatar" />
+              <UserAvatar src={current_user.avatar_url} alt="Your avatar" className="mr-6" />
               {current_user.name}
             </>
           }
@@ -42,7 +43,7 @@ export const Nav = ({ title, current_user }: Props) => {
             {current_user.impersonated_user ? (
               <>
                 <a role="menuitem" href={Routes.root_url()}>
-                  <img className="user-avatar" src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
+                  <UserAvatar src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
                   <span>{current_user.impersonated_user.name}</span>
                 </a>
                 <hr />

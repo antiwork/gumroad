@@ -17,6 +17,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
+import { UserAvatar } from "$app/components/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -133,8 +134,8 @@ const IncomingCollaboratorsTableRow = ({
   <tr key={incomingCollaborator.id} aria-selected={isSelected} onClick={onSelect}>
     <td data-label="Name">
       <div className="flex items-center gap-4">
-        <img
-          className="user-avatar !w-8"
+        <UserAvatar
+          className="!w-8"
           src={incomingCollaborator.seller_avatar_url}
           alt={`Avatar of ${incomingCollaborator.seller_name || "Collaborator"}`}
         />

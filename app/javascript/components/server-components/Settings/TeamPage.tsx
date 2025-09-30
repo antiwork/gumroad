@@ -29,6 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
+import { UserAvatar } from "$app/components/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const ROLE_TITLES: Record<Role, string> = {
@@ -304,8 +305,7 @@ const TeamMembersSection = ({
             <tr key={`${memberInfo.type}-${memberInfo.id}`}>
               <td data-label="Member">
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
-                  <img
-                    className="user-avatar"
+                  <UserAvatar
                     style={{ width: "var(--spacer-6)" }}
                     src={memberInfo.avatar_url}
                     alt={`Avatar of ${memberInfo.name}`}

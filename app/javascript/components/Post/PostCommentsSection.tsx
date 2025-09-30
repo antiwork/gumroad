@@ -20,6 +20,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
 
@@ -240,7 +241,11 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
 
   return (
     <article className="comment">
-      <img className="user-avatar" alt="Comment author avatar" src={comment.author_avatar_url} />
+      <UserAvatar
+        className="col-start-1 row-start-1 row-end-3 h-12 w-12"
+        alt="Comment author avatar"
+        src={comment.author_avatar_url}
+      />
       <div className="body">
         <header>
           <span className="user-name">{comment.author_name}</span>
@@ -342,7 +347,11 @@ const CommentTextarea = ({
   return (
     <div className={cx({ comment: showAvatar })} style={showAvatar ? {} : { display: "grid", gap: "var(--spacer-3)" }}>
       {showAvatar ? (
-        <img className="user-avatar" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
+        <UserAvatar
+          className="col-start-1 row-start-1 row-end-3 h-12 w-12"
+          alt="Current user avatar"
+          src={loggedInUser?.avatarUrl ?? defaultUserAvatar}
+        />
       ) : null}
       {loggedInUser || purchase_id ? (
         <textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />

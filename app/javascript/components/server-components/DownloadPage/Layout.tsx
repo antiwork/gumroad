@@ -17,6 +17,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 type ContentUnavailabilityReasonCode =
   | "inactive_membership"
@@ -308,7 +309,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
       {creator ? (
         <div>
           <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
-            {creator.avatar_url ? <img className="user-avatar" src={creator.avatar_url} /> : null}
+            {creator.avatar_url ? <UserAvatar src={creator.avatar_url} /> : null}
 
             <span>
               By{" "}

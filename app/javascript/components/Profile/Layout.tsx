@@ -9,6 +9,7 @@ import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 import { FollowForm } from "./FollowForm";
 
@@ -37,7 +38,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
               Impersonate
             </NavigationButton>
           ) : null}
-          <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
+          <UserAvatar src={creatorProfile.avatar_url} alt="Profile Picture" />
           <a href={Routes.root_path()} style={{ textDecoration: "none" }}>
             {creatorProfile.name}
           </a>

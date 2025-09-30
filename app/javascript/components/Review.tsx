@@ -6,6 +6,7 @@ import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
+import { UserAvatar } from "$app/components/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Seller = {
@@ -25,7 +26,7 @@ const ReviewUserAttribution = ({
   isBuyer?: boolean;
 }) => (
   <section style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
-    <img className="user-avatar" src={avatarUrl} />
+    <UserAvatar src={avatarUrl} />
     <h5>{name}</h5>
     {isBuyer ? (
       <WithTooltip tip="Verified Buyer">

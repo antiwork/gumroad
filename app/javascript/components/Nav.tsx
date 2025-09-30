@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 type NavContextValue = {
   close: () => void;
@@ -160,7 +161,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       onClick={onClick}
       aria-checked={teamMembership.is_selected}
     >
-      <img className="user-avatar" src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
+      <UserAvatar src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
       <span title={teamMembership.seller_name}>{teamMembership.seller_name}</span>
     </a>
   );

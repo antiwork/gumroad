@@ -54,6 +54,7 @@ import {
 } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { UserAvatar } from "$app/components/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type EmailFormState = {
@@ -739,7 +740,7 @@ const SellerByLine = ({ isPreview }: { isPreview: boolean }) => {
       rel="noopener noreferrer nofollow"
       tabIndex={isPreview ? undefined : -1}
     >
-      <img className="user-avatar" src={currentSeller.avatarUrl} />
+      <UserAvatar src={currentSeller.avatarUrl} />
       {currentSeller.name || currentSeller.email || ""}
     </a>
   );

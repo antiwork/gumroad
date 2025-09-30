@@ -40,6 +40,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { IncomingCollaborators } from "$app/components/server-components/CollaboratorsPage/IncomingCollaborators";
 import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
+import { UserAvatar } from "$app/components/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -219,8 +220,7 @@ const Collaborators = () => {
                   >
                     <td data-label="Name">
                       <div className="flex items-center gap-4">
-                        <img
-                          className="user-avatar"
+                        <UserAvatar
                           src={collaborator.avatar_url}
                           style={{ width: "var(--spacer-6)" }}
                           alt={`Avatar of ${collaborator.name || "Collaborator"}`}

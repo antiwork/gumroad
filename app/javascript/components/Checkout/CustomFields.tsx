@@ -6,6 +6,7 @@ import { CustomFieldDescriptor } from "$app/parsers/product";
 
 import { Creator } from "$app/components/Checkout/cartState";
 import { Product, getCustomFieldKey, getErrors, isProcessing, useState } from "$app/components/Checkout/payment";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldKey: string }) => {
   const [state, dispatch] = useState();
@@ -137,7 +138,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
     <div>
       <section className="paragraphs">
         <h4>
-          <img className="user-avatar" src={seller.avatar_url} />
+          <UserAvatar src={seller.avatar_url} />
           &ensp;
           {seller.name}
         </h4>

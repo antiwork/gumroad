@@ -4,6 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "../Button";
+import { UserAvatar } from "../UserAvatar";
 
 type Props = {
   avatar_url: string;
@@ -12,7 +13,7 @@ type Props = {
 
 export const SubscribePreview = ({ avatar_url, title }: Props) => (
   <div className="subscribe-preview">
-    <img className="user-avatar" src={avatar_url} />
+    <UserAvatar src={avatar_url} className="w-full" />
     <section>
       <span className="logo-full" />
       <h1>{title}</h1>

@@ -5,6 +5,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
+import { UserAvatar } from "$app/components/UserAvatar";
 
 function NavbarFooter() {
   const routeParams = { host: useAppDomain() };
@@ -23,7 +24,7 @@ function NavbarFooter() {
         position="top"
         trigger={
           <>
-            <img className="user-avatar" src={currentSeller?.avatarUrl} alt="Your avatar" />
+            <UserAvatar className="mr-3" src={currentSeller?.avatarUrl} alt="Your avatar" />
             {currentSeller?.name || currentSeller?.email}
           </>
         }
