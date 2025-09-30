@@ -19,7 +19,7 @@ class UtmLinksController < Sellers::BaseController
 
     context_data = UtmLinkPresenter.new(seller: current_seller).new_page_react_props
 
-    render inertia: "UtmLinks/index", props: inertia_props(
+    render inertia: "UtmLinks/Index", props: inertia_props(
       utm_links: utm_links_data[:utm_links],
       pagination: utm_links_data[:pagination],
       context: context_data[:context]
@@ -32,7 +32,7 @@ class UtmLinksController < Sellers::BaseController
     copy_from = params[:copy_from]
     utm_link_data = UtmLinkPresenter.new(seller: current_seller).new_page_react_props(copy_from: copy_from)
 
-    render inertia: "UtmLinks/index", props: inertia_props(
+    render inertia: "UtmLinks/Index", props: inertia_props(
       context: utm_link_data[:context],
       utm_link: utm_link_data[:utm_link],
       copy_from: copy_from
@@ -47,7 +47,7 @@ class UtmLinksController < Sellers::BaseController
 
     utm_link_data = UtmLinkPresenter.new(seller: current_seller, utm_link: utm_link).edit_page_react_props
 
-    render inertia: "UtmLinks/index", props: inertia_props(
+    render inertia: "UtmLinks/Index", props: inertia_props(
       context: utm_link_data[:context],
       utm_link: utm_link_data[:utm_link]
     )

@@ -25,7 +25,7 @@ RSpec.describe "Inertia Dashboard Page", type: :system, js: true do
       # Verify the page is using Inertia
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Dashboard/index")
+      expect(page_data["component"]).to eq("Dashboard/Index")
     end
 
     it "displays revenue metrics correctly" do
@@ -35,7 +35,7 @@ RSpec.describe "Inertia Dashboard Page", type: :system, js: true do
       # Verify Inertia component structure
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Dashboard/index")
+      expect(page_data["component"]).to eq("Dashboard/Index")
     end
 
     it "handles AJAX requests for dashboard metrics" do

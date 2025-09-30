@@ -12,6 +12,7 @@ import {
 } from "$app/data/utm_links";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
+import * as Routes from "$app/utils/routes";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button, NavigationButton } from "$app/components/Button";
@@ -31,8 +32,8 @@ import { WithTooltip } from "$app/components/WithTooltip";
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
 
-const duplicateLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/new?copy_from=${link.id}`;
-const editLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/${link.id}/edit`;
+const duplicateLinkPath = (link: SavedUtmLink) => `${Routes.new_dashboard_utm_link_path()}?copy_from=${link.id}`;
+const editLinkPath = (link: SavedUtmLink) => Routes.edit_dashboard_utm_link_path(link.id);
 const truncateText = (text: string, maxLength: number) => {
   const truncated = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
   return {
@@ -99,7 +100,7 @@ const UtmLinkList = ({
   const onChangePage = (newPage: number) => {
     const params = new URLSearchParams(window.location.search);
     params.set("page", newPage.toString());
-    router.get(`${Routes.utm_links_dashboard_path()}?${params.toString()}`);
+    router.get(`${Routes.dashboard_utm_links_path()}?${params.toString()}`);
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
@@ -109,7 +110,7 @@ const UtmLinkList = ({
       params.set("key", newSort.key);
       params.set("direction", newSort.direction);
     }
-    router.get(`${Routes.utm_links_dashboard_path()}?${params.toString()}`);
+    router.get(`${Routes.dashboard_utm_links_path()}?${params.toString()}`);
     setSort(newSort);
   };
 
@@ -127,7 +128,7 @@ const UtmLinkList = ({
       params.delete("query");
     }
     params.delete("page");
-    router.get(`${Routes.utm_links_dashboard_path()}?${params.toString()}`);
+    router.get(`${Routes.dashboard_utm_links_path()}?${params.toString()}`);
   }, 500);
 
   return (
@@ -136,7 +137,7 @@ const UtmLinkList = ({
       actions={
         <>
           <SearchBoxPopover initialQuery={query} onSearch={onSearch} />
-          <Link href="/dashboard/utm_links/new" className="button accent">
+          <Link href={Routes.new_dashboard_utm_link_path()} className="button accent">
             Create link
           </Link>
         </>

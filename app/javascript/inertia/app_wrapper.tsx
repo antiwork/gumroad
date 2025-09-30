@@ -1,3 +1,4 @@
+import cx from "classnames";
 import React from "react";
 
 import { Nav } from "$app/components/client-components/Nav";
@@ -69,7 +70,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
       <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
         <Nav title="Dashboard" />
         {isRouteLoading ? <LoadingSkeleton /> : null}
-        <main className={isRouteLoading ? "hidden" : "flex-1 overflow-y-auto"}>{children}</main>
+        <main className={cx({ hidden: isRouteLoading }, "flex-1 overflow-y-auto")}>{children}</main>
       </div>
     </>
   );

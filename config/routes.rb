@@ -399,8 +399,6 @@ Rails.application.routes.draw do
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
     get "/workflows/*other", to: "workflows#index" # route handled by react-router
     get "/emails/*other", to: "emails#index" # route handled by react-router
-    get "/dashboard/utm_links/new", to: "utm_links#new"
-    get "/dashboard/utm_links/:id/edit", to: "utm_links#edit"
     get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
@@ -807,7 +805,7 @@ Rails.application.routes.draw do
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
-    get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
+    resources :utm_links, only: [:index, :new, :edit], path: 'dashboard/utm_links', as: :dashboard_utm_links
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address

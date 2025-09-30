@@ -22,26 +22,26 @@ export const ProductsLayout = ({
   <div>
     <PageHeader title={title || "Products"} actions={ctaButton}>
       <Tabs>
-        <Tab isSelected={selectedTab === "products"}>
+        <Tab isSelected={selectedTab === "products"} asChild>
           <Link className="no-underline" href={Routes.products_path()}>
             All products
           </Link>
         </Tab>
 
-        <Tab isSelected={selectedTab === "affiliated"}>
+        <Tab isSelected={selectedTab === "affiliated"} asChild>
           <Link className="no-underline" href={Routes.products_affiliated_index_path()}>
             Affiliated
           </Link>
         </Tab>
 
-        <Tab isSelected={selectedTab === "collabs"}>
+        <Tab isSelected={selectedTab === "collabs"} asChild>
           <Link className="no-underline" href={Routes.products_collabs_path()}>
             Collabs
           </Link>
         </Tab>
 
         {archivedTabVisible ? (
-          <Tab isSelected={selectedTab === "archived"}>
+          <Tab isSelected={selectedTab === "archived"} asChild>
             <Link className="no-underline" href={Routes.products_archived_index_path()}>
               Archived
             </Link>

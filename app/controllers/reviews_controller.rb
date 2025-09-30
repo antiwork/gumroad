@@ -7,10 +7,9 @@ class ReviewsController < ApplicationController
   def index
     authorize ProductReview
 
-    @title = "Reviews"
     presenter = ReviewsPresenter.new(current_seller)
 
-    render inertia: "Reviews/index",
+    render inertia: "Reviews/Index",
            props: inertia_props(
              **presenter.reviews_props.merge(
                following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller)

@@ -26,7 +26,7 @@ RSpec.describe "Inertia Reviews Page", type: :system, js: true do
       # Verify Inertia component
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Reviews/index")
+      expect(page_data["component"]).to eq("Reviews/Index")
 
       # Verify the reviews props are passed correctly
       expect(page_data["props"]).to have_key("reviews_props")

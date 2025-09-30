@@ -11,7 +11,7 @@ class AudienceController < Sellers::BaseController
 
     total_follower_count = current_seller.audience_members.where(follower: true).count
 
-    render inertia: "Audience/index",
+    render inertia: "Audience/Index",
            props: inertia_props(total_follower_count: total_follower_count)
   end
 

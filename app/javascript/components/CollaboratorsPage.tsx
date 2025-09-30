@@ -316,6 +316,8 @@ const CollaboratorForm = () => {
   const emailInputRef = React.useRef<HTMLInputElement>(null);
   const isEditing = "id" in formData;
 
+  const buttonText = isSaving ? "Saving..." : isEditing ? "Save changes" : "Add collaborator";
+
   const hasEnabledUnpublishedOrIneligibleProducts =
     isEditing &&
     formData.products.some((product) => product.enabled && (!product.published || product.has_another_collaborator));
@@ -478,11 +480,7 @@ const CollaboratorForm = () => {
               onClick={handleSubmit}
               disabled={formData.collaborators_disabled_reason !== null || isSaving}
             >
-              {(() => {
-                if (isSaving) return "Saving...";
-                if (isEditing) return "Save changes";
-                return "Add collaborator";
-              })()}
+              {buttonText}
             </Button>
           </WithTooltip>
         </>

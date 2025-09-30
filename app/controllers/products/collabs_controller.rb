@@ -4,13 +4,12 @@ class Products::CollabsController < Sellers::BaseController
   before_action :authorize
 
   def index
-    @title = "Products"
     props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
 
     if request.format.json?
       render json: props
     else
-      render inertia: "Products/Collabs/index", props: inertia_props(**props)
+      render inertia: "Products/Collabs/Index", props: inertia_props(**props)
     end
   end
 

@@ -4,7 +4,6 @@ class Products::AffiliatedController < Sellers::BaseController
   before_action :authorize
 
   def index
-    @title = "Products"
     props = AffiliatedProductsPresenter.new(current_seller,
                                            query: affiliated_products_params[:query],
                                            page: affiliated_products_params[:page],
@@ -14,7 +13,7 @@ class Products::AffiliatedController < Sellers::BaseController
     if request.format.json?
       render json: props
     else
-      render inertia: "Products/Affiliated/index", props: inertia_props(**props)
+      render inertia: "Products/Affiliated/Index", props: inertia_props(**props)
     end
   end
 

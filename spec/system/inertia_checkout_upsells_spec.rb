@@ -20,7 +20,7 @@ RSpec.describe "Inertia Checkout Upsells Page", type: :system, js: true do
       # Verify Inertia component
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Checkout/Upsells/index")
+      expect(page_data["component"]).to eq("Checkout/Upsells/Index")
     end
 
     it "displays upsells data correctly" do
@@ -40,7 +40,7 @@ RSpec.describe "Inertia Checkout Upsells Page", type: :system, js: true do
       # Verify Inertia component structure
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Checkout/Upsells/index")
+      expect(page_data["component"]).to eq("Checkout/Upsells/Index")
     end
   end
 end

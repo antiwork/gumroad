@@ -12,12 +12,9 @@ class LibraryController < Sellers::BaseController
   def index
     authorize Purchase
 
-    @on_library_page = true
-    @title = "Library"
-    @body_class = "library-container"
     purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
 
-    render inertia: "Library/index",
+    render inertia: "Library/Index",
            props: inertia_props(
              results: purchase_results,
              creator_counts: creator_counts,

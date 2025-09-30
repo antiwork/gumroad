@@ -20,7 +20,7 @@ RSpec.describe "Inertia Products Archived Page", type: :system, js: true do
       # Verify Inertia component
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Products/Archived/index")
+      expect(page_data["component"]).to eq("Products/Archived/Index")
     end
 
     it "displays archived products data correctly" do
@@ -37,7 +37,7 @@ RSpec.describe "Inertia Products Archived Page", type: :system, js: true do
 
       # Verify Inertia component structure
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Products/Archived/index")
+      expect(page_data["component"]).to eq("Products/Archived/Index")
     end
   end
 end

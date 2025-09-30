@@ -12,7 +12,7 @@ class DashboardController < Sellers::BaseController
       redirect_to products_url
     else
       presenter = CreatorHomePresenter.new(pundit_user)
-      render inertia: "Dashboard/index",
+      render inertia: "Dashboard/Index",
              props: inertia_props(**presenter.creator_home_props)
     end
   end

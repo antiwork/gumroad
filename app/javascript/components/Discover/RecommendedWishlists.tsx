@@ -3,7 +3,7 @@ import * as React from "react";
 import { fetchRecommendedWishlists } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
-import { useClientAlert } from "$app/components/ClientAlertProvider";
+import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { CardWishlist, CardGrid, Card, DummyCardGrid } from "$app/components/Wishlist/Card";
 
@@ -15,7 +15,6 @@ export const RecommendedWishlists = ({
   curatedProductIds?: string[];
   taxonomy?: string | null;
 }) => {
-  const { showAlert } = useClientAlert();
   const [wishlists, setWishlists] = React.useState<CardWishlist[] | null>(null);
 
   useRunOnce(() => {

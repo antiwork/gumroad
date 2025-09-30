@@ -14,7 +14,7 @@ class CustomersController < Sellers::BaseController
     customers_presenter = CustomersPresenter.new(pundit_user:, product:, customers: load_sales(sales), pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil }, count: sales.results.total)
     create_user_event("customers_view")
 
-    render inertia: "Customers/index",
+    render inertia: "Customers/Index",
            props: inertia_props(**customers_presenter.customers_props)
   end
 

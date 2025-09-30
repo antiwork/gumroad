@@ -8,11 +8,10 @@ class Checkout::UpsellsController < Sellers::BaseController
   def index
     authorize [:checkout, Upsell]
 
-    @title = "Upsells"
     pagination, upsells = fetch_upsells
     upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
 
-    render inertia: "Checkout/Upsells/index",
+    render inertia: "Checkout/Upsells/Index",
            props: inertia_props(**upsells_props)
   end
 

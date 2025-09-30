@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { SavedUtmLink, UtmLink, UtmLinkFormContext, SortKey } from "$app/data/utm_links";
+import * as Routes from "$app/utils/routes";
 
 import { PaginationProps } from "$app/components/Pagination";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -24,25 +25,29 @@ export const UtmLinkLayout = ({
   </div>
 );
 
+const VALID_SORT_COLUMNS = new Set([
+  "link",
+  "date",
+  "source",
+  "medium",
+  "campaign",
+  "clicks",
+  "sales_count",
+  "revenue_cents",
+  "conversion_rate",
+]);
+
+const isValidSortKey = (value: string): value is SortKey => VALID_SORT_COLUMNS.has(value);
+
 export const extractSortParam = (rawParams: URLSearchParams): Sort<SortKey> | null => {
   const column = rawParams.get("key");
-  switch (column) {
-    case "link":
-    case "date":
-    case "source":
-    case "medium":
-    case "campaign":
-    case "clicks":
-    case "sales_count":
-    case "revenue_cents":
-    case "conversion_rate":
-      return {
-        key: column,
-        direction: rawParams.get("direction") === "desc" ? "desc" : "asc",
-      };
-    default:
-      return null;
+  if (column && isValidSortKey(column)) {
+    return {
+      key: column,
+      direction: rawParams.get("direction") === "desc" ? "desc" : "asc",
+    };
   }
+  return null;
 };
 
 export type UtmLinksPageProps = {
@@ -55,7 +60,7 @@ export type UtmLinksPageProps = {
 
 const UtmLinksPage = ({ utm_links, pagination, context, utm_link, copy_from }: UtmLinksPageProps) => {
   const currentPath = window.location.pathname;
-  const newUtmLinkPath = "/dashboard/utm_links/new";
+  const newUtmLinkPath = Routes.new_dashboard_utm_link_path();
   const editUtmLinkRegex = /\/dashboard\/utm_links\/\d+\/edit$/u;
 
   if (currentPath === newUtmLinkPath) {

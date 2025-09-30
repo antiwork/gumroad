@@ -10,11 +10,10 @@ class Checkout::DiscountsController < Sellers::BaseController
   def index
     authorize [:checkout, OfferCode]
 
-    @title = "Discounts"
     pagination, offer_codes = fetch_offer_codes
     presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
 
-    render inertia: "Checkout/Discounts/index",
+    render inertia: "Checkout/Discounts/Index",
            props: inertia_props(**presenter.discounts_props)
   end
 

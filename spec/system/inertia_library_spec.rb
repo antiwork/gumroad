@@ -27,7 +27,7 @@ RSpec.describe "Inertia Library Page", type: :system, js: true do
       # Verify Inertia component
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Library/index")
+      expect(page_data["component"]).to eq("Library/Index")
     end
 
     it "displays purchased products" do
@@ -61,7 +61,7 @@ RSpec.describe "Inertia Library Page", type: :system, js: true do
       # Verify search results are displayed
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Library/index")
+      expect(page_data["component"]).to eq("Library/Index")
     end
   end
 end

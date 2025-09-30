@@ -14,6 +14,7 @@ import {
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { ResponseError } from "$app/utils/request";
+import * as Routes from "$app/utils/routes";
 
 import { Button } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
@@ -203,7 +204,7 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
       }
 
       showAlert(isEditing ? "Link updated!" : "Link created!", "success");
-      router.get(Routes.utm_links_dashboard_path());
+      router.get(Routes.dashboard_utm_links_path());
     } catch (error) {
       const genericMessage = "Sorry, something went wrong. Please try again.";
       if (error instanceof ResponseError) {
@@ -233,7 +234,7 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
       title={isEditing ? "Edit link" : "Create link"}
       actions={
         <>
-          <Link href={Routes.utm_links_dashboard_path()} className="button">
+          <Link href={Routes.dashboard_utm_links_path()} className="button">
             <Icon name="x-square" />
             Cancel
           </Link>

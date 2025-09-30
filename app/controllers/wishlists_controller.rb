@@ -1,21 +1,21 @@
 # frozen_string_literal: true
 
 class WishlistsController < ApplicationController
-  include CustomDomainConfig, DiscoverCuratedProducts
+  include CustomDomainConfig, DiscoverCuratedProducts, FindWishlist
 
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
   before_action :hide_layouts, only: :show
+  before_action :find_wishlist, only: :show
 
   def index
     authorize Wishlist
 
     respond_to do |format|
       format.html do
-        @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
         wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
 
-        render inertia: "Wishlists/index",
+        render inertia: "Wishlists/Index",
                props: inertia_props(
                  wishlists: wishlists_props,
                  reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
@@ -38,10 +38,9 @@ class WishlistsController < ApplicationController
   end
 
   def show
-    find_wishlist
     wishlist_presenter = WishlistPresenter.new(wishlist: @wishlist)
 
-    render inertia: "WishlistPage",
+    render inertia: "Wishlist/Show/Index",
            props: inertia_props(**wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by]))
   end
 
@@ -67,14 +66,4 @@ class WishlistsController < ApplicationController
 
     head :no_content
   end
-
-  private
-    def find_wishlist
-      @wishlist = user_by_domain(request.host).wishlists.alive.find_by_url_slug(params[:id])
-      e404 if @wishlist.blank?
-
-      @user = @wishlist.user
-      @title = @wishlist.name
-      @show_user_favicon = true
-    end
 end

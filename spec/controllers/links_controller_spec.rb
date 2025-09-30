@@ -92,7 +92,7 @@ describe LinksController, :vcr do
           expect(response).to be_successful
 
           expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(response.body).to include("Products/Index")
 
           expect_sales_count_in_inertia_response(1)
         end
@@ -103,7 +103,7 @@ describe LinksController, :vcr do
           expect(response).to be_successful
 
           expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(response.body).to include("Products/Index")
 
           expect_sales_count_in_inertia_response(3_030)
         end
@@ -115,7 +115,7 @@ describe LinksController, :vcr do
           expect(response).to be_successful
 
           expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(response.body).to include("Products/Index")
 
           expect_sales_count_in_inertia_response(424_242)
         end
@@ -127,7 +127,7 @@ describe LinksController, :vcr do
           expect(response).to be_successful
 
           expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(response.body).to include("Products/Index")
 
           expect_sales_count_in_inertia_response(1_111)
         end
@@ -140,7 +140,7 @@ describe LinksController, :vcr do
           expect(response).to be_successful
 
           expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(response.body).to include("Products/Index")
 
           data_page_match = response.body.match(/data-page="([^"]*)"/)
           expect(data_page_match).to be_present

@@ -48,7 +48,7 @@ class LinksController < ApplicationController
     @user_compliance_info = current_seller.fetch_or_build_user_compliance_info
     react_products_page_props = DashboardProductsPagePresenter.new(pundit_user:, memberships:, memberships_pagination:, products:, products_pagination:).page_props
 
-    render inertia: "Products/index",
+    render inertia: "Products/Index",
            props: inertia_props(**react_products_page_props)
   end
 
@@ -82,7 +82,7 @@ class LinksController < ApplicationController
     react_new_product_page_props = ProductPresenter.new_page_props(current_seller:)
     @title = "What are you creating?"
 
-    render inertia: "Products/New/index",
+    render inertia: "Products/New/Index",
            props: inertia_props(**react_new_product_page_props)
   end
 

@@ -20,7 +20,7 @@ RSpec.describe "Inertia UTM Links Page", type: :system, js: true do
       # Verify Inertia component
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("UtmLinks/index")
+      expect(page_data["component"]).to eq("UtmLinks/Index")
     end
 
     it "displays UTM links data correctly" do
@@ -41,7 +41,7 @@ RSpec.describe "Inertia UTM Links Page", type: :system, js: true do
       # Verify Inertia component structure
       expect(page).to have_css("[data-page]")
       page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("UtmLinks/index")
+      expect(page_data["component"]).to eq("UtmLinks/Index")
     end
   end
 end

@@ -34,7 +34,7 @@ export const AnalyticsLayout = ({
           </Tab>
           {user.policies.utm_link.index ? (
             <Tab isSelected={selectedTab === "utm_links"} asChild>
-              <Link className="no-underline" href={Routes.utm_links_dashboard_path()}>
+              <Link className="no-underline" href={Routes.dashboard_utm_links_path()}>
                 Links
               </Link>
             </Tab>
