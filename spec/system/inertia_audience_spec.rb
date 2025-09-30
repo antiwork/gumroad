@@ -23,11 +23,19 @@ RSpec.describe "Inertia Audience Page", type: :system, js: true do
     it "displays audience interface elements" do
       expect(page).to have_content("Following", wait: 10)
       expect(page).to have_css("main", wait: 10)
+      expect(page).to have_css("[role='tablist'], .tab-list, .tabs", wait: 10)
     end
 
     it "shows audience navigation and layout" do
       expect(page).to have_content("Analytics", wait: 10)
       expect(page).to have_css("main", wait: 10)
+      expect(page).to have_css("nav, .navigation, [role='navigation']", wait: 10)
+    end
+
+    it "displays audience data sections" do
+      expect(page).to have_content("Following", wait: 10)
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
     end
   end
 end

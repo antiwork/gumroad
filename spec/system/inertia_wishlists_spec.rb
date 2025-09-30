@@ -26,7 +26,14 @@ RSpec.describe "Inertia Wishlists Page", type: :system, js: true do
 
     it "shows wishlists navigation and layout" do
       expect(page).to have_css("main", wait: 10)
+      expect(page).to have_css("nav, .navigation, [role='navigation']", wait: 10)
       expect(page).not_to have_content("Error")
+    end
+
+    it "displays wishlists data sections" do
+      expect(page).to have_content("Analytics", wait: 10)
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
     end
   end
 
@@ -50,7 +57,14 @@ RSpec.describe "Inertia Wishlists Page", type: :system, js: true do
 
     it "shows wishlist navigation and structure" do
       expect(page).to have_css("main", wait: 10)
+      expect(page).to have_css("nav, .navigation, [role='navigation']", wait: 10)
       expect(page).not_to have_content("Error")
+    end
+
+    it "displays wishlist show data sections" do
+      expect(page).to have_content("Analytics", wait: 10)
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
     end
   end
 end

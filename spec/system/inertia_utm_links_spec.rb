@@ -26,6 +26,13 @@ RSpec.describe "Inertia UTM Links Page", type: :system, js: true do
 
     it "shows analytics navigation" do
       expect(page).to have_content("Analytics", wait: 10)
+      expect(page).to have_css("nav, .navigation, [role='navigation']", wait: 10)
+    end
+
+    it "displays UTM links data sections" do
+      expect(page).to have_content("Analytics", wait: 10)
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
     end
   end
 end

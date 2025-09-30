@@ -28,6 +28,13 @@ RSpec.describe "Inertia Products Page", type: :system, js: true do
     it "shows products navigation and layout" do
       expect(page).to have_content("Products", wait: 10)
       expect(page).to have_css("main", wait: 10)
+      expect(page).to have_css("nav, .navigation, [role='navigation']", wait: 10)
+    end
+
+    it "displays products data sections" do
+      expect(page).to have_content("Products", wait: 10)
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
     end
 
     it "tests new product functionality by clicking button and checking form" do
@@ -72,6 +79,13 @@ RSpec.describe "Inertia Products Page", type: :system, js: true do
     it "shows product creation layout" do
       expect(page).to have_content("Publish your first product", wait: 10)
       expect(page).to have_css("main", wait: 10)
+      expect(page).to have_css("nav, .navigation, [role='navigation']", wait: 10)
+    end
+
+    it "displays product form data sections" do
+      expect(page).to have_content("Next: Customize", wait: 10)
+      expect(page).to have_css("main", wait: 10)
+      expect(page).not_to have_content("Loading...", wait: 5)
     end
 
     it "tests product form functionality by filling fields and checking results" do
