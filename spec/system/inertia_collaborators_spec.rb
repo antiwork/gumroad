@@ -41,7 +41,6 @@ RSpec.describe "Inertia Collaborators Page", type: :system, js: true do
     end
 
     it "tests add collaborator functionality by clicking button and checking form" do
-      # Tesverify we can see the "Add collaborator" button
       expect(page).to have_content("Add collaborator", wait: 10)
 
       if page.has_button?("Add collaborator", wait: 5)

@@ -41,7 +41,7 @@ RSpec.describe "Inertia Wishlists Page", type: :system, js: true do
     let(:wishlist) { create(:wishlist, user: seller) }
 
     before do
-      wishlist # Force creation
+      wishlist
       visit wishlists_path
     end
 

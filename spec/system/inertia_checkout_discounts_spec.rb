@@ -41,7 +41,6 @@ RSpec.describe "Inertia Checkout Discounts Page", type: :system, js: true do
     end
 
     it "tests new discount functionality by clicking button and checking form" do
-      # Test actual new discount functionality as reques
       expect(page).to have_content("New discount", wait: 10)
 
       if page.has_button?("New discount", wait: 5)
