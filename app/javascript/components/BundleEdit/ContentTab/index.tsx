@@ -134,7 +134,7 @@ export const ContentTab = () => {
                 </div>
               ) : null}
               <div
-                className="border-parentBorder bg-filled text-contrastFilled grid gap-4 rounded-lg border border-solid p-4"
+                className="grid gap-4 rounded-lg border border-solid border-parentBorder bg-filled p-4 text-contrastFilled"
                 aria-label="Product selector"
               >
                 <div className="input">

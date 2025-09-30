@@ -616,7 +616,7 @@ const EmailPreview = ({
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
       </div>
-      <div className="border-parentBorder bg-filled text-contrastFilled grid gap-4 rounded-lg border border-solid p-4">
+      <div className="grid gap-4 rounded-lg border border-solid border-parentBorder bg-filled p-4 text-contrastFilled">
         <div className="paragraphs">
           <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
           <EditorContent className="rich-text" editor={editor} />
