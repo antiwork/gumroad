@@ -77,8 +77,10 @@ export const SignupPage = ({
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
         <SocialAuth />
-        <div role="separator">
+        <div role="separator" className="flex items-center gap-3">
+          <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
           <span>or</span>
+          <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
         </div>
         <section>
           {saveState.type === "error" ? (

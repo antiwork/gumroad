@@ -718,7 +718,11 @@ export const EmailForm = () => {
                     </Button>
                   )}
                 </div>
-                <div role="separator">OR</div>
+                <div role="separator" className="flex items-center gap-3">
+                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
+                  <span>OR</span>
+                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
+                </div>
                 <fieldset className={cx({ danger: invalidFields.has("scheduleDate") })}>
                   <DateInput
                     withTime

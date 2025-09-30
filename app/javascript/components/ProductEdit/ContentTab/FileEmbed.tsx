@@ -401,7 +401,11 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   The thumbnail image is shown as a preview in the embedded video player. Your image should have a 16:9
                   aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
                 </div>
-                <div role="separator">or</div>
+                <div role="separator" className="flex items-center gap-3">
+                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
+                  <span>or</span>
+                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
+                </div>
                 <div>
                   <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
                 </div>

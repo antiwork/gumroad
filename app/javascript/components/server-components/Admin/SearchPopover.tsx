@@ -71,7 +71,11 @@ export const SearchPopover = ({ card_types }: Props) => {
             <Icon name="solid-search" />
           </Button>
         </form>
-        <div role="separator">or search by card</div>
+        <div role="separator" className="flex items-center gap-3">
+          <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
+          <span>or search by card</span>
+          <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
+        </div>
         <form action={Routes.admin_cards_path()} method="get" style={{ display: "contents" }}>
           <select name="card_type" defaultValue={searchParams.get("card_type") || ""}>
             <option>Choose card type</option>
