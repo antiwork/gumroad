@@ -6,6 +6,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { Separator } from "$app/components/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -71,7 +72,7 @@ export const SearchPopover = ({ card_types }: Props) => {
             <Icon name="solid-search" />
           </Button>
         </form>
-        <div role="separator">or search by card</div>
+        <Separator>or search by card</Separator>
         <form action={Routes.admin_cards_path()} method="get" style={{ display: "contents" }}>
           <select name="card_type" defaultValue={searchParams.get("card_type") || ""}>
             <option>Choose card type</option>

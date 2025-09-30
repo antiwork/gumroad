@@ -39,6 +39,7 @@ import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
+import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { editEmailPath, emailTabPath, newEmailPath } from "$app/components/server-components/EmailsPage";
 import { TagInput } from "$app/components/TagInput";
@@ -718,7 +719,7 @@ export const EmailForm = () => {
                     </Button>
                   )}
                 </div>
-                <div role="separator">OR</div>
+                <Separator>OR</Separator>
                 <fieldset className={cx({ danger: invalidFields.has("scheduleDate") })}>
                   <DateInput
                     withTime
