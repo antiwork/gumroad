@@ -4,7 +4,7 @@ export const Separator = ({ children, ...rest }: React.PropsWithChildren<React.H
   <div
     {...rest}
     role="separator"
-    className="override grid grid-cols-[1fr_auto_1fr] items-center gap-3 before:border-b before:border-solid before:border-[rgb(var(--parent-color)/var(--border-alpha))] before:content-[''] after:border-b after:border-solid after:border-[rgb(var(--parent-color)/var(--border-alpha))] after:content-['']"
+    className="override grid grid-cols-[1fr_auto_1fr] items-center gap-3 before:content-[''] before:[border-bottom:solid_.0625rem_rgb(var(--parent-color)/var(--border-alpha))] after:content-[''] after:[border-bottom:solid_.0625rem_rgb(var(--parent-color)/var(--border-alpha))]"
   >
     {children}
   </div>
