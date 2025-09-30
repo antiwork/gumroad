@@ -90,7 +90,7 @@ describe CheckoutPresenter do
       expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:accepted_offer]).to be_present
 
       upsell.update!(paused: true)
-      expect { @instance.checkout_props(params:, browser_guid:) }.to raise_error(ActiveRecord::RecordNotFound)
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:accepted_offer]).to be_nil
     end
 
     it "allows adding a product" do
