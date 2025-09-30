@@ -144,7 +144,7 @@ class Link < ApplicationRecord
   has_many :product_cached_values, foreign_key: :product_id
   has_one :upsell, -> { upsell.alive }, foreign_key: :product_id
   has_one :available_upsell, -> { upsell.available_to_customers },
-    class_name: "Upsell", foreign_key: :product_id
+          class_name: "Upsell", foreign_key: :product_id
   has_many :available_upsell_variants, through: :available_upsell, source: :upsell_variants
   has_many :available_cross_sells, ->(link) {
     includes(:selected_products)
