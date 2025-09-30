@@ -46,6 +46,53 @@ describe CheckoutPresenter do
       expect(@instance.checkout_props(params: {}, browser_guid:)).to include(cart: { email: nil, returnUrl: "", rejectPppDiscount: false, discountCodes: [], items: [] })
     end
 
+    it "does not show paused upsells" do
+      product = create(:product_with_digital_versions, user: create(:named_user))
+      upsell = create(:upsell, seller: product.user, product:)
+      params = { product: product.unique_permalink }
+
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:upsell]).to be_present
+
+      upsell.update!(paused: true)
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:upsell]).to be_nil
+    end
+
+    it "does not show paused upsell variants" do
+      product = create(:product_with_digital_versions, user: create(:named_user))
+      upsell = create(:upsell, seller: product.user, product:)
+      create(:upsell_variant, upsell:, selected_variant: product.alive_variants.first, offered_variant: product.alive_variants.second)
+      options = product.options
+      params = { product: product.unique_permalink, option: options.first[:id] }
+
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:options].first[:upsell_offered_variant_id]).to be_present
+
+      upsell.update!(paused: true)
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:options].first[:upsell_offered_variant_id]).to be_nil
+    end
+
+    it "does not show paused cross-sells" do
+      product = create(:product, user: create(:named_user))
+      offered_product = create(:product, user: product.user)
+      upsell = create(:upsell, selected_products: [product], seller: product.user, product: offered_product, cross_sell: true)
+      params = { product: product.unique_permalink }
+
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:cross_sells]).to be_present
+
+      upsell.update!(paused: true)
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:product][:cross_sells]).to be_empty
+    end
+
+    it "does not accept paused upsells as accepted offers" do
+      product = create(:product_with_digital_versions, user: create(:named_user))
+      upsell = create(:upsell, seller: product.user, product:)
+      params = { product: product.unique_permalink, accepted_offer_id: upsell.external_id }
+
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:accepted_offer]).to be_present
+
+      upsell.update!(paused: true)
+      expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:accepted_offer]).to be_nil
+    end
+
     it "allows adding a product" do
       product = create(:product_with_digital_versions, name: "Sample Product", description: "Simple description", user: create(:named_user), duration_in_months: 6)
       product.alive_variants.first.update!(max_purchase_count: 0)

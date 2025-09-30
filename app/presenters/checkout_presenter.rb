@@ -47,9 +47,9 @@ class CheckoutPresenter
 
   def checkout_product(product, cart_item, params, include_cross_sells: true)
     return unless product.present?
-    upsell_variants = product.upsell_variants.alive.includes(:selected_variant, :offered_variant)
+    upsell_variants = product.available_upsell_variants.alive.includes(:selected_variant, :offered_variant)
     bundle_products = product.bundle_products.in_order.includes(:product, :variant).alive.load
-    accepted_offer = params[:accepted_offer_id] ? Upsell.alive.where(product:).find_by_external_id!(params[:accepted_offer_id]) : nil
+    accepted_offer = params[:accepted_offer_id] ? Upsell.available_to_customers.where(product:).find_by_external_id(params[:accepted_offer_id]) : nil
     option_id = accepted_offer&.variant&.external_id || cart_item[:option]&.fetch(:id)
 
     value = {
@@ -94,10 +94,10 @@ class CheckoutPresenter
           )
         end,
         ppp_details: product.ppp_details(@ip),
-        upsell: product.upsell.present? ? {
-          id: product.upsell.external_id,
-          text: product.upsell.text,
-          description: Rinku.auto_link(sanitize(product.upsell.description), :all, 'target="_blank" rel="noopener"'),
+        upsell: product.available_upsell.present? ? {
+          id: product.available_upsell.external_id,
+          text: product.available_upsell.text,
+          description: Rinku.auto_link(sanitize(product.available_upsell.description), :all, 'target="_blank" rel="noopener"'),
         } : nil,
         archived: product.archived?,
         bundle_products: bundle_products.map do |bundle_product|
@@ -125,7 +125,7 @@ class CheckoutPresenter
       accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount } : nil,
     }
     if include_cross_sells
-      value[:product][:cross_sells] = product.cross_sells.filter_map do |cross_sell|
+      value[:product][:cross_sells] = product.available_cross_sells.filter_map do |cross_sell|
         next unless cross_sell.product.alive? &&
           (cross_sell.product.remaining_for_sale_count.nil? || cross_sell.product.remaining_for_sale_count > 0) &&
           (cross_sell.variant.blank? || cross_sell.variant.available?) &&

@@ -171,6 +171,8 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       fill_in "Offer text", with: "My cool upsell"
       fill_in "Offer description", with: "This is a really cool upsell"
+      choose "Paused"
+
       in_preview do
         within_modal "My cool upsell" do
           expect(page).to have_text("This is a really cool upsell")
@@ -214,6 +216,7 @@ describe("Checkout upsells page", type: :system, js: true) do
           expect(page).to have_text("Offer text Enhance your learning experience", normalize_ws: true)
           expect(page).to have_text("Uses 0", normalize_ws: true)
           expect(page).to have_text("Revenue $0", normalize_ws: true)
+          expect(page).to have_text("Status Paused", normalize_ws: true)
         end
 
         within_section "Selected product" do
@@ -612,6 +615,54 @@ describe("Checkout upsells page", type: :system, js: true) do
 
     expect(upsell1.reload.deleted_at).to be_present
     expect(upsell1.offer_code.reload.deleted_at).to be_present
+  end
+
+  it "allows pausing the selected upsell" do
+    visit checkout_upsells_path
+
+    find(:table_row, { "Upsell" => "Upsell 2" }).click
+    within_section "Upsell 2", section_element: :aside do
+      within_section "Details" do
+        expect(page).to have_text("Status Live", normalize_ws: true)
+      end
+      click_on "Pause upsell"
+    end
+
+    expect(page).to have_alert(text: "Upsell paused and will not appear at checkout.")
+
+    find(:table_row, { "Upsell" => "Upsell 2", "Status" => "Paused" }).click
+    within_section "Upsell 2", section_element: :aside do
+      within_section "Details" do
+        expect(page).to have_text("Status Paused", normalize_ws: true)
+      end
+    end
+
+    expect(upsell2.reload.paused).to eq(true)
+  end
+
+  it "allows resuming the selected upsell" do
+    upsell2.update!(paused: true)
+
+    visit checkout_upsells_path
+
+    find(:table_row, { "Upsell" => "Upsell 2", "Status" => "Paused" }).click
+    within_section "Upsell 2", section_element: :aside do
+      within_section "Details" do
+        expect(page).to have_text("Status Paused", normalize_ws: true)
+      end
+      click_on "Resume upsell"
+    end
+
+    expect(page).to have_alert(text: "Upsell resumed and will appear at checkout.")
+
+    find(:table_row, { "Upsell" => "Upsell 2", "Status" => "Live" }).click
+    within_section "Upsell 2", section_element: :aside do
+      within_section "Details" do
+        expect(page).to have_text("Status Live", normalize_ws: true)
+      end
+    end
+
+    expect(upsell2.reload.paused).to eq(false)
   end
 
   it "allows duplicating the selected upsell" do

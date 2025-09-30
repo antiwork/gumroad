@@ -481,6 +481,10 @@ Rails.application.routes.draw do
         get :paged, on: :collection
         get :cart_item, on: :collection
         get :statistics, on: :member
+
+        scope module: :upsells do
+          resource :pause, only: [:create, :destroy]
+        end
       end
       namespace :upsells do
         resources :products, only: [:index, :show]

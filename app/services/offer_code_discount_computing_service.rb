@@ -46,7 +46,7 @@ class OfferCodeDiscountComputingService
 
     def links
       @_links ||= Link.visible
-        .includes({ cross_sells: :product })
+        .includes({ available_cross_sells: :product })
         .where(unique_permalink: products.values.map { it[:permalink] })
     end
 
@@ -139,7 +139,7 @@ class OfferCodeDiscountComputingService
     # will still be validated and updated during checkout, where the buyer will
     # be able to see the correct discount and adjust accordingly.
     def optimistically_apply_to_applicable_cross_sells(products_data, link)
-      link.cross_sells.each do |cross_sell|
+      link.available_cross_sells.each do |cross_sell|
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
