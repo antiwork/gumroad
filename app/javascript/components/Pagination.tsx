@@ -51,12 +51,12 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
   }, [pagination, pageDisplayCount]);
 
   return (
-    <div role="navigation" aria-label="Pagination" className="pagination">
+    <div role="navigation" aria-label="Pagination" className="flex w-full justify-center gap-2">
       <Button small disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
         <Icon name="outline-cheveron-left" />
         Previous
       </Button>
-      <menu>
+      <menu className="hidden lg:flex lg:flex-grow lg:justify-center lg:gap-2">
         {firstBoundaryPageShown ? (
           <>
             <PageNumber page={1} isCurrent={pagination.page === 1} onClick={() => onChangePage(1)} />
