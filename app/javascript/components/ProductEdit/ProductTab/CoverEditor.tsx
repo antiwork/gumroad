@@ -11,6 +11,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
 import { Progress } from "$app/components/Progress";
@@ -59,14 +60,14 @@ export const CoverEditor = ({
         </div>
       </header>
       {covers.length === 0 ? (
-        <div className="placeholder">
+        <Placeholder>
           <CoverUploader
             permalink={permalink}
             setCovers={setCovers}
             isUploading={isUploading}
             setIsUploading={setIsUploading}
           />
-        </div>
+        </Placeholder>
       ) : (
         <div>
           <div
