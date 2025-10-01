@@ -11,7 +11,7 @@ export const Separator = ({
     {...rest}
     role="separator"
     className={classNames(
-      "override grid grid-cols-[1fr_auto_1fr] items-center gap-3 before:content-[''] before:[border-bottom:solid_.0625rem_rgb(var(--parent-color)/var(--border-alpha))] after:content-[''] after:[border-bottom:solid_.0625rem_rgb(var(--parent-color)/var(--border-alpha))]",
+      "override grid grid-cols-[1fr_auto_1fr] items-center gap-3 before:content-[''] before:[border-bottom:solid_1px_rgb(var(--parent-color)/var(--border-alpha))] after:content-[''] after:[border-bottom:solid_1px_rgb(var(--parent-color)/var(--border-alpha))]",
       className,
     )}
   >
