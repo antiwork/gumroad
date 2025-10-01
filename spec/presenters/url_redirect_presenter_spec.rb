@@ -665,5 +665,37 @@ describe UrlRedirectPresenter do
         avatar_url: @user.avatar_url,
       )
     end
+
+    context "with completed installment plan" do
+      it "marks subscription as ended when all installments are completed" do
+        purchase = create(:installment_plan_purchase)
+        subscription = purchase.subscription
+        product = subscription.link
+
+        subscription.update_columns(charge_occurrence_count: product.installment_plan.number_of_installments)
+
+        (product.installment_plan.number_of_installments - 1).times do
+          create(:purchase, link: product, subscription: subscription, purchaser: subscription.user)
+        end
+
+        url_redirect = create(:url_redirect, purchase: purchase)
+        props = described_class.new(url_redirect:, logged_in_user: subscription.user).download_page_without_content_props
+
+        expect(props[:purchase][:membership][:is_subscription_ended]).to eq(true)
+      end
+
+      it "does not mark subscription as ended when installments are incomplete" do
+        purchase = create(:installment_plan_purchase)
+        subscription = purchase.subscription
+        product = subscription.link
+
+        subscription.update_columns(charge_occurrence_count: product.installment_plan.number_of_installments - 1)
+
+        url_redirect = create(:url_redirect, purchase: purchase)
+        props = described_class.new(url_redirect:, logged_in_user: subscription.user).download_page_without_content_props
+
+        expect(props[:purchase][:membership][:is_subscription_ended]).to eq(false)
+      end
+    end
   end
 end
