@@ -7,7 +7,7 @@ import { AnalyticsTotal } from "$app/components/server-components/AnalyticsPage"
 import { Stats } from "$app/components/Stats";
 
 export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }) => (
-  <div className="stats-grid">
+  <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 override">
     <Stats
       title={
         <>
