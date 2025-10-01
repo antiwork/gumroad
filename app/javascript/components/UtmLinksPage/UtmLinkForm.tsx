@@ -228,6 +228,12 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
     }
   });
 
+  const buttonText = React.useMemo(() => {
+    if (isSaving) return "Saving...";
+    if (isEditing) return "Save changes";
+    return "Add link";
+  }, [isSaving, isEditing]);
+
   return (
     <UtmLinkLayout
       title={isEditing ? "Edit link" : "Create link"}
@@ -238,11 +244,7 @@ export const UtmLinkForm = ({ context, utm_link }: { context: UtmLinkFormContext
             Cancel
           </Link>
           <Button color="accent" onClick={submit} disabled={isSaving}>
-            {(() => {
-              if (isSaving) return "Saving...";
-              if (isEditing) return "Save changes";
-              return "Add link";
-            })()}
+            {buttonText}
           </Button>
         </>
       }

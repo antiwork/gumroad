@@ -31,7 +31,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
 
-const duplicateLinkPath = (link: SavedUtmLink) => `${Routes.new_dashboard_utm_link_path()}?copy_from=${link.id}`;
+const duplicateLinkPath = (link: SavedUtmLink) => Routes.new_dashboard_utm_link_path({ copy_from: link.id });
 const editLinkPath = (link: SavedUtmLink) => Routes.edit_dashboard_utm_link_path(link.id);
 const truncateText = (text: string, maxLength: number) => {
   const truncated = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
@@ -99,7 +99,7 @@ const UtmLinkList = ({
   const onChangePage = (newPage: number) => {
     const params = new URLSearchParams(window.location.search);
     params.set("page", newPage.toString());
-    router.get(`${Routes.dashboard_utm_links_path()}?${params.toString()}`);
+    router.get(Routes.dashboard_utm_links_path(Object.fromEntries(params)));
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
@@ -109,7 +109,7 @@ const UtmLinkList = ({
       params.set("key", newSort.key);
       params.set("direction", newSort.direction);
     }
-    router.get(`${Routes.dashboard_utm_links_path()}?${params.toString()}`);
+    router.get(Routes.dashboard_utm_links_path(Object.fromEntries(params)));
     setSort(newSort);
   };
 
@@ -127,7 +127,7 @@ const UtmLinkList = ({
       params.delete("query");
     }
     params.delete("page");
-    router.get(`${Routes.dashboard_utm_links_path()}?${params.toString()}`);
+    router.get(Routes.dashboard_utm_links_path(Object.fromEntries(params)));
   }, 500);
 
   return (

@@ -8,6 +8,7 @@ class Wishlists::FollowingController < ApplicationController
   def index
     authorize Wishlist
 
+    @title = "Following"
     wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.alive_following_wishlists, is_wishlist_creator: false)
 
     render inertia: "Wishlists/Following/Index",

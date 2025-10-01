@@ -62,7 +62,13 @@ class LinksController < ApplicationController
     authorize Link, :index?
 
     pagination, memberships = paginated_memberships(page: paged_params[:page].to_i, query: params[:query])
-    react_products_page_props = DashboardProductsPagePresenter.new(pundit_user:, memberships:, memberships_pagination: pagination, products: nil, products_pagination: nil).memberships_table_props
+    react_products_page_props = DashboardProductsPagePresenter.new(
+      pundit_user:,
+      memberships:,
+      memberships_pagination: pagination,
+      products: nil,
+      products_pagination: nil
+    ).memberships_table_props
 
     render json: {
       pagination: react_products_page_props[:memberships_pagination],
@@ -74,7 +80,13 @@ class LinksController < ApplicationController
     authorize Link, :index?
 
     pagination, products = paginated_products(page: paged_params[:page].to_i, query: params[:query])
-    react_products_page_props = DashboardProductsPagePresenter.new(pundit_user:, memberships: nil, memberships_pagination: nil, products:, products_pagination: pagination).products_table_props
+    react_products_page_props = DashboardProductsPagePresenter.new(
+      pundit_user:,
+      memberships: nil,
+      memberships_pagination: nil,
+      products:,
+      products_pagination: pagination
+    ).products_table_props
 
     render json: {
       pagination: react_products_page_props[:products_pagination],

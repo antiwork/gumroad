@@ -11,12 +11,14 @@ class WishlistsController < ApplicationController
   def index
     authorize Wishlist
 
-    wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
 
     if request.format.json?
       wishlists = current_seller.wishlists.alive.includes(:products).by_external_ids(params[:ids])
       render json: WishlistPresenter.cards_props(wishlists:, pundit_user:, layout: Product::Layout::PROFILE)
     else
+      @title = Feature.active?(:follow_wishlists, current_seller) ? "Saved" : "Wishlists"
+      wishlists_props = WishlistPresenter.library_props(wishlists: current_seller.wishlists.alive)
+
       render inertia: "Wishlists/Index",
              props: inertia_props(
                wishlists: wishlists_props,
