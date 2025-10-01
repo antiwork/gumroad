@@ -3393,6 +3393,26 @@ describe Subscription, :vcr do
 
       expect(subscription.alive_or_restartable?).to eq(false)
     end
+
+    it "returns false if the subscription is a completed installment plan" do
+      product = create(:product, :with_installment_plan)
+      subscription = create(:subscription, :installment_plan, link: product, user: create(:user))
+      
+      create_list(:purchase, 3, :successful, subscription: subscription, link: product, is_installment_payment: true)
+      
+      expect(subscription.charges_completed?).to eq(true)
+      expect(subscription.alive_or_restartable?).to eq(false)
+    end
+
+    it "returns true if the subscription is an incomplete installment plan" do
+      product = create(:product, :with_installment_plan)
+      subscription = create(:subscription, :installment_plan, link: product, user: create(:user))
+      
+      create_list(:purchase, 2, :successful, subscription: subscription, link: product, is_installment_payment: true)
+      
+      expect(subscription.charges_completed?).to eq(false)
+      expect(subscription.alive_or_restartable?).to eq(true)
+    end
   end
 
   describe "#alive_at?" do

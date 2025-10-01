@@ -107,7 +107,8 @@ class Subscription < ApplicationRecord
       ended_at:,
       failed_at:,
       free_trial_ends_at:,
-      status:
+      status:,
+      successful_installment_payments_count:
     }
 
     json[:license_key] = license_key if license_key.present?
@@ -728,11 +729,31 @@ class Subscription < ApplicationRecord
   end
 
   def charges_completed?
-    has_fixed_length? && purchases.successful.count == charge_occurrence_count
+    return false unless has_fixed_length?
+    
+    if is_installment_plan?
+      purchases.successful.where(is_installment_payment: true).count == charge_occurrence_count
+    else
+      purchases.successful.count == charge_occurrence_count
+    end
   end
 
   def remaining_charges_count
-    has_fixed_length? ? charge_occurrence_count - purchases.successful.count : 0
+    return 0 unless has_fixed_length?
+    
+    if is_installment_plan?
+      charge_occurrence_count - purchases.successful.where(is_installment_payment: true).count
+    else
+      charge_occurrence_count - purchases.successful.count
+    end
+  end
+
+  def successful_installment_payments_count
+    if is_installment_plan?
+      purchases.successful.where(is_installment_payment: true).count
+    else
+      0
+    end
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
@@ -849,6 +870,7 @@ class Subscription < ApplicationRecord
   end
 
   def alive_or_restartable?
+    return false if is_installment_plan? && charges_completed?
     !ended? && !cancelled_by_seller?
   end
 

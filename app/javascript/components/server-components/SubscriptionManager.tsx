@@ -73,6 +73,7 @@ type Props = {
     discount: Discount | null;
     end_time_of_subscription: string;
     successful_purchases_count: number;
+    successful_installment_payments_count: number;
     is_in_free_trial: boolean;
     is_test: boolean;
     is_overdue_for_charge: boolean;
@@ -110,7 +111,10 @@ const SubscriptionManager = ({
   const url = new URL(useOriginalLocation());
 
   const subscriptionEntity = subscription.is_installment_plan ? "installment plan" : "membership";
-  const restartable = !subscription.alive || subscription.pending_cancellation;
+  const isInstallmentPlanCompleted = subscription.is_installment_plan && 
+    product.installment_plan && 
+    subscription.successful_installment_payments_count >= product.installment_plan.number_of_installments;
+  const restartable = (!subscription.alive || subscription.pending_cancellation) && !isInstallmentPlanCompleted;
   const [cancelled, setCancelled] = React.useState(restartable);
   const initialSelection = {
     recurrence: subscription.recurrence,
