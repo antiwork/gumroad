@@ -1,4 +1,3 @@
-import cx from "classnames";
 import { parseISO } from "date-fns";
 import * as React from "react";
 
@@ -152,7 +151,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         ))}
       </div>
       {data.pagination.next !== null ? (
-        <div style={{ display: "flex", justifyContent: "center", marginTop: "var(--spacer-6)" }}>
+        <div className="flex justify-center mt-6">
           <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
             {loadingMore ? "Loading more comments..." : "Load more comments"}
           </Button>
@@ -239,14 +238,14 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
   };
 
   return (
-    <article className="comment">
-      <img className="user-avatar" alt="Comment author avatar" src={comment.author_avatar_url} />
-      <div className="body">
-        <header>
-          <span className="user-name">{comment.author_name}</span>
+    <article className="grid grid-cols-[max-content_1fr] gap-3 relative">
+      <img className="h-[3.025rem] w-[3.025rem] col-start-1 row-span-2 row-start-1" alt="Comment author avatar" src={comment.author_avatar_url} />
+      <div className={`grid gap-3 relative whitespace-pre-wrap col-start-2 ${comment.replies.length > 0 ? "before:content-[''] before:absolute before:left-[-2.2625rem] before:h-[calc(100%-2.3rem)] before:top-[2.3rem] before:border-l before:border-[rgb(var(--parent-color)/var(--border-alpha))]" : ""}`}>
+        <header className="flex gap-3 items-center flex-wrap">
+          <span className="font-bold no-underline">{comment.author_name}</span>
           <time title={formatDate(parseISO(comment.created_at))}>{comment.created_at_humanized}</time>
           {comment.author_id === seller_id ? <span className="pill small">Creator</span> : null}
-          <div style={{ marginLeft: "auto" }}>
+          <div className="ml-auto">
             {comment.is_editable || comment.is_deletable ? (
               <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
                 {(close) => (
@@ -291,12 +290,13 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
           </footer>
         ) : null}
       </div>
-      {replyDraft != null ? (
-        <CommentTextarea
-          value={replyDraft}
-          onChange={(event) => setReplyDraft(event.target.value)}
-          disabled={isPosting}
-        >
+      <div className="col-start-2">
+        {replyDraft != null ? (
+          <CommentTextarea
+            value={replyDraft}
+            onChange={(event) => setReplyDraft(event.target.value)}
+            disabled={isPosting}
+          >
           <Button onClick={() => setReplyDraft(null)} disabled={isPosting}>
             Cancel
           </Button>
@@ -308,17 +308,28 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
           >
             {isPosting ? "Posting..." : "Post"}
           </Button>
-        </CommentTextarea>
-      ) : null}
+          </CommentTextarea>
+        ) : null}
+      </div>
 
-      {comment.replies.map((reply) => (
-        <CommentContainer
+      <div className="col-start-2">
+        {comment.replies.map((reply, index) => (
+        <div
           key={reply.id}
-          comment={reply}
-          upsertComment={upsertComment}
-          confirmCommentDeletion={confirmCommentDeletion}
-        />
-      ))}
+          className={`mt-8 -ml-[1.5125rem] max-w-none relative before:content-[''] before:absolute before:top-[-2.75rem] before:right-full before:w-[calc(0.75rem-1px)] before:border-b before:border-l before:border-[rgb(var(--parent-color)/var(--border-alpha))] before:h-[2.9rem] before:rounded-bl-lg ${
+            index < comment.replies.length - 1
+              ? "after:content-[''] after:absolute after:h-full after:left-[-0.75rem] after:border-l after:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+              : ""
+          }`}
+        >
+          <CommentContainer
+            comment={reply}
+            upsertComment={upsertComment}
+            confirmCommentDeletion={confirmCommentDeletion}
+          />
+        </div>
+        ))}
+      </div>
     </article>
   );
 };
@@ -340,9 +351,9 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={cx({ comment: showAvatar })} style={showAvatar ? {} : { display: "grid", gap: "var(--spacer-3)" }}>
+    <div className={showAvatar ? "grid grid-cols-[max-content_1fr] gap-3 relative" : "grid gap-3"}>
       {showAvatar ? (
-        <img className="user-avatar" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
+        <img className="h-[3.025rem] w-[3.025rem] col-start-1 row-span-2 row-start-1" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
       ) : null}
       {loggedInUser || purchase_id ? (
         <textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />
@@ -353,7 +364,7 @@ const CommentTextarea = ({
         </div>
       )}
       {loggedInUser != null || purchase_id != null ? (
-        <div style={{ display: "grid", justifyContent: "end", gap: "var(--spacer-3)", gridAutoFlow: "column" }}>
+        <div className="grid justify-end gap-3 grid-flow-col mt-2">
           {children}
         </div>
       ) : null}
