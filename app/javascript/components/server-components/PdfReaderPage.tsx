@@ -198,7 +198,10 @@ export const PdfReaderPage = ({
             <ReaderPopover onZoomIn={zoomIn} onZoomOut={zoomOut} />
           </div>
           <div className="right">
-            <div className="pagination" style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+            <div
+              className="flex w-full justify-center gap-2"
+              style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
+            >
               {pageNumber} of {pageCount}
             </div>
             <button

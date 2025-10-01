@@ -8,10 +8,10 @@
 %>
 
 <%= paginator.render do %>
-  <div class="pagination" role="navigation" aria-label="Pagination">
+  <div class="flex w-full justify-center gap-2" role="navigation" aria-label="Pagination">
     <%= first_page_tag %>
     <%= prev_page_tag %>
-    <menu>
+    <menu class="hidden lg:flex lg:flex-grow lg:justify-center lg:gap-2">
       <% each_page do |page| %>
         <% if page.display_tag? %>
           <li>
