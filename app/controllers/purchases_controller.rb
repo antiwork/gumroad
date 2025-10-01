@@ -453,7 +453,7 @@ class PurchasesController < ApplicationController
         success: false,
         error_message:,
         name: purchase&.link&.name,
-        formatted_price: formatted_price(purchase&.link&.price_currency_type || Currency::USD, purchase&.total_transaction_cents),
+        formatted_price: formatted_price(Currency::USD, purchase&.total_transaction_cents),
         error_code: purchase&.error_code,
         is_tax_mismatch: purchase&.error_code == PurchaseErrorCode::TAX_VALIDATION_FAILED,
         card_country: (ISO3166::Country[card_country]&.common_name if card_country.present?),
