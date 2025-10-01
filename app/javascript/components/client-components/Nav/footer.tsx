@@ -5,7 +5,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 
 function NavbarFooter() {
   const routeParams = { host: useAppDomain() };

@@ -6,7 +6,7 @@ import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Seller = {

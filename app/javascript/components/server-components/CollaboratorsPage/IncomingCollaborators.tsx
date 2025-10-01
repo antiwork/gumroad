@@ -17,7 +17,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";

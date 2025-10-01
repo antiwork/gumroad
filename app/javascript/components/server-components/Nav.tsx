@@ -17,7 +17,7 @@ import {
 } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {

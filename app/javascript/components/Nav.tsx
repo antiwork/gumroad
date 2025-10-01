@@ -9,8 +9,8 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { Icon } from "$app/components/Icons";
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { UserAvatar } from "$app/components/UserAvatar";
 
 type NavContextValue = {
   close: () => void;

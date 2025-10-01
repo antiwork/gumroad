@@ -29,7 +29,7 @@ import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const ROLE_TITLES: Record<Role, string> = {

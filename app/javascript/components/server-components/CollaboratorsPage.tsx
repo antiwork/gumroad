@@ -40,7 +40,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { IncomingCollaborators } from "$app/components/server-components/CollaboratorsPage/IncomingCollaborators";
 import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 
 export const AuthorByline = ({
   name,

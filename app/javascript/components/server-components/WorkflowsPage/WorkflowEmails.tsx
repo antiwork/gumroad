@@ -52,9 +52,9 @@ import {
   determineWorkflowTrigger,
   WorkflowTrigger,
 } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { UserAvatar } from "$app/components/UserAvatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type EmailFormState = {

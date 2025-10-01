@@ -13,7 +13,7 @@ import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
-import { UserAvatar } from "$app/components/UserAvatar";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 
 function MessageListItem({ message, isLastMessage }: { message: Message; isLastMessage: boolean }) {
   const [isExpanded, setIsExpanded] = React.useState(isLastMessage);

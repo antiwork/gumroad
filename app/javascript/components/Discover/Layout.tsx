@@ -10,8 +10,8 @@ import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { UserAvatar } from "$app/components/UserAvatar";
 
 const UserActionButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();

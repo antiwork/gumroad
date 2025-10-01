@@ -16,8 +16,8 @@ import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { UserAvatar } from "$app/components/ui/UserAvatar";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { UserAvatar } from "$app/components/UserAvatar";
 
 type ContentUnavailabilityReasonCode =
   | "inactive_membership"

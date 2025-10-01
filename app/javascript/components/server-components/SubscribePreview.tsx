@@ -4,7 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "../Button";
-import { UserAvatar } from "../UserAvatar";
+import { UserAvatar } from "../ui/UserAvatar";
 
 type Props = {
   avatar_url: string;
