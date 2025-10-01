@@ -14,6 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Card } from "$app/components/Product/Card";
 import {
@@ -362,7 +363,7 @@ export const Checkout = ({
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -371,7 +372,7 @@ export const Checkout = ({
             <a className="button accent" href={discoverUrl}>
               Discover products
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </div>

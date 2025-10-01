@@ -9,6 +9,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
+import { Placeholder } from "$app/components/Placeholder";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -130,7 +131,7 @@ const WishlistsPage = ({
             </tbody>
           </table>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -139,7 +140,7 @@ const WishlistsPage = ({
             <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
               Learn more about wishlists
             </a>
-          </div>
+          </Placeholder>
         )}
 
         {deletingWishlist ? (

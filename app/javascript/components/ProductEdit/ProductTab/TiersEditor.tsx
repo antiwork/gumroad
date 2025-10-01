@@ -20,6 +20,7 @@ import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
+import { Placeholder } from "$app/components/Placeholder";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RecurrencePriceValue, Tier, useProductEditContext } from "$app/components/ProductEdit/state";
@@ -76,11 +77,11 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
   );
 
   return tiers.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Offer different tiers of this membership</h2>
       Sweeten the deal for your customers with different levels of access. Every membership needs at least one tier.
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalVersion ? (

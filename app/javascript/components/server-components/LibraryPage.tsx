@@ -15,6 +15,7 @@ import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
@@ -337,7 +338,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
     >
       <section className="space-y-4 p-4 md:p-8">
         {state.results.length === 0 || showArchivedNotice ? (
-          <div className="placeholder">
+          <Placeholder>
             {state.results.length === 0 ? (
               <figure>
                 <img src={placeholder} />
@@ -365,7 +366,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                 </Button>
               </>
             )}
-          </div>
+          </Placeholder>
         ) : null}
         {archivedCount > 0 && !state.search.showArchivedOnly && !showArchivedNotice ? (
           <div role="status" className="info mb-5">

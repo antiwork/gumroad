@@ -15,6 +15,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Placeholder } from "$app/components/Placeholder";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -180,7 +181,7 @@ const TableRowLoadingSpinner = () => (
 
 const EmptyState = () => (
   <section className="p-4 md:p-8">
-    <div className="placeholder">
+    <Placeholder>
       <figure>
         <img src={placeholder} />
       </figure>
@@ -189,7 +190,7 @@ const EmptyState = () => (
       <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
         Learn more about collaborations
       </a>
-    </div>
+    </Placeholder>
   </section>
 );
 

@@ -5,6 +5,7 @@ import { Membership, Product } from "$app/data/products";
 import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -80,7 +81,7 @@ export const ProductsDashboardPage = ({
     >
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -97,7 +98,7 @@ export const ProductsDashboardPage = ({
                 learn more about the products dashboard
               </a>
             </span>
-          </div>
+          </Placeholder>
         ) : (
           <ProductsPage
             memberships={memberships}

@@ -4,6 +4,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
+import { Placeholder } from "$app/components/Placeholder";
 import { PriceInput } from "$app/components/PriceInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
@@ -55,11 +56,11 @@ export const DurationsEditor = ({
   );
 
   return durations.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Add duration</h2>
       Create one or more call durations for customers to choose from.
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalDuration ? (

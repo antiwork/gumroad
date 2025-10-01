@@ -5,6 +5,7 @@ import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Availability } from "$app/components/ProductEdit/state";
 
 const DEFAULT_INTERVAL_START_HOURS = 9;
@@ -176,7 +177,7 @@ export const AvailabilityEditor = ({
       />
     </>
   ) : (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Add day of availability</h2>
       Adjust your availability to reflect specific dates and times
       <AddButton
@@ -186,7 +187,7 @@ export const AvailabilityEditor = ({
           addAvailability(date, DEFAULT_INTERVAL_LENGTH);
         }}
       />
-    </div>
+    </Placeholder>
   );
 };
 

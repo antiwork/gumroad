@@ -19,6 +19,7 @@ import { SalesChart } from "$app/components/Analytics/SalesChart";
 import { SalesQuickStats } from "$app/components/Analytics/SalesQuickStats";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { DateRangePicker } from "$app/components/DateRangePicker";
+import { Placeholder } from "$app/components/Placeholder";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -204,7 +205,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -216,7 +217,7 @@ const AnalyticsPage = ({ products: initialProducts, country_codes, state_names }
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
               Learn more about the analytics dashboard
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </AnalyticsLayout>

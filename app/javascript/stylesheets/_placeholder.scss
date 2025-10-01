@@ -1,14 +1,14 @@
-.placeholder {
-  border: dashed $border-width $border-color;
-  border-radius: border-radius(1);
-  padding: spacer(6);
-  @include bg-color(filled);
-  gap: spacer(3);
-  display: grid;
-  text-align: center;
-  justify-items: center;
+// .placeholder {
+//   border: dashed $border-width $border-color;
+//   border-radius: border-radius(1);
+//   padding: spacer(6);
+//   @include bg-color(filled);
+//   gap: spacer(3);
+//   display: grid;
+//   text-align: center;
+//   justify-items: center;
 
-  > .icon {
-    @include font-size(4);
-  }
-}
+//   > .icon {
+//     @include font-size(4);
+//   }
+// }

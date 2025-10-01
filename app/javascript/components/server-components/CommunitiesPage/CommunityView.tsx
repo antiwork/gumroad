@@ -26,6 +26,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
@@ -865,7 +866,7 @@ const GoBackHeader = () => {
 const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) => (
   <div>
     <section>
-      <div className="placeholder">
+      <Placeholder>
         <figure>
           <img src={placeholderImage} />
         </figure>
@@ -883,7 +884,7 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
             learn more about community chats
           </a>
         </p>
-      </div>
+      </Placeholder>
     </section>
   </div>
 );

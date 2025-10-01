@@ -49,6 +49,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -318,7 +319,7 @@ const AffiliateRequestsTable = ({
           </tbody>
         </table>
       ) : (
-        <div className="placeholder">No requests yet</div>
+        <Placeholder>No requests yet</Placeholder>
       )}
 
       {showMoreItems ? <Button onClick={showMoreItems}>Load more</Button> : null}
@@ -572,12 +573,12 @@ const AffiliatesTab = () => {
                 ) : null}
               </>
             ) : (
-              <div className="placeholder">
+              <Placeholder>
                 <figure>
                   <img src={placeholder} />
                 </figure>
                 <h2>No affiliates found</h2>
-              </div>
+              </Placeholder>
             )}
           </>
         )}

@@ -16,6 +16,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
+import { Placeholder } from "$app/components/Placeholder";
 import { AffiliatesNavigation, Layout } from "$app/components/server-components/AffiliatesPage";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
@@ -100,7 +101,7 @@ export const AffiliateSignupForm = () => {
     >
       {products.length === 0 ? (
         <section className="!p-4 md:!p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholderImage} />
             </figure>
@@ -113,7 +114,7 @@ export const AffiliateSignupForm = () => {
             >
               New product
             </NavigationButton>
-          </div>
+          </Placeholder>
         </section>
       ) : (
         <form>

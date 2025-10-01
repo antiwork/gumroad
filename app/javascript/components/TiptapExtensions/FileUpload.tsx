@@ -6,6 +6,7 @@ import { cast } from "ts-safe-cast";
 import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 
 declare module "@tiptap/core" {
@@ -38,12 +39,12 @@ export const FileUpload = TiptapNode.create({
 const FileUploadNodeView = ({ editor, node }: NodeViewProps) => (
   <NodeViewWrapper data-drag-handle={editor.isEditable ? true : undefined}>
     {editor.isEditable ? (
-      <div className="placeholder">
+      <Placeholder>
         <Button color="primary">
           <Icon name="upload-fill" />
           Upload files
         </Button>
-      </div>
+      </Placeholder>
     ) : (
       <FileInput customFieldId={cast<string>(node.attrs.id)} />
     )}

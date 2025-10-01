@@ -8,6 +8,7 @@ import { getRecommendedProducts, RecommendationType } from "$app/data/recommende
 import { CardProduct } from "$app/parsers/product";
 
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Card } from "$app/components/Product/Card";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 
@@ -144,10 +145,10 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
             ))}
           </div>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <Icon name="archive-fill" />
             <p>No products found</p>
-          </div>
+          </Placeholder>
         )}
       </div>
     </NodeViewWrapper>

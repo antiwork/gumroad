@@ -10,6 +10,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -229,7 +230,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
             ) : null}
           </div>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -255,7 +256,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
             ) : (
               <h2>No followers found</h2>
             )}
-          </div>
+          </Placeholder>
         )}
       </div>
     </Layout>

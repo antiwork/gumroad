@@ -16,6 +16,7 @@ import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverCompo
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import WorkflowEmails from "$app/components/server-components/WorkflowsPage/WorkflowEmails";
 import WorkflowForm, { WorkflowTrigger } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
@@ -138,13 +139,13 @@ const ErrorBoundary = () => {
   return (
     <div>
       <div>
-        <div className="placeholder">
+        <Placeholder>
           <p>
             {isRouteErrorResponse(error) && error.status === 404
               ? "The resource you're looking for doesn't exist."
               : "Something went wrong."}
           </p>
-        </div>
+        </Placeholder>
       </div>
     </div>
   );

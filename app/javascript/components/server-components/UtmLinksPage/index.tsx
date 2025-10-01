@@ -13,6 +13,7 @@ import { getEditUtmLink, getNewUtmLink, getUtmLinks, SortKey } from "$app/data/u
 import { assertDefined } from "$app/utils/assert";
 import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
+import { Placeholder } from "$app/components/Placeholder";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Sort } from "$app/components/useSortingTableDriver";
 
@@ -39,13 +40,13 @@ const ErrorBoundary = () => {
   return (
     <div>
       <div className="p-4 md:p-8">
-        <div className="placeholder">
+        <Placeholder>
           <p>
             {isRouteErrorResponse(error) && error.status === 404
               ? "The resource you're looking for doesn't exist."
               : "Something went wrong."}
           </p>
-        </div>
+        </Placeholder>
       </div>
     </div>
   );

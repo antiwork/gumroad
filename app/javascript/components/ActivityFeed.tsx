@@ -4,6 +4,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Placeholder } from "$app/components/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 type SaleItemDetails = {
@@ -50,7 +51,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
 
   if (!items.length) {
     return (
-      <div className="placeholder">
+      <Placeholder>
         <p>
           Followers and sales will show up here as they come in.
           {loggedInUser?.policies.product.create ? (
@@ -61,7 +62,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
             </span>
           ) : null}
         </p>
-      </div>
+      </Placeholder>
     );
   }
 

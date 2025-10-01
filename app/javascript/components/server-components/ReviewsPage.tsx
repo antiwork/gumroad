@@ -8,6 +8,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { RatingStars } from "$app/components/RatingStars";
@@ -126,17 +127,17 @@ const ReviewsPage = ({
         </section>
       ) : reviews.length > 0 ? (
         <section className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <h2>You've reviewed all your products!</h2>
             <NavigationButton href={discoverUrl} color="accent">
               Discover more
             </NavigationButton>
-          </div>
+          </Placeholder>
         </section>
       ) : null}
       <section className="p-4 md:p-8">
         {reviews.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholderImage} />
             </figure>
@@ -148,7 +149,7 @@ const ReviewsPage = ({
             <a href="/help/article/344-rate-and-review-your-purchase" target="_blank" rel="noreferrer">
               Learn more about reviews
             </a>
-          </div>
+          </Placeholder>
         ) : (
           <table>
             <caption>Your reviews</caption>

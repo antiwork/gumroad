@@ -12,6 +12,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -315,7 +316,7 @@ const AffiliatedPage = ({
       ) : (
         <section className="p-4 md:p-8">
           {initialAffiliatedProducts.length === 0 ? (
-            <div className="placeholder">
+            <Placeholder>
               <figure>
                 <img src={placeholder} />
               </figure>
@@ -333,17 +334,17 @@ const AffiliatedPage = ({
                   learn more to get started
                 </a>
               </p>
-            </div>
+            </Placeholder>
           ) : (
             <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
               <StatsSection {...stats} />
               {state.affiliatedProducts.length === 0 ? (
-                <div className="placeholder">
+                <Placeholder>
                   <figure>
                     <img src={placeholder} />
                   </figure>
                   <h2>No affiliated products found.</h2>
-                </div>
+                </Placeholder>
               ) : (
                 <AffiliatedProductsTable
                   affiliatedProducts={affiliatedProducts}

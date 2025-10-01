@@ -15,6 +15,7 @@ import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Placeholder } from "$app/components/Placeholder";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -199,7 +200,7 @@ const ThirdPartyAnalyticsPage = ({ settings_pages, third_party_analytics, produc
               {addSnippetButton}
             </>
           ) : (
-            <div className="placeholder">{addSnippetButton}</div>
+            <Placeholder>{addSnippetButton}</Placeholder>
           )}
         </section>
       </form>

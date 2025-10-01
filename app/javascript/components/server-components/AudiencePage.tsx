@@ -13,6 +13,7 @@ import { AudienceQuickStats } from "$app/components/Audience/AudienceQuickStats"
 import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -86,7 +87,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -98,7 +99,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
             <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
               Learn more
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </AnalyticsLayout>

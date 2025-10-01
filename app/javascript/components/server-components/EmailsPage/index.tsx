@@ -20,6 +20,7 @@ import { register, GlobalProps, buildStaticRouter } from "$app/utils/serverCompo
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { DraftsTab } from "$app/components/server-components/EmailsPage/DraftsTab";
@@ -162,7 +163,7 @@ export const EmptyStatePlaceholder = ({
   description: string;
   placeholderImage: string;
 }) => (
-  <div className="placeholder">
+  <Placeholder>
     <figure>
       <img src={placeholderImage} />
     </figure>
@@ -174,7 +175,7 @@ export const EmptyStatePlaceholder = ({
         Learn more about emails
       </a>
     </p>
-  </div>
+  </Placeholder>
 );
 
 export type AudienceCounts = Map<string, number | "loading" | "failed">;

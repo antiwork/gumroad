@@ -28,6 +28,7 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Select, Option } from "$app/components/Select";
@@ -460,7 +461,7 @@ const DiscountsPage = ({
             ) : null}
           </section>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -473,7 +474,7 @@ const DiscountsPage = ({
                 </a>
               </p>
             </div>
-          </div>
+          </Placeholder>
         )}
         {selectedOfferCode ? (
           <aside>

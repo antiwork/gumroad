@@ -10,6 +10,7 @@ import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Card } from "$app/components/Product/Card";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -173,14 +174,14 @@ export const ContentTab = () => {
               </div>
             </>
           ) : (
-            <section className="placeholder">
+            <Placeholder>
               <h2>Select products</h2>
               <p>Choose the products you want to include in your bundle</p>
               <Button color="primary" onClick={() => setIsSelecting(true)}>
                 <Icon name="plus" />
                 Add products
               </Button>
-            </section>
+            </Placeholder>
           )}
         </section>
       </form>

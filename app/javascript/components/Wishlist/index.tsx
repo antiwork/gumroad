@@ -12,6 +12,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import { Placeholder } from "$app/components/Placeholder";
 import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
@@ -282,12 +283,12 @@ export const Wishlist = ({
         </div>
 
         {can_edit && items.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <Icon name="gift-fill" />
             </figure>
             Products from your wishlist will be displayed here
-          </div>
+          </Placeholder>
         ) : null}
 
         {isEditing ? (

@@ -7,6 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { NavigationButton } from "$app/components/Button";
 import { PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { CollabsMembershipsTable } from "$app/components/ProductsPage/Collabs/MembershipsTable";
 import { CollabsProductsTable } from "$app/components/ProductsPage/Collabs/ProductsTable";
@@ -44,7 +45,7 @@ const CollabsPage = ({
     <ProductsLayout selectedTab="collabs" title="Products" archivedTabVisible={archivedTabVisible}>
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -65,7 +66,7 @@ const CollabsPage = ({
                 learn more to get started
               </a>
             </p>
-          </div>
+          </Placeholder>
         ) : (
           <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
             <div className="stats-grid" aria-label="Stats">

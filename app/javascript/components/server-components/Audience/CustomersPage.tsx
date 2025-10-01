@@ -66,6 +66,7 @@ import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Progress } from "$app/components/Progress";
@@ -553,7 +554,7 @@ const CustomersPage = ({
             ) : null}
           </section>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -577,7 +578,7 @@ const CustomersPage = ({
                 </p>
               </>
             )}
-          </div>
+          </Placeholder>
         )}
         {selectedCustomer ? (
           <CustomerDrawer

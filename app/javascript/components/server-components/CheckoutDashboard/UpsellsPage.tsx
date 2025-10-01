@@ -31,6 +31,7 @@ import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
@@ -319,7 +320,7 @@ const UpsellsPage = (props: {
             ) : null}
           </section>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -332,7 +333,7 @@ const UpsellsPage = (props: {
             <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
               Learn more about upsells
             </a>
-          </div>
+          </Placeholder>
         )}
         {selectedUpsell ? (
           <UpsellDrawer

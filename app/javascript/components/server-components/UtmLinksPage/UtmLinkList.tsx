@@ -20,6 +20,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
+import { Placeholder } from "$app/components/Placeholder";
 import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -303,16 +304,16 @@ const UtmLinkList = () => {
         </section>
       ) : query ? (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={noLinksFoundPlaceholder} />
             </figure>
             <h4>No links found for "{query}"</h4>
-          </div>
+          </Placeholder>
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={noLinksYetPlaceholder} />
             </figure>
@@ -322,7 +323,7 @@ const UtmLinkList = () => {
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
               Learn more about UTM tracking
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </AnalyticsLayout>
