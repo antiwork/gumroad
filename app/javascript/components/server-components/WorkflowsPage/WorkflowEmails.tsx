@@ -52,6 +52,7 @@ import {
   determineWorkflowTrigger,
   WorkflowTrigger,
 } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
+import { Card } from "$app/components/ui/Card";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -616,7 +617,7 @@ const EmailPreview = ({
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
       </div>
-      <div className="grid gap-4 rounded-lg border border-solid border-parentBorder bg-filled p-4 text-contrastFilled">
+      <Card>
         <div className="paragraphs">
           <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
           <EditorContent className="rich-text" editor={editor} />
@@ -629,7 +630,7 @@ const EmailPreview = ({
             </p>
           </div>
         </div>
-      </div>
+      </Card>
     </section>
   );
 };

@@ -10,9 +10,10 @@ import { Layout } from "$app/components/BundleEdit/Layout";
 import { BundleProduct, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Card } from "$app/components/Product/Card";
+import { Card as ProductCard } from "$app/components/Product/Card";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Card } from "$app/components/ui/Card";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
@@ -75,7 +76,7 @@ export const ContentTab = () => {
           <section>
             <div className="product-card-grid">
               {bundle.products.map((bundleProduct) => (
-                <Card key={bundleProduct.id} product={bundleProduct} />
+                <ProductCard key={bundleProduct.id} product={bundleProduct} />
               ))}
             </div>
           </section>
@@ -133,10 +134,7 @@ export const ContentTab = () => {
                   ))}
                 </div>
               ) : null}
-              <div
-                className="grid gap-4 rounded-lg border border-solid border-parentBorder bg-filled p-4 text-contrastFilled"
-                aria-label="Product selector"
-              >
+              <Card aria-label="Product selector">
                 <div className="input">
                   <Icon name="solid-search" />
                   <input
@@ -173,7 +171,7 @@ export const ContentTab = () => {
                 ) : (
                   <div style={{ justifySelf: "center" }}>No products found</div>
                 )}
-              </div>
+              </Card>
             </>
           ) : (
             <section className="placeholder">
