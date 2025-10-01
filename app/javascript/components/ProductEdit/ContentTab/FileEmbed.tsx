@@ -30,6 +30,7 @@ import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
 import { FileEmbedGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Separator } from "$app/components/ui/Separator";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const getDownloadUrl = (productId: string, file: FileEntry) =>
@@ -401,11 +402,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   The thumbnail image is shown as a preview in the embedded video player. Your image should have a 16:9
                   aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
                 </div>
-                <div role="separator" className="flex items-center gap-3">
-                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
-                  <span>or</span>
-                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
-                </div>
+                <Separator />
                 <div>
                   <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
                 </div>
