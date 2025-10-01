@@ -71,6 +71,8 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
 
+  alias_attribute :total_transaction_cents_usd, :total_transaction_cents
+
   belongs_to :link, optional: true
   has_one :url_redirect
   has_one :gift_given, class_name: "Gift", foreign_key: :gifter_purchase_id
