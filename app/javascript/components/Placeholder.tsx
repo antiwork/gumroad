@@ -10,7 +10,7 @@ interface PlaceholderProps {
 export const Placeholder: React.FC<PlaceholderProps> = ({ children, className }) => (
   <div
     className={classNames(
-      "override placeholder grid justify-items-center gap-3 rounded border border-dashed border-[rgb(var(--parent-color)/var(--border-alpha))] bg-[rgb(var(--filled))] p-8 text-center",
+      "override placeholder grid justify-items-center gap-3 rounded border border-dashed border-[rgb(var(--parent-color)/var(--border-alpha))] bg-background p-8 text-center",
       "[&>.icon]:text-xl [&>.icon]:leading-[1.3]",
       className,
     )}
