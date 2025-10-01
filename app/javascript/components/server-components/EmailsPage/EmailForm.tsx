@@ -43,6 +43,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { editEmailPath, emailTabPath, newEmailPath } from "$app/components/server-components/EmailsPage";
 import { TagInput } from "$app/components/TagInput";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Separator } from "$app/components/ui/Separator";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -718,11 +719,7 @@ export const EmailForm = () => {
                     </Button>
                   )}
                 </div>
-                <div role="separator" className="flex items-center gap-3">
-                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
-                  <span>OR</span>
-                  <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
-                </div>
+                <Separator text="OR" />
                 <fieldset className={cx({ danger: invalidFields.has("scheduleDate") })}>
                   <DateInput
                     withTime

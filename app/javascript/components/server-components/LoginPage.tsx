@@ -10,6 +10,7 @@ import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
+import { Separator } from "$app/components/ui/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -62,11 +63,7 @@ export const LoginPage = ({
       ) : (
         <form onSubmit={(e) => void handleSubmit(e)}>
           <SocialAuth />
-          <div role="separator" className="flex items-center gap-3">
-            <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
-            <span >or</span>
-            <div className="flex-1 h-px border-b border-solid border-[rgb(var(--parent-color)/var(--border-alpha))]"></div>
-          </div>
+          <Separator />
 
           <section>
             {saveState.type === "error" ? (
