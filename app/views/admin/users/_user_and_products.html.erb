@@ -36,7 +36,7 @@
           <%= render("admin/links/product", product: product, show_purchases: true, is_affiliate_user: is_affiliate_user, user_id: user.id) %>
         <% end %>
         <% if pagy.pages > 1 %>
-          <div class="flex w-full justify-center gap-2" role="navigation" aria-label="Pagination">
+          <div class="flex w-full justify-center gap-2" aria-label="Pagination">
             <%= link_to("‹ Previous", pagy_url_for(pagy, pagy.prev), class: "button", inert: !pagy.prev) %>
             <menu class="hidden lg:flex lg:flex-grow lg:justify-center lg:gap-2">
               <% (1..pagy.pages).map do |page| %>
