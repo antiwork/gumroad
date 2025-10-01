@@ -4,6 +4,7 @@ class Products::AffiliatedController < Sellers::BaseController
   before_action :authorize
 
   def index
+    @title = "Products"
     props = AffiliatedProductsPresenter.new(current_seller,
                                             query: affiliated_products_params[:query],
                                             page: affiliated_products_params[:page],

@@ -23,7 +23,7 @@ class Products::ArchivedController < Sellers::BaseController
       products_pagination:
     ).page_props
 
-
+    @title = "Archived products"
     render inertia: "Products/Archived/Index",
            props: inertia_props(**react_products_page_props)
   end

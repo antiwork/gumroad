@@ -37,7 +37,7 @@ class WishlistsController < ApplicationController
   def show
     wishlist_presenter = WishlistPresenter.new(wishlist: @wishlist)
 
-    render inertia: "Wishlist/Show/Index",
+    render inertia: "Wishlist/Show",
            props: inertia_props(**wishlist_presenter.public_props(request:, pundit_user:, recommended_by: params[:recommended_by]))
   end
 

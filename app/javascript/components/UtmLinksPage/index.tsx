@@ -1,13 +1,11 @@
 import * as React from "react";
 
 import { SavedUtmLink, UtmLink, UtmLinkFormContext, SortKey } from "$app/data/utm_links";
-import * as Routes from "$app/utils/routes";
 
 import { PaginationProps } from "$app/components/Pagination";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Sort } from "$app/components/useSortingTableDriver";
 
-import { UtmLinkForm } from "./UtmLinkForm";
 import UtmLinkList from "./UtmLinkList";
 
 export const UtmLinkLayout = ({
@@ -58,20 +56,8 @@ export type UtmLinksPageProps = {
   copy_from?: string | undefined;
 };
 
-const UtmLinksPage = ({ utm_links, pagination, context, utm_link, copy_from }: UtmLinksPageProps) => {
-  const currentPath = window.location.pathname;
-  const newUtmLinkPath = Routes.new_dashboard_utm_link_path();
-  const editUtmLinkRegex = /\/dashboard\/utm_links\/\d+\/edit$/u;
-
-  if (currentPath === newUtmLinkPath) {
-    return <UtmLinkForm context={context} utm_link={utm_link ?? null} {...(copy_from && { copy_from })} />;
-  }
-
-  if (editUtmLinkRegex.test(currentPath)) {
-    return <UtmLinkForm context={context} utm_link={utm_link ?? null} />;
-  }
-
-  return <UtmLinkList utm_links={utm_links} pagination={pagination} />;
-};
+const UtmLinksPage = ({ utm_links, pagination }: UtmLinksPageProps) => (
+  <UtmLinkList utm_links={utm_links} pagination={pagination} />
+);
 
 export default UtmLinksPage;

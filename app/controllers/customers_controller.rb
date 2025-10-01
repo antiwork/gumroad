@@ -11,7 +11,12 @@ class CustomersController < Sellers::BaseController
   def index
     product = Link.fetch(params[:link_id]) if params[:link_id].present?
     sales = fetch_sales(products: [product].compact)
-    customers_presenter = CustomersPresenter.new(pundit_user:, product:, customers: load_sales(sales), pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil }, count: sales.results.total)
+    customers_presenter = CustomersPresenter.new(
+      pundit_user:, product:,
+      customers: load_sales(sales),
+      pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
+      count: sales.results.total
+    )
     create_user_event("customers_view")
 
     render inertia: "Customers/Index",
@@ -34,7 +39,12 @@ class CustomersController < Sellers::BaseController
       country: params[:country],
       active_customers_only: ActiveModel::Type::Boolean.new.cast(params[:active_customers_only]),
     )
-    customers_presenter = CustomersPresenter.new(pundit_user:, customers: load_sales(sales), pagination: { page: params[:page].to_i + 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil }, count: sales.results.total)
+    customers_presenter = CustomersPresenter.new(
+      pundit_user:,
+      customers: load_sales(sales),
+      pagination: { page: params[:page].to_i + 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
+      count: sales.results.total
+    )
 
     render json: customers_presenter.customers_props
   end

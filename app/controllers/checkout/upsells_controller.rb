@@ -8,6 +8,7 @@ class Checkout::UpsellsController < Sellers::BaseController
   def index
     authorize [:checkout, Upsell]
 
+    @title = "Upsells"
     pagination, upsells = fetch_upsells
     upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
 

@@ -14,7 +14,6 @@ import {
 import { assertDefined } from "$app/utils/assert";
 import { asyncVoid } from "$app/utils/promise";
 import { ResponseError } from "$app/utils/request";
-import * as Routes from "$app/utils/routes";
 
 import { Button } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";

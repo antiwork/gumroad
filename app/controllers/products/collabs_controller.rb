@@ -4,6 +4,7 @@ class Products::CollabsController < Sellers::BaseController
   before_action :authorize
 
   def index
+    @title = "Products"
     props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
 
     if request.format.json?

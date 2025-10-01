@@ -7,6 +7,7 @@ class ReviewsController < ApplicationController
   def index
     authorize ProductReview
 
+    @title = "Reviews"
     presenter = ReviewsPresenter.new(current_seller)
 
     render inertia: "Reviews/Index",

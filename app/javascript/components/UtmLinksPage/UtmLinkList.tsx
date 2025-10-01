@@ -12,7 +12,6 @@ import {
 } from "$app/data/utm_links";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import * as Routes from "$app/utils/routes";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button, NavigationButton } from "$app/components/Button";
