@@ -87,7 +87,7 @@ export const Layout = ({
           </>
         }
       >
-        <Tabs>
+        <Tabs className="sm:pb-0 pb-4">
           {TABS.map((tab) =>
             tab === "subscribers" ? (
               <Tab href={Routes.followers_path()} isSelected={false} key={tab}>
