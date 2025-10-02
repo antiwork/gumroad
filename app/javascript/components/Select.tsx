@@ -212,7 +212,7 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
 
 const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMulti>) => (
   <div {...props.removeProps}>
-    <button className="pill primary dismissable">{props.data.label}</button>
+    <button className="pill primary dismissable max-w-[90%]">{props.data.label}</button>
   </div>
 );
 
