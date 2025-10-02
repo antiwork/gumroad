@@ -21,6 +21,7 @@ export const useConfigureEvaporate = (props: Props) => {
         bucket,
         fetchCurrentServerTimeUrl: Routes.s3_utility_current_utc_time_string_path(),
         maxFileSize: MAX_FILE_SIZE,
+        cloudfront: `https://${bucket}.s3.amazonaws.com`,
       }),
     [props.aws_access_key_id, bucket],
   );
