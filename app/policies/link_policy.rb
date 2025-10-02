@@ -71,6 +71,7 @@ class LinkPolicy < ApplicationPolicy
       :hide_sold_out_variants,
       :custom_button_text_option,
       :custom_summary,
+      :isbn,
       :is_epublication,
       :display_product_reviews,
       :is_adult,

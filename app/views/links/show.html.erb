@@ -1,5 +1,27 @@
 <% content_for :meta do %>
   <link href="<%= @product.long_url %>" rel="canonical">
+  
+  <% if @product.native_type == "ebook" && @product.isbn.present? %>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Book",
+      "name": "<%= j @product.name %>",
+      "description": "<%= j strip_tags(@product.description).truncate(160) %>",
+      "isbn": "<%= j @product.isbn %>",
+      "bookFormat": "https://schema.org/EBook",
+      "url": "<%= @product.long_url %>",
+      "author": {
+        "@type": "Person",
+        "name": "<%= j @product.user.name %>"
+      },
+      "publisher": {
+        "@type": "Organization", 
+        "name": "<%= j @product.user.name %>"
+      }
+    }
+    </script>
+  <% end %>
 <% end %>
 
 <%= render("layouts/custom_styles/style") %>

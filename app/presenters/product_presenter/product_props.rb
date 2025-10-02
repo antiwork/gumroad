@@ -34,6 +34,7 @@ class ProductPresenter::ProductProps
         streamable: product.streamable?,
         sales_count: cached_sales_count,
         summary: product.custom_summary.presence,
+        isbn: product.isbn.presence,
         attributes: attributes_props,
         description_html: product.html_safe_description,
         currency_code: product.price_currency_type.downcase,

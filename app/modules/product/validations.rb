@@ -85,4 +85,45 @@ module Product::Validations
 
       errors.add(:base, "Calls must have at least one duration")
     end
+
+    def isbn_format_is_valid
+      return if isbn.blank?
+      
+      clean_isbn = isbn.gsub(/[^0-9X]/i, '').upcase
+      
+      if clean_isbn.length == 10
+        errors.add(:base, "Invalid ISBN-10 format") unless valid_isbn_10?(clean_isbn)
+      elsif clean_isbn.length == 13
+        errors.add(:base, "Invalid ISBN-13 format") unless valid_isbn_13?(clean_isbn)
+      else
+        errors.add(:base, "ISBN must be 10 or 13 digits long")
+      end
+    end
+
+    def valid_isbn_10?(isbn)
+      return false if isbn.length != 10
+      return false unless isbn[0..8].match?(/\A\d{9}\z/) && isbn[9].match?(/\A[\dXx]\z/)
+      
+      sum = 0
+      (0..8).each { |i| sum += isbn[i].to_i * (10 - i) }
+      
+      check_digit = isbn[9].upcase
+      calculated_check = (11 - (sum % 11)) % 11
+      expected_check = calculated_check == 10 ? 'X' : calculated_check.to_s
+      
+      check_digit == expected_check
+    end
+
+    def valid_isbn_13?(isbn)
+      return false if isbn.length != 13
+      return false unless isbn.match?(/\A\d{13}\z/)
+      
+      sum = 0
+      (0..11).each { |i| sum += isbn[i].to_i * (i.even? ? 1 : 3) }
+      
+      check_digit = isbn[12].to_i
+      calculated_check = (10 - (sum % 10)) % 10
+      
+      check_digit == calculated_check
+    end
 end

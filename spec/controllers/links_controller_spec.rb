@@ -751,6 +751,11 @@ describe LinksController, :vcr do
         expect(@product.product_refund_policy).to be_nil
       end
 
+      it "updates the product ISBN" do
+        put :update, params: @params.merge(isbn: "978-0123456786"), as: :json
+        expect(@product.reload.isbn).to eq "978-0123456786"
+      end
+
       context "when seller_refund_policy_disabled_for_all feature flag is set to true" do
         before do
           Feature.activate(:seller_refund_policy_disabled_for_all)

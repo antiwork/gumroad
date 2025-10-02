@@ -205,11 +205,13 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :isbn_format_is_valid, if: -> { isbn.present? && native_type == NATIVE_TYPE_EBOOK }
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
   before_save :downcase_filetype
   before_save :remove_xml_tags
+  before_save :normalize_isbn
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
   after_update :create_licenses_for_existing_customers,
@@ -229,6 +231,7 @@ class Link < ApplicationRecord
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
   scope :visible_and_not_archived,        -> { visible.not_archived }
+  scope :with_isbn, ->(isbn) { where(isbn: isbn.to_s.gsub(/[-\s]/, '')) if isbn.present? }
   scope :by_user,                         ->(user) { where(user.present? ? { user_id: user.id } : "1 = 1") }
   scope :by_general_permalink,            ->(permalink) { where("unique_permalink = ? OR custom_permalink = ?", permalink, permalink) }
   scope :by_unique_permalinks,            ->(permalinks) { where("unique_permalink IN (?)", permalinks) }
@@ -1236,6 +1239,12 @@ class Link < ApplicationRecord
       return if description.blank?
 
       self.description = description.gsub(/<!--\?xml.+\?-->|<!--\[if gte mso.+<!\[endif\]-->/m, "")
+    end
+
+    def normalize_isbn
+      return if isbn.blank?
+      
+      self.isbn = isbn.gsub(/[^0-9X]/i, '').upcase
     end
 
     def generate_unique_permalink

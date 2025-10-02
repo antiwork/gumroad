@@ -200,6 +200,18 @@ export const ProductTab = () => {
                   value={product.custom_summary}
                   onChange={(value) => updateProduct({ custom_summary: value })}
                 />
+                {product.native_type === "ebook" ? (
+                  <fieldset>
+                    <label htmlFor={`${uid}-isbn`}>ISBN (optional)</label>
+                    <input
+                      id={`${uid}-isbn`}
+                      type="text"
+                      value={product.isbn || ""}
+                      placeholder="Enter ISBN-10 or ISBN-13"
+                      onChange={(evt) => updateProduct({ isbn: evt.target.value })}
+                    />
+                  </fieldset>
+                ) : null}
                 <AttributesEditor
                   customAttributes={product.custom_attributes}
                   setCustomAttributes={(custom_attributes) => updateProduct({ custom_attributes })}

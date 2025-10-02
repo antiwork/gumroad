@@ -97,6 +97,7 @@ export type Product = {
   installment_plan: InstallmentPlan | null;
   custom_button_text_option: CustomButtonTextOption | null;
   custom_summary: string | null;
+  isbn: string | null;
   custom_attributes: Attribute[];
   file_attributes: Attribute[];
   max_purchase_count: number | null;

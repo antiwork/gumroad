@@ -113,6 +113,7 @@ export type Product = {
   native_type: ProductNativeType;
   sales_count: number | null;
   summary: string | null;
+  isbn?: string | null;
   attributes: { name: string; value: string }[];
   free_trial: FreeTrial | null;
   rental: Rental | null;
@@ -575,9 +576,15 @@ export const Product = ({
               Watch link provided after purchase
             </div>
           ) : null}
-          {product.summary || product.attributes.length > 0 ? (
+          {product.summary || product.isbn || product.attributes.length > 0 ? (
             <div className="stack">
               {product.summary ? <p>{product.summary}</p> : null}
+              {product.isbn ? (
+                <div>
+                  <h5>ISBN</h5>
+                  <div>{product.isbn}</div>
+                </div>
+              ) : null}
               {product.attributes.map(({ name, value }, idx) => (
                 <div key={idx}>
                   <h5>{name}</h5>

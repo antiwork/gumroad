@@ -5157,6 +5157,25 @@ describe Link, :vcr do
     end
   end
 
+  describe "isbn validations" do
+    let(:product) { build(:product, native_type: "ebook") }
+
+    it "accepts valid ISBN-10" do
+      product.isbn = "0123456789"
+      expect(product).to be_valid
+    end
+
+    it "accepts valid ISBN-13" do
+      product.isbn = "9780123456786"
+      expect(product).to be_valid
+    end
+
+    it "rejects invalid ISBN" do
+      product.isbn = "invalid"
+      expect(product).not_to be_valid
+    end
+  end
+
   describe "#can_gift?" do
     let(:product) { build(:product) }
 
