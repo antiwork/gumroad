@@ -400,7 +400,7 @@ const UpsellDrawer = ({
         <h3>Details</h3>
         <div>
           <h5>Offer text</h5>
-          {selectedUpsell.text}
+          <div className="whitespace-normal break-words">{selectedUpsell.text}</div>
         </div>
         {selectedUpsell.discount ? (
           <div>
