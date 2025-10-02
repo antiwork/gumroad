@@ -99,7 +99,11 @@ export const TestimonialSelectModal = ({
         <>
           <Button onClick={onClose}>Cancel</Button>
           {state.reviews.length > 0 ? (
-            <Button color="primary" onClick={() => onInsert(selectedReviewIds)}>
+            <Button
+              color="primary"
+              onClick={() => onInsert(selectedReviewIds)}
+              disabled={selectedReviewIds.length === 0}
+            >
               Insert
             </Button>
           ) : null}
