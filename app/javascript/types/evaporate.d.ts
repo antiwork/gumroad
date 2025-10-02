@@ -19,6 +19,7 @@ declare module "$vendor/evaporate.cjs" {
       bucket: string;
       fetchCurrentServerTimeUrl: string;
       maxFileSize?: number;
+      cloudfront?: string;
     });
 
     add(params: UploadParams): string | number;
