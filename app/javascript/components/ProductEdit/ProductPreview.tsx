@@ -137,6 +137,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     bundle_products: [],
     public_files: product.public_files,
     audio_previews_enabled: product.audio_previews_enabled,
+    ...(product.native_type === "ebook" && product.isbn && { isbn: product.isbn }),
   };
 
   return product.native_type === "coffee" ? (
