@@ -490,7 +490,7 @@ const UpsellDrawer = ({
           ))}
         </section>
       )}
-      <section className="override grid auto-cols-fr grid-flow-col gap-4">
+      <section className="override grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
