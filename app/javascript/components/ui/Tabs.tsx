@@ -8,7 +8,7 @@ export const Tabs = ({
   className,
   ...props
 }: { children: React.ReactNode } & React.HTMLProps<HTMLDivElement>) => (
-  <div role="tablist" className={classNames("flex gap-3 overflow-x-auto", className)} {...props}>
+  <div role="tablist" className={classNames("flex gap-3 overflow-x-auto pb-4 sm:pb-0", className)} {...props}>
     {children}
   </div>
 );
