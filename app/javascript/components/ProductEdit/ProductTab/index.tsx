@@ -202,7 +202,7 @@ export const ProductTab = () => {
                 />
                 {product.native_type === "ebook" ? (
                   <fieldset>
-                    <label htmlFor={`${uid}-isbn`}>ISBN (optional)</label>
+                    <label htmlFor={`${uid}-isbn`}>ISBN</label>
                     <input
                       id={`${uid}-isbn`}
                       type="text"

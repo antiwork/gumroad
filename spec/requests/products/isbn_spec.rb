@@ -17,7 +17,7 @@ describe "ISBN functionality", type: :system, js: true do
       fill_in("Price", with: 1)
       click_on("Next: Customize")
 
-      expect(page).to have_field("ISBN (optional)")
+      expect(page).to have_field("ISBN")
     end
 
     it "saves ISBN for ebook products" do
@@ -27,8 +27,8 @@ describe "ISBN functionality", type: :system, js: true do
       fill_in("Price", with: 1)
       click_on("Next: Customize")
 
-      fill_in("ISBN (optional)", with: "978-0-123456-47-2")
-      click_on("Save changes")
+      fill_in("ISBN", with: "978-0-123456-47-2")
+      click_on("Save and continue")
 
       wait_for_ajax
 
@@ -41,7 +41,7 @@ describe "ISBN functionality", type: :system, js: true do
       
       visit ebook.long_url
 
-      expect(page).to have_xpath("//script[@type='application/ld+json']")
+      expect(page).to have_xpath("//script[@type='application/ld+json']", visible: false)
       
       json_ld = page.find("script[type='application/ld+json']", visible: false).text(:all)
       structured_data = JSON.parse(json_ld)
