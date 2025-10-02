@@ -61,7 +61,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
 
   return (
     <ComboBox
-      style={{ flex: 1 }}
+      className="flex-1"
       open={autocompleteOpen ? options.length > 0 : false}
       onToggle={setAutocompleteOpen}
       editable
