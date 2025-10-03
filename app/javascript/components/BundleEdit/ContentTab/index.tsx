@@ -68,12 +68,12 @@ export const ContentTab = () => {
   return (
     <Layout
       preview={
-        <div>
+        <div className="p-6">
           <header>
             <h1>Library</h1>
           </header>
           <section>
-            <div className="product-card-grid">
+            <div className="product-card-grid mt-4">
               {bundle.products.map((bundleProduct) => (
                 <Card key={bundleProduct.id} product={bundleProduct} />
               ))}
