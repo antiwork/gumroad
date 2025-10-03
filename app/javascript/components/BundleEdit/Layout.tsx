@@ -125,7 +125,7 @@ export const Layout = ({
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
+              <CopyToClipboard text={url} copyTooltip="Copy product URL" tooltipPosition="left">
                 <Button>
                   <Icon name="link" />
                 </Button>
