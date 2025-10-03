@@ -303,6 +303,34 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[1]]).to include(success: false, error_message: "Your card has expired.")
     end
 
+    it "returns error responses with USD formatted price even when product display currency is EUR" do
+      allow_any_instance_of(Purchase)
+        .to receive(:get_rate).with(Currency::EUR.to_sym).and_return(0.8)
+
+      eur_product = create(:product, user: seller_1, price_cents: 10_00, price_currency_type: Currency::EUR)
+      eur_line_items_params = {
+        line_items: [
+          {
+            uid: "unique-id-eur",
+            permalink: eur_product.unique_permalink,
+            perceived_price_cents: eur_product.price_cents,
+            quantity: 1
+          }
+        ]
+      }
+      params = eur_line_items_params.merge!(common_order_params_without_payment).merge!(fail_payment_params)
+
+      order, _ = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(1)
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+      expect(order.purchases.failed.count).to eq(1)
+      expect(charge_responses.size).to eq(1)
+      response = charge_responses[charge_responses.keys[0]]
+      expect(response).to include(success: false)
+      expect(response[:formatted_price]).to eq("$12.50")
+    end
+
     it "returns SCA response if the payment method provided in params requires SCA" do
       params = line_items_params.merge!(common_order_params_without_payment).merge!(sca_payment_params)
 
