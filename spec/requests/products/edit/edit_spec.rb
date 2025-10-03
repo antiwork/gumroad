@@ -954,7 +954,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     within_modal "Insert reviews" do
-      expect(page).to have_text("No written reviews yet")
+      expect(page).to have_text("No reviews with text or video yet.")
       expect(page).not_to have_button "Insert"
       click_on "Cancel"
     end
@@ -1009,7 +1009,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     within_modal "Insert reviews" do
-      expect(page).to have_text("No written reviews yet")
+      expect(page).to have_text("No reviews with text or video yet.")
       expect(page).not_to have_button "Insert"
       click_on "Cancel"
     end
