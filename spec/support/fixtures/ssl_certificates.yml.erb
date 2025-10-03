@@ -3,7 +3,7 @@ development: &development
   acme_url: "https://test.api.letsencrypt.org/directory"
   invalid_domain_cache_expires_in: <%= 8.hours %>
   max_retries: 10
-  nginx_sync_duration: <%= 30.seconds %>
+  nginx_sync_duration: <%= 300.seconds %>
   rate_limit: 300 # 300 new certificate orders per account per 3 hours - https://letsencrypt.org/docs/rate-limits/
   rate_limit_hours: <%= 3.hours %>
   renew_in: <%= 60.days %>
