@@ -11,7 +11,7 @@ export const RatingSelector = ({ currentRating, onChangeCurrentRating, disabled 
   const [hoveredRating, setHoveredRating] = React.useState<null | number>(null);
 
   return (
-    <div className="flex items-center shrink-0 gap-1" role="radiogroup" aria-label="Your rating:">
+    <div className="flex shrink-0 items-center gap-1" role="radiogroup" aria-label="Your rating:">
       {[1, 2, 3, 4, 5].map((rating) => (
         <Icon
           key={rating}

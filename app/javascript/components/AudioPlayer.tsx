@@ -115,7 +115,7 @@ export const AudioPlayer = (props: Props) => {
               <Icon name="skip-forward-30" />
             </button>
           </div>
-          <time aria-label="Progress" className="text-[0.875rem] leading-[1.3] tabular-nums">
+          <time aria-label="Progress" className="text-[0.875rem] tabular-nums leading-[1.3]">
             {formattedTime(progress)}
           </time>
           <input
@@ -130,7 +130,7 @@ export const AudioPlayer = (props: Props) => {
             style={{ "--progress": `${(progress * 100) / duration}%` }}
             className="flex-grow"
           />
-          <time aria-label="Remaining" className="text-[0.875rem] leading-[1.3] tabular-nums">
+          <time aria-label="Remaining" className="text-[0.875rem] tabular-nums leading-[1.3]">
             {formattedTime(duration - progress)}
           </time>
         </>
