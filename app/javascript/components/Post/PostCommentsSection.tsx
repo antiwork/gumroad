@@ -22,6 +22,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
+import { classNames } from "$app/utils/classNames";
 
 type CommentsMetadata = {
   seller_id: string;
@@ -340,7 +341,7 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={cx({ comment: showAvatar }, !showAvatar && "grid gap-3")}>
+    <div className={classNames({ comment: showAvatar, "grid gap-3": !showAvatar })}>
       {showAvatar ? (
         <img className="user-avatar" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
       ) : null}
@@ -353,7 +354,7 @@ const CommentTextarea = ({
         </div>
       )}
       {loggedInUser != null || purchase_id != null ? (
-        <div className="grid justify-end gap-3 grid-flow-col">
+        <div className="override grid justify-end gap-3 grid-flow-col">
           {children}
         </div>
       ) : null}
