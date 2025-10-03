@@ -237,7 +237,7 @@ module User::Risk
   class_methods do
     def refund_queue(from_date = 7.days.ago)
       user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]
-        .find(suspended_at: { "$gte": from_date.utc })
+        .find(suspended_at: { "$gte": from_date.utc.to_s })
         .limit(MAX_REFUND_QUEUE_SIZE)
         .map { |record| record["user_id"] }
 
