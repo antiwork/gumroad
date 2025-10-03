@@ -20,7 +20,7 @@
       </div>
     <% end %>
     <% if product[:ratings].present? %>
-      <div class="rating">
+      <div class="flex shrink-0 items-center gap-1">
         ★
         <% if product[:ratings][:count].positive? %>
           <span class="rating-average"><%= product[:ratings][:average] %></span>

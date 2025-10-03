@@ -1740,7 +1740,10 @@ const ReviewSection = ({
     <h3>Review</h3>
     <section>
       <h5>Rating</h5>
-      <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+      <div
+        className="flex shrink-0 items-center gap-1"
+        aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
+      >
         <RatingStars rating={review.rating} />
       </div>
     </section>
