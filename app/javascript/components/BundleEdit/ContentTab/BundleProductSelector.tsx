@@ -17,7 +17,7 @@ export const BundleProductSelector = ({
 
   return (
     <label role="listitem">
-      <section style={{ gridTemplateColumns: isDesktop ? "5rem 1fr auto" : undefined }}>
+      <section className={isDesktop ? "grid !grid-cols-[5rem_1fr_auto] gap-4" : "grid gap-4"}>
         <figure>
           <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
         </figure>
@@ -30,7 +30,7 @@ export const BundleProductSelector = ({
             </footer>
           ) : null}
         </section>
-        <section style={{ justifyContent: "center" }}>
+        <section className="flex justify-center items-center">
           <input type="checkbox" checked={!!selected} onChange={onToggle} />
         </section>
       </section>
