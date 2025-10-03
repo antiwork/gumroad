@@ -63,7 +63,7 @@ export const Review = ({
         </section>
       </section>
       {review.response && !isEditing && !hideResponse ? (
-        <section className="grid gap-2 ml-4">
+        <section className="override grid gap-2 ml-4">
           <p className="m-0">{review.response.message}</p>
           <section className="flex gap-1 items-center flex-wrap">
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}
