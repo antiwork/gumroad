@@ -16,10 +16,12 @@ export const TwoFactorAuthenticationPage = ({
   user_id,
   email,
   token: initialToken,
+  otp_digits,
 }: {
   user_id: string;
   email: string;
   token: string | null;
+  otp_digits: number;
 }) => {
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   const uid = React.useId();
@@ -30,8 +32,7 @@ export const TwoFactorAuthenticationPage = ({
     e.preventDefault();
     setSaveState({ type: "submitting" });
     try {
-      const trimmedToken = token.trim();
-      const { redirectLocation } = await twoFactorLogin({ user_id, token: trimmedToken, next });
+      const { redirectLocation } = await twoFactorLogin({ user_id, token, next });
       window.location.href = redirectLocation;
     } catch (e) {
       assertResponseError(e);
@@ -73,7 +74,15 @@ export const TwoFactorAuthenticationPage = ({
             <legend>
               <label htmlFor={uid}>Authentication Token</label>
             </legend>
-            <input id={uid} type="text" value={token} onChange={(e) => setToken(e.target.value)} required autoFocus />
+            <input
+              id={uid}
+              type="text"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              maxLength={otp_digits}
+              required
+              autoFocus
+            />
           </fieldset>
           <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>
             {saveState.type === "submitting" ? "Logging in..." : "Login"}
