@@ -516,9 +516,9 @@ describe("Checkout upsells page", type: :system, js: true) do
       find(:table_row, { "Upsell" => "Upsell 1" }).click
       click_on "Edit"
 
-      fill_in "Name", with: "Complete course upsell"
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+      fill_in "Name", with: "Complete course upsell", fill_options: { clear: :backspace }
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
       choose "Replace the version selected with another version of the same product"
 
