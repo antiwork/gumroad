@@ -88,7 +88,7 @@ export const ShareSection = ({
 
   return (
     <>
-      <div style={{ display: "grid", gap: "var(--spacer-2)", gridTemplateColumns: "1fr auto" }}>
+      <div className="grid !gap-2 !grid-cols-[1fr_auto]">
         <ComboBox
           input={(props) => (
             <div {...props} className="input" aria-label="Add to wishlist">
