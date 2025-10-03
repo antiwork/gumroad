@@ -152,7 +152,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         ))}
       </div>
       {data.pagination.next !== null ? (
-        <div style={{ display: "flex", justifyContent: "center", marginTop: "var(--spacer-6)" }}>
+        <div className="flex justify-center mt-6">
           <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
             {loadingMore ? "Loading more comments..." : "Load more comments"}
           </Button>
@@ -246,7 +246,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
           <span className="user-name">{comment.author_name}</span>
           <time title={formatDate(parseISO(comment.created_at))}>{comment.created_at_humanized}</time>
           {comment.author_id === seller_id ? <span className="pill small">Creator</span> : null}
-          <div style={{ marginLeft: "auto" }}>
+          <div className="ml-auto">
             {comment.is_editable || comment.is_deletable ? (
               <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
                 {(close) => (
@@ -340,7 +340,7 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={cx({ comment: showAvatar })} style={showAvatar ? {} : { display: "grid", gap: "var(--spacer-3)" }}>
+    <div className={cx({ comment: showAvatar }, !showAvatar && "grid gap-3")}>
       {showAvatar ? (
         <img className="user-avatar" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
       ) : null}
@@ -353,7 +353,7 @@ const CommentTextarea = ({
         </div>
       )}
       {loggedInUser != null || purchase_id != null ? (
-        <div style={{ display: "grid", justifyContent: "end", gap: "var(--spacer-3)", gridAutoFlow: "column" }}>
+        <div className="grid justify-end gap-3 grid-flow-col">
           {children}
         </div>
       ) : null}
