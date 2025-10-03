@@ -3,6 +3,7 @@ import * as React from "react";
 import { BundleProduct } from "$app/components/BundleEdit/state";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { classNames } from "$app/utils/classNames";
 
 export const BundleProductSelector = ({
   bundleProduct,
@@ -17,7 +18,7 @@ export const BundleProductSelector = ({
 
   return (
     <label role="listitem">
-      <section className={isDesktop ? "override grid grid-cols-[5rem_1fr_auto] gap-4" : "grid gap-4"}>
+      <section className={classNames("grid gap-4",isDesktop && "override !grid-cols-[5rem_1fr_auto]")}>
         <figure>
           <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
         </figure>
@@ -30,7 +31,7 @@ export const BundleProductSelector = ({
             </footer>
           ) : null}
         </section>
-        <section className="flex justify-center items-center">
+        <section className="justify-center">
           <input type="checkbox" checked={!!selected} onChange={onToggle} />
         </section>
       </section>
