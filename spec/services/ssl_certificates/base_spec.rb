@@ -34,7 +34,7 @@ describe SslCertificates::Base do
       expect(@obj.send(:acme_url)).to eq "https://test.api.letsencrypt.org/directory"
       expect(@obj.send(:invalid_domain_cache_expires_in)).to eq 8.hours.seconds
       expect(@obj.send(:max_retries)).to eq 10
-      expect(@obj.send(:nginx_sync_duration)).to eq 30.seconds
+      expect(@obj.send(:nginx_sync_duration)).to eq 300.seconds
       expect(@obj.send(:rate_limit)).to eq 300
       expect(@obj.send(:rate_limit_hours)).to eq 3.hours.seconds
       expect(@obj.send(:renew_in)).to eq 60.days.seconds

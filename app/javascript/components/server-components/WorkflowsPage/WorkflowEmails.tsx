@@ -41,6 +41,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
+import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import {
   Layout,
@@ -609,13 +610,13 @@ const EmailPreview = ({
 
   return (
     <section className="paragraphs" ref={selfRef}>
-      <div role="separator">
+      <Separator>
         <div className="flex gap-2">
           <Icon name="outline-clock" />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
-      </div>
+      </Separator>
       <div className="card">
         <div className="paragraphs">
           <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
