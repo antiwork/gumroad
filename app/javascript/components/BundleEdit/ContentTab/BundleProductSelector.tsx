@@ -17,7 +17,7 @@ export const BundleProductSelector = ({
 
   return (
     <label role="listitem">
-      <section className={isDesktop ? "grid !grid-cols-[5rem_1fr_auto] gap-4" : "grid gap-4"}>
+      <section className={isDesktop ? "override grid grid-cols-[5rem_1fr_auto] gap-4" : "grid gap-4"}>
         <figure>
           <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
         </figure>
