@@ -169,8 +169,8 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       fill_in "Name", with: "Complete course upsell"
 
-      fill_in "Offer text", with: "My cool upsell"
-      fill_in "Offer description", with: "This is a really cool upsell"
+      fill_in "Offer text", with: "My cool upsell", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "This is a really cool upsell", fill_options: { clear: :backspace }
       choose "Paused"
 
       in_preview do
@@ -179,8 +179,8 @@ describe("Checkout upsells page", type: :system, js: true) do
         end
       end
 
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
       in_preview do
         within_modal "Enhance your learning experience" do
           expect(page).to have_text("You'll enjoy a range of exclusive features, including...")
@@ -282,16 +282,16 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       fill_in "Name", with: "Complete course upsell"
 
-      fill_in "Offer text", with: "My cool upsell"
-      fill_in "Offer description", with: "This is a really cool upsell"
+      fill_in "Offer text", with: "My cool upsell", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "This is a really cool upsell", fill_options: { clear: :backspace }
       in_preview do
         within_modal "My cool upsell" do
           expect(page).to have_text("This is a really cool upsell")
         end
       end
 
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
       in_preview do
         within_modal "Enhance your learning experience" do
           expect(page).to have_text("You'll enjoy a range of exclusive features, including...")
@@ -388,16 +388,16 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       fill_in "Name", with: "Complete course upsell"
 
-      fill_in "Offer text", with: "My cool upsell"
-      fill_in "Offer description", with: "This is a really cool upsell"
+      fill_in "Offer text", with: "My cool upsell", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "This is a really cool upsell", fill_options: { clear: :backspace }
       in_preview do
         within_modal "My cool upsell" do
           expect(page).to have_text("This is a really cool upsell")
         end
       end
 
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
       check "All products"
       select_combo_box_option search: "Product 1", from: "Product to offer"
@@ -458,8 +458,8 @@ describe("Checkout upsells page", type: :system, js: true) do
       choose "Add another product to the cart"
 
       fill_in "Name", with: "Complete course upsell"
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
       select_combo_box_option search: "Product 1", from: "Apply to these products"
       select_combo_box_option search: "Product 2", from: "Product to offer"
@@ -516,7 +516,7 @@ describe("Checkout upsells page", type: :system, js: true) do
       find(:table_row, { "Upsell" => "Upsell 1" }).click
       click_on "Edit"
 
-      fill_in "Name", with: "Complete course upsell", fill_options: { clear: :backspace }
+      fill_in "Name", with: "Complete course upsell"
       fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
       fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
@@ -674,8 +674,8 @@ describe("Checkout upsells page", type: :system, js: true) do
     expect(find_field("Name").value).to eq("Upsell 1 (copy)")
 
     fill_in "Name", with: "Complete course upsell"
-    fill_in "Offer text", with: "Enhance your learning experience"
-    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+    fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
     choose "Replace the version selected with another version of the same product"
 
@@ -728,8 +728,8 @@ describe("Checkout upsells page", type: :system, js: true) do
     expect(find_field("Name").value).to eq("Upsell 2 (copy)")
 
     fill_in "Name", with: "Complete course upsell"
-    fill_in "Offer text", with: "Enhance your learning experience"
-    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+    fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
     choose "Add another product to the cart"
 
