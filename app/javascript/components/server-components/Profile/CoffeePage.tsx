@@ -77,24 +77,14 @@ export const CoffeeProduct = ({
     </>
   );
   return (
-    <section className="px-4" style={{ display: "grid", gap: "var(--spacer-7)", alignContent: "center", flexGrow: 1 }}>
+    <section className="px-4 grid gap-8 content-center flex-grow">
       <section className="override grid gap-8">
         <h1>{product.name}</h1>
         {product.description_html ? <h3 dangerouslySetInnerHTML={{ __html: product.description_html }} /> : null}
       </section>
-      <section
-        style={{
-          minWidth: "66%",
-          maxWidth: "32rem",
-        }}
-      >
+      <section className="min-w-[66%] max-w-[32rem]">
         {product.options.length === 1 ? (
-          <fieldset
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-            }}
-          >
+          <fieldset className="!grid grid-cols-[1fr_auto]">
             {configurationSelector}
           </fieldset>
         ) : (
