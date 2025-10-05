@@ -47,6 +47,7 @@ describe "Audience analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_ref
 
     it "shows the chart" do
       visit audience_dashboard_path(from: "2023-12-01", to: "2023-12-31")   
+      
       expect(page).to have_css(".chart")
       expect(page).to have_css(".point", count: 31)
 
