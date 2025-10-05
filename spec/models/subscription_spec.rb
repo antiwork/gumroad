@@ -2951,35 +2951,31 @@ describe Subscription, :vcr do
       before do
         @product = create(:product, :with_installment_plan)
         @subscription = create(:subscription, :installment_plan, link: @product)
-        create(:purchase, :successful, is_original_subscription_purchase: true, is_installment_payment: true, 
+        create(:purchase, :successful, is_original_subscription_purchase: true, is_installment_payment: true,
                link: @product, subscription: @subscription, purchaser: @subscription.user)
       end
 
       it "returns true when all installments are paid" do
         @subscription.update_columns(charge_occurrence_count: 3)
-        
+
         # Create 2 more successful installment payments (total 3 including the one created in before)
-        create_list(:purchase, 2, :successful, is_installment_payment: true, 
+        create_list(:purchase, 2, :successful, is_installment_payment: true,
                      link: @product, subscription: @subscription, purchaser: @subscription.user)
-        
+
         expect(@subscription.charges_completed?).to be(true)
       end
 
       it "returns false when not all installments are paid" do
         @subscription.update_columns(charge_occurrence_count: 3)
-        
-        # Only 1 payment (from before block) out of 3 required
         expect(@subscription.charges_completed?).to be(false)
       end
 
       it "ignores non-installment payments when counting" do
         @subscription.update_columns(charge_occurrence_count: 3)
-        
-        # Create 2 successful non-installment payments (should be ignored)
-        create_list(:purchase, 2, :successful, is_installment_payment: false, 
+
+        create_list(:purchase, 2, :successful, is_installment_payment: false,
                      link: @product, subscription: @subscription, purchaser: @subscription.user)
-        
-        # Should still be false since we only have 1 installment payment
+
         expect(@subscription.charges_completed?).to be(false)
       end
     end
@@ -2997,23 +2993,21 @@ describe Subscription, :vcr do
     end
 
     it "returns 0 when there are no successful installment payments" do
-      create(:purchase, :successful, is_installment_payment: false, 
+      create(:purchase, :successful, is_installment_payment: false,
              link: @product, subscription: @subscription, purchaser: @subscription.user)
-      
+
       expect(@subscription.successful_installment_payments_count).to eq(0)
     end
 
     it "returns the correct count of successful installment payments" do
-      # Create 3 successful installment payments
-      create_list(:purchase, 3, :successful, is_installment_payment: true, 
+      create_list(:purchase, 3, :successful, is_installment_payment: true,
                    link: @product, subscription: @subscription, purchaser: @subscription.user)
-      
-      # Create some non-installment or failed payments that should be ignored
-      create(:purchase, :successful, is_installment_payment: false, 
+
+      create(:purchase, :successful, is_installment_payment: false,
              link: @product, subscription: @subscription, purchaser: @subscription.user)
-      create(:purchase, :failed, is_installment_payment: true, 
+      create(:purchase, :failed, is_installment_payment: true,
              link: @product, subscription: @subscription, purchaser: @subscription.user)
-      
+
       expect(@subscription.successful_installment_payments_count).to eq(3)
     end
   end
@@ -3469,9 +3463,9 @@ describe Subscription, :vcr do
     it "returns false if the subscription is a completed installment plan" do
       product = create(:product, :with_installment_plan)
       subscription = create(:subscription, :installment_plan, link: product, user: create(:user))
-      
+
       create_list(:purchase, 3, :successful, subscription: subscription, link: product, is_installment_payment: true)
-      
+
       expect(subscription.charges_completed?).to eq(true)
       expect(subscription.alive_or_restartable?).to eq(false)
     end
@@ -3479,9 +3473,9 @@ describe Subscription, :vcr do
     it "returns true if the subscription is an incomplete installment plan" do
       product = create(:product, :with_installment_plan)
       subscription = create(:subscription, :installment_plan, link: product, user: create(:user))
-      
+
       create_list(:purchase, 2, :successful, subscription: subscription, link: product, is_installment_payment: true)
-      
+
       expect(subscription.charges_completed?).to eq(false)
       expect(subscription.alive_or_restartable?).to eq(true)
     end
