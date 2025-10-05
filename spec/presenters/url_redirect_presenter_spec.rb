@@ -553,7 +553,9 @@ describe UrlRedirectPresenter do
       @user = create(:user, name: "John Doe", disable_reviews_after_year: true)
       @product = create(:membership_product, user: @user)
       @subscription = create(:subscription, link: @product)
-      @purchase = create(:purchase, link: @product, email: @subscription.user.email, is_original_subscription_purchase: true, subscription: @subscription, created_at: 2.days.ago)
+      @purchase = create(:purchase, link: @product, email: "test@example.com", full_name: "Test User",
+                                    price_cents: @product.price_cents, is_original_subscription_purchase: true,
+                                    subscription: @subscription, created_at: 2.days.ago, purchaser: @user)
       @url_redirect = create(:url_redirect, purchase: @purchase, link: @product)
       @custom_field = create(:custom_field, products: [@product], field_type: CustomField::TYPE_TEXT, is_post_purchase: true)
       @file_custom_field = create(:custom_field, products: [@product], field_type: CustomField::TYPE_FILE, is_post_purchase: true)
@@ -651,6 +653,42 @@ describe UrlRedirectPresenter do
       props = described_class.new(url_redirect: @url_redirect, logged_in_user: @user).download_page_without_content_props(content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required])
 
       expect(props[:purchase]).to include(email: nil)
+    end
+
+    context "with completed installment plan" do
+      it "sets is_installment_plan_completed to true when all installments are paid" do
+        product = create(:product, :with_installment_plan)
+        subscription = create(:subscription, :installment_plan, link: product)
+        purchase = create(:purchase, link: product, subscription: subscription, purchaser: @user, 
+                            is_original_subscription_purchase: true, is_installment_payment: true)
+        
+        # Complete the installments
+        subscription.update_columns(charge_occurrence_count: 3)
+        create_list(:purchase, 2, :successful, is_installment_payment: true, 
+                     link: product, subscription: subscription, purchaser: @user)
+        
+        url_redirect = create(:url_redirect, purchase: purchase)
+        props = described_class.new(url_redirect: url_redirect, logged_in_user: @user).download_page_without_content_props
+        
+        expect(props[:purchase][:membership][:is_installment_plan_completed]).to be(true)
+        expect(props[:purchase][:membership][:is_subscription_ended]).to be(false)
+      end
+
+      it "sets is_installment_plan_completed to false when installments are incomplete" do
+        product = create(:product, :with_installment_plan)
+        subscription = create(:subscription, :installment_plan, link: product)
+        purchase = create(:purchase, link: product, subscription: subscription, purchaser: @user, 
+                            is_original_subscription_purchase: true, is_installment_payment: true)
+        
+        # Only one payment out of three
+        subscription.update_columns(charge_occurrence_count: 3)
+        
+        url_redirect = create(:url_redirect, purchase: purchase)
+        props = described_class.new(url_redirect: url_redirect, logged_in_user: @user).download_page_without_content_props
+        
+        expect(props[:purchase][:membership][:is_installment_plan_completed]).to be(false)
+        expect(props[:purchase][:membership][:is_subscription_ended]).to be(false)
+      end
     end
 
     it "includes 'installment' and correct 'creator' in props" do

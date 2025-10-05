@@ -55,6 +55,7 @@ export type LayoutProps = {
       has_active_subscription: boolean;
       subscription_id: string;
       is_subscription_ended: boolean | null;
+      is_installment_plan_completed: boolean | null;
       is_subscription_cancelled_or_failed: boolean | null;
       is_alive_or_restartable: boolean | null;
       in_free_trial: boolean;

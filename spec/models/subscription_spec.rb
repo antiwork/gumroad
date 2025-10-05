@@ -2921,28 +2921,100 @@ describe Subscription, :vcr do
   end
 
   describe "#charges_completed?" do
+    context "for regular subscriptions" do
+      before do
+        product = create(:membership_product)
+        @subscription = create(:subscription, link: product)
+        create(:purchase, is_original_subscription_purchase: true, link: product, subscription: @subscription, purchaser: @subscription.user)
+        create(:purchase, link: product, subscription: @subscription, purchaser: @subscription.user, purchase_state: "failed")
+      end
+
+      it "returns `true` when the required number of charges are processed" do
+        @subscription.update_columns(charge_occurrence_count: 2)
+
+        create(:purchase, link: @subscription.link, subscription: @subscription, purchaser: @subscription.user)
+        expect(@subscription.charges_completed?).to be(true)
+      end
+
+      it "returns `false` when the required number of charges are not processed" do
+        @subscription.update_columns(charge_occurrence_count: 2)
+
+        expect(@subscription.charges_completed?).to be(false)
+      end
+
+      it "returns `false` when the subscription has no set number of charges" do
+        expect(@subscription.charges_completed?).to be(false)
+      end
+    end
+
+    context "for installment plans" do
+      before do
+        @product = create(:product, :with_installment_plan)
+        @subscription = create(:subscription, :installment_plan, link: @product)
+        create(:purchase, :successful, is_original_subscription_purchase: true, is_installment_payment: true, 
+               link: @product, subscription: @subscription, purchaser: @subscription.user)
+      end
+
+      it "returns true when all installments are paid" do
+        @subscription.update_columns(charge_occurrence_count: 3)
+        
+        # Create 2 more successful installment payments (total 3 including the one created in before)
+        create_list(:purchase, 2, :successful, is_installment_payment: true, 
+                     link: @product, subscription: @subscription, purchaser: @subscription.user)
+        
+        expect(@subscription.charges_completed?).to be(true)
+      end
+
+      it "returns false when not all installments are paid" do
+        @subscription.update_columns(charge_occurrence_count: 3)
+        
+        # Only 1 payment (from before block) out of 3 required
+        expect(@subscription.charges_completed?).to be(false)
+      end
+
+      it "ignores non-installment payments when counting" do
+        @subscription.update_columns(charge_occurrence_count: 3)
+        
+        # Create 2 successful non-installment payments (should be ignored)
+        create_list(:purchase, 2, :successful, is_installment_payment: false, 
+                     link: @product, subscription: @subscription, purchaser: @subscription.user)
+        
+        # Should still be false since we only have 1 installment payment
+        expect(@subscription.charges_completed?).to be(false)
+      end
+    end
+  end
+
+  describe "#successful_installment_payments_count" do
     before do
-      product = create(:membership_product)
-      @subscription = create(:subscription, link: product)
-      create(:purchase, is_original_subscription_purchase: true, link: product, subscription: @subscription, purchaser: @subscription.user)
-      create(:purchase, link: product, subscription: @subscription, purchaser: @subscription.user, purchase_state: "failed")
+      @product = create(:product, :with_installment_plan)
+      @subscription = create(:subscription, :installment_plan, link: @product)
     end
 
-    it "returns `true` when the required number of charges are processed" do
-      @subscription.update_columns(charge_occurrence_count: 2)
-
-      create(:purchase, link: @subscription.link, subscription: @subscription, purchaser: @subscription.user)
-      expect(@subscription.charges_completed?).to be(true)
+    it "returns 0 for non-installment plans" do
+      regular_subscription = create(:subscription, link: create(:product))
+      expect(regular_subscription.successful_installment_payments_count).to eq(0)
     end
 
-    it "returns `false` when the required number of charges are not processed" do
-      @subscription.update_columns(charge_occurrence_count: 2)
-
-      expect(@subscription.charges_completed?).to be(false)
+    it "returns 0 when there are no successful installment payments" do
+      create(:purchase, :successful, is_installment_payment: false, 
+             link: @product, subscription: @subscription, purchaser: @subscription.user)
+      
+      expect(@subscription.successful_installment_payments_count).to eq(0)
     end
 
-    it "returns `false` when the subscription has no set number of charges" do
-      expect(@subscription.charges_completed?).to be(false)
+    it "returns the correct count of successful installment payments" do
+      # Create 3 successful installment payments
+      create_list(:purchase, 3, :successful, is_installment_payment: true, 
+                   link: @product, subscription: @subscription, purchaser: @subscription.user)
+      
+      # Create some non-installment or failed payments that should be ignored
+      create(:purchase, :successful, is_installment_payment: false, 
+             link: @product, subscription: @subscription, purchaser: @subscription.user)
+      create(:purchase, :failed, is_installment_payment: true, 
+             link: @product, subscription: @subscription, purchaser: @subscription.user)
+      
+      expect(@subscription.successful_installment_payments_count).to eq(3)
     end
   end
 

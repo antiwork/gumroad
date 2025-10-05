@@ -100,6 +100,24 @@ describe SubscriptionsController do
     end
 
     describe "GET manage" do
+      context "when subscription is a completed installment plan" do
+        it "returns 404" do
+          product = create(:product, :with_installment_plan)
+          subscription = create(:subscription, :installment_plan, link: product, user: subscriber)
+          purchase = create(:purchase, link: product, subscription: subscription, 
+                                is_original_subscription_purchase: true, is_installment_payment: true, purchaser: subscriber)
+          
+          # Complete the installments
+          subscription.update_columns(charge_occurrence_count: 3)
+          create_list(:purchase, 2, :successful, is_installment_payment: true, 
+                       link: product, subscription: subscription, purchaser: subscriber)
+          
+          expect { 
+            get :manage, params: { id: subscription.external_id } 
+          }.to raise_error(ActiveRecord::RecordNotFound)
+        end
+      end
+
       context "when subscription has ended" do
         it "returns 404" do
           expect { get :manage, params: { id: @subscription.external_id } }.not_to raise_error

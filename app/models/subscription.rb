@@ -108,7 +108,9 @@ class Subscription < ApplicationRecord
       failed_at:,
       free_trial_ends_at:,
       status:,
-      successful_installment_payments_count:
+      is_installment_plan: is_installment_plan?,
+      successful_installment_payments_count: is_installment_plan? ? successful_installment_payments_count : 0,
+      charges_completed: charges_completed?
     }
 
     json[:license_key] = license_key if license_key.present?
@@ -732,10 +734,15 @@ class Subscription < ApplicationRecord
     return false unless has_fixed_length?
     
     if is_installment_plan?
-      purchases.successful.where(is_installment_payment: true).count == charge_occurrence_count
+      successful_installment_payments_count == charge_occurrence_count
     else
       purchases.successful.count == charge_occurrence_count
     end
+  end
+  
+  def successful_installment_payments_count
+    return 0 unless is_installment_plan?
+    purchases.successful.where(is_installment_payment: true).count
   end
 
   def remaining_charges_count
