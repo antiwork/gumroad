@@ -36,30 +36,30 @@ const getAlertIcon = (status: string) => {
   switch (status) {
     case "success":
       return (
-        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="12" fill="#23a094" opacity="0.15" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 13l4 4 8-8" stroke="#23a094" />
+        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="#23a094" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" fill="#23a094" opacity="1" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 13l4 4 8-8" stroke="black" />
         </svg>
       );
     case "danger":
       return (
-        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="12" fill="#dc341e" opacity="0.15" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" stroke="#dc431e" />
+        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="#dc431e" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" fill="#dc341e" opacity="1" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" stroke="black" />
         </svg>
       );
     case "warning":
       return (
-        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="12" fill="#ffc900" opacity="0.15" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" stroke="##ffc900" />
+        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="#ffc900" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" fill="#ffc900" opacity="1" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" stroke="black" />
         </svg>
       );
     case "info":
       return (
-        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="12" fill="#90a8ed" opacity="0.08" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" stroke="#90a8ed" />
+        <svg className={iconBaseClasses} fill="none" viewBox="0 0 24 24" stroke="#90a8ed" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" fill="#90a8ed" opacity="1" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" stroke="black" />
         </svg>
       );
     default:
