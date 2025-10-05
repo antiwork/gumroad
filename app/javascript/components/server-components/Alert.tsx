@@ -18,15 +18,15 @@ const getAlertClasses = (status: string) => {
 
   switch (status) {
     case "success":
-      return `${baseClasses} bg-green-50 text-gray-900 border-[#23a094]`;
+      return `${baseClasses} bg-black text-gray-900 border-[#23a094]`;
     case "danger":
-      return `${baseClasses} bg-red-50 text-gray-900 border-[#dc341e]`;
+      return `${baseClasses} bg-black text-gray-900 border-[#dc341e]`;
     case "warning":
-      return `${baseClasses} bg-orange-50 text-gray-900 border-[#ffc900]`;
+      return `${baseClasses} bg-black text-gray-900 border-[#ffc900]`;
     case "info":
-      return `${baseClasses} bg-purple-50 text-gray-900 border-[#90a8ed]`;
+      return `${baseClasses} bg-black text-gray-900 border-[#90a8ed]`;
     default:
-      return `${baseClasses} bg-gray-50 text-gray-900 border-gray-400`;
+      return `${baseClasses} bg-black text-gray-900 border-gray-400`;
   }
 };
 
