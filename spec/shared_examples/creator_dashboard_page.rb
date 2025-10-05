@@ -5,7 +5,6 @@ require "spec_helper"
 RSpec.shared_examples_for "creator dashboard page" do |title|
   it "marks the correct navigation link as active" do
     visit path
-
     expect(page).to have_css("nav[aria-label='Main']")
     within "nav", aria: { label: "Main" } do
       expect(page).to have_link(title, aria: { current: "page" })
