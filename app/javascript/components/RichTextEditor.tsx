@@ -16,6 +16,7 @@ import { assertDefined } from "$app/utils/assert";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Icon } from "$app/components/Icons";
 import { Popover, Props as PopoverProps } from "$app/components/Popover";
+import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
 import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
@@ -413,7 +414,7 @@ export const RichTextEditorToolbar = ({
             </ul>
           )}
         </Popover>
-        <div role="separator" aria-orientation="vertical" />
+        <Separator aria-orientation="vertical" />
         <MenuItem
           name="Bold"
           icon="bold"
@@ -444,7 +445,7 @@ export const RichTextEditorToolbar = ({
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
-        <div role="separator" aria-orientation="vertical" />
+        <Separator aria-orientation="vertical" />
         {custom ?? (
           <>
             {topMenuItems.map((extension, i) => (
@@ -463,7 +464,7 @@ export const RichTextEditorToolbar = ({
 
             {insertMenuItems.length > 1 ? (
               <>
-                <div role="separator" aria-orientation="vertical" />
+                <Separator aria-orientation="vertical" />
                 <Popover
                   trigger={
                     <div className="toolbar-item">
