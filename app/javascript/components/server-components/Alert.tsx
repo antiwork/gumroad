@@ -64,20 +64,22 @@ const AlertStyles: React.FC = () => (
     dangerouslySetInnerHTML={{
       __html: `
       .alert-container {
-        color: #000000 !important;
+        text-color: #000000 !important;
+        stroke-color: #000000 !important;
       }
 
       .alert-container.dark-mode {
-        color: #ffffff !important;
+        text-color: #ffffff !important;
+        stroke-color: #ffffff !important;
       }
 
       .alert-container * {
-        color: inherit !important;
+        text-color: inherit !important;
       }
 
       .alert-container .prose,
       .alert-container .prose * {
-        color: inherit !important;
+        text-color: inherit !important;
       }
     `,
     }}
@@ -123,6 +125,8 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
     viewBox: "0 0 24 24",
     fill: "none",
     "aria-hidden": true,
+    minHeight: "max(1lh, 1rem)",
+    width: "1lh",
   } as const;
 
   switch (status) {
