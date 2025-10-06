@@ -101,7 +101,7 @@ const getAlertClasses = (isDark: boolean): string => {
 
     "w-max max-w-[calc(100vw-2rem)] md:max-w-sm",
 
-    "text-xs font-normal leading-tight",
+    "text-s font-normal leading-tight",
 
     "z-50",
 
@@ -121,7 +121,7 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
   const strokeColor = isDark ? "#ffffff" : "#000000";
 
   const iconProps = {
-    className: "w-4 h-4 flex-shrink-0",
+    className: "w-8 h-10 flex-shrink-0",
     viewBox: "0 0 24 24",
     fill: "none",
     "aria-hidden": true,
@@ -133,8 +133,14 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
     case "success":
       return (
         <svg {...iconProps}>
-          <circle cx="12" cy="12" r="10" fill={config.iconColor} />
-          <path d="M6 13l4 4 8-8" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="12" cy="12" r="7" fill={config.iconColor} />
+          <path
+            d="M9 12l2 2 3.5-3.5"
+            stroke={strokeColor}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
 
