@@ -61,7 +61,7 @@ configuration_by_env = {
     discover_domain: "gumroad.dev",
     api_domain: "api.gumroad.dev",
     third_party_analytics_domain: "analytics.gumroad.dev",
-    valid_request_hosts: ["app.gumroad.dev", "gumroad.dev"],
+    valid_request_hosts: ["app.gumroad.dev", "gumroad.dev", "localhost", "127.0.0.1"],
     valid_api_request_hosts: ["api.gumroad.dev"],
     valid_discover_host: "gumroad.dev",
     valid_cors_origins: [],

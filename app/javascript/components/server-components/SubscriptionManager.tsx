@@ -110,7 +110,11 @@ const SubscriptionManager = ({
   const url = new URL(useOriginalLocation());
 
   const subscriptionEntity = subscription.is_installment_plan ? "installment plan" : "membership";
-  const restartable = !subscription.alive || subscription.pending_cancellation;
+  // Prevent restarting completed installment plans
+  const isCompletedInstallmentPlan =
+    subscription.is_installment_plan &&
+    subscription.successful_purchases_count >= (product.installment_plan?.number_of_installments ?? 0);
+  const restartable = (!subscription.alive || subscription.pending_cancellation) && !isCompletedInstallmentPlan;
   const [cancelled, setCancelled] = React.useState(restartable);
   const initialSelection = {
     recurrence: subscription.recurrence,

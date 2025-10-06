@@ -521,7 +521,8 @@ class Subscription < ApplicationRecord
   end
 
   def ended?
-    ended_at.present?
+    # Consider installment plans as ended when all charges are completed
+    ended_at.present? || (is_installment_plan && charges_completed?)
   end
 
   def pending_cancellation?

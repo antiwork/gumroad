@@ -36,7 +36,8 @@ Rails.application.configure do
   end
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
-  config.asset_host = "#{PROTOCOL}://#{ASSET_DOMAIN}"
+  # Commented out to allow assets to be served from any valid domain (gumroad.dev or app.gumroad.dev)
+  # config.asset_host = "#{PROTOCOL}://#{ASSET_DOMAIN}"
 
   # Where to store uploaded files (see config/storage.yml for options)
   config.active_storage.service = :amazon

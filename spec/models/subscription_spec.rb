@@ -2946,6 +2946,52 @@ describe Subscription, :vcr do
     end
   end
 
+  describe "#ended?" do
+    context "for regular subscriptions" do
+      it "returns true when ended_at is set" do
+        @subscription.update_columns(ended_at: Time.current)
+        expect(@subscription.ended?).to be(true)
+      end
+
+      it "returns false when ended_at is not set" do
+        @subscription.update_columns(ended_at: nil)
+        expect(@subscription.ended?).to be(false)
+      end
+    end
+
+    context "for installment plans" do
+      let(:product) { create(:product, :with_installment_plan, price_cents: 30_00) }
+      let(:subscription) { create(:subscription, link: product, is_installment_plan: true) }
+      let(:buyer) { subscription.user }
+
+      before do
+        create(:installment_plan_purchase, subscription: subscription, link: product, purchaser: buyer)
+      end
+
+      it "returns true when ended_at is set" do
+        subscription.end_subscription!
+        expect(subscription.ended?).to be(true)
+      end
+
+      it "returns true when all charges are completed even if ended_at is not set" do
+        # Complete all remaining installments
+        (product.installment_plan.number_of_installments - 1).times do
+          create(:recurring_installment_plan_purchase, subscription: subscription, link: product, purchaser: buyer)
+        end
+
+        expect(subscription.charges_completed?).to be(true)
+        expect(subscription.ended_at).to be_nil
+        expect(subscription.ended?).to be(true)
+      end
+
+      it "returns false when charges are not completed and ended_at is not set" do
+        expect(subscription.charges_completed?).to be(false)
+        expect(subscription.ended_at).to be_nil
+        expect(subscription.ended?).to be(false)
+      end
+    end
+  end
+
   describe "#price" do
     it "uses the last_payment_option_id column if it's not nil" do
       payment_option = create(:payment_option)

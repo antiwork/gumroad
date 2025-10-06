@@ -28,12 +28,67 @@ describe "Installment Plans", type: :system, js: true do
   context "paid in full" do
     include_context "setup installment plan subscription"
 
-    it "404s when the installment plan has been paid in full" do
+    it "404s when the installment plan has been paid in full (ended_at set)" do
       subscription.end_subscription!
 
       visit manage_subscription_path(subscription.external_id, token: subscription.token)
 
       expect(page).to have_text("Not Found")
+    end
+
+    it "404s when all charges are completed even without ended_at being set" do
+      # Create all required purchases to complete the installment plan
+      product.installment_plan.number_of_installments.times do |i|
+        next if i.zero? # Skip first one as it's already created in setup
+
+        create(:recurring_installment_plan_purchase,
+               subscription: subscription,
+               link: product,
+               credit_card: credit_card,
+               purchaser: buyer)
+      end
+
+      # Verify charges_completed? returns true
+      expect(subscription.reload.charges_completed?).to be true
+      # Verify ended_at is NOT set (this is the vulnerability condition)
+      expect(subscription.ended_at).to be_nil
+
+      # This should 404 even though ended_at is not set
+      visit manage_subscription_path(subscription.external_id, token: subscription.token)
+
+      expect(page).to have_text("Not Found")
+    end
+
+    it "prevents restarting a completed installment plan via API" do
+      # Complete all installments
+      product.installment_plan.number_of_installments.times do |i|
+        next if i.zero?
+
+        create(:recurring_installment_plan_purchase,
+               subscription: subscription,
+               link: product,
+               credit_card: credit_card,
+               purchaser: buyer)
+      end
+
+      expect(subscription.reload.charges_completed?).to be true
+
+      # Attempt to restart via UpdaterService
+      updater = Subscription::UpdaterService.new(
+        subscription: subscription,
+        params: {
+          contact_info: { email: buyer.email },
+          use_existing_card: true
+        },
+        logged_in_user: buyer,
+        gumroad_guid: SecureRandom.uuid,
+        remote_ip: "127.0.0.1"
+      )
+
+      result = updater.perform
+
+      expect(result[:success]).to be false
+      expect(result[:error_message]).to eq("This installment plan has been paid in full and cannot be restarted.")
     end
   end
 

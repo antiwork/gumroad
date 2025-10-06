@@ -46,6 +46,11 @@ class Subscription::UpdaterService
       return { success: false, error_message: "This subscription cannot be restarted." }
     end
 
+    # Prevent restarting completed installment plans
+    if is_resubscribing && subscription.is_installment_plan && subscription.charges_completed?
+      return { success: false, error_message: "This installment plan has been paid in full and cannot be restarted." }
+    end
+
     result = nil
     terminated_or_scheduled_for_termination = subscription.termination_date.present?
 
