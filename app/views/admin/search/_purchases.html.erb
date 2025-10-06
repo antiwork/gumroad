@@ -32,6 +32,9 @@
                     <%= purchase_refund_policy_tooltip(purchase_refund_policy) %>
                   </li>
                 <% end %>
+                <% if purchase.seller.support_email.present? %>
+                  <li>Seller support email: <%= copy_to_clipboard(purchase.seller.support_email) %></li>
+                <% end %>
                 <li>Seller: <%= copy_to_clipboard(purchase.seller.email) %></li>
               </ul>
             </div>
