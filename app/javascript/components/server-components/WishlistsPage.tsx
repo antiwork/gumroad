@@ -117,7 +117,6 @@ const WishlistsPage = ({
                     <div className="actions">
                       <Button
                         color="danger"
-                        outline
                         aria-label="Delete wishlist"
                         onClick={() => setConfirmingDeleteWishlist(wishlist)}
                       >
