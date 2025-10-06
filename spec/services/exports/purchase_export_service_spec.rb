@@ -279,6 +279,28 @@ describe Exports::PurchaseExportService do
         expect(field_value(row, "Tax Included in Price?")).to eq("0")
       end
 
+      it "has subtotal that does not include the tax collected by Gumroad" do
+        @purchase.was_purchase_taxable = true
+        @purchase.was_tax_excluded_from_price = true
+        @purchase.gumroad_tax_cents = 1_80
+        @purchase.save!
+
+        row = last_data_row
+        expect(field_value(row, "Subtotal ($)")).to eq("100.0")
+        expect(field_value(totals_row, "Subtotal ($)")).to eq("100.0")
+        expect(field_value(row, "Taxes ($)")).to eq("1.8")
+        expect(field_value(totals_row, "Taxes ($)")).to eq("1.8")
+        expect(field_value(row, "Shipping ($)")).to eq("0.0")
+        expect(field_value(totals_row, "Shipping ($)")).to eq("0.0")
+        expect(field_value(row, "Sale Price ($)")).to eq("100.0")
+        expect(field_value(totals_row, "Sale Price ($)")).to eq("100.0")
+        expect(field_value(row, "Fees ($)")).to eq("0.31")
+        expect(field_value(totals_row, "Fees ($)")).to eq("0.31")
+        expect(field_value(row, "Net Total ($)")).to eq("99.69")
+        expect(field_value(totals_row, "Net Total ($)")).to eq("99.69")
+        expect(field_value(row, "Tax Included in Price?")).to eq("0")
+      end
+
       describe "tax type" do
         tax_type_test_cases = [
           { country: "IT", rate: 0.22, excluded: nil, expected_type: "VAT" },

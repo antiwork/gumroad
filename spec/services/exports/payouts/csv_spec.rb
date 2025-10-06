@@ -39,6 +39,7 @@ describe Exports::Payouts::Csv, :vcr do
         @paypal_purchase.update!(affiliate_credit_cents: 200)
 
         @purchase_with_tax = create_purchase price_cents: 1000, seller: @seller, link: @product, tax_cents: 200
+        @purchase_with_gumroad_tax = create_purchase price_cents: 1000, seller: @seller, link: @product, gumroad_tax_cents: 180
         @purchase_with_affiliate_1 = create_purchase price_cents: 1000, seller: @another_seller, link: @affiliate_product, affiliate: @direct_affiliate
         @purchase_to_refund = create_purchase price_cents: 1000, seller: @seller, link: @product
         @user_credit = Credit.create_for_credit!(user: @seller, amount_cents: 1000, crediting_user: create(:user))
@@ -97,6 +98,7 @@ describe Exports::Payouts::Csv, :vcr do
         ["Credit", @user_credit.balance.date.to_s, "", "", "", "", "", "", "10.0", "", "10.0"],
         ["Sale", @regular_purchase.succeeded_at.to_date.to_s, @regular_purchase.external_id, @regular_purchase.link.name, @regular_purchase.full_name, @regular_purchase.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
         ["Sale", @purchase_with_tax.succeeded_at.to_date.to_s, @purchase_with_tax.external_id, @purchase_with_tax.link.name, @purchase_with_tax.full_name, @purchase_with_tax.purchaser_email_or_email, "2.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @purchase_with_gumroad_tax.succeeded_at.to_date.to_s, @purchase_with_gumroad_tax.external_id, @purchase_with_gumroad_tax.link.name, @purchase_with_gumroad_tax.full_name, @purchase_with_gumroad_tax.purchaser_email_or_email, "1.8", "0.0", "10.0", "2.09", "7.91"],
         ["Sale", @purchase_to_refund.succeeded_at.to_date.to_s, @purchase_to_refund.external_id, @purchase_to_refund.link.name, @purchase_to_refund.full_name, @purchase_to_refund.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
         ["Sale", @purchase_to_refund_partially.succeeded_at.to_date.to_s, @purchase_to_refund_partially.external_id, @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
         ["Sale", @purchase_to_refund_from_years_ago.succeeded_at.to_date.to_s, @purchase_to_refund_from_years_ago.external_id, @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
@@ -108,8 +110,8 @@ describe Exports::Payouts::Csv, :vcr do
         ["Partial Refund", (@purchase_to_refund_partially.succeeded_at + 1.day).to_date.to_s, @purchase_to_refund_partially.external_id, @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "-0.0", "-0.0", "-3.5", "-0.55", "-2.95"],
         ["Full Refund", (@purchase_to_refund_from_years_ago.succeeded_at + 1.day).to_date.to_s, @purchase_to_refund_from_years_ago.external_id, @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
         ["PayPal Payouts", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "-6.5", "", "-6.5"],
-        ["Payout Fee", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "0.76", "-0.76"],
-        ["Totals", nil, nil, nil, nil, nil, "2.0", "0.0", "46.14", "9.16", "36.98"]
+        ["Payout Fee", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "0.92", "-0.92"],
+        ["Totals", nil, nil, nil, nil, nil, "3.8", "0.0", "56.14", "11.41", "44.73"]
       ]
 
       expect(parsed_csv).to eq(expected)
@@ -236,6 +238,10 @@ describe Exports::Payouts::Csv, :vcr do
     purchase.update_balance_and_mark_successful!
     if attrs[:tax_cents]
       purchase.tax_cents = attrs[:tax_cents]
+      purchase.save
+    end
+    if attrs[:gumroad_tax_cents]
+      purchase.gumroad_tax_cents = attrs[:gumroad_tax_cents]
       purchase.save
     end
     purchase
