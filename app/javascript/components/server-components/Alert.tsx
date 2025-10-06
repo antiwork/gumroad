@@ -148,9 +148,9 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
     case "alert":
       return (
         <svg {...iconProps}>
-          <circle cx="12" cy="12" r="10" fill={config.iconColor} />
+          <circle cx="12" cy="12" r="7" fill={config.iconColor} />
           <path
-            d="M6 6l12 12M6 18L18 6"
+            d="M9 12l2 2 3.5-3.5"
             stroke={strokeColor}
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -162,9 +162,9 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
     case "warning":
       return (
         <svg {...iconProps}>
-          <circle cx="12" cy="12" r="10" fill={config.iconColor} />
+          <circle cx="12" cy="12" r="17" fill={config.iconColor} />
           <path
-            d="M12 8v4m0 4h.01"
+            d="M9 12l2 2 3.5-3.5"
             stroke={strokeColor}
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -176,9 +176,9 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
     case "info":
       return (
         <svg {...iconProps}>
-          <circle cx="12" cy="12" r="10" fill={config.iconColor} />
+          <circle cx="12" cy="12" r="7" fill={config.iconColor} />
           <path
-            d="M12 16v-4m0-4h.01"
+            d="M9 12l2 2 3.5-3.5"
             stroke={strokeColor}
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -190,9 +190,9 @@ const AlertIcon: React.FC<AlertIconProps> = ({ status, isDark }) => {
     default:
       return (
         <svg {...iconProps}>
-          <circle cx="12" cy="12" r="10" fill={STATUS_CONFIG.info.iconColor} />
+          <circle cx="12" cy="12" r="7" fill={STATUS_CONFIG.info.iconColor} />
           <path
-            d="M12 16v-4m0-4h.01"
+            d="M9 12l2 2 3.5-3.5"
             stroke={strokeColor}
             strokeWidth="2.5"
             strokeLinecap="round"
