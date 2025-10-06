@@ -260,9 +260,25 @@ interface AlertProps {
 
 const Alert: React.FC<AlertProps> = ({ initial }) => {
   const [alert, setAlert] = React.useState<AlertPayload | null>(initial);
-  const [isVisible, setIsVisible] = React.useState<boolean>(!!initial);
+  const [isVisible, setIsVisible] = React.useState<boolean>(false);
   const timerRef = React.useRef<number | null>(null);
   const isDark = useDarkMode();
+
+  React.useEffect(() => {
+    if (initial) {
+      requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+      timerRef.current = window.setTimeout(() => {
+        setIsVisible(false);
+      }, 5000);
+    }
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [initial]);
 
   const clearTimer = React.useCallback((): void => {
     if (timerRef.current !== null) {
@@ -280,14 +296,16 @@ const Alert: React.FC<AlertProps> = ({ initial }) => {
 
   useGlobalEventListener("message", (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
-
     try {
       if (is<{ type: string; payload: AlertPayload }>(event.data) && event.data.type === ALERT_KEY) {
         const newAlert = event.data.payload;
-
         if (newAlert && typeof newAlert.message === "string" && typeof newAlert.status === "string") {
           setAlert(newAlert);
-          setIsVisible(true);
+          // RESET and trigger slide-in
+          setIsVisible(false);
+          requestAnimationFrame(() => {
+            setIsVisible(true);
+          });
           startTimer();
         }
       }
@@ -297,6 +315,7 @@ const Alert: React.FC<AlertProps> = ({ initial }) => {
   useRunOnce(() => {
     if (initial) {
       startTimer();
+      startTimer();
     }
   });
 
@@ -304,8 +323,7 @@ const Alert: React.FC<AlertProps> = ({ initial }) => {
     if (!isVisible && alert) {
       const cleanup = setTimeout(() => {
         setAlert(null);
-      }, 300);
-
+      }, 140);
       return () => clearTimeout(cleanup);
     }
   }, [isVisible, alert]);
@@ -317,14 +335,14 @@ const Alert: React.FC<AlertProps> = ({ initial }) => {
   const alertStyles: React.CSSProperties = {
     backgroundColor: isDark ? config.bgDark : config.bgLight,
     borderColor: config.borderColor,
-    transform: isVisible ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(-100%)",
+    transform: `translateX(-50%) translateY(${isVisible ? "0" : "-100%"})`,
     opacity: isVisible ? 1 : 0,
+    transition: "transform 0.14s ease-out, opacity 0.14s ease-out",
   };
 
   return (
     <>
       <AlertStyles />
-
       <div
         role="alert"
         aria-live="assertive"
@@ -333,7 +351,6 @@ const Alert: React.FC<AlertProps> = ({ initial }) => {
         style={alertStyles}
       >
         <AlertIcon status={alert.status} isDark={isDark} />
-
         <div className="min-w-0 break-words">
           {alert.html ? <div dangerouslySetInnerHTML={{ __html: alert.message }} /> : alert.message}
         </div>
