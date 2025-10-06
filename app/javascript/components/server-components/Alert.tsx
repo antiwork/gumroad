@@ -126,7 +126,6 @@ export const showAlert = (
   status: "success" | "error" | "info" | "warning" | "alert",
   options: { html?: boolean } = { html: false },
 ) => {
-  // Simple mapping function
   const mapStatus = (inputStatus: typeof status): "success" | "danger" | "info" | "warning" => {
     switch (inputStatus) {
       case "error":
