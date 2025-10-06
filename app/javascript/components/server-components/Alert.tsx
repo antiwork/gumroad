@@ -8,7 +8,7 @@ const ALERT_KEY = "alert";
 
 type AlertPayload = {
   message: string;
-  status: "success" | "danger" | "info" | "warning";
+  status: "success" | "danger" | "info" | "warning" | "alert";
   html?: boolean;
 };
 
@@ -20,6 +20,7 @@ const getAlertClasses = (status: string) => {
     case "success":
       return `${baseClasses} bg-black text-gray-900 border-[#23a094]`;
     case "danger":
+    case "alert":
       return `${baseClasses} bg-black text-gray-900 border-[#dc341e]`;
     case "warning":
       return `${baseClasses} bg-black text-gray-900 border-[#ffc900]`;
@@ -122,15 +123,32 @@ const Alert = ({ initial }: { initial: AlertPayload | null }) => {
 
 export const showAlert = (
   message: string,
-  status: "success" | "error" | "info" | "warning",
+  status: "success" | "error" | "info" | "warning" | "alert",
   options: { html?: boolean } = { html: false },
 ) => {
+  // Simple mapping function
+  const mapStatus = (inputStatus: typeof status): "success" | "danger" | "info" | "warning" => {
+    switch (inputStatus) {
+      case "error":
+      case "alert":
+        return "danger";
+      case "success":
+        return "success";
+      case "warning":
+        return "warning";
+      case "info":
+        return "info";
+      default:
+        return "info"; // fallback
+    }
+  };
+
   window.postMessage(
     {
       type: ALERT_KEY,
       payload: {
         message,
-        status: status === "error" ? "danger" : status,
+        status: mapStatus(status),
         html: options.html,
       },
     },
