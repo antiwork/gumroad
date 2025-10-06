@@ -96,6 +96,7 @@ article {
     grid-template-rows: auto 1fr auto;
 
     &:hover {
+      transform: translate(-$card-hover-transform-length, -$card-hover-transform-length);
       box-shadow: box-shadow(1);
     }
 
