@@ -187,7 +187,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
               )}
               <footer className="text-base">
                 {product.review_count > 0 ? (
-                  <div className="rating">
+                  <div className="flex shrink-0 items-center gap-1">
                     <Icon name="solid-star" />
                     <span className="rating-average">{product.average_rating.toFixed(1)}</span>
                     <span>{`(${formatOrderOfMagnitude(product.review_count, 1)})`}</span>

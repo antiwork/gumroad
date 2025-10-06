@@ -688,7 +688,7 @@ export const CrossSellModal = ({
             </header>
             <footer>
               {crossSell.ratings ? (
-                <div className="rating">
+                <div className="flex shrink-0 items-center gap-1">
                   <span className="rating-average">{crossSell.ratings.average.toFixed(1)}</span>
                   <span>{`(${formatOrderOfMagnitude(crossSell.ratings.count, 1)})`}</span>
                 </div>
