@@ -942,10 +942,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows creating and deleting a testimonial in the product rich content" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
     purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", full_name: "Reviewer 1")
-    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
-
     purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", full_name: "Reviewer 2")
-    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
 
     visit edit_link_path(product.unique_permalink)
     select_tab "Content"
@@ -957,6 +954,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     within_modal "Insert reviews" do
+      expect(page).to have_text("No reviews with text or video yet.")
+      expect(page).not_to have_button "Insert"
+      click_on "Cancel"
+    end
+
+    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
+    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
+
+    select_disclosure "Insert" do
+      click_on "Review"
+    end
+
+    within_modal "Insert reviews" do
+      expect(page).to have_button "Insert", disabled: true
       check "Select all"
       click_on "Insert"
     end
@@ -987,10 +998,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows creating and deleting a testimonial in the product description" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
     purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", full_name: "Reviewer 1")
-    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
-
     purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", full_name: "Reviewer 2")
-    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
 
     visit edit_link_path(product.unique_permalink)
 
@@ -1001,6 +1009,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     within_modal "Insert reviews" do
+      expect(page).to have_text("No reviews with text or video yet.")
+      expect(page).not_to have_button "Insert"
+      click_on "Cancel"
+    end
+
+    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
+    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
+
+    select_disclosure "Insert" do
+      click_on "Review"
+    end
+
+    within_modal "Insert reviews" do
+      expect(page).to have_button "Insert", disabled: true
       check "Select all"
       click_on "Insert"
     end
