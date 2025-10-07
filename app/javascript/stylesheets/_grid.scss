@@ -1,13 +1,3 @@
-@keyframes loading {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0.3;
-  }
-}
-
 .grid:not(.override) {
   display: grid;
   grid-template-columns: repeat(

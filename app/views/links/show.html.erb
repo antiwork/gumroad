@@ -1,5 +1,11 @@
 <% content_for :meta do %>
   <link href="<%= @product.long_url %>" rel="canonical">
+
+  <% if (structured_data = @product.structured_data).any? %>
+    <script type="application/ld+json">
+      <%= structured_data.to_json.html_safe %>
+    </script>
+  <% end %>
 <% end %>
 
 <%= render("layouts/custom_styles/style") %>

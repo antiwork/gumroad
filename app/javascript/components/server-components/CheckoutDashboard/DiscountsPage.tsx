@@ -378,7 +378,7 @@ const DiscountsPage = ({
                         expiresAt ? formatDate(expiresAt) : "No end date"
                       }`}</td>
                       <td className="whitespace-nowrap">
-                        <div className="grid grid-cols-[min-content_1fr] gap-2">
+                        <div className="override grid grid-cols-[min-content_1fr] gap-2">
                           {validAt && currentDate < validAt ? (
                             <>Scheduled</>
                           ) : expiresAt && currentDate > expiresAt ? (
@@ -549,7 +549,7 @@ const DiscountsPage = ({
                       ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
                       : null;
                   return (
-                    <div key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
+                    <div key={product.id} className="override grid grid-cols-[1fr_auto] gap-2">
                       <div>
                         <h5>{product.name}</h5>
                         {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
@@ -864,7 +864,7 @@ const Form = ({
             <legend>
               <label htmlFor={`${uid}code`}>Discount code</label>
             </legend>
-            <div className="grid grid-cols-[1fr_auto] gap-2">
+            <div className="override grid grid-cols-[1fr_auto] gap-2">
               <input
                 type="text"
                 id={`${uid}code`}

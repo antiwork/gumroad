@@ -2,6 +2,7 @@
 
 class PurchasesController < ApplicationController
   include CurrencyHelper, PreorderHelper, RecommendationType, ValidateRecaptcha, ProcessRefund
+  include Order::ResponseHelpers
   SEARCH_RESULTS_PER_PAGE = 100
 
   PARAM_TO_ATTRIBUTE_MAPPINGS = {
@@ -443,23 +444,6 @@ class PurchasesController < ApplicationController
 
     def render_create_success(purchase)
       render json: purchase.purchase_response
-    end
-
-    def error_response(error_message, purchase: nil)
-      card_country = purchase&.card_country
-      card_country = "CN" if card_country == "C2" # PayPal (wrongly) returns CN2 for China users transacting with USD
-
-      {
-        success: false,
-        error_message:,
-        name: purchase&.link&.name,
-        formatted_price: formatted_price(purchase&.link&.price_currency_type || Currency::USD, purchase&.total_transaction_cents),
-        error_code: purchase&.error_code,
-        is_tax_mismatch: purchase&.error_code == PurchaseErrorCode::TAX_VALIDATION_FAILED,
-        card_country: (ISO3166::Country[card_country]&.common_name if card_country.present?),
-        ip_country: purchase&.ip_country,
-        updated_product: purchase.present? ? CheckoutPresenter.new(logged_in_user: nil, ip: request.remote_ip).checkout_product(purchase.link, purchase.link.cart_item({ rent: purchase.is_rental, option: purchase.variant_attributes.first&.external_id, recurrence: purchase.price&.recurrence, price: purchase.customizable_price? ? purchase.displayed_price_cents : nil }), { recommended_by: purchase.recommended_by.presence }) : nil,
-      }
     end
 
     def render_error(error_message, purchase: nil)

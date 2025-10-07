@@ -29,6 +29,7 @@ describe UrlRedirectPresenter do
                                                                      file_name: "Display Name",
                                                                      description: "Description",
                                                                      file_size: 50,
+                                                                     isbn: nil,
                                                                      id: folder_file.external_id,
                                                                      pagelength: 3,
                                                                      duration: nil,
@@ -54,6 +55,7 @@ describe UrlRedirectPresenter do
                                                                    id: file.external_id,
                                                                    pagelength: nil,
                                                                    duration: nil,
+                                                                   isbn: nil,
                                                                    subtitle_files: [
                                                                      url: subtitle_file.url,
                                                                      file_name: subtitle_file.s3_display_name,

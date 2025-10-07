@@ -63,6 +63,7 @@ export type FileItem = {
   pdf_stamp_enabled: boolean;
   processing: boolean;
   thumbnail_url: string | null;
+  isbn?: string | null;
 };
 export type FolderItem = {
   type: "folder";
@@ -228,6 +229,8 @@ export const FileRow = ({
                   {file.pagelength} {file.pagelength === 1 ? "page" : "pages"}
                 </li>
               ) : null}
+
+              {file.isbn ? <li>ISBN: {file.isbn}</li> : null}
 
               {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
             </>
