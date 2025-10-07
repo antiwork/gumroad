@@ -81,7 +81,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
         click_on "Donate"
         fill_checkout_form(coffee_product)
 
-        expect(page).not_to have_text("Add a tip")
+        expect(page).not_to have_text("Support with a tip")
         expect(page).not_to have_radio_button("0%")
         expect(page).not_to have_radio_button("10%")
         expect(page).not_to have_radio_button("20%")
@@ -94,7 +94,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
         add_to_cart(product)
         fill_checkout_form(product)
 
-        expect(page).to have_text("Add a tip")
+        expect(page).to have_text("Support with a tip")
         expect(page).to have_radio_button("0%", checked: true)
         expect(page).to have_radio_button("10%")
         expect(page).to have_radio_button("20%")
@@ -255,7 +255,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
       fill_checkout_form(membership_product)
       wait_for_ajax
 
-      expect(page).not_to have_text("Add a tip")
+      expect(page).not_to have_text("Support with a tip")
 
       click_on "Pay"
 
@@ -277,7 +277,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
       fill_checkout_form(product)
       wait_for_ajax
 
-      expect(page).not_to have_text("Add a tip")
+      expect(page).not_to have_text("Support with a tip")
 
       click_on "Pay"
 

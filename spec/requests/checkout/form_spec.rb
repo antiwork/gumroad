@@ -172,7 +172,7 @@ describe("Checkout form page", type: :system, js: true) do
 
       find_field("Allow customers to add tips to their orders", checked: false).check
       in_preview do
-        expect(page).to have_text("Add a tip")
+        expect(page).to have_text("Support with a tip")
         expect(page).to have_radio_button("0%", checked: true)
         expect(page).to have_radio_button("10%", checked: false)
         expect(page).to have_radio_button("20%", checked: false)
@@ -184,7 +184,7 @@ describe("Checkout form page", type: :system, js: true) do
 
       refresh
       in_preview do
-        expect(page).to have_text("Add a tip")
+        expect(page).to have_text("Support with a tip")
         expect(page).to have_radio_button("0%", checked: true)
         expect(page).to have_radio_button("10%", checked: false)
         expect(page).to have_radio_button("20%", checked: false)
