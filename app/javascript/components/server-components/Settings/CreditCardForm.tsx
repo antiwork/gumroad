@@ -59,7 +59,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
             }
             position="top"
           >
-            <Button outline color="danger" onClick={remove} disabled={!can_remove || status === "removing"}>
+            <Button color="danger" onClick={remove} disabled={!can_remove || status === "removing"}>
               {status === "removing" ? "Removing..." : "Remove credit card"}
             </Button>
           </WithTooltip>

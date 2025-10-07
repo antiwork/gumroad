@@ -528,7 +528,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           ) : null}
 
           {!isComplete ? (
-            <Button color="danger" outline onClick={onCancel} aria-label="Cancel">
+            <Button color="danger" onClick={onCancel} aria-label="Cancel">
               Cancel
             </Button>
           ) : null}

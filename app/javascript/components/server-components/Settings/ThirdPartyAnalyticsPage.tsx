@@ -258,6 +258,7 @@ const SnippetRow = ({
           {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
         </Button>
         <Button
+          color="danger"
           onClick={() =>
             updateThirdPartyAnalytics({
               snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id),

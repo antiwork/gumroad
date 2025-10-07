@@ -126,7 +126,6 @@ export const FileRow = ({ file }: { file: FileState }) => {
         ) : null}
         <WithTooltip tip={uploadProgress === null ? "Remove" : "Cancel"} position="left">
           <Button
-            outline
             color="danger"
             aria-label="Remove"
             onClick={() => {

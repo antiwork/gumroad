@@ -131,7 +131,7 @@ const WorkflowRow = ({
           >
             <Icon name="pencil" />
           </Link>
-          <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
+          <Button color="danger" aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
             <Icon name="trash2" />
           </Button>
         </div>

@@ -140,7 +140,7 @@ const VersionEditor = ({
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove version">
+          <Button onClick={onDelete} aria-label="Remove version" color="danger">
             <Icon name="trash2" />
           </Button>
         </WithTooltip>

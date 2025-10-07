@@ -145,7 +145,6 @@ const FormPage = ({
                           <Button
                             onClick={() => setCustomFields(customFields.filter((_, index) => index !== i))}
                             color="danger"
-                            outline
                             aria-label="Remove"
                           >
                             <Icon name="trash2" />

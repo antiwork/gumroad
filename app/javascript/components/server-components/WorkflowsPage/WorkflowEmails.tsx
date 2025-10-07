@@ -503,7 +503,7 @@ const EmailRow = ({
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
           <WithTooltip tip="Delete">
-            <Button outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
+            <Button color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
               <Icon name="trash2" />
             </Button>
           </WithTooltip>

@@ -138,7 +138,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
                     </ul>
                   </td>
                   <td>
-                    <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
+                    <Button color="danger" onClick={() => setRevokingAccessForApp({ id: application.id })}>
                       <Icon name="x-square"></Icon>
                       Revoke access
                     </Button>

@@ -384,7 +384,6 @@ const Files = ({
             {blob.signed_id ? (
               <Button
                 color="danger"
-                outline
                 aria-label="Remove"
                 disabled={isRemovingFile || isSubmitting}
                 onClick={handleFileRemove}

@@ -51,7 +51,7 @@ export const Row = ({ subtitleFile, onRemove, onCancel, onChangeLanguage }: Prop
             </div>
           </div>
           <div className="actions">
-            <Button onClick={onCancel} color="danger" outline aria-label="Remove">
+            <Button onClick={onCancel} color="danger" aria-label="Remove">
               <Icon name="x-circle-fill" />
             </Button>
           </div>
@@ -67,7 +67,7 @@ export const Row = ({ subtitleFile, onRemove, onCancel, onChangeLanguage }: Prop
           </div>
           <div className="actions">
             <SubtitleLanguageSelect currentLanguage={subtitleFile.language} onChange={onChangeLanguage} />
-            <Button onClick={onRemove} color="danger" outline aria-label="Remove">
+            <Button onClick={onRemove} color="danger" aria-label="Remove">
               <Icon name="trash2" />
             </Button>
           </div>

@@ -88,7 +88,7 @@ const AttributeEditor = ({
       onChange={(evt) => onUpdate?.({ value: evt.target.value })}
       disabled={!onUpdate}
     />
-    <Button onClick={onDelete}>
+    <Button color="danger" onClick={onDelete}>
       <Icon name="trash2" />
     </Button>
   </div>

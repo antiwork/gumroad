@@ -165,7 +165,6 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
                   </div>
                   <div className="actions">
                     <Button
-                      outline
                       color="danger"
                       aria-label="Remove"
                       onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}

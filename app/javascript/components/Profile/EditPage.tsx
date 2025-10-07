@@ -72,7 +72,7 @@ const EditTab = ({
         </h4>
       </div>
       <div className="actions">
-        <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
+        <Button small color="danger" aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
           <Icon name="trash2" />
         </Button>
       </div>

@@ -375,7 +375,6 @@ const SubscriptionManager = ({
         <div>
           <Button
             color="danger"
-            outline
             onClick={handleCancel}
             disabled={cancellationStatus === "processing" || cancellationStatus === "done"}
           >
