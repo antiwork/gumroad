@@ -3388,7 +3388,13 @@ class Purchase < ApplicationRecord
       return unless is_installment_payment
 
       nth_installment = subscription&.purchases&.successful&.count || 0
-      installment_payments = fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
+
+      # Use frozen config instead of live plan to ensure amounts don't change
+      # when seller modifies product installment configuration
+      config = frozen_installment_config
+      return unless config
+
+      installment_payments = config.calculate_installment_payments(total_price_cents)
       installment_payments[nth_installment] || installment_payments.last
     end
 
@@ -3823,5 +3829,37 @@ class Purchase < ApplicationRecord
 
     def fetch_installment_plan
       installment_plan || subscription&.last_payment_option&.installment_plan
+    end
+
+    # Returns a frozen snapshot of the installment plan configuration
+    # that was in effect when the subscription was created.
+    #
+    # This ensures that billing amounts remain consistent even if the seller
+    # changes the product's installment plan configuration after the purchase.
+    #
+    # @return [FrozenInstallmentConfig, nil] Frozen config or nil if not an installment purchase
+    def frozen_installment_config
+      return nil unless is_installment_payment
+      return nil unless subscription&.last_payment_option
+
+      payment_option = subscription.last_payment_option
+
+      # Return snapshot data if available (records created after migration)
+      if payment_option.number_of_installments.present?
+        FrozenInstallmentConfig.new(
+          number_of_installments: payment_option.number_of_installments,
+          recurrence: payment_option.recurrence
+        )
+      else
+        # Fallback for records created before migration
+        # This maintains backwards compatibility during transition period
+        plan = fetch_installment_plan
+        if plan
+          FrozenInstallmentConfig.new(
+            number_of_installments: plan.number_of_installments,
+            recurrence: plan.recurrence
+          )
+        end
+      end
     end
 end

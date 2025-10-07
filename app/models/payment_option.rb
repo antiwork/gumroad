@@ -9,7 +9,11 @@ class PaymentOption < ApplicationRecord
              foreign_key: :product_installment_plan_id, class_name: "ProductInstallmentPlan",
              optional: true
 
+  before_validation :snapshot_installment_config, on: :create, if: -> { installment_plan.present? }
+
   validates :installment_plan, presence: true, if: -> { subscription&.is_installment_plan }
+  validates :number_of_installments, presence: true, if: -> { subscription&.is_installment_plan }
+  validates :recurrence, presence: true, if: -> { subscription&.is_installment_plan }
 
   after_create :update_subscription_last_payment_option
   after_update :update_subscription_last_payment_option, if: :saved_change_to_deleted_at?
@@ -25,5 +29,17 @@ class PaymentOption < ApplicationRecord
 
   def update_subscription_last_payment_option
     subscription.update_last_payment_option
+  end
+
+  private
+
+  # Snapshot installment plan configuration at subscription creation
+  # This ensures billing amounts remain consistent even if the seller
+  # changes the product's installment plan configuration later
+  def snapshot_installment_config
+    return unless installment_plan.present?
+
+    self.number_of_installments = installment_plan.number_of_installments
+    self.recurrence = installment_plan.recurrence
   end
 end

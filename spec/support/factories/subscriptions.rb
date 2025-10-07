@@ -11,16 +11,21 @@ FactoryBot.define do
     end
 
     before(:create) do |subscription, evaluator|
-      payment_option = create(
-        :payment_option,
-        subscription:,
-        price: evaluator.price || subscription.link.default_price,
-        installment_plan: subscription.is_installment_plan ? subscription.link.installment_plan : nil
-      )
-      subscription.payment_options << payment_option
+      installment_plan = subscription.is_installment_plan ? subscription.link.installment_plan : nil
 
-      if subscription.is_installment_plan
-        subscription.charge_occurrence_count = subscription.link.installment_plan.number_of_installments
+      # Build payment option but don't validate/save yet
+      # The subscription needs payment_options to be present for validation
+      payment_option = subscription.payment_options.build(
+        price: evaluator.price || subscription.link.default_price,
+        installment_plan:
+      )
+
+      # Manually set snapshot fields for installment plans to satisfy validation
+      # The before_create callback would normally set these, but we're building manually
+      if subscription.is_installment_plan && installment_plan
+        payment_option.number_of_installments = installment_plan.number_of_installments
+        payment_option.recurrence = installment_plan.recurrence
+        subscription.charge_occurrence_count = installment_plan.number_of_installments
       end
     end
 

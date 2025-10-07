@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_07_142609) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1263,6 +1263,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
     t.datetime "deleted_at", precision: nil
     t.integer "flags", default: 0, null: false
     t.bigint "product_installment_plan_id"
+    t.integer "number_of_installments"
+    t.string "recurrence"
     t.index ["price_id"], name: "index_payment_options_on_price_id"
     t.index ["product_installment_plan_id"], name: "index_payment_options_on_product_installment_plan_id"
     t.index ["subscription_id"], name: "index_payment_options_on_subscription_id"
