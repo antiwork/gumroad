@@ -16,6 +16,7 @@ import { Preview } from "$app/components/Preview";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const useProductUrl = (params = {}) => {
@@ -43,6 +44,8 @@ export const Layout = ({
 
   const [match] = useMatches();
   const tab = match?.handle ?? "product";
+
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   const [isSaving, setIsSaving] = React.useState(false);
   const handleSave = async () => {
@@ -125,7 +128,7 @@ export const Layout = ({
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
+              <CopyToClipboard text={url} copyTooltip="Copy product URL" tooltipPosition={isDesktop ? "left" : "bottom"}>
                 <Button>
                   <Icon name="link" />
                 </Button>
