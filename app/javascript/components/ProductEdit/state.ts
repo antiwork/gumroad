@@ -217,6 +217,7 @@ export type FileEntry = {
   is_transcoding_in_progress: boolean;
   id: string; // id is either server ID or, in case of unsaved dropbox files, `drop_[external_id]`
   url: string | null;
+  isbn?: string | null;
   subtitle_files: SubtitleFile[];
   status: FileStatus | { type: "removed"; previousStatus: FileStatus };
   thumbnail: ThumbnailFile | null;

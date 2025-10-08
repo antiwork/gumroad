@@ -2,6 +2,7 @@
 
 module PreviewBoxHelpers
   def in_preview(&block)
+    scroll_to find("aside", text: "Preview")
     within_section "Preview", section_element: :aside do
       block.call
     end

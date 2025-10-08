@@ -385,7 +385,7 @@ export const Product = ({
                           <h4>{bundleProduct.name}</h4>
                         </a>
                         {bundleProduct.ratings ? (
-                          <section className="rating" aria-label="Rating">
+                          <section className="flex shrink-0 items-center gap-1" aria-label="Rating">
                             <Icon name="solid-star" />
                             {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                           </section>
@@ -739,7 +739,7 @@ const Reviews = ({
     <section>
       <header>
         <h3>Ratings</h3>
-        <div className="rating">
+        <div className="flex shrink-0 items-center gap-1">
           <Icon name="solid-star" />
           <div className="rating-average">{ratings.average}</div>(
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
@@ -749,7 +749,7 @@ const Reviews = ({
         <div itemProp="reviewCount">{ratings.count}</div>
         <div itemProp="ratingValue">{ratings.average}</div>
       </div>
-      <section className="histogram" aria-label="Ratings histogram">
+      <section className="override grid grid-cols-[auto_1fr_auto] gap-3" aria-label="Ratings histogram">
         {([4, 3, 2, 1, 0] as const).map((rating) => (
           <RatingsHistogramRow rating={rating + 1} percentage={ratings.percentages[rating]} key={rating} />
         ))}
@@ -794,7 +794,7 @@ const Review = ({
 );
 
 export const RatingsSummary = ({ ratings }: { ratings: Ratings }) => (
-  <div className="rating">
+  <div className="flex shrink-0 items-center gap-1">
     <RatingStars rating={ratings.average} />
     <span className="rating-number">
       {ratings.count} {ratings.count === 1 ? "rating" : "ratings"}

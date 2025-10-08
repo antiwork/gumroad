@@ -32,4 +32,12 @@ class Checkout::UpsellPolicy < ApplicationPolicy
   def destroy?
     update?
   end
+
+  def pause?
+    update?
+  end
+
+  def unpause?
+    update?
+  end
 end

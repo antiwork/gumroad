@@ -256,6 +256,22 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when the upsell is paused" do
+      before do
+        upsell.update!(paused: true)
+      end
+
+      it "returns an error" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(error).to eq("Sorry, this offer is no longer available.")
+      end
+    end
+
     context "when the upsell variant doesn't exist" do
       before do
         params[:accepted_offer][:original_variant_id] = "invalid"

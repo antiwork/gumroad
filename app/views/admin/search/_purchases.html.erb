@@ -33,6 +33,9 @@
                   </li>
                 <% end %>
                 <li>Seller: <%= copy_to_clipboard(purchase.seller.email) %></li>
+                <% if purchase.seller.support_email.present? %>
+                  <li>Seller support email: <%= copy_to_clipboard(purchase.seller.support_email) %></li>
+                <% end %>
               </ul>
             </div>
           </td>

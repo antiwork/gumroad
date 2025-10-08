@@ -158,6 +158,15 @@ class ContactingCreatorMailer < ApplicationMailer
     @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
   end
 
+  def flagged_for_explicit_nsfw_tos_violation(user_id)
+    @seller = User.find(user_id)
+    @subject = "Your account has been temporarily suspended for selling sexually explicit / fetish-related content"
+    @days_until_suspension = 10
+    date_of_suspension = Time.current + @days_until_suspension.days
+    @formatted_suspension_date = I18n.l(date_of_suspension, format: "%-d %B", locale: @seller.locale)
+    @from = NOREPLY_EMAIL_WITH_NAME
+  end
+
   def debit_card_limit_reached(payment_id)
     @payment = Payment.find(payment_id)
     @seller = @payment.user

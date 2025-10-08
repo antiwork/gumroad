@@ -55,8 +55,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
       <IconComponent
         onClick={togglePasswordVisibility}
         role="button"
-        tabIndex={0}
-        style={{ cursor: "pointer", userSelect: "none" }}
+        className="cursor-pointer select-none"
         aria-label={showPassword ? "Hide password" : "Show password"}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {

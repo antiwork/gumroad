@@ -47,7 +47,7 @@ class Link < ApplicationRecord
   include ProductsHelper, PreorderHelper, CurrencyHelper, SocialShareUrlHelper, Product::Stats, Product::Preview,
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
-          Product::ReviewStat, Product::Utils, ActionView::Helpers::SanitizeHelper,
+          Product::ReviewStat, Product::Utils, Product::StructuredData, ActionView::Helpers::SanitizeHelper,
           ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
           Integrations, Product::StaffPicked, RichContents, Product::Sorting, Product::CreationLimit
@@ -143,12 +143,14 @@ class Link < ApplicationRecord
   has_many :active_integrations, through: :live_product_integrations, source: :integration
   has_many :product_cached_values, foreign_key: :product_id
   has_one :upsell, -> { upsell.alive }, foreign_key: :product_id
-  has_many :upsell_variants, through: :upsell
-  has_many :cross_sells, ->(link) {
+  has_one :available_upsell, -> { upsell.available_to_customers },
+          class_name: "Upsell", foreign_key: :product_id
+  has_many :available_upsell_variants, through: :available_upsell, source: :upsell_variants
+  has_many :available_cross_sells, ->(link) {
     includes(:selected_products)
       .where(selected_products: { id: link.id })
       .or(where(universal: true))
-  }, through: :user, source: :cross_sells
+  }, through: :user, source: :available_cross_sells
   has_and_belongs_to_many :custom_fields, join_table: "custom_fields_products", foreign_key: "product_id"
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"

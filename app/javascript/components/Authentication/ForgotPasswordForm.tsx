@@ -5,6 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
+import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type SaveState = { type: "initial" | "submitting" } | { type: "error"; message: string };
@@ -30,9 +31,9 @@ export const ForgotPasswordForm = ({ onClose }: { onClose: () => void }) => {
   return (
     <form onSubmit={(e) => void handleSubmit(e)}>
       <SocialAuth />
-      <div role="separator">
+      <Separator>
         <span>or</span>
-      </div>
+      </Separator>
       <section>
         {saveState.type === "error" ? (
           <div role="alert" className="danger">

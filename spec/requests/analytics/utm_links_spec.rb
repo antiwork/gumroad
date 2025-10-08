@@ -246,7 +246,9 @@ describe "UTM links", :js, type: :system do
 
         # Sort by "Link" column in descending order
         find_and_click("th", text: "Link")
+        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=asc")
         find_and_click("th", text: "Link")
+        expect(page).to have_current_path("#{utm_links_dashboard_path}?key=link&direction=desc")
 
         expect(page).to have_table_row({ "Link" => utm_link2.title })
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })

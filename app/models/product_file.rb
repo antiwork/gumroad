@@ -24,6 +24,12 @@ class ProductFile < ApplicationRecord
 
   has_one_attached :thumbnail
 
+  normalizes :isbn, with: ->(value) do
+    next if value.blank?
+
+    value.strip.upcase.gsub(/[\s–—−]/, "-")
+  end
+
   before_save :set_filegroup
   before_save :downcase_filetype
   after_commit :schedule_file_analyze, on: :create
@@ -40,6 +46,9 @@ class ProductFile < ApplicationRecord
             check_for_column: false
 
   validates_presence_of :url
+  validates :isbn, isbn: true, allow_nil: true, if: :supports_isbn?
+  validates :isbn, absence: { unless: :supports_isbn? }
+
   validate :valid_url?, on: :create
   validate :belongs_to_product_or_installment, on: :save
   validate :thumbnail_is_vaild
@@ -132,6 +141,10 @@ class ProductFile < ApplicationRecord
 
   def mobi?
     filetype == "mobi"
+  end
+
+  def supports_isbn?
+    epub? || pdf? || mobi?
   end
 
   def streamable?

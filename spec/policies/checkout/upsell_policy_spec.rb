@@ -72,7 +72,7 @@ describe Checkout::UpsellPolicy do
     end
   end
 
-  permissions :update?, :destroy? do
+  permissions :update?, :destroy?, :pause?, :unpause? do
     context "when the upsell belongs to seller" do
       let(:upsell) { create(:upsell, seller:) }
 

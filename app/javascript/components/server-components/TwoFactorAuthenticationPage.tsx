@@ -24,22 +24,23 @@ export const TwoFactorAuthenticationPage = ({
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   const uid = React.useId();
   const [token, setToken] = React.useState(initialToken ?? "");
-  const [saveState, setSaveState] = React.useState<SaveState>({ type: "initial" });
+  const [loginState, setLoginState] = React.useState<SaveState>({ type: "initial" });
+  const [resendState, setResendState] = React.useState<SaveState>({ type: "initial" });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSaveState({ type: "submitting" });
+    setLoginState({ type: "submitting" });
     try {
       const { redirectLocation } = await twoFactorLogin({ user_id, token, next });
       window.location.href = redirectLocation;
     } catch (e) {
       assertResponseError(e);
-      setSaveState({ type: "error", message: e.message });
+      setLoginState({ type: "error", message: e.message });
     }
   };
 
   const resendToken = async () => {
-    setSaveState({ type: "submitting" });
+    setResendState({ type: "submitting" });
     try {
       await resendTwoFactorToken(user_id);
       showAlert("Resent the authentication token, please check your inbox.", "success");
@@ -47,7 +48,7 @@ export const TwoFactorAuthenticationPage = ({
       assertResponseError(e);
       showAlert(e.message, "error");
     }
-    setSaveState({ type: "initial" });
+    setResendState({ type: "initial" });
   };
 
   return (
@@ -63,9 +64,9 @@ export const TwoFactorAuthenticationPage = ({
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
         <section>
-          {saveState.type === "error" ? (
+          {loginState.type === "error" ? (
             <div role="alert" className="danger">
-              {saveState.message}
+              {loginState.message}
             </div>
           ) : null}
           <fieldset>
@@ -74,10 +75,10 @@ export const TwoFactorAuthenticationPage = ({
             </legend>
             <input id={uid} type="text" value={token} onChange={(e) => setToken(e.target.value)} required autoFocus />
           </fieldset>
-          <Button color="primary" type="submit" disabled={saveState.type === "submitting"}>
-            {saveState.type === "submitting" ? "Logging in..." : "Login"}
+          <Button color="primary" type="submit" disabled={loginState.type === "submitting"}>
+            {loginState.type === "submitting" ? "Logging in..." : "Login"}
           </Button>
-          <Button disabled={saveState.type === "submitting"} onClick={() => void resendToken()}>
+          <Button disabled={resendState.type === "submitting"} onClick={() => void resendToken()}>
             Resend Authentication Token
           </Button>
         </section>
