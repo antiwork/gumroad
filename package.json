@@ -50,7 +50,7 @@
     "jquery": "^3.6.3",
     "js-yaml": "^4.1.0",
     "json-schema-to-ts": "^3.0.0",
-    "libphonenumber-js": "^1.10.15",
+    "libphonenumber-js": "^1.12.23",
     "lodash": "^4.17.21",
     "lowlight": "^3.0.0",
     "mailcheck": "^1.1.1",
