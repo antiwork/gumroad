@@ -33,7 +33,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, findCartItem } from "./cartState";
-import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
+import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, isTippingEnabled, useState } from "./payment";
 import { TipSelector } from "./TipSelector";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
@@ -252,7 +252,7 @@ export const Checkout = ({
                     <h4>Subtotal</h4>
                     <div>{formatPrice(subtotal)}</div>
                   </div>
-                  {tip > 0 ? (
+                  {isTippingEnabled(state) ? (
                     <div>
                       <h4>Tip</h4>
                       <div>{formatPrice(tip)}</div>
