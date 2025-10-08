@@ -174,15 +174,15 @@ export function computeTip(state: State) {
 
 export function computeTipForPrice(state: State, price: number, permalink: string | undefined = undefined) {
   if (!isTippingEnabled(state)) return null;
-  if (state.tip.type === "fixed") {
+  if (state.tip.type === "fixed" && state.tip.amount === null) {
+    return 0;
+  } else if (state.tip.type === "fixed") {
     const totalPrice = getTotalPriceFromProducts(state);
     if (totalPrice === 0) {
       return computeTipForFreeCart(state, permalink);
     }
-
     return Math.round((state.tip.amount ?? 0) * (price / totalPrice));
   }
-
   return Math.round((state.tip.percentage / 100) * price);
 }
 
@@ -270,7 +270,6 @@ export function createReducer(initial: {
       if ((field.type === "terms" || field.required) && !state.customFieldValues[field.key])
         errors.add(`customFields.${field.key}`);
     }
-    if (isTippingEnabled(state) && state.tip.type === "fixed" && state.tip.amount === null) errors.add("tip");
     if (
       requiresPayment(state) &&
       state.paymentMethod !== "stripePaymentRequest" &&

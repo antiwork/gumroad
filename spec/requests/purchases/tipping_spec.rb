@@ -130,6 +130,22 @@ describe("Product checkout with tipping", type: :system, js: true) do
     let(:free_product2) { create(:product, name: "Free Product 2", user: seller, price_cents: 0) }
     let(:free_product3) { create(:product, name: "Free Product 3", user: seller2, price_cents: 0) }
 
+    it "allows the buyer to purchase without a tip" do
+      visit free_product1.long_url
+      add_to_cart(free_product1, pwyw_price: 0)
+
+      fill_in "Email address", with: "test@gumroad.com"
+      click_on "Get"
+
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+      last_purchase = Purchase.last
+      expect(last_purchase).to be_successful
+      expect(last_purchase.link).to eq(free_product1)
+      expect(last_purchase.price_cents).to eq(0)
+      expect(last_purchase.tip).to be_nil
+    end
+
     it "only allows the buyer to tip a fixed amount" do
       visit free_product2.long_url
       add_to_cart(free_product2, pwyw_price: 0)
