@@ -23,7 +23,7 @@ export const TipSelector = () => {
   return (
     <div className="bg-filled rounded border border-border p-4 text-foreground">
       <div className="paragraphs">
-        <h4>Support with a tip</h4>
+        <h4 className="font-bold">Support with a tip</h4>
         {showPercentageOptions ? (
           <div
             role="radiogroup"
