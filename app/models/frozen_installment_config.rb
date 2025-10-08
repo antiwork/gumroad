@@ -1,40 +1,53 @@
 # frozen_string_literal: true
 
-# Value object representing immutable installment plan configuration.
-# Used to ensure billing amounts don't change when product config changes.
+# This class represents a point-in-time snapshot of an installment plan configuration.
+# We needed this because customers were getting charged different amounts when sellers
+# changed their product settings after the customer had already subscribed.
 #
-# When a customer purchases a product with installment payments, we snapshot
-# the installment plan configuration (number of installments and recurrence)
-# at purchase time. This frozen config is then used for all subsequent
-# recurring charges, regardless of any changes the seller makes to the
-# product's installment plan.
+# The Problem We're Solving:
+# - Customer buys a $147 product with 3 monthly installments ($49 each)
+# - Seller later changes the product to $197 with 2 installments
+# - Without this fix, the customer's remaining payments would change to $98.50 each
+# - That's wrong - the customer agreed to pay $147 in 3 installments, not $197 in 2
 #
-# Example:
-#   config = FrozenInstallmentConfig.new(number_of_installments: 3, recurrence: 'monthly')
-#   payments = config.calculate_installment_payments(1000) # => [334, 333, 333]
+# This class stores the original installment configuration (how many payments, how often)
+# so we can always calculate the correct billing amounts based on what the customer
+# originally agreed to, not what the seller changed it to later.
 #
 class FrozenInstallmentConfig
   attr_reader :number_of_installments, :recurrence
 
   def initialize(number_of_installments:, recurrence:)
+    # Store the installment count (e.g., 3 payments)
     @number_of_installments = number_of_installments
+
+    # Store the payment frequency (e.g., "monthly")
     @recurrence = recurrence
   end
 
-  # Calculate installment payment amounts for a given total price.
-  # Puts any remainder in the first installment to avoid rounding issues.
+  # Divides the total price into equal installment payments.
+  # Any leftover cents from rounding go into the first payment.
   #
-  # @param full_price_cents [Integer] Total price in cents
-  # @return [Array<Integer>] Array of payment amounts in cents, one per installment
+  # Why put the remainder in the first payment?
+  # - It's less confusing for customers (first payment slightly higher, rest are equal)
+  # - Matches existing ProductInstallmentPlan behavior for consistency
+  # - Avoids the last payment being unexpectedly different
   #
-  # Example:
-  #   config.calculate_installment_payments(1000) # 3 installments
-  #   # => [334, 333, 333] (remainder of 1 cent goes to first payment)
+  # Example: $100 split into 3 installments
+  # - Base amount: $100 / 3 = $33 per payment
+  # - Remainder: $100 % 3 = $1 left over
+  # - Result: [$34, $33, $33] - first payment gets the extra $1
   #
   def calculate_installment_payments(full_price_cents)
+    # Calculate the base payment amount (integer division)
     base_price = full_price_cents / number_of_installments
+
+    # Calculate any remaining cents that don't divide evenly
     remainder = full_price_cents % number_of_installments
 
+    # Build an array with one payment amount per installment
+    # The first payment (i == 0) gets the base price plus any remainder
+    # All other payments just get the base price
     Array.new(number_of_installments) do |i|
       i.zero? ? base_price + remainder : base_price
     end

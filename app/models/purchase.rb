@@ -3384,17 +3384,40 @@ class Purchase < ApplicationRecord
       customizable_price? ? perceived_price_cents : nil
     end
 
+    # Calculates how much to charge for this specific installment payment.
+    # This is called by RecurringChargeWorker when processing each installment.
+    #
+    # The critical change here is using frozen_installment_config instead of
+    # looking up the current product configuration. This ensures customers
+    # are billed according to their original agreement.
+    #
+    # Example:
+    # - Customer agreed to $147 in 3 installments: [$49, $49, $49]
+    # - This is their 2nd payment (nth_installment = 1, zero-indexed)
+    # - We use frozen_installment_config which has number_of_installments=3
+    # - Even if seller changed product to 2 installments, we still return $49
+    #
     def calculate_installment_payment_price_cents(total_price_cents)
+      # Only for installment purchases
       return unless is_installment_payment
 
+      # Figure out which installment payment this is (0 for first, 1 for second, etc.)
+      # We count successful purchases because failed charges shouldn't advance the counter
       nth_installment = subscription&.purchases&.successful&.count || 0
 
-      # Use frozen config instead of live plan to ensure amounts don't change
-      # when seller modifies product installment configuration
+      # Get the frozen snapshot of what the customer originally agreed to.
+      # THIS IS THE KEY FIX: We use frozen_installment_config (from the snapshot)
+      # instead of fetch_installment_plan (which would use current product config).
       config = frozen_installment_config
       return unless config
 
+      # Calculate all the installment amounts based on the original agreement
+      # Example: $147 / 3 = [49, 49, 49] (with rounding handled in first payment)
       installment_payments = config.calculate_installment_payments(total_price_cents)
+
+      # Return the amount for this specific installment
+      # Use .last as a safety fallback if somehow nth_installment is out of bounds
+      # (shouldn't happen in practice, but better safe than crashing)
       installment_payments[nth_installment] || installment_payments.last
     end
 
@@ -3831,28 +3854,51 @@ class Purchase < ApplicationRecord
       installment_plan || subscription&.last_payment_option&.installment_plan
     end
 
-    # Returns a frozen snapshot of the installment plan configuration
-    # that was in effect when the subscription was created.
+    # Returns the installment plan configuration that was active when the
+    # customer originally subscribed (not the current product configuration).
     #
-    # This ensures that billing amounts remain consistent even if the seller
-    # changes the product's installment plan configuration after the purchase.
+    # This method is the key to fixing the retroactive billing issue.
+    # Instead of looking at the product's current installment plan settings,
+    # we look at the snapshot that was saved when the customer subscribed.
     #
-    # @return [FrozenInstallmentConfig, nil] Frozen config or nil if not an installment purchase
+    # Why this matters:
+    # - Customer subscribes to $147 product with 3 installments
+    # - Payment option saves number_of_installments=3 as a snapshot
+    # - Seller changes product to 2 installments (product config now says 2)
+    # - This method returns the snapshot (still 3), not the current config (2)
+    # - Customer continues to be billed for 3 installments as originally agreed
+    #
+    # @return [FrozenInstallmentConfig, nil] The original agreement, or nil if not an installment purchase
     def frozen_installment_config
+      # Only applies to installment plan purchases
       return nil unless is_installment_payment
+
+      # Can't determine config without a payment option
       return nil unless subscription&.last_payment_option
 
       payment_option = subscription.last_payment_option
 
-      # Return snapshot data if available (records created after migration)
+      # Check if this payment option has the snapshot data.
+      # After our migration, all installment payment options will have
+      # number_of_installments populated. Before the migration, this field
+      # will be nil and we'll fall back to the live plan.
       if payment_option.number_of_installments.present?
+        # Use the snapshot! This is the configuration the customer agreed to.
+        # Even if the seller changes the product's installment plan,
+        # these values will never change.
         FrozenInstallmentConfig.new(
           number_of_installments: payment_option.number_of_installments,
           recurrence: payment_option.recurrence
         )
       else
-        # Fallback for records created before migration
-        # This maintains backwards compatibility during transition period
+        # This is the fallback for old data that existed before we added
+        # the snapshot columns. For these purchases, we have to use the
+        # current product configuration (the old buggy behavior).
+        #
+        # This branch will become less and less used over time as:
+        # 1. The migration backfills existing records
+        # 2. All new subscriptions get snapshots automatically
+        # 3. Old installment plans complete and are no longer charged
         plan = fetch_installment_plan
         if plan
           FrozenInstallmentConfig.new(
