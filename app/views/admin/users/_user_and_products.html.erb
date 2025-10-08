@@ -13,11 +13,11 @@
   <input type="radio" name="user-tabs" id="products-tab-radio" <%= "checked" if show_products_tab %> style="display: none;">
 
   <!-- Tab buttons -->
-  <div role="tablist" class="tab-container grid grid-auto-cols-fr gap-3 sm:grid-flow-col" aria-label="Profile Tabs">
-    <label for="profile-tab-radio" role="tab" class="cursor-pointer button select-button">
+  <div role="tablist" class="tab-buttons" aria-label="Profile Tabs">
+    <label for="profile-tab-radio" role="tab" style="cursor: pointer;">
       Profile
     </label>
-    <label for="products-tab-radio" role="tab" class="cursor-pointer button select-button">
+    <label for="products-tab-radio" role="tab" style="cursor: pointer;">
       Products
     </label>
   </div>
@@ -68,26 +68,26 @@
   }
 
   /* Active tab styling */
-  .tab-container label {
+  .tab-buttons label {
     opacity: 0.7;
     transition: opacity 0.2s;
   }
 
-  #profile-tab-radio:checked ~ .tab-container label[for="profile-tab-radio"],
-  #products-tab-radio:checked ~ .tab-container label[for="products-tab-radio"] {
+  #profile-tab-radio:checked ~ .tab-buttons label[for="profile-tab-radio"],
+  #products-tab-radio:checked ~ .tab-buttons label[for="products-tab-radio"] {
     opacity: 1;
     font-weight: bold;
     background: white;
   }
 
   @media (prefers-color-scheme: dark) {
-    .tab-container label {
+    .tab-buttons label {
       color: rgba(255, 255, 255, 0.7);
       font-weight: bold;
     }
 
-    #profile-tab-radio:checked ~ .tab-container label[for="profile-tab-radio"],
-    #products-tab-radio:checked ~ .tab-container label[for="products-tab-radio"] {
+    #profile-tab-radio:checked ~ .tab-buttons label[for="profile-tab-radio"],
+    #products-tab-radio:checked ~ .tab-buttons label[for="products-tab-radio"] {
       background: transparent;
       color: white;
       font-weight: bold;
