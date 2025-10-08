@@ -88,7 +88,7 @@ export const ProductTab = () => {
             {showAiNotification ? (
               <div
                 role="status"
-                className="grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
+                className="!border-pink bg-pink/20 grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg p-6"
               >
                 <span className="self-center text-lg">
                   <Icon name="sparkle" />

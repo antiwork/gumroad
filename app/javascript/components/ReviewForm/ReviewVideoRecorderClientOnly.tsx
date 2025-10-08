@@ -57,7 +57,7 @@ const RecordingTimer = () => {
   const pad = (num: number) => num.toString().padStart(2, "0");
 
   return (
-    <div className="absolute left-2 top-2 rounded-sm bg-red px-2 py-1 font-mono text-xs text-white">
+    <div className="bg-red absolute top-2 left-2 rounded-sm px-2 py-1 font-mono text-xs text-white">
       {pad(minutes)}:{pad(seconds)}
     </div>
   );
@@ -74,7 +74,7 @@ const StartRecordingCountdownButton = ({ onClick, disabled }: { onClick: () => v
     disabled={disabled}
   >
     <div className="flex h-full w-full items-center justify-center rounded-full border-2 border-white p-[2px]">
-      <div className="h-full w-full rounded-full bg-red" />
+      <div className="bg-red h-full w-full rounded-full" />
     </div>
   </button>
 );
@@ -88,14 +88,14 @@ const StopRecordingButton = ({ onClick, disabled }: { onClick: () => void; disab
     disabled={disabled}
   >
     <div className="flex h-full w-full items-center justify-center rounded-full border-2 border-white p-[6px]">
-      <div className="h-full w-full rounded-xs bg-red" />
+      <div className="bg-red h-full w-full rounded-xs" />
     </div>
   </button>
 );
 
 const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className={cx("absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-sm bg-black", {
+    className={cx("absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-sm bg-black", {
       [disabledButtonClassNames]: disabled,
     })}
     onClick={onClick}
@@ -113,7 +113,7 @@ const LoadingOverlay = () => (
 
 const ErrorOverlay = ({ message }: { message: string }) => (
   <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-    <p className="text-center text-red">{message}</p>
+    <p className="text-red text-center">{message}</p>
   </div>
 );
 

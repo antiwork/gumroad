@@ -109,7 +109,7 @@ const PostCard = ({
           {showSnippet ? (
             <div className="relative flex-1" ref={snippetContainerRef}>
               <p
-                className="text-md inset-0 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
+                className="text-md text-dark-gray inset-0 flex-1 overflow-hidden text-ellipsis opacity-90"
                 style={{
                   position: clamp === undefined ? "absolute" : "relative",
                   display: "-webkit-box",
@@ -124,7 +124,7 @@ const PostCard = ({
           ) : (
             <div className="flex-1" />
           )}
-          <p className="text-md flex-none text-dark-gray">{formatPostDate(post.published_at, "en-US")}</p>
+          <p className="text-md text-dark-gray flex-none">{formatPostDate(post.published_at, "en-US")}</p>
           {post.tags.length > 0 && (
             <div className="flex flex-none flex-row flex-wrap">
               {post.tags.map((tag) => (
@@ -140,12 +140,12 @@ const PostCard = ({
 
 const CompactPostItem = ({ post }: { post: Post }) => (
   <li className="border-gray-300 py-4 first:pt-0">
-    <a href={post.url} className="hover:text-pink-600 group flex items-end justify-between text-black no-underline">
+    <a href={post.url} className="group flex items-end justify-between text-black no-underline hover:text-pink-600">
       <div className="override grid grid-cols-1 gap-1">
         <h4 className="mb-0.5 text-2xl font-normal">{post.subject}</h4>
-        <p className="text-gray-500 pb-0.5 text-base">{formatPostDate(post.published_at, "en-US")}</p>
+        <p className="pb-0.5 text-base text-gray-500">{formatPostDate(post.published_at, "en-US")}</p>
       </div>
-      <div className="border-gray-400 ml-3 mr-1 flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-md border p-2 transition-all duration-200 ease-in-out group-hover:-translate-x-px group-hover:-translate-y-px group-hover:shadow-[2px_2px_0_0_#000]">
+      <div className="mr-1 ml-3 flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-md border border-gray-400 p-2 transition-all duration-200 ease-in-out group-hover:-translate-x-px group-hover:-translate-y-px group-hover:shadow-[2px_2px_0_0_#000]">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
@@ -179,7 +179,7 @@ const PostsGrid = ({ posts }: { posts: Post[] }) => (
         ))}
       </div>
     ) : (
-      <p className="text-gray-600 col-span-full py-10 text-center">No posts found.</p>
+      <p className="col-span-full py-10 text-center text-gray-600">No posts found.</p>
     )}
   </section>
 );
@@ -271,7 +271,7 @@ const IndexPage = ({ posts = [] }: IndexPageProps) => {
               {featured_post ? (
                 <PostCard post={featured_post} title_size_class="text-2xl md:text-4xl" usePlaceholder />
               ) : (
-                <p className="text-gray-600 border-gray-300 flex min-h-[300px] items-center justify-center rounded-sm border-2 border-dashed p-8 text-center">
+                <p className="flex min-h-[300px] items-center justify-center rounded-sm border-2 border-dashed border-gray-300 p-8 text-center text-gray-600">
                   No featured post available.
                 </p>
               )}

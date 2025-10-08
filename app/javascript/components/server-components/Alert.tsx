@@ -43,7 +43,7 @@ const Alert = ({ initial }: { initial: AlertPayload | null }) => {
     <div
       role="alert"
       className={cx(
-        "bg-filled fixed left-1/2 top-4 w-max max-w-[calc(100vw-2rem)] px-4 py-2 md:max-w-sm",
+        "bg-filled fixed top-4 left-1/2 w-max max-w-[calc(100vw-2rem)] px-4 py-2 md:max-w-sm",
         alert?.status,
         isVisible ? "visible" : "invisible",
       )}

@@ -26,14 +26,14 @@ export const Separator = ({
     {showDividerLine ? (
       <div
         className={cx("grow border-t", {
-          "border-gray-200 dark:border-pink": type === "unread",
+          "dark:border-pink border-gray-200": type === "unread",
           "border-black/10 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]": type === "date",
         })}
       ></div>
     ) : null}
     <span
       className={cx("shrink rounded-full border px-3 py-1.5 text-xs font-bold", {
-        "border-gray-200 bg-black text-white dark:border-black dark:bg-pink dark:text-black": type === "unread",
+        "dark:bg-pink border-gray-200 bg-black text-white dark:border-black dark:text-black": type === "unread",
         "border-black/10 bg-white text-black dark:border-[rgb(var(--parent-color)/var(--border-alpha))] dark:bg-black dark:text-(--primary)":
           type === "date",
       })}
@@ -43,7 +43,7 @@ export const Separator = ({
     {showDividerLine ? (
       <div
         className={cx("grow border-t", {
-          "border-gray-200 dark:border-pink": type === "unread",
+          "dark:border-pink border-gray-200": type === "unread",
           "border-black/10 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]": type === "date",
         })}
       ></div>

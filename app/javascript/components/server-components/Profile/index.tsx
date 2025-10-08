@@ -63,7 +63,7 @@ const PublicProfile = (props: Props) => {
   return (
     <>
       {props.bio || props.tabs.length > 1 ? (
-        <header className="grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
+        <header className="border-border grid grid-cols-1 gap-4 border-b px-4 py-8">
           {props.bio ? (
             <h1 className="whitespace-pre-line">
               <AutoLink text={props.bio} />

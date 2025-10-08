@@ -127,7 +127,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
   const nestedComments = React.useMemo(() => nestComments(data.comments), [data.comments]);
 
   return (
-    <section className="comments comments-section override grid gap-8 border-b border-border p-4 lg:py-12">
+    <section className="comments comments-section override border-border grid gap-8 border-b p-4 lg:py-12">
       <h2>
         {data.count} {data.count === 1 ? "comment" : "comments"}
       </h2>

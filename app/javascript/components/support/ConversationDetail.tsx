@@ -22,7 +22,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
   return (
     <div role="listitem" className="items-stretch! gap-0! p-0!">
       <div
-        className="content peer cursor-pointer p-4 hover:bg-(--active-bg) peer-hover:bg-(--active-bg)"
+        className="content peer cursor-pointer p-4 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
         <img className={cx("user-avatar w-9!", image === pinkIcon ? "border-none!" : "")} src={image} />
@@ -32,12 +32,12 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         <div className={isExpanded ? "hidden" : "ml-2 line-clamp-1 min-w-0 flex-1"}>
           <MessageContent message={message} />
         </div>
-        <div className="whitespace-nowrap text-right">
+        <div className="text-right whitespace-nowrap">
           {new Date(message.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </div>
       </div>
       <div
-        className="actions peer cursor-pointer p-4 pl-0 hover:bg-(--active-bg) peer-hover:bg-(--active-bg)"
+        className="actions peer cursor-pointer p-4 pl-0 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
         <Button outline aria-expanded={isExpanded} aria-label={isExpanded ? "Collapse message" : "Expand message"}>
@@ -111,7 +111,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
 
   return (
     <div>
-      <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
+      <header className="border-border flex flex-col gap-4 border-b p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
           <Icon name="arrow-left" /> Go back to Support tickets
         </a>

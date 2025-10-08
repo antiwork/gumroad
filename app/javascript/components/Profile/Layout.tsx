@@ -25,7 +25,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
 
   return (
     <div className={cx("profile", className)}>
-      <header className="relative z-20 bg-background">
+      <header className="bg-background relative z-20">
         <section>
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (

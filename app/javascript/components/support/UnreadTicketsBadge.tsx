@@ -8,7 +8,7 @@ export const UnreadTicketsBadge = ({ className }: { className?: string }) => {
   return (
     <span
       className={cx(
-        "inline-flex h-5 w-5 items-center justify-center rounded-full border border-black bg-pink text-xs text-black",
+        "bg-pink inline-flex h-5 w-5 items-center justify-center rounded-full border border-black text-xs text-black",
         className,
       )}
     >

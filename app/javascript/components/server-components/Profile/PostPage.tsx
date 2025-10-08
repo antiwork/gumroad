@@ -69,11 +69,11 @@ const PostPage = ({
 
   return (
     <Layout className="reader" creatorProfile={creator_profile}>
-      <header className="override grid gap-2 border-b border-border px-4 py-8">
+      <header className="override border-border grid gap-2 border-b px-4 py-8">
         <h1>{subject}</h1>
         <time>{publishedAtFormatted}</time>
       </header>
-      <article className="override grid gap-8 border-b border-border p-4 pt-8 lg:pb-8 lg:pt-12">
+      <article className="override border-border grid gap-8 border-b p-4 pt-8 lg:pt-12 lg:pb-8">
         {pageLoaded ? null : <LoadingSpinner width="2em" />}
         <EditorContent className="rich-text" editor={editor} />
 
@@ -120,7 +120,7 @@ const PostPage = ({
             <a
               key={post.slug}
               href={Routes.custom_domain_view_post_path(post.slug, { purchase_id })}
-              className="flex justify-between border-b border-border px-4 py-8 no-underline lg:py-12"
+              className="border-border flex justify-between border-b px-4 py-8 no-underline lg:py-12"
             >
               <div>
                 <h2>{post.name}</h2>
@@ -132,7 +132,7 @@ const PostPage = ({
           {has_posts_on_profile ? (
             <a
               href={Routes.root_path()}
-              className="flex justify-between border-b border-border px-4 py-8 no-underline lg:py-12"
+              className="border-border flex justify-between border-b px-4 py-8 no-underline lg:py-12"
             >
               <h2>See all posts from {creator_profile.name}</h2>
               <Icon name="arrow-diagonal-up-right" className="text-lg" />

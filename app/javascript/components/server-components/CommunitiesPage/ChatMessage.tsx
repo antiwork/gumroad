@@ -126,7 +126,7 @@ export const ChatMessage = ({
           <div className="flex items-center gap-2">
             <span className="font-bold">{message.user.name}</span>
             {message.user.is_seller ? (
-              <span className="py-0.25 rounded-sm border px-1 text-[10px] font-bold uppercase tracking-wider dark:text-gray">
+              <span className="dark:text-gray rounded-sm border px-1 py-0.25 text-[10px] font-bold tracking-wider uppercase">
                 Creator
               </span>
             ) : null}
@@ -154,7 +154,7 @@ export const ChatMessage = ({
             onSave={handleSaveEdit}
           />
         ) : (
-          <div className="whitespace-pre-wrap text-sm" aria-label="Message content">
+          <div className="text-sm whitespace-pre-wrap" aria-label="Message content">
             {message.content}
           </div>
         )}
@@ -168,7 +168,7 @@ export const ChatMessage = ({
               <>
                 <WithTooltip position="top" tip="Edit">
                   <button
-                    className="border-gray-200 flex items-center rounded-md border-r px-2 py-1.5 text-xs hover:bg-gray dark:hover:bg-dark-gray"
+                    className="hover:bg-gray dark:hover:bg-dark-gray flex items-center rounded-md border-r border-gray-200 px-2 py-1.5 text-xs"
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
@@ -180,7 +180,7 @@ export const ChatMessage = ({
             ) : null}
             <WithTooltip position="top" tip="Delete">
               <button
-                className="flex items-center rounded-md px-2 py-1.5 text-xs hover:bg-gray hover:text-red dark:hover:bg-dark-gray"
+                className="hover:bg-gray hover:text-red dark:hover:bg-dark-gray flex items-center rounded-md px-2 py-1.5 text-xs"
                 onClick={() => setDeleteConfirmation({ deleting: false })}
                 aria-label="Delete message"
               >
@@ -292,7 +292,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
   };
 
   return (
-    <div className="relative overflow-hidden rounded-md border focus-within:outline-solid focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="relative overflow-hidden rounded-md border focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] focus-within:outline-solid dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
       <textarea
         ref={textareaRef}
         placeholder="Edit message"
@@ -310,7 +310,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
         onScroll={determineIfMoreTextIndicatorShouldBeShown}
       />
       <div
-        className={cx("absolute bottom-0 left-0 right-0 flex justify-end gap-2 bg-white p-2 dark:bg-black", {
+        className={cx("absolute right-0 bottom-0 left-0 flex justify-end gap-2 bg-white p-2 dark:bg-black", {
           "border-t": showMoreTextIndicator,
         })}
         onClick={(e) => {

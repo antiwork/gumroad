@@ -79,7 +79,7 @@ const NotifyAboutProductUpdatesAlert = () => {
 
   return (
     <div
-      className={cx("fixed right-1/2 top-4", isVisible ? "visible" : "invisible")}
+      className={cx("fixed top-4 right-1/2", isVisible ? "visible" : "invisible")}
       style={{
         transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
         transition: "all 0.3s ease-out 0.5s",

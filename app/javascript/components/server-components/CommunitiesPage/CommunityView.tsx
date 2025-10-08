@@ -597,7 +597,7 @@ export const CommunityView = () => {
             <div
               className={cx("flex shrink-0 flex-col overflow-hidden", {
                 "relative w-72 border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]": isAboveBreakpoint,
-                "absolute inset-0 top-12 z-30 bg-gray dark:bg-dark-gray": !isAboveBreakpoint && sidebarOpen,
+                "bg-gray dark:bg-dark-gray absolute inset-0 top-12 z-30": !isAboveBreakpoint && sidebarOpen,
                 "w-0 overflow-hidden": !isAboveBreakpoint && !sidebarOpen,
               })}
               aria-label="Sidebar"
@@ -636,12 +636,7 @@ export const CommunityView = () => {
                             onClick={() => switchSeller(seller.id)}
                           >
                             <div className="flex items-center gap-1">
-                              <UserAvatar
-                                src={seller.avatar_url}
-                                alt={seller.name}
-                                className="shrink-0"
-                                size="small"
-                              />
+                              <UserAvatar src={seller.avatar_url} alt={seller.name} className="shrink-0" size="small" />
                               <span className="truncate">
                                 {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
                               </span>
