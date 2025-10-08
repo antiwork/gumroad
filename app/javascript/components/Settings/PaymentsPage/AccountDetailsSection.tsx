@@ -1,5 +1,5 @@
 import cx from "classnames";
-import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
+import { CountryCode, parsePhoneNumberWithError } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -45,7 +45,7 @@ const AccountDetailsSection = ({
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null) => {
     try {
       const countryCode: CountryCode = cast(country_code);
-      return parsePhoneNumber(phoneNumber, countryCode).format("E.164");
+      return parsePhoneNumberWithError(phoneNumber, countryCode).format("E.164");
     } catch {
       return phoneNumber;
     }
