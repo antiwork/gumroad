@@ -1,6 +1,6 @@
 import { StripeCardElement } from "@stripe/stripe-js";
 import cx from "classnames";
-import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
+import { CountryCode, parsePhoneNumberWithError } from "libphonenumber-js";
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
@@ -296,7 +296,7 @@ const PaymentsPage = (props: Props) => {
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = cast(country_code);
     try {
-      return input && parsePhoneNumber(input, countryCode).isValid();
+      return input && parsePhoneNumberWithError(input, countryCode).isValid();
     } catch {
       return false;
     }
