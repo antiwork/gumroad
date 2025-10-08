@@ -70,7 +70,7 @@ const IncomingCollaboratorDetails = ({
   disabled: boolean;
 }) =>
   ReactDOM.createPortal(
-    <aside className="!flex !flex-col">
+    <aside className="flex! flex-col!">
       <header>
         <h2>{selected.seller_name}</h2>
         <button className="close" aria-label="Close" onClick={onClose} />
@@ -134,7 +134,7 @@ const IncomingCollaboratorsTableRow = ({
     <td data-label="Name">
       <div className="flex items-center gap-4">
         <img
-          className="user-avatar !w-8"
+          className="user-avatar w-8!"
           src={incomingCollaborator.seller_avatar_url}
           alt={`Avatar of ${incomingCollaborator.seller_name || "Collaborator"}`}
         />

@@ -149,7 +149,7 @@ export const PublishedTab = () => {
                               <tbody>
                                 {installment.clicked_urls.map(({ url, count }) => (
                                   <tr key={`${installment.external_id}-${url}`}>
-                                    <th scope="row" className="max-w-[calc(20rem*0.7)] whitespace-break-spaces">
+                                    <th scope="row" className="max-w-56 whitespace-break-spaces">
                                       {url}
                                     </th>
                                     <td>{formatStatNumber({ value: count })}</td>
@@ -179,7 +179,7 @@ export const PublishedTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <aside className="!mt-0">
+              <aside className="mt-0!">
                 <header>
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />

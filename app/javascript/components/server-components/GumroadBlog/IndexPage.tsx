@@ -24,7 +24,7 @@ const Tag = ({ name, count, showCount = false, active = false, size = "sm" }: Ta
     base: "text-base",
   };
 
-  const commonClasses = `inline-block rounded px-2 py-2 leading-none mr-2 mb-2`;
+  const commonClasses = `inline-block rounded-sm px-2 py-2 leading-none mr-2 mb-2`;
   const activeStateClass = active ? "bg-black text-white" : "bg-white text-black border border-black";
 
   return (
@@ -99,12 +99,12 @@ const PostCard = ({
         )}
       >
         {featureImageUrl ? (
-          <figure className="aspect-[1800/1080] overflow-hidden border-b border-black">
+          <figure className="aspect-1800/1080 overflow-hidden border-b border-black">
             <img src={featureImageUrl} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
           </figure>
         ) : null}
 
-        <div className="flex h-full flex-grow flex-col space-y-2 p-6">
+        <div className="flex h-full grow flex-col space-y-2 p-6">
           <h3 className={cx("flex-none leading-tight", title_size_class)}>{post.subject}</h3>
           {showSnippet ? (
             <div className="relative flex-1" ref={snippetContainerRef}>
@@ -145,7 +145,7 @@ const CompactPostItem = ({ post }: { post: Post }) => (
         <h4 className="mb-0.5 text-2xl font-normal">{post.subject}</h4>
         <p className="text-gray-500 pb-0.5 text-base">{formatPostDate(post.published_at, "en-US")}</p>
       </div>
-      <div className="border-gray-400 ml-3 mr-1 flex h-10 w-10 flex-shrink-0 items-center justify-center self-end rounded-md border p-2 transition-all duration-200 ease-in-out group-hover:-translate-x-px group-hover:-translate-y-px group-hover:shadow-[2px_2px_0_0_#000]">
+      <div className="border-gray-400 ml-3 mr-1 flex h-10 w-10 shrink-0 items-center justify-center self-end rounded-md border p-2 transition-all duration-200 ease-in-out group-hover:-translate-x-px group-hover:-translate-y-px group-hover:shadow-[2px_2px_0_0_#000]">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
@@ -158,7 +158,7 @@ const CompactPostSection = ({ product_updates }: { product_updates: Post[] }) =>
   <div className="mb-8 hidden w-full lg:mb-0 lg:block lg:w-[calc(33%-0.9375rem)]">
     <div className="flex h-full flex-col">
       {product_updates.length > 0 ? (
-        <ul className="flex-grow divide-y overflow-y-auto">
+        <ul className="grow divide-y overflow-y-auto">
           {product_updates.map((post) => (
             <CompactPostItem key={post.url} post={post} />
           ))}
@@ -266,12 +266,12 @@ const IndexPage = ({ posts = [] }: IndexPageProps) => {
         />
 
         {activeTab ? null : (
-          <div className="mb-8 flex flex-row items-start lg:gap-[1.875rem]">
+          <div className="mb-8 flex flex-row items-start lg:gap-7.5">
             <section className="mb-0 w-full lg:mb-0 lg:w-[calc(67%-0.9375rem)]">
               {featured_post ? (
                 <PostCard post={featured_post} title_size_class="text-2xl md:text-4xl" usePlaceholder />
               ) : (
-                <p className="text-gray-600 border-gray-300 flex min-h-[300px] items-center justify-center rounded border-2 border-dashed p-8 text-center">
+                <p className="text-gray-600 border-gray-300 flex min-h-[300px] items-center justify-center rounded-sm border-2 border-dashed p-8 text-center">
                   No featured post available.
                 </p>
               )}

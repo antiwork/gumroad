@@ -45,7 +45,7 @@ export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thu
   const { loading, showPlayer, onPlay, playerId } = usePlayer(videoId, uid);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded bg-black">
+    <div className="relative aspect-video w-full overflow-hidden rounded-sm bg-black">
       <div id={playerId} className={cx({ hidden: !showPlayer })}></div>
       <figure className={cx("relative aspect-video w-full", { hidden: showPlayer })}>
         {thumbnail ? (

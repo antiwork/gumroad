@@ -185,7 +185,7 @@ const GettingStartedItem = ({
 
   if (completed) {
     return (
-      <div className={cx(commonClasses, "button filled !cursor-default")} data-status="completed">
+      <div className={cx(commonClasses, "button filled cursor-default!")} data-status="completed">
         {content}
       </div>
     );

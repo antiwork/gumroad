@@ -128,7 +128,7 @@ export const AudioPlayer = (props: Props) => {
               (audio, ev: React.ChangeEvent<HTMLInputElement>) => (audio.currentTime = parseInt(ev.target.value, 10)),
             )}
             style={{ "--progress": `${(progress * 100) / duration}%` }}
-            className="flex-grow"
+            className="grow"
           />
           <time aria-label="Remaining" className="text-[0.875rem] tabular-nums leading-[1.3]">
             {formattedTime(duration - progress)}

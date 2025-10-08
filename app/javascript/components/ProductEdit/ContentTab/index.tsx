@@ -488,7 +488,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       <div className="product-content h-screen sm:h-full md:flex md:flex-col">
         {editor ? (
           <RichTextEditorToolbar
-            className="border-b border-border px-8"
+            className="border-border border-b px-8"
             editor={editor}
             productId={id}
             custom={
@@ -743,7 +743,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             }
           />
         ) : null}
-        <div className="has-sidebar p-4 md:!h-auto md:flex-1 md:p-8">
+        <div className="has-sidebar p-4 md:h-auto! md:flex-1 md:p-8">
           {!isDesktop && !showPageList ? null : (
             <div className="paragraphs">
               {showPageList ? (

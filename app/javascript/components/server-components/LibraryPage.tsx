@@ -471,7 +471,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                       {(showingAllCreators ? creators : creators.slice(0, 5)).map((creator) => (
                         <label key={creator.id}>
                           {creator.name}
-                          <span className="text-muted flex-shrink-0">{`(${creator.count})`}</span>
+                          <span className="text-muted shrink-0">{`(${creator.count})`}</span>
                           <input
                             type="checkbox"
                             checked={state.search.creators.includes(creator.id)}

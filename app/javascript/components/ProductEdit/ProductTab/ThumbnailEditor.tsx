@@ -73,7 +73,7 @@ export const ThumbnailEditor = ({
   };
 
   return (
-    <section className="!p-4 md:!p-8">
+    <section className="p-4! md:p-8!">
       <div className="flex items-center justify-between">
         <h2>Thumbnail</h2>
         <a href="/help/article/60-adding-a-cover-image" target="_blank" rel="noreferrer">

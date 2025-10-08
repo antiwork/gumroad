@@ -64,7 +64,7 @@ export const ImageUploader = ({
         </div>
       ) : (
         <figure className="relative aspect-square">
-          <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded border border-border bg-background" />
+          <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded-sm border border-border bg-background" />
           <Button
             color="primary"
             small

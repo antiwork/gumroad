@@ -245,7 +245,7 @@ export const UtmLinkForm = () => {
       }
     >
       <form>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <p>Create UTM links to track where your traffic is coming from. </p>
             <p>Once set up, simply share the links to see which sources are driving more conversions and revenue.</p>

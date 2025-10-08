@@ -831,7 +831,7 @@ const Form = ({
         }
       />
       <form>
-        <section className="!p-8">
+        <section className="p-8!">
           <header>
             <div className="paragraphs">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>

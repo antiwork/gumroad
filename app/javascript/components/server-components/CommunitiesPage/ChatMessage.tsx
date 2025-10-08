@@ -118,7 +118,7 @@ export const ChatMessage = ({
       <UserAvatar
         src={message.user.avatar_url}
         alt={message.user.name}
-        className="flex-shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+        className="shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
         size="large"
       />
       <div className="relative flex w-full flex-col gap-0.5">
@@ -126,7 +126,7 @@ export const ChatMessage = ({
           <div className="flex items-center gap-2">
             <span className="font-bold">{message.user.name}</span>
             {message.user.is_seller ? (
-              <span className="py-0.25 rounded border px-1 text-[10px] font-bold uppercase tracking-wider dark:text-gray">
+              <span className="py-0.25 rounded-sm border px-1 text-[10px] font-bold uppercase tracking-wider dark:text-gray">
                 Creator
               </span>
             ) : null}
@@ -292,11 +292,11 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
   };
 
   return (
-    <div className="relative overflow-hidden rounded-md border focus-within:outline focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="relative overflow-hidden rounded-md border focus-within:outline-solid focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
       <textarea
         ref={textareaRef}
         placeholder="Edit message"
-        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-none"
+        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden"
         value={editedContent}
         onChange={(e) => {
           setEditedContent(e.target.value);
