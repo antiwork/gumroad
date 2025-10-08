@@ -296,7 +296,17 @@ const PaymentsPage = (props: Props) => {
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = cast(country_code);
     try {
-      return input && parsePhoneNumber(input, countryCode).isValid();
+      if (!input) return false;
+
+      const parsedNumber = parsePhoneNumber(input, countryCode);
+
+      // Handle not-yet-supported Canadian overlay (e.g., +1 942)
+      if (/^\+1942\d{7,10}$/u.test(parsedNumber.number) && countryCode === "CA") {
+        // +1 942 is a new Toronto overlay (effective April 2025)
+        return true;
+      }
+
+      return parsedNumber.isValid();
     } catch {
       return false;
     }
