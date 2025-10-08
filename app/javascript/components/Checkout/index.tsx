@@ -1,11 +1,10 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
 import { getRecommendedProducts } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
-import { formatPriceCentsWithoutCurrencySymbol, formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
+import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
@@ -15,8 +14,8 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
+import { TipSelector } from "$app/components/Checkout/TipSelector";
 import { Popover } from "$app/components/Popover";
-import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
 import {
   applySelection,
@@ -33,16 +32,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, findCartItem } from "./cartState";
-import {
-  computeTip,
-  computeTipForPrice,
-  getErrors,
-  getTotalPrice,
-  getTotalPriceFromProducts,
-  isProcessing,
-  isTippingEnabled,
-  useState,
-} from "./payment";
+import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, isTippingEnabled, useState } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
 
@@ -68,87 +58,6 @@ const nameOfSalesTaxForCountry = (countryCode: string) => {
     default:
       return "VAT";
   }
-};
-
-const TipSelector = () => {
-  const [state, dispatch] = useState();
-  const errors = getErrors(state);
-  const showPercentageOptions = getTotalPriceFromProducts(state) > 0;
-
-  React.useEffect(() => {
-    if (!showPercentageOptions && state.tip.type === "percentage")
-      dispatch({ type: "set-value", tip: { type: "fixed", amount: null } });
-  }, [showPercentageOptions]);
-
-  const defaultOther = state.surcharges.type === "loaded" ? state.surcharges.result.subtotal * 0.3 : 5;
-
-  return (
-    <div className="bg-filled rounded border border-border p-4 text-foreground">
-      <div className="paragraphs">
-        <h4>Support with a tip</h4>
-        {showPercentageOptions ? (
-          <div
-            role="radiogroup"
-            className="radio-buttons"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(5rem, 100%), 1fr))" }}
-          >
-            {state.tipOptions.map((tip) => (
-              <Button
-                key={tip}
-                role="radio"
-                aria-checked={state.tip.type === "percentage" && tip === state.tip.percentage}
-                onClick={() => {
-                  dispatch({
-                    type: "set-value",
-                    tip: {
-                      type: "percentage",
-                      percentage: tip,
-                    },
-                  });
-                }}
-                disabled={isProcessing(state)}
-                style={{ justifyContent: "center" }}
-              >
-                {tip}%
-              </Button>
-            ))}
-            <Button
-              role="radio"
-              aria-checked={state.tip.type === "fixed"}
-              onClick={() => {
-                dispatch({
-                  type: "set-value",
-                  tip: {
-                    type: "fixed",
-                    amount: state.tip.type === "fixed" ? state.tip.amount : defaultOther,
-                  },
-                });
-              }}
-              disabled={isProcessing(state)}
-              style={{ justifyContent: "center" }}
-            >
-              Other
-            </Button>
-          </div>
-        ) : null}
-        {state.tip.type === "fixed" ? (
-          <fieldset className={cx({ danger: errors.has("tip") })}>
-            <PriceInput
-              hasError={errors.has("tip")}
-              ariaLabel="Tip"
-              currencyCode="usd"
-              cents={state.tip.amount}
-              onChange={(newAmount) => {
-                dispatch({ type: "set-value", tip: { type: "fixed", amount: newAmount } });
-              }}
-              placeholder={formatPriceCentsWithoutCurrencySymbol("usd", defaultOther)}
-              disabled={isProcessing(state)}
-            />
-          </fieldset>
-        ) : null}
-      </div>
-    </div>
-  );
 };
 
 export const Checkout = ({
