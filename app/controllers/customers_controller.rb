@@ -21,7 +21,7 @@ class CustomersController < Sellers::BaseController
     create_user_event("customers_view")
 
     render inertia: "Customers/index",
-           props: inertia_props(customers_presenter: @customers_presenter.customers_props)
+           props: { customers_presenter: @customers_presenter.customers_props }
   end
 
   def paged

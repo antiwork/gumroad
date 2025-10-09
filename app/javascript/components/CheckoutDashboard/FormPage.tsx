@@ -1,6 +1,5 @@
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { CustomField, updateCheckoutForm } from "$app/data/checkout_form";
 import { RecommendationType } from "$app/data/recommended_products";
@@ -9,22 +8,30 @@ import { assertDefined } from "$app/utils/assert";
 import { PLACEHOLDER_CARD_PRODUCT, PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Select } from "$app/components/Select";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 
 let lastKey = 0;
+
+export type FormPageProps = {
+  pages: Page[];
+  user: { display_offer_code_field: boolean; recommendation_type: RecommendationType; tipping_enabled: boolean };
+  cart_item: CartItem | null;
+  card_product: CardProduct | null;
+  custom_fields: CustomField[];
+  products: SimpleProduct[];
+};
 
 const FormPage = ({
   pages,
@@ -33,15 +40,9 @@ const FormPage = ({
   card_product,
   custom_fields,
   products,
-}: {
-  pages: Page[];
-  user: { display_offer_code_field: boolean; recommendation_type: RecommendationType; tipping_enabled: boolean };
-  cart_item: CartItem | null;
-  card_product: CardProduct | null;
-  custom_fields: CustomField[];
-  products: SimpleProduct[];
-}) => {
+}: FormPageProps) => {
   const loggedInUser = useLoggedInUser();
+  const { showAlert } = useClientAlert();
 
   const cartItem = cart_item ?? PLACEHOLDER_CART_ITEM;
   const cardProduct = card_product ?? PLACEHOLDER_CARD_PRODUCT;
@@ -366,4 +367,4 @@ const FormPage = ({
   );
 };
 
-export default register({ component: FormPage, propParser: createCast() });
+export default FormPage;

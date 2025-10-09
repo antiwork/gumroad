@@ -155,7 +155,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         fill_in "Quantity", with: "10"
 
         check "Limit validity period"
-        fill_in "Valid from", with: "11-02-2022\t11:00PM"
+        fill_in_datetime "Valid from", with: "2022-11-02T23:00"
 
         check "Set a minimum quantity"
         fill_in "Minimum quantity per product", with: "1"
@@ -237,10 +237,10 @@ describe("Checkout discounts page", type: :system, js: true) do
         fill_in "Fixed amount", with: "10"
 
         check "Limit validity period"
-        fill_in "Valid from", with: "11-02-2022\t11:00PM"
+        fill_in_datetime "Valid from", with: "2022-11-02T23:00"
 
         uncheck "No end date"
-        fill_in "Valid until", with: "12-02-2022\t11:00PM"
+        fill_in_datetime "Valid until", with: "2022-12-02T23:00"
 
         click_on "Add discount"
 
@@ -422,10 +422,10 @@ describe("Checkout discounts page", type: :system, js: true) do
 
           click_on "New discount"
           check "Limit validity period"
-          fill_in "Valid from", with: "12-02-2022\t11:00PM"
+          fill_in_datetime "Valid from", with: "2022-12-02T23:00"
 
           uncheck "No end date"
-          fill_in "Valid until", with: "11-02-2022\t11:00PM"
+          fill_in_datetime "Valid until", with: "2022-11-02T23:00"
 
           click_on "Add discount"
           expect(find_field("Valid until")["aria-invalid"]).to eq("true")
@@ -495,10 +495,10 @@ describe("Checkout discounts page", type: :system, js: true) do
 
       check "Set a minimum qualifying amount"
       fill_in "Minimum amount", with: "5"
-      fill_in "Valid from", with: "11-02-2022\t11:00PM"
+      fill_in_datetime "Valid from", with: "2022-11-02T23:00"
 
       uncheck "No end date"
-      fill_in "Valid until", with: "12-02-2022\t11:00PM"
+      fill_in_datetime "Valid until", with: "2022-12-02T23:00"
 
       click_on "Save changes"
 

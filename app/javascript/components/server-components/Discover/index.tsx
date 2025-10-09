@@ -202,7 +202,7 @@ const Discover = (props: Props) => {
       query={state.params.query}
       setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}
     >
-      <div className="grid !gap-16 px-4 py-16 lg:pe-16 lg:ps-16">
+      <div className="grid gap-16! px-4 py-16 lg:ps-16 lg:pe-16">
         {showRecommendedSections ? (
           <ProductsCarousel
             products={recommendedProducts}
@@ -272,7 +272,7 @@ const Discover = (props: Props) => {
                 <fieldset role="group">
                   {range(4, 0).map((number) => (
                     <label key={number}>
-                      <span className="rating">
+                      <span className="flex shrink-0 items-center gap-1">
                         <RatingStars rating={number} />
                         and up
                       </span>

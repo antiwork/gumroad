@@ -4,8 +4,8 @@ import { Discount } from "$app/parsers/checkout";
 import { CurrencyCode } from "$app/utils/currency";
 import { request, ResponseError } from "$app/utils/request";
 
+import { OfferCode, SortKey, Duration } from "$app/components/CheckoutDashboard/DiscountsPage";
 import { PaginationProps } from "$app/components/Pagination";
-import { OfferCode, SortKey, Duration } from "$app/components/server-components/CheckoutDashboard/DiscountsPage";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 type Uid = string;

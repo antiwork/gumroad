@@ -86,6 +86,7 @@ class UrlRedirectPresenter
             has_active_subscription: purchase.has_active_subscription?,
             subscription_id: purchase.subscription.external_id,
             is_subscription_ended: purchase.subscription.ended?,
+            is_installment_plan_completed: purchase.subscription.is_installment_plan? && purchase.subscription.charges_completed?,
             is_subscription_cancelled_or_failed: purchase.subscription.cancelled_or_failed?,
             is_alive_or_restartable: purchase.subscription.alive_or_restartable?,
             in_free_trial: purchase.subscription.in_free_trial?,
@@ -212,6 +213,7 @@ class UrlRedirectPresenter
                        nil,
         latest_media_location: media_locations_by_file[file.id].as_json,
         content_length: file.content_length,
+        isbn: file.isbn,
         read_url: file.readable? ? (
           file.is_a?(Link) ? url_redirect_read_url(url_redirect.token) : file.is_a?(ProductFile) ? url_redirect_read_for_product_file_path(url_redirect.token, file.external_id) : nil
         ) : nil,

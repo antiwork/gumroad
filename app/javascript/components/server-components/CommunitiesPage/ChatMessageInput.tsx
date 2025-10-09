@@ -42,7 +42,7 @@ export const ChatMessageInput = React.forwardRef<
   React.useEffect(adjustTextareaHeight, [draft?.content, adjustTextareaHeight]);
 
   return (
-    <div className="input !pr-2 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="input pr-2! dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
       <textarea
         ref={ref}
         className="resize-none"

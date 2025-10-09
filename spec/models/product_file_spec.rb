@@ -815,6 +815,91 @@ describe ProductFile do
     end
   end
 
+  describe "isbn" do
+    context "normalization" do
+      it "converts em and en dashes to ASCII dash" do
+        file = create(:pdf_product_file, isbn: "978–3—16−1484100")
+        expect(file.isbn).to eq("978-3-16-1484100")
+      end
+
+      it "converts whitespaces to ASCII dash" do
+        file = create(:pdf_product_file, isbn: "978 3 16 1484100")
+        expect(file.isbn).to eq("978-3-16-1484100")
+      end
+
+      it "upcases the string" do
+        file = create(:pdf_product_file, isbn: "978316148410x")
+        expect(file.isbn).to eq("978316148410X")
+      end
+
+      it "strips whitespace from the string" do
+        file = create(:pdf_product_file, isbn: "  978316148410X  ")
+        expect(file.isbn).to eq("978316148410X")
+      end
+
+      it "nullifies isbn if blank or only whitespace" do
+        file = create(:pdf_product_file, isbn: "   ")
+        expect(file.isbn).to be_nil
+      end
+    end
+
+    context "validation" do
+      context "when pdf" do
+        it "is valid with a valid isbn-13" do
+          product_file = build(:pdf_product_file, isbn: Faker::Code.isbn(base: 13))
+          expect(product_file).to be_valid
+        end
+
+        it "is valid with a valid isbn-10" do
+          product_file = build(:pdf_product_file, isbn: Faker::Code.isbn)
+          expect(product_file).to be_valid
+        end
+
+        it "is invalid with an invalid isbn" do
+          product_file = build(:pdf_product_file, isbn: "invalid-isbn")
+          expect(product_file).to be_invalid
+          expect(product_file.errors.full_messages).to include(a_string_including("is not a valid ISBN-10 or ISBN-13"))
+        end
+
+        it "is valid with a nil isbn" do
+          product_file = build(:pdf_product_file, isbn: nil)
+          expect(product_file).to be_valid
+        end
+      end
+
+      context "when epub" do
+        it "is valid with a valid isbn-13" do
+          product_file = build(:epub_product_file, isbn: Faker::Code.isbn(base: 13))
+          expect(product_file).to be_valid
+        end
+
+        it "is valid with a valid isbn-10" do
+          product_file = build(:epub_product_file, isbn: Faker::Code.isbn)
+          expect(product_file).to be_valid
+        end
+
+        it "is invalid with an invalid isbn" do
+          product_file = build(:epub_product_file, isbn: "invalid-isbn")
+          expect(product_file).to be_invalid
+          expect(product_file.errors.full_messages).to include(a_string_including("is not a valid ISBN-10 or ISBN-13"))
+        end
+
+        it "is valid with a nil isbn" do
+          product_file = build(:epub_product_file, isbn: nil)
+          expect(product_file).to be_valid
+        end
+      end
+
+      context "when unrelated file type" do
+        it "doesn't allow isbn" do
+          product_file = build(:streamable_video, isbn: "invalid-isbn")
+          expect(product_file).to be_invalid
+          expect(product_file.errors.full_messages).to include("Isbn must be blank")
+        end
+      end
+    end
+  end
+
   describe "scopes" do
     describe ".in_order" do
       it "returns files in ascending order of positions" do

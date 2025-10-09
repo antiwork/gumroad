@@ -62,6 +62,12 @@ module CapybaraHelpers
     find("body").click
   end
 
+  def fill_in_datetime(field, with:)
+    element = find_field(field)
+    element.click
+    element.execute_script("this.value = arguments[0]; this.dispatchEvent(new Event('blur', {bubbles: true}));", with)
+  end
+
   def accept_browser_dialog
     wait = Selenium::WebDriver::Wait.new(timeout: 30)
     wait.until do

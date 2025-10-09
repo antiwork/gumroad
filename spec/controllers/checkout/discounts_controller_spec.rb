@@ -5,6 +5,8 @@ require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
 describe Checkout::DiscountsController do
+  render_views
+
   let(:seller) { create(:named_seller) }
 
   def transform_offer_code_props(offer_code_props)
@@ -21,12 +23,26 @@ describe Checkout::DiscountsController do
       let(:record) { OfferCode }
     end
 
-    it "returns HTTP success and assigns correct instance variables" do
+    it "returns HTTP success and renders correct inertia props" do
       get :index
       expect(response).to be_successful
       expect(assigns[:title]).to eq("Discounts")
 
-      expect(assigns[:presenter].pundit_user).to eq(controller.pundit_user)
+      expect(response.body).to include("data-page=")
+
+      page_data_match = response.body.match(/data-page="([^"]*)"/)
+      expect(page_data_match).to be_present, "Expected Inertia.js data-page attribute"
+
+      page_data = JSON.parse(CGI.unescapeHTML(page_data_match[1]))
+      expect(page_data["component"]).to eq("Checkout/Discounts/Index")
+
+      props = page_data["props"]
+      expect(props).to include("pagination", "offer_codes", "products")
+
+      expect(props["products"]).to be_an(Array)
+      expect(props["products"]).to all(have_key("id"))
+      expect(props["products"]).to all(have_key("name"))
+      expect(props["products"]).to all(have_key("archived"))
     end
   end
 
@@ -46,11 +62,10 @@ describe Checkout::DiscountsController do
       let(:record) { OfferCode }
     end
 
-    it "returns HTTP success and assigns correct instance variables" do
+    it "returns HTTP success and renders correct JSON response" do
       get :paged, params: { page: 1 }
       expect(response).to be_successful
 
-      expect(assigns[:presenter].pundit_user).to eq(controller.pundit_user)
       expect(response.parsed_body["pagination"]["pages"]).to eq(3)
       expect(response.parsed_body["pagination"]["page"]).to eq(1)
       expect(response.parsed_body["offer_codes"].map(&:deep_symbolize_keys)).to eq(

@@ -23,7 +23,7 @@ type Props = {
 const EditApplicationPage = ({ settings_pages, application }: Props) => (
   <Layout currentPage="advanced" pages={settings_pages}>
     <form>
-      <section>
+      <section className="p-4! md:p-8!">
         <header>
           <h2>Edit application</h2>
         </header>

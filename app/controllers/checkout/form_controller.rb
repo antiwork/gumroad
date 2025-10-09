@@ -5,7 +5,10 @@ class Checkout::FormController < Sellers::BaseController
     authorize [:checkout, :form]
 
     @title = "Checkout form"
-    @form_props = Checkout::FormPresenter.new(pundit_user:).form_props
+    form_props = Checkout::FormPresenter.new(pundit_user:).form_props
+
+    render inertia: "Checkout/Form/Show",
+           props: form_props
   end
 
   def update

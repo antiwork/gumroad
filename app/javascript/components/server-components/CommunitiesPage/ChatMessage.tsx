@@ -118,7 +118,7 @@ export const ChatMessage = ({
       <UserAvatar
         src={message.user.avatar_url}
         alt={message.user.name}
-        className="flex-shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+        className="shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
         size="large"
       />
       <div className="relative flex w-full flex-col gap-0.5">
@@ -126,7 +126,7 @@ export const ChatMessage = ({
           <div className="flex items-center gap-2">
             <span className="font-bold">{message.user.name}</span>
             {message.user.is_seller ? (
-              <span className="py-0.25 rounded border px-1 text-[10px] font-bold uppercase tracking-wider dark:text-gray">
+              <span className="rounded-sm border px-1 py-0.25 text-[10px] font-bold tracking-wider uppercase dark:text-gray">
                 Creator
               </span>
             ) : null}
@@ -154,7 +154,7 @@ export const ChatMessage = ({
             onSave={handleSaveEdit}
           />
         ) : (
-          <div className="whitespace-pre-wrap text-sm" aria-label="Message content">
+          <div className="text-sm whitespace-pre-wrap" aria-label="Message content">
             {message.content}
           </div>
         )}
@@ -168,7 +168,7 @@ export const ChatMessage = ({
               <>
                 <WithTooltip position="top" tip="Edit">
                   <button
-                    className="border-gray-200 flex items-center rounded-md border-r px-2 py-1.5 text-xs hover:bg-gray dark:hover:bg-dark-gray"
+                    className="flex items-center rounded-md border-r border-gray-200 px-2 py-1.5 text-xs hover:bg-gray dark:hover:bg-dark-gray"
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
@@ -292,11 +292,11 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
   };
 
   return (
-    <div className="relative overflow-hidden rounded-md border focus-within:outline focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="relative overflow-hidden rounded-md border focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] focus-within:outline-solid dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
       <textarea
         ref={textareaRef}
         placeholder="Edit message"
-        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-none"
+        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden"
         value={editedContent}
         onChange={(e) => {
           setEditedContent(e.target.value);
@@ -310,7 +310,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
         onScroll={determineIfMoreTextIndicatorShouldBeShown}
       />
       <div
-        className={cx("absolute bottom-0 left-0 right-0 flex justify-end gap-2 bg-white p-2 dark:bg-black", {
+        className={cx("absolute right-0 bottom-0 left-0 flex justify-end gap-2 bg-white p-2 dark:bg-black", {
           "border-t": showMoreTextIndicator,
         })}
         onClick={(e) => {

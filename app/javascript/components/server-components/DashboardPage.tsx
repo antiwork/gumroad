@@ -171,21 +171,21 @@ const GettingStartedItem = ({
   const content = minimized ? (
     <div className="flex w-full items-center gap-2">
       <IconComponent isChecked={completed} width={36} height={36} className="flex-none" />
-      <span className="mb-1 flex-1 font-semibold leading-tight">{name}</span>
+      <span className="mb-1 flex-1 leading-tight font-semibold">{name}</span>
       <Icon name={iconName} className={cx("flex-none", iconClasses)} />
     </div>
   ) : (
     <div className="my-3 flex flex-col items-center gap-1">
       <IconComponent isChecked={completed} width={60} height={60} />
-      <span className="font-semibold leading-tight">{name}</span>
-      <Icon name={iconName} className={cx("absolute right-2 top-2", iconClasses)} />
+      <span className="leading-tight font-semibold">{name}</span>
+      <Icon name={iconName} className={cx("absolute top-2 right-2", iconClasses)} />
       <p className="text-sm opacity-80">{description}</p>
     </div>
   );
 
   if (completed) {
     return (
-      <div className={cx(commonClasses, "button filled !cursor-default")} data-status="completed">
+      <div className={cx(commonClasses, "button filled cursor-default!")} data-status="completed">
         {content}
       </div>
     );
@@ -355,7 +355,7 @@ export const DashboardPage = ({
                   />
                 </a>
               </div>
-              <div className="override grid w-full grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 min-[2000px]:grid-cols-8">
+              <div className="override grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
                 {GETTING_STARTED_ITEMS.map((item) => (
                   <GettingStartedItem
                     key={item.name}

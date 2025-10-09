@@ -41,6 +41,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
+import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import {
   Layout,
@@ -609,25 +610,23 @@ const EmailPreview = ({
 
   return (
     <section className="paragraphs" ref={selfRef}>
-      <div role="separator">
+      <Separator>
         <div className="flex gap-2">
           <Icon name="outline-clock" />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
-      </div>
-      <div className="card">
-        <div className="paragraphs">
-          <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
-          <EditorContent className="rich-text" editor={editor} />
-          {emailFiles.length > 0 ? <Button color="primary">View content</Button> : null}
-          <hr />
-          <div className="paragraphs" style={{ justifyItems: "center" }}>
-            <p>{gumroadAddress}</p>
-            <p>
-              Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
-            </p>
-          </div>
+      </Separator>
+      <div className="override grid gap-4 rounded-sm border border-border bg-background p-4">
+        <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
+        <EditorContent className="rich-text" editor={editor} />
+        {emailFiles.length > 0 ? <Button color="primary">View content</Button> : null}
+        <hr />
+        <div className="paragraphs" style={{ justifyItems: "center" }}>
+          <p>{gumroadAddress}</p>
+          <p>
+            Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
+          </p>
         </div>
       </div>
     </section>

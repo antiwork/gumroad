@@ -12,16 +12,19 @@ class Checkout::DiscountsController < Sellers::BaseController
 
     @title = "Discounts"
     pagination, offer_codes = fetch_offer_codes
-    @presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
+    presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
+
+    render inertia: "Checkout/Discounts/Index",
+           props: presenter.discounts_props
   end
 
   def paged
     authorize [:checkout, OfferCode]
 
     pagination, offer_codes = fetch_offer_codes
-    @presenter = Checkout::DiscountsPresenter.new(pundit_user:)
+    presenter = Checkout::DiscountsPresenter.new(pundit_user:)
 
-    render json: { offer_codes: offer_codes.map { @presenter.offer_code_props(_1) }, pagination: }
+    render json: { offer_codes: offer_codes.map { presenter.offer_code_props(_1) }, pagination: }
   end
 
   def statistics
@@ -104,8 +107,8 @@ class Checkout::DiscountsController < Sellers::BaseController
     end
 
     def parse_date_times
-      offer_code_params[:valid_at] = Date.parse(offer_code_params[:valid_at]) if offer_code_params[:valid_at].present?
-      offer_code_params[:expires_at] = Date.parse(offer_code_params[:expires_at]) if offer_code_params[:expires_at].present?
+      offer_code_params[:valid_at] = Time.zone.parse(offer_code_params[:valid_at]) if offer_code_params[:valid_at].present?
+      offer_code_params[:expires_at] = Time.zone.parse(offer_code_params[:expires_at]) if offer_code_params[:expires_at].present?
     end
 
     def fetch_offer_codes

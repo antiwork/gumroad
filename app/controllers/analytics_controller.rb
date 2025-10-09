@@ -13,7 +13,7 @@ class AnalyticsController < Sellers::BaseController
     LargeSeller.create_if_warranted(current_seller)
 
     render inertia: "Analytics/index",
-           props: inertia_props(analytics_props: @analytics_props)
+           props: { analytics_props: @analytics_props }
   end
 
   def data_by_date

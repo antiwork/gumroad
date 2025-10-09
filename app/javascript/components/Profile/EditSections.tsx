@@ -565,7 +565,7 @@ const FeaturedProductSectionView = ({ section }: { section: FeaturedProductSecti
       {props ? (
         <FeaturedProductView props={props} />
       ) : section.featured_product_id ? (
-        <section className="dummy h-[32rem]" />
+        <section className="dummy h-128" />
       ) : null}
     </SectionLayout>
   );

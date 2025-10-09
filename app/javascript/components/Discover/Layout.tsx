@@ -64,13 +64,13 @@ const DesktopHeaderRows: React.FC<HeaderRowElementsProps> = ({
     <div className="flex w-full items-center gap-4">
       {logoLink}
       {searchBar}
-      <div className="flex flex-shrink-0 items-center space-x-4">
+      <div className="flex shrink-0 items-center space-x-4">
         {userActionButtons}
         {cartButton}
       </div>
     </div>
     <div className="flex w-full items-center justify-between gap-4">
-      <div className="flex-grow">{navElementNoFooter}</div>
+      <div className="grow">{navElementNoFooter}</div>
       {avatarElement}
     </div>
   </>
@@ -138,18 +138,18 @@ export const Layout: React.FC<{
   const logoLink = (
     <a
       href={Routes.discover_url({ host: discoverDomain })}
-      className="logo-full flex aspect-[157/22] !w-[245px] flex-shrink-0 items-center"
+      className="logo-full flex aspect-157/22 w-[245px]! shrink-0 items-center"
       aria-label="Gumroad"
     />
   );
   const searchBar = (
-    <div className="min-w-0 flex-grow">
+    <div className="min-w-0 grow">
       <Search query={query} setQuery={setQuery} />
     </div>
   );
-  const cartButton = <CartNavigationButton className="link-button flex-shrink-0" />;
+  const cartButton = <CartNavigationButton className="link-button shrink-0" />;
   const avatarElement = currentSeller ? (
-    <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard" className="flex-shrink-0">
+    <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard" className="shrink-0">
       <img className="user-avatar" src={currentSeller.avatarUrl} />
     </a>
   ) : null;
@@ -187,7 +187,7 @@ export const Layout: React.FC<{
   return (
     <div className={cx("discover", className)}>
       <header
-        className="hero relative z-20 border-b border-t-0 border-border bg-body px-4 py-8 lg:pe-16 lg:ps-16"
+        className="hero relative z-20 border-t-0 border-b border-border bg-body px-4 py-8 lg:ps-16 lg:pe-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
       >
         <div className="flex w-full flex-col gap-4">

@@ -16,6 +16,7 @@ import { Preview } from "$app/components/Preview";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const useProductUrl = (params = {}) => {
@@ -43,6 +44,8 @@ export const Layout = ({
 
   const [match] = useMatches();
   const tab = match?.handle ?? "product";
+
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   const [isSaving, setIsSaving] = React.useState(false);
   const handleSave = async () => {
@@ -125,7 +128,11 @@ export const Layout = ({
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
+              <CopyToClipboard
+                text={url}
+                copyTooltip="Copy product URL"
+                tooltipPosition={isDesktop ? "left" : "bottom"}
+              >
                 <Button>
                   <Icon name="link" />
                 </Button>
@@ -185,7 +192,7 @@ export const Layout = ({
       <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}
         {preview ? (
-          <aside aria-label="Preview" className="!sticky top-0 min-h-screen self-start overflow-y-auto">
+          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
             <header>
               <h2>Preview</h2>
               <WithTooltip tip="Preview">

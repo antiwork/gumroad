@@ -880,7 +880,7 @@ const PaymentsPage = (props: Props) => {
           </div>
         ) : null}
 
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Verification</h2>
           </header>
@@ -930,7 +930,7 @@ const PaymentsPage = (props: Props) => {
             </div>
           </div>
         ) : null}
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Payout schedule</h2>
           </header>
@@ -1015,7 +1015,7 @@ const PaymentsPage = (props: Props) => {
           </section>
         </section>
 
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Payout method</h2>
             <div>

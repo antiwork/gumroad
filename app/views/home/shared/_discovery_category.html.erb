@@ -73,11 +73,11 @@
   <% discovery_rows.each do |row| %>
     <div class="flex w-[200%] group-hover:[animation-play-state:paused] motion-safe:animate-[marquee_20s_linear_infinite] motion-safe:md:animate-[marquee_60s_linear_infinite] motion-reduce:animate-none">
       <% (row[:tags] * 2).each do |tag| %>
-        <div class="flex-shrink-0 mr-3 flex gap-3 justify-center items-center h-auto">
+        <div class="shrink-0 mr-3 flex gap-3 justify-center items-center h-auto">
           <%= image_tag tag[:icon],
               alt: "#{tag[:tag]} icon",
               loading: "lazy",
-              class: "w-12 h-auto md:w-20 flex-shrink-0" %>
+              class: "w-12 h-auto md:w-20 shrink-0" %>
           <%= link_to(
             tag[:name],
             discover_taxonomy_url(tag[:path], tags: tag[:name], host: DISCOVER_DOMAIN),
