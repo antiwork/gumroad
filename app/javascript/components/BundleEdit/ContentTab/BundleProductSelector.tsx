@@ -2,7 +2,6 @@ import * as React from "react";
 
 import { BundleProduct } from "$app/components/BundleEdit/state";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
-import { classNames } from "$app/utils/classNames";
 
 export const BundleProductSelector = ({
   bundleProduct,
