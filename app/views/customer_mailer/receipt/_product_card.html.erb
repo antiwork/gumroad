@@ -33,7 +33,9 @@
   </div>
   <div class="footer">
     <div>
-      <div class="price">
+      <div class="relative block border border-r-0 py-1 px-2 overflow-hidden whitespace-nowrap text-ellipsis" style="padding-right: calc(0.5rem + 1em); background-image: linear-gradient(to left, transparent 1em, rgb(var(--accent)) 1em); background-repeat: no-repeat; color: rgb(var(--contrast-accent));">
+        <span class="absolute top-0 bottom-0 right-0 border-l" style="border-top-width: calc(0.25rem + 0.5lh); border-bottom-width: calc(0.25rem + 0.5lh); border-left-width: var(--border-width); border-right-width: 1em; border-style: solid; border-color: rgb(var(--parent-color) / var(--border-alpha)); border-right-color: transparent;"></span>
+        <span class="absolute top-0 bottom-0" style="right: var(--border-width); border-top-width: calc(0.25rem + 0.5lh); border-bottom-width: calc(0.25rem + 0.5lh); border-right-width: 1em; border-style: solid; border-color: rgb(var(--accent)); border-right-color: transparent; border-left: none;"></span>
         <%= product_card_formatted_price(
           price: product[:price_cents],
           currency_code: product[:currency_code],

@@ -60,10 +60,41 @@ export const PriceTag = ({
     <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
       <div className={`has-tooltip ${tooltipPosition}`} aria-describedby={tooltipUid}>
         <div
-          className="price"
+          className="relative block border border-r-0 py-1 px-2 overflow-hidden whitespace-nowrap text-ellipsis text-[rgb(var(--contrast-accent))]"
+          style={{
+            paddingRight: "calc(0.5rem + 1em)",
+            backgroundImage:
+              "linear-gradient(to left, transparent 1em, rgb(var(--accent)) 1em)",
+            backgroundRepeat: "no-repeat",
+          }}
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
+          <span
+            className="absolute top-0 bottom-0 right-0 border-l"
+            style={{
+              borderTopWidth: "calc(0.25rem + 0.5lh)",
+              borderBottomWidth: "calc(0.25rem + 0.5lh)",
+              borderLeftWidth: "var(--border-width)",
+              borderRightWidth: "1em",
+              borderStyle: "solid",
+              borderColor: "rgb(var(--parent-color) / var(--border-alpha))",
+              borderRightColor: "transparent",
+            }}
+          />
+          <span
+            className="absolute top-0 bottom-0"
+            style={{
+              right: "var(--border-width)",
+              borderTopWidth: "calc(0.25rem + 0.5lh)",
+              borderBottomWidth: "calc(0.25rem + 0.5lh)",
+              borderRightWidth: "1em",
+              borderStyle: "solid",
+              borderColor: "rgb(var(--accent))",
+              borderRightColor: "transparent",
+              borderLeft: "none",
+            }}
+          />
           {priceTag}
         </div>
         <div role="tooltip" id={tooltipUid}>
