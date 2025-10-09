@@ -269,6 +269,7 @@ describe UrlRedirectPresenter do
         has_active_subscription: true,
         subscription_id: subscription.external_id,
         is_subscription_ended: false,
+        is_installment_plan_completed: false,
         is_subscription_cancelled_or_failed: false,
         is_alive_or_restartable: true,
         in_free_trial: false,
@@ -597,6 +598,7 @@ describe UrlRedirectPresenter do
             has_active_subscription: true,
             subscription_id: @subscription.external_id,
             is_subscription_ended: false,
+            is_installment_plan_completed: false,
             is_subscription_cancelled_or_failed: false,
             is_alive_or_restartable: true,
             in_free_trial: false,
@@ -666,6 +668,40 @@ describe UrlRedirectPresenter do
         profile_url: @user.profile_url(recommended_by: "library"),
         avatar_url: @user.avatar_url,
       )
+    end
+
+    context "with completed installment plan" do
+      it "marks installment plan as completed when all installments are completed" do
+        purchase = create(:installment_plan_purchase)
+        subscription = purchase.subscription
+        product = subscription.link
+
+        subscription.update_columns(charge_occurrence_count: product.installment_plan.number_of_installments)
+
+        (product.installment_plan.number_of_installments - 1).times do
+          create(:purchase, link: product, subscription: subscription, purchaser: subscription.user)
+        end
+
+        url_redirect = create(:url_redirect, purchase: purchase)
+        props = described_class.new(url_redirect:, logged_in_user: subscription.user).download_page_without_content_props
+
+        expect(props[:purchase][:membership][:is_installment_plan_completed]).to eq(true)
+        expect(props[:purchase][:membership][:is_subscription_ended]).to eq(false)
+      end
+
+      it "does not mark installment plan as completed when installments are incomplete" do
+        purchase = create(:installment_plan_purchase)
+        subscription = purchase.subscription
+        product = subscription.link
+
+        subscription.update_columns(charge_occurrence_count: product.installment_plan.number_of_installments - 1)
+
+        url_redirect = create(:url_redirect, purchase: purchase)
+        props = described_class.new(url_redirect:, logged_in_user: subscription.user).download_page_without_content_props
+
+        expect(props[:purchase][:membership][:is_installment_plan_completed]).to eq(false)
+        expect(props[:purchase][:membership][:is_subscription_ended]).to eq(false)
+      end
     end
   end
 end
