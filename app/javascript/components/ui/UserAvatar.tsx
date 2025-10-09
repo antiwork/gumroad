@@ -10,7 +10,7 @@ type UserAvatarProps = {
 
 export const UserAvatar = ({ src, alt = "User avatar", className, style, ...props }: UserAvatarProps) => (
   <img
-    className={cx("aspect-square w-5 flex-shrink-0 rounded-[10rem] border", className)}
+    className={cx("aspect-square w-5 shrink-0 rounded-full border border-border", className)}
     src={src}
     alt={alt}
     style={style}

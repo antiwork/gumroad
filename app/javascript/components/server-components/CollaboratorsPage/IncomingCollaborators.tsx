@@ -135,7 +135,7 @@ const IncomingCollaboratorsTableRow = ({
     <td data-label="Name">
       <div className="flex items-center gap-4">
         <UserAvatar
-          className="!w-8"
+          className="w-8"
           src={incomingCollaborator.seller_avatar_url}
           alt={`Avatar of ${incomingCollaborator.seller_name || "Collaborator"}`}
         />

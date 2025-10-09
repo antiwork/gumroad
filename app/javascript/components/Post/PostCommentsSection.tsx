@@ -242,7 +242,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
   return (
     <article className="comment">
       <UserAvatar
-        className="col-start-1 row-start-1 row-end-3 h-12 w-12"
+        className="col-start-1 row-start-1 row-end-3 size-12"
         alt="Comment author avatar"
         src={comment.author_avatar_url}
       />

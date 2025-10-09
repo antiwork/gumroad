@@ -26,7 +26,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         className="content peer cursor-pointer p-4 hover:bg-[var(--active-bg)] peer-hover:bg-[var(--active-bg)]"
         onClick={() => setIsExpanded((v) => !v)}
       >
-        <UserAvatar className={cx("!w-9", image === pinkIcon ? "!border-none" : "")} src={image} />
+        <UserAvatar className={cx("w-9", image === pinkIcon ? "!border-none" : "")} src={image} />
         <div className={`font-bold ${isExpanded ? "flex-1" : ""}`}>
           {message.role === "user" ? (currentSeller?.name ?? "You") : message.staffName || startCase(message.role)}
         </div>
