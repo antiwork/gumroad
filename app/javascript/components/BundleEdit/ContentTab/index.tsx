@@ -134,7 +134,7 @@ export const ContentTab = () => {
                 </div>
               ) : null}
               <div
-                className="override grid gap-4 rounded border border-border bg-background p-4"
+                className="override grid gap-4 rounded-sm border border-border bg-background p-4"
                 aria-label="Product selector"
               >
                 <div className="input">
