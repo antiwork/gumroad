@@ -13,7 +13,7 @@ export function Placeholder({ children, className }: PlaceholderProps) {
   return (
     <div
       className={classNames(
-        "override placeholder grid justify-items-center gap-3 rounded border border-dashed border-[rgb(var(--parent-color)/var(--border-alpha))] bg-background p-8 text-center",
+        "override placeholder grid justify-items-center gap-3 rounded border border-dashed border-border bg-background p-8 text-center",
         className,
       )}
     >
