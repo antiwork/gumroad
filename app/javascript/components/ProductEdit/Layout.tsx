@@ -79,7 +79,7 @@ const NotifyAboutProductUpdatesAlert = () => {
 
   return (
     <div
-      className={cx("fixed right-1/2 top-4", isVisible ? "visible" : "invisible")}
+      className={cx("fixed top-4 right-1/2", isVisible ? "visible" : "invisible")}
       style={{
         transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
         transition: "all 0.3s ease-out 0.5s",
@@ -304,7 +304,7 @@ export const Layout = ({
       <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}
         {preview ? (
-          <aside aria-label="Preview" className="!sticky top-0 min-h-screen self-start overflow-y-auto">
+          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
             <header>
               <h2>Preview</h2>
               <WithTooltip tip="Preview">

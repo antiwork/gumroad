@@ -141,7 +141,7 @@ const MainPage = (props: Props) => {
       canUpdate={!props.is_form_disabled && !isSaving}
     >
       <form ref={formRef}>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>User details</h2>
           </header>
@@ -175,7 +175,7 @@ const MainPage = (props: Props) => {
             ) : null}
           </fieldset>
         </section>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Notifications</h2>
             <div>
@@ -294,7 +294,7 @@ const MainPage = (props: Props) => {
             </table>
           </fieldset>
         </section>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Support</h2>
           </header>
@@ -322,7 +322,7 @@ const MainPage = (props: Props) => {
           )}
         </section>
         {props.user.seller_refund_policy.enabled ? (
-          <section className="!p-4 md:!p-8">
+          <section className="p-4! md:p-8!">
             <header>
               <h2>Refund policy</h2>
               <div>Choose how refunds will be handled for your products.</div>
@@ -395,7 +395,7 @@ const MainPage = (props: Props) => {
             </fieldset>
           </section>
         ) : null}
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Local</h2>
           </header>
@@ -527,7 +527,7 @@ const MainPage = (props: Props) => {
             </small>
           </fieldset>
         </section>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Adult content</h2>
           </header>
@@ -540,7 +540,7 @@ const MainPage = (props: Props) => {
             />
           </fieldset>
         </section>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Affiliates</h2>
           </header>
@@ -581,7 +581,7 @@ const InvalidateActiveSessionsSection = () => {
   });
 
   return (
-    <section className="!p-4 md:!p-8">
+    <section className="p-4! md:p-8!">
       <fieldset>
         <button className="link" type="button" onClick={() => setIsConfirmationDialogOpen(true)}>
           Sign out from all active sessions

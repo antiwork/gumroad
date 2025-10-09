@@ -20,24 +20,24 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
   const attachments = [...message.publicAttachments, ...message.privateAttachments];
   const image = message.role === "user" ? (currentSeller?.avatarUrl ?? pinkIcon) : pinkIcon;
   return (
-    <div role="listitem" className="!items-stretch !gap-0 !p-0">
+    <div role="listitem" className="items-stretch! gap-0! p-0!">
       <div
-        className="content peer cursor-pointer p-4 hover:bg-[var(--active-bg)] peer-hover:bg-[var(--active-bg)]"
+        className="content peer cursor-pointer p-4 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
-        <img className={cx("user-avatar !w-9", image === pinkIcon ? "!border-none" : "")} src={image} />
+        <img className={cx("user-avatar w-9!", image === pinkIcon ? "border-none!" : "")} src={image} />
         <div className={`font-bold ${isExpanded ? "flex-1" : ""}`}>
           {message.role === "user" ? (currentSeller?.name ?? "You") : message.staffName || startCase(message.role)}
         </div>
         <div className={isExpanded ? "hidden" : "ml-2 line-clamp-1 min-w-0 flex-1"}>
           <MessageContent message={message} />
         </div>
-        <div className="whitespace-nowrap text-right">
+        <div className="text-right whitespace-nowrap">
           {new Date(message.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </div>
       </div>
       <div
-        className="actions peer cursor-pointer p-4 pl-0 hover:bg-[var(--active-bg)] peer-hover:bg-[var(--active-bg)]"
+        className="actions peer cursor-pointer p-4 pl-0 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
         <Button outline aria-expanded={isExpanded} aria-label={isExpanded ? "Collapse message" : "Expand message"}>
@@ -52,11 +52,11 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
               {attachments.map((attachment) => (
                 <div
                   role="listitem"
-                  className={attachment.contentType?.startsWith("image/") ? "!p-0" : ""}
+                  className={attachment.contentType?.startsWith("image/") ? "p-0!" : ""}
                   key={attachment.url}
                 >
                   {attachment.contentType?.startsWith("image/") ? (
-                    <img src={attachment.url} alt={attachment.name ?? "Attachment"} className="w-full rounded-sm" />
+                    <img src={attachment.url} alt={attachment.name ?? "Attachment"} className="w-full rounded-xs" />
                   ) : (
                     <FileRowContent
                       name={FileUtils.getFileNameWithoutExtension(attachment.name ?? "Attachment")}
@@ -132,7 +132,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
         <form className="mt-4 flex flex-col gap-2" onSubmit={(e) => void handleSubmit(e)}>
           <label htmlFor="reply">Reply</label>
           <textarea
-            className="mb-2 flex-1 rounded border px-3 py-2"
+            className="mb-2 flex-1 rounded-sm border px-3 py-2"
             placeholder="Write a reply"
             id="reply"
             value={input}

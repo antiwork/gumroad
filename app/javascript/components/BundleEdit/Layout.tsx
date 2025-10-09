@@ -192,7 +192,7 @@ export const Layout = ({
       <div className={preview ? "squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]" : "flex-1"}>
         {children}
         {preview ? (
-          <aside aria-label="Preview" className="!sticky top-0 min-h-screen self-start overflow-y-auto">
+          <aside aria-label="Preview" className="sticky! top-0 min-h-screen self-start overflow-y-auto">
             <header>
               <h2>Preview</h2>
               <WithTooltip tip="Preview">

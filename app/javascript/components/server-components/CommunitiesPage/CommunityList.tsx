@@ -38,9 +38,9 @@ export const CommunityList = ({
             "hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white": !isCommunitySelected,
           })}
         >
-          <figure className="flex-shrink-0">
+          <figure className="shrink-0">
             <img
-              className="flex h-8 w-8 items-center justify-center rounded border border-black object-cover"
+              className="flex h-8 w-8 items-center justify-center rounded-sm border border-black object-cover"
               src={community.thumbnail_url}
             />
           </figure>

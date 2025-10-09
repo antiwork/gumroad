@@ -743,7 +743,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             }
           />
         ) : null}
-        <div className="has-sidebar p-4 md:!h-auto md:flex-1 md:p-8">
+        <div className="has-sidebar p-4 md:h-auto! md:flex-1 md:p-8">
           {!isDesktop && !showPageList ? null : (
             <div className="paragraphs">
               {showPageList ? (

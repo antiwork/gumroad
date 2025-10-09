@@ -73,7 +73,7 @@ const PostPage = ({
         <h1>{subject}</h1>
         <time>{publishedAtFormatted}</time>
       </header>
-      <article className="override grid gap-8 border-b border-border p-4 pt-8 lg:pb-8 lg:pt-12">
+      <article className="override grid gap-8 border-b border-border p-4 pt-8 lg:pt-12 lg:pb-8">
         {pageLoaded ? null : <LoadingSpinner width="2em" />}
         <EditorContent className="rich-text" editor={editor} />
 

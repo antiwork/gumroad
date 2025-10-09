@@ -47,7 +47,7 @@ const NotificationEndpointSection = ({
   });
 
   return (
-    <section className="!p-4 md:!p-8">
+    <section className="p-4! md:p-8!">
       <header>
         <h2>Ping</h2>
         <a href={Routes.ping_path()} target="_blank" rel="noreferrer">

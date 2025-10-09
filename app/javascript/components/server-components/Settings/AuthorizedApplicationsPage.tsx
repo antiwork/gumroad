@@ -94,7 +94,7 @@ const AuthorizedApplicationsPage = (props: Props) => {
   return (
     <Layout currentPage="authorized_applications" pages={props.settings_pages}>
       {applications.length > 0 ? (
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <table>
             <caption>You've authorized the following applications to use your Gumroad account.</caption>
             <tbody>

@@ -102,7 +102,7 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
 
       <section className="relative -mx-4 max-h-[300px] max-w-none overflow-y-auto border-y p-4">
         {isLoading ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white bg-opacity-50">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50">
             <LoadingSpinner width="2em" />
           </div>
         ) : null}

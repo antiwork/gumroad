@@ -32,7 +32,7 @@ const AccountDeletionSection = (props: Props) => {
   };
 
   return (
-    <section className="!p-4 md:!p-8">
+    <section className="p-4! md:p-8!">
       <header>
         <h2>Danger Zone</h2>
       </header>

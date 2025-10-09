@@ -11,7 +11,7 @@ const CustomDomainSection = ({
   customDomain: string;
   setCustomDomain: (val: string) => void;
 }) => (
-  <section className="!p-4 md:!p-8">
+  <section className="p-4! md:p-8!">
     <header>
       <h2>Custom domain</h2>
       <a href="/help/article/153-setting-up-a-custom-domain" target="_blank" rel="noreferrer">

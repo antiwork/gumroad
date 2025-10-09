@@ -805,7 +805,7 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
       hasStickyHeader
     >
       <form>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header dangerouslySetInnerHTML={{ __html: headerLabel }} />
           <fieldset className={cx({ danger: errors.has("email") })}>
             <legend>

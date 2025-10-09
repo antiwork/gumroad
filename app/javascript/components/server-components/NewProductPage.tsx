@@ -279,7 +279,7 @@ const NewProductPage = ({
       <div>
         <div>
           <form id={`new-product-form-${formUID}`} className="row" onSubmit={(e) => void submit(e)}>
-            <section className="!p-4 md:!p-8">
+            <section className="p-4! md:p-8!">
               <header>
                 <p>
                   Turn your idea into a live product in minutes. No fuss, just a few quick selections and you're ready
@@ -306,7 +306,7 @@ const NewProductPage = ({
                       Learn more
                     </a>
                   </div>
-                  <button className="link !col-start-3 self-center" onClick={() => void dismissAiPromo()}>
+                  <button className="link col-start-3! self-center" onClick={() => void dismissAiPromo()}>
                     close
                   </button>
                 </div>
@@ -482,7 +482,7 @@ const ProductTypeSelector = ({
   onChange: (type: ProductNativeType) => void;
   disabled?: boolean;
 }) => (
-  <div className="radio-buttons !grid-cols-1 sm:!grid-cols-2 md:!grid-cols-3 2xl:!grid-cols-5" role="radiogroup">
+  <div className="radio-buttons grid-cols-1! sm:grid-cols-2! md:grid-cols-3! 2xl:grid-cols-5!" role="radiogroup">
     {types.map((type) => {
       const typeButton = (
         <Button
