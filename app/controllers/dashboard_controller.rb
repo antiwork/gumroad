@@ -5,6 +5,8 @@ class DashboardController < Sellers::BaseController
   skip_before_action :check_suspended
   before_action :check_payment_details, only: :index
 
+  layout "inertia", only: :index
+
   def index
     authorize :dashboard
 

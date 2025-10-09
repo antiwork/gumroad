@@ -5,6 +5,8 @@ class Checkout::UpsellsController < Sellers::BaseController
 
   PER_PAGE = 20
 
+  layout "inertia", only: [:index]
+
   def index
     authorize [:checkout, Upsell]
 

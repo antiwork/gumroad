@@ -7,7 +7,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 
 const ALERT_KEY = "alert";
 
-type AlertPayload = { message: string; status: "success" | "danger" | "info" | "warning"; html?: boolean };
+export type AlertPayload = { message: string; status: "success" | "danger" | "info" | "warning"; html?: boolean };
 
 const Alert = ({ initial }: { initial: AlertPayload | null }) => {
   const [alert, setAlert] = React.useState<AlertPayload | null>(initial);

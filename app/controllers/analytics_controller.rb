@@ -6,6 +6,8 @@ class AnalyticsController < Sellers::BaseController
   after_action :set_dashboard_preference_to_sales, only: :index
   before_action :check_payment_details, only: :index
 
+  layout "inertia", only: [:index]
+
   def index
     authorize :analytics
 
