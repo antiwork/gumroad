@@ -62,7 +62,7 @@ export const PostsView = ({ posts }: { posts: Post[] }) => {
         <a
           key={post.slug}
           href={Routes.custom_domain_view_post_path(post.slug)}
-          className="border-border flex justify-between gap-4 border-b py-8 no-underline first:pt-0 last:border-b-0 last:pb-0"
+          className="flex justify-between gap-4 border-b border-border py-8 no-underline first:pt-0 last:border-b-0 last:pb-0"
         >
           <div>
             <h2>{post.name}</h2>
@@ -203,7 +203,7 @@ export type PageProps = {
 };
 
 export const Section = ({ section, creator_profile, currency_code }: { section: Section } & PageProps) => (
-  <section id={section.id} className="border-border border-b px-4 py-8 lg:py-16">
+  <section id={section.id} className="border-b border-border px-4 py-8 lg:py-16">
     {section.header ? <h2>{section.header}</h2> : null}
     {section.type === "SellerProfileProductsSection" ? (
       <ProductsSectionView section={section} creatorProfile={creator_profile} currencyCode={currency_code} />

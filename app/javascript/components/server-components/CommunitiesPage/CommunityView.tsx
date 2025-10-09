@@ -597,7 +597,7 @@ export const CommunityView = () => {
             <div
               className={cx("flex shrink-0 flex-col overflow-hidden", {
                 "relative w-72 border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]": isAboveBreakpoint,
-                "bg-gray dark:bg-dark-gray absolute inset-0 top-12 z-30": !isAboveBreakpoint && sidebarOpen,
+                "absolute inset-0 top-12 z-30 bg-gray dark:bg-dark-gray": !isAboveBreakpoint && sidebarOpen,
                 "w-0 overflow-hidden": !isAboveBreakpoint && !sidebarOpen,
               })}
               aria-label="Sidebar"

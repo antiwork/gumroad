@@ -25,7 +25,7 @@ export const Tab = ({
   return (
     <Component
       className={classNames(
-        "hover:border-border shrink-0 rounded-full border border-transparent px-3 py-2 no-underline",
+        "shrink-0 rounded-full border border-transparent px-3 py-2 no-underline hover:border-border",
         isSelected && "border-border bg-background text-foreground",
         className,
       )}

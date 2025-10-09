@@ -488,7 +488,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       <div className="product-content h-screen sm:h-full md:flex md:flex-col">
         {editor ? (
           <RichTextEditorToolbar
-            className="border-border border-b px-8"
+            className="border-b border-border px-8"
             editor={editor}
             productId={id}
             custom={

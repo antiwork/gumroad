@@ -194,7 +194,7 @@ export const EditProfile = (props: Props) => {
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="border-border grid grid-cols-1 gap-4 border-b px-4 py-8">
+      <header className="grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <div role="toolbar" style={{ gridColumn: "unset" }}>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
@@ -264,7 +264,7 @@ export const EditProfile = (props: Props) => {
             key={section.id}
             id={section.id}
             style={{ overflowAnchor: section.id === movedSectionId ? "none" : undefined }}
-            className="border-border border-b px-4 py-8 lg:py-16"
+            className="border-b border-border px-4 py-8 lg:py-16"
           >
             <AddSectionButton index={i} />
             <ImageUploadSettingsContext.Provider value={imageUploadSettings}>

@@ -109,7 +109,7 @@ const PostCard = ({
           {showSnippet ? (
             <div className="relative flex-1" ref={snippetContainerRef}>
               <p
-                className="text-md text-dark-gray inset-0 flex-1 overflow-hidden text-ellipsis opacity-90"
+                className="text-md inset-0 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
                 style={{
                   position: clamp === undefined ? "absolute" : "relative",
                   display: "-webkit-box",
@@ -124,7 +124,7 @@ const PostCard = ({
           ) : (
             <div className="flex-1" />
           )}
-          <p className="text-md text-dark-gray flex-none">{formatPostDate(post.published_at, "en-US")}</p>
+          <p className="text-md flex-none text-dark-gray">{formatPostDate(post.published_at, "en-US")}</p>
           {post.tags.length > 0 && (
             <div className="flex flex-none flex-row flex-wrap">
               {post.tags.map((tag) => (

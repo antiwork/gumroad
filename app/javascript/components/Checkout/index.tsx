@@ -203,7 +203,7 @@ export const Checkout = ({
   const isDesktop = useIsAboveBreakpoint("lg");
 
   return (
-    <div className="max-w-product-page mx-auto w-full">
+    <div className="mx-auto w-full max-w-product-page">
       <PageHeader
         className="border-none"
         title="Checkout"

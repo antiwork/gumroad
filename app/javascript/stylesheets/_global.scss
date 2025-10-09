@@ -1,23 +1,25 @@
-:root,
-:host {
-  color-scheme: light dark;
-  @include globals;
-}
+@layer base {
+  :root,
+  :host {
+    color-scheme: light dark;
+    @include globals;
+  }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  min-width: 0;
-  max-width: 100%;
-  vertical-align: bottom;
-  background-origin: padding-box;
-  border-style: solid;
-  border-width: 0;
-  --border: #{$border};
-  --outline: #{$outline};
-  @for $i from 1 through length($grays) {
-    --gray-#{$i}: #{nth($grays, $i)};
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: bottom;
+    background-origin: padding-box;
+    border-style: solid;
+    border-width: 0;
+    --border: #{$border};
+    --outline: #{$outline};
+    @for $i from 1 through length($grays) {
+      --gray-#{$i}: #{nth($grays, $i)};
+    }
   }
 }
 

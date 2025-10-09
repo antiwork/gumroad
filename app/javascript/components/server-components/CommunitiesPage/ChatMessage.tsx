@@ -126,7 +126,7 @@ export const ChatMessage = ({
           <div className="flex items-center gap-2">
             <span className="font-bold">{message.user.name}</span>
             {message.user.is_seller ? (
-              <span className="dark:text-gray rounded-sm border px-1 py-0.25 text-[10px] font-bold tracking-wider uppercase">
+              <span className="rounded-sm border px-1 py-0.25 text-[10px] font-bold tracking-wider uppercase dark:text-gray">
                 Creator
               </span>
             ) : null}
@@ -168,7 +168,7 @@ export const ChatMessage = ({
               <>
                 <WithTooltip position="top" tip="Edit">
                   <button
-                    className="hover:bg-gray dark:hover:bg-dark-gray flex items-center rounded-md border-r border-gray-200 px-2 py-1.5 text-xs"
+                    className="flex items-center rounded-md border-r border-gray-200 px-2 py-1.5 text-xs hover:bg-gray dark:hover:bg-dark-gray"
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
@@ -180,7 +180,7 @@ export const ChatMessage = ({
             ) : null}
             <WithTooltip position="top" tip="Delete">
               <button
-                className="hover:bg-gray hover:text-red dark:hover:bg-dark-gray flex items-center rounded-md px-2 py-1.5 text-xs"
+                className="flex items-center rounded-md px-2 py-1.5 text-xs hover:bg-gray hover:text-red dark:hover:bg-dark-gray"
                 onClick={() => setDeleteConfirmation({ deleting: false })}
                 aria-label="Delete message"
               >

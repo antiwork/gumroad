@@ -111,7 +111,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
 
   return (
     <div>
-      <header className="border-border flex flex-col gap-4 border-b p-4 md:p-8">
+      <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
           <Icon name="arrow-left" /> Go back to Support tickets
         </a>
