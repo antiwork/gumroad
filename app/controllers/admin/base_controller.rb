@@ -8,7 +8,6 @@ class Admin::BaseController < ApplicationController
   inertia_share do
     RenderingExtension.custom_context(view_context).merge(
       card_types: CreditCardUtility.card_types_for_react,
-      title: @title,
       compliance: {
         reasons: Compliance::TOS_VIOLATION_REASONS,
         default_reason: Compliance::DEFAULT_TOS_VIOLATION_REASON
@@ -135,9 +134,5 @@ class Admin::BaseController < ApplicationController
 
     def xhr_or_json_request?
       request.xhr? || request.format.json?
-    end
-
-    def admin_layout
-      params[:admin_old] ? "admin_old" : "admin"
     end
 end
