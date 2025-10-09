@@ -55,7 +55,7 @@ const PostPage = ({
           <h1 className="mb-4">{subject}</h1>
           <time className="text-dark-gray">{publishedAtFormatted}</time>
         </header>
-        <div className="mx-auto mt-6 grid max-w-3xl gap-6 border-t py-12 text-xl">
+        <div className="mx-auto mt-6 grid max-w-3xl justify-items-center gap-6 border-t py-12 text-xl">
           {pageLoaded ? null : <LoadingSpinner width="2em" />}
           <EditorContent className="rich-text" editor={editor} />
 

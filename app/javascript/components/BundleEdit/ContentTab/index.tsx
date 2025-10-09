@@ -133,7 +133,10 @@ export const ContentTab = () => {
                   ))}
                 </div>
               ) : null}
-              <div className="card" aria-label="Product selector">
+              <div
+                className="override grid gap-4 rounded border border-border bg-background p-4"
+                aria-label="Product selector"
+              >
                 <div className="input">
                   <Icon name="solid-search" />
                   <input

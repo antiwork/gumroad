@@ -24,7 +24,7 @@ const ReviewUserAttribution = ({
   name: string;
   isBuyer?: boolean;
 }) => (
-  <section style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
+  <section className="flex items-center gap-2">
     <img className="user-avatar" src={avatarUrl} />
     <h5>{name}</h5>
     {isBuyer ? (
@@ -52,27 +52,30 @@ export const Review = ({
   return (
     <>
       <section className="override grid gap-2">
-        <span className="rating" aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+        <span
+          className="flex shrink-0 items-center gap-1"
+          aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
+        >
           <RatingStars rating={review.rating} />
           {review.is_new ? <span className="pill small primary">New</span> : null}
         </span>
-        {review.message ? <p style={{ margin: 0 }}>{review.message}</p> : null}
+        {review.message ? <p className="m-0">{review.message}</p> : null}
         {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
-        <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center", flexWrap: "wrap" }}>
+        <section className="flex flex-wrap items-center gap-1">
           <ReviewUserAttribution avatarUrl={review.rater.avatar_url} name={review.rater.name} isBuyer />
         </section>
       </section>
       {review.response && !isEditing && !hideResponse ? (
-        <section style={{ display: "grid", gap: "var(--spacer-2)", marginLeft: "var(--spacer-4)" }}>
-          <p style={{ margin: 0 }}>{review.response.message}</p>
-          <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center", flexWrap: "wrap" }}>
+        <section className="override ml-4 grid gap-2">
+          <p className="m-0">{review.response.message}</p>
+          <section className="flex flex-wrap items-center gap-1">
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}
             <span className="pill small">Creator</span>
           </section>
         </section>
       ) : null}
       {canRespond && !hideResponse ? (
-        <section style={{ marginLeft: "var(--spacer-4)" }}>
+        <section className="ml-4">
           <ReviewResponseForm
             message={review.response?.message}
             purchaseId={review.purchase_id}

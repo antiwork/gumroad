@@ -49,7 +49,7 @@ export const ShareTab = () => {
           profileSections={profileSections}
         />
         <section className="!p-4 md:!p-8">
-          <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <header className="flex items-center justify-between">
             <h2>Gumroad Discover</h2>
             <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
               Learn more
