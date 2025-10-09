@@ -68,7 +68,7 @@ export const ContentTab = () => {
   return (
     <Layout
       preview={
-        <div>
+        <div className="flex flex-col gap-6 p-6">
           <header>
             <h1>Library</h1>
           </header>
