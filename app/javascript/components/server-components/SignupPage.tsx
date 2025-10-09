@@ -10,6 +10,7 @@ import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
+import { Separator } from "$app/components/Separator";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -77,9 +78,9 @@ export const SignupPage = ({
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
         <SocialAuth />
-        <div role="separator">
+        <Separator>
           <span>or</span>
-        </div>
+        </Separator>
         <section>
           {saveState.type === "error" ? (
             <div role="alert" className="danger">

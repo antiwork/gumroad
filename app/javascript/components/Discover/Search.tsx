@@ -61,7 +61,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
 
   return (
     <ComboBox
-      style={{ flex: 1 }}
+      className="flex-1"
       open={autocompleteOpen ? options.length > 0 : false}
       onToggle={setAutocompleteOpen}
       editable
@@ -71,7 +71,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
           <input
             {...props}
             type="search"
-            className="!cursor-text"
+            className="cursor-text!"
             placeholder="Search products"
             aria-label="Search products"
             value={enteredQuery}

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_09_25_161102) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1404,6 +1404,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_09_25_161102) do
     t.text "description"
     t.bigint "folder_id"
     t.boolean "stampable_pdf"
+    t.string "isbn"
     t.index ["deleted_at"], name: "index_product_files_on_deleted_at"
     t.index ["deleted_from_cdn_at"], name: "index_product_files_on_deleted_from_cdn_at"
     t.index ["installment_id"], name: "index_product_files_on_installment_id"

@@ -68,6 +68,8 @@ const FileUtils = {
   },
   isAudioExtension: (extension: string | null) =>
     extension !== null && FILE_TYPE_EXTENSIONS_MAP.audio.includes(extension),
+  isDocumentExtension: (extension: string | null) =>
+    extension !== null && FILE_TYPE_EXTENSIONS_MAP.document.includes(extension),
   isFileNameStreamable: (fileName: string) => {
     const ext = FileUtils.getFileExtension(fileName);
     return FileUtils.isFileExtensionStreamable(ext);
@@ -89,6 +91,7 @@ export const FILE_TYPE_EXTENSIONS_MAP = {
   image: ["JPG", "JPEG", "PNG", "GIF", "SVG"],
   audio: ["MP3", "WAV", "FLAC", "WMA", "AAC", "M4A"],
   video: ["MP4", "MOV", "WMV", "AVI", "MKV", "WEBM", "FLV"],
+  document: ["PDF", "EPUB", "MOBI"],
   zip: ["RAR", "ZIP"],
 };
 

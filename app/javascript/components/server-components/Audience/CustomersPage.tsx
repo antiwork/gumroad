@@ -427,7 +427,7 @@ const CustomersPage = ({
                   Download
                 </NavigationButton>
                 {count > 2000 && (
-                  <div className="text-gray-600 mt-2 text-sm">
+                  <div className="mt-2 text-sm text-gray-600">
                     Exports over 2,000 rows will be processed in the background and emailed to you.
                   </div>
                 )}

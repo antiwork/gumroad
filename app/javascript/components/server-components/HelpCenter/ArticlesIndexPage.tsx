@@ -33,7 +33,7 @@ const renderHighlightedText = (text: string, searchTerm: string): React.ReactNod
   return (
     <span
       dangerouslySetInnerHTML={{
-        __html: text.replace(regex, (match) => `<mark class="highlight rounded-sm bg-pink">${match}</mark>`),
+        __html: text.replace(regex, (match) => `<mark class="highlight rounded-xs bg-pink">${match}</mark>`),
       }}
     />
   );
@@ -54,7 +54,7 @@ const CategoryArticles = ({ category, searchTerm }: { category: Category; search
             key={article.url}
             href={article.url}
             color="filled"
-            className="!box-border !flex !h-full !w-full !items-center !justify-center !p-12 text-center !text-xl"
+            className="box-border! flex! h-full! w-full! items-center! justify-center! p-12! text-center text-xl!"
           >
             {renderHighlightedText(article.title, searchTerm)}
           </NavigationButton>

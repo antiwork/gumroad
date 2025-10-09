@@ -435,8 +435,7 @@ const UpsellDrawer = ({
           <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
         </div>
       </section>
-      {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
-      <section style={{ display: "grid" }} className="auto-cols-fr grid-flow-col gap-4">
+      <section className="override grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
           {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
         </Button>
@@ -491,8 +490,7 @@ const UpsellDrawer = ({
           ))}
         </section>
       )}
-      {/* Can't use Tailwind `grid` yet, because we have a conflicting `grid` definition in `_grid.scss`. */}
-      <section style={{ display: "grid" }} className="auto-cols-fr grid-flow-col gap-4">
+      <section className="override grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
@@ -697,7 +695,7 @@ const Form = ({
       />
       <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
-          <section className="!p-8">
+          <section className="p-8!">
             <p>
               When a customer clicks "Pay", offer a version upgrade or another product with or without a discount.{" "}
               <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
@@ -895,7 +893,7 @@ const Form = ({
                   />
                 </fieldset>
                 {selectedProduct ? (
-                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
+                  <div className="override grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
                     <div />
                     <b>Version to offer</b>

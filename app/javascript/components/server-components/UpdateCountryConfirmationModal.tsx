@@ -51,7 +51,7 @@ export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
                   placeholder="I understand"
-                  className="border-gray-300 w-full rounded border p-2"
+                  className="w-full rounded-sm border border-gray-300 p-2"
                 />
               </div>
             </>

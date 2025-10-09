@@ -1,100 +1,102 @@
-:root,
-:host {
-  color-scheme: light dark;
-  @include globals;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  min-width: 0;
-  max-width: 100%;
-  vertical-align: bottom;
-  background-origin: padding-box;
-  border-style: solid;
-  border-width: 0;
-  --border: #{$border};
-  --outline: #{$outline};
-  @for $i from 1 through length($grays) {
-    --gray-#{$i}: #{nth($grays, $i)};
+@layer base {
+  :root,
+  :host {
+    color-scheme: light dark;
+    @include globals;
   }
-}
 
-html,
-body {
-  height: 100%;
-  width: 100%;
-  overflow-wrap: anywhere;
-}
-
-body {
-  @include font-size(2);
-  font-family: var(--font-family);
-  font-feature-settings: "ss11", "ss04";
-  background-color: var(--body-bg);
-  -webkit-font-smoothing: antialiased;
-  color: full-color(color);
-}
-
-body:not(.mac) * {
-  &::-webkit-scrollbar {
-    width: size(0.75);
-    background-color: gray(1);
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: bottom;
+    background-origin: padding-box;
+    border-style: solid;
+    border-width: 0;
+    --border: #{$border};
+    --outline: #{$outline};
+    @for $i from 1 through length($grays) {
+      --gray-#{$i}: #{nth($grays, $i)};
+    }
   }
-  &::-webkit-scrollbar-thumb {
-    background-color: gray(3);
-    border-radius: border-radius(2);
+
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+    overflow-wrap: anywhere;
   }
-}
 
-main {
-  display: flex;
-  flex-direction: column;
-}
-
-@for $i from 1 through 5 {
-  h#{$i} {
-    @include font-size(6 - $i);
-    font-weight: normal;
+  body {
+    @include font-size(2);
+    font-family: var(--font-family);
+    font-feature-settings: "ss11", "ss04";
+    background-color: var(--body-bg);
+    -webkit-font-smoothing: antialiased;
+    color: full-color(color);
   }
-}
 
-.text-singleline {
-  @include text-singleline;
-}
+  body:not(.mac) * {
+    &::-webkit-scrollbar {
+      width: size(0.75);
+      background-color: gray(1);
+    }
+    &::-webkit-scrollbar-thumb {
+      background-color: gray(3);
+      border-radius: border-radius(2);
+    }
+  }
 
-a {
-  color: var(--color);
-  text-decoration: underline;
-  cursor: pointer;
-}
+  main {
+    display: flex;
+    flex-direction: column;
+  }
 
-.link {
-  @extend a;
-}
+  @for $i from 1 through 5 {
+    h#{$i} {
+      @include font-size(6 - $i);
+      font-weight: normal;
+    }
+  }
 
-sub {
-  vertical-align: sub;
-}
+  .text-singleline {
+    @include text-singleline;
+  }
 
-sup {
-  vertical-align: super;
-}
+  a {
+    color: var(--color);
+    text-decoration: underline;
+    cursor: pointer;
+  }
 
-small {
-  display: block;
-  @include font-size(1);
-}
+  .link {
+    @extend a;
+  }
 
-hr {
-  border: none;
-  border-top: $border;
-}
+  sub {
+    vertical-align: sub;
+  }
 
-ol,
-ul {
-  padding-left: spacer(6);
+  sup {
+    vertical-align: super;
+  }
+
+  small {
+    display: block;
+    @include font-size(1);
+  }
+
+  hr {
+    border: none;
+    border-top: $border;
+  }
+
+  ol,
+  ul {
+    padding-left: spacer(6);
+  }
 }
 
 ul.inline {

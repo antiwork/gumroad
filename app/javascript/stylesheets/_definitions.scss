@@ -190,6 +190,16 @@ $z-indices: (
   text-overflow: ellipsis;
 }
 
+@keyframes loading {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.3;
+  }
+}
+
 @mixin dummy {
   background-color: gray(1);
   animation: loading 1s infinite linear alternate;

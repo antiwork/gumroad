@@ -24,6 +24,7 @@ import { Popover } from "$app/components/Popover";
 import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Progress } from "$app/components/Progress";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
+import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
@@ -401,7 +402,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   The thumbnail image is shown as a preview in the embedded video player. Your image should have a 16:9
                   aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
                 </div>
-                <div role="separator">or</div>
+                <Separator>or</Separator>
                 <div>
                   <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
                 </div>
@@ -582,6 +583,21 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 placeholder="Description"
               />
             </fieldset>
+
+            {FileUtils.isDocumentExtension(file.extension) ? (
+              <fieldset>
+                <legend>
+                  <label htmlFor={`${uid}isbn`}>ISBN</label>
+                </legend>
+                <input
+                  type="text"
+                  id={`${uid}isbn`}
+                  value={file.isbn ?? ""}
+                  onChange={(evt) => updateFile({ isbn: evt.target.value })}
+                  placeholder="ISBN"
+                />
+              </fieldset>
+            ) : null}
 
             {file.is_pdf ? (
               <label>

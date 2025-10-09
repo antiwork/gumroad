@@ -153,7 +153,7 @@ export const DraftsTab = () => {
               </Button>
             ) : null}
             {selectedInstallment ? (
-              <aside className="!mt-0">
+              <aside className="mt-0!">
                 <header>
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />

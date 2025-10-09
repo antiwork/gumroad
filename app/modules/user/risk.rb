@@ -13,7 +13,7 @@ module User::Risk
   ].freeze
   PROBATION_WITH_REMINDER_DAYS = 30
   PROBATION_REVIEW_DAYS = 2
-  MAX_REFUND_QUEUE_SIZE = 1000
+  MAX_REFUND_QUEUE_SIZE = 10000
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
 
   def self.contact_iffy_risk_analysis(iffy_request_parameters)
@@ -237,7 +237,7 @@ module User::Risk
   class_methods do
     def refund_queue(from_date = 7.days.ago)
       user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]
-        .find(suspended_at: { "$gte": from_date.utc })
+        .find(suspended_at: { "$gte": from_date.utc.to_s })
         .limit(MAX_REFUND_QUEUE_SIZE)
         .map { |record| record["user_id"] }
 

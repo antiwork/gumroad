@@ -235,7 +235,7 @@ export const ReviewForm = React.forwardRef<
   };
 
   const reviewModeRadioButtons = (
-    <div role="radiogroup" className="radio-buttons !grid-cols-2">
+    <div role="radiogroup" className="radio-buttons grid-cols-2!">
       <Button
         role="radio"
         aria-checked={reviewMode === "text"}
@@ -319,7 +319,7 @@ export const ReviewForm = React.forwardRef<
   );
 
   return (
-    <form onSubmit={(event) => void handleSubmit(event)} style={style} className="flex flex-col !items-start">
+    <form onSubmit={(event) => void handleSubmit(event)} style={style} className="flex flex-col items-start!">
       {error ? <p className="text-red"> {error} </p> : null}
       <div className="flex flex-wrap justify-between gap-2">
         <label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</label>

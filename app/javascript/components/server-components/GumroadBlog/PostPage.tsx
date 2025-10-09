@@ -15,7 +15,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 
 const BackToBlog = ({ className }: { className?: string }) => (
   <div className={cx("scoped-tailwind-preflight", className)}>
-    <a href="/blog" className="text-pink-600 hover:text-pink-800 mt-4 flex items-center font-medium">
+    <a href="/blog" className="mt-4 flex items-center font-medium text-pink-600 hover:text-pink-800">
       <Icon name="arrow-left" className="mr-1.5" style={{ width: 18, height: 18 }} />
       Back to Blog
     </a>
@@ -55,7 +55,7 @@ const PostPage = ({
           <h1 className="mb-4">{subject}</h1>
           <time className="text-dark-gray">{publishedAtFormatted}</time>
         </header>
-        <div className="mx-auto mt-6 grid max-w-3xl gap-6 border-t py-12 text-xl">
+        <div className="mx-auto mt-6 grid max-w-3xl justify-items-center gap-6 border-t py-12 text-xl">
           {pageLoaded ? null : <LoadingSpinner width="2em" />}
           <EditorContent className="rich-text" editor={editor} />
 

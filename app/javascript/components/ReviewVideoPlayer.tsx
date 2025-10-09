@@ -45,14 +45,14 @@ export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thu
   const { loading, showPlayer, onPlay, playerId } = usePlayer(videoId, uid);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded bg-black">
+    <div className="relative aspect-video w-full overflow-hidden rounded-sm bg-black">
       <div id={playerId} className={cx({ hidden: !showPlayer })}></div>
       <figure className={cx("relative aspect-video w-full", { hidden: showPlayer })}>
         {thumbnail ? (
           <img src={thumbnail} loading="lazy" className="absolute h-full w-full rounded-t bg-black object-cover" />
         ) : null}
         <button
-          className="link absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          className="link absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
           onClick={() => void onPlay()}
           aria-label="Watch"
           disabled={loading}

@@ -25,7 +25,7 @@ export const ShareTab = () => {
   return (
     <Layout preview={<ProductPreview />}>
       <form>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           <header>
             <h2>Share</h2>
           </header>
@@ -48,8 +48,8 @@ export const ShareTab = () => {
           onChange={(sectionIds) => updateBundle({ section_ids: sectionIds })}
           profileSections={profileSections}
         />
-        <section className="!p-4 md:!p-8">
-          <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <section className="p-4! md:p-8!">
+          <header className="flex items-center justify-between">
             <h2>Gumroad Discover</h2>
             <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
               Learn more

@@ -110,6 +110,24 @@ describe SubscriptionsController do
         end
       end
 
+      context "when installment plan is completed" do
+        it "returns 404" do
+          purchase = create(:installment_plan_purchase)
+          subscription = purchase.subscription
+          product = subscription.link
+
+          subscription.update_columns(charge_occurrence_count: product.installment_plan.number_of_installments)
+
+          (product.installment_plan.number_of_installments - 1).times do
+            create(:purchase, link: product, subscription: subscription, purchaser: subscription.user)
+          end
+
+          cookies.encrypted[subscription.cookie_key] = subscription.external_id
+
+          expect { get :manage, params: { id: subscription.external_id } }.to raise_error(ActionController::RoutingError)
+        end
+      end
+
       context "when encrypted cookie is present" do
         it "renders the manage page" do
           cookies.encrypted[@subscription.cookie_key] = @subscription.external_id
