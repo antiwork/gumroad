@@ -86,7 +86,7 @@ export const AudioPlayer = (props: Props) => {
   });
 
   return (
-    <div className="audio-player">
+    <div className="flex items-center justify-center gap-3">
       <audio
         src={props.src}
         ref={ref}
@@ -98,7 +98,7 @@ export const AudioPlayer = (props: Props) => {
       />
       {isLoaded ? (
         <>
-          <div role="toolbar">
+          <div role="toolbar" className="flex items-center gap-2 text-[1.25rem]">
             {isPlaying ? (
               <button type="button" onClick={pauseAudio} aria-label="Pause">
                 <Icon name="circle-pause" />
@@ -115,7 +115,9 @@ export const AudioPlayer = (props: Props) => {
               <Icon name="skip-forward-30" />
             </button>
           </div>
-          <time aria-label="Progress">{formattedTime(progress)}</time>
+          <time aria-label="Progress" className="text-[0.875rem] tabular-nums leading-[1.3]">
+            {formattedTime(progress)}
+          </time>
           <input
             type="range"
             min={0}
@@ -126,8 +128,11 @@ export const AudioPlayer = (props: Props) => {
               (audio, ev: React.ChangeEvent<HTMLInputElement>) => (audio.currentTime = parseInt(ev.target.value, 10)),
             )}
             style={{ "--progress": `${(progress * 100) / duration}%` }}
+            className="flex-grow"
           />
-          <time aria-label="Remaining">{formattedTime(duration - progress)}</time>
+          <time aria-label="Remaining" className="text-[0.875rem] tabular-nums leading-[1.3]">
+            {formattedTime(duration - progress)}
+          </time>
         </>
       ) : (
         <LoadingSpinner width="2em" />

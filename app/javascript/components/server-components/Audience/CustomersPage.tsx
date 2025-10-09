@@ -438,7 +438,7 @@ const CustomersPage = ({
       />
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
-          <>
+          <section className="paragraphs">
             <table aria-live="polite" aria-busy={isLoading}>
               <caption>{`All sales (${count})`}</caption>
               <thead>
@@ -551,7 +551,7 @@ const CustomersPage = ({
             {pagination && pagination.pages > 1 ? (
               <Pagination onChangePage={asyncVoid(loadCustomers)} pagination={pagination} />
             ) : null}
-          </>
+          </section>
         ) : (
           <div className="placeholder">
             <figure>
@@ -888,7 +888,7 @@ const CustomerDrawer = ({
         />
       ) : null}
       <section className="stack">
-        <h3 style={{ display: "flex", gap: "var(--spacer-1)" }}>
+        <h3 className="flex gap-1">
           Order information
           {!subscription && customer.transaction_url_for_seller ? (
             <a href={customer.transaction_url_for_seller} target="_blank" rel="noreferrer" aria-label="Transaction">
@@ -1044,7 +1044,7 @@ const CustomerDrawer = ({
             ))
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1230,7 +1230,7 @@ const CustomerDrawer = ({
             </>
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1295,7 +1295,7 @@ const CustomerDrawer = ({
             </>
           ) : (
             <section>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Progress width="2em" />
               </div>
             </section>
@@ -1863,7 +1863,7 @@ const OptionSection = ({
             </>
           )
         ) : (
-          <div style={{ textAlign: "center" }}>
+          <div className="text-center">
             <Progress width="2em" />
           </div>
         )}
@@ -2562,7 +2562,7 @@ const CommissionSection = ({
         <h3>Files</h3>
       </header>
       <section>
-        <section style={{ display: "grid", gap: "var(--spacer-2)" }}>
+        <section className="override grid gap-2">
           {commission.files.length ? (
             <div role="tree">
               {commission.files.map((file) => (

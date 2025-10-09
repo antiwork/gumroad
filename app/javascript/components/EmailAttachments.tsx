@@ -141,7 +141,7 @@ export const FileRow = ({ file }: { file: FileState }) => {
       {isDrawerOpen ? (
         <Drawer>
           {file.is_streamable ? (
-            <div style={{ display: "grid", gap: "var(--spacer-3)" }}>
+            <div className="override grid gap-3">
               <SubtitleList
                 subtitleFiles={file.subtitle_files}
                 onRemoveSubtitle={(subtitleUrl) =>

@@ -24,7 +24,7 @@ const ProductsPage = ({
   setEnableArchiveTab?: (enable: boolean) => void;
   type?: Tab;
 }) => (
-  <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
+  <div className="override grid gap-12">
     {memberships.length > 0 ? (
       <ProductsPageMembershipsTable
         query={query}

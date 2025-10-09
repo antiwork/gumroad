@@ -13,7 +13,7 @@ module User::Risk
   ].freeze
   PROBATION_WITH_REMINDER_DAYS = 30
   PROBATION_REVIEW_DAYS = 2
-  MAX_REFUND_QUEUE_SIZE = 1000
+  MAX_REFUND_QUEUE_SIZE = 10000
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
 
   def self.contact_iffy_risk_analysis(iffy_request_parameters)
@@ -62,6 +62,25 @@ module User::Risk
   def disable_refunds!
     self.refunds_disabled = true
     save!
+  end
+
+  def flagged_for_explicit_nsfw?
+    flagged_for_tos_violation? && tos_violation_reason == Compliance::EXPLICIT_NSFW_TOS_VIOLATION_REASON
+  end
+
+  def flag_for_explicit_nsfw_tos_violation!(options)
+    transaction do
+      update!(tos_violation_reason: Compliance::EXPLICIT_NSFW_TOS_VIOLATION_REASON)
+
+      comment_content = "All products were unpublished because this user was selling prohibited content."
+      flag_for_tos_violation!(options.merge(bulk: true, content: comment_content))
+
+      ContactingCreatorMailer.flagged_for_explicit_nsfw_tos_violation(id).deliver_later(queue: "default")
+
+      links.alive.find_each do |product|
+        product.unpublish!(is_unpublished_by_admin: true)
+      end
+    end
   end
 
   def suspend_due_to_stripe_risk
@@ -218,7 +237,7 @@ module User::Risk
   class_methods do
     def refund_queue(from_date = 7.days.ago)
       user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]
-        .find(suspended_at: { "$gte": from_date.utc })
+        .find(suspended_at: { "$gte": from_date.utc.to_s })
         .limit(MAX_REFUND_QUEUE_SIZE)
         .map { |record| record["user_id"] }
 

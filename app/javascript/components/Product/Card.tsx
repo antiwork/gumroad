@@ -57,7 +57,7 @@ export const Card = ({
 );
 
 export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; big?: boolean; eager?: boolean }) => (
-  <article className={cx("product-card horizontal", { big })} style={{ position: "relative" }}>
+  <article className={cx("product-card horizontal relative", { big })}>
     <figure>
       <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
     </figure>
@@ -95,7 +95,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
 );
 
 const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSProperties }) => (
-  <div className="rating" aria-label="Rating" style={style}>
+  <div className="flex shrink-0 items-center gap-1" aria-label="Rating" style={style}>
     <Icon name="solid-star" />
     <span className="rating-average">{ratings.average.toFixed(1)}</span>
     <span title={`${ratings.average} ${ratings.average === 1 ? "rating" : "ratings"}`}>

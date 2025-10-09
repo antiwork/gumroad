@@ -199,6 +199,7 @@ describe Upsell do
           cross_sell: true,
           replace_selected_products: true,
           universal: false,
+          paused: false,
           discount: nil,
           product: {
             id: product1.external_id,
@@ -228,6 +229,7 @@ describe Upsell do
           cross_sell: false,
           replace_selected_products: false,
           universal: false,
+          paused: false,
           discount: {
             cents: 100,
             type: "fixed",

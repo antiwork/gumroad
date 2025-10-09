@@ -283,29 +283,25 @@ describe "Wishlist show page", :js, type: :system do
     within_section "New Wishlist Name", section_element: :aside do
       fill_in "Description", with: "Description Goes Here"
 
-      within_cart_item(wishlist.wishlist_products.first.product.name) do
-        expect(page).to have_text("$20")
-        expect(page).to have_text("Qty: 2")
-      end
-
-      within_cart_item(wishlist.wishlist_products.fourth.product.name) do
-        expect(page).to have_text("$2")
-        expect(page).to have_text("Tier: First Tier")
-        expect(page).to have_text("Membership: Yearly")
-      end
-
-      wishlist.wishlist_products.each do |wishlist_product|
-        within_cart_item(wishlist_product.product.name) do
-          click_on "Remove"
-        end
-      end
-
-      expect(page).to have_text("Products from your wishlist will be displayed here")
-
       click_on "Close"
     end
 
+    within find_product_card(wishlist.wishlist_products.first.product) do
+      expect(page).to have_text("$10")
+    end
+
+    within find_product_card(wishlist.wishlist_products.fourth.product) do
+      expect(page).to have_text("$2 a month")
+    end
+
+    wishlist.wishlist_products.each do |wishlist_product|
+      within find_product_card(wishlist_product.product) do
+        click_on "Remove this product"
+      end
+    end
+
     expect(page).to have_text("Description Goes Here")
+    expect(page).to have_text("Products from your wishlist will be displayed here")
 
     wishlist.wishlist_products.reload.each do |wishlist_product|
       expect(wishlist_product).to be_deleted

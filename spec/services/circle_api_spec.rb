@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe CircleApi, :vcr do
+describe CircleApi, :vcr, :without_circle_rate_limit do
   let(:communities_list) do [
     {
       "id" => 3512,

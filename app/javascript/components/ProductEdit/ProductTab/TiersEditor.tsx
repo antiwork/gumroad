@@ -201,7 +201,7 @@ const TierEditor = ({
         </WithTooltip>
       </div>
       {isOpen ? (
-        <Drawer style={{ display: "grid", gap: "var(--spacer-5)" }}>
+        <Drawer className="override grid gap-6">
           <fieldset>
             <label htmlFor={`${uid}-name`}>Name</label>
             <div className="input">
@@ -424,7 +424,7 @@ You can modify or cancel your membership at any time.`;
       open={tier.apply_price_changes_to_existing_memberships}
     >
       <div className="dropdown">
-        <div style={{ display: "grid", gap: "var(--spacer-5)" }}>
+        <div className="override grid gap-6">
           {initialEffectiveDate ? (
             <div role="alert" className="warning">
               You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}

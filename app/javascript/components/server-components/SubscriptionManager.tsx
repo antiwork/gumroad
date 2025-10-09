@@ -361,7 +361,7 @@ const SubscriptionManager = ({
           <PaymentForm className="borderless" notice={paymentNotice} />
           {totalPrice > 0 ? (
             <div>
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 {vat > 0
                   ? `You'll be charged ${formatUSDCentsWithExpandedCurrencySymbol(totalPrice)} today, including ${formatUSDCentsWithExpandedCurrencySymbol(vat)} for VAT in ${state.countries[state.country] ?? ""}.`
                   : `You'll be charged ${formatUSDCentsWithExpandedCurrencySymbol(totalPrice)} today.`}

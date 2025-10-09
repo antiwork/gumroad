@@ -481,6 +481,10 @@ Rails.application.routes.draw do
         get :paged, on: :collection
         get :cart_item, on: :collection
         get :statistics, on: :member
+
+        scope module: :upsells do
+          resource :pause, only: [:create, :destroy]
+        end
       end
       namespace :upsells do
         resources :products, only: [:index, :show]
@@ -1123,7 +1127,7 @@ Rails.application.routes.draw do
     end
 
     resources :wishlists, only: [:index, :create, :show, :update] do
-      resources :products, only: [:create, :destroy], controller: "wishlists/products"
+      resources :products, only: [:create, :destroy, :index], controller: "wishlists/products"
       resource :followers, only: [:create, :destroy], controller: "wishlists/followers"
     end
 

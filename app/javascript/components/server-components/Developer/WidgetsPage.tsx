@@ -229,7 +229,7 @@ const OverlayPanel = ({ selectedProduct }: PanelProps) => {
         </fieldset>
       </div>
       <CodeContainer codeToCopy={codeToCopy} />
-      <fieldset style={{ display: "grid", gap: "var(--spacer-4)" }}>
+      <fieldset className="override grid gap-4">
         <label>
           <input type="checkbox" checked={isWanted} onChange={(e) => setIsWanted(e.target.checked)} role="switch" />
           Send directly to checkout page

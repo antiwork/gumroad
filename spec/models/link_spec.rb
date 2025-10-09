@@ -4496,15 +4496,22 @@ describe Link, :vcr do
     end
   end
 
-  describe "#cross_sells" do
+  describe "#available_cross_sells" do
     let(:seller) { create(:named_seller) }
     let(:product) { create(:product, user: seller) }
-    let(:cross_sell1) { create(:upsell, seller:, selected_products: [product], cross_sell: true) }
-    let(:cross_sell2) { create(:upsell, seller:, universal: true, cross_sell: true) }
-    let (:cross_sell3) { create(:upsell, seller:, cross_sell: true) }
+    let!(:cross_sell_for_product) { create(:upsell, seller:, selected_products: [product], cross_sell: true) }
+    let!(:cross_sell_universal) { create(:upsell, seller:, universal: true, cross_sell: true) }
+    let!(:cross_sell_for_another_product) { create(:upsell, seller:, cross_sell: true) }
 
-    it "returns the product's cross-sells" do
-      expect(product.cross_sells).to eq([cross_sell1, cross_sell2])
+    it "returns cross-sells that are are either for the product or universal" do
+      expect(product.available_cross_sells).to contain_exactly(cross_sell_for_product, cross_sell_universal)
+    end
+
+    it "does not return cross-sells that are paused or deleted" do
+      cross_sell_for_product.update!(paused: true)
+      cross_sell_universal.mark_deleted!
+
+      expect(product.available_cross_sells.reload).to be_empty
     end
   end
 
@@ -5246,7 +5253,7 @@ describe Link, :vcr do
   describe ".eligible_for_content_upsells" do
     let!(:regular_product) { create(:product_with_file_and_preview) }
     let!(:membership_product) { create(:membership_product) }
-    let!(:product_with_variants) { create(:product_with_digital_versions) }
+    let!(:product_with_variants) { create(:product_with_digital_versions_with_price_difference_cents) }
     let!(:archived_product) { create(:product, archived: true) }
 
     it "returns visible non-membership products including those with variants" do

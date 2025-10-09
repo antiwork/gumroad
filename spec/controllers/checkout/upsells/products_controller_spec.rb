@@ -7,7 +7,7 @@ describe Checkout::Upsells::ProductsController do
   let!(:product1) { create(:product, :recommendable, user: seller, name: "Product 1", price_cents: 1000, price_currency_type: "usd", native_type: "digital") }
   let!(:product2) { create(:product, user: seller, name: "Product 2", price_cents: 2000, price_currency_type: "eur", native_type: "physical") }
   let!(:archived_product) { create(:product, user: seller, archived: true) }
-  let!(:versioned_product) { create(:product_with_digital_versions, user: seller, name: "Versioned Product", price_cents: 3000) }
+  let!(:versioned_product) { create(:product_with_digital_versions_with_price_difference_cents, user: seller, name: "Versioned Product", price_cents: 3000) }
   let!(:membership_product) { create(:membership_product, user: seller, name: "Membership", price_cents: 4000) }
 
   describe "GET #index" do
@@ -55,7 +55,7 @@ describe Checkout::Upsells::ProductsController do
                 name: "Untitled 1",
                 quantity_left: nil,
                 description: "",
-                price_difference_cents: 0,
+                price_difference_cents: 100,
                 recurrence_price_values: nil,
                 is_pwyw: false,
                 duration_in_minutes: nil
@@ -65,7 +65,7 @@ describe Checkout::Upsells::ProductsController do
                 name: "Untitled 2",
                 quantity_left: nil,
                 description: "",
-                price_difference_cents: 0,
+                price_difference_cents: 200,
                 recurrence_price_values: nil,
                 is_pwyw: false,
                 duration_in_minutes: nil
@@ -125,7 +125,7 @@ describe Checkout::Upsells::ProductsController do
                   name: "Untitled 1",
                   quantity_left: nil,
                   description: "",
-                  price_difference_cents: 0,
+                  price_difference_cents: 100,
                   recurrence_price_values: nil,
                   is_pwyw: false,
                   duration_in_minutes: nil
@@ -135,7 +135,7 @@ describe Checkout::Upsells::ProductsController do
                   name: "Untitled 2",
                   quantity_left: nil,
                   description: "",
-                  price_difference_cents: 0,
+                  price_difference_cents: 200,
                   recurrence_price_values: nil,
                   is_pwyw: false,
                   duration_in_minutes: nil

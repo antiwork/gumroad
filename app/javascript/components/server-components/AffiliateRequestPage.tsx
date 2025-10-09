@@ -41,7 +41,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
       });
     } catch (e) {
       assertResponseError(e);
-      const message = `An error occurred while submitting affiliate request${e.message}`;
+      const message = `An error occurred while submitting affiliate request. ${e.message}`;
       showAlert(message, "error");
       setFormStatus({ type: "error", message });
     }

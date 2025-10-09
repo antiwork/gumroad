@@ -40,6 +40,7 @@ import {
   validateUrl,
 } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3UploadConfig";
+import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
@@ -555,12 +556,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         }
                       />
                       <div
-                        className="rows"
+                        className="rows overflow-auto"
                         role="listbox"
-                        style={{ maxHeight: "20rem", overflow: "auto", textAlign: "initial" }}
+                        style={{ maxHeight: "20rem", textAlign: "initial" }}
                       >
                         {selectingExistingFiles.isLoading ? (
-                          <div style={{ display: "flex", justifyContent: "center", minHeight: "10rem" }}>
+                          <div className="flex min-h-40 justify-center">
                             <LoadingSpinner width="2rem" />
                           </div>
                         ) : (
@@ -634,7 +635,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     />
                   </div>
                 </Modal>
-                <div role="separator" aria-orientation="vertical" />
+                <Separator aria-orientation="vertical" />
                 <Popover
                   trigger={
                     <div className="toolbar-item">
@@ -686,7 +687,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             e.stopPropagation();
                             setInsertMenuState("inputs");
                           }}
-                          style={{ display: "flex", alignItems: "center" }}
+                          className="flex items-center"
                         >
                           <span className="icon icon-input-cursor-text" />
                           <span>Input</span>
@@ -733,7 +734,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   </div>
                 </Popover>
                 <>
-                  <div role="separator" aria-orientation="vertical" />
+                  <Separator aria-orientation="vertical" />
                   <button className="toolbar-item" onClick={handleCreatePageClick}>
                     <Icon name="plus" /> Page
                   </button>

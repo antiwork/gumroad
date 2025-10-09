@@ -110,7 +110,7 @@ const AffiliatedProductsTable = ({
   }, [sort]);
 
   return (
-    <>
+    <section className="paragraphs">
       <table aria-live="polite" aria-busy={isLoading}>
         <thead>
           <tr>
@@ -173,7 +173,7 @@ const AffiliatedProductsTable = ({
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadAffiliatedProducts(page, sort)} pagination={pagination} />
       ) : null}
-    </>
+    </section>
   );
 };
 

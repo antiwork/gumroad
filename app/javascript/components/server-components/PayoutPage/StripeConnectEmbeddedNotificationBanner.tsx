@@ -15,7 +15,7 @@ export const StripeConnectEmbeddedNotificationBanner = () => {
     setConnectInstance(getStripeConnectInstance());
   });
 
-  const loader = <div className="dummy" style={{ height: "10rem" }} />;
+  const loader = <div className="dummy h-40" />;
 
   return (
     <section>

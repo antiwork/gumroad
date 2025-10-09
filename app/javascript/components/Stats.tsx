@@ -51,7 +51,7 @@ export const Stats = ({
           </WithTooltip>
         ) : null}
       </h2>
-      <div ref={containerRef} style={{ overflow: "hidden", overflowWrap: "initial" }}>
+      <div ref={containerRef} className="overflow-hidden" style={{ overflowWrap: "initial" }}>
         <span style={adjustedFontSize ? { fontSize: adjustedFontSize } : undefined}>{value ?? "-"}</span>
       </div>
     </section>

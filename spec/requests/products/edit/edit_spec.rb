@@ -147,9 +147,11 @@ describe("Product Edit Scenario", type: :system, js: true) do
     fill_in "Fixed amount", with: "1"
     click_on "Insert"
 
-    within_section "Sample product", section_element: :article do
-      expect(page).to have_text("5.0 (1)", normalize_ws: true)
-      expect(page).to have_text("$10 $9")
+    within("[aria-label='Description']") do
+      within_section "Sample product", section_element: :article do
+        expect(page).to have_text("5.0 (1)", normalize_ws: true)
+        expect(page).to have_text("$10 $9")
+      end
     end
 
     click_on "Save"
@@ -184,7 +186,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   end
 
   it "allows creating and deleting an upsell with variants in the product description" do
-    product = create(:product_with_digital_versions, user: seller, name: "Sample product", price_cents: 1000)
+    product = create(:product_with_digital_versions_with_price_difference_cents, user: seller, name: "Sample product", price_cents: 1000)
     variant1 = product.alive_variants.first
     variant2 = product.alive_variants.last
     create(:purchase, :with_review, link: product)
@@ -226,13 +228,22 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
     check "Add a discount to the offered product"
     choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
+    discount_amount_cents = 100
+    discount_amount = discount_amount_cents / 100.0
+    fill_in "Fixed amount", with: discount_amount
     click_on "Insert"
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_selector("span", text: "(#{variant1.name})")
       expect(page).to have_text("5.0 (1)", normalize_ws: true)
-      expect(page).to have_text("$10 $9")
+
+      price_cents = variant1.price_difference_cents + product.price_cents
+      price = price_cents / 100
+
+      discounted_price = price_cents - discount_amount_cents
+      discounted_price = discounted_price / 100
+
+      expect(page).to have_text("$#{price} $#{discounted_price}")
     end
 
     click_on "Save"
@@ -931,10 +942,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows creating and deleting a testimonial in the product rich content" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
     purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", full_name: "Reviewer 1")
-    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
-
     purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", full_name: "Reviewer 2")
-    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
 
     visit edit_link_path(product.unique_permalink)
     select_tab "Content"
@@ -946,6 +954,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     within_modal "Insert reviews" do
+      expect(page).to have_text("No reviews with text or video yet.")
+      expect(page).not_to have_button "Insert"
+      click_on "Cancel"
+    end
+
+    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
+    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
+
+    select_disclosure "Insert" do
+      click_on "Review"
+    end
+
+    within_modal "Insert reviews" do
+      expect(page).to have_button "Insert", disabled: true
       check "Select all"
       click_on "Insert"
     end
@@ -976,10 +998,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows creating and deleting a testimonial in the product description" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
     purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", full_name: "Reviewer 1")
-    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
-
     purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", full_name: "Reviewer 2")
-    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
 
     visit edit_link_path(product.unique_permalink)
 
@@ -990,6 +1009,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     within_modal "Insert reviews" do
+      expect(page).to have_text("No reviews with text or video yet.")
+      expect(page).not_to have_button "Insert"
+      click_on "Cancel"
+    end
+
+    review1 = create(:product_review, purchase: purchase1, rating: 5, message: "This is amazing! Highly recommended.")
+    review2 = create(:product_review, purchase: purchase2, rating: 4, message: "Very good product with great features.")
+
+    select_disclosure "Insert" do
+      click_on "Review"
+    end
+
+    within_modal "Insert reviews" do
+      expect(page).to have_button "Insert", disabled: true
       check "Select all"
       click_on "Insert"
     end

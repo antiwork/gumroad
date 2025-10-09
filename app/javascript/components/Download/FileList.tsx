@@ -63,6 +63,7 @@ export type FileItem = {
   pdf_stamp_enabled: boolean;
   processing: boolean;
   thumbnail_url: string | null;
+  isbn?: string | null;
 };
 export type FolderItem = {
   type: "folder";
@@ -228,6 +229,8 @@ export const FileRow = ({
                   {file.pagelength} {file.pagelength === 1 ? "page" : "pages"}
                 </li>
               ) : null}
+
+              {file.isbn ? <li>ISBN: {file.isbn}</li> : null}
 
               {file.duration ? <li>{humanizedDuration(file.duration)}</li> : null}
             </>
@@ -531,11 +534,11 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
           <meter
             value={latestMediaLocation / file.duration}
+            className="border-0"
             style={{
               ...{
                 background: "var(--active-bg)",
                 height: "var(--spacer-1)",
-                border: "none",
               },
               ...(isPlaying ? {} : { "--optimum-value-background": "currentColor" }),
             }}

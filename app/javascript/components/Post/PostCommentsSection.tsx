@@ -127,7 +127,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
   const nestedComments = React.useMemo(() => nestComments(data.comments), [data.comments]);
 
   return (
-    <section className="comments comments-section grid gap-8 border-b border-border p-4 lg:py-12">
+    <section className="comments comments-section override grid gap-8 border-b border-border p-4 lg:py-12">
       <h2>
         {data.count} {data.count === 1 ? "comment" : "comments"}
       </h2>
@@ -141,7 +141,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         </Button>
       </CommentTextarea>
       {nestedComments.length > 0 ? <hr /> : null}
-      <div style={{ display: "grid", gap: "var(--spacer-5)" }}>
+      <div className="override grid gap-6">
         {nestedComments.map((comment) => (
           <CommentContainer
             key={comment.id}
@@ -250,7 +250,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
             {comment.is_editable || comment.is_deletable ? (
               <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
                 {(close) => (
-                  <div style={{ display: "grid", gap: "var(--spacer-3)" }} onClick={close}>
+                  <div className="override grid gap-3" onClick={close}>
                     {comment.is_editable ? (
                       <Button onClick={() => setEditDraft(comment.content.original)}>Edit</Button>
                     ) : null}

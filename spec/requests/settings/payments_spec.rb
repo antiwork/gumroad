@@ -157,7 +157,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_content("Payouts will be made in USD.")
 
       select("1", from: "Day")
-      select("1", from: "Month")
+      select("January", from: "Month")
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
 
@@ -198,7 +198,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("ZIP code", with: "10110")
 
       select("1", from: "Day")
-      select("1", from: "Month")
+      select("January", from: "Month")
       select("1901", from: "Year")
       fill_in("Last 4 digits of SSN", with: "0000")
       fill_in("Phone number", with: "5022-541-982")
@@ -621,7 +621,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Cadastro de Pessoas Físicas (CPF)", with: "000.000.000-00")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "US LLC Brazilian Rep")
@@ -702,7 +702,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Social Insurance Number", with: "111111111")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "CA Pvt Corp")
@@ -791,7 +791,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("Account number", with: "000123456789")
       fill_in("Confirm account number", with: "000123456789")
       select("1", from: "Day")
-      select("1", from: "Month")
+      select("January", from: "Month")
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
       click_on("Update settings")
@@ -822,7 +822,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       fill_in("Account number", with: "000123456789")
       fill_in("Confirm account number", with: "000123456789")
       select("1", from: "Day")
-      select("1", from: "Month")
+      select("January", from: "Month")
       select("1980", from: "Year")
       fill_in("Last 4 digits of SSN", with: "1235")
       click_on("Update settings")
@@ -913,7 +913,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           fill_in("Postal code", with: "51133")
 
           select("1", from: "Day")
-          select("1", from: "Month")
+          select("January", from: "Month")
           select("1980", from: "Year")
           select("India", from: "Nationality")
           fill_in("Emirates ID", with: "000000000000000")
@@ -954,7 +954,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           fill_in("Postal code", with: "51133")
 
           select("1", from: "Day")
-          select("1", from: "Month")
+          select("January", from: "Month")
           select("1980", from: "Year")
           select("India", from: "Nationality")
           fill_in("Emirates ID", with: "000000000000000")
@@ -1063,7 +1063,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to_not have_alert(text: "Thanks! You're all set.")
         expect(find_field("Month")["aria-invalid"]).to eq "true"
 
-        select("1", from: "Month")
+        select("January", from: "Month")
         click_on("Update settings")
         expect(page).to_not have_alert(text: "Thanks! You're all set.")
         expect(find_field("Year")["aria-invalid"]).to eq "true"
@@ -1084,7 +1084,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("PayPal Email", with: "valid@gumroad.com")
@@ -1115,7 +1115,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in "Postal code", with: "12345"
         fill_in "Phone number", with: "5022541982"
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1990", from: "Year")
         expect do
           click_on "Update settings"
@@ -1147,7 +1147,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1199,7 +1199,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         fill_in("Hong Kong ID Number", with: "000000000")
 
@@ -1267,7 +1267,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Social Insurance Number", with: "000000000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "CA LLC")
@@ -1334,7 +1334,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "546080")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         fill_in("NRIC number / FIN", with: "000000000")
         select("India", from: "Nationality")
@@ -1386,7 +1386,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10169")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1435,7 +1435,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1138")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1483,7 +1483,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1050")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1531,7 +1531,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1014")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1579,7 +1579,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10169")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1639,7 +1639,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Emirates ID", with: "000000000000000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "uae biz")
@@ -1706,7 +1706,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "51133")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         select("India", from: "Nationality")
         fill_in("Emirates ID", with: "000000000000000")
@@ -1742,7 +1742,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "51133")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         select("India", from: "Nationality")
         fill_in("Emirates ID", with: "000000000000000")
@@ -1787,7 +1787,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "9103401")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1835,7 +1835,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "150123")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1884,7 +1884,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1002")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1932,7 +1932,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "010051")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -1979,7 +1979,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10465")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2027,7 +2027,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("México", from: "State")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         fill_in("Personal RFC", with: "0000000000000")
 
@@ -2077,7 +2077,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "411088")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2130,7 +2130,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1001")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         fill_in("CUIL", with: "00-00000000-0")
 
@@ -2179,7 +2179,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1001")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
         fill_in("DNI number", with: "00000000-0")
 
@@ -2228,7 +2228,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "0139")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Norwegian Creator")
@@ -2277,7 +2277,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "D02 NX03")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2325,7 +2325,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "0139")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Liechtenstein Creator")
@@ -2374,7 +2374,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "000000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2423,7 +2423,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10101")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2472,7 +2472,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10110")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2522,7 +2522,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "8320054")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2562,7 +2562,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "8320054")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2614,7 +2614,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10110")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2663,7 +2663,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10110")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2712,7 +2712,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10110")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2761,7 +2761,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "71000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Bosnia and Herzegovina Creator")
@@ -2811,7 +2811,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10020")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2861,7 +2861,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "11000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2911,7 +2911,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "050000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -2963,7 +2963,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "170102")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -3013,7 +3013,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Antigua and Barbuda Creator")
@@ -3063,7 +3063,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Tanzanian Creator")
@@ -3113,7 +3113,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Namibian Creator")
@@ -3163,7 +3163,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Albanian Creator")
@@ -3213,7 +3213,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Bahraini Creator")
@@ -3262,7 +3262,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "112")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Rwandan Creator")
@@ -3313,7 +3313,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Jordanian Creator")
@@ -3363,7 +3363,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Nigerian Creator")
@@ -3413,7 +3413,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Azerbaijani Creator")
@@ -3470,7 +3470,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "100-0000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "japanese creator")
@@ -3526,7 +3526,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "GX11 1AA")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -3573,7 +3573,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Phone number", with: "71123456")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "botswana creator")
@@ -3623,7 +3623,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "11000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "uruguayan creator")
@@ -3674,7 +3674,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "11324")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "mauritian creator")
@@ -3724,7 +3724,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "00233")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "ghanaian creator")
@@ -3774,7 +3774,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "JMAAW01")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "jamaican creator")
@@ -3824,7 +3824,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "112")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "omani creator")
@@ -3873,7 +3873,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1001")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "tunisian creator")
@@ -3922,7 +3922,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "10101")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Dominican Republic Creator")
@@ -3973,7 +3973,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "100000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Uzbekistan Creator")
@@ -4024,7 +4024,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "0000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Chuck Bartowski")
@@ -4075,7 +4075,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "00241")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Gabonese Creator")
@@ -4125,7 +4125,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "98000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Monaco Creator")
@@ -4174,7 +4174,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "2001")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Moldova Creator")
@@ -4224,7 +4224,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
@@ -4274,7 +4274,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Ethiopia Creator")
@@ -4324,7 +4324,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Brunei Creator")
@@ -4374,7 +4374,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Guyana Creator")
@@ -4424,7 +4424,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Guatemala Creator")
@@ -4476,7 +4476,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "00000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Panamanian creator")
@@ -4526,7 +4526,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Personal ID number", with: "000000000")
@@ -4580,7 +4580,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Bhutan Creator")
@@ -4630,7 +4630,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Laos Creator")
@@ -4681,7 +4681,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Mozambique Taxpayer Single ID Number (NUIT)", with: "000000000")
@@ -4734,7 +4734,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1101")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "El Salvadorian Creator")
@@ -4784,7 +4784,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "001001")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "Paraguayan Creator")
@@ -4835,7 +4835,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "0010")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Armenian Creator")
@@ -4885,7 +4885,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "101")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "malagasy creator")
@@ -4935,7 +4935,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "00100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Sri Lankan Creator")
@@ -4986,7 +4986,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Kuwaiti Creator")
@@ -5036,7 +5036,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "101")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Icelandic Creator")
@@ -5083,7 +5083,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Qatar Creator")
@@ -5133,7 +5133,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Bahamas Creator")
@@ -5183,7 +5183,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12345")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Saint Lucia Creator")
@@ -5233,7 +5233,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12500")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Senegal Creator")
@@ -5281,7 +5281,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Angola Creator")
@@ -5331,7 +5331,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Niger Creator")
@@ -5380,7 +5380,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "43200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "San Marino Creator")
@@ -5430,7 +5430,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "12000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Cambodia Creator")
@@ -5480,7 +5480,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "14200")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Mongolia Creator")
@@ -5530,7 +5530,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "16000")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Algeria Creator")
@@ -5580,7 +5580,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "999078")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Macao Creator")
@@ -5630,7 +5630,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "300271")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Benin Creator")
@@ -5678,7 +5678,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Postal code", with: "1100")
 
         select("1", from: "Day")
-        select("1", from: "Month")
+        select("January", from: "Month")
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Cote d'Ivoire Creator")

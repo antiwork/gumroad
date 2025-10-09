@@ -51,8 +51,11 @@ export const Review = ({
 
   return (
     <>
-      <section style={{ display: "grid", gap: "var(--spacer-2)" }}>
-        <span className="rating" aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+      <section className="override grid gap-2">
+        <span
+          className="flex shrink-0 items-center gap-1"
+          aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
+        >
           <RatingStars rating={review.rating} />
           {review.is_new ? <span className="pill small primary">New</span> : null}
         </span>

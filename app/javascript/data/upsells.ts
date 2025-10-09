@@ -19,6 +19,7 @@ export type UpsellPayload = {
   offerCode: { amount_cents: number } | { amount_percentage: number } | null;
   productIds: string[];
   upsellVariants: { selectedVariantId: string; offeredVariantId: string }[];
+  paused: boolean;
 };
 
 export const createUpsell = async ({
@@ -33,6 +34,7 @@ export const createUpsell = async ({
   offerCode,
   productIds,
   upsellVariants,
+  paused,
 }: UpsellPayload) => {
   const response = await request({
     method: "POST",
@@ -53,6 +55,7 @@ export const createUpsell = async ({
         selected_variant_id: selectedVariantId,
         offered_variant_id: offeredVariantId,
       })),
+      paused,
     },
   });
   const responseData = cast<
@@ -77,6 +80,7 @@ export const updateUpsell = async (
     offerCode,
     productIds,
     upsellVariants,
+    paused,
   }: UpsellPayload,
 ) => {
   const response = await request({
@@ -98,6 +102,7 @@ export const updateUpsell = async (
         selected_variant_id: selectedVariantId,
         offered_variant_id: offeredVariantId,
       })),
+      paused,
     },
   });
   const responseData = cast<
@@ -120,6 +125,24 @@ export const deleteUpsell = async (id: string) => {
   if (!responseData.success) throw new ResponseError(responseData.error);
 
   return responseData;
+};
+
+export const pauseUpsell = async (id: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.checkout_upsell_pause_url(id),
+  });
+  if (!response.ok) throw new ResponseError();
+};
+
+export const resumeUpsell = async (id: string) => {
+  const response = await request({
+    method: "DELETE",
+    accept: "json",
+    url: Routes.checkout_upsell_pause_url(id),
+  });
+  if (!response.ok) throw new ResponseError();
 };
 
 export const getPagedUpsells = (page: number, query: string | null, sort: Sort<SortKey> | null) => {

@@ -224,7 +224,16 @@ describe WishlistPresenter do
             rent: false,
             created_at: wishlist.wishlist_products.second.created_at
           }
-        ]
+        ],
+        pagination: {
+          count: 2,
+          items: 20,
+          page: 1,
+          pages: 1,
+          prev: nil,
+          next: nil,
+          last: 1
+        },
       )
     end
 
@@ -278,6 +287,43 @@ describe WishlistPresenter do
       it "cannot be followed" do
         expect(described_class.new(wishlist:).public_props(request: nil, pundit_user:)[:can_follow]).to eq(false)
       end
+    end
+  end
+
+  describe "#public_items" do
+    let(:wishlist) { create(:wishlist, name: "My Wishlist", user: create(:user, name: "Wishlister")) }
+    let(:pundit_user) { SellerContext.logged_out }
+    let(:request) { nil }
+
+    it "returns items with pagination metadata" do
+      create(:wishlist_product, :with_quantity, wishlist:)
+      create(:wishlist_product, :with_recurring_variant, wishlist:)
+
+      result = described_class.new(wishlist:).public_items(request:, pundit_user:)
+
+      expect(result[:items].length).to eq(2)
+      expect(result[:items].first).to include(
+        :id, :product, :option, :recurrence, :quantity, :rent, :created_at, :purchasable, :giftable
+      )
+      expect(result[:pagination]).to include(
+        count: 2,
+        items: 20,
+        page: 1,
+        pages: 1
+      )
+    end
+
+    it "paginates items correctly" do
+      create_list(:wishlist_product, 25, wishlist:)
+
+      first_page = described_class.new(wishlist:).public_items(request:, pundit_user:, page: 1)
+      second_page = described_class.new(wishlist:).public_items(request:, pundit_user:, page: 2)
+
+      expect(first_page[:items].length).to eq(20)
+      expect(first_page[:pagination]).to include(page: 1, pages: 2, next: 2)
+
+      expect(second_page[:items].length).to eq(5)
+      expect(second_page[:pagination]).to include(page: 2, prev: 1, next: nil)
     end
   end
 

@@ -185,7 +185,7 @@ const AddTeamMembersSection = ({
           />
         </fieldset>
       </div>
-      <Button color="primary" style={{ width: "fit-content" }} disabled={loading} onClick={onSubmit}>
+      <Button color="primary" className="w-fit" disabled={loading} onClick={onSubmit}>
         {loading ? (
           <>
             <LoadingSpinner color="grey" /> Sending invitation
@@ -332,14 +332,11 @@ const TeamMembersSection = ({
               </td>
               <td data-label="Role">
                 {memberInfo.leave_team_option ? (
-                  <Button
-                    color="danger"
-                    disabled={loading}
-                    style={{ float: "right" }}
-                    onClick={() => setConfirming(memberInfo)}
-                  >
-                    {memberInfo.leave_team_option.label}
-                  </Button>
+                  <div className="flex justify-end">
+                    <Button color="danger" disabled={loading} onClick={() => setConfirming(memberInfo)}>
+                      {memberInfo.leave_team_option.label}
+                    </Button>
+                  </div>
                 ) : (
                   <Select
                     instanceId={memberInfo.id}

@@ -1,9 +1,12 @@
+import uniqBy from "lodash/uniqBy";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
+import { fetchPaginatedWishlistItems, deleteWishlistItem } from "$app/data/wishlists";
 import { CardProduct } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
+import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -12,6 +15,7 @@ import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
+import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
@@ -46,6 +50,15 @@ export type WishlistProps = {
   checkout_enabled: boolean;
   items: WishlistItem[];
   isDiscover?: boolean;
+  pagination: {
+    count: number;
+    items: number;
+    page: number;
+    pages: number;
+    prev: number | null;
+    next: number | null;
+    last: number;
+  };
 };
 
 const formatName = ({ product, option, recurrence }: WishlistItem) => {
@@ -69,6 +82,95 @@ const addToCartUrl = (item: WishlistItem) => {
   return url.toString();
 };
 
+const WishlistItemCard = ({
+  wishlistId,
+  item,
+  onDelete,
+  canEdit,
+}: {
+  wishlistId: string;
+  item: WishlistItem;
+  onDelete: () => void;
+  canEdit: boolean;
+}) => {
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const destroy = async () => {
+    setIsDeleting(true);
+
+    try {
+      await deleteWishlistItem({ wishlistId, wishlistProductId: item.id });
+      showAlert("Removed from wishlist", "success");
+      onDelete();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <Card
+      key={item.id}
+      product={{ ...item.product, name: formatName(item) }}
+      footerAction={
+        <>
+          {canEdit ? (
+            <div style={{ padding: 0, display: "grid" }}>
+              <WithTooltip position="top" tip="Remove this product">
+                <button
+                  disabled={isDeleting}
+                  aria-label="Remove this product"
+                  onClick={() => void destroy()}
+                  className="grid p-4"
+                >
+                  <Icon name="trash2" />
+                </button>
+              </WithTooltip>
+            </div>
+          ) : null}
+          {item.purchasable && item.giftable ? (
+            <div style={{ padding: 0, display: "grid" }}>
+              <WithTooltip position="top" tip="Gift this product">
+                <a
+                  aria-label="Gift this product"
+                  href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
+                  className="grid p-4"
+                >
+                  <Icon name="gift-fill" />
+                </a>
+              </WithTooltip>
+            </div>
+          ) : null}
+        </>
+      }
+      badge={
+        item.purchasable ? (
+          <div style={{ position: "absolute", top: "var(--spacer-4)", right: "var(--spacer-4)" }}>
+            <WithTooltip position="top" tip="Add to cart">
+              <NavigationButton
+                href={addToCartUrl(item)}
+                color="primary"
+                aria-label="Add to cart"
+                onClick={() =>
+                  trackCtaClick({
+                    sellerId: item.product.seller?.id,
+                    permalink: item.product.permalink,
+                    name: item.product.name,
+                  })
+                }
+              >
+                <Icon name="cart3-fill" />
+              </NavigationButton>
+            </WithTooltip>
+          </div>
+        ) : null
+      }
+    />
+  );
+};
+
 export const Wishlist = ({
   id,
   name: initialName,
@@ -82,11 +184,43 @@ export const Wishlist = ({
   checkout_enabled,
   items: initialItems,
   isDiscover,
+  pagination: initialPagination,
 }: WishlistProps) => {
   const [name, setName] = React.useState(initialName);
   const [description, setDescription] = React.useState(initialDescription);
   const [items, setItems] = React.useState(initialItems);
+  const [pagination, setPagination] = React.useState(initialPagination);
   const [isEditing, setIsEditing] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const gridRef = React.useRef<HTMLDivElement | null>(null);
+
+  const loadMoreWishlistItems = async () => {
+    if (loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const loaded = await fetchPaginatedWishlistItems({
+        wishlist_id: id,
+        page: pagination.next,
+      });
+      setItems((prev) => uniqBy([...prev, ...loaded.items], "id"));
+      setPagination(loaded.pagination);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert("An error occurred while loading more items", "error");
+    }
+    setLoadingMore(false);
+  };
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver((e) => {
+      if (e[0]?.isIntersecting && !loadingMore && pagination.next) void loadMoreWishlistItems();
+    });
+
+    if (items.length && gridRef.current?.lastElementChild) observer.observe(gridRef.current.lastElementChild);
+
+    return () => observer.disconnect();
+  }, [pagination, items]);
 
   return (
     <>
@@ -131,51 +265,31 @@ export const Wishlist = ({
         {description ? <h4>{description}</h4> : null}
       </PageHeader>
       <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
-        <div className="product-card-grid">
+        <div className="product-card-grid" ref={gridRef}>
           {items.map((item) => (
-            <Card
+            <WishlistItemCard
               key={item.id}
-              product={{ ...item.product, name: formatName(item) }}
-              footerAction={
-                item.purchasable && item.giftable ? (
-                  <div style={{ padding: 0, display: "grid" }}>
-                    <WithTooltip position="top" tip="Gift this product">
-                      <a
-                        aria-label="Gift this product"
-                        href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
-                        style={{ padding: "var(--spacer-4)", display: "grid" }}
-                      >
-                        <Icon name="gift-fill" />
-                      </a>
-                    </WithTooltip>
-                  </div>
-                ) : null
-              }
-              badge={
-                item.purchasable ? (
-                  <div style={{ position: "absolute", top: "var(--spacer-4)", right: "var(--spacer-4)" }}>
-                    <WithTooltip position="top" tip="Add to cart">
-                      <NavigationButton
-                        href={addToCartUrl(item)}
-                        color="primary"
-                        aria-label="Add to cart"
-                        onClick={() =>
-                          trackCtaClick({
-                            sellerId: item.product.seller?.id,
-                            permalink: item.product.permalink,
-                            name: item.product.name,
-                          })
-                        }
-                      >
-                        <Icon name="cart3-fill" />
-                      </NavigationButton>
-                    </WithTooltip>
-                  </div>
-                ) : null
-              }
+              wishlistId={id}
+              item={item}
+              canEdit={can_edit}
+              onDelete={() => {
+                setItems((prev) => prev.filter((i) => i.id !== item.id));
+                // Go back to first page to avoid empty last page
+                setPagination(initialPagination);
+              }}
             />
           ))}
         </div>
+
+        {can_edit && items.length === 0 ? (
+          <div className="placeholder">
+            <figure>
+              <Icon name="gift-fill" />
+            </figure>
+            Products from your wishlist will be displayed here
+          </div>
+        ) : null}
+
         {isEditing ? (
           <WishlistEditor
             id={id}
@@ -183,8 +297,6 @@ export const Wishlist = ({
             setName={setName}
             description={description}
             setDescription={setDescription}
-            items={items}
-            setItems={setItems}
             isDiscoverable={!discover_opted_out}
             onClose={() => setIsEditing(false)}
           />
