@@ -23,7 +23,7 @@ describe Checkout::FormController do
       expect(response).to be_successful
       expect(assigns[:title]).to eq("Checkout form")
 
-      expect(response.body).to include('data-page=')
+      expect(response.body).to include("data-page=")
 
       page_data_match = response.body.match(/data-page="([^"]*)"/)
       expect(page_data_match).to be_present, "Expected Inertia.js data-page attribute"

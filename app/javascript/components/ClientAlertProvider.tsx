@@ -95,7 +95,7 @@ export const ClientAlert = ({ alert, isVisible }: { alert: AlertPayload | null; 
   alert ? (
     <div
       role="alert"
-      className={classNames("bg-filled fixed left-1/2 top-4 z-[30] min-w-max max-w-sm px-4 py-2", alert.status, {
+      className={classNames("bg-filled fixed top-4 left-1/2 z-[30] max-w-sm min-w-max px-4 py-2", alert.status, {
         visible: isVisible,
         invisible: !isVisible,
         "-translate-x-1/2 translate-y-0 transition-all delay-500 duration-300 ease-out": isVisible,
