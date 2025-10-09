@@ -24,6 +24,7 @@ import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEntry, useProductEditContext } from "./state";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 export const useProductUrl = (params = {}) => {
   const { product, uniquePermalink } = useProductEditContext();
@@ -140,6 +141,7 @@ export const Layout = ({
   const tab = match?.handle ?? "product";
 
   const navigate = useRefToLatest(useNavigate());
+  const isDesktop = useIsAboveBreakpoint("lg");
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -234,7 +236,7 @@ export const Layout = ({
                   <Icon name="link" />
                 </Button>
               </CopyToClipboard>
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
+              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition={isDesktop ? "left" : "bottom"}>
                 <Button>
                   <Icon name="cart-plus" />
                 </Button>
