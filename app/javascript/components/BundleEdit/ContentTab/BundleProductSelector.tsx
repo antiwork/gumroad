@@ -2,7 +2,6 @@ import * as React from "react";
 
 import { BundleProduct } from "$app/components/BundleEdit/state";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
-import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { classNames } from "$app/utils/classNames";
 
 export const BundleProductSelector = ({
@@ -14,11 +13,10 @@ export const BundleProductSelector = ({
   selected?: boolean;
   onToggle: () => void;
 }) => {
-  const isDesktop = useIsAboveBreakpoint("sm");
 
   return (
     <label role="listitem">
-      <section className={classNames("grid gap-4",isDesktop && "override !grid-cols-[5rem_1fr_auto]")}>
+      <section className="override lg:!grid-cols-[5rem_1fr_auto]">
         <figure>
           <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
         </figure>
