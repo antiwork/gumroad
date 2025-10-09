@@ -23,9 +23,7 @@ export function Placeholder({ children, className }: PlaceholderProps) {
 }
 Placeholder.displayName = "Placeholder";
 
-const PlaceholderIcon = ({ className, ...rest }: React.ComponentProps<typeof Icon>) => (
+export const PlaceholderIcon = ({ className, ...rest }: React.ComponentProps<typeof Icon>) => (
   <Icon {...rest} className={classNames("text-xl leading-[1.3]", className)} />
 );
 PlaceholderIcon.displayName = "PlaceholderIcon";
-
-Placeholder.Icon = PlaceholderIcon;

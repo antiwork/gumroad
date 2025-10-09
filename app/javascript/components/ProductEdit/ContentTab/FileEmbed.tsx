@@ -19,7 +19,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
-import { Placeholder } from "$app/components/Placeholder";
+import { Placeholder, PlaceholderIcon } from "$app/components/Placeholder";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover } from "$app/components/Popover";
 import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
@@ -426,7 +426,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
                   <Placeholder>
                     {thumbnailInput}
-                    <Placeholder.Icon name="upload-fill" />
+                    <PlaceholderIcon name="upload-fill" />
                   </Placeholder>
                 </>
               )}

@@ -7,7 +7,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { NumberInput } from "$app/components/NumberInput";
-import { Placeholder } from "$app/components/Placeholder";
+import { Placeholder, PlaceholderIcon } from "$app/components/Placeholder";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
@@ -345,7 +345,7 @@ export const CardGrid = ({
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
-          <Placeholder.Icon name="archive-fill" />
+          <PlaceholderIcon name="archive-fill" />
           No products found
         </Placeholder>
       ) : (
