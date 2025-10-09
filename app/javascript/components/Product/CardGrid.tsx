@@ -6,7 +6,6 @@ import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { Placeholder } from "$app/components/Placeholder";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -346,7 +345,7 @@ export const CardGrid = ({
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
-          <Icon name="archive-fill" />
+          <Placeholder.Icon name="archive-fill" />
           No products found
         </Placeholder>
       ) : (

@@ -426,7 +426,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
                   <Placeholder>
                     {thumbnailInput}
-                    <Icon name="upload-fill" />
+                    <Placeholder.Icon name="upload-fill" />
                   </Placeholder>
                 </>
               )}

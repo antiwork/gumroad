@@ -146,7 +146,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
           </div>
         ) : (
           <Placeholder>
-            <Icon name="archive-fill" />
+            <Placeholder.Icon name="archive-fill" />
             <p>No products found</p>
           </Placeholder>
         )}

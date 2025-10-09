@@ -2,24 +2,14 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
+import { Icon } from "$app/components/Icons";
+
 type PlaceholderProps = {
   className?: string;
   children?: React.ReactNode;
 };
 
 export function Placeholder({ children, className }: PlaceholderProps) {
-  const enhancedChildren = React.Children.map(children, (child) => {
-    if (!React.isValidElement(child)) return child;
-
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    const typedChild = child as React.ReactElement<{ className?: string }>;
-
-    const existingClassName = typedChild.props.className ?? "";
-    return React.cloneElement(typedChild, {
-      className: classNames(existingClassName.includes("icon") ? "text-xl leading-[1.3]" : "", existingClassName),
-    });
-  });
-
   return (
     <div
       className={classNames(
@@ -27,9 +17,15 @@ export function Placeholder({ children, className }: PlaceholderProps) {
         className,
       )}
     >
-      {enhancedChildren}
+      {children}
     </div>
   );
 }
-
 Placeholder.displayName = "Placeholder";
+
+const PlaceholderIcon = ({ className, ...rest }: React.ComponentProps<typeof Icon>) => (
+  <Icon {...rest} className={classNames("text-xl leading-[1.3]", className)} />
+);
+PlaceholderIcon.displayName = "PlaceholderIcon";
+
+Placeholder.Icon = PlaceholderIcon;
