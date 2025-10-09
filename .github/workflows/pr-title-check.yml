@@ -1,0 +1,17 @@
+name: PR Title Prefix Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title prefix
+        run: |
+          echo "PR title: ${{ github.event.pull_request.title }}"
+          if [[ ! "${{ github.event.pull_request.title }}" =~ ^(feat|fix|docs|refactor|test|chore)(\([^)]+\))?:\  ]]; then
+            echo "❌ PR title must start with one of: feat, fix, docs, refactor, test, chore types"
+            exit 1
+          fi
