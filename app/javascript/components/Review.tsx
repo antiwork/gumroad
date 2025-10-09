@@ -58,14 +58,14 @@ export const Review = ({
         </span>
         {review.message ? <p className="m-0">{review.message}</p> : null}
         {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
-        <section className="flex gap-1 items-center flex-wrap">
+        <section className="flex flex-wrap items-center gap-1">
           <ReviewUserAttribution avatarUrl={review.rater.avatar_url} name={review.rater.name} isBuyer />
         </section>
       </section>
       {review.response && !isEditing && !hideResponse ? (
-        <section className="override grid gap-2 ml-4">
+        <section className="override ml-4 grid gap-2">
           <p className="m-0">{review.response.message}</p>
-          <section className="flex gap-1 items-center flex-wrap">
+          <section className="flex flex-wrap items-center gap-1">
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}
             <span className="pill small">Creator</span>
           </section>
