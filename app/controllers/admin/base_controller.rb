@@ -85,7 +85,7 @@ class Admin::BaseController < ApplicationController
 
       return super(*args, **kwargs) unless request.format.html?
       return super(*args, **kwargs) if kwargs.key?(:partial)
-      return super(*args, **{ layout: "admin_old" }.merge(kwargs)) unless kwargs.key?(:inertia)
+      return super(*args, layout: "admin_old", **kwargs) unless kwargs.key?(:inertia)
       return super(*args, **kwargs) unless params[:admin_old]
 
       kwargs[:props] ||= {}
@@ -93,7 +93,7 @@ class Admin::BaseController < ApplicationController
         instance_variable_set("@#{key}", kwargs[:props][key])
       end
 
-      render template: kwargs[:inertia].downcase.to_s + '_old', layout: "admin_old"
+      render template: kwargs[:inertia].downcase.to_s + "_old", layout: "admin_old"
     end
 
   private

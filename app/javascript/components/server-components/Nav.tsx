@@ -14,7 +14,7 @@ import {
   NavLinkDropdownItem,
   UnbecomeDropdownItem,
   NavLinkDropdownMembershipItem,
-} from "$app/components/Nav";
+} from "$app/components/Nav/Base";
 import { Popover } from "$app/components/Popover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { useRunOnce } from "$app/components/useRunOnce";

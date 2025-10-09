@@ -53,17 +53,18 @@ void createInertiaApp<GlobalProps>({
 const urlsMigratedtoInertia = [
   Routes.admin_url(),
   // Add other urls here when they are migrated to inertia
-]
+];
 
-router.on('before', (event) => {
-  const error = event.detail as { response?: Response & { url?: string } };
-  const status = error.response?.status || 0;
-  const url = event.detail.visit.url;
-  const hasMigratedToInertia = status === 200 && !url && urlsMigratedtoInertia.includes(url);
+interface InertiaBeforeEvent extends Event {
+  detail: {
+    response?: Response & { url?: string };
+    visit: { url: URL };
+  };
+}
 
-  console.log("hasMigratedToInertia", hasMigratedToInertia);
-  console.log("url", url);
-  console.log("status", status);
+router.on("before", (event: InertiaBeforeEvent) => {
+  const url = event.detail.visit.url.toString();
+  const hasMigratedToInertia = url && urlsMigratedtoInertia.includes(url);
 
   if (!hasMigratedToInertia) {
     event.preventDefault();

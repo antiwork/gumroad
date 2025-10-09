@@ -26,7 +26,7 @@ interface BaseNavLinkProps {
   href: string;
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
-  component?: string | React.ComponentType;
+  component?: string | React.ComponentType<Record<string, unknown>>;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
 }
 
@@ -48,7 +48,7 @@ const BaseNavLink = ({
     ? "page"
     : undefined;
 
-  const Component = component === "a" ? "a" : (component as React.ComponentType<any>);
+  const Component = component === "a" ? "a" : component;
 
   return (
     <Component aria-current={ariaCurrent} href={href} title={text} className="flex items-center" {...props}>

@@ -3,7 +3,12 @@ import React from "react";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
+import {
+  NavLink,
+  NavLinkDropdownItem,
+  UnbecomeDropdownItem,
+  NavLinkDropdownMembershipItem,
+} from "$app/components/Nav/Base";
 import { Popover } from "$app/components/Popover";
 
 function NavbarFooter() {
