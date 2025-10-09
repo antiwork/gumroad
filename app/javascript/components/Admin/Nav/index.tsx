@@ -5,7 +5,7 @@ import { CurrentUser } from "$app/types/user";
 
 import AdminNavFooter from "$app/components/Admin/Nav/Footer";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Nav as NavFramework, NavLink, InertiaNavLink } from "$app/components/Nav/Base";
+import { Nav as NavFramework, NavLink, InertiaNavLink } from "$app/components/Nav";
 
 type Props = { title: string; current_user: CurrentUser };
 

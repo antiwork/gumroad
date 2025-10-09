@@ -8,7 +8,7 @@ import {
   NavLinkDropdownItem,
   UnbecomeDropdownItem,
   NavLinkDropdownMembershipItem,
-} from "$app/components/Nav/Base";
+} from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
 
 function NavbarFooter() {

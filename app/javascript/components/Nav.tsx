@@ -1,8 +1,8 @@
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { escapeRegExp } from "$app/utils";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -19,23 +19,27 @@ const NavContext = React.createContext<NavContextValue | undefined>(undefined);
 
 export const useNav = () => React.useContext(NavContext);
 
-export const NavLink = ({
-  text,
-  icon,
-  badge,
-  href,
-  exactHrefMatch,
-  additionalPatterns = [],
-  onClick,
-}: {
+interface BaseNavLinkProps {
   text: string;
   icon?: IconName;
   badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
+  component?: string | React.ComponentType<Record<string, unknown>>;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
-}) => {
+}
+
+const BaseNavLink = ({
+  text,
+  icon,
+  badge,
+  href,
+  exactHrefMatch,
+  additionalPatterns = [],
+  component = "a",
+  ...props
+}: BaseNavLinkProps) => {
   const { href: originalHref } = new URL(useOriginalLocation());
   const ariaCurrent = [href, ...additionalPatterns].some((pattern) => {
     const escaped = escapeRegExp(pattern);
@@ -44,8 +48,10 @@ export const NavLink = ({
     ? "page"
     : undefined;
 
+  const Component = component === "a" ? "a" : component;
+
   return (
-    <a aria-current={ariaCurrent} href={href} title={text} onClick={onClick} className="flex items-center">
+    <Component aria-current={ariaCurrent} href={href} title={text} className="flex items-center" {...props}>
       {icon ? <Icon name={icon} /> : null}
       {text}
       {badge ? (
@@ -54,9 +60,25 @@ export const NavLink = ({
           {badge}
         </>
       ) : null}
-    </a>
+    </Component>
   );
 };
+
+interface NavLinkProps extends BaseNavLinkProps {
+  onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
+}
+
+export const NavLink = ({ onClick, ...props }: NavLinkProps) => (
+  <BaseNavLink {...props} {...(onClick && { onClick })} />
+);
+
+interface InertiaNavLinkProps extends BaseNavLinkProps {
+  prefetch?: boolean;
+}
+
+export const InertiaNavLink = ({ prefetch = false, ...props }: InertiaNavLinkProps) => (
+  <BaseNavLink {...props} {...(prefetch && { prefetch })} />
+);
 
 export const NavLinkDropdownItem = ({
   text,
@@ -90,7 +112,7 @@ export const Nav = ({ title, children, footer, compact }: Props) => {
 
   return (
     <NavContext.Provider value={contextValue}>
-      <nav aria-label="Main" className={cx({ compact, open })}>
+      <nav aria-label="Main" className={classNames({ compact, open })}>
         <div className="navbar">
           <a href={Routes.root_url()}>
             <span className="logo-g">&nbsp;</span>
