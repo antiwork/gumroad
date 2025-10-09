@@ -21,82 +21,82 @@
       --gray-#{$i}: #{nth($grays, $i)};
     }
   }
-}
 
-html,
-body {
-  height: 100%;
-  width: 100%;
-  overflow-wrap: anywhere;
-}
-
-body {
-  @include font-size(2);
-  font-family: var(--font-family);
-  font-feature-settings: "ss11", "ss04";
-  background-color: var(--body-bg);
-  -webkit-font-smoothing: antialiased;
-  color: full-color(color);
-}
-
-body:not(.mac) * {
-  &::-webkit-scrollbar {
-    width: size(0.75);
-    background-color: gray(1);
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+    overflow-wrap: anywhere;
   }
-  &::-webkit-scrollbar-thumb {
-    background-color: gray(3);
-    border-radius: border-radius(2);
+
+  body {
+    @include font-size(2);
+    font-family: var(--font-family);
+    font-feature-settings: "ss11", "ss04";
+    background-color: var(--body-bg);
+    -webkit-font-smoothing: antialiased;
+    color: full-color(color);
   }
-}
 
-main {
-  display: flex;
-  flex-direction: column;
-}
-
-@for $i from 1 through 5 {
-  h#{$i} {
-    @include font-size(6 - $i);
-    font-weight: normal;
+  body:not(.mac) * {
+    &::-webkit-scrollbar {
+      width: size(0.75);
+      background-color: gray(1);
+    }
+    &::-webkit-scrollbar-thumb {
+      background-color: gray(3);
+      border-radius: border-radius(2);
+    }
   }
-}
 
-.text-singleline {
-  @include text-singleline;
-}
+  main {
+    display: flex;
+    flex-direction: column;
+  }
 
-a {
-  color: var(--color);
-  text-decoration: underline;
-  cursor: pointer;
-}
+  @for $i from 1 through 5 {
+    h#{$i} {
+      @include font-size(6 - $i);
+      font-weight: normal;
+    }
+  }
 
-.link {
-  @extend a;
-}
+  .text-singleline {
+    @include text-singleline;
+  }
 
-sub {
-  vertical-align: sub;
-}
+  a {
+    color: var(--color);
+    text-decoration: underline;
+    cursor: pointer;
+  }
 
-sup {
-  vertical-align: super;
-}
+  .link {
+    @extend a;
+  }
 
-small {
-  display: block;
-  @include font-size(1);
-}
+  sub {
+    vertical-align: sub;
+  }
 
-hr {
-  border: none;
-  border-top: $border;
-}
+  sup {
+    vertical-align: super;
+  }
 
-ol,
-ul {
-  padding-left: spacer(6);
+  small {
+    display: block;
+    @include font-size(1);
+  }
+
+  hr {
+    border: none;
+    border-top: $border;
+  }
+
+  ol,
+  ul {
+    padding-left: spacer(6);
+  }
 }
 
 ul.inline {
