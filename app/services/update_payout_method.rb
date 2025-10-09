@@ -194,6 +194,10 @@ class UpdatePayoutMethod
     end
 
     def paypal_payouts_supported?
-      !user.native_payouts_supported? || (params.dig(:user, :country) == Compliance::Countries::ARE.alpha2 && !params.dig(:user, :is_business))
+      !user.native_payouts_supported? || switching_to_uae_individual_account?
+    end
+
+    def switching_to_uae_individual_account?
+      params.dig(:user, :country) == Compliance::Countries::ARE.alpha2 && !params.dig(:user, :is_business)
     end
 end
