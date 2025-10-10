@@ -12,7 +12,7 @@ class AnalyticsController < Sellers::BaseController
     @analytics_props = AnalyticsPresenter.new(seller: current_seller).page_props
     LargeSeller.create_if_warranted(current_seller)
 
-    render inertia: "Analytics/index",
+    render inertia: "Analytics/Index",
            props: { analytics_props: @analytics_props }
   end
 

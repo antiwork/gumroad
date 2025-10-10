@@ -3,7 +3,7 @@ import * as React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { Button } from "$app/components/Button";
-import { AnalyticsReferrerTotals } from "$app/components/server-components/AnalyticsPage";
+import { type AnalyticsReferrerTotals } from "$app/components/Analytics";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 const ROWS_PER_PAGE = 10;

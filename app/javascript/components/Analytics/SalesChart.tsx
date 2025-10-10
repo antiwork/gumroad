@@ -5,7 +5,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
-import { AnalyticsDailyTotal } from "$app/components/server-components/AnalyticsPage";
+import { type AnalyticsDailyTotal } from "$app/components/Analytics";
 
 type DataPoint = {
   views: number;

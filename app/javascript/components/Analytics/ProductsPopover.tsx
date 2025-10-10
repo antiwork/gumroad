@@ -3,7 +3,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
-import { Product } from "$app/components/server-components/AnalyticsPage";
+import { type Product } from "$app/components/Analytics";
 
 export type ProductOption = Product & { selected: boolean };
 
