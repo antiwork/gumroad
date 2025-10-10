@@ -40,7 +40,6 @@ class BalanceController < Sellers::BaseController
   end
 
   private
-
     def fetch_payouts
       payouts = current_seller.payments
         .completed
