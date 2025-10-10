@@ -135,7 +135,7 @@ const ReviewsPage = ({
         </section>
       ) : null}
       <section className="p-4 md:p-8">
-        {reviews.length === 0 ? (
+        {reviews.length === 0 && purchases.length === 0 ? (
           <div className="placeholder">
             <figure>
               <img src={placeholderImage} />
@@ -149,7 +149,7 @@ const ReviewsPage = ({
               Learn more about reviews
             </a>
           </div>
-        ) : (
+        ) : reviews.length > 0 ? (
           <table>
             <caption>Your reviews</caption>
             <tbody>
@@ -166,7 +166,7 @@ const ReviewsPage = ({
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
       </section>
     </Layout>
   );

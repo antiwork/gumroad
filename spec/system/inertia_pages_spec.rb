@@ -285,52 +285,6 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
     end
   end
 
-  describe "Payouts page" do
-    before do
-      # Mock balance stats
-      allow_any_instance_of(UserBalanceStatsService).to receive(:fetch).and_return({
-                                                                                     next_payout_period_data: { amount: 1000, date: 1.week.from_now },
-                                                                                     processing_payout_periods_data: []
-                                                                                   })
-    end
-
-    it "renders the payouts dashboard" do
-      visit balance_path
-
-      expect(page).to have_content("Payouts", wait: 10)
-
-      # Verify Inertia component
-      expect(page).to have_css("[data-page]")
-      page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Payouts/index")
-    end
-
-    it "displays payout information" do
-      visit balance_path
-
-      expect(page).to have_content("Payouts", wait: 10)
-    end
-
-    it "handles payout pagination" do
-      visit balance_path
-
-      # Test payments pagination endpoint with proper waiting
-      page.execute_script("
-        window.paymentsData = null;
-        fetch('/balance/payments_paged?page=1')
-          .then(response => response.json())
-          .then(data => window.paymentsData = data)
-          .catch(error => window.paymentsData = { payouts: [] })
-      ")
-
-      # Wait for async operation
-      sleep(2)
-
-      payments_data = page.evaluate_script("window.paymentsData")
-      expect(payments_data).not_to be_nil
-    end
-  end
-
   describe "Collaborators page" do
     it "renders the collaborators page" do
       visit collaborators_path

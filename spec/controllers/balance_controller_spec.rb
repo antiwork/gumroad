@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe BalanceController do
+describe BalanceController, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
@@ -27,11 +28,15 @@ describe BalanceController do
 
       get :index
       expect(response).to be_successful
-
-      # For Inertia.js controllers, we focus on testing the response status
-      # The actual Inertia.js rendering is tested in system tests
-      payout_presenter = assigns(:payout_presenter)
-      expect(payout_presenter.seller).to eq(seller)
+      expect(inertia.component).to eq("Payouts/Index")
+      expect(inertia.props[:payout_presenter][:next_payout_period_data]).to eq({
+                                                                                 should_be_shown_currencies_always: false,
+                                                                                 minimum_payout_amount_cents: 1000,
+                                                                                 is_user_payable: false,
+                                                                                 status: "not_payable",
+                                                                                 payout_note: nil,
+                                                                                 has_stripe_connect: false
+                                                                               })
     end
   end
 

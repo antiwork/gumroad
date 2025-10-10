@@ -87,7 +87,7 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <span className="icon icon-twitter" />
+          <Icon name="twitter" />
           <span>Twitter post</span>
         </div>
       </WithDialog>
