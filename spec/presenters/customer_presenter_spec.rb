@@ -124,7 +124,7 @@ describe CustomerPresenter do
           has_options: true,
           option: purchase1.variant_attributes.first.to_option,
           utm_link: nil,
-          download_count: 0,
+          download_count: nil,
         }
       )
 
@@ -356,8 +356,9 @@ describe CustomerPresenter do
     end
 
     context "purchase for coffee product" do
-      let(:coffee_product) { create(:product, native_type: Link::NATIVE_TYPE_COFFEE) }
-      let(:purchase) { create(:purchase, link: coffee_product) }
+      let(:coffee_user) { create(:user, created_at: 31.days.ago) }
+      let(:coffee_product) { create(:product, user: coffee_user, native_type: Link::NATIVE_TYPE_COFFEE) }
+      let(:purchase) { create(:purchase, link: coffee_product, seller: coffee_user) }
 
       before do
         create(:url_redirect, purchase:, uses: 10)
