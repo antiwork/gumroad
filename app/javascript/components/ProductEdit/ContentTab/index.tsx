@@ -674,11 +674,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     ) : (
                       <>
                         <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                          <span className="icon icon-button" />
+                          <Icon name="button" />
                           <span>Button</span>
                         </div>
                         <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                          <span className="icon icon-horizontal-rule" />
+                          <Icon name="horizontal-rule" />
                           <span>Divider</span>
                         </div>
                         <div
@@ -689,24 +689,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           }}
                           className="flex items-center"
                         >
-                          <span className="icon icon-input-cursor-text" />
+                          <Icon name="input-cursor-text" />
                           <span>Input</span>
-                          <span className="icon icon-outline-cheveron-right" style={{ marginLeft: "auto" }} />
+                          <Icon name="outline-cheveron-right" className="ml-auto" />
                         </div>
                         <div role="menuitem" onClick={onInsertMoreLikeThis}>
-                          <span className="icon icon-grid" />
+                          <Icon name="grid" />
                           <span>More like this</span>
                         </div>
                         <div role="menuitem" onClick={onInsertPosts}>
-                          <span className="icon icon-file-earmark-medical" />
+                          <Icon name="file-earmark-medical" />
                           <span>List of posts</span>
                         </div>
                         <div role="menuitem" onClick={onInsertLicense}>
-                          <span className="icon icon-outline-key" />
+                          <Icon name="outline-key" />
                           <span>License key</span>
                         </div>
                         <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                          <span className="icon icon-twitter" />
+                          <Icon name="twitter" />
                           <span>Twitter post</span>
                         </div>
                         <div
@@ -716,7 +716,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setShowUpsellModal(true);
                           }}
                         >
-                          <span className="icon icon-cart-plus" />
+                          <Icon name="cart-plus" />
                           <span>Upsell</span>
                         </div>
                         <div
@@ -726,7 +726,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setShowReviewModal(true);
                           }}
                         >
-                          <span className="icon icon-solid-star" />
+                          <Icon name="solid-star" />
                           <span>Review</span>
                         </div>
                       </>

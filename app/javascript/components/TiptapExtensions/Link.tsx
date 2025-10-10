@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
+import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
@@ -321,7 +322,7 @@ const TiptapButton = Node.create({
     item: (editor) => (
       <WithDialog editor={editor} type="button">
         <div role="menuitem">
-          <span className="icon icon-button" />
+          <Icon name="button" />
           <span>Button</span>
         </div>
       </WithDialog>
