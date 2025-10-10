@@ -3,9 +3,9 @@ import { XAxis, YAxis, Bar, Line, Cell } from "recharts";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { type AnalyticsDailyTotal } from "$app/components/Analytics";
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
-import { type AnalyticsDailyTotal } from "$app/components/Analytics";
 
 type DataPoint = {
   views: number;
