@@ -169,7 +169,7 @@ class UpdatePayoutMethod
 
       return { error: :provide_valid_email_prompt } unless EmailFormatValidator.valid?(payment_address)
       return { error: :provide_ascii_only_email_prompt } unless payment_address.ascii_only?
-      return { error: :paypal_payouts_not_supported } if user.alive_user_compliance_info.blank? || user.native_payouts_supported?
+      return { error: :paypal_payouts_not_supported } unless paypal_payouts_supported?
 
       user.payment_address = payment_address
       user.save!
@@ -191,5 +191,13 @@ class UpdatePayoutMethod
       bank_account_type = params[:bank_account][:type]
       permitted_params = BANK_ACCOUNT_TYPES[bank_account_type][:permitted_params]
       params[:bank_account].permit(*permitted_params)
+    end
+
+    def paypal_payouts_supported?
+      !user.native_payouts_supported? || switching_to_uae_individual_account?
+    end
+
+    def switching_to_uae_individual_account?
+      params.dig(:user, :country) == Compliance::Countries::ARE.alpha2 && !params.dig(:user, :is_business)
     end
 end
