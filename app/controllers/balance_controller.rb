@@ -13,18 +13,18 @@ class BalanceController < Sellers::BaseController
     authorize :balance
 
     @title = "Payouts"
-    @seller_stats = UserBalanceStatsService.new(user: current_seller).fetch
+    seller_stats = UserBalanceStatsService.new(user: current_seller).fetch
     pagination, past_payouts = fetch_payouts
-    @payout_presenter = PayoutsPresenter.new(
-      next_payout_period_data: @seller_stats[:next_payout_period_data],
-      processing_payout_periods_data: @seller_stats[:processing_payout_periods_data],
+    payout_presenter = PayoutsPresenter.new(
+      next_payout_period_data: seller_stats[:next_payout_period_data],
+      processing_payout_periods_data: seller_stats[:processing_payout_periods_data],
       seller: current_seller,
       pagination:,
       past_payouts:
     )
 
     render inertia: "Payouts/Index",
-           props: { payout_presenter: @payout_presenter.props }
+           props: { payout_presenter: payout_presenter.props }
   end
 
   # TODO:
