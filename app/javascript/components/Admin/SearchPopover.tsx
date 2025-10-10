@@ -80,56 +80,13 @@ const SearchPopover = () => {
     });
   };
 
-  const onUserInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("user_query", e.target.value);
-  };
-
-  const onSearchUsersFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const submitForm = (
+    e: React.FormEvent<HTMLFormElement>,
+    endpoint: string,
+    attribute: keyof typeof data | null,
+  ) => {
     e.preventDefault();
-    submit(Routes.admin_search_users_path(), "user_query");
-  };
-
-  const onPurchaseInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("purchase_query", e.target.value);
-  };
-
-  const onSearchPurchasesFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    submit(Routes.admin_search_purchases_path(), "purchase_query");
-  };
-
-  const onAffiliateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("affiliate_query", e.target.value);
-  };
-
-  const onSearchAffiliatesFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    submit(Routes.admin_affiliates_path(), "affiliate_query");
-  };
-
-  const onCardTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setData("card_type", e.target.value);
-  };
-
-  const onTransactionDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("transaction_date", e.target.value);
-  };
-
-  const onLast4Change = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("last_4", e.target.value);
-  };
-
-  const onExpiryDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("expiry_date", e.target.value);
-  };
-
-  const onPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setData("price", e.target.value);
-  };
-
-  const onSearchCardsFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    submit(Routes.admin_cards_path(), null);
+    submit(endpoint, attribute);
   };
 
   return (
@@ -146,7 +103,7 @@ const SearchPopover = () => {
       }
     >
       <div className="grid w-96 max-w-full gap-3">
-        <form onSubmit={onSearchUsersFormSubmit} className="input-with-button">
+        <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="input-with-button">
           <div className="input">
             <Icon name="person" />
             <input
@@ -155,7 +112,7 @@ const SearchPopover = () => {
               placeholder="Search users (email, name, ID)"
               type="text"
               value={data.user_query}
-              onChange={onUserInputChange}
+              onChange={(e) => setData("user_query", e.target.value)}
             />
           </div>
           <Button color="primary" type="submit">
@@ -163,7 +120,7 @@ const SearchPopover = () => {
           </Button>
         </form>
 
-        <form onSubmit={onSearchPurchasesFormSubmit} className="input-with-button">
+        <form onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")} className="input-with-button">
           <div className="input">
             <Icon name="solid-currency-dollar" />
             <input
@@ -171,7 +128,7 @@ const SearchPopover = () => {
               placeholder="Search purchases (email, IP, card, external ID)"
               type="text"
               value={data.purchase_query}
-              onChange={onPurchaseInputChange}
+              onChange={(e) => setData("purchase_query", e.target.value)}
             />
           </div>
           <Button color="primary" type="submit">
@@ -179,7 +136,7 @@ const SearchPopover = () => {
           </Button>
         </form>
 
-        <form onSubmit={onSearchAffiliatesFormSubmit} className="input-with-button">
+        <form onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")} className="input-with-button">
           <div className="input">
             <Icon name="people-fill" />
             <input
@@ -187,7 +144,7 @@ const SearchPopover = () => {
               placeholder="Search affiliates (email, name, ID)"
               type="text"
               value={data.affiliate_query}
-              onChange={onAffiliateInputChange}
+              onChange={(e) => setData("affiliate_query", e.target.value)}
             />
           </div>
           <Button color="primary" type="submit">
@@ -197,8 +154,8 @@ const SearchPopover = () => {
 
         <div role="separator">or search by card</div>
 
-        <form onSubmit={onSearchCardsFormSubmit} style={{ display: "contents" }}>
-          <select name="card_type" value={data.card_type} onChange={onCardTypeChange}>
+        <form onSubmit={(e) => submitForm(e, Routes.admin_cards_path(), null)} style={{ display: "contents" }}>
+          <select name="card_type" value={data.card_type} onChange={(e) => setData("card_type", e.target.value)}>
             <option>Choose card type</option>
             {card_types.map((cardType) => (
               <option key={cardType.id} value={cardType.id}>
@@ -213,7 +170,7 @@ const SearchPopover = () => {
               placeholder="Date (02/22/2022)"
               type="text"
               value={data.transaction_date}
-              onChange={onTransactionDateChange}
+              onChange={(e) => setData("transaction_date", e.target.value)}
             />
           </div>
           <div className="input">
@@ -225,7 +182,7 @@ const SearchPopover = () => {
               value={data.last_4}
               minLength={4}
               maxLength={4}
-              onChange={onLast4Change}
+              onChange={(e) => setData("last_4", e.target.value)}
             />
           </div>
           <div className="input">
@@ -235,7 +192,7 @@ const SearchPopover = () => {
               placeholder="Expiry (02/22)"
               type="text"
               value={data.expiry_date}
-              onChange={onExpiryDateChange}
+              onChange={(e) => setData("expiry_date", e.target.value)}
             />
           </div>
           <div className="input">
@@ -246,7 +203,7 @@ const SearchPopover = () => {
               type="number"
               step="0.01"
               value={data.price}
-              onChange={onPriceChange}
+              onChange={(e) => setData("price", e.target.value)}
             />
           </div>
           <Button color="primary" type="submit">
