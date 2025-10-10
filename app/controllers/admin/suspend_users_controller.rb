@@ -3,18 +3,17 @@
 class Admin::SuspendUsersController < Admin::BaseController
   # IDs can be separated by whitespaces or commas
   ID_DELIMITER_REGEX = /\s|,/
+  SUSPEND_REASONS = [
+    "Violating our terms of service",
+    "Creating products that violate our ToS",
+    "Using Gumroad to commit fraud",
+    "Using Gumroad for posting spam or SEO manipulation",
+  ].freeze
 
   def show
     @title = "Mass-suspend users"
     render inertia: "Admin/SuspendUsers/Show",
-           props: {
-             suspend_reasons: [
-               "Violating our terms of service",
-               "Creating products that violate our ToS",
-               "Using Gumroad to commit fraud",
-               "Using Gumroad for posting spam or SEO manipulation",
-             ]
-           }
+           props: { suspend_reasons: SUSPEND_REASONS }
   end
 
   def update
