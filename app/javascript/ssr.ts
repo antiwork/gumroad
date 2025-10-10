@@ -30,7 +30,6 @@ import Alert from "$app/components/server-components/Alert";
 import ArchivedProductsPage from "$app/components/server-components/ArchivedProductsPage";
 import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
 import AudiencePage from "$app/components/server-components/AudiencePage";
-import BalancePage from "$app/components/server-components/BalancePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CollaboratorsPage from "$app/components/server-components/CollaboratorsPage";
@@ -133,7 +132,6 @@ ReactOnRails.register({
   AudienceCustomersPage,
   AudiencePage,
   AuthorizedApplicationsSettingsPage,
-  BalancePage,
   BundleEditPage,
   CheckoutPage,
   CollaboratorsPage,
