@@ -166,7 +166,7 @@ class CustomerPresenter
 
   private
     def should_show_download_count?
-      purchase.link.native_type != Link::NATIVE_TYPE_COFFEE && !purchase.is_bundle_purchase
+      purchase.link.native_type != Link::NATIVE_TYPE_COFFEE && !purchase.is_bundle_purchase?
     end
 
     def file_details(file)
