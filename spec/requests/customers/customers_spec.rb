@@ -442,6 +442,7 @@ describe "Sales page", type: :system, js: true do
         click_on "Close"
 
         find(:table_row, { "Email" => "customer3hasaninsanelylonge..." }).click
+
         within_section "Product 2Bundle", section_element: :aside do
           within_section "Order information" do
             expect(page).not_to have_text("Download count")
@@ -469,7 +470,6 @@ describe "Sales page", type: :system, js: true do
         post = posts.last
         visit customers_path
         find(:table_row, { "Name" => "Customer 1" }).click
-
         within_section "Product 1", section_element: :aside do
           within_section "Send missed posts", section_element: :section do
             10.times do |i|
