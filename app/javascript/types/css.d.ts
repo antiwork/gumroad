@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- we merge into this interface, but the rule does not detect this properly
 import "react";
 
 declare module "react" {
