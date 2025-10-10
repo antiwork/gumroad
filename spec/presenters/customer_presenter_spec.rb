@@ -356,7 +356,7 @@ describe CustomerPresenter do
     end
 
     context "purchase for coffee product" do
-      let(:coffee_user) { create(:user, created_at: 31.days.ago) }
+      let(:coffee_user) { create(:user, :eligible_for_service_products) }
       let(:coffee_product) { create(:product, user: coffee_user, native_type: Link::NATIVE_TYPE_COFFEE) }
       let(:purchase) { create(:purchase, link: coffee_product, seller: coffee_user) }
 

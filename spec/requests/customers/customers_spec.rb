@@ -417,7 +417,7 @@ describe "Sales page", type: :system, js: true do
     describe "download count" do
       it "shows download count for regular products but not for coffee or bundle products" do
         create(:url_redirect, purchase: purchase1, uses: 42)
-        coffee_user = create(:user, created_at: 31.days.ago)
+        coffee_user = create(:user, :eligible_for_service_products)
         coffee_product = create(:product, user: coffee_user, name: "Buy Me Coffee", native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 500)
         coffee_purchase = create(:purchase, link: coffee_product, full_name: "Coffee Buyer", email: "coffee@example.com", seller: coffee_user)
         create(:url_redirect, purchase: coffee_purchase, uses: 10)
