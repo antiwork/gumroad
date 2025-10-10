@@ -1,4 +1,4 @@
-import { useForm } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -7,8 +7,15 @@ import { Popover } from "$app/components/Popover";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-type Props = { card_types: { id: string; name: string }[] };
-export const SearchPopover = ({ card_types }: Props) => {
+type CardType = {
+  id: string;
+  name: string;
+};
+
+type PageProps = { card_types: CardType[] };
+
+const SearchPopover = () => {
+  const { card_types } = usePage<PageProps>().props;
   const currentUrl = useOriginalLocation();
   const searchParams = new URL(currentUrl).searchParams;
   const [open, setOpen] = React.useState(false);

@@ -1,19 +1,18 @@
-import { Link } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
-
-import { CurrentUser } from "$app/types/user";
 
 import AdminNavFooter from "$app/components/Admin/Nav/Footer";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Nav as NavFramework, NavLink, InertiaNavLink } from "$app/components/Nav";
 
-type Props = { title: string; current_user: CurrentUser };
+type PageProps = { title: string; };
 
-const Nav = ({ title, current_user }: Props) => {
+const Nav = () => {
+  const { title } = usePage<PageProps>().props;
   const routeParams = { host: useAppDomain() };
 
   return (
-    <NavFramework title={title} footer={<AdminNavFooter current_user={current_user} />}>
+    <NavFramework title={title} footer={<AdminNavFooter />}>
       <section>
         <InertiaNavLink
           text="Suspend users"
