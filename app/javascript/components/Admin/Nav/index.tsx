@@ -5,7 +5,7 @@ import AdminNavFooter from "$app/components/Admin/Nav/Footer";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Nav as NavFramework, NavLink, InertiaNavLink } from "$app/components/Nav";
 
-type PageProps = { title: string; };
+type PageProps = { title: string };
 
 const Nav = () => {
   const { title } = usePage<PageProps>().props;

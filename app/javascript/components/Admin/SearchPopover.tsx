@@ -80,11 +80,7 @@ const SearchPopover = () => {
     });
   };
 
-  const submitForm = (
-    e: React.FormEvent<HTMLFormElement>,
-    endpoint: string,
-    attribute: keyof typeof data | null,
-  ) => {
+  const submitForm = (e: React.FormEvent<HTMLFormElement>, endpoint: string, attribute: keyof typeof data | null) => {
     e.preventDefault();
     submit(endpoint, attribute);
   };
@@ -103,7 +99,10 @@ const SearchPopover = () => {
       }
     >
       <div className="grid w-96 max-w-full gap-3">
-        <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="input-with-button">
+        <form
+          onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")}
+          className="input-with-button"
+        >
           <div className="input">
             <Icon name="person" />
             <input
@@ -120,7 +119,10 @@ const SearchPopover = () => {
           </Button>
         </form>
 
-        <form onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")} className="input-with-button">
+        <form
+          onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")}
+          className="input-with-button"
+        >
           <div className="input">
             <Icon name="solid-currency-dollar" />
             <input
@@ -136,7 +138,10 @@ const SearchPopover = () => {
           </Button>
         </form>
 
-        <form onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")} className="input-with-button">
+        <form
+          onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")}
+          className="input-with-button"
+        >
           <div className="input">
             <Icon name="people-fill" />
             <input
