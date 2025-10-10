@@ -11,9 +11,7 @@ type Props = {
 const AdminSuspendUsers = () => {
   const { suspend_reasons, authenticity_token } = usePage<Props>().props;
 
-  return (
-    <Form authenticity_token={authenticity_token} suspend_reasons={suspend_reasons} />
-  );
+  return <Form authenticity_token={authenticity_token} suspend_reasons={suspend_reasons} />;
 };
 
 export default AdminSuspendUsers;
