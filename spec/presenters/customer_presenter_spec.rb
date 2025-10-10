@@ -124,6 +124,7 @@ describe CustomerPresenter do
           has_options: true,
           option: purchase1.variant_attributes.first.to_option,
           utm_link: nil,
+          download_count: 0,
         }
       )
 
@@ -192,6 +193,7 @@ describe CustomerPresenter do
           has_options: true,
           option: purchase2.variant_attributes.first.to_option,
           utm_link: nil,
+          download_count: 0,
         }
       )
     end
@@ -328,6 +330,29 @@ describe CustomerPresenter do
           ProductReviewVideoPresenter.new(alive_approved_video).props(pundit_user:),
           ProductReviewVideoPresenter.new(alive_pending_video).props(pundit_user:),
         )
+      end
+    end
+
+    context "purchase has downloads" do
+      let(:purchase) { create(:purchase) }
+      let(:url_redirect) { create(:url_redirect, purchase:, uses: 5) }
+
+      before do
+        purchase.update!(url_redirect:)
+      end
+
+      it "includes the download count" do
+        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
+        expect(props[:download_count]).to eq(5)
+      end
+    end
+
+    context "purchase without url_redirect" do
+      let(:purchase) { create(:purchase) }
+
+      it "returns 0 for download count" do
+        props = described_class.new(purchase:).customer(pundit_user:)
+        expect(props[:download_count]).to eq(0)
       end
     end
   end
