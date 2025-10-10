@@ -335,10 +335,9 @@ describe CustomerPresenter do
 
     context "purchase has downloads" do
       let(:purchase) { create(:purchase) }
-      let(:url_redirect) { create(:url_redirect, purchase:, uses: 5) }
 
       before do
-        purchase.update!(url_redirect:)
+        create(:url_redirect, purchase:, uses: 5)
       end
 
       it "includes the download count" do
@@ -353,6 +352,33 @@ describe CustomerPresenter do
       it "returns 0 for download count" do
         props = described_class.new(purchase:).customer(pundit_user:)
         expect(props[:download_count]).to eq(0)
+      end
+    end
+
+    context "purchase for coffee product" do
+      let(:coffee_product) { create(:product, native_type: Link::NATIVE_TYPE_COFFEE) }
+      let(:purchase) { create(:purchase, link: coffee_product) }
+
+      before do
+        create(:url_redirect, purchase:, uses: 10)
+      end
+
+      it "does not include download count" do
+        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
+        expect(props[:download_count]).to be_nil
+      end
+    end
+
+    context "purchase for bundle" do
+      let(:purchase) { create(:purchase, is_bundle_purchase: true) }
+
+      before do
+        create(:url_redirect, purchase:, uses: 10)
+      end
+
+      it "does not include download count" do
+        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
+        expect(props[:download_count]).to be_nil
       end
     end
   end

@@ -414,6 +414,50 @@ describe "Sales page", type: :system, js: true do
       end
     end
 
+    describe "download count" do
+      it "shows download count for regular products" do
+        purchase1.url_redirect.update!(uses: 42)
+        index_model_records(Purchase)
+
+        visit customers_path
+        find(:table_row, { "Email" => "customer1@gumroad.com" }).click
+
+        within_section "Product 1", section_element: :aside do
+          within_section "Order information" do
+            expect(page).to have_text("Download count 42", normalize_ws: true)
+          end
+        end
+      end
+
+      it "does not show download count for coffee products" do
+        coffee_product = create(:product, user: seller, name: "Buy Me Coffee", native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 500)
+        coffee_purchase = create(:purchase, link: coffee_product, full_name: "Coffee Buyer", email: "coffee@example.com", seller:)
+        coffee_purchase.url_redirect.update!(uses: 10)
+        index_model_records(Purchase)
+
+        visit customers_path
+        find(:table_row, { "Email" => "coffee@example.com" }).click
+
+        within_section "Buy Me Coffee", section_element: :aside do
+          within_section "Order information" do
+            expect(page).not_to have_text("Download count")
+          end
+        end
+      end
+
+      it "does not show download count for bundle purchases" do
+        index_model_records(Purchase)
+        visit customers_path
+        find(:table_row, { "Email" => "customer3hasaninsanelylonge..." }).click
+
+        within_section "Product 2Bundle", section_element: :aside do
+          within_section "Order information" do
+            expect(page).not_to have_text("Download count")
+          end
+        end
+      end
+    end
+
     describe "missed posts" do
       let!(:posts) do
         create_list(:installment, 11, link: product1, published_at: Time.current) do |post, i|

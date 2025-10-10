@@ -125,7 +125,7 @@ export type Customer = {
     term: string | null;
     content: string | null;
   } | null;
-  download_count: number;
+  download_count?: number;
 };
 
 export type Query = {

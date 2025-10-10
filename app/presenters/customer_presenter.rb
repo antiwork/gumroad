@@ -145,7 +145,7 @@ class CustomerPresenter
         term: utm_link.utm_term,
         content: utm_link.utm_content,
       } : nil,
-      download_count: purchase.url_redirect&.uses || 0,
+      download_count: should_show_download_count? ? (purchase.url_redirect&.uses || 0) : nil,
     }
   end
 
@@ -165,6 +165,10 @@ class CustomerPresenter
   end
 
   private
+    def should_show_download_count?
+      purchase.link.native_type != Link::NATIVE_TYPE_COFFEE && !purchase.is_bundle_purchase
+    end
+
     def file_details(file)
       {
         id: file.signed_id,

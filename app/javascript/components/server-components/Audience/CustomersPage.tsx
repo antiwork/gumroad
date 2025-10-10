@@ -904,7 +904,7 @@ const CustomerDrawer = ({
           <h5>{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
           {customer.quantity}
         </div>
-        {customer.product.native_type !== "coffee" && !customer.is_bundle_purchase ? (
+        {customer.download_count !== undefined ? (
           <div>
             <h5>Download count</h5>
             {customer.download_count}
