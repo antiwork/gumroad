@@ -6,9 +6,9 @@ class Admin::BaseController < ApplicationController
   layout "admin"
 
   inertia_share do
-    RenderingExtension.custom_context(view_context).merge(
+    {
       card_types: CreditCardUtility.card_types_for_react
-    )
+    }
   end
 
   before_action :require_admin!
