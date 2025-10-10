@@ -114,7 +114,7 @@ describe Admin::BaseController, type: :controller, inertia: true do
             get :index
 
             expect(response).to be_successful
-            expect(inertia.component).to eq 'Admin/Base/Index'
+            expect(inertia.component).to eq "Admin/Base/Index"
             expect(inertia.props[:title]).to eq("Admin")
           end
         end
@@ -124,7 +124,7 @@ describe Admin::BaseController, type: :controller, inertia: true do
             get :index
 
             expect(response).to be_successful
-            expect(inertia.component).to eq 'Admin/Base/Index'
+            expect(inertia.component).to eq "Admin/Base/Index"
             expect(inertia.props[:title]).to eq("Admin")
           end
         end

@@ -19,15 +19,15 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
       get :show
 
       expect(response).to be_successful
-      expect(inertia.component).to eq 'Admin/SuspendUsers/Show'
+      expect(inertia.component).to eq "Admin/SuspendUsers/Show"
 
       expect(inertia.props[:title]).to eq("Mass-suspend users")
       expect(inertia.props[:suspend_reasons]).to eq([
-                                               "Violating our terms of service",
-                                               "Creating products that violate our ToS",
-                                               "Using Gumroad to commit fraud",
-                                               "Using Gumroad for posting spam or SEO manipulation",
-                                             ])
+                                                      "Violating our terms of service",
+                                                      "Creating products that violate our ToS",
+                                                      "Using Gumroad to commit fraud",
+                                                      "Using Gumroad for posting spam or SEO manipulation",
+                                                    ])
       expect(inertia.props[:authenticity_token]).to be_present
     end
   end
