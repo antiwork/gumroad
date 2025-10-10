@@ -31,7 +31,8 @@ export const TwoFactorAuthenticationPage = ({
     e.preventDefault();
     setLoginState({ type: "submitting" });
     try {
-      const { redirectLocation } = await twoFactorLogin({ user_id, token, next });
+      const trimmedToken = token.trim();
+      const { redirectLocation } = await twoFactorLogin({ user_id, token: trimmedToken, next });
       window.location.href = redirectLocation;
     } catch (e) {
       assertResponseError(e);
