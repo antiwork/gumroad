@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Checkout::FormController < Sellers::BaseController
+  layout "inertia", only: [:show]
+
   def show
     authorize [:checkout, :form]
 

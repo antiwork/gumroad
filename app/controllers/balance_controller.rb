@@ -7,6 +7,8 @@ class BalanceController < Sellers::BaseController
 
   PAST_PAYMENTS_PER_PAGE = 3
 
+  layout "inertia", only: [:index]
+
   def index
     authorize :balance
 
