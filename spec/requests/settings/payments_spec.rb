@@ -1620,7 +1620,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       it "allows to enter bank account details" do
         visit settings_payments_path
 
-        choose "Business"
+        choose "Bank Account"
 
         fill_in("Legal business name", with: "uae biz")
         select("LLC", from: "Type")
@@ -1680,6 +1680,48 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         login_as user
         visit settings_payments_path
         expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+      end
+
+      it "allows the creator to use paypal payouts as an individual" do
+        user = create(:user, username: nil, payment_address: nil)
+        create(:user_compliance_info_uae_business, user:, birthday: Date.new(1901, 1, 2))
+        create(:uae_bank_account, user:)
+        create(:tos_agreement, user:)
+        create(:merchant_account, user:)
+
+        login_as user
+        visit settings_payments_path
+        choose "PayPal"
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        select("Abu Dhabi", from: "Province")
+        fill_in("Phone number", with: "98765432")
+        fill_in("Postal code", with: "51133")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        select("India", from: "Nationality")
+        fill_in("Emirates ID", with: "000000000000000")
+
+        expect(page).to have_status(text: "PayPal payouts are subject to a 2% processing fee.")
+        fill_in("PayPal Email", with: "uaecr@gumroad.com")
+
+        click_on("Update settings")
+
+        expect(page).to have_content("Thanks! You're all set.")
+        compliance_info = user.alive_user_compliance_info
+        expect(compliance_info.first_name).to eq("barnabas")
+        expect(compliance_info.last_name).to eq("barnabastein")
+        expect(compliance_info.street_address).to eq("address_full_match")
+        expect(compliance_info.city).to eq("barnabasville")
+        expect(compliance_info.zip_code).to eq("51133")
+        expect(compliance_info.phone).to eq("+97198765432")
+        expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+        expect(user.reload.payment_address).to eq("uaecr@gumroad.com")
       end
     end
 
