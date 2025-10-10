@@ -31,6 +31,8 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
+  layout "inertia", only: [:index]
+
   def index
     authorize Link
 
@@ -55,7 +57,7 @@ class LinksController < ApplicationController
     ).page_props
 
     render inertia: "Products/index",
-           props: inertia_props(react_products_page_props: @react_products_page_props)
+           props: { react_products_page_props: @react_products_page_props }
   end
 
   def memberships_paged

@@ -2,8 +2,8 @@ import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { type AnalyticsTotal } from "$app/components/Analytics";
 import { Icon } from "$app/components/Icons";
-import { AnalyticsTotal } from "$app/components/server-components/AnalyticsPage";
 import { Stats } from "$app/components/Stats";
 
 export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }) => (

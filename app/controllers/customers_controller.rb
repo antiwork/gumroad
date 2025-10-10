@@ -8,6 +8,8 @@ class CustomersController < Sellers::BaseController
 
   CUSTOMERS_PER_PAGE = 20
 
+  layout "inertia", only: [:index]
+
   def index
     product = Link.fetch(params[:link_id]) if params[:link_id].present?
     sales = fetch_sales(products: [product].compact)
@@ -21,7 +23,7 @@ class CustomersController < Sellers::BaseController
     create_user_event("customers_view")
 
     render inertia: "Customers/index",
-           props: inertia_props(customers_presenter: @customers_presenter.customers_props)
+           props: { customers_presenter: @customers_presenter.customers_props }
   end
 
   def paged

@@ -71,7 +71,7 @@ describe("Product Page - Shipping physical preoder", type: :system, js: true, sh
     expect(preorder.state).to eq("authorization_successful")
   end
 
-  it "charges the proper amount with taxes" do
+  it "charges the proper amount with taxes for preorder" do
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
     check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do

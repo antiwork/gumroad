@@ -42,10 +42,11 @@ export const ClientNavLink = ({
   additionalPatterns?: string[];
   onClick?: (event: React.MouseEvent) => void;
 }) => {
-  const currentPath = window.location.href;
+  const currentPath = window.location.pathname + window.location.search;
 
   const ariaCurrent = [href, ...additionalPatterns].some((pattern) => {
-    const escaped = escapeRegExp(pattern);
+    const patternPath = pattern.includes("://") ? new URL(pattern).pathname + new URL(pattern).search : pattern;
+    const escaped = escapeRegExp(patternPath);
     return new RegExp(exactHrefMatch ? `^${escaped}/?$` : escaped, "u").test(currentPath);
   })
     ? "page"
@@ -117,7 +118,7 @@ export const Nav = (props: Props) => {
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
         ) : null}
-        <NavLink
+        <ClientNavLink
           text="Checkout"
           icon="cart3-fill"
           href={Routes.checkout_discounts_url(routeParams)}

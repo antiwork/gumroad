@@ -132,7 +132,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
         {isLoading ? (
           <div className="product-card-grid narrow">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="dummy h-[32rem]" />
+              <div key={index} className="dummy h-128" />
             ))}
           </div>
         ) : recommendedProducts && recommendedProducts.length > 0 ? (

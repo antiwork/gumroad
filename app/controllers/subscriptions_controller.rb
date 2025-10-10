@@ -60,6 +60,7 @@ class SubscriptionsController < ApplicationController
     def check_can_manage
       (@subscription = Subscription.find_by_external_id(params[:id])) || e404
       e404 if @subscription.ended?
+      e404 if @subscription.is_installment_plan? && @subscription.charges_completed?
       cookie = cookies.encrypted[@subscription.cookie_key]
       return if cookie.present? && ActiveSupport::SecurityUtils.secure_compare(cookie, @subscription.external_id)
       return if user_signed_in? && logged_in_user.is_team_member?

@@ -36,7 +36,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
     expect(subscription.email).to eq("test@gumroad.com")
   end
 
-  it "charges the proper amount with taxes" do
+  it "charges the proper amount with taxes for subscription" do
     visit "/l/#{@sub_link.unique_permalink}"
     add_to_cart(@sub_link)
     check_out(@sub_link, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do

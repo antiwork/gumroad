@@ -247,7 +247,7 @@ export const EditProfile = (props: Props) => {
           ))}
         </Tabs>
       </header>
-      <div className="!fixed right-3 top-5 z-30 !p-0 lg:left-3 lg:right-auto lg:top-3">
+      <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"

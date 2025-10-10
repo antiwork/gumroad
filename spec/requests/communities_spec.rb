@@ -470,12 +470,11 @@ describe "Communities", :js, type: :system do
           expect(page).to have_link("Mastering Rails", href: community_path(seller.external_id, community.external_id))
           expect(page).to have_link("Scaling web apps", href: community_path(seller.external_id, community2.external_id))
           community1_link_element = find_link("Mastering Rails")
-          within community1_link_element do
-            within "[aria-label='Unread message count']" do
-              expect(page).to have_text("2")
-            end
-          end
           expect(community1_link_element["aria-selected"]).to eq("true")
+          within community1_link_element do
+            # Wait for the unread message count to disappear as IntersectionObserver marks message as read
+            expect(page).to_not have_selector("[aria-label='Unread message count']", wait: 10)
+          end
           community2_link_element = find_link("Scaling web apps")
 
           # Wait for the unread count to be rendered by the React component
@@ -586,8 +585,8 @@ describe "Communities", :js, type: :system do
           expect(page).not_to have_link("The ultimate guide to design systems")
           expect(find_link("Mastering Rails")["aria-selected"]).to eq("true")
 
-          # Wait for the unread count to be rendered by the React component
-          expect(page).to have_selector("[aria-label='Unread message count']", text: "2", wait: 10)
+          # Wait for the unread message count to disappear as IntersectionObserver marks message as read
+          expect(page).to_not have_selector("[aria-label='Unread message count']", wait: 10)
         end
       end
 
@@ -620,8 +619,8 @@ describe "Communities", :js, type: :system do
           expect(page).not_to have_link("Mastering Rails")
           expect(find_link("The ultimate guide to design systems")["aria-selected"]).to eq("true")
 
-          # Wait for the unread count to be rendered by the React component
-          expect(page).to have_selector("[aria-label='Unread message count']", text: "1", wait: 10)
+          # Wait for the unread message count to disappear as IntersectionObserver marks message as read
+          expect(page).not_to have_selector("[aria-label='Unread message count']", wait: 10)
         end
       end
 

@@ -5,6 +5,12 @@ class Admin::BaseController < ApplicationController
 
   layout "admin"
 
+  inertia_share do
+    {
+      card_types: CreditCardUtility.card_types_for_react
+    }
+  end
+
   before_action :require_admin!
   before_action :hide_layouts
 
@@ -14,6 +20,8 @@ class Admin::BaseController < ApplicationController
   end
 
   def index
+    @title = "Admin"
+    render inertia: "Admin/Base/Index"
   end
 
   def impersonate
@@ -53,6 +61,36 @@ class Admin::BaseController < ApplicationController
       redirect_to admin_path
     end
   end
+
+  protected
+    # Override render to allow serving Inertia-admin pages inside the legacy "admin_old" layout, for transitional/testing purposes.
+    #
+    # Normal usage:
+    #   - For standard HTML requests: use the default render behavior.
+    #   - For render(partial: ...): use the default render (do NOT use the admin_old layout).
+    #   - For requests with inertia: By default, use the normal layout.
+    #   - If params[:admin_old] is set and inertia is present: Render the React page server-side
+    #     but in the admin_old layout, and map each React prop to an instance variable
+    #     for legacy view compatibility. It looks for a template file based on the inertia name,
+    #     lowercased and suffixed with '_old' (e.g., Admin/Base/Index => admin/base/index_old).
+    def render(*args, **kwargs)
+      Rails.logger.warn("Warning: render(*args, **kwargs) is being overridden in Admin::BaseController")
+      Rails.logger.warn("args: #{args.inspect}")
+      Rails.logger.warn("kwargs: #{kwargs.inspect}")
+      Rails.logger.warn("Make sure to remove this override when we are done migrating to Inertia.")
+
+      return super(*args, **kwargs) unless request.format.html?
+      return super(*args, **kwargs) if kwargs.key?(:partial)
+      return super(*args, layout: "admin_old", **kwargs) unless kwargs.key?(:inertia)
+      return super(*args, **kwargs) unless params[:admin_old]
+
+      kwargs[:props] ||= {}
+      kwargs[:props].each_key do |key|
+        instance_variable_set("@#{key}", kwargs[:props][key])
+      end
+
+      render template: kwargs[:inertia].downcase.to_s + "_old", layout: "admin_old"
+    end
 
   private
     def find_user(identifier)

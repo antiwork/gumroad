@@ -1,7 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
-import { createCast, is } from "ts-safe-cast";
+import { is } from "ts-safe-cast";
 
 import {
   OfferCodeStatistics,
@@ -14,12 +14,12 @@ import {
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
@@ -31,7 +31,6 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Select, Option } from "$app/components/Select";
-import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -123,17 +122,15 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
 
 const year = new Date().getFullYear();
 
-const DiscountsPage = ({
-  offer_codes,
-  pages,
-  products,
-  pagination: initialPagination,
-}: {
-  pages: Page[];
+export type DiscountsPageProps = {
   offer_codes: OfferCode[];
+  pages: Page[];
   products: Product[];
   pagination: PaginationProps;
-}) => {
+};
+
+const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagination }: DiscountsPageProps) => {
+  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
   const [{ offerCodes, pagination }, setState] = React.useState<{
     offerCodes: OfferCode[];
@@ -699,7 +696,7 @@ const Form = ({
   isLoading: boolean;
 }) => {
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: offerCode?.name ?? "" });
-
+  const { showAlert } = useClientAlert();
   const [code, setCode] = React.useState<{ value: string; error?: boolean }>({
     value: offerCode?.code || generateCode(),
   });
@@ -831,7 +828,7 @@ const Form = ({
         }
       />
       <form>
-        <section className="!p-8">
+        <section className="p-8!">
           <header>
             <div className="paragraphs">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
@@ -1139,4 +1136,4 @@ const Form = ({
   );
 };
 
-export default register({ component: DiscountsPage, propParser: createCast() });
+export default DiscountsPage;

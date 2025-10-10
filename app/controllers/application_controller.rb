@@ -17,6 +17,7 @@ class ApplicationController < ActionController::Base
   include HelperWidget
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
+  include InertiaRendering
 
   before_action :debug_headers
   before_action :set_is_mobile
@@ -134,10 +135,6 @@ class ApplicationController < ActionController::Base
         request_referrer_is_not_sign_up_route? &&
         request_referrer_is_not_login_route? &&
         request_referrer_is_not_two_factor_authentication_path?
-    end
-
-    def inertia_props(props = {})
-      RenderingExtension.custom_context(view_context).merge(props)
     end
 
   private

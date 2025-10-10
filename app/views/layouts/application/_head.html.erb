@@ -12,7 +12,7 @@
   <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
     <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
   <% end %>
-  <title><%= @title %></title>
+  <title inertia><%= @title %></title>
   <% packs = ["design"] %>
   <% packs << @css_pack_name if @css_pack_name %>
   <%= action_cable_meta_tag %>

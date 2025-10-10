@@ -5,12 +5,17 @@ class Checkout::UpsellsController < Sellers::BaseController
 
   PER_PAGE = 20
 
+  layout "inertia", only: [:index]
+
   def index
     authorize [:checkout, Upsell]
 
     @title = "Upsells"
     pagination, upsells = fetch_upsells
-    @upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
+    upsells_props = Checkout::UpsellsPresenter.new(pundit_user:, pagination:, upsells:).upsells_props
+
+    render inertia: "Checkout/Upsells/Index",
+           props: upsells_props
   end
 
   def paged

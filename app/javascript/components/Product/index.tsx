@@ -606,7 +606,7 @@ const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: 
       covers={covers}
       activeCoverId={activeCoverId}
       setActiveCoverId={setActiveCoverId}
-      style={{ paddingBottom: activeCoverId ? undefined : "25%" }}
+      className={activeCoverId ? "" : "pb-[25%]"}
     />
   );
 };

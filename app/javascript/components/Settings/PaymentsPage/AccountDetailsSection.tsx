@@ -5,12 +5,7 @@ import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import {
-  ComplianceInfo,
-  FormFieldName,
-  PayoutMethod,
-  User,
-} from "$app/components/server-components/Settings/PaymentsPage";
+import { ComplianceInfo, FormFieldName, User } from "$app/components/server-components/Settings/PaymentsPage";
 
 const AccountDetailsSection = ({
   user,
@@ -24,7 +19,6 @@ const AccountDetailsSection = ({
   canadaBusinessTypes,
   states,
   errorFieldNames,
-  payoutMethod,
 }: {
   user: User;
   complianceInfo: ComplianceInfo;
@@ -45,7 +39,6 @@ const AccountDetailsSection = ({
     br: { code: string; name: string }[];
   };
   errorFieldNames: Set<FormFieldName>;
-  payoutMethod: PayoutMethod;
 }) => {
   const uid = React.useId();
 
@@ -60,47 +53,49 @@ const AccountDetailsSection = ({
 
   return (
     <section className="override grid gap-8">
-      <section>
-        <fieldset>
-          <legend>
-            <label>Account type</label>
-            <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
-          </legend>
-        </fieldset>
-        <div className="radio-buttons" role="radiogroup">
-          <Button
-            role="radio"
-            key="individual"
-            aria-checked={!complianceInfo.is_business}
-            onClick={() => updateComplianceInfo({ is_business: false })}
-            disabled={isFormDisabled}
-          >
-            <Icon name="person" />
-            <div>
-              <h4>Individual</h4>
-              When you are selling as yourself
-            </div>
-          </Button>
-          <Button
-            role="radio"
-            key="business"
-            aria-checked={complianceInfo.is_business}
-            onClick={() =>
-              updateComplianceInfo({
-                is_business: true,
-                business_country: complianceInfo.business_country ?? complianceInfo.country,
-              })
-            }
-            disabled={isFormDisabled}
-          >
-            <Icon name="shop-window" />
-            <div>
-              <h4>Business</h4>
-              When you are selling as a business
-            </div>
-          </Button>
-        </div>
-      </section>
+      {(complianceInfo.is_business ? complianceInfo.business_country !== "AE" : complianceInfo.country !== "AE") ? (
+        <section>
+          <fieldset>
+            <legend>
+              <label>Account type</label>
+              <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
+            </legend>
+          </fieldset>
+          <div className="radio-buttons" role="radiogroup">
+            <Button
+              role="radio"
+              key="individual"
+              aria-checked={!complianceInfo.is_business}
+              onClick={() => updateComplianceInfo({ is_business: false })}
+              disabled={isFormDisabled}
+            >
+              <Icon name="person" />
+              <div>
+                <h4>Individual</h4>
+                When you are selling as yourself
+              </div>
+            </Button>
+            <Button
+              role="radio"
+              key="business"
+              aria-checked={complianceInfo.is_business}
+              onClick={() =>
+                updateComplianceInfo({
+                  is_business: true,
+                  business_country: complianceInfo.business_country ?? complianceInfo.country,
+                })
+              }
+              disabled={isFormDisabled}
+            >
+              <Icon name="shop-window" />
+              <div>
+                <h4>Business</h4>
+                When you are selling as a business
+              </div>
+            </Button>
+          </div>
+        </section>
+      ) : null}
       {complianceInfo.is_business ? (
         <section className="override grid gap-8">
           <div
@@ -630,11 +625,6 @@ const AccountDetailsSection = ({
         </section>
       ) : null}
       <section className="override grid gap-8">
-        {payoutMethod !== "paypal" && user.country_code === "AE" && !complianceInfo.is_business ? (
-          <div role="status" className="danger">
-            <div>Individual accounts from the UAE are not supported. Please use a business account.</div>
-          </div>
-        ) : null}
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
           <fieldset className={cx({ danger: errorFieldNames.has("first_name") })}>
             <legend>

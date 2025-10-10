@@ -27,15 +27,11 @@ import AffiliatedPage from "$app/components/server-components/AffiliatedPage";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AnalyticsPage from "$app/components/server-components/AnalyticsPage";
 import ArchivedProductsPage from "$app/components/server-components/ArchivedProductsPage";
 import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
 import AudiencePage from "$app/components/server-components/AudiencePage";
 import BalancePage from "$app/components/server-components/BalancePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
-import DiscountsPage from "$app/components/server-components/CheckoutDashboard/DiscountsPage";
-import FormPage from "$app/components/server-components/CheckoutDashboard/FormPage";
-import UpsellsPage from "$app/components/server-components/CheckoutDashboard/UpsellsPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
 import CollaboratorsPage from "$app/components/server-components/CollaboratorsPage";
 import CollabsPage from "$app/components/server-components/CollabsPage";
@@ -129,7 +125,6 @@ ReactOnRails.register({
   AffiliateRequestPage,
   AffiliatesPage,
   Alert,
-  AnalyticsPage,
   AdminAddCreditForm,
   ApplicationEditPage,
   ArchivedProductsPage,
@@ -149,7 +144,6 @@ ReactOnRails.register({
   CustomersFilterPopover,
   DashboardPage,
   DeveloperWidgetsPage,
-  DiscountsPage,
   Discover,
   DiscoverProductPage,
   DiscoverWishlistPage,
@@ -158,7 +152,6 @@ ReactOnRails.register({
   DownloadPageWithoutContent,
   EmailsPage,
   FollowersPage,
-  FormPage,
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   GumroadBlogIndexPage,
@@ -198,7 +191,6 @@ ReactOnRails.register({
   TeamSettingsPage,
   ThirdPartyAnalyticsSettingsPage,
   TwoFactorAuthenticationPage,
-  UpsellsPage,
   VideoStreamPlayer,
   WishlistPage,
   WishlistsFollowingPage,

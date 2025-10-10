@@ -1,11 +1,16 @@
 # frozen_string_literal: true
 
 class Checkout::FormController < Sellers::BaseController
+  layout "inertia", only: [:show]
+
   def show
     authorize [:checkout, :form]
 
     @title = "Checkout form"
-    @form_props = Checkout::FormPresenter.new(pundit_user:).form_props
+    form_props = Checkout::FormPresenter.new(pundit_user:).form_props
+
+    render inertia: "Checkout/Form/Show",
+           props: form_props
   end
 
   def update

@@ -83,7 +83,7 @@ export const ContentTab = () => {
       }
     >
       <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
-        <section className="!p-4 md:!p-8">
+        <section className="p-4! md:p-8!">
           {hasOutdatedPurchases ? <BundleContentUpdatedStatus /> : null}
           {isSelecting ? (
             <>
@@ -133,7 +133,10 @@ export const ContentTab = () => {
                   ))}
                 </div>
               ) : null}
-              <div className="card" aria-label="Product selector">
+              <div
+                className="override grid gap-4 rounded-sm border border-border bg-background p-4"
+                aria-label="Product selector"
+              >
                 <div className="input">
                   <Icon name="solid-search" />
                   <input

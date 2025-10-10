@@ -5,10 +5,11 @@ class CollaboratorsController < ApplicationController
   before_action :set_meta, only: [:index]
   after_action :verify_authorized
 
+  layout "inertia", only: [:index]
+
   def index
     authorize Collaborator
-    render inertia: "Collaborators/index",
-           props: inertia_props
+    render inertia: "Collaborators/index"
   end
 
   private

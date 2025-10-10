@@ -3,8 +3,8 @@ import { cast } from "ts-safe-cast";
 import { request, ResponseError } from "$app/utils/request";
 
 import { ProductToAdd } from "$app/components/Checkout/cartState";
+import { Upsell, SortKey } from "$app/components/CheckoutDashboard/UpsellsPage";
 import { PaginationProps } from "$app/components/Pagination";
-import { Upsell, SortKey } from "$app/components/server-components/CheckoutDashboard/UpsellsPage";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 export type UpsellPayload = {
@@ -131,7 +131,7 @@ export const pauseUpsell = async (id: string) => {
   const response = await request({
     method: "POST",
     accept: "json",
-    url: Routes.checkout_upsell_pause_url(id),
+    url: Routes.checkout_upsell_pause_path(id),
   });
   if (!response.ok) throw new ResponseError();
 };
@@ -140,7 +140,7 @@ export const resumeUpsell = async (id: string) => {
   const response = await request({
     method: "DELETE",
     accept: "json",
-    url: Routes.checkout_upsell_pause_url(id),
+    url: Routes.checkout_upsell_pause_path(id),
   });
   if (!response.ok) throw new ResponseError();
 };

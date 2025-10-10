@@ -2857,5 +2857,34 @@ describe Subscription::UpdaterService, :vcr do
         end
       end
     end
+
+    context "when restarting a completed installment plan" do
+      it "returns an error and does not restart the subscription" do
+        purchase = create(:installment_plan_purchase)
+        subscription = purchase.subscription
+        product = subscription.link
+
+        subscription.update_columns(
+          charge_occurrence_count: product.installment_plan.number_of_installments,
+          user_requested_cancellation_at: 1.day.ago,
+          ended_at: 1.day.ago
+        )
+
+        (product.installment_plan.number_of_installments - 1).times do
+          create(:purchase, link: product, subscription: subscription, purchaser: subscription.user)
+        end
+
+        result = described_class.new(
+          subscription: subscription,
+          params: { is_resubscribing: true },
+          logged_in_user: subscription.user,
+          remote_ip: "127.0.0.1",
+          gumroad_guid: "abc123",
+        ).perform
+
+        expect(result[:success]).to eq(false)
+        expect(result[:error_message]).to eq("This installment plan has already been completed and cannot be restarted.")
+      end
+    end
   end
 end

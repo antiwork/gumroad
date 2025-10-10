@@ -1,11 +1,11 @@
 <div class="bg-gray min-h-screen">
   <header class="grid override grid-cols-1 bg-gray">
-    <div data-hero-parallax-container class="relative flex items-center justify-center bg-gray-100 px-8 py-40 lg:px-[8vw] md:py-[14rem]">
-      <div class="flex flex-col max-w-screen-lg items-center gap-6 text-center z-10">
+    <div data-hero-parallax-container class="relative flex items-center justify-center bg-gray-100 px-8 py-40 lg:px-[8vw] md:py-56">
+      <div class="flex flex-col max-w-3xl items-center gap-6 text-center z-10">
         <h1 class="leading-none text-6xl md:text-7xl lg:text-8xl">Go from<br class="sm:hidden"> <span class="whitespace-nowrap">0 to $1</span></h1>
         <div class="text-xl max-w-md lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
         <div class="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-[384px] sm:max-w-none sm:w-auto mx-auto">
-          <div class="w-full sm:w-auto [&>div]:!block">
+          <div class="w-full sm:w-auto [&>div]:block!">
             <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
           </div>
           <form action="<%= discover_path %>" method="get" class="relative w-full sm:w-auto">
@@ -15,7 +15,7 @@
               type="text"
               name="query"
               placeholder="Search marketplace ..."
-              class="!bg-gray mr-8 rounded-lg focus:outline-none focus:ring-1 focus:ring-black focus:border-black/60 w-full sm:w-64 !text-xl !h-14 lg:!h-16 dark:bg-gray-800 border !border-dark-gray dark:!bg-dark-gray dark:!laceholder-white dark:border-gray-600 dark:!text-white"
+              class="!bg-gray mr-8 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black focus:border-black/60 w-full sm:w-64 text-xl! h-14! lg:h-16! dark:bg-gray-800 border !border-dark-gray dark:!bg-dark-gray dark:!laceholder-white dark:border-gray-600 dark:text-white!"
               style="padding-left: 2rem; padding-right: 5rem;"
             />
             <button
@@ -40,19 +40,19 @@
         </div>
       </div>
       <div class="absolute inset-0 pointer-events-none overflow-visible parallax-up">
-        <div class="hero-coin absolute z-[1] w-[8rem] invisible md:visible sm:w-[8rem] sm:top-[20rem] sm:right-[-3rem] md:w-[10rem] md:top-[58rem] md:right-[15rem] lg:w-[12rem] lg:top-[55rem]" data-parallax-intensity="0.03" data-scroll-intensity="-0.20">
+        <div class="hero-coin absolute z-1 w-32 invisible md:visible sm:w-32 sm:top-80 sm:-right-12 md:w-40 md:top-232 md:right-60 lg:w-48 lg:top-220" data-parallax-intensity="0.03" data-scroll-intensity="-0.20">
           <%= image_tag "about/coin-1.svg", loading: "lazy", alt: "Decorative coin 1", class: "w-full h-auto" %>
         </div>
-        <div class="hero-coin absolute z-[1] w-[10rem] top-[28rem] left-[-12vw] sm:left-[-7vw] md:left-[3vw] md:w-[11rem] md:top-[30rem]" data-parallax-intensity="-0.02" data-scroll-intensity="-0.15">
+        <div class="hero-coin absolute z-1 w-40 top-112 left-[-12vw] sm:left-[-7vw] md:left-[3vw] md:w-44 md:top-120" data-parallax-intensity="-0.02" data-scroll-intensity="-0.15">
           <%= image_tag "about/coin-2.svg", loading: "lazy", alt: "Decorative coin 2", class: "w-full h-auto" %>
         </div>
-        <div class="hero-coin absolute z-[1] w-[9rem] right-[-3vw] top-[-7rem] invisible sm:visible md:w-[8rem] md:top-[26rem] md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.18">
+        <div class="hero-coin absolute z-1 w-36 right-[-3vw] -top-28 invisible sm:visible md:w-32 md:top-104 md:right-[6vw]" data-parallax-intensity="0.05" data-scroll-intensity="-0.18">
           <%= image_tag "about/coin-3.svg", loading: "lazy", alt: "Decorative coin 3", class: "w-full h-auto" %>
         </div>
-        <div class="hero-coin absolute z-[1] w-[9rem] top-[53rem] right-[-14vw] sm:top-[42rem] sm:right-[-5rem] md:w-[11rem] md:top-[44rem] md:right-[-5rem] lg:w-[12rem] lg:top-[46rem] lg:right-[-4rem]" data-parallax-intensity="-0.035" data-scroll-intensity="-0.16">
+        <div class="hero-coin absolute z-1 w-36 top-212 right-[-14vw] sm:top-168 sm:-right-20 md:w-44 md:top-176 md:-right-20 lg:w-48 lg:top-184 lg:-right-16" data-parallax-intensity="-0.035" data-scroll-intensity="-0.16">
           <%= image_tag "about/coin-4.svg", loading: "lazy", alt: "Decorative Coin 4", class: "w-full h-auto" %>
         </div>
-        <div class="hero-coin absolute z-[1] w-[10rem] left-[-2rem] top-[63rem] sm:w-[10rem] sm:top-[50rem] sm:left-[3rem] md:w-[14rem] md:top-[45rem] md:left-[-6rem] lg:w-[16rem] lg:left-[-3rem]" data-parallax-intensity="0.04" data-scroll-intensity="-0.17">
+        <div class="hero-coin absolute z-1 w-40 -left-8 top-252 sm:w-40 sm:top-200 sm:left-12 md:w-56 md:top-180 md:-left-24 lg:w-[16rem] lg:-left-12" data-parallax-intensity="0.04" data-scroll-intensity="-0.17">
           <%= image_tag "about/coin-5.svg", loading: "lazy", alt: "Decorative Coin 5", class: "w-full h-auto" %>
         </div>
       </div>
@@ -61,8 +61,8 @@
 
   <div class="flex flex-col bg-gray max-w-6xl mx-auto px-4 gap-8 md:-mt-20">
     <div class="flex flex-col lg:flex-row gap-8">
-      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-[30rem]">
-        <div class="order-1 md:order-none">
+      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
+        <div class="order-1 md:order-0">
           <p class="text-4xl text-balance">
             Sell anything
           </p>
@@ -70,24 +70,24 @@
             Video lessons. Monthly subscriptions. Whatever! Gumroad was created to help you experiment with all kinds of ideas and formats.
           </p>
         </div>
-        <div class="w-[484px] order-2 md:order-none md:absolute md:top-[-4rem] md:right-[-0.5rem] mt-4 md:mt-0">
+        <div class="w-[484px] order-2 md:order-0 md:absolute md:-top-16 md:-right-2 mt-4 md:mt-0">
           <%= image_tag "about/ukulele.png", alt: "Sell anything feature illustration", class: "w-full h-auto" %>
         </div>
       </div>
-      <div class="flex flex-col md:relative overflow-hidden bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-[30rem]">
-        <div class="order-1 md:order-none">
+      <div class="flex flex-col md:relative overflow-hidden bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
+        <div class="order-1 md:order-0">
           <p class="text-4xl mb-4 text-balance">Make your own road</p>
           <p class="text-lg mb-4">
             Whether you need more balance, flexibility, or just a different gig, we make it easy to chart a new path.
           </p>
         </div>
-        <div class="order-2 md:order-none md:absolute md:bottom-0 md:left-0 mt-8 md:mt-0">
+        <div class="order-2 md:order-0 md:absolute md:bottom-0 md:left-0 mt-8 md:mt-0">
           <%= image_tag "about/make-your-road.svg", alt: "Make your own road feature illustration", class: "w-full h-auto" %>
         </div>
       </div>
     </div>
     <div class="flex flex-col lg:flex-row gap-8">
-      <div class="overflow-hidden flex flex-col justify-between bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-[30rem]">
+      <div class="overflow-hidden flex flex-col justify-between bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-1/3 h-auto md:h-120">
         <p class="text-4xl mb-8 md:mb-0 text-balance">Sell to anyone</p>
         <div class="flex flex-col gap-4">
           <% [
@@ -106,8 +106,8 @@
           <% end %>
         </div>
       </div>
-      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-[30rem]">
-        <div class="order-1 md:order-none">
+      <div class="flex flex-col md:relative bg-white border border-dark-gray/50 rounded-3xl p-8 lg:basis-2/3 h-auto md:h-120">
+        <div class="order-1 md:order-0">
           <p class="text-4xl text-balance">
             Sell anywhere
           </p>
@@ -115,7 +115,7 @@
             Create and customize your storefront with our all-in-one platform or choose to use your personal site instead. Seamlessly connect your Gumroad account to thousands of apps in your current stack.
           </p>
         </div>
-        <div class="w-[389px] order-2 md:order-none md:absolute md:top-[2rem] md:right-[-2rem] mt-8 md:mt-0">
+        <div class="w-[389px] order-2 md:order-0 md:absolute md:top-8 md:-right-8 mt-8 md:mt-0">
           <%= image_tag "about/sell-anywhere.png", alt: "Sell to anyone feature illustration", class: "w-full h-auto" %>
         </div>
       </div>
@@ -123,20 +123,20 @@
     <div class="flex flex-col sm:flex-row gap-9">
       <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 md:p-14 flex-1">
         <div class="flex flex-col md:relative">
-          <div class="order-2 md:order-none">
+          <div class="order-2 md:order-0">
             <%= image_tag "about/side-project-1.svg", alt: "Side project 1", class: "w-full h-auto" %>
           </div>
-          <div class="order-1 md:order-none md:absolute md:top-[-1rem] md:left-0 sm:md:left-[-2rem] bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black mb-4 md:mb-0">
+          <div class="order-1 md:order-0 md:absolute md:-top-4 md:left-0 sm:md:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black mb-4 md:mb-0">
             <p class="text-xl font-medium m-0">Instead of building a company...</p>
           </div>
         </div>
       </div>
       <div class="bg-white border border-dark-gray/50 rounded-3xl p-8 flex-1">
         <div class="flex flex-col md:relative">
-          <div class="order-2 md:order-none">
+          <div class="order-2 md:order-0">
             <%= image_tag "about/side-project-2.svg", alt: "Side project 2", class: "w-full h-auto object-cover mx-auto" %>
           </div>
-          <div class="order-1 md:order-none md:absolute md:bottom-1 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black mb-4 md:mb-0">
+          <div class="order-1 md:order-0 md:absolute md:bottom-1 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black mb-4 md:mb-0">
             <p class="text-xl font-medium m-0">...start selling a side project!</p>
           </div>
         </div>
@@ -217,7 +217,7 @@
         <% prev_week_payout = $redis.get(RedisKey.prev_week_payout_usd).presence || "3129297" %>
         $<%= number_with_delimiter(prev_week_payout) %>
       </h1>
-      <div class="text-center text-balance text-2xl md:text-3xl max-w-screen-sm">
+      <div class="text-center text-balance text-2xl md:text-3xl max-w-2xl">
         The amount of income earned by Gumroad digital entrepreneurs last week.
       </div>
     </div>
@@ -280,7 +280,7 @@
               alt: "Sell anywhere feature illustration",
               class: "w-full h-auto object-cover mx-auto",
               data: { parallax: true } %>
-          <div class="absolute top-[-1rem] left-0 sm:left-[-2rem] bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black">
+          <div class="absolute -top-4 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-8 py-4 border border-black">
             <p class="text-xl font-medium m-0">Instead of selling a book...</p>
           </div>
         </div>
@@ -294,7 +294,7 @@
               alt: "Sell anywhere feature illustration",
               class: "w-full h-auto object-cover mx-auto",
               data: { parallax: true } %>
-          <div class="absolute bottom-[-0.5rem] left-0 sm:left-[-2rem] bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black">
+          <div class="absolute -bottom-2 left-0 sm:-left-8 bg-white rounded-2xl px-6 sm:px-6 py-4 border border-black">
             <p class="text-xl font-medium m-0">...start by selling a blog post!</p>
           </div>
         </div>

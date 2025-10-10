@@ -131,7 +131,7 @@ const AddTeamMembersSection = ({
   });
 
   return (
-    <section className="!p-4 md:!p-8">
+    <section className="p-4! md:p-8!">
       <header>
         <h2>Add team members</h2>
         <div>Invite as many team members as you need to help run this account.</div>
@@ -261,7 +261,7 @@ const TeamMembersSection = ({
   };
 
   return (
-    <section className="!p-4 md:!p-8">
+    <section className="p-4! md:p-8!">
       <header>
         <h2 ref={ref}>Team members</h2>
       </header>

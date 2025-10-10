@@ -595,7 +595,7 @@ export const CommunityView = () => {
         ) : selectedCommunity ? (
           <div className="flex flex-1 overflow-hidden">
             <div
-              className={cx("flex flex-shrink-0 flex-col overflow-hidden", {
+              className={cx("flex shrink-0 flex-col overflow-hidden", {
                 "relative w-72 border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]": isAboveBreakpoint,
                 "absolute inset-0 top-12 z-30 bg-gray dark:bg-dark-gray": !isAboveBreakpoint && sidebarOpen,
                 "w-0 overflow-hidden": !isAboveBreakpoint && !sidebarOpen,
@@ -607,7 +607,7 @@ export const CommunityView = () => {
                   <UserAvatar
                     src={selectedCommunity.seller.avatar_url}
                     alt={selectedCommunity.seller.name}
-                    className="flex-shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
+                    className="shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
                   />
                   <div className="flex items-center font-medium">
                     <span className="flex-1 truncate">
@@ -617,7 +617,7 @@ export const CommunityView = () => {
                     </span>
 
                     <Popover
-                      className="flex-shrink-0"
+                      className="shrink-0"
                       open={switcherOpen}
                       onToggle={setSwitcherOpen}
                       aria-label="Switch creator"
@@ -636,12 +636,7 @@ export const CommunityView = () => {
                             onClick={() => switchSeller(seller.id)}
                           >
                             <div className="flex items-center gap-1">
-                              <UserAvatar
-                                src={seller.avatar_url}
-                                alt={seller.name}
-                                className="flex-shrink-0"
-                                size="small"
-                              />
+                              <UserAvatar src={seller.avatar_url} alt={seller.name} className="shrink-0" size="small" />
                               <span className="truncate">
                                 {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
                               </span>
@@ -787,7 +782,7 @@ const NotificationsSettingsModal = ({
         value={updatedSettings.recap_frequency !== null}
         onChange={(newValue) => setUpdatedSettings({ ...updatedSettings, recap_frequency: newValue ? "weekly" : null })}
         dropdown={
-          <div className="radio-buttons !flex !flex-col" role="radiogroup">
+          <div className="radio-buttons flex! flex-col!" role="radiogroup">
             <Button
               role="radio"
               aria-checked={updatedSettings.recap_frequency === "daily"}
@@ -829,7 +824,7 @@ const CommunityChatHeader = ({
     aria-label="Community chat header"
   >
     <button
-      className={cx("flex-shrink-0", { hidden: isAboveBreakpoint })}
+      className={cx("shrink-0", { hidden: isAboveBreakpoint })}
       aria-label="Open sidebar"
       onClick={() => setSidebarOpen(true)}
     >

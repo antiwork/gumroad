@@ -1,6 +1,5 @@
 import cx from "classnames";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import {
   createUpsell,
@@ -20,13 +19,13 @@ import { PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -34,7 +33,6 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
-import { showAlert } from "$app/components/server-components/Alert";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -81,12 +79,15 @@ export type QueryParams = {
 const formatOfferedProductName = (productName: string, variantName?: string) =>
   `${productName}${variantName ? ` - ${variantName}` : ""}`;
 
-const UpsellsPage = (props: {
+export type UpsellsPageProps = {
   pages: Page[];
   upsells: Upsell[];
   products: { id: string; name: string; has_multiple_versions: boolean; native_type: ProductNativeType }[];
   pagination: PaginationProps;
-}) => {
+};
+
+const UpsellsPage = (props: UpsellsPageProps) => {
+  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
   const isReadOnly = !loggedInUser?.policies.upsell.create;
 
@@ -521,7 +522,7 @@ const Form = ({
   isLoading: boolean;
 }) => {
   const uid = React.useId();
-
+  const { showAlert } = useClientAlert();
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.name ?? "" });
   const [offerText, setOfferText] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.text ?? "" });
   const [offerDescription, setOfferDescription] = React.useState(upsell?.description ?? "");
@@ -695,7 +696,7 @@ const Form = ({
       />
       <div className="squished fixed-aside flex-1 lg:grid lg:grid-cols-[1fr_30vw]">
         <form>
-          <section className="!p-8">
+          <section className="p-8!">
             <p>
               When a customer clicks "Pay", offer a version upgrade or another product with or without a discount.{" "}
               <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
@@ -1011,4 +1012,4 @@ const Form = ({
   );
 };
 
-export default register({ component: UpsellsPage, propParser: createCast() });
+export default UpsellsPage;

@@ -9,6 +9,8 @@ class BalanceController < Sellers::BaseController
 
   before_action :set_on_balance_page
 
+  layout "inertia", only: [:index]
+
   def index
     authorize :balance
 
@@ -24,7 +26,7 @@ class BalanceController < Sellers::BaseController
     )
 
     render inertia: "Payouts/index",
-           props: inertia_props(payout_presenter: @payout_presenter.props)
+           props: { payout_presenter: @payout_presenter.props }
   end
 
   def payments_paged

@@ -1,6 +1,43 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" source(none); /* Should be layer(utilties) but that conflicts with the legacy non-layer CSS */
+/*
+ * By default Tailwind checks all files in the project for classes, but in Gumroad that causes performance issues.
+ * Whitelisting source directories solves the issue, but we need to keep the list up to date to cover all frontend code.
+ */
+@source "../**/*.{ts,tsx}";
+@source "../../views/**/*.erb";
+@source "../../../public/help/**/*.html";
+
+@theme {
+  --color-black: #000000;
+  --color-white: #ffffff;
+  --color-pink: #ff90e8;
+  --color-purple: #90a8ed;
+  --color-green: #23a094;
+  --color-orange: #ffc900;
+  --color-red: #dc341e;
+  --color-yellow: #f1f333;
+  --color-violet: #b23386;
+  --color-gray: #f4f4f0;
+  --color-dark-gray: #242423;
+
+  --color-body: var(--body-bg);
+  --color-background: rgb(var(--filled));
+  --color-foreground: rgb(var(--color));
+  --color-border: rgb(var(--color) / var(--border-alpha));
+
+  --shadow: 0.25rem 0.25rem 0 currentColor;
+  --shadow-lg: 0.5rem 0.5rem 0 currentColor;
+
+  --spacing-product-page: 75.25rem;
+}
+
+@layer base {
+  .scoped-tailwind-preflight {
+    @import "tailwindcss/preflight.css";
+  }
+}
 
 /* Coins parallax animation */
 .parallax-up {
