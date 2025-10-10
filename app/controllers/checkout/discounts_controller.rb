@@ -7,6 +7,8 @@ class Checkout::DiscountsController < Sellers::BaseController
 
   before_action :clean_params, only: [:create, :update]
 
+  layout "inertia", only: [:index]
+
   def index
     authorize [:checkout, OfferCode]
 

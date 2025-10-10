@@ -9,6 +9,8 @@ class BalanceController < Sellers::BaseController
 
   before_action :set_on_balance_page
 
+  layout "inertia", only: [:index]
+
   def index
     authorize :balance
 
