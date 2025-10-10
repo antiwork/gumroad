@@ -141,7 +141,7 @@ const PostCard = ({
 const CompactPostItem = ({ post }: { post: Post }) => (
   <li className="border-gray-300 py-4 first:pt-0">
     <a href={post.url} className="group flex items-end justify-between text-black no-underline hover:text-pink-600">
-      <div className="override grid grid-cols-1 gap-1">
+      <div className="grid grid-cols-1 gap-1">
         <h4 className="mb-0.5 text-2xl font-normal">{post.subject}</h4>
         <p className="pb-0.5 text-base text-gray-500">{formatPostDate(post.published_at, "en-US")}</p>
       </div>
@@ -173,7 +173,7 @@ const CompactPostSection = ({ product_updates }: { product_updates: Post[] }) =>
 const PostsGrid = ({ posts }: { posts: Post[] }) => (
   <section className="mt-8">
     {posts.length > 0 ? (
-      <div className="override grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
         {posts.map((post) => (
           <PostCard key={post.url} post={post} />
         ))}

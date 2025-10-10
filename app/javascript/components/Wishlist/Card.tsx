@@ -121,7 +121,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
 
 export const CardGrid = ({ children }: { children: React.ReactNode }) => (
   <div className="@container">
-    <div className="override grid gap-4 @lg:grid-cols-2">{children}</div>
+    <div className="grid gap-4 @lg:grid-cols-2">{children}</div>
   </div>
 );
 

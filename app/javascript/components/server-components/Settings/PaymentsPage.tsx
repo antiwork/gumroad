@@ -1026,7 +1026,7 @@ const PaymentsPage = (props: Props) => {
               </a>
             </div>
           </header>
-          <section className="override grid gap-8">
+          <section className="grid gap-8">
             <div className="radio-buttons" role="radiogroup">
               {props.bank_account_details.show_bank_account ? (
                 <>

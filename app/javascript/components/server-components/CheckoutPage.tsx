@@ -671,7 +671,7 @@ export const CrossSellModal = ({
 
   return (
     <>
-      <div className="override grid gap-4">
+      <div className="grid gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: crossSell.description }} />
         <article className="product-card horizontal">
           <figure>{product.thumbnail_url ? <img src={product.thumbnail_url} /> : null}</figure>

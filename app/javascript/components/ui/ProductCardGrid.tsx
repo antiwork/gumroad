@@ -14,7 +14,7 @@ export const ProductCardGrid = React.forwardRef<
     <div
       ref={ref}
       className={classNames(
-        "override grid gap-4",
+        "grid gap-4",
         narrow
           ? "grid-cols-2"
           : [

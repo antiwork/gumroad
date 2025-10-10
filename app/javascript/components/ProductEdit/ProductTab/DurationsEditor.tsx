@@ -139,7 +139,7 @@ const DurationEditor = ({
         </WithTooltip>
       </div>
       {isOpen ? (
-        <Drawer className="override grid gap-6">
+        <Drawer className="grid gap-6">
           <fieldset>
             <legend>
               <label htmlFor={`${uid}-duration`}>Duration</label>

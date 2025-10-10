@@ -211,7 +211,7 @@ const ProductsTable = ({ sales }: TableProps) => {
 
   if (sales.every((b) => b.sales === 0)) {
     return (
-      <div className="override grid gap-4">
+      <div className="grid gap-4">
         <h2>Best selling</h2>
         <div className="placeholder">
           <p>
@@ -336,7 +336,7 @@ export const DashboardPage = ({
 
       {loggedInUser?.policies.settings_payments_user.show
         ? Object.values(getting_started_stats).some((v) => !v) && (
-            <div className="override grid gap-4 p-4 md:p-8">
+            <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
                 <h2>Getting started</h2>
                 <a
@@ -355,7 +355,7 @@ export const DashboardPage = ({
                   />
                 </a>
               </div>
-              <div className="override grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
                 {GETTING_STARTED_ITEMS.map((item) => (
                   <GettingStartedItem
                     key={item.name}
@@ -382,7 +382,7 @@ export const DashboardPage = ({
         <ProductsTable sales={sales} />
       </div>
 
-      <div className="override grid gap-4 p-4 md:p-8">
+      <div className="grid gap-4 p-4 md:p-8">
         <h2>Activity</h2>
 
         <div className="stats-grid">
