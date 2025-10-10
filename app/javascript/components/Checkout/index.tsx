@@ -25,6 +25,7 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -347,12 +348,12 @@ export const Checkout = ({
               {recommendedProducts && recommendedProducts.length > 0 ? (
                 <section className="paragraphs">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
-                  <div className="product-card-grid narrow">
+                  <ProductCardGrid narrow>
                     {recommendedProducts.map((product, idx) => (
                       // All of this grid is off-screen. so we just eager load the first image
                       <Card key={product.id} product={product} eager={idx === 0} />
                     ))}
-                  </div>
+                  </ProductCardGrid>
                 </section>
               ) : null}
             </div>
