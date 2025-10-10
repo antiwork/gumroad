@@ -7,11 +7,7 @@ class Admin::BaseController < ApplicationController
 
   inertia_share do
     RenderingExtension.custom_context(view_context).merge(
-      card_types: CreditCardUtility.card_types_for_react,
-      compliance: {
-        reasons: Compliance::TOS_VIOLATION_REASONS,
-        default_reason: Compliance::DEFAULT_TOS_VIOLATION_REASON
-      }
+      card_types: CreditCardUtility.card_types_for_react
     )
   end
 
