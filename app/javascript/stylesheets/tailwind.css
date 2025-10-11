@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" source(none); /* Should be layer(utilties) but that conflicts with the legacy non-layer CSS */
+@import "tailwindcss/utilities.css" source(none); /* Should be layer(utilities) but that conflicts with the legacy non-layer CSS */
+
 /*
  * By default Tailwind checks all files in the project for classes, but in Gumroad that causes performance issues.
  * Whitelisting source directories solves the issue, but we need to keep the list up to date to cover all frontend code.
@@ -33,6 +34,8 @@
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
   --spacing-product-page: 75.25rem;
+
+  --alert-slide-offset: -4rem;
 }
 
 @layer base {
@@ -41,11 +44,9 @@
   }
 }
 
-/* Coins parallax animation */
 .parallax-up {
   transform: translateY(0);
   will-change: transform;
-  transition: transform 0.1s linear;
   transform-style: preserve-3d;
   animation: parallax-scroll linear;
   animation-timeline: view();
@@ -68,5 +69,170 @@
   }
   100% {
     transform: translateX(0);
+  }
+}
+
+@keyframes alert-slide-down {
+  from {
+    translate: 0 var(--alert-slide-offset);
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+
+@keyframes alert-slide-up {
+  from {
+    translate: 0 0;
+    opacity: 1;
+  }
+  to {
+    translate: 0 var(--alert-slide-offset);
+    opacity: 0;
+  }
+}
+
+@layer components {
+  [role="alert"],
+  [role="status"] {
+    display: grid;
+    grid-template-columns: 2fr;
+    align-items: center;
+    padding: 1rem;
+    gap: 1.25rem;
+    border: solid calc(1rem / 16) rgb(var(--parent-color) / var(--border-alpha));
+    border-radius: 0.25rem;
+    min-height: 2.5rem;
+  }
+
+  [role="alert"].bg-filled {
+    display: block !important;
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 2rem);
+    visibility: visible !important;
+    z-index: 9999;
+  }
+
+  [role="alert"].bg-filled.visible {
+    opacity: 1;
+    pointer-events: auto;
+    animation: alert-slide-down 0.5s ease-out both;
+  }
+
+  [role="alert"].bg-filled.invisible {
+    opacity: 0;
+    pointer-events: none;
+    animation: alert-slide-up 0.3s ease-in both;
+  }
+
+  [role="alert"].success,
+  [role="status"].success {
+    border-color: rgb(var(--success));
+    background-color: rgb(var(--success) / 20%) !important;
+  }
+
+  [role="alert"].success::before,
+  [role="status"].success::before {
+    content: "\00a0";
+    display: inline-block;
+    background: currentColor;
+    min-height: max(1lh, 1em);
+    width: 1lh;
+    mask-position: 50% 50%;
+    mask-size: 120%;
+    mask-repeat: no-repeat;
+    flex-shrink: 0;
+    mask-image: url("~images/icons/solid-check-circle.svg");
+    color: rgb(var(--success));
+    grid-column: 1;
+    margin-right: 0.5rem;
+  }
+
+  [role="alert"].danger,
+  [role="status"].danger {
+    border-color: rgb(var(--danger));
+    background-color: rgb(var(--danger) / 20%) !important;
+  }
+
+  [role="alert"].danger::before,
+  [role="status"].danger::before {
+    content: "\00a0";
+    display: inline-block;
+    background: currentColor;
+    min-height: max(1lh, 1em);
+    width: 1lh;
+    mask-position: 50% 50%;
+    mask-size: 120%;
+    mask-repeat: no-repeat;
+    flex-shrink: 0;
+    mask-image: url("~images/icons/x-circle-fill.svg");
+    color: rgb(var(--danger));
+    grid-column: 1;
+    margin-right: 0.5rem;
+  }
+
+  [role="alert"].warning,
+  [role="status"].warning {
+    border-color: rgb(var(--warning));
+    background-color: rgb(var(--warning) / 20%) !important;
+  }
+
+  [role="alert"].warning::before,
+  [role="status"].warning::before {
+    content: "\00a0";
+    display: inline-block;
+    background: currentColor;
+    min-height: max(1lh, 1em);
+    width: 1lh;
+    mask-position: 50% 50%;
+    mask-size: 120%;
+    mask-repeat: no-repeat;
+    flex-shrink: 0;
+    mask-image: url("~images/icons/solid-shield-exclamation.svg");
+    color: rgb(var(--warning));
+    grid-column: 1;
+    margin-right: 0.5rem;
+  }
+
+  [role="alert"].info,
+  [role="status"].info {
+    border-color: rgb(var(--info));
+    background-color: rgb(var(--info) / 20%) !important;
+  }
+
+  [role="alert"].info::before,
+  [role="status"].info::before {
+    content: "\00a0";
+    display: inline-block;
+    background: currentColor;
+    min-height: max(1lh, 1em);
+    width: 1lh;
+    mask-position: 50% 50%;
+    mask-size: 120%;
+    mask-repeat: no-repeat;
+    flex-shrink: 0;
+    mask-image: url("~images/icons/info-circle-fill.svg");
+    color: rgb(var(--info));
+    grid-column: 1;
+    margin-right: 0.5rem;
+  }
+
+  [role="alert"] .close,
+  [role="status"] .close {
+    align-self: center;
+    grid-column: 1;
+  }
+
+  @media (min-width: 640px) {
+    [role="alert"] .close,
+    [role="status"] .close {
+      grid-column: 2;
+    }
   }
 }
