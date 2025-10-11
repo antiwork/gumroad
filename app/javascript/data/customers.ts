@@ -125,7 +125,7 @@ export type Customer = {
     term: string | null;
     content: string | null;
   } | null;
-  download_count?: number;
+  download_count?: number | null;
 };
 
 export type Query = {
@@ -318,6 +318,7 @@ export type Charge = {
   chargedback: boolean;
   paypal_refund_expired: boolean;
 };
+
 
 export const getCharges = (purchaseId: string, purchaseEmail: string) =>
   request({

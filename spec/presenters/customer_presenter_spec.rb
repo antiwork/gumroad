@@ -340,9 +340,9 @@ describe CustomerPresenter do
         create(:url_redirect, purchase:, uses: 5)
       end
 
-      it "includes the download count" do
-        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
-        expect(props[:download_count]).to eq(5)
+      it "returns the download count" do
+        presenter = described_class.new(purchase: purchase.reload)
+        expect(presenter.download_count).to eq(5)
       end
     end
 
@@ -350,8 +350,8 @@ describe CustomerPresenter do
       let(:purchase) { create(:purchase) }
 
       it "returns 0 for download count" do
-        props = described_class.new(purchase:).customer(pundit_user:)
-        expect(props[:download_count]).to eq(0)
+        presenter = described_class.new(purchase:)
+        expect(presenter.download_count).to eq(0)
       end
     end
 
@@ -364,9 +364,9 @@ describe CustomerPresenter do
         create(:url_redirect, purchase:, uses: 10)
       end
 
-      it "does not include download count" do
-        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
-        expect(props[:download_count]).to be_nil
+      it "returns nil for download count" do
+        presenter = described_class.new(purchase: purchase.reload)
+        expect(presenter.download_count).to be_nil
       end
     end
 
@@ -377,9 +377,9 @@ describe CustomerPresenter do
         create(:url_redirect, purchase:, uses: 10)
       end
 
-      it "does not include download count" do
-        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
-        expect(props[:download_count]).to be_nil
+      it "returns nil for download count" do
+        presenter = described_class.new(purchase: purchase.reload)
+        expect(presenter.download_count).to be_nil
       end
     end
   end
