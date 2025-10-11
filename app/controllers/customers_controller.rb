@@ -171,6 +171,7 @@ class CustomersController < Sellers::BaseController
           :tip,
           :upsell_purchase,
           :variant_attributes,
+          :url_redirect,
           product_review: [:response, { alive_videos: [:video_file] }],
           utm_link: [target_resource: [:seller, :user]]
         )
