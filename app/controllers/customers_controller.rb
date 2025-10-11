@@ -164,10 +164,8 @@ class CustomersController < Sellers::BaseController
     end
 
     def load_sales(sales)
-      # Get the ordered IDs from Elasticsearch results to preserve order
       ordered_ids = sales.records.map(&:id)
 
-      # Fetch records with includes while preserving the Elasticsearch order
       sales.records
         .includes(
           :call,
@@ -183,7 +181,6 @@ class CustomersController < Sellers::BaseController
         .order(Arel.sql("FIELD(purchases.id, #{ordered_ids.join(',')})"))
         .load
     end
-
 
     def set_title
       @title = "Sales"

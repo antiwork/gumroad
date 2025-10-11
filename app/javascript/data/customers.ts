@@ -319,7 +319,6 @@ export type Charge = {
   paypal_refund_expired: boolean;
 };
 
-
 export const getCharges = (purchaseId: string, purchaseEmail: string) =>
   request({
     method: "GET",
