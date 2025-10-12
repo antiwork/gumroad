@@ -296,7 +296,7 @@ export const Checkout = ({
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
                       className="grid auto-cols-max grid-flow-col items-center gap-3"
-                      style={{ gridTemplateColumns: "1fr auto" }}
+                      style={{ gridTemplateColumns: "1fr" }}
                       onSubmit={(e) => {
                         e.preventDefault();
                         void applyDiscount(newDiscountCode);

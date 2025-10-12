@@ -40,7 +40,8 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
     <>
       {styles ? <style dangerouslySetInnerHTML={{ __html: styles }} /> : null}
       <FollowForm
-        className="input-with-button"
+        className="grid auto-cols-max grid-flow-col items-center gap-3"
+        style={{ gridTemplateColumns: "1fr" }}
         ref={followFormRef}
         action={Routes.follow_user_from_embed_form_url({ host: appDomain })}
         method="post"
