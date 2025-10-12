@@ -12,21 +12,21 @@ overlay.className = "fixed inset-0 overflow-scroll bg-black/80";
 overlay.style.display = "none";
 
 const content = document.createElement("div");
-content.className = "p-4 lg:py-16 lg:px-8 max-w-product-page mx-auto";
+content.className = "mx-auto max-w-product-page p-4 lg:px-8 lg:py-16";
 overlay.appendChild(content);
 
 const overlayCloseButton = document.createElement("button");
-overlayCloseButton.className = "button filled fixed top-3 right-3";
+overlayCloseButton.className = "button filled fixed right-3 top-3";
 overlayCloseButton.innerHTML = '<span class="icon icon-x"></span>';
 overlay.appendChild(overlayCloseButton);
 
 const overlayIframe = document.createElement("iframe");
-overlayIframe.className = "w-full border-none rounded-sm";
+overlayIframe.className = "w-full rounded-sm border-none";
 content.appendChild(overlayIframe);
 
 const progressbar = document.createElement("div");
 progressbar.setAttribute("role", "progressbar");
-progressbar.className = "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2";
+progressbar.className = "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2";
 progressbar.style.display = "none";
 
 const registerButton = (button: HTMLAnchorElement) => {
