@@ -8,7 +8,7 @@ const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumro
 const customDomain = script ? new URL(script.src).host : undefined;
 
 const overlay = document.createElement("div");
-overlay.className = "overlay fixed inset-0 overflow-scroll bg-black/80";
+overlay.className = "fixed inset-0 overflow-scroll bg-black/80";
 overlay.style.display = "none";
 
 const content = document.createElement("div");
@@ -16,7 +16,7 @@ content.className = "p-4 lg:py-16 lg:px-8 max-w-product-page mx-auto";
 overlay.appendChild(content);
 
 const overlayCloseButton = document.createElement("button");
-overlayCloseButton.className = "close-button button filled fixed top-3 right-3";
+overlayCloseButton.className = "button filled fixed top-3 right-3";
 overlayCloseButton.innerHTML = '<span class="icon icon-x"></span>';
 overlay.appendChild(overlayCloseButton);
 
