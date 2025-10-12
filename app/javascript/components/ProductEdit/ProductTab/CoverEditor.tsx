@@ -200,7 +200,7 @@ const CoverUploader = ({
         </div>
         <fieldset role="tabpanel" id={`${uid}-url`} hidden={uploader?.type !== "url"}>
           {uploader?.type === "url" ? (
-            <div className="input-with-button">
+            <div className="grid auto-cols-max grid-flow-col items-center gap-3" style={{ gridTemplateColumns: "1fr" }}>
               <input
                 type="url"
                 placeholder="https://"
