@@ -9,27 +9,15 @@ const icons = require.context("$assets/images/icons/");
 const ALERT_CONFIG = {
   success: {
     icon: cast(icons("./solid-check-circle.svg")),
-    borderColor: "rgb(var(--success))",
-    backgroundColor: "rgb(var(--success) / 20%)",
-    iconColor: "rgb(var(--success))",
   },
   danger: {
     icon: cast(icons("./x-circle-fill.svg")),
-    borderColor: "rgb(var(--danger))",
-    backgroundColor: "rgb(var(--danger) / 20%)",
-    iconColor: "rgb(var(--danger))",
   },
   warning: {
     icon: cast(icons("./solid-shield-exclamation.svg")),
-    borderColor: "rgb(var(--warning))",
-    backgroundColor: "rgb(var(--warning) / 20%)",
-    iconColor: "rgb(var(--warning))",
   },
   info: {
     icon: cast(icons("./info-circle-fill.svg")),
-    borderColor: "rgb(var(--info))",
-    backgroundColor: "rgb(var(--info) / 20%)",
-    iconColor: "rgb(var(--info))",
   },
 };
 
@@ -125,37 +113,48 @@ export const ClientAlert = ({ alert, isVisible }: { alert: AlertPayload | null; 
   if (!alert) return null;
 
   const status = alert.status === "error" ? "danger" : alert.status;
-  const config = ALERT_CONFIG[status as keyof typeof ALERT_CONFIG];
 
   return (
     <div
       role="alert"
       className={cx(
-        "fixed top-4 left-1/2 z-[9999]",
+        "fixed top-4 left-1/2 z-[9999] -translate-x-1/2",
         "min-h-10 w-max max-w-[calc(100vw-2rem)] md:max-w-sm",
         "flex items-center gap-3 rounded border p-3",
         "transition-all delay-500 duration-300 ease-out",
-        isVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+        {
+          "border-[rgb(var(--success))] bg-[rgb(var(--success)/20%)]": status === "success",
+          "border-[rgb(var(--danger))] bg-[rgb(var(--danger)/20%)]": status === "danger",
+          "border-[rgb(var(--warning))] bg-[rgb(var(--warning)/20%)]": status === "warning",
+          "border-[rgb(var(--info))] bg-[rgb(var(--info)/20%)]": status === "info",
+        },
+        isVisible ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none -translate-y-16 opacity-0",
       )}
-      style={{
-        transform: `translateX(-50%) translateY(${isVisible ? "0" : "-4rem"})`,
-        borderColor: config.borderColor,
-        backgroundColor: config.backgroundColor,
-      }}
     >
       <div
-        className="h-5 w-5 flex-shrink-0"
-        style={{
-          backgroundColor: config.iconColor,
-          maskImage: `url(${config.icon})`,
-          maskPosition: "center",
-          maskSize: "contain",
-          maskRepeat: "no-repeat",
-          WebkitMaskImage: `url(${config.icon})`,
-          WebkitMaskPosition: "center",
-          WebkitMaskSize: "contain",
-          WebkitMaskRepeat: "no-repeat",
-        }}
+        className={cx(
+          "h-5 w-5 flex-shrink-0",
+          "[mask-size:contain] [mask-position:center] [mask-repeat:no-repeat]",
+          "[-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]",
+          {
+            "bg-[rgb(var(--success))] [mask-image:var(--success-icon)] [-webkit-mask-image:var(--success-icon)]":
+              status === "success",
+            "bg-[rgb(var(--danger))] [mask-image:var(--danger-icon)] [-webkit-mask-image:var(--danger-icon)]":
+              status === "danger",
+            "bg-[rgb(var(--warning))] [mask-image:var(--warning-icon)] [-webkit-mask-image:var(--warning-icon)]":
+              status === "warning",
+            "bg-[rgb(var(--info))] [mask-image:var(--info-icon)] [-webkit-mask-image:var(--info-icon)]":
+              status === "info",
+          },
+        )}
+        style={
+          {
+            "--success-icon": `url(${ALERT_CONFIG.success.icon})`,
+            "--danger-icon": `url(${ALERT_CONFIG.danger.icon})`,
+            "--warning-icon": `url(${ALERT_CONFIG.warning.icon})`,
+            "--info-icon": `url(${ALERT_CONFIG.info.icon})`,
+          } as React.CSSProperties
+        }
       />
       {alert.html ? <div dangerouslySetInnerHTML={{ __html: alert.message }} /> : <div>{alert.message}</div>}
     </div>
