@@ -95,13 +95,15 @@ export const ClientAlert = ({ alert, isVisible }: { alert: AlertPayload | null; 
   alert ? (
     <div
       role="alert"
-      className={classNames("bg-filled fixed top-4 left-1/2 z-[30] max-w-sm min-w-max px-4 py-2", alert.status, {
-        visible: isVisible,
-        invisible: !isVisible,
-        "-translate-x-1/2 translate-y-0 transition-all delay-500 duration-300 ease-out": isVisible,
-        "-translate-x-1/2 translate-y-[-calc(100%+var(--spacer-4))] transition-all delay-500 duration-300 ease-out":
-          !isVisible,
-      })}
+      className={classNames(
+        "bg-filled fixed top-4 left-1/2 z-[9999] w-max max-w-[calc(100vw-2rem)] px-4 py-2 md:max-w-sm",
+        alert.status,
+        isVisible ? "visible" : "invisible",
+      )}
+      style={{
+        transform: `translateX(-50%) translateY(${isVisible ? 0 : "calc(-100% - 1rem)"})`,
+        transition: "all 0.3s ease-out 0.5s",
+      }}
       dangerouslySetInnerHTML={alert.html ? { __html: alert.message } : undefined}
     >
       {!alert.html ? alert.message : null}
