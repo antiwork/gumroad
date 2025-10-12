@@ -241,6 +241,14 @@ This starts the Rails server, the JavaScript build system, and a Sidekiq worker.
 
 You can now access the application at `https://gumroad.dev`.
 
+#### All-in-one Docker setup
+
+If you want to run the application and all supporting services inside Docker, you can use the all-in-one compose file. This is helpful if you do not want to install Ruby, Node, or MySQL directly on your machine.
+
+```shell
+make LOCAL_DOCKER_COMPOSE_CONFIG=docker-compose-all-in-one.yml local
+``` 
+
 ## Development
 
 ### Logging in
