@@ -14,8 +14,8 @@ export const SubscribePreview = ({ avatar_url, title }: Props) => (
   <div className="override grid h-full w-full grid-cols-[27.5%_1fr] items-center gap-6 p-6">
     <img className="user-avatar w-full!" src={avatar_url} />
     <section className="override grid gap-3">
-      <span className="logo-full text-[0.875rem] leading-[1.3] text-[rgb(var(--color)/0.2)]" />
-      <h1 className="line-clamp-2 text-[2rem]">{title}</h1>
+      <span className="logo-full text-sm opacity-20" />
+      <h1 className="line-clamp-2 text-3xl">{title}</h1>
       <div>
         <Button color="accent">Subscribe</Button>
       </div>
