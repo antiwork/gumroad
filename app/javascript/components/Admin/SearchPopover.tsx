@@ -101,7 +101,7 @@ const SearchPopover = () => {
       <div className="grid w-96 max-w-full gap-3">
         <form
           onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")}
-          className="input-with-button"
+          className="grid auto-cols-max grid-flow-col grid-cols-1 items-center gap-3"
         >
           <div className="input">
             <Icon name="person" />
@@ -121,7 +121,7 @@ const SearchPopover = () => {
 
         <form
           onSubmit={(e) => submitForm(e, Routes.admin_search_purchases_path(), "purchase_query")}
-          className="input-with-button"
+          className="grid auto-cols-max grid-flow-col grid-cols-1 items-center gap-3"
         >
           <div className="input">
             <Icon name="solid-currency-dollar" />
@@ -140,7 +140,7 @@ const SearchPopover = () => {
 
         <form
           onSubmit={(e) => submitForm(e, Routes.admin_affiliates_path(), "affiliate_query")}
-          className="input-with-button"
+          className="grid auto-cols-max grid-flow-col grid-cols-1 items-center gap-3"
         >
           <div className="input">
             <Icon name="people-fill" />
