@@ -1,11 +1,4 @@
-.input-with-button {
-  display: grid;
-  grid-auto-flow: column;
-  gap: spacer(3);
-  grid-template-columns: 1fr;
-  grid-auto-columns: max-content;
-  align-items: center;
-}
+
 
 .paragraphs {
   display: flex;

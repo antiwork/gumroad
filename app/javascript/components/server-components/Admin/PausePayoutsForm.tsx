@@ -30,7 +30,7 @@ export const AdminPausePayoutsForm = ({
     >
       {(isLoading) => (
         <fieldset>
-          <div className="input-with-button" style={{ alignItems: "end" }}>
+          <div className="grid auto-cols-max grid-flow-col items-end gap-3" style={{ gridTemplateColumns: "1fr" }}>
             {payouts_paused_by === "admin" ? (
               <p>Payouts are currently paused by Gumroad admin. Reason: {reason}</p>
             ) : payouts_paused_by === "system" ? (

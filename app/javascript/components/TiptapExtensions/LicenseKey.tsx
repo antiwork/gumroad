@@ -83,7 +83,10 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
                 <legend>
                   <label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</label>
                 </legend>
-                <div className="input-with-button">
+                <div
+                  className="grid auto-cols-max grid-flow-col items-center gap-3"
+                  style={{ gridTemplateColumns: "1fr" }}
+                >
                   <input id={`product_id-${uid}`} type="text" value={productId} readOnly />
                   <CopyToClipboard text={productId} tooltipPosition="bottom">
                     <a className="button">Copy</a>

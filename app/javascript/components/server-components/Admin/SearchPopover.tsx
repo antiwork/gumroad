@@ -29,7 +29,12 @@ export const SearchPopover = ({ card_types }: Props) => {
       }
     >
       <div style={{ width: "23rem", maxWidth: "100%", display: "grid", gap: "var(--spacer-3)" }}>
-        <form action={Routes.admin_search_users_path()} method="get" className="input-with-button">
+        <form
+          action={Routes.admin_search_users_path()}
+          method="get"
+          className="grid auto-cols-max grid-flow-col items-center gap-3"
+          style={{ gridTemplateColumns: "1fr" }}
+        >
           <div className="input">
             <Icon name="person" />
             <input
@@ -44,7 +49,12 @@ export const SearchPopover = ({ card_types }: Props) => {
             <Icon name="solid-search" />
           </Button>
         </form>
-        <form action={Routes.admin_search_purchases_path()} method="get" className="input-with-button">
+        <form
+          action={Routes.admin_search_purchases_path()}
+          method="get"
+          className="grid auto-cols-max grid-flow-col items-center gap-3"
+          style={{ gridTemplateColumns: "1fr" }}
+        >
           <div className="input">
             <Icon name="solid-currency-dollar" />
             <input
@@ -58,7 +68,12 @@ export const SearchPopover = ({ card_types }: Props) => {
             <Icon name="solid-search" />
           </Button>
         </form>
-        <form action={Routes.admin_affiliates_path()} method="get" className="input-with-button">
+        <form
+          action={Routes.admin_affiliates_path()}
+          method="get"
+          className="grid auto-cols-max grid-flow-col items-center gap-3"
+          style={{ gridTemplateColumns: "1fr" }}
+        >
           <div className="input">
             <Icon name="people-fill" />
             <input
@@ -73,7 +88,12 @@ export const SearchPopover = ({ card_types }: Props) => {
           </Button>
         </form>
         <Separator>or search by card</Separator>
-        <form action={Routes.admin_cards_path()} method="get" style={{ display: "contents" }}>
+        <form
+          action={Routes.admin_cards_path()}
+          method="get"
+          className="contents auto-cols-max grid-flow-col items-center gap-3"
+          style={{ gridTemplateColumns: "1fr" }}
+        >
           <select name="card_type" defaultValue={searchParams.get("card_type") || ""}>
             <option>Choose card type</option>
             {card_types.map((cardType) => (

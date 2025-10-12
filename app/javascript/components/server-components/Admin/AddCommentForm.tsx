@@ -21,7 +21,7 @@ export const AdminAddCommentForm = ({
   >
     {(isLoading) => (
       <fieldset>
-        <div className="input-with-button">
+        <div className="grid auto-cols-max grid-flow-col items-center gap-3" style={{ gridTemplateColumns: "1fr" }}>
           <textarea name="comment[content]" rows={1} placeholder={`Comment on this ${commentable_type}`} required />
           <input type="hidden" name="comment[commentable_id]" value={commentable_id} />
           <input type="hidden" name="comment[commentable_type]" value={commentable_type} />

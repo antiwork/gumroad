@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { followSeller } from "$app/data/follow_seller";
@@ -9,6 +8,7 @@ import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { classNames } from "$app/utils/classNames";
 
 export const FollowForm = ({
   creatorProfile,
@@ -52,7 +52,12 @@ export const FollowForm = ({
 
   return (
     <form onSubmit={(e) => void submit(e)} style={{ flexGrow: 1 }} noValidate>
-      <fieldset className={cx("input-with-button", { danger: formStatus === "invalid" })}>
+      <fieldset
+        className={classNames("grid auto-cols-max grid-flow-col items-center gap-3", {
+          danger: formStatus === "invalid",
+        })}
+        style={{ gridTemplateColumns: "1fr" }}
+      >
         <input
           type="email"
           value={email}

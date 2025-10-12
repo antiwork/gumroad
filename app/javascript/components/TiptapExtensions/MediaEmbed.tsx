@@ -178,7 +178,13 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
         <legend>
           <label htmlFor={inputUid}>{type === "embed" ? "Video URL" : "Tweet URL"}</label>
         </legend>
-        {horizontalLayout ? <div className="input-with-button">{fields}</div> : fields}
+        {horizontalLayout ? (
+          <div className="grid auto-cols-max grid-flow-col items-center gap-3" style={{ gridTemplateColumns: "1fr" }}>
+            {fields}
+          </div>
+        ) : (
+          fields
+        )}
       </fieldset>
     );
   },

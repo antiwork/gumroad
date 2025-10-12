@@ -312,7 +312,7 @@
       <summary>
         <h3>Edit giftee email</h3>
       </summary>
-      <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
+      <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "grid auto-cols-max grid-flow-col items-center gap-3", style: "grid-template-columns: 1fr" }) do |f| %>
         <%= f.text_field :giftee_email, placeholder: "Enter new giftee email" %>
         <%= f.button "Update", class: "button" %>
       <% end %>

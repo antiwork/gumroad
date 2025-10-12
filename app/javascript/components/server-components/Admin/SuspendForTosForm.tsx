@@ -24,7 +24,7 @@ export const AdminSuspendForTosForm = ({
     method="POST"
     confirmMessage={confirm_message}
     onSuccess={() => showAlert(success_message, "success")}
-    className="input-with-button"
+    className="grid auto-cols-max grid-flow-col grid-cols-1 items-center gap-3"
   >
     {(isLoading) => (
       <>

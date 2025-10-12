@@ -87,7 +87,7 @@ const ShippingDestinationRow = ({
 
   return (
     <div aria-label="Shipping destination">
-      <fieldset className="input-with-button">
+      <fieldset className="grid auto-cols-max grid-flow-col items-center gap-3" style={{ gridTemplateColumns: "1fr" }}>
         <legend>
           <label htmlFor={`${uid}-country`}>Country</label>
         </legend>

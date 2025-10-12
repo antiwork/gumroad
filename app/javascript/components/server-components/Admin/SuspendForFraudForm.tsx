@@ -15,7 +15,7 @@ export const AdminSuspendForFraudForm = ({ user_id }: { user_id: number }) => (
   >
     {(isLoading) => (
       <fieldset>
-        <div className="input-with-button" style={{ alignItems: "start" }}>
+        <div className="grid auto-cols-max grid-flow-col items-start gap-3" style={{ gridTemplateColumns: "1fr" }}>
           <textarea name="suspend_for_fraud[suspension_note]" rows={3} placeholder="Add suspension note (optional)" />
           <button type="submit" className="button" disabled={isLoading}>
             {isLoading ? "Submitting..." : "Submit"}

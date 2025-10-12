@@ -250,7 +250,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
               onChange={(evt) => setLink({ ...link, url: evt.target.value })}
               onKeyDown={handleKeyPress}
             />
-            <div className="input-with-button">
+            <div className="grid auto-cols-max grid-flow-col items-center gap-3" style={{ gridTemplateColumns: "1fr" }}>
               {!isButton && (
                 <Button contentEditable={false} color="danger" onClick={removeLink}>
                   Remove link
