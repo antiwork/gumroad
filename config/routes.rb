@@ -769,7 +769,6 @@ Rails.application.routes.draw do
     get "/churn" => redirect("/dashboard/churn")
     get "/dashboard/churn", to: "churn#index", as: :churn_dashboard
     get "/churn/data", to: "churn#data", as: "churn_data"
-    get "/dashboard/churn/*other", to: "churn#index" # route handled by react-router
 
     # audience
     get "/audience" => redirect("/dashboard/audience")
