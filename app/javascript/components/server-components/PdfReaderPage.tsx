@@ -184,15 +184,18 @@ export const PdfReaderPage = ({
           <h3>One moment while we prepare your reading experience</h3>
         </div>
       ) : null}
-      <div role="application">
-        <div role="menubar">
+      <div className="flex h-full flex-col" role="application">
+        <div
+          className="flex *:flex *:items-center *:gap-1 *:p-4 *:text-sm *:leading-[1.3] *:not-last:border-r *:not-last:border-border *:sm:text-[length:inherit] *:sm:leading-[inherit]"
+          role="menubar"
+        >
           <div className="left">
             <button aria-label="Back" onClick={() => history.back()}>
               <Icon name="x" />
             </button>
           </div>
           <div className="left" style={{ flex: 1, minWidth: 0 }}>
-            <h1>{title}</h1>
+            <h1 className="truncate text-[length:inherit] leading-[inherit]">{title}</h1>
           </div>
           <div className="right">
             <ReaderPopover onZoomIn={zoomIn} onZoomOut={zoomOut} />
@@ -247,7 +250,7 @@ export const PdfReaderPage = ({
           </div>
         </div>
 
-        <div className="main relative overflow-auto" role="document">
+        <div className="main relative grow overflow-auto bg-background" role="document">
           <div className="pdf-reader-container">
             <div ref={contentRef} style={{ position: "absolute", height: "100%", width: "100%" }}>
               <div className="pdfViewer"></div>
