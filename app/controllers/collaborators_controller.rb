@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-class CollaboratorsController < ApplicationController
-  before_action :authenticate_user!
-  after_action :verify_authorized
-
+class CollaboratorsController < Sellers::BaseController
   layout "inertia", only: [:index]
 
   def index

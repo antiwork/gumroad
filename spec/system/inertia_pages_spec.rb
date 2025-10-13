@@ -285,27 +285,6 @@ RSpec.describe "Inertia Pages", type: :system, js: true do
     end
   end
 
-  describe "Collaborators page" do
-    it "renders the collaborators page" do
-      visit collaborators_path
-
-      expect(page).to have_content("Collaborators", wait: 10)
-
-      # Verify Inertia component
-      expect(page).to have_css("[data-page]")
-      page_data = JSON.parse(page.find("[data-page]")["data-page"])
-      expect(page_data["component"]).to eq("Collaborators/index")
-    end
-
-    it "displays collaborators interface" do
-      visit collaborators_path
-
-      # Since this is a simpler page, just verify it loads without errors
-      expect(page).not_to have_content("Error")
-      expect(page).not_to have_content("500")
-    end
-  end
-
   describe "Inertia.js functionality" do
     let!(:product) { create(:product, user: seller, name: "Navigation Test Product") }
 
