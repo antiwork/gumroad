@@ -164,8 +164,6 @@ class CustomersController < Sellers::BaseController
     end
 
     def load_sales(sales)
-      ordered_ids = sales.records.map(&:id)
-
       sales.records
         .includes(
           :call,
@@ -178,7 +176,7 @@ class CustomersController < Sellers::BaseController
           product_review: [:response, { alive_videos: [:video_file] }],
           utm_link: [target_resource: [:seller, :user]]
         )
-        .order(Arel.sql("FIELD(purchases.id, #{ordered_ids.join(',')})"))
+        .in_order_of(:id, sales.records.ids)
         .load
     end
 
