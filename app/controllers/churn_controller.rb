@@ -58,18 +58,22 @@ class ChurnController < Sellers::BaseController
       service = current_period_service
       result = service.calculate
 
+      daily_data = service.calculate_by_date.map do |record|
+        cache_daily_data(record) if should_use_cache?
+
+        {
+          date: record[:date].to_s,
+          customer_churn_rate: record[:customer_churn_rate].to_f,
+          churned_subscribers: record[:churned_subscribers],
+          churned_mrr_cents: record[:churned_mrr_cents]
+        }
+      end
+
       {
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
         metrics: build_metrics(result),
-        daily_data: service.calculate_by_date.map do |record|
-          {
-            date: record[:date].to_s,
-            customer_churn_rate: record[:customer_churn_rate].to_f,
-            churned_subscribers: record[:churned_subscribers],
-            churned_mrr_cents: record[:churned_mrr_cents]
-          }
-        end
+        daily_data: daily_data
       }
     end
 
@@ -155,6 +159,21 @@ class ChurnController < Sellers::BaseController
         churned_subscribers: result[:churned_subscribers],
         churned_mrr_cents: result[:churned_mrr_cents]
       }
+    end
+
+    def cache_daily_data(record)
+      date = record[:date]
+
+      return if date >= 2.days.ago.to_date
+
+      CreatorAnalyticsChurnCache.find_or_initialize_by(user: current_seller, date: date).tap do |cache|
+        cache.customer_churn_rate = record[:customer_churn_rate]
+        cache.churned_subscribers = record[:churned_subscribers]
+        cache.churned_mrr_cents = record[:churned_mrr_cents]
+        cache.save!
+      end
+    rescue ActiveRecord::RecordInvalid => e
+      Rails.logger.warn("Failed to cache churn data for #{date}: #{e.message}")
     end
 end
 
