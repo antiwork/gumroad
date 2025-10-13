@@ -689,6 +689,15 @@ describe("Library Scenario", type: :system, js: true) do
 
       before { purchase3.seller.update!(disable_reviews_after_year: true) }
 
+      it "does not show the empty state placeholder when there are purchases awaiting review" do
+        login_as user
+        visit reviews_path
+
+        expect(page).not_to have_text("You haven't bought anything... yet!")
+        expect(page).not_to have_text("Once you do, it'll show up here so you can review them.")
+        expect(page).not_to have_link("Discover products", href: discover_url(host: DISCOVER_DOMAIN))
+      end
+
       it "shows review forms for purchases awaiting review" do
         login_as user
         visit library_path
@@ -727,7 +736,7 @@ describe("Library Scenario", type: :system, js: true) do
       end
     end
 
-    context "user has no reviews" do
+    context "user has no purchases or reviews" do
       it "shows a placeholder" do
         login_as user
         visit reviews_path

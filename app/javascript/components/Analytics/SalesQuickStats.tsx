@@ -11,7 +11,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Icon name="circle-fill" style={{ color: "rgb(var(--color))" }} />
+          <Icon name="circle-fill" className="text-foreground" />
           Sales
         </>
       }
@@ -20,7 +20,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Icon name="circle-fill" style={{ color: "rgb(var(--color) / var(--gray-1))" }} />
+          <Icon name="circle-fill" className="text-muted-foreground" />
           Views
         </>
       }
@@ -29,7 +29,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Icon name="circle-fill" style={{ color: "rgb(var(--accent))" }} />
+          <Icon name="circle-fill" className="text-accent" />
           Total
         </>
       }

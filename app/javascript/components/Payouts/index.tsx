@@ -12,8 +12,8 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
+import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ExportPayoutsPopover } from "$app/components/server-components/BalancePage/ExportPayoutsPopover";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -242,7 +242,7 @@ type PastPeriodPayoutsData = {
   type: PayoutType;
 };
 
-export type BalancePageProps = {
+export type PayoutsProps = {
   next_payout_period_data:
     | CurrentPayoutsDataWithUserNotPayable
     | CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -637,7 +637,7 @@ const PeriodPaypalAccount = ({
 
 const PeriodNoAccount = () => <h4>Will be sent to:</h4>;
 
-const BalancePage = ({
+const Payouts = ({
   next_payout_period_data,
   processing_payout_periods_data,
   payouts_status,
@@ -647,7 +647,7 @@ const BalancePage = ({
   instant_payout,
   show_instant_payouts_notice,
   pagination: initialPagination,
-}: BalancePageProps) => {
+}: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
 
@@ -961,4 +961,4 @@ const BalancePage = ({
   );
 };
 
-export default BalancePage;
+export default Payouts;
