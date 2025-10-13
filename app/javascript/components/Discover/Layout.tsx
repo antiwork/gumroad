@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { getRootTaxonomy, getRootTaxonomyCss, Taxonomy } from "$app/utils/discover";
@@ -185,7 +184,7 @@ export const Layout: React.FC<{
   };
 
   return (
-    <div className={cx("discover", className)}>
+    <div className={className}>
       <header
         className="hero relative z-20 border-t-0 border-b border-border bg-body px-4 py-8 lg:ps-16 lg:pe-16"
         style={showTaxonomy && rootTaxonomy ? getRootTaxonomyCss(rootTaxonomy) : undefined}
