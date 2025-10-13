@@ -5,8 +5,10 @@ import { cast, createCast, is } from "ts-safe-cast";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { Button } from "$app/components/Button";
 import { ReaderPopover } from "$app/components/Download/ReaderPopover";
 import { Icon } from "$app/components/Icons";
+import { Popover } from "$app/components/Popover";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const zoomLevelMin = 0.1;
@@ -184,21 +186,29 @@ export const PdfReaderPage = ({
           <h3>One moment while we prepare your reading experience</h3>
         </div>
       ) : null}
-      <div role="application">
-        <div role="menubar">
-          <div className="left">
-            <button aria-label="Back" onClick={() => history.back()}>
-              <Icon name="x" />
-            </button>
+      <div role="application" className="flex h-full flex-col">
+        <div role="menubar" className="flex text-sm md:text-base">
+          <button aria-label="Back" onClick={() => history.back()} className="border-r p-4">
+            <Icon name="x" />
+          </button>
+          <div className="flex-1 border-r p-4 flex items-center">
+            <h1 className="text-[length:inherit] truncate">{title}</h1>
           </div>
-          <div className="left" style={{ flex: 1, minWidth: 0 }}>
-            <h1>{title}</h1>
-          </div>
-          <div className="right">
-            <ReaderPopover onZoomIn={zoomIn} onZoomOut={zoomOut} />
-          </div>
-          <div className="right">
-            <div className="pagination" style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+          <Popover aria-label="Appearance" trigger={<div className="border-r p-4"><Icon name="zoom-in" /></div>}>
+            <fieldset>
+              <legend>Appearance</legend>
+              <div>
+                <Button className="mr-2" onClick={zoomOut}>
+                  <Icon name="zoom-out" />
+                </Button>
+                <Button onClick={zoomIn}>
+                  <Icon name="zoom-in" />
+                </Button>
+              </div>
+            </fieldset>
+          </Popover>
+          <div className="flex gap-1 whitespace-nowrap tabular-nums items-center p-4">
+            <div className="pagination">
               {pageNumber} of {pageCount}
             </div>
             <button
@@ -247,7 +257,7 @@ export const PdfReaderPage = ({
           </div>
         </div>
 
-        <div className="main relative overflow-auto" role="document">
+        <div className="main relative flex-1 overflow-auto bg-background" role="document">
           <div className="pdf-reader-container">
             <div ref={contentRef} style={{ position: "absolute", height: "100%", width: "100%" }}>
               <div className="pdfViewer"></div>
