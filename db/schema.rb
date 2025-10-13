@@ -2439,8 +2439,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_12_024759) do
     t.string "first_name"
     t.string "last_name"
     t.string "stripe_identity_document_id"
-    t.bigint "guardian_id"
-    t.index ["guardian_id"], name: "index_user_compliance_info_on_guardian_id"
     t.index ["user_id"], name: "index_user_compliance_info_on_user_id"
   end
 
@@ -2735,5 +2733,4 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_12_024759) do
 
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "creator_analytics_churn_caches", "users"
-  add_foreign_key "user_compliance_info", "guardians"
 end

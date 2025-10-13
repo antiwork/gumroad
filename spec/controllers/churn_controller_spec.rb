@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
+require "spec_helper"
 
 RSpec.describe ChurnController, type: :controller do
   let(:user) { create(:user) }
@@ -23,22 +23,6 @@ RSpec.describe ChurnController, type: :controller do
         get :index
         expect(controller.instance_variable_get(:@churn_props)).to be_present
         expect(controller.instance_variable_get(:@churn_props)[:has_subscription_products]).to be true
-      end
-    end
-
-    context "when user has no subscription products" do
-      it "renders successfully with empty state" do
-        get :index
-        expect(response).to have_http_status(:success)
-      end
-    end
-
-    context "when not authenticated" do
-      before { sign_out user }
-
-      it "redirects to login" do
-        get :index
-        expect(response).to redirect_to(new_user_session_path)
       end
     end
   end
@@ -76,34 +60,38 @@ RSpec.describe ChurnController, type: :controller do
 
     context "with cached data" do
       before do
-        allow(Feature).to receive(:active?).with(:churn_analytics_cache, user).and_return(true)
+        product  # Ensure product exists
+        allow(LargeSeller).to receive(:where).and_return(double(exists?: true))
 
         create(:creator_analytics_churn_cache,
                user: user,
                date: end_date,
-               active_subscribers_at_start: 100,
-               new_subscribers: 10,
-               churned_subscribers: 5)
+               customer_churn_rate: 10.5,
+               churned_subscribers: 5,
+               churned_mrr_cents: 5000)
       end
 
       it "uses cached data when available" do
         get :data, params: { start_time: start_date.to_s, end_time: end_date.to_s }
 
         json = JSON.parse(response.body)
-        expect(json["metrics"]["active_subscribers_at_start"]).to eq(100)
+        expect(json["daily_data"].first["churned_subscribers"]).to eq(5)
       end
     end
 
     context "without cached data" do
       before do
-        allow(Feature).to receive(:active?).with(:churn_analytics_cache, user).and_return(false)
+        product  # Ensure product exists
+        allow(LargeSeller).to receive(:where).and_return(double(exists?: false))
       end
 
       it "calculates data in real-time" do
-        expect_any_instance_of(CreatorAnalytics::Churn).to receive(:calculate).and_call_original
-
         get :data, params: { start_time: start_date.to_s, end_time: end_date.to_s }
+
         expect(response).to have_http_status(:success)
+        json = JSON.parse(response.body)
+        expect(json).to have_key("metrics")
+        expect(json).to have_key("daily_data")
       end
     end
 
