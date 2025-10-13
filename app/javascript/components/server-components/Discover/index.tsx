@@ -59,7 +59,7 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
       </header>
       <div className="relative">
         <div
-          className="override grid auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 min-h-96 pb-1 lg:auto-cols-[40rem] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[40rem] [&::-webkit-scrollbar]:hidden"
           ref={itemsRef}
           style={{ scrollSnapType: dragStart != null ? "none" : undefined }}
           onScroll={handleScroll}

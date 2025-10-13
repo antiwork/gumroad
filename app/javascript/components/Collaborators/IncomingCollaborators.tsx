@@ -12,11 +12,11 @@ import { IncomingCollaborator, IncomingCollaboratorsData } from "$app/data/incom
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Layout } from "$app/components/server-components/CollaboratorsPage/Layout";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
