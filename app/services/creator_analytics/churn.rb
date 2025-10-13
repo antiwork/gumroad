@@ -11,7 +11,6 @@ class CreatorAnalytics::Churn
     {
       date: @end_date,
       customer_churn_rate: customer_churn_rate,
-      last_period_churn_rate: last_period_churn_rate,
       churned_subscribers: churned_count,
       active_subscribers_at_start: active_at_start_count,
       new_subscribers: new_subscribers_count,
@@ -53,38 +52,16 @@ class CreatorAnalytics::Churn
     end
   end
 
-    def customer_churn_rate
-      return 0.0 if total_subscriber_base.zero?
-      (churned_count.to_f / total_subscriber_base * 100).round(2)
-    end
+  def customer_churn_rate
+    return 0.0 if total_subscriber_base.zero?
+    (churned_count.to_f / total_subscriber_base * 100).round(2)
+  end
 
-    def retention_rate
-      (100 - customer_churn_rate).round(2)
-    end
+  def retention_rate
+    (100 - customer_churn_rate).round(2)
+  end
 
   private
-    def last_period_churn_rate
-      period_length = @end_date - @start_date + 1
-
-      if period_length == 1
-        last_period_start = @start_date - 1.day
-        last_period_end = @start_date - 1.day
-      else
-        last_period_start = @start_date - period_length
-        last_period_end = @start_date - 1
-      end
-
-      return 0.0 if last_period_start < 1.year.ago # Don't calculate if going too far back
-
-      last_period_calculator = self.class.new(
-        user: @user,
-        start_date: last_period_start,
-        end_date: last_period_end
-      )
-
-      last_period_calculator.customer_churn_rate
-    end
-
     def total_subscriber_base
       @total_subscriber_base ||= active_at_start_count + new_subscribers_count
     end

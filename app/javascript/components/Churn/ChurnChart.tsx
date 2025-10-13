@@ -50,7 +50,7 @@ export const ChurnChart = ({ data }: { data: ChurnDailyData[] }) => {
           date: item.date,
           dateFormatted: format(date, "EEEE, MMMM do"),
           churnRate: item.customer_churn_rate,
-          cancellations: item.churned_subscribers, // This is actually cancellation events (deactivated subscriptions)
+          cancellations: item.churned_subscribers,
           revenueLost: item.churned_mrr_cents,
           label: isFirst || isLast ? format(date, "MMM d") : "",
         };

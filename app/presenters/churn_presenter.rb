@@ -7,27 +7,14 @@ class ChurnPresenter
 
   def page_props
     {
-      products: subscription_products,
-      has_subscription_products: subscription_products.any?
+      has_subscription_products: has_subscription_products?
     }
   end
 
   private
     attr_reader :seller
 
-    def subscription_products
-      @subscription_products ||= seller.products
-        .alive
-        .is_recurring_billing
-        .map { |product| product_props(product) }
-    end
-
-    def product_props(product)
-      {
-        id: product.external_id,
-        name: product.name,
-        unique_permalink: product.unique_permalink,
-        alive: product.alive?
-      }
+    def has_subscription_products?
+      seller.products.alive.is_recurring_billing.exists?
     end
 end

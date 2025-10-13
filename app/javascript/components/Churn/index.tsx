@@ -14,15 +14,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
-export type Product = {
-  name: string;
-  id: string;
-  alive: boolean;
-  unique_permalink: string;
-};
-
 export type ChurnProps = {
-  products: Product[];
   has_subscription_products: boolean;
 };
 

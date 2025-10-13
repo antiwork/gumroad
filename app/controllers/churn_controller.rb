@@ -49,42 +49,19 @@ class ChurnController < Sellers::BaseController
         .where(date: @start_date..@end_date)
         .order(:date)
 
-      if cached_records.empty?
-        fetch_realtime_data
-      else
-        format_cached_data(cached_records)
-      end
+      return fetch_realtime_data if cached_records.empty?
+
+      format_cached_data(cached_records)
     end
 
     def fetch_realtime_data
-      service = CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: @start_date,
-        end_date: @end_date
-      )
-
+      service = current_period_service
       result = service.calculate_essential
-
-      period_length = (@end_date - @start_date).to_i
-      last_period_end = @start_date - 1.day
-      last_period_start = last_period_end - period_length.days
-
-      last_period_service = CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: last_period_start,
-        end_date: last_period_end
-      )
-      last_period_churn_rate = last_period_service.customer_churn_rate
 
       {
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
-        metrics: {
-          customer_churn_rate: result[:customer_churn_rate].to_f,
-          last_period_churn_rate: last_period_churn_rate.to_f,
-          churned_subscribers: result[:churned_subscribers],
-          churned_mrr_cents: result[:churned_mrr_cents]
-        },
+        metrics: build_metrics(result),
         daily_data: service.calculate_by_date_essential.map do |record|
           record.merge(customer_churn_rate: record[:customer_churn_rate].to_f)
         end
@@ -92,34 +69,12 @@ class ChurnController < Sellers::BaseController
     end
 
     def format_cached_data(cached_records)
-      service = CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: @start_date,
-        end_date: @end_date
-      )
-
-      overall_metrics = service.calculate_essential
-
-      period_length = (@end_date - @start_date).to_i
-      last_period_end = @start_date - 1.day
-      last_period_start = last_period_end - period_length.days
-
-      last_period_service = CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: last_period_start,
-        end_date: last_period_end
-      )
-      last_period_churn_rate = last_period_service.customer_churn_rate
+      overall_metrics = current_period_service.calculate_essential
 
       {
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
-        metrics: {
-          customer_churn_rate: overall_metrics[:customer_churn_rate].to_f,
-          last_period_churn_rate: last_period_churn_rate.to_f,
-          churned_subscribers: overall_metrics[:churned_subscribers],
-          churned_mrr_cents: overall_metrics[:churned_mrr_cents]
-        },
+        metrics: build_metrics(overall_metrics),
         daily_data: cached_records.map do |record|
           {
             date: record.date.to_s,
@@ -128,6 +83,37 @@ class ChurnController < Sellers::BaseController
             churned_mrr_cents: record.churned_mrr_cents
           }
         end
+      }
+    end
+
+    def current_period_service
+      @current_period_service ||= CreatorAnalytics::Churn.new(
+        user: current_seller,
+        start_date: @start_date,
+        end_date: @end_date
+      )
+    end
+
+    def last_period_churn_rate
+      @last_period_churn_rate ||= begin
+        period_length = (@end_date - @start_date).to_i
+        last_period_end = @start_date - 1.day
+        last_period_start = last_period_end - period_length.days
+
+        CreatorAnalytics::Churn.new(
+          user: current_seller,
+          start_date: last_period_start,
+          end_date: last_period_end
+        ).customer_churn_rate
+      end
+    end
+
+    def build_metrics(result)
+      {
+        customer_churn_rate: result[:customer_churn_rate].to_f,
+        last_period_churn_rate: last_period_churn_rate.to_f,
+        churned_subscribers: result[:churned_subscribers],
+        churned_mrr_cents: result[:churned_mrr_cents]
       }
     end
 end
