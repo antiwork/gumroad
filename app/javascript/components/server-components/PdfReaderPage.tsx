@@ -190,10 +190,17 @@ export const PdfReaderPage = ({
           <button aria-label="Back" onClick={() => history.back()} className="border-r p-4">
             <Icon name="x" />
           </button>
-          <div className="flex-1 border-r p-4 flex items-center">
-            <h1 className="text-[length:inherit] truncate">{title}</h1>
+          <div className="flex flex-1 items-center border-r p-4">
+            <h1 className="truncate text-[length:inherit]">{title}</h1>
           </div>
-          <Popover aria-label="Appearance" trigger={<div className="border-r p-4"><Icon name="zoom-in" /></div>}>
+          <Popover
+            aria-label="Appearance"
+            trigger={
+              <div className="border-r p-4">
+                <Icon name="zoom-in" />
+              </div>
+            }
+          >
             <fieldset>
               <legend>Appearance</legend>
               <div>
@@ -206,7 +213,7 @@ export const PdfReaderPage = ({
               </div>
             </fieldset>
           </Popover>
-          <div className="flex gap-1 whitespace-nowrap tabular-nums items-center p-4">
+          <div className="flex items-center gap-1 p-4 whitespace-nowrap tabular-nums">
             <div className="pagination">
               {pageNumber} of {pageCount}
             </div>
