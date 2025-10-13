@@ -56,20 +56,20 @@ class ChurnController < Sellers::BaseController
 
     def fetch_realtime_data
       service = current_period_service
-      result = service.calculate_essential
+      result = service.calculate
 
       {
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
         metrics: build_metrics(result),
-        daily_data: service.calculate_by_date_essential.map do |record|
+        daily_data: service.calculate_by_date.map do |record|
           record.merge(customer_churn_rate: record[:customer_churn_rate].to_f)
         end
       }
     end
 
     def format_cached_data(cached_records)
-      overall_metrics = current_period_service.calculate_essential
+      overall_metrics = current_period_service.calculate
 
       {
         start_date: @start_date.to_s,
