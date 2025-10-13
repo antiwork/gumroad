@@ -63,18 +63,33 @@ class ChurnController < Sellers::BaseController
         end_date: @end_date.to_s,
         metrics: build_metrics(result),
         daily_data: service.calculate_by_date.map do |record|
-          record.merge(customer_churn_rate: record[:customer_churn_rate].to_f)
+          {
+            date: record[:date].to_s,
+            customer_churn_rate: record[:customer_churn_rate].to_f,
+            churned_subscribers: record[:churned_subscribers],
+            churned_mrr_cents: record[:churned_mrr_cents]
+          }
         end
       }
     end
 
     def format_cached_data(cached_records)
-      overall_metrics = current_period_service.calculate
+      total_days = cached_records.count
+      overall_metrics = {
+        customer_churn_rate: total_days > 0 ? cached_records.sum(&:customer_churn_rate) / total_days : 0.0,
+        churned_subscribers: cached_records.sum(&:churned_subscribers),
+        churned_mrr_cents: cached_records.sum(&:churned_mrr_cents)
+      }
 
       {
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
-        metrics: build_metrics(overall_metrics),
+        metrics: {
+          customer_churn_rate: overall_metrics[:customer_churn_rate].to_f,
+          last_period_churn_rate: last_period_churn_rate_from_cache.to_f,
+          churned_subscribers: overall_metrics[:churned_subscribers],
+          churned_mrr_cents: overall_metrics[:churned_mrr_cents]
+        },
         daily_data: cached_records.map do |record|
           {
             date: record.date.to_s,
@@ -95,17 +110,42 @@ class ChurnController < Sellers::BaseController
     end
 
     def last_period_churn_rate
-      @last_period_churn_rate ||= begin
+      @last_period_churn_rate ||= calculate_last_period_churn_rate
+    end
+
+    def last_period_churn_rate_from_cache
+      @last_period_churn_rate_from_cache ||= begin
         period_length = (@end_date - @start_date).to_i
         last_period_end = @start_date - 1.day
         last_period_start = last_period_end - period_length.days
 
-        CreatorAnalytics::Churn.new(
-          user: current_seller,
-          start_date: last_period_start,
-          end_date: last_period_end
-        ).customer_churn_rate
+        if should_use_cache?
+          cached_records = CreatorAnalyticsChurnCache
+            .where(user_id: current_seller.id)
+            .where(date: last_period_start..last_period_end)
+            .order(:date)
+
+          if cached_records.any?
+            cached_records.sum(&:customer_churn_rate) / cached_records.count
+          else
+            calculate_last_period_churn_rate
+          end
+        else
+          calculate_last_period_churn_rate
+        end
       end
+    end
+
+    def calculate_last_period_churn_rate
+      period_length = (@end_date - @start_date).to_i
+      last_period_end = @start_date - 1.day
+      last_period_start = last_period_end - period_length.days
+
+      CreatorAnalytics::Churn.new(
+        user: current_seller,
+        start_date: last_period_start,
+        end_date: last_period_end
+      ).customer_churn_rate
     end
 
     def build_metrics(result)
