@@ -58,9 +58,10 @@ class ChurnController < Sellers::BaseController
       service = current_period_service
       result = service.calculate
 
-      daily_data = service.calculate_by_date.map do |record|
-        cache_daily_data(record) if should_use_cache?
+      daily_results = service.calculate_by_date
+      cache_daily_data_bulk(daily_results) if should_use_cache?
 
+      daily_data = daily_results.map do |record|
         {
           date: record[:date].to_s,
           customer_churn_rate: record[:customer_churn_rate].to_f,
@@ -160,24 +161,25 @@ class ChurnController < Sellers::BaseController
       }
     end
 
-    def cache_daily_data(record)
-      date = record[:date]
+    def cache_daily_data_bulk(daily_results)
+      cacheable_results = daily_results.reject { |record| record[:date] >= 2.days.ago.to_date }
+      return if cacheable_results.empty?
 
-      return if date >= 2.days.ago.to_date
-
-      CreatorAnalyticsChurnCache.upsert(
+      now = Time.current
+      records_to_upsert = cacheable_results.map do |record|
         {
           user_id: current_seller.id,
-          date: date,
+          date: record[:date],
           customer_churn_rate: record[:customer_churn_rate],
           churned_subscribers: record[:churned_subscribers],
           churned_mrr_cents: record[:churned_mrr_cents],
-          created_at: Time.current,
-          updated_at: Time.current
-        },
-        unique_by: [:user_id, :date]
-      )
+          created_at: now,
+          updated_at: now
+        }
+      end
+
+      CreatorAnalyticsChurnCache.upsert_all(records_to_upsert, unique_by: [:user_id, :date])
     rescue ActiveRecord::RecordInvalid => e
-      Rails.logger.warn("Failed to cache churn data for #{date}: #{e.message}")
+      Rails.logger.warn("Failed to bulk cache churn data: #{e.message}")
     end
 end
