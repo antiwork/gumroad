@@ -80,12 +80,14 @@ class ChurnController < Sellers::BaseController
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
         metrics: {
-          customer_churn_rate: result[:customer_churn_rate],
-          last_period_churn_rate: last_period_churn_rate,
+          customer_churn_rate: result[:customer_churn_rate].to_f,
+          last_period_churn_rate: last_period_churn_rate.to_f,
           churned_subscribers: result[:churned_subscribers],
           churned_mrr_cents: result[:churned_mrr_cents]
         },
-        daily_data: service.calculate_by_date_essential
+        daily_data: service.calculate_by_date_essential.map do |record|
+          record.merge(customer_churn_rate: record[:customer_churn_rate].to_f)
+        end
       }
     end
 
@@ -113,15 +115,15 @@ class ChurnController < Sellers::BaseController
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
         metrics: {
-          customer_churn_rate: overall_metrics[:customer_churn_rate],
-          last_period_churn_rate: last_period_churn_rate,
+          customer_churn_rate: overall_metrics[:customer_churn_rate].to_f,
+          last_period_churn_rate: last_period_churn_rate.to_f,
           churned_subscribers: overall_metrics[:churned_subscribers],
           churned_mrr_cents: overall_metrics[:churned_mrr_cents]
         },
         daily_data: cached_records.map do |record|
           {
-            date: record.date,
-            customer_churn_rate: record.customer_churn_rate,
+            date: record.date.to_s,
+            customer_churn_rate: record.customer_churn_rate.to_f,
             churned_subscribers: record.churned_subscribers,
             churned_mrr_cents: record.churned_mrr_cents
           }
