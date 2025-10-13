@@ -6,7 +6,6 @@ import { trackMediaLocationChanged } from "$app/data/media_location";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
-import { ReaderPopover } from "$app/components/Download/ReaderPopover";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { useRunOnce } from "$app/components/useRunOnce";
