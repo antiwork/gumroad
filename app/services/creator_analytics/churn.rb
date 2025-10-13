@@ -17,8 +17,7 @@ class CreatorAnalytics::Churn
   end
 
   def calculate_by_date
-    dates_array = (@start_date..@end_date).to_a
-    dates_array.map do |date|
+    (@start_date..@end_date).map do |date|
       period_start = date - 29.days
       period_end = date
 
@@ -64,12 +63,11 @@ class CreatorAnalytics::Churn
     end
 
     def churned_subscriptions
-      @churned_subscriptions ||= subscription_products
-        .joins(:subscriptions)
-        .merge(Subscription.where(deactivated_at: @start_date..@end_date))
-        .includes(subscriptions: { last_payment_option: :price })
-        .flat_map(&:subscriptions)
-        .select { |s| s.deactivated_at&.between?(@start_date, @end_date) }
+      @churned_subscriptions ||= Subscription
+        .where(seller: @user)
+        .where(link_id: subscription_products.select(:id))
+        .where(deactivated_at: @start_date..@end_date)
+        .includes(:last_payment_option => :price)
     end
 
     def calculate_mrr_cents(subscription)

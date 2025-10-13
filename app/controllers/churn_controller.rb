@@ -78,11 +78,14 @@ class ChurnController < Sellers::BaseController
     end
 
     def format_cached_data(cached_records)
-      total_days = cached_records.count
+      cache_scope = CreatorAnalyticsChurnCache
+        .where(user_id: current_seller.id)
+        .where(date: @start_date..@end_date)
+
       overall_metrics = {
-        customer_churn_rate: total_days > 0 ? cached_records.sum(&:customer_churn_rate) / total_days : 0.0,
-        churned_subscribers: cached_records.sum(&:churned_subscribers),
-        churned_mrr_cents: cached_records.sum(&:churned_mrr_cents)
+        customer_churn_rate: cache_scope.average(:customer_churn_rate).to_f,
+        churned_subscribers: cache_scope.sum(:churned_subscribers),
+        churned_mrr_cents: cache_scope.sum(:churned_mrr_cents)
       }
 
       {
@@ -124,16 +127,12 @@ class ChurnController < Sellers::BaseController
         last_period_start = last_period_end - period_length.days
 
         if should_use_cache?
-          cached_records = CreatorAnalyticsChurnCache
+          avg_rate = CreatorAnalyticsChurnCache
             .where(user_id: current_seller.id)
             .where(date: last_period_start..last_period_end)
-            .order(:date)
+            .average(:customer_churn_rate)
 
-          if cached_records.any?
-            cached_records.sum(&:customer_churn_rate) / cached_records.count
-          else
-            calculate_last_period_churn_rate
-          end
+          avg_rate || calculate_last_period_churn_rate
         else
           calculate_last_period_churn_rate
         end
@@ -166,12 +165,18 @@ class ChurnController < Sellers::BaseController
 
       return if date >= 2.days.ago.to_date
 
-      CreatorAnalyticsChurnCache.find_or_initialize_by(user: current_seller, date: date).tap do |cache|
-        cache.customer_churn_rate = record[:customer_churn_rate]
-        cache.churned_subscribers = record[:churned_subscribers]
-        cache.churned_mrr_cents = record[:churned_mrr_cents]
-        cache.save!
-      end
+      CreatorAnalyticsChurnCache.upsert(
+        {
+          user_id: current_seller.id,
+          date: date,
+          customer_churn_rate: record[:customer_churn_rate],
+          churned_subscribers: record[:churned_subscribers],
+          churned_mrr_cents: record[:churned_mrr_cents],
+          created_at: Time.current,
+          updated_at: Time.current
+        },
+        unique_by: [:user_id, :date]
+      )
     rescue ActiveRecord::RecordInvalid => e
       Rails.logger.warn("Failed to cache churn data for #{date}: #{e.message}")
     end
