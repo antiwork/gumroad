@@ -239,11 +239,15 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
   };
 
   return (
-    <article className="comment">
-      <img className="user-avatar" alt="Comment author avatar" src={comment.author_avatar_url} />
-      <div className="body">
-        <header>
-          <span className="user-name">{comment.author_name}</span>
+    <article className="comment override relative grid grid-cols-[max-content_1fr] gap-3 *:col-2">
+      <img
+        className="col-1! row-[1/3] aspect-[1] size-form-element shrink-0 rounded-full border border-border"
+        alt="Comment author avatar"
+        src={comment.author_avatar_url}
+      />
+      <div className="body override relative col-start-2 grid gap-3 whitespace-pre-wrap">
+        <header className="flex flex-wrap items-center gap-3">
+          <span className="font-bold no-underline">{comment.author_name}</span>
           <time title={formatDate(parseISO(comment.created_at))}>{comment.created_at_humanized}</time>
           {comment.author_id === seller_id ? <span className="pill small">Creator</span> : null}
           <div style={{ marginLeft: "auto" }}>
@@ -285,7 +289,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         )}
         {replyDraft == null && comment.depth < max_allowed_depth ? (
           <footer>
-            <button className="link" onClick={() => setReplyDraft("")}>
+            <button className="link underline" onClick={() => setReplyDraft("")}>
               Reply
             </button>
           </footer>
@@ -310,7 +314,6 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
           </Button>
         </CommentTextarea>
       ) : null}
-
       {comment.replies.map((reply) => (
         <CommentContainer
           key={reply.id}
@@ -340,9 +343,17 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={cx({ comment: showAvatar })} style={showAvatar ? {} : { display: "grid", gap: "var(--spacer-3)" }}>
+    <div
+      className={cx("override grid gap-3", {
+        "comment relative grid-cols-[max-content_1fr] *:col-2": showAvatar,
+      })}
+    >
       {showAvatar ? (
-        <img className="user-avatar" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
+        <img
+          className="col-1! row-[1/3] aspect-[1] size-form-element shrink-0 rounded-full border border-border"
+          alt="Current user avatar"
+          src={loggedInUser?.avatarUrl ?? defaultUserAvatar}
+        />
       ) : null}
       {loggedInUser || purchase_id ? (
         <textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />

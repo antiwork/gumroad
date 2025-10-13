@@ -33,11 +33,36 @@
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
   --spacing-product-page: 75.25rem;
+  --spacing-form-element: var(--form-element-height);
 }
 
 @layer base {
   .scoped-tailwind-preflight {
     @import "tailwindcss/preflight.css";
+  }
+}
+
+@layer components {
+  .comment > .body {
+    @apply relative grid gap-3 whitespace-pre-wrap;
+  }
+  .comment:has(.comment) > .body::before {
+    @apply absolute border-l border-border content-[""];
+    left: calc(-0.5 * var(--spacing-form-element) - 0.75rem);
+    top: var(--spacing-form-element);
+    height: calc(100% - var(--spacing-form-element));
+  }
+  .comment .comment {
+    @apply relative mt-6 max-w-none;
+    margin-left: calc(-0.5 * var(--spacing-form-element));
+  }
+  .comment .comment:not(:last-child)::before {
+    @apply absolute top-0 -left-3 h-full border-l border-border content-[""];
+  }
+  .comment .comment::after {
+    @apply absolute -top-9 right-full rounded-bl-lg border-b border-l border-border content-[""];
+    width: calc(0.75rem - 1px);
+    height: calc(0.5 * var(--spacing-form-element) + 2.25rem);
   }
 }
 
