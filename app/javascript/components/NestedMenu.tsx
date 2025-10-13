@@ -370,72 +370,155 @@ const ItemsList = ({
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
   React.useEffect(() => setDisplayedItem(initialMenuItem), [open]);
 
+  const isNestedView = displayedItem.key !== initialMenuItem.key;
+  const isMobileOverlay = Boolean(footer);
+
   return (
     <div
       id={menuId}
-      style={{ ...displayedItem.css, width: "var(--size-12)", border: "none", padding: 0, boxShadow: "unset" }}
+      style={{ ...displayedItem.css, width: "12rem", border: "none", padding: 0, boxShadow: "unset" }}
       role="menu"
       aria-label={displayedItem.label}
-      className="flex flex-col overflow-hidden"
+      className={cx("bg-surface flex h-full flex-col")}
     >
-      {footer ? (
-        <footer className="bg-filled sticky bottom-0 grid auto-cols-fr grid-flow-col gap-4 border-t border-border p-4">
-          {footer}
-        </footer>
-      ) : null}
+      <div className="bg-surface flex-1 overflow-y-auto">
+        {isMobileOverlay && footer ? (
+          <div className="bg-surface shrink-0">
+            <div className="bg-filled p-4">{footer}</div>
 
-      {displayedItem.key !== initialMenuItem.key ? (
-        <a
-          key={`back${displayedItem.key}`}
-          href={displayedItem.parent?.href ?? "#"}
-          onClick={(e) => {
-            if (e.ctrlKey || e.shiftKey) return;
-            setDisplayedItem(displayedItem.parent ?? initialMenuItem);
-            e.preventDefault();
-          }}
-          style={{ justifyContent: "normal", gap: "var(--spacer-2)" }}
-          className="hover:bg-primary flex shrink-0 items-center p-4 whitespace-normal"
-          role="menuitem"
-        >
-          <Icon name="outline-cheveron-left" />
-          <span>Back</span>
-        </a>
-      ) : null}
-      {displayedItem.key !== initialMenuItem.key || showAllItemOnInitialList ? (
-        <a
-          href={displayedItem.href}
-          onClick={(e) => onSelectItem?.(displayedItem, e)}
-          className="hover:bg-primary shrink-0 p-4 whitespace-normal underline"
-          role="menuitem"
-        >
-          All {displayedItem.label}
-        </a>
-      ) : null}
-      {displayedItem.children.map((item) => (
-        <a
-          key={item.key}
-          href={item.href}
-          onClick={(e) => {
-            if (item.children.length) {
+            <div className="h-px w-full bg-[rgb(var(--border))]"></div>
+          </div>
+        ) : null}
+
+        {isNestedView ? (
+          <a
+            key={`back${displayedItem.key}`}
+            href={displayedItem.parent?.href ?? "#"}
+            onClick={(e) => {
               if (e.ctrlKey || e.shiftKey) return;
+              setDisplayedItem(displayedItem.parent ?? initialMenuItem);
               e.preventDefault();
-              setDisplayedItem(item);
-            } else return onSelectItem?.(item, e);
-          }}
-          className={cx("hover:bg-primary shrink-0 p-4 whitespace-normal", {
-            "flex items-center justify-between": item.children.length > 0,
-            underline: item.children.length === 0,
-          })}
-          role="menuitem"
-          aria-haspopup={item.children.length ? "menu" : undefined}
-        >
-          {item.label}
-          {item.children.length > 0 && <Icon name="outline-cheveron-right" className="ml-2 shrink-0" />}
-        </a>
-      ))}
-      {displayedItem.image ? (
-        <img src={displayedItem.image} className="mt-auto w-full translate-x-6 translate-y-6" />
-      ) : null}
+            }}
+            style={{
+              padding: "var(--spacer-4)",
+              backgroundColor: "transparent",
+              whiteSpace: "normal",
+              overflow: "visible",
+              textOverflow: "clip",
+            }}
+            className="flex shrink-0 items-center"
+            role="menuitem"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgb(var(--primary))";
+              e.currentTarget.style.color = "rgb(var(--contrast-primary))";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "";
+            }}
+          >
+            <div className="flex items-center" style={{ gap: "var(--spacer-2)" }}>
+              <Icon name="outline-cheveron-left" />
+              <span>Back</span>
+            </div>
+          </a>
+        ) : null}
+
+        {isNestedView || showAllItemOnInitialList ? (
+          <a
+            href={displayedItem.href}
+            onClick={(e) => onSelectItem?.(displayedItem, e)}
+            className={cx("shrink-0", { underline: displayedItem.children.length === 0 })}
+            style={{
+              padding: "var(--spacer-4)",
+              backgroundColor: "transparent",
+              whiteSpace: "normal",
+              overflow: "visible",
+              textOverflow: "clip",
+              textDecoration: displayedItem.children.length === 0 ? "underline" : "none",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgb(var(--primary))";
+              e.currentTarget.style.color = "rgb(var(--contrast-primary))";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "";
+            }}
+            role="menuitem"
+          >
+            All {displayedItem.label}
+          </a>
+        ) : null}
+
+        {displayedItem.children.map((item) => (
+          <a
+            key={item.key}
+            href={item.href}
+            onClick={(e) => {
+              if (item.children.length) {
+                if (e.ctrlKey || e.shiftKey) return;
+                e.preventDefault();
+                setDisplayedItem(item);
+              } else return onSelectItem?.(item, e);
+            }}
+            className={cx("shrink-0", {
+              "flex items-center": item.children.length > 0,
+            })}
+            style={
+              item.children.length > 0
+                ? {
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "var(--spacer-4)",
+                    backgroundColor: "transparent",
+                    whiteSpace: "normal",
+                    overflow: "visible",
+                    textOverflow: "clip",
+                    textDecoration: "none",
+                    gap: "var(--spacer-2)",
+                  }
+                : {
+                    padding: "var(--spacer-4)",
+                    backgroundColor: "transparent",
+                    whiteSpace: "normal",
+                    overflow: "visible",
+                    textOverflow: "clip",
+                    textDecoration: "underline",
+                  }
+            }
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgb(var(--primary))";
+              e.currentTarget.style.color = "rgb(var(--contrast-primary))";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "";
+            }}
+            role="menuitem"
+            aria-haspopup={item.children.length ? "menu" : undefined}
+          >
+            <span style={{ flexGrow: 1, minWidth: 0 }}>{item.label}</span>
+            {item.children.length > 0 && (
+              <Icon name="outline-cheveron-right" className="shrink-0" style={{ flexShrink: 0 }} />
+            )}
+          </a>
+        ))}
+
+        {displayedItem.image ? (
+          <img
+            src={displayedItem.image}
+            className="w-full shrink-0 object-contain"
+            style={{
+              maxHeight: "200px",
+              padding: "var(--spacer-4)",
+              marginTop: "auto",
+            }}
+            alt=""
+          />
+        ) : null}
+      </div>
     </div>
   );
 };
