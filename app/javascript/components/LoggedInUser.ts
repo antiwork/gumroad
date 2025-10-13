@@ -62,6 +62,9 @@ type Policies = {
   utm_link: {
     index: boolean;
   };
+  churn?: {
+    index: boolean;
+  };
   community: {
     index: boolean;
   };

@@ -765,6 +765,12 @@ Rails.application.routes.draw do
     get "/analytics/data/by_state", to: "analytics#data_by_state", as: "analytics_data_by_state"
     get "/analytics/data/by_referral", to: "analytics#data_by_referral", as: "analytics_data_by_referral"
 
+    # churn
+    get "/churn" => redirect("/dashboard/churn")
+    get "/dashboard/churn", to: "churn#index", as: :churn_dashboard
+    get "/churn/data", to: "churn#data", as: "churn_data"
+    get "/dashboard/churn/*other", to: "churn#index" # route handled by react-router
+
     # audience
     get "/audience" => redirect("/dashboard/audience")
     get "/dashboard/audience", to: "audience#index", as: :audience_dashboard

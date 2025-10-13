@@ -110,6 +110,9 @@ module RenderingExtension
         utm_link: {
           index: Pundit.policy!(pundit_user, :utm_link).index?,
         },
+        churn: {
+          index: Pundit.policy!(pundit_user, :churn).index?,
+        },
         community: {
           index: Pundit.policy!(pundit_user, Community).index?,
         }
