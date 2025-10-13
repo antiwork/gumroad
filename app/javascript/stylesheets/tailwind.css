@@ -41,6 +41,42 @@
   }
 }
 
+@layer components {
+  .help-center-article {
+    p {
+      @apply mb-4;
+    }
+
+    h3 {
+      @apply text-2xl font-semibold mt-6 mb-2;
+    }
+
+    a {
+      @apply underline;
+    }
+
+    figure {
+      @apply my-6 text-center flex justify-center items-center;
+
+      img {
+        @apply max-w-full h-auto;
+      }
+    }
+
+    ul, ol {
+      @apply mb-4 ml-6;
+    }
+
+    li {
+      @apply mb-2 list-disc;
+    }
+
+    pre {
+      @apply whitespace-pre-wrap break-words;
+    }
+  }
+}
+
 /* Coins parallax animation */
 .parallax-up {
   transform: translateY(0);
