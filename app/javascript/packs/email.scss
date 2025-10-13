@@ -10,7 +10,6 @@ $light-body-bg: #ffffff;
 @import "../stylesheets/icon_names";
 @import "../stylesheets/icons";
 
-// Alert styles migrated to Tailwind CSS (see stylesheets/tailwind.css @layer components)
 @import "../stylesheets/button";
 @include buttons;
 @import "../stylesheets/containers";

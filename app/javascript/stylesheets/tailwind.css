@@ -1,4 +1,3 @@
-@layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" source(none); /* Should be layer(utilities) but that conflicts with the legacy non-layer CSS */
 
@@ -22,6 +21,11 @@
   --color-violet: #b23386;
   --color-gray: #f4f4f0;
   --color-dark-gray: #242423;
+
+  --color-success: #23a094;
+  --color-danger: #dc341e;
+  --color-warning: #ffc900;
+  --color-info: #90a8ed;
 
   --color-body: var(--body-bg);
   --color-background: rgb(var(--filled));
