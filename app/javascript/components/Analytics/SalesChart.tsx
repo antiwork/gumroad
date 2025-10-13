@@ -34,7 +34,7 @@ const ChartTooltip = ({ data: { views, sales, totals, title } }: { data: DataPoi
         </strong>
       </div>
     ) : null}
-    <time className="block font-bold">{title}</time>
+    <time>{title}</time>
   </>
 );
 
@@ -100,10 +100,10 @@ export const SalesChart = ({
           })
         }
       />
-      <Bar dataKey="sales" stackId="stack" className="fill-current" />
+      <Bar dataKey="sales" stackId="stack" className="bar level2" />
       <Bar dataKey="viewsWithoutSales" stackId="stack" radius={[4, 4, 0, 0]}>
         {dataPoints.map((_, index) => (
-          <Cell key={index} className={tooltip?.index === index ? "fill-foreground/20" : "fill-foreground/10"} />
+          <Cell key={index} className={`bar ${tooltip?.index === index ? "highlight" : ""}`} />
         ))}
       </Bar>
       <Line {...lineProps(dotRef, dataPoints.length)} dataKey="totals" yAxisId="totals" />
