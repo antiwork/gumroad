@@ -11,11 +11,11 @@ type Props = {
 };
 
 export const SubscribePreview = ({ avatar_url, title }: Props) => (
-  <div className="subscribe-preview">
-    <img className="user-avatar" src={avatar_url} />
-    <section>
-      <span className="logo-full" />
-      <h1>{title}</h1>
+  <div className="override grid h-full w-full grid-cols-[27.5%_1fr] items-center gap-6 p-6">
+    <img className="user-avatar w-full!" src={avatar_url} />
+    <section className="override grid gap-3">
+      <span className="logo-full text-sm opacity-20" />
+      <h1 className="line-clamp-2 text-3xl">{title}</h1>
       <div>
         <Button color="accent">Subscribe</Button>
       </div>
