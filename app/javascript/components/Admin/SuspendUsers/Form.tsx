@@ -1,16 +1,18 @@
-import { useForm } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
 import { showAlert } from "$app/components/server-components/Alert";
 
-type Props = {
+type PageProps = {
   authenticity_token: string;
   suspend_reasons: string[];
 };
 
-const Form = ({ authenticity_token, suspend_reasons: suspendReasons }: Props) => {
+const Form = () => {
+  const { authenticity_token: authenticityToken, suspend_reasons: suspendReasons } = usePage<PageProps>().props;
+
   const form = useForm({
-    authenticity_token,
+    authenticity_token: authenticityToken,
     suspend_users: {
       identifiers: "",
       reason: "",
@@ -84,7 +86,7 @@ const Form = ({ authenticity_token, suspend_reasons: suspendReasons }: Props) =>
           onChange={setReason}
         >
           <option value="">Select a reason</option>
-          {suspendReasons.map((reason) => (
+          {suspendReasons.map((reason: string) => (
             <option key={reason} value={reason}>
               {reason}
             </option>
