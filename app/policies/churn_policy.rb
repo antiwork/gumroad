@@ -14,4 +14,3 @@ class ChurnPolicy < ApplicationPolicy
       user.products.alive.is_recurring_billing.exists?
     end
 end
-

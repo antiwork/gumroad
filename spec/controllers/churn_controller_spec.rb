@@ -105,4 +105,3 @@ RSpec.describe ChurnController, type: :controller do
     end
   end
 end
-

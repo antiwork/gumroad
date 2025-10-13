@@ -11,4 +11,3 @@ class CreatorAnalyticsChurnCache < ApplicationRecord
   scope :for_date_range, ->(start_date, end_date) { where(date: start_date..end_date) }
   scope :recent, -> { where("date >= ?", 90.days.ago) }
 end
-

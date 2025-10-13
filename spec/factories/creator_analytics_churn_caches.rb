@@ -9,4 +9,3 @@ FactoryBot.define do
     churned_mrr_cents { 50000 }
   end
 end
-

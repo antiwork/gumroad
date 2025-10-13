@@ -176,4 +176,3 @@ class ChurnController < Sellers::BaseController
       Rails.logger.warn("Failed to cache churn data for #{date}: #{e.message}")
     end
 end
-

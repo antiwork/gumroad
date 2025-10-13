@@ -102,4 +102,3 @@ class CreatorAnalytics::Churn
                   )
     end
 end
-

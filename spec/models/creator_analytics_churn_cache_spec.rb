@@ -75,4 +75,3 @@ RSpec.describe CreatorAnalyticsChurnCache, type: :model do
     end
   end
 end
-

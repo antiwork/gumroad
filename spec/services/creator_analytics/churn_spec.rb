@@ -22,9 +22,9 @@ RSpec.describe CreatorAnalytics::Churn do
     context "with churned subscriptions" do
       before do
         create(:subscription, link: product, user: create(:user),
-               created_at: 60.days.ago, deactivated_at: 10.days.ago)
+                              created_at: 60.days.ago, deactivated_at: 10.days.ago)
         create(:subscription, link: product, user: create(:user),
-               created_at: 60.days.ago, deactivated_at: 5.days.ago)
+                              created_at: 60.days.ago, deactivated_at: 5.days.ago)
       end
 
       it "counts churned subscriptions during period" do
@@ -39,7 +39,7 @@ RSpec.describe CreatorAnalytics::Churn do
         create(:subscription, link: product, user: create(:user), created_at: 60.days.ago)
         create(:subscription, link: product, user: create(:user), created_at: 15.days.ago)
         create(:subscription, link: product, user: create(:user),
-               created_at: 60.days.ago, deactivated_at: 10.days.ago)
+                              created_at: 60.days.ago, deactivated_at: 10.days.ago)
       end
 
       it "calculates churn rate using Stripe formula" do
@@ -53,7 +53,7 @@ RSpec.describe CreatorAnalytics::Churn do
     context "with subscribers who join and churn in same period" do
       before do
         create(:subscription, link: product, user: create(:user),
-               created_at: 15.days.ago, deactivated_at: 5.days.ago)
+                              created_at: 15.days.ago, deactivated_at: 5.days.ago)
       end
 
       it "counts in both new and churned" do
@@ -88,7 +88,7 @@ RSpec.describe CreatorAnalytics::Churn do
         create(:subscription, link: product, user: create(:user), created_at: 60.days.ago)
         create(:subscription, link: product, user: create(:user), created_at: 15.days.ago)
         create(:subscription, link: product, user: create(:user),
-               created_at: 60.days.ago, deactivated_at: 10.days.ago)
+                              created_at: 60.days.ago, deactivated_at: 10.days.ago)
       end
 
       it "calculates churn rate correctly" do
@@ -102,7 +102,7 @@ RSpec.describe CreatorAnalytics::Churn do
       let!(:price) { create(:price, link: product, price_cents: 1000, recurrence: "monthly") }
       let!(:subscription) do
         create(:subscription, link: product, user: create(:user),
-               created_at: 60.days.ago, deactivated_at: 10.days.ago)
+                              created_at: 60.days.ago, deactivated_at: 10.days.ago)
       end
 
       before do
@@ -120,7 +120,7 @@ RSpec.describe CreatorAnalytics::Churn do
       let!(:price) { create(:price, link: product, price_cents: 12000, recurrence: "yearly") }
       let!(:subscription) do
         create(:subscription, link: product, user: create(:user),
-               created_at: 60.days.ago, deactivated_at: 10.days.ago)
+                              created_at: 60.days.ago, deactivated_at: 10.days.ago)
       end
 
       before do
@@ -135,4 +135,3 @@ RSpec.describe CreatorAnalytics::Churn do
     end
   end
 end
-
