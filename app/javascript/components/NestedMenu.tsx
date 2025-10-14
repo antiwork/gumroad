@@ -269,7 +269,7 @@ const MenubarItem = ({
             if (newSelectedItem === selectedItem) handleToggleMenu(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          classNames="flex w-48 flex-col"
+          className="flex w-48 flex-col"
         />
       </div>
     </div>
@@ -344,7 +344,7 @@ const OverlayMenu = ({
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          classNames="fixed h-full overflow-y-auto w-80 max-w-[calc(100vw-1.25rem)] rounded-[unset]!"
+          className="fixed h-full w-80 max-w-[calc(100vw-1.25rem)] overflow-y-auto rounded-[unset]!"
         />
       </div>
     </>
@@ -358,7 +358,7 @@ const ItemsList = ({
   open,
   onSelectItem,
   footer,
-  classNames,
+  className,
 }: {
   menuId?: string;
   menuItem: MenuItemWithChildren;
@@ -366,7 +366,7 @@ const ItemsList = ({
   open: boolean;
   onSelectItem?: SelectItemHandler;
   footer?: React.ReactNode;
-  classNames?: string;
+  className?: string;
 }) => {
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
   React.useEffect(() => setDisplayedItem(initialMenuItem), [open]);
@@ -377,7 +377,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={cx("overflow-hidden border-none! p-0! shadow-[unset]!", classNames)}
+      className={cx("overflow-hidden border-none! p-0! shadow-[unset]!", className)}
     >
       {footer}
 
