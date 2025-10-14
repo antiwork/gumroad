@@ -6,8 +6,8 @@ const AdminBlockEmailDomains = () => (
   <Form
     action={Routes.admin_block_email_domains_path()}
     header="To suspend email domains, please enter them separated by comma or newline."
-    button_label="Block email domains"
-    notice_message="Blocking email domains in progress!"
+    buttonLabel="Block email domains"
+    noticeMessage="Blocking email domains in progress!"
   />
 );
 

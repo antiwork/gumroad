@@ -6,11 +6,11 @@ import { showAlert } from "$app/components/server-components/Alert";
 export type Props = {
   action: string;
   header: string;
-  button_label: string;
-  notice_message: string;
+  buttonLabel: string;
+  noticeMessage: string;
 };
 
-const Form = ({ action, header, button_label, notice_message }: Props) => {
+const Form = ({ action, header, buttonLabel, noticeMessage }: Props) => {
   const { authenticity_token } = usePage<{ authenticity_token: string }>().props;
 
   const form = useForm({
@@ -25,7 +25,7 @@ const Form = ({ action, header, button_label, notice_message }: Props) => {
 
     form.put(action, {
       onSuccess: () => {
-        showAlert(notice_message, "success");
+        showAlert(noticeMessage, "success");
         form.reset();
       },
     });
@@ -74,7 +74,7 @@ const Form = ({ action, header, button_label, notice_message }: Props) => {
         />
 
         <button type="submit" className="button primary">
-          {button_label}
+          {buttonLabel}
         </button>
       </section>
     </form>
