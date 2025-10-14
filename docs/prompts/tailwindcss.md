@@ -31,7 +31,10 @@ I'm migrating a CSS component to Tailwind CSS. Please help me convert the existi
   ```tsx
   // Good
   import { classNames } from "$app/utils/classNames";
-  classNames("base-class", condition && "conditional-class")// Avoid
+  classNames(
+    "base-class",
+    condition && "conditional-class",
+  ) // Avoid
   `base-class ${condition ? "conditional-class" : ""}`;
 
   import cx from "classnames";
