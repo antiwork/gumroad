@@ -269,7 +269,7 @@ const MenubarItem = ({
             if (newSelectedItem === selectedItem) handleToggleMenu(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          classNames="flex w-48 flex-col border-none shadow-[unset]"
+          classNames="flex w-48 flex-col"
         />
       </div>
     </div>
@@ -327,11 +327,7 @@ const OverlayMenu = ({
         hidden={!menuOpen}
         style={menuTop ? { top: menuTop } : undefined}
       >
-        <button
-          className="absolute top-4 right-4 bg-background text-xl"
-          onClick={() => setMenuOpen(false)}
-          aria-label="Close Menu"
-        >
+        <button className="absolute top-4 right-4 text-xl" onClick={() => setMenuOpen(false)} aria-label="Close Menu">
           <Icon name="x" className="text-white" />
         </button>
         <ItemsList
@@ -348,7 +344,7 @@ const OverlayMenu = ({
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          classNames="fixed h-full overflow-y-auto w-80 max-w-[calc(100vw-1.25rem)] rounded-[unset]"
+          classNames="fixed h-full overflow-y-auto w-80 max-w-[calc(100vw-1.25rem)] rounded-[unset]!"
         />
       </div>
     </>
@@ -381,7 +377,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={cx("overflow-hidden p-0!", classNames)}
+      className={cx("overflow-hidden border-none! p-0! shadow-[unset]!", classNames)}
     >
       {footer}
 
