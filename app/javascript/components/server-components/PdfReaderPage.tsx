@@ -185,11 +185,13 @@ export const PdfReaderPage = ({
           <h3>One moment while we prepare your reading experience</h3>
         </div>
       ) : null}
-      <div role="application" className="flex h-full flex-col">
+      <div role="application" className="flex h-full flex-col scoped-tailwind-preflight">
         <div role="menubar" className="flex text-sm md:text-base">
-          <button aria-label="Back" onClick={() => history.back()} className="border-r p-4">
-            <Icon name="x" />
-          </button>
+          <div className="border-r">
+            <button aria-label="Back" onClick={() => history.back()} className="p-4">
+              <Icon name="x" />
+            </button>
+          </div>
           <div className="flex-1 border-r p-4 flex items-center">
             <h1 className="text-[length:inherit] truncate">{title}</h1>
           </div>

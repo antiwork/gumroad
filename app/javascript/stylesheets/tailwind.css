@@ -38,6 +38,10 @@
 @layer base {
   .scoped-tailwind-preflight {
     @import "tailwindcss/preflight.css";
+
+    * {
+      border-color: var(--color-border);
+    }
   }
 }
 
