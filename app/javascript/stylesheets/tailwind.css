@@ -33,6 +33,7 @@
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
   --spacing-product-page: 75.25rem;
+  --grid-cols-sidebar: 1fr 3fr;
 }
 
 @layer base {
