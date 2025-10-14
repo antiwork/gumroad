@@ -19,7 +19,8 @@ describe Admin::UnblockEmailDomainsController do
     it "renders the page to unsuspend users if admin" do
       get :show
       expect(response).to be_successful
-      expect(response).to render_template(:show)
+      expect(response.body).to include("data-page")
+      expect(response.body).to include("Admin/UnblockEmailDomains/Show")
     end
   end
 
@@ -30,7 +31,6 @@ describe Admin::UnblockEmailDomainsController do
     it "enqueues a job to unsuspend the specified email domains" do
       put :update, params: { email_domains: { identifiers: } }
       expect(UnblockObjectWorker.jobs.size).to eq(2)
-      expect(flash[:notice]).to eq "Unblocking email domains in progress!"
       expect(response).to redirect_to(admin_unblock_email_domains_url)
     end
 

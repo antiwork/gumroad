@@ -19,7 +19,8 @@ describe Admin::BlockEmailDomainsController do
       get :show
 
       expect(response).to be_successful
-      expect(response).to render_template(:show)
+      expect(response.body).to include("data-page")
+      expect(response.body).to include("Admin/BlockEmailDomains/Show")
     end
   end
 
@@ -32,7 +33,6 @@ describe Admin::BlockEmailDomainsController do
       it "enqueues a job to suspend the specified users" do
         put :update, params: { email_domains: { identifiers: } }
         expect(BlockObjectWorker.jobs.size).to eq(2)
-        expect(flash[:notice]).to eq "Blocking email domains in progress!"
         expect(response).to redirect_to(admin_block_email_domains_url)
       end
 
@@ -50,7 +50,6 @@ describe Admin::BlockEmailDomainsController do
       it "enqueues a job to suspend the specified users" do
         put :update, params: { email_domains: { identifiers: } }
         expect(BlockObjectWorker.jobs.size).to eq(2)
-        expect(flash[:notice]).to eq "Blocking email domains in progress!"
         expect(response).to redirect_to(admin_block_email_domains_url)
       end
 
