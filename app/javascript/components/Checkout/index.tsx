@@ -297,7 +297,7 @@ export const Checkout = ({
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
-                      className="input-with-button"
+                      className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void applyDiscount(newDiscountCode);
@@ -347,7 +347,7 @@ export const Checkout = ({
                 ) : null}
               </div>
               {recommendedProducts && recommendedProducts.length > 0 ? (
-                <section className="paragraphs">
+                <section className="flex flex-col gap-4">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
                   <ProductCardGrid narrow>
                     {recommendedProducts.map((product, idx) => (
@@ -512,7 +512,7 @@ const CartItemComponent = ({
                     open={editPopoverOpen}
                     onToggle={setEditPopoverOpen}
                   >
-                    <div className="paragraphs" style={{ width: "24rem" }}>
+                    <div className="flex flex-col gap-4" style={{ width: "24rem" }}>
                       <ConfigurationSelector
                         selection={selection}
                         setSelection={(selection) => {

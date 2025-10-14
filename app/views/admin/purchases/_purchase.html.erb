@@ -17,7 +17,7 @@
   </div>
 
   <hr>
-  <div class="paragraphs">
+  <div class="flex flex-col gap-4">
     <h3>Info</h3>
     <dl>
       <% if purchase.seller.support_email.present? %>
@@ -313,7 +313,7 @@
       <summary>
         <h3>Edit giftee email</h3>
       </summary>
-      <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "input-with-button" }) do |f| %>
+      <%= form_for(:update_giftee_email, url: update_giftee_email_admin_purchase_path(purchase.id), html: { class: "grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center" }) do |f| %>
         <%= f.text_field :giftee_email, placeholder: "Enter new giftee email" %>
         <%= f.button "Update", class: "button" %>
       <% end %>
@@ -350,7 +350,7 @@
   <% end %>
 
   <hr>
-  <div class="button-group">
+  <div class="flex flex-wrap gap-2">
     <% if purchase.can_force_update? || purchase.failed? %>
       <%= admin_action label: "Sync with Stripe/PayPal", url: sync_status_with_charge_processor_admin_purchase_path(purchase), loading: "syncing...", done: "synced!", confirm_message: "Are you sure you want to sync this purchase's state with Stripe/PayPal?", success_message: "synced!" %>
     <% end %>
@@ -378,7 +378,7 @@
   </div>
 
   <hr>
-  <div class="paragraphs">
+  <div class="flex flex-col gap-4">
     <h3>Comments</h3>
     <%= render("admin/comments/form", commentable: purchase) %>
     <%= render("admin/comments/index", commentable: purchase) %>

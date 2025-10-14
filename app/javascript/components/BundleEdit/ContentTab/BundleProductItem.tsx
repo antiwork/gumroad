@@ -62,7 +62,7 @@ export const BundleProductItem = ({
                     open={editPopoverOpen}
                     onToggle={setEditPopoverOpen}
                   >
-                    <div className="paragraphs" style={{ width: "24rem" }}>
+                    <div className="flex flex-col gap-4" style={{ width: "24rem" }}>
                       <ConfigurationSelector
                         selection={selection}
                         setSelection={setSelection}

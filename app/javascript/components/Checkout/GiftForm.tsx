@@ -38,7 +38,7 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
       </label>
 
       {gift ? (
-        <div className="paragraphs w-full">
+        <div className="flex flex-col gap-4 w-full">
           {isMembership ? (
             <div role="alert" className="info">
               <div>

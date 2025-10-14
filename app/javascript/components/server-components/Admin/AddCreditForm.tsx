@@ -15,7 +15,7 @@ export const AdminAddCreditForm = ({ user_id }: { user_id: number }) => (
   >
     {(isLoading) => (
       <fieldset>
-        <div className="input-with-button">
+        <div className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
           <div className="input">
             <span className="pill">$</span>
             <input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />

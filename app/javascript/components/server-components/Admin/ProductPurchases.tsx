@@ -54,7 +54,7 @@ const AdminProductPurchases = ({
       >
         <h3>{is_affiliate_user ? "Affiliate purchases" : "Purchases"}</h3>
       </summary>
-      <div className="paragraphs">
+      <div className="flex flex-col gap-4">
         {purchases && purchases.length > 0 ? (
           <div className="stack">
             {purchases.map((purchase) => (

@@ -1,4 +1,4 @@
-<%= form_with url: admin_search_purchases_path, method: :get, class: "input-with-button", style: "margin-bottom: 1rem;" do |f| %>
+<%= form_with url: admin_search_purchases_path, method: :get, class: "grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center", style: "margin-bottom: 1rem;" do |f| %>
   <%= f.hidden_field :query, value: params[:query] %>
   <div class="input">
     <%= f.text_field :product_title_query, placeholder: "Filter by product title", value: params[:product_title_query] %>

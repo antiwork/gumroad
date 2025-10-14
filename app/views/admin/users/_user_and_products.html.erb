@@ -6,7 +6,7 @@
   </div>
 <% end %>
 
-<div class="paragraphs css-tabs">
+<div class="flex flex-col gap-4 css-tabs">
   <!-- Hidden radio buttons for state management -->
   <% show_products_tab = params[:page].present? && params[:page].to_i >= 2 %>
   <input type="radio" name="user-tabs" id="profile-tab-radio" <%= "checked" unless show_products_tab %> style="display: none;">

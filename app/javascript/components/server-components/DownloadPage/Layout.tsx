@@ -177,7 +177,7 @@ export const Layout = ({
               {receiptPurchaseId ? (
                 <details>
                   <summary>Receipt</summary>
-                  <div className="paragraphs">
+                  <div className="flex flex-col gap-4">
                     <NavigationButton
                       href={
                         purchase.email
@@ -196,7 +196,7 @@ export const Layout = ({
               {loggedInUser !== null ? (
                 <details>
                   <summary>Library</summary>
-                  <div className="paragraphs">
+                  <div className="flex flex-col gap-4">
                     <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                     <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                   </div>
@@ -240,22 +240,18 @@ export const Layout = ({
           <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}
         {settings || pageList ? (
-          <PageListLayout
-            className="flex-1"
-            pageList={
-              <>
-                {pageList}
-                {isDesktop ? settings : null}
-              </>
-            }
-          >
-            <div className="paragraphs">
+          <div className="has-sidebar p-4 md:p-8">
+            <div className="flex flex-col gap-4">
+              {pageList}
+              {isDesktop ? settings : null}
+            </div>
+            <div className="flex flex-col gap-4">
               {children}
               {!isDesktop ? settings : null}
             </div>
           </PageListLayout>
         ) : (
-          <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
+          <div className="flex flex-col gap-4 flex-1 p-4 md:p-8">{children}</div>
         )}
       </div>
     </>

@@ -1,5 +1,5 @@
 <article class="grid gap-4 rounded border border-border bg-background p-4" data-product-id="<%= product.unique_permalink %>">
-  <div class="paragraphs">
+  <div class="flex flex-col gap-4">
     <div style="display: flex; gap: var(--spacer-4); align-items: center">
       <%= link_to_if(product.preview_url, image_tag(cdn_url_for(product.preview_url) || asset_path("cover_placeholder.png"), style: "width: var(--form-element-height)", alt: "Preview image"), product.preview_url, target: "_blank") %>
       <div style="display: grid; gap: var(--spacer-2)">
@@ -17,7 +17,7 @@
       </div>
     </div>
 
-    <div class="button-group">
+    <div class="flex flex-wrap gap-2">
       <%= link_to "Edit", edit_link_path(product), target: "_blank", class: "button small" %>
       <% if product.admins_can_generate_url_redirects? %>
         <%= link_to "View download page", generate_url_redirect_admin_link_path(product.unique_permalink), target: "_blank", class: "button small" %>
@@ -135,7 +135,7 @@
   </dl>
 
   <hr>
-  <div class="button-group">
+  <div class="flex flex-wrap gap-2">
     <% if product.alive? %>
       <%= admin_action label: "Unpublish", url: unpublish_admin_link_path(product.unique_permalink), loading: "Unpublishing product...", done: "Unpublished!", success_message: "Unpublished!" %>
     <% else %>

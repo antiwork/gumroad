@@ -1,6 +1,6 @@
 <%= load_pack("admin_review") %>
 
-<div class="paragraphs">
+<div class="flex flex-col gap-4">
   <% if @service_charges.present? %>
     <% @service_charges.each do |service_charge| %>
       <%= render("admin/service_charges/service_charge", service_charge: service_charge) %>

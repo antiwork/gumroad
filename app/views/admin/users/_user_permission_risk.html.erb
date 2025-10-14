@@ -1,6 +1,6 @@
 <hr>
 <div style="display: flex; justify-content: space-between">
-  <div class="button-group">
+  <div class="flex flex-wrap gap-2">
     <% unless user.compliant? %>
       <%= admin_action label: "Mark compliant", url: mark_compliant_admin_user_path(user), loading: "Marking compliant...", done: "Marked compliant!", success_message: "Marked compliant!", outline: true, color: "success" %>
     <% end %>

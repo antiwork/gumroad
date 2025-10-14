@@ -14,7 +14,7 @@
         <%= yield %>
       </div>
       <div class="footer">
-        <div class="paragraphs">
+        <div class="flex flex-col gap-4">
           <%= render(@footer_template) if @footer_template %>
           <p><%= GumroadAddress.full %></p>
 

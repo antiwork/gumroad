@@ -1,6 +1,6 @@
 <%= load_pack("admin_review") %>
 
-<div class="paragraphs">
+<div class="flex flex-col gap-4">
   <% if @users.any? %>
     <% @users.each do |user| %>
       <%= render("admin/users/user", user: user, is_affiliate_user: false) %>

@@ -1,5 +1,5 @@
 <div class="grid gap-4 rounded border border-border bg-background p-4 js-admin-user" data-user-id="<%= user.id %>">
-  <div class="paragraphs">
+  <div class="flex flex-col gap-4">
     <div style="display: flex; gap: var(--spacer-4); align-items: center">
       <%= image_tag(user.avatar_url, class: "user-avatar", style: "width: var(--form-element-height)", alt: user.name) %>
       <div style="display: grid; gap: var(--spacer-2)">
@@ -45,7 +45,7 @@
   </div>
 
   <hr>
-  <div class="button-group">
+  <div class="flex flex-wrap gap-2">
     <% can_impersonate = policy([:admin, :impersonators, user]).create? %>
     <% if can_impersonate %>
       <%= link_to "Become", admin_impersonate_path(user_identifier: user.external_id), class: "button small" %>

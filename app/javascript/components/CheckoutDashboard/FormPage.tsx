@@ -126,7 +126,7 @@ const FormPage = ({
               <div className="stack">
                 {customFields.map((field, i) => (
                   <div key={field.key}>
-                    <div className="paragraphs">
+                    <div className="flex flex-col gap-4">
                       <fieldset>
                         <legend>
                           <label htmlFor={`${uid}-${field.key}-type`}>Type of field</label>

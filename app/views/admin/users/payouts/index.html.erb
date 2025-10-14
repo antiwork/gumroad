@@ -1,6 +1,6 @@
 <%= load_pack("admin_review") %>
 
-<div class="paragraphs">
+<div class="flex flex-col gap-4">
   <%= render partial: "admin/users/payouts/payment", collection: @payouts %>
   <%= paginate @payouts, views_prefix: "admin" %>
 </div>

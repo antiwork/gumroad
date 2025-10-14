@@ -1,5 +1,5 @@
 <% user = user_compliance_info.user %>
-<div class="paragraphs">
+<div class="flex flex-col gap-4">
   <h3>Personal Info</h3>
   <dl>
     <dt>Is Business</dt>
@@ -45,7 +45,7 @@
 </div>
 
 <% if user_compliance_info.is_business %>
-  <div class="paragraphs">
+  <div class="flex flex-col gap-4">
     <h3>Business Info</h3>
     <dl>
       <dt>Name</dt>

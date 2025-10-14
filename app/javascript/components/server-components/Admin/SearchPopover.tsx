@@ -29,7 +29,7 @@ export const SearchPopover = ({ card_types }: Props) => {
       }
     >
       <div style={{ width: "23rem", maxWidth: "100%", display: "grid", gap: "var(--spacer-3)" }}>
-        <form action={Routes.admin_search_users_path()} method="get" className="input-with-button">
+        <form action={Routes.admin_search_users_path()} method="get" className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
           <div className="input">
             <Icon name="person" />
             <input
@@ -44,7 +44,7 @@ export const SearchPopover = ({ card_types }: Props) => {
             <Icon name="solid-search" />
           </Button>
         </form>
-        <form action={Routes.admin_search_purchases_path()} method="get" className="input-with-button">
+        <form action={Routes.admin_search_purchases_path()} method="get" className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
           <div className="input">
             <Icon name="solid-currency-dollar" />
             <input
@@ -58,7 +58,7 @@ export const SearchPopover = ({ card_types }: Props) => {
             <Icon name="solid-search" />
           </Button>
         </form>
-        <form action={Routes.admin_affiliates_path()} method="get" className="input-with-button">
+        <form action={Routes.admin_affiliates_path()} method="get" className="grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center">
           <div className="input">
             <Icon name="people-fill" />
             <input

@@ -7,7 +7,7 @@
 
 <hr>
 <div style="display: grid; gap: var(--spacer-4); grid-template-columns: repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)); place-items: flex-start">
-  <div class="paragraphs" style="width: 100%">
+  <div class="flex flex-col gap-4" style="width: 100%">
     <h3>Payout info</h3>
     <div>
       <% case %>
@@ -52,7 +52,7 @@
     <% end %>
   </div>
 
-  <div class="paragraphs">
+  <div class="flex flex-col gap-4">
     <h3>Merchant Accounts</h3>
     <% if user.merchant_accounts.empty? %>
       No merchant accounts.
@@ -66,7 +66,7 @@
         <% end %>
       </ul>
     <% end %>
-    <div class="button-group">
+    <div class="flex flex-wrap gap-2">
       <% if user.stripe_account.nil? %>
         <%= admin_action label: "Create Managed Account", url: create_stripe_managed_account_admin_user_url(user), confirm_message: "Are you sure you want to create a Stripe Managed Account for user #{user.id}?", class: "button-stripe" %>
       <% end %>

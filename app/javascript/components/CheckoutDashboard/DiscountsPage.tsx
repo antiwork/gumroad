@@ -324,7 +324,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
     >
       <section className="p-4 md:p-8">
         {offerCodes.length > 0 ? (
-          <section className="paragraphs">
+          <section className="flex flex-col gap-4">
             <table aria-live="polite" aria-busy={isLoading}>
               <thead>
                 <tr>
@@ -827,7 +827,7 @@ const Form = ({
       <form>
         <section className="p-8!">
           <header>
-            <div className="paragraphs">
+            <div className="flex flex-col gap-4">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
               <div>
                 Once the code is created, you can share it or copy a unique link per product that automatically applies

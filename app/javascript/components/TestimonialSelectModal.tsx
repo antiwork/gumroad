@@ -129,7 +129,7 @@ export const TestimonialSelectModal = ({
               />
               <p>Select all</p>
             </div>
-            <section className="paragraphs" style={{ marginTop: "var(--spacer-2)" }}>
+            <section className="flex flex-col gap-4" style={{ marginTop: "var(--spacer-2)" }}>
               {state.reviews.map((review) => (
                 <SelectableReviewCard
                   key={review.id}

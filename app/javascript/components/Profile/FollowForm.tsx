@@ -52,7 +52,7 @@ export const FollowForm = ({
 
   return (
     <form onSubmit={(e) => void submit(e)} style={{ flexGrow: 1 }} noValidate>
-      <fieldset className={cx("input-with-button", { danger: formStatus === "invalid" })}>
+      <fieldset className={cx("grid grid-flow-col gap-3 grid-cols-[1fr] auto-cols-max items-center", { danger: formStatus === "invalid" })}>
         <input
           type="email"
           value={email}

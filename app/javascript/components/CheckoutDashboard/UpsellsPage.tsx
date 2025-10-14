@@ -263,7 +263,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
     >
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
-          <section className="paragraphs">
+          <section className="flex flex-col gap-4">
             <table aria-busy={isLoading} aria-label="Upsells">
               <thead>
                 <tr>
