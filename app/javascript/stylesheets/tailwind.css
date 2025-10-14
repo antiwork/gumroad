@@ -75,7 +75,7 @@
   }
   100% {
     transform: translateY(-100%);
-    opacity: 0
+    opacity: 0;
   }
 }
 
