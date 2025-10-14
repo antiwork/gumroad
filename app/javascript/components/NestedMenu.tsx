@@ -269,7 +269,7 @@ const MenubarItem = ({
             if (newSelectedItem === selectedItem) handleToggleMenu(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          classNames="flex w-48 flex-col border-none p-0 shadow-[unset]"
+          classNames="flex w-48 flex-col border-none shadow-[unset]"
         />
       </div>
     </div>
@@ -381,7 +381,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={cx("overflow-hidden", classNames)}
+      className={cx("overflow-hidden p-0!", classNames)}
     >
       {footer}
 
@@ -394,7 +394,7 @@ const ItemsList = ({
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
-          className="shrink-0 justify-normal gap-2 !p-4 whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!"
+          className="shrink-0 justify-normal gap-2 bg-[inherit]! p-4! whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!"
           role="menuitem"
         >
           <Icon name="outline-cheveron-left" />
