@@ -79,19 +79,19 @@ export const AnalyticsCountriesTable = ({
   });
 
   return (
-    <>
-      <table>
-        <caption>{caption}</caption>
-        <thead>
-          <tr>
-            <th {...thProps("name")}>Country</th>
-            <th {...thProps("views")}>Views</th>
-            <th {...thProps("sales")}>Sales</th>
-            <th {...thProps("totals")}>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map(({ name, totals, sales, views }) => (
+    <table>
+      <caption>{caption}</caption>
+      <thead>
+        <tr>
+          <th {...thProps("name")}>Country</th>
+          <th {...thProps("views")}>Views</th>
+          <th {...thProps("sales")}>Sales</th>
+          <th {...thProps("totals")}>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.length ? (
+          items.map(({ name, totals, sales, views }) => (
             <tr key={name}>
               <td data-label="Country">
                 <CountryFlag countryCode={countries[name] || ""} />
@@ -103,11 +103,14 @@ export const AnalyticsCountriesTable = ({
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
               </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {!items.length ? <div className="input mt-4 lg:mt-0">Nothing yet </div> : null}
-    </>
+          ))
+        ) : (
+          <tr>
+            <td colSpan={4}>Nothing yet</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   );
 };
 
