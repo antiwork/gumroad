@@ -80,7 +80,7 @@ export const ClientAlert = ({ alert }: { alert: AlertPayload | null }) =>
       className={classNames(
         "bg-filled pointer-events-auto fixed top-4 left-1/2 z-[30] max-w-sm min-w-max -translate-x-1/2 px-4 py-2",
         alert.status,
-        "animate-fade-in-down-out-up animate-duration-5000",
+        "animate-fade-in-down-out-up",
       )}
       dangerouslySetInnerHTML={alert.html ? { __html: alert.message } : undefined}
     >

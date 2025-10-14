@@ -91,9 +91,5 @@
 }
 
 .animate-fade-in-down-out-up {
-  animation: fade-in-down-out-up var(--animation-duration, 5s) both;
-}
-
-@utility animate-duration-* {
-  --animation-duration: --value(5000)ms;
+  animation: fade-in-down-out-up 5s both;
 }

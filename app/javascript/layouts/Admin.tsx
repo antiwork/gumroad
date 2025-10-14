@@ -11,7 +11,7 @@ import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
   title: string;
-  flash: AlertPayload;
+  flash?: AlertPayload;
 };
 
 const Admin = ({ children }: { children: React.ReactNode }) => {
