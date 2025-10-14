@@ -376,20 +376,21 @@ const ItemsList = ({
   return (
     <div
       id={menuId}
-      style={{ ...displayedItem.css, width: "12rem", border: "none", padding: 0, boxShadow: "unset" }}
+      style={{
+        width: isMobileOverlay ? "20rem" : "12rem",
+        maxWidth: isMobileOverlay ? "calc(100vw - (1.25em + 2 * var(--spacer-4)))" : undefined,
+        border: "none",
+        padding: 0,
+        boxShadow: "unset",
+      }}
       role="menu"
       aria-label={displayedItem.label}
-      className={cx("bg-surface flex h-full flex-col")}
+      className={cx("bg-surface flex h-full flex-col", { "fixed h-full": isMobileOverlay })}
     >
-      <div className="bg-surface flex-1 overflow-y-auto">
+      <div className={cx("flex-1 overflow-y-auto", { "flex flex-col": isMobileOverlay })} style={displayedItem.css}>
         {isMobileOverlay && footer ? (
-          <div className="bg-surface shrink-0">
-            <div className="bg-filled p-4">{footer}</div>
-
-            <div className="h-px w-full bg-[rgb(var(--border))]"></div>
-          </div>
+          <div className="shrink-0 border-b border-[rgb(var(--border))] p-4">{footer}</div>
         ) : null}
-
         {isNestedView ? (
           <a
             key={`back${displayedItem.key}`}
@@ -509,11 +510,10 @@ const ItemsList = ({
         {displayedItem.image ? (
           <img
             src={displayedItem.image}
-            className="w-full shrink-0 object-contain"
+            className="mt-auto w-full shrink-0 object-contain"
             style={{
               maxHeight: "200px",
               padding: "var(--spacer-4)",
-              marginTop: "auto",
             }}
             alt=""
           />
