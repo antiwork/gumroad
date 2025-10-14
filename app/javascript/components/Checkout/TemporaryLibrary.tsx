@@ -31,7 +31,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
     <div>
       <PageHeader title="Library" />
       <section className="p-4 md:p-8">
-        <div className="with-sidebar">
+        <div className="grid auto-cols-[3fr] grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-flow-col">
           {!user && canBuyerSignUp ? (
             <div className="stack">
               <div>
