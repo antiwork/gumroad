@@ -904,6 +904,12 @@ const CustomerDrawer = ({
           <h5>{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
           {customer.quantity}
         </div>
+        {customer.download_count ? (
+          <div>
+            <h5>Download count</h5>
+            {customer.download_count}
+          </div>
+        ) : null}
         <div>
           <h5>Price</h5>
           <div>

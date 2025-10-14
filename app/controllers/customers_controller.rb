@@ -171,9 +171,12 @@ class CustomersController < Sellers::BaseController
           :tip,
           :upsell_purchase,
           :variant_attributes,
+          :url_redirect,
+          :link,
           product_review: [:response, { alive_videos: [:video_file] }],
           utm_link: [target_resource: [:seller, :user]]
         )
+        .in_order_of(:id, sales.records.ids)
         .load
     end
 
