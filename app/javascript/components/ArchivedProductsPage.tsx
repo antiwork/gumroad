@@ -1,17 +1,22 @@
 import React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Membership, Product } from "$app/data/products";
-import { register } from "$app/utils/serverComponentUtil";
 
-import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import ProductsPage from "$app/components/ProductsPage";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import ProductsPage from "./ProductsPage";
+export type ArchivedProductsPageProps = {
+  memberships: Membership[];
+  memberships_pagination: PaginationProps;
+  products: Product[];
+  products_pagination: PaginationProps;
+  can_create_product: boolean;
+};
 
 export const ArchivedProductsPage = ({
   memberships,
@@ -19,13 +24,7 @@ export const ArchivedProductsPage = ({
   products,
   products_pagination: productsPagination,
   can_create_product: canCreateProduct,
-}: {
-  memberships: Membership[];
-  memberships_pagination: PaginationProps;
-  products: Product[];
-  products_pagination: PaginationProps;
-  can_create_product: boolean;
-}) => {
+}: ArchivedProductsPageProps) => {
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
   const [query, setQuery] = React.useState<string | null>(null);
@@ -64,9 +63,9 @@ export const ArchivedProductsPage = ({
               />
             </div>
           </Popover>
-          <NavigationButton href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
+          <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
-          </NavigationButton>
+          </NavigationButtonInertia>
         </>
       }
     >
@@ -84,4 +83,4 @@ export const ArchivedProductsPage = ({
   );
 };
 
-export default register({ component: ArchivedProductsPage, propParser: createCast() });
+export default ArchivedProductsPage;

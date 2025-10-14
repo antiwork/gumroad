@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- we merge into this interface, but the rule does not detect this properly
-import { CSSProperties } from "react";
+import "react";
 
 declare module "react" {
   export interface CSSProperties {
@@ -11,7 +10,5 @@ declare module "react" {
     "--primary"?: string;
     "--body-bg"?: string;
     "--contrast-primary"?: string;
-    "--max-grid-relative-size"?: string;
-    "--min-grid-absolute-size"?: string;
   }
 }

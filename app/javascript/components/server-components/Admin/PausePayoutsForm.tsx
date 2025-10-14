@@ -38,7 +38,7 @@ export const AdminPausePayoutsForm = ({
             ) : payouts_paused_by === "stripe" ? (
               <p>Payouts are currently paused by Stripe because of pending verification requirements.</p>
             ) : (
-              <div className="override grid gap-2">
+              <div className="grid gap-2">
                 {payouts_paused_by === "user" && <p>Payouts are currently paused by the creator.</p>}
                 <textarea
                   name="pause_payouts[reason]"

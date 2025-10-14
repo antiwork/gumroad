@@ -348,7 +348,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
                       <td>
-                        <div className="override grid gap-2">
+                        <div className="grid gap-2">
                           <div>
                             <div className="pill small mr-2" aria-label="Offer code">
                               {offerCode.code.toUpperCase()}
@@ -375,7 +375,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                         expiresAt ? formatDate(expiresAt) : "No end date"
                       }`}</td>
                       <td className="whitespace-nowrap">
-                        <div className="override grid grid-cols-[min-content_1fr] gap-2">
+                        <div className="grid grid-cols-[min-content_1fr] gap-2">
                           {validAt && currentDate < validAt ? (
                             <>Scheduled</>
                           ) : expiresAt && currentDate > expiresAt ? (
@@ -546,7 +546,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                       ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
                       : null;
                   return (
-                    <div key={product.id} className="override grid grid-cols-[1fr_auto] gap-2">
+                    <div key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
                       <div>
                         <h5>{product.name}</h5>
                         {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
@@ -861,7 +861,7 @@ const Form = ({
             <legend>
               <label htmlFor={`${uid}code`}>Discount code</label>
             </legend>
-            <div className="override grid grid-cols-[1fr_auto] gap-2">
+            <div className="grid grid-cols-[1fr_auto] gap-2">
               <input
                 type="text"
                 id={`${uid}code`}

@@ -414,6 +414,49 @@ describe "Sales page", type: :system, js: true do
       end
     end
 
+    describe "download count" do
+      it "shows download count for regular products and hides it for bundle purchases" do
+        create(:url_redirect, purchase: purchase1, uses: 42)
+        create(:url_redirect, purchase: purchase3, uses: 25)
+
+        index_model_records(Purchase)
+
+        visit customers_path
+
+        # Test regular product - should show download count
+        find(:table_row, { "Email" => "customer1@gumroad.com" }).click
+        expect(page).to have_css("aside")
+        within("aside") do
+          expect(page).to have_text("Download count 42", normalize_ws: true)
+        end
+        click_on "Close"
+
+        # Test bundle purchase - should NOT show download count
+        find(:table_row, { "Email" => "customer3hasaninsanelylonge..." }).click
+        expect(page).to have_css("aside")
+        within("aside") do
+          expect(page).not_to have_text("Download count")
+        end
+      end
+
+      it "hides download count for coffee products" do
+        coffee_product = create(:product, user: seller, name: "Buy Me Coffee", native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 500)
+        coffee_purchase = create(:purchase, link: coffee_product, full_name: "Coffee Buyer", email: "coffee@example.com", seller:, created_at: 1.day.ago)
+        create(:url_redirect, purchase: coffee_purchase, uses: 10)
+
+        index_model_records(Purchase)
+
+        visit customers_path
+
+        # Test coffee product - should NOT show download count
+        find(:table_row, { "Email" => "coffee@example.com" }).click
+        expect(page).to have_css("aside")
+        within("aside") do
+          expect(page).not_to have_text("Download count")
+        end
+      end
+    end
+
     describe "missed posts" do
       let!(:posts) do
         create_list(:installment, 11, link: product1, published_at: Time.current) do |post, i|

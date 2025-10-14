@@ -1,6 +1,6 @@
 import { StripeCardElement } from "@stripe/stripe-js";
 import cx from "classnames";
-import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
+import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
@@ -297,11 +297,7 @@ const PaymentsPage = (props: Props) => {
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = cast(country_code);
-    try {
-      return input && parsePhoneNumber(input, countryCode).isValid();
-    } catch {
-      return false;
-    }
+    return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
   };
 
   const validateBankAccountFields = () => {
@@ -1026,7 +1022,7 @@ const PaymentsPage = (props: Props) => {
               </a>
             </div>
           </header>
-          <section className="override grid gap-8">
+          <section className="grid gap-8">
             <div className="radio-buttons" role="radiogroup">
               {props.bank_account_details.show_bank_account ? (
                 <>

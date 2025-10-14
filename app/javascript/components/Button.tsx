@@ -7,7 +7,7 @@ import { classNames } from "$app/utils/classNames";
 
 import { ButtonColor, buttonColors } from "$app/components/design";
 
-const buttonVariants = cva("button", {
+export const buttonVariants = cva("button", {
   variants: {
     variant: {
       default: "",
@@ -146,7 +146,7 @@ export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationBu
 NavigationButton.displayName = "NavigationButton";
 
 // Logs warnings whenever `className` changes, instead of on every render
-const useValidateClassName = (className: string | undefined) => {
+export const useValidateClassName = (className: string | undefined) => {
   if (process.env.NODE_ENV === "production") return;
 
   React.useEffect(() => validateClassName(className), [className]);

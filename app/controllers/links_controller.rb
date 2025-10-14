@@ -31,7 +31,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index]
+  layout "inertia", only: [:index, :new]
 
   def index
     authorize Link
@@ -56,7 +56,7 @@ class LinksController < ApplicationController
       products_pagination: @products_pagination
     ).page_props
 
-    render inertia: "Products/index",
+    render inertia: "Products/Index",
            props: { react_products_page_props: @react_products_page_props }
   end
 
@@ -99,8 +99,10 @@ class LinksController < ApplicationController
   def new
     authorize Link
 
-    @react_new_product_page_props = ProductPresenter.new_page_props(current_seller:)
+    props = ProductPresenter.new_page_props(current_seller:)
     @title = "What are you creating?"
+
+    render inertia: "Products/New", props:
   end
 
   def create
