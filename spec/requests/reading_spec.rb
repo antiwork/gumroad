@@ -80,6 +80,7 @@ describe "Reading Scenario", type: :system, js: true do
       visit("/read/#{@url_redirect.token}/#{file.external_id}")
       expect(page).to have_text("One moment while we prepare your reading experience")
       expect(page).to have_text("Building a billion-dollar company.")
+      sleep 60
     end
   end
 

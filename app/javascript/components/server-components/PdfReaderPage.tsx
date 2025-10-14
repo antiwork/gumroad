@@ -185,17 +185,24 @@ export const PdfReaderPage = ({
           <h3>One moment while we prepare your reading experience</h3>
         </div>
       ) : null}
-      <div role="application" className="flex h-full flex-col scoped-tailwind-preflight">
+      <div role="application" className="scoped-tailwind-preflight flex h-full flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="p-4">
               <Icon name="x" />
             </button>
           </div>
-          <div className="flex-1 border-r p-4 flex items-center">
-            <h1 className="text-[length:inherit] truncate">{title}</h1>
+          <div className="flex flex-1 items-center border-r p-4">
+            <h1 className="truncate">{title}</h1>
           </div>
-          <Popover aria-label="Appearance" trigger={<div className="border-r p-4"><Icon name="zoom-in" /></div>}>
+          <Popover
+            aria-label="Appearance"
+            trigger={
+              <div className="border-r p-4">
+                <Icon name="zoom-in" />
+              </div>
+            }
+          >
             <fieldset>
               <legend>Appearance</legend>
               <div>
@@ -208,7 +215,7 @@ export const PdfReaderPage = ({
               </div>
             </fieldset>
           </Popover>
-          <div className="flex gap-1 whitespace-nowrap tabular-nums items-center p-4">
+          <div className="flex items-center gap-1 p-4 whitespace-nowrap tabular-nums">
             <div className="pagination">
               {pageNumber} of {pageCount}
             </div>
