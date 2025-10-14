@@ -52,6 +52,8 @@ void createInertiaApp<GlobalProps>({
 // then remove this check when they are all migrated
 const urlsMigratedtoInertia = [
   Routes.admin_url(),
+  Routes.admin_block_email_domains_url(),
+  Routes.admin_unblock_email_domains_url(),
   // Add other urls here when they are migrated to inertia
 ];
 
