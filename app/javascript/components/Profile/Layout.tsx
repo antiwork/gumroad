@@ -23,10 +23,13 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
   const cartItemsCount = useCartItemsCount();
   const loggedInUser = useLoggedInUser();
 
+  const sectionClassName =
+    "col-[unset] row-[unset] flex items-center gap-3 border-b border-border px-4 py-8 lg:border-0 lg:p-0";
+
   return (
-    <div className={cx("profile", className)}>
-      <header className="relative z-20 bg-background">
-        <section>
+    <div className={cx("grid min-h-full grid-rows-[auto_1fr]", className)}>
+      <header className="relative z-20 grid grid-cols-1 bg-background text-[1.15rem] leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-profile-desktop-padding lg:py-6">
+        <section className={sectionClassName}>
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (
             <NavigationButton
@@ -43,12 +46,12 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </a>
         </section>
         {!hideFollowForm ? (
-          <section>
+          <section className={cx(sectionClassName, "col-span-2")}>
             <FollowForm creatorProfile={creatorProfile} />
           </section>
         ) : null}
         {creatorProfile.twitter_handle || cartItemsCount ? (
-          <section className="links">
+          <section className={cx(sectionClassName, "col-2 row-1")}>
             {creatorProfile.twitter_handle ? (
               <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
                 <Icon name="twitter" />
@@ -58,7 +61,12 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </section>
         ) : null}
       </header>
-      <main className={cx("custom-sections", loggedInUser?.id === creatorProfile.external_id && "has-user")}>
+      <main
+        className={cx(
+          "custom-sections row-[unset] *:lg:px-profile-desktop-padding",
+          loggedInUser?.id === creatorProfile.external_id && "has-user",
+        )}
+      >
         {children}
         <PoweredByFooter />
       </main>

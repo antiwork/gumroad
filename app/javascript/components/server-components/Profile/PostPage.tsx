@@ -68,12 +68,12 @@ const PostPage = ({
   const publishedAtFormatted = formatPostDate(published_at, userAgentInfo.locale);
 
   return (
-    <Layout className="reader" creatorProfile={creator_profile}>
+    <Layout creatorProfile={creator_profile}>
       <header className="grid gap-2 border-b border-border px-4 py-8">
         <h1>{subject}</h1>
         <time>{publishedAtFormatted}</time>
       </header>
-      <article className="grid gap-8 border-b border-border p-4 pt-8 lg:pt-12 lg:pb-8">
+      <article className="grid gap-8 border-b border-border p-4 pt-8 text-lg lg:pt-12 lg:pr-[max(calc(100%-50rem-var(--spacing-profile-desktop-padding)),4rem)] lg:pb-8">
         {pageLoaded ? null : <LoadingSpinner width="2em" />}
         <EditorContent className="rich-text" editor={editor} />
 
