@@ -382,7 +382,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             </span>
           </div>
         ) : null}
-        <div className="grid auto-cols-[3fr] grid-cols-1 items-start gap-6 gap-x-8 lg:grid-flow-col">
+        <div className="grid auto-cols-[3fr] grid-cols-1 items-start gap-12 gap-x-16 lg:grid-flow-col">
           {!showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9) ? (
             <div className="stack">
               <header>
