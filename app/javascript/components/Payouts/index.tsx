@@ -902,7 +902,7 @@ const Payouts = ({
               <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
             </div>
           ) : (
-            <section className="override grid gap-4">
+            <section className="grid gap-4">
               {next_payout_period_data.payout_note &&
               !["processing", "paused"].includes(next_payout_period_data.status) ? (
                 <div className="info" role="status">

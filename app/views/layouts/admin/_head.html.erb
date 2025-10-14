@@ -8,7 +8,7 @@
   <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
     <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
   <% end %>
-  <title><%= "#{@title} - Admin" %></title>
+  <title inertia><%= "#{@title} - Admin" %></title>
   <%= stylesheet_pack_tag(:admin) %>
   <%= yield :style %>
   <%= csrf_meta_tags %>

@@ -643,7 +643,7 @@ export const EmailForm = () => {
                   </Button>
                 }
               >
-                <div className="override grid gap-3">
+                <div className="grid gap-3">
                   <Button disabled={isBusy} onClick={() => save("save_and_preview_post")}>
                     <Icon name="file-earmark-medical-fill" />
                     Preview Post
@@ -675,7 +675,7 @@ export const EmailForm = () => {
                 </Button>
               }
             >
-              <div className="override grid gap-3">
+              <div className="grid gap-3">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr max-content" }}>
                   {isSaving && secondsLeftToPublish > 0 ? (
                     <>
@@ -1088,7 +1088,7 @@ export const EmailForm = () => {
           </div>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <EvaporateUploaderProvider value={evaporateUploader}>
-              <div className="override grid gap-6">
+              <div className="grid gap-6">
                 <fieldset className={cx({ danger: invalidFields.has("title") })}>
                   <input
                     ref={titleRef}

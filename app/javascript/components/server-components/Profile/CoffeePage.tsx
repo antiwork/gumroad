@@ -78,7 +78,7 @@ export const CoffeeProduct = ({
   );
   return (
     <section className="px-4" style={{ display: "grid", gap: "var(--spacer-7)", alignContent: "center", flexGrow: 1 }}>
-      <section className="override grid gap-8">
+      <section className="grid gap-8">
         <h1>{product.name}</h1>
         {product.description_html ? <h3 dangerouslySetInnerHTML={{ __html: product.description_html }} /> : null}
       </section>

@@ -749,7 +749,7 @@ const Reviews = ({
         <div itemProp="reviewCount">{ratings.count}</div>
         <div itemProp="ratingValue">{ratings.average}</div>
       </div>
-      <section className="override grid grid-cols-[auto_1fr_auto] gap-3" aria-label="Ratings histogram">
+      <section className="grid grid-cols-[auto_1fr_auto] gap-3" aria-label="Ratings histogram">
         {([4, 3, 2, 1, 0] as const).map((rating) => (
           <RatingsHistogramRow rating={rating + 1} percentage={ratings.percentages[rating]} key={rating} />
         ))}

@@ -48,7 +48,7 @@ const AccountDetailsSection = ({
   };
 
   return (
-    <section className="override grid gap-8">
+    <section className="grid gap-8">
       {(complianceInfo.is_business ? complianceInfo.business_country !== "AE" : complianceInfo.country !== "AE") ? (
         <section>
           <fieldset>
@@ -93,7 +93,7 @@ const AccountDetailsSection = ({
         </section>
       ) : null}
       {complianceInfo.is_business ? (
-        <section className="override grid gap-8">
+        <section className="grid gap-8">
           <div
             style={{
               display: "grid",
@@ -620,7 +620,7 @@ const AccountDetailsSection = ({
           </fieldset>
         </section>
       ) : null}
-      <section className="override grid gap-8">
+      <section className="grid gap-8">
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
           <fieldset className={cx({ danger: errorFieldNames.has("first_name") })}>
             <legend>

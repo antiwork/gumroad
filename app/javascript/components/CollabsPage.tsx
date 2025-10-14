@@ -1,9 +1,7 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Membership, Product } from "$app/data/collabs";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { NavigationButton } from "$app/components/Button";
 import { PaginationProps } from "$app/components/Pagination";
@@ -16,15 +14,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
 
-const CollabsPage = ({
-  memberships,
-  memberships_pagination: membershipsPagination,
-  products,
-  products_pagination: productsPagination,
-  stats,
-  archived_tab_visible: archivedTabVisible,
-  collaborators_disabled_reason: collaboratorsDisabledReason,
-}: {
+export type CollabsPageProps = {
   memberships: Membership[];
   memberships_pagination: PaginationProps;
   products: Product[];
@@ -37,7 +27,17 @@ const CollabsPage = ({
   };
   archived_tab_visible: boolean;
   collaborators_disabled_reason: string | null;
-}) => {
+};
+
+const CollabsPage = ({
+  memberships,
+  memberships_pagination: membershipsPagination,
+  products,
+  products_pagination: productsPagination,
+  stats,
+  archived_tab_visible: archivedTabVisible,
+  collaborators_disabled_reason: collaboratorsDisabledReason,
+}: CollabsPageProps) => {
   const userAgentInfo = useUserAgentInfo();
 
   return (
@@ -104,4 +104,4 @@ const CollabsPage = ({
   );
 };
 
-export default register({ component: CollabsPage, propParser: createCast() });
+export default CollabsPage;

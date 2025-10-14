@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Products::CollabsController, :vcr, :sidekiq_inline, :elasticsearch_wait_for_refresh do
+describe Products::CollabsController, :vcr, :sidekiq_inline, :elasticsearch_wait_for_refresh, inertia: true do
   include CurrencyHelper
   render_views
 
@@ -153,20 +154,32 @@ describe Products::CollabsController, :vcr, :sidekiq_inline, :elasticsearch_wait
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(response).to render_template(:index)
+      expect(assigns[:title]).to eq("Products")
+
+      expect(inertia).to render_component("Products/Collabs/Index")
 
       # stats
-      ["Total revenue", "$28", "Customers", "4", "Active members", "3", "Collaborations", "5"].each do |stat|
-        expect(response.body).to include stat
-      end
+      stats = inertia.props[:stats]
+      expect(stats[:total_revenue]).to eq(2800)
+      expect(stats[:total_customers]).to eq(4)
+      expect(stats[:total_members]).to eq(3)
+      expect(stats[:total_collaborations]).to eq(5)
 
       # products
-      [collab_1, collab_2, collab_3, membership_collab_1, membership_collab_2].each do |product|
-        expect(response.body).to include product.name
+      memberships = inertia.props[:memberships]
+      products = inertia.props[:products]
+
+      [membership_collab_1, membership_collab_2].each do |product|
+        expect(memberships.any? { |m| m[:id] == product.id }).to be(true)
+      end
+
+      [collab_1, collab_2, collab_3].each do |product|
+        expect(products.any? { |p| p[:id] == product.id }).to be(true)
       end
 
       [non_collab_product, pending_collab_1, pending_collab_2].each do |product|
-        expect(response.body).not_to include product.name
+        expect(memberships.any? { |m| m[:id] == product.id }).to be(false)
+        expect(products.any? { |p| p[:id] == product.id }).to be(false)
       end
     end
 
@@ -174,14 +187,18 @@ describe Products::CollabsController, :vcr, :sidekiq_inline, :elasticsearch_wait
       get :index, params: { query: "2" }
 
       expect(response).to have_http_status(:ok)
-      expect(response).to render_template(:index)
 
-      [collab_2, membership_collab_2].each do |product|
-        expect(response.body).to include product.name
-      end
+      expect(inertia).to render_component("Products/Collabs/Index")
+
+      memberships = inertia.props[:memberships]
+      products = inertia.props[:products]
+
+      expect(memberships.any? { |m| m[:id] == membership_collab_2.id }).to be(true)
+      expect(products.any? { |p| p[:id] == collab_2.id }).to be(true)
 
       [collab_1, collab_3, membership_collab_1].each do |product|
-        expect(response.body).not_to include product.name
+        expect(memberships.any? { |m| m[:id] == product.id }).to be(false)
+        expect(products.any? { |p| p[:id] == product.id }).to be(false)
       end
     end
   end

@@ -166,7 +166,12 @@ export const Layout = (
 
   const mainSection = (
     <section className="border-b border-border">
-      <div className={classNames("mx-auto w-full max-w-product-page lg:py-16", props.sections.length > 0 ? "px-4 py-8" : "p-4 lg:px-8")}>
+      <div
+        className={classNames(
+          "mx-auto w-full max-w-product-page lg:py-16",
+          props.sections.length > 0 ? "px-4 py-8" : "p-4 lg:px-8",
+        )}
+      >
         {productView}
       </div>
     </section>
