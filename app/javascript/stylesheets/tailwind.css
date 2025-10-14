@@ -25,14 +25,24 @@
   --color-body: var(--body-bg);
   --color-background: rgb(var(--filled));
   --color-foreground: rgb(var(--color));
+  --color-backdrop: rgba(0, 0, 0, 0.8);
   --color-border: rgb(var(--color) / var(--border-alpha));
   --color-accent: rgb(var(--accent));
   --color-muted-foreground: rgb(var(--color) / var(--gray-1));
+  --color-primary: rgb(0 0 0);
+  --color-primary-contrast: rgb(255 255 255);
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
   --spacing-product-page: 75.25rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: rgb(221 221 221);
+    --color-primary-contrast: rgb(0 0 0);
+  }
 }
 
 @layer base {

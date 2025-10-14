@@ -159,7 +159,11 @@ export const Layout: React.FC<{
       currentTaxonomyPath={taxonomyPath}
       onClickTaxonomy={onTaxonomyChange}
       forceDomain={forceDomain}
-      footer={<div className="flex gap-4 border-b p-4 pb-4">{userActionButtons}</div>}
+      footer={
+        <div className="bg-filled sticky bottom-0 flex gap-4 border-t border-b border-border p-4 pb-4">
+          {userActionButtons}
+        </div>
+      }
     />
   );
 
