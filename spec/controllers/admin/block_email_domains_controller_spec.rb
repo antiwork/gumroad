@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::BlockEmailDomainsController do
+describe Admin::BlockEmailDomainsController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -20,7 +21,7 @@ describe Admin::BlockEmailDomainsController do
 
       expect(response).to be_successful
       expect(response.body).to include("data-page")
-      expect(response.body).to include("Admin/BlockEmailDomains/Show")
+      expect(inertia.component).to eq "Admin/BlockEmailDomains/Show"
     end
   end
 
