@@ -5,9 +5,9 @@ const useRouteLoading = () => {
 
   React.useEffect(() => {
     const startHandler = (event: DocumentEventMap["inertia:start"]) => {
-      const { prefetch, only = [] } = event.detail.visit;
-      const preserveScroll = event.detail.visit.preserveScroll !== false;
-      setIsRouteLoading(!prefetch && !preserveScroll && only.length === 0);
+      const { prefetch, only = [], preserveScroll } = event.detail.visit;
+      const shouldPreserveScroll = preserveScroll !== false;
+      setIsRouteLoading(!prefetch && !shouldPreserveScroll && only.length === 0);
     };
 
     const finishHandler = (_event: DocumentEventMap["inertia:finish"]) => setIsRouteLoading(false);
