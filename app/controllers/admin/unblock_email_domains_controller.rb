@@ -5,11 +5,12 @@ class Admin::UnblockEmailDomainsController < Admin::BaseController
 
   def show
     @title = "Mass-unblock email domains"
+    render inertia: "Admin/UnblockEmailDomains/Show"
   end
 
   def update
     schedule_mass_unblock(identifiers: email_domains_params[:identifiers])
-    redirect_to admin_unblock_email_domains_url, notice: "Unblocking email domains in progress!"
+    redirect_to admin_unblock_email_domains_url, status: :see_other, inertia: {}
   end
 
   private

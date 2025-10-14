@@ -161,7 +161,7 @@ export const ProductsPageProductsTable = (props: {
                 })()}
               </td>
               {product.can_duplicate || product.can_destroy ? (
-                <td className="whitespace-nowrap lg:px-8">
+                <td className="lg:px-8">
                   <ActionsPopover
                     product={product}
                     onDuplicate={() => void loadProducts(1)}

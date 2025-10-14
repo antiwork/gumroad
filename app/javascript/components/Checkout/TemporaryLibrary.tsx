@@ -11,6 +11,7 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Result } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const formatName = (productName: string, optionName: string | null) =>
@@ -47,7 +48,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
               </div>
             </div>
           ) : null}
-          <div className="product-card-grid">
+          <ProductCardGrid>
             {results.flatMap(({ result, item }) =>
               result.success && result.content_url ? (
                 result.bundle_products?.length ? (
@@ -82,7 +83,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
                 []
               ),
             )}
-          </div>
+          </ProductCardGrid>
         </div>
       </section>
     </div>

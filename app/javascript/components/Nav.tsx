@@ -40,7 +40,7 @@ const BaseNavLink = ({
   component = "a",
   ...props
 }: BaseNavLinkProps) => {
-  const { href: originalHref } = new URL(useOriginalLocation());
+  const { href: originalHref } = new URL(typeof window !== "undefined" ? window.location.href : useOriginalLocation());
   const ariaCurrent = [href, ...additionalPatterns].some((pattern) => {
     const escaped = escapeRegExp(pattern);
     return new RegExp(exactHrefMatch ? `^${escaped}/?$` : escaped, "u").test(originalHref);

@@ -69,7 +69,7 @@ export type Upsell = {
   }[];
 };
 
-export type SortKey = "name" | "revenue" | "uses";
+export type SortKey = "name" | "revenue" | "uses" | "status";
 export type QueryParams = {
   sort: Sort<SortKey> | null;
   query: string | null;
@@ -267,7 +267,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                   <th {...thProps("name")}>Upsell</th>
                   <th {...thProps("revenue")}>Revenue</th>
                   <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("uses")}>Status</th>
+                  <th {...thProps("status")}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -436,7 +436,7 @@ const UpsellDrawer = ({
           <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
         </div>
       </section>
-      <section className="override grid auto-cols-fr grid-flow-col gap-4">
+      <section className="grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
           {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
         </Button>
@@ -491,7 +491,7 @@ const UpsellDrawer = ({
           ))}
         </section>
       )}
-      <section className="override grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
+      <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
           Duplicate
         </Button>
@@ -894,7 +894,7 @@ const Form = ({
                   />
                 </fieldset>
                 {selectedProduct ? (
-                  <div className="override grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
+                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
                     <div />
                     <b>Version to offer</b>

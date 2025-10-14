@@ -169,7 +169,7 @@ export const ProductsPageMembershipsTable = (props: {
                 })()}
               </td>
               {membership.can_duplicate || membership.can_destroy ? (
-                <td className="whitespace-nowrap lg:px-8">
+                <td className="lg:px-8">
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => void loadMemberships(1)}

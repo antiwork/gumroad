@@ -35,7 +35,7 @@ export const ImageUploader = ({
     defaultImageUrl && `linear-gradient(${overlayColor}, ${overlayColor}), url(${defaultImageUrl}) center / cover`;
 
   return (
-    <div className="override grid grid-cols-[12.5rem_1fr] gap-5">
+    <div className="grid grid-cols-[12.5rem_1fr] gap-5">
       {uploading ? (
         <div className="placeholder aspect-square items-center">
           <Progress width="2rem" />

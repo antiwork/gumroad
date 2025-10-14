@@ -1,22 +1,5 @@
 @use "sass:math";
 
-.product-card-grid {
-  --min-grid-absolute-size: #{size(9)};
-  --max-grid-relative-size: 20%;
-
-  @extend .grid;
-
-  @include breakpoint-up(lg) {
-    --min-grid-absolute-size: #{size(16)};
-  }
-
-  &.narrow {
-    @include breakpoint-up(lg) {
-      --min-grid-absolute-size: #{size(12)};
-    }
-  }
-}
-
 .product-cta {
   @include bg-color(filled);
   display: flex;
