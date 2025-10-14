@@ -1,7 +1,13 @@
 import * as React from "react";
 
-import { type ChurnMetrics } from "$app/data/churn";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+
+type ChurnMetrics = {
+  customer_churn_rate: number;
+  last_period_churn_rate: number;
+  churned_subscribers: number;
+  churned_mrr_cents: number;
+};
 
 import { Stats } from "$app/components/Stats";
 

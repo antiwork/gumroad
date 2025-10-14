@@ -767,8 +767,7 @@ Rails.application.routes.draw do
 
     # churn
     get "/churn" => redirect("/dashboard/churn")
-    get "/dashboard/churn", to: "churn#index", as: :churn_dashboard
-    get "/churn/data", to: "churn#data", as: "churn_data"
+    get "/dashboard/churn", to: "churn#show", as: :churn_dashboard
 
     # audience
     get "/audience" => redirect("/dashboard/audience")

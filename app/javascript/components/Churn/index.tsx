@@ -1,8 +1,22 @@
-import { lightFormat } from "date-fns";
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { fetchChurnData, type ChurnData } from "$app/data/churn";
-import { AbortError } from "$app/utils/request";
+export type ChurnData = {
+  start_date: string;
+  end_date: string;
+  metrics: {
+    customer_churn_rate: number;
+    last_period_churn_rate: number;
+    churned_subscribers: number;
+    churned_mrr_cents: number;
+  };
+  daily_data: {
+    date: string;
+    customer_churn_rate: number;
+    churned_subscribers: number;
+    churned_mrr_cents: number;
+  }[];
+};
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
@@ -10,50 +24,46 @@ import { ChurnChart } from "$app/components/Churn/ChurnChart";
 import { ChurnQuickStats } from "$app/components/Churn/ChurnQuickStats";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Progress } from "$app/components/Progress";
-import { showAlert } from "$app/components/server-components/Alert";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
 export type ChurnProps = {
   has_subscription_products: boolean;
+  initialData?: ChurnData | null;
 };
 
-const Churn = ({ has_subscription_products }: ChurnProps) => {
-  const dateRange = useAnalyticsDateRange();
-  const [data, setData] = React.useState<ChurnData | null>(null);
+const isChurnData = (data: unknown): data is ChurnData =>
+  typeof data === "object" &&
+  data !== null &&
+  "daily_data" in data &&
+  "metrics" in data &&
+  "start_date" in data &&
+  "end_date" in data;
 
-  const startTime = lightFormat(dateRange.from, "yyyy-MM-dd");
-  const endTime = lightFormat(dateRange.to, "yyyy-MM-dd");
+const Churn = ({ has_subscription_products, initialData }: ChurnProps) => {
+  const dateRange = useAnalyticsDateRange();
+  const [data, setData] = React.useState<ChurnData | null>(initialData || null);
 
   const hasContent = has_subscription_products;
 
-  const activeRequest = React.useRef<AbortController | null>(null);
-
+  // Handle date range changes using Inertia partial reload
   React.useEffect(() => {
-    const loadData = async () => {
-      if (!hasContent) return;
+    if (!hasContent) return;
 
-      try {
-        if (activeRequest.current) {
-          activeRequest.current.abort();
+    router.reload({
+      only: ["churn_data"],
+      data: {
+        start_time: dateRange.from.toISOString().split("T")[0],
+        end_time: dateRange.to.toISOString().split("T")[0],
+      },
+      onSuccess: (page) => {
+        const churnData = page.props.churn_data;
+        if (isChurnData(churnData)) {
+          setData(churnData);
         }
-
-        setData(null);
-
-        const request = fetchChurnData({ startTime, endTime });
-        activeRequest.current = request.abort;
-
-        const result = await request.response;
-        setData(result);
-        activeRequest.current = null;
-      } catch (e) {
-        if (e instanceof AbortError) return;
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      }
-    };
-
-    void loadData();
-  }, [startTime, endTime, hasContent]);
+      },
+    });
+  }, [dateRange.from, dateRange.to, hasContent]);
 
   return (
     <AnalyticsLayout selectedTab="churn" actions={hasContent ? <DateRangePicker {...dateRange} /> : null}>

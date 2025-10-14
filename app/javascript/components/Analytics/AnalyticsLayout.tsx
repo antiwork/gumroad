@@ -27,7 +27,7 @@ export const AnalyticsLayout = ({
           <Tab href={Routes.sales_dashboard_path()} isSelected={selectedTab === "sales"}>
             Sales
           </Tab>
-          {user.policies.churn?.index ? (
+          {user.policies.churn?.show ? (
             <Tab href={Routes.churn_dashboard_path()} isSelected={selectedTab === "churn"}>
               Churn
             </Tab>

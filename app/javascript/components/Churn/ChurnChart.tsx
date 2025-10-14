@@ -2,8 +2,14 @@ import { format, parseISO } from "date-fns";
 import * as React from "react";
 import { XAxis, YAxis, Line, Area } from "recharts";
 
-import { type ChurnDailyData } from "$app/data/churn";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+
+type ChurnDailyData = {
+  date: string;
+  customer_churn_rate: number;
+  churned_subscribers: number;
+  churned_mrr_cents: number;
+};
 
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";

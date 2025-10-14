@@ -611,19 +611,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_12_024759) do
     t.index ["purchase_id"], name: "index_consumption_events_on_purchase_id"
   end
 
-  create_table "creator_analytics_churn_caches", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.date "date", null: false
-    t.decimal "customer_churn_rate", precision: 5, scale: 2, default: "0.0"
-    t.integer "churned_subscribers", default: 0, null: false
-    t.bigint "churned_mrr_cents", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["date"], name: "index_creator_analytics_churn_caches_on_date"
-    t.index ["user_id", "date"], name: "index_creator_analytics_churn_caches_on_user_id_and_date", unique: true
-    t.index ["user_id"], name: "index_creator_analytics_churn_caches_on_user_id"
-  end
-
   create_table "credit_cards", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "card_type"
     t.integer "expiry_month"
@@ -2732,5 +2719,4 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_12_024759) do
   end
 
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "creator_analytics_churn_caches", "users"
 end

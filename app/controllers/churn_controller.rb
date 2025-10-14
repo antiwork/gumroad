@@ -1,28 +1,34 @@
 # frozen_string_literal: true
 
 class ChurnController < Sellers::BaseController
-  before_action :set_time_range, only: [:data]
+  layout "inertia", only: [:show]
 
-  layout "inertia", only: [:index]
-
-  def index
+  def show
     authorize :churn
 
-    @churn_props = ChurnPresenter.new(seller: current_seller).page_props
     LargeSeller.create_if_warranted(current_seller)
 
     render inertia: "Churn/Index",
-           props: { churn_props: @churn_props }
+           props: {
+             churn_props: {
+               has_subscription_products: has_subscription_products?
+             },
+             churn_data: InertiaRails.optional { lazy_churn_data }
+           }
   end
 
-  def data
-    authorize :churn, :index?
+  private
+    def has_subscription_products?
+      current_seller.products.alive.is_recurring_billing.exists?
+    end
 
-    data = fetch_churn_data
-    render json: data
-  end
+    def lazy_churn_data
+      return nil unless has_subscription_products?
 
-  protected
+      set_time_range
+      fetch_churn_data
+    end
+
     def set_time_range
       @start_date = params[:start_time]&.to_date || 30.days.ago.to_date
       @end_date = params[:end_time]&.to_date || Date.current
@@ -30,7 +36,6 @@ class ChurnController < Sellers::BaseController
       @start_date = [@start_date, 1.year.ago.to_date].max
     end
 
-  private
     def fetch_churn_data
       if should_use_cache?
         fetch_cached_data
@@ -43,23 +48,33 @@ class ChurnController < Sellers::BaseController
       LargeSeller.where(user: current_seller).exists?
     end
 
+    def cache_key(start_date, end_date)
+      "seller_daily_churn_metrics:#{current_seller.id}:#{start_date}:#{end_date}"
+    end
+
     def fetch_cached_data
-      cached_records = CreatorAnalyticsChurnCache
-        .where(user_id: current_seller.id)
-        .where(date: @start_date..@end_date)
-        .order(:date)
+      cache_key_value = cache_key(@start_date, @end_date)
 
-      return fetch_realtime_data if cached_records.empty?
+      cached_data = Rails.cache.fetch(cache_key_value, expires_in: 24.hours) do
+        compute_churn_data
+      end
 
-      format_cached_data(cached_records)
+      cached_data
     end
 
     def fetch_realtime_data
-      service = current_period_service
-      result = service.calculate
+      compute_churn_data
+    end
 
+    def compute_churn_data
+      service = CreatorAnalytics::Churn.new(
+        user: current_seller,
+        start_date: @start_date,
+        end_date: @end_date
+      )
+
+      result = service.calculate
       daily_results = service.calculate_by_date
-      cache_daily_data_bulk(daily_results) if should_use_cache?
 
       daily_data = daily_results.map do |record|
         {
@@ -78,80 +93,6 @@ class ChurnController < Sellers::BaseController
       }
     end
 
-    def format_cached_data(cached_records)
-      cache_scope = CreatorAnalyticsChurnCache
-        .where(user_id: current_seller.id)
-        .where(date: @start_date..@end_date)
-
-      overall_metrics = {
-        customer_churn_rate: cache_scope.average(:customer_churn_rate).to_f,
-        churned_subscribers: cache_scope.sum(:churned_subscribers),
-        churned_mrr_cents: cache_scope.sum(:churned_mrr_cents)
-      }
-
-      {
-        start_date: @start_date.to_s,
-        end_date: @end_date.to_s,
-        metrics: {
-          customer_churn_rate: overall_metrics[:customer_churn_rate].to_f,
-          last_period_churn_rate: last_period_churn_rate_from_cache.to_f,
-          churned_subscribers: overall_metrics[:churned_subscribers],
-          churned_mrr_cents: overall_metrics[:churned_mrr_cents]
-        },
-        daily_data: cached_records.map do |record|
-          {
-            date: record.date.to_s,
-            customer_churn_rate: record.customer_churn_rate.to_f,
-            churned_subscribers: record.churned_subscribers,
-            churned_mrr_cents: record.churned_mrr_cents
-          }
-        end
-      }
-    end
-
-    def current_period_service
-      @current_period_service ||= CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: @start_date,
-        end_date: @end_date
-      )
-    end
-
-    def last_period_churn_rate
-      @last_period_churn_rate ||= calculate_last_period_churn_rate
-    end
-
-    def last_period_churn_rate_from_cache
-      @last_period_churn_rate_from_cache ||= begin
-        period_length = (@end_date - @start_date).to_i
-        last_period_end = @start_date - 1.day
-        last_period_start = last_period_end - period_length.days
-
-        if should_use_cache?
-          avg_rate = CreatorAnalyticsChurnCache
-            .where(user_id: current_seller.id)
-            .where(date: last_period_start..last_period_end)
-            .average(:customer_churn_rate)
-
-          avg_rate || calculate_last_period_churn_rate
-        else
-          calculate_last_period_churn_rate
-        end
-      end
-    end
-
-    def calculate_last_period_churn_rate
-      period_length = (@end_date - @start_date).to_i
-      last_period_end = @start_date - 1.day
-      last_period_start = last_period_end - period_length.days
-
-      CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: last_period_start,
-        end_date: last_period_end
-      ).customer_churn_rate
-    end
-
     def build_metrics(result)
       {
         customer_churn_rate: result[:customer_churn_rate].to_f,
@@ -161,25 +102,26 @@ class ChurnController < Sellers::BaseController
       }
     end
 
-    def cache_daily_data_bulk(daily_results)
-      cacheable_results = daily_results.reject { |record| record[:date] >= 2.days.ago.to_date }
-      return if cacheable_results.empty?
+    def last_period_churn_rate
+      period_length = (@end_date - @start_date).to_i
+      last_period_end = @start_date - 1.day
+      last_period_start = last_period_end - period_length.days
 
-      now = Time.current
-      records_to_upsert = cacheable_results.map do |record|
-        {
-          user_id: current_seller.id,
-          date: record[:date],
-          customer_churn_rate: record[:customer_churn_rate],
-          churned_subscribers: record[:churned_subscribers],
-          churned_mrr_cents: record[:churned_mrr_cents],
-          created_at: now,
-          updated_at: now
-        }
+      if should_use_cache?
+        cache_key_value = cache_key(last_period_start, last_period_end)
+        Rails.cache.fetch(cache_key_value, expires_in: 24.hours) do
+          calculate_last_period_churn_rate(last_period_start, last_period_end)
+        end
+      else
+        calculate_last_period_churn_rate(last_period_start, last_period_end)
       end
+    end
 
-      CreatorAnalyticsChurnCache.upsert_all(records_to_upsert, unique_by: [:user_id, :date])
-    rescue ActiveRecord::RecordInvalid => e
-      Rails.logger.warn("Failed to bulk cache churn data: #{e.message}")
+    def calculate_last_period_churn_rate(start_date, end_date)
+      CreatorAnalytics::Churn.new(
+        user: current_seller,
+        start_date: start_date,
+        end_date: end_date
+      ).customer_churn_rate
     end
 end

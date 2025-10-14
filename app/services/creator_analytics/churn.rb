@@ -17,11 +17,20 @@ class CreatorAnalytics::Churn
   end
 
   def calculate_by_date
+    earliest_date = @start_date - 29.days
+
+    all_subscriptions = Subscription
+      .where(seller: @user)
+      .where(link_id: subscription_products.select(:id))
+      .where("created_at < ? OR deactivated_at >= ?", @end_date + 1.day, earliest_date)
+      .includes(:last_payment_option => :price)
+      .to_a
+
     (@start_date..@end_date).map do |date|
       period_start = date - 29.days
       period_end = date
 
-      self.class.new(user: @user, start_date: period_start, end_date: period_end).calculate
+      calculate_for_period(period_start, period_end, all_subscriptions)
     end
   end
 
@@ -31,6 +40,36 @@ class CreatorAnalytics::Churn
   end
 
   private
+    def calculate_for_period(period_start, period_end, subscriptions)
+      active_at_start = subscriptions.count do |sub|
+        sub.created_at < period_start &&
+          (sub.deactivated_at.nil? || sub.deactivated_at >= period_start)
+      end
+
+      new_subscribers = subscriptions.count do |sub|
+        sub.created_at >= period_start && sub.created_at <= period_end
+      end
+
+      churned_subs = subscriptions.select do |sub|
+        sub.deactivated_at &&
+          sub.deactivated_at >= period_start &&
+          sub.deactivated_at <= period_end
+      end
+
+      churned_count = churned_subs.count
+      churned_mrr = churned_subs.sum { |sub| calculate_mrr_cents(sub) }
+
+      total_base = active_at_start + new_subscribers
+      churn_rate = total_base.zero? ? 0.0 : (churned_count.to_f / total_base * 100).round(2)
+
+      {
+        date: period_end,
+        customer_churn_rate: churn_rate,
+        churned_subscribers: churned_count,
+        churned_mrr_cents: churned_mrr
+      }
+    end
+
     def total_subscriber_base
       @total_subscriber_base ||= active_at_start_count + new_subscribers_count
     end
