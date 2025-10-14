@@ -1,9 +1,9 @@
-import cx from "classnames";
 import * as React from "react";
 import { CSSProperties } from "react";
 
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -236,15 +236,15 @@ const MenubarItem = ({
 
   return menuItem.children.length > 0 ? (
     <div
-      className={cx("popover", { expanded: menuOpen })}
+      className={classNames("popover", { expanded: menuOpen })}
       ref={ref}
       onMouseEnter={() => handleToggleMenu(true)}
       onMouseLeave={closeAfterDelay}
     >
       <a
         href={menuItem.href ?? "#"}
-        className={cx("pill button", {
-          "border-transparent! bg-[unset]! text-inherit!": !isHighlighted,
+        className={classNames("pill button", {
+          "border-transparent! bg-transparent! text-inherit!": !isHighlighted,
           expandable: showExpandableIcon,
         })}
         role="menuitem"
@@ -277,8 +277,8 @@ const MenubarItem = ({
     <div onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={() => handleToggleMenu(false)}>
       <a
         href={menuItem.href ?? "#"}
-        className={cx("pill button", {
-          "border-transparent! bg-[unset]! text-inherit!": !isHighlighted,
+        className={classNames("pill button", {
+          "border-transparent! bg-transparent! text-inherit!": !isHighlighted,
           expandable: showExpandableIcon,
         })}
         role="menuitem"
@@ -344,7 +344,7 @@ const OverlayMenu = ({
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          className="fixed h-full w-80 max-w-[calc(100vw-1.25rem)] overflow-y-auto rounded-[unset]!"
+          className="fixed h-full w-80 max-w-[calc(100vw-1.25rem)] overflow-y-auto rounded-none!"
         />
       </div>
     </>
@@ -377,7 +377,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={cx("overflow-hidden border-none! p-0! shadow-[unset]!", className)}
+      className={classNames("overflow-hidden border-none! p-0! shadow-none!", className)}
     >
       {footer}
 
@@ -390,7 +390,7 @@ const ItemsList = ({
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
-          className="shrink-0 justify-normal gap-2 bg-[inherit]! p-4! whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!"
+          className="shrink-0 justify-normal gap-2 bg-inherit! p-4! whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!"
           role="menuitem"
         >
           <Icon name="outline-cheveron-left" />
@@ -418,7 +418,7 @@ const ItemsList = ({
               setDisplayedItem(item);
             } else return onSelectItem?.(item, e);
           }}
-          className={cx(
+          className={classNames(
             "shrink-0 justify-between gap-2 !p-4 whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!",
             {
               "flex! items-center! no-underline!": item.children.length,
