@@ -18,10 +18,21 @@ table {
   }
 
   & > thead,
+  & > tfoot {
+    & > * > * {
+      padding: spacer(3) spacer(4);
+    }
+  }
+  & > tbody {
+    & > * > * {
+      padding: spacer(4);
+    }
+  }
+
+  & > thead,
   & > tbody,
   & > tfoot {
     & > * > * {
-      padding: spacer(4);
       text-align: left;
       vertical-align: middle;
     }
@@ -109,7 +120,6 @@ table {
   }
 
   & > thead th {
-    padding-top: 0;
     white-space: nowrap;
 
     &[aria-sort] {
