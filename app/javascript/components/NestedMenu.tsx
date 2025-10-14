@@ -1,9 +1,9 @@
-import cx from "classnames";
 import * as React from "react";
 import { CSSProperties } from "react";
 
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -127,9 +127,10 @@ const Menubar = ({ moreLabel, ...extraAriaAttrs }: { moreLabel?: string | undefi
       ref={parentRef}
       role="menubar"
       aria-busy={itemsUnderMore === null}
-      className={cx("grid auto-cols-max grid-flow-col items-center", {
-        "overflow-x-hidden": itemsUnderMore === null,
-      })}
+      className={classNames(
+        "grid auto-cols-max grid-flow-col items-center",
+        itemsUnderMore === null && "overflow-x-hidden",
+      )}
       {...extraAriaAttrs}
     >
       {menubarItems.map((menuItem) => (
@@ -238,15 +239,18 @@ const MenubarItem = ({
 
   return menuItem.children.length > 0 ? (
     <div
-      className={cx("popover", { expanded: menuOpen })}
+      className={classNames("popover", menuOpen && "expanded")}
       ref={ref}
       onMouseEnter={() => handleToggleMenu(true)}
       onMouseLeave={closeAfterDelay}
     >
       <a
         href={menuItem.href ?? "#"}
-        className={cx("pill button", { expandable: showExpandableIcon })}
-        style={!isHighlighted ? { backgroundColor: "unset", color: "inherit", borderColor: "transparent" } : undefined}
+        className={classNames(
+          "pill button",
+          showExpandableIcon && "expandable",
+          !isHighlighted && "border-transparent bg-transparent text-inherit",
+        )}
         role="menuitem"
         aria-current={isHighlighted}
         aria-haspopup="menu"
@@ -269,6 +273,7 @@ const MenubarItem = ({
             if (newSelectedItem === selectedItem) handleToggleMenu(false);
             onSelectItem?.(newSelectedItem, e);
           }}
+          className="bg-surface flex h-full w-48 flex-col"
         />
       </div>
     </div>
@@ -276,8 +281,11 @@ const MenubarItem = ({
     <div onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={() => handleToggleMenu(false)}>
       <a
         href={menuItem.href ?? "#"}
-        className={cx("pill button", { expandable: showExpandableIcon })}
-        style={!isHighlighted ? { backgroundColor: "unset", color: "inherit", borderColor: "transparent" } : undefined}
+        className={classNames(
+          "pill button",
+          showExpandableIcon && "expandable",
+          !isHighlighted && "border-transparent bg-transparent text-inherit",
+        )}
         role="menuitem"
         aria-current={isHighlighted}
         {...extraAriaAttrs}
@@ -321,9 +329,9 @@ const OverlayMenu = ({
         <Icon name="filter" />
       </Button>
       <div
-        className="z-modal bg-backdrop fixed top-0 left-0 h-full w-full"
-        hidden={!menuOpen}
+        className="z-modal fixed top-0 left-0 h-full w-full bg-[rgba(0,0,0,0.8)]"
         style={menuTop ? { top: menuTop } : undefined}
+        hidden={!menuOpen}
       >
         <button
           className="absolute top-4 right-4 text-[var(--big-icon-size)]"
@@ -340,12 +348,13 @@ const OverlayMenu = ({
             children: topLevelMenuItems,
             parent: null,
           }}
-          footer={footer}
+          footer={footer ? <div className="shrink-0 border-b border-border p-4">{footer}</div> : undefined}
           open={menuOpen}
           onSelectItem={(newSelectedItem, e) => {
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
+          className="bg-surface fixed flex h-full w-80 max-w-[calc(100vw-(1.25em+2*var(--spacer-4)))] flex-col overflow-x-hidden overflow-y-auto"
         />
       </div>
     </>
@@ -359,6 +368,7 @@ const ItemsList = ({
   open,
   onSelectItem,
   footer,
+  className,
 }: {
   menuId?: string;
   menuItem: MenuItemWithChildren;
@@ -366,159 +376,75 @@ const ItemsList = ({
   open: boolean;
   onSelectItem?: SelectItemHandler;
   footer?: React.ReactNode;
+  className?: string;
 }) => {
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
   React.useEffect(() => setDisplayedItem(initialMenuItem), [open]);
 
   const isNestedView = displayedItem.key !== initialMenuItem.key;
-  const isMobileOverlay = Boolean(footer);
 
   return (
     <div
       id={menuId}
-      style={{
-        width: isMobileOverlay ? "20rem" : "12rem",
-        maxWidth: isMobileOverlay ? "calc(100vw - (1.25em + 2 * var(--spacer-4)))" : undefined,
-        border: "none",
-        padding: 0,
-        boxShadow: "unset",
-      }}
+      style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={cx("bg-surface flex h-full flex-col", { "fixed h-full": isMobileOverlay })}
+      className={classNames("overflow-hidden border-none! p-0! shadow-[unset]!", className)}
     >
-      <div className={cx("flex-1 overflow-y-auto", { "flex flex-col": isMobileOverlay })} style={displayedItem.css}>
-        {isMobileOverlay && footer ? (
-          <div className="shrink-0 border-b border-[rgb(var(--border))] p-4">{footer}</div>
-        ) : null}
-        {isNestedView ? (
-          <a
-            key={`back${displayedItem.key}`}
-            href={displayedItem.parent?.href ?? "#"}
-            onClick={(e) => {
+      {footer}
+
+      {isNestedView ? (
+        <a
+          key={`back${displayedItem.key}`}
+          href={displayedItem.parent?.href ?? "#"}
+          onClick={(e) => {
+            if (e.ctrlKey || e.shiftKey) return;
+            setDisplayedItem(displayedItem.parent ?? initialMenuItem);
+            e.preventDefault();
+          }}
+          className="shrink-0 justify-normal gap-2 bg-[inherit]! p-4! whitespace-normal underline hover:bg-[rgb(var(--primary))]! hover:text-[rgb(var(--contrast-primary))]!"
+          role="menuitem"
+        >
+          <Icon name="outline-cheveron-left" />
+          <span>Back</span>
+        </a>
+      ) : null}
+
+      {isNestedView || showAllItemOnInitialList ? (
+        <a
+          href={displayedItem.href}
+          onClick={(e) => onSelectItem?.(displayedItem, e)}
+          className="shrink-0 justify-between gap-2 p-4! whitespace-normal underline hover:bg-[rgb(var(--primary))]! hover:text-[rgb(var(--contrast-primary))]!"
+          role="menuitem"
+        >
+          All {displayedItem.label}
+        </a>
+      ) : null}
+
+      {displayedItem.children.map((item) => (
+        <a
+          key={item.key}
+          href={item.href}
+          onClick={(e) => {
+            if (item.children.length) {
               if (e.ctrlKey || e.shiftKey) return;
-              setDisplayedItem(displayedItem.parent ?? initialMenuItem);
               e.preventDefault();
-            }}
-            style={{
-              padding: "var(--spacer-4)",
-              backgroundColor: "transparent",
-              whiteSpace: "normal",
-              overflow: "visible",
-              textOverflow: "clip",
-            }}
-            className="flex shrink-0 items-center"
-            role="menuitem"
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgb(var(--primary))";
-              e.currentTarget.style.color = "rgb(var(--contrast-primary))";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-              e.currentTarget.style.color = "";
-            }}
-          >
-            <div className="flex items-center" style={{ gap: "var(--spacer-2)" }}>
-              <Icon name="outline-cheveron-left" />
-              <span>Back</span>
-            </div>
-          </a>
-        ) : null}
+              setDisplayedItem(item);
+            } else return onSelectItem?.(item, e);
+          }}
+          className={classNames(
+            "shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! underline hover:bg-[rgb(var(--primary))]! hover:text-[rgb(var(--contrast-primary))]!",
+            item.children.length && "flex! items-start! no-underline!",
+          )}
+          role="menuitem"
+          aria-haspopup={item.children.length ? "menu" : undefined}
+        >
+          <span className="min-w-0 flex-1 overflow-visible! break-words">{item.label}</span>
+          {item.children.length > 0 && <Icon name="outline-cheveron-right" className="shrink-0" />}
+        </a>
+      ))}
 
-        {isNestedView || showAllItemOnInitialList ? (
-          <a
-            href={displayedItem.href}
-            onClick={(e) => onSelectItem?.(displayedItem, e)}
-            className={cx("shrink-0", { underline: displayedItem.children.length === 0 })}
-            style={{
-              padding: "var(--spacer-4)",
-              backgroundColor: "transparent",
-              whiteSpace: "normal",
-              overflow: "visible",
-              textOverflow: "clip",
-              textDecoration: displayedItem.children.length === 0 ? "underline" : "none",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgb(var(--primary))";
-              e.currentTarget.style.color = "rgb(var(--contrast-primary))";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-              e.currentTarget.style.color = "";
-            }}
-            role="menuitem"
-          >
-            All {displayedItem.label}
-          </a>
-        ) : null}
-
-        {displayedItem.children.map((item) => (
-          <a
-            key={item.key}
-            href={item.href}
-            onClick={(e) => {
-              if (item.children.length) {
-                if (e.ctrlKey || e.shiftKey) return;
-                e.preventDefault();
-                setDisplayedItem(item);
-              } else return onSelectItem?.(item, e);
-            }}
-            className={cx("shrink-0", {
-              "flex items-center": item.children.length > 0,
-            })}
-            style={
-              item.children.length > 0
-                ? {
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "var(--spacer-4)",
-                    backgroundColor: "transparent",
-                    whiteSpace: "normal",
-                    overflow: "visible",
-                    textOverflow: "clip",
-                    textDecoration: "none",
-                    gap: "var(--spacer-2)",
-                  }
-                : {
-                    padding: "var(--spacer-4)",
-                    backgroundColor: "transparent",
-                    whiteSpace: "normal",
-                    overflow: "visible",
-                    textOverflow: "clip",
-                    textDecoration: "underline",
-                  }
-            }
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgb(var(--primary))";
-              e.currentTarget.style.color = "rgb(var(--contrast-primary))";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-              e.currentTarget.style.color = "";
-            }}
-            role="menuitem"
-            aria-haspopup={item.children.length ? "menu" : undefined}
-          >
-            <span style={{ flexGrow: 1, minWidth: 0 }}>{item.label}</span>
-            {item.children.length > 0 && (
-              <Icon name="outline-cheveron-right" className="shrink-0" style={{ flexShrink: 0 }} />
-            )}
-          </a>
-        ))}
-
-        {displayedItem.image ? (
-          <img
-            src={displayedItem.image}
-            className="mt-auto w-full shrink-0 object-contain"
-            style={{
-              maxHeight: "200px",
-              padding: "var(--spacer-4)",
-            }}
-            alt=""
-          />
-        ) : null}
-      </div>
+      {displayedItem.image ? <img src={displayedItem.image} className="w-full translate-x-6 translate-y-6" /> : null}
     </div>
   );
 };
