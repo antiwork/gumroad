@@ -20,11 +20,11 @@ class Admin::SalesReportsController < Admin::BaseController
     errors[:sales_report][:start_date] = "Invalid date format. Please use YYYY-MM-DD format" if start_date_str.blank?
     errors[:sales_report][:end_date] = "Invalid date format. Please use YYYY-MM-DD format" if end_date_str.blank?
 
-    start_date = Date.parse(start_date_str)
-    end_date = Date.parse(end_date_str)
+    start_date = start_date_str.presence && Date.parse(start_date_str)
+    end_date = end_date_str.presence && Date.parse(end_date_str)
 
-    errors[:sales_report][:start_date] = "Start date must be before end date" if start_date > end_date
-    errors[:sales_report][:start_date] = "Start date cannot be in the future" if start_date > Date.current
+    errors[:sales_report][:start_date] = "Start date must be before end date" if start_date.present? && start_date > end_date
+    errors[:sales_report][:start_date] = "Start date cannot be in the future" if start_date.present? && start_date > Date.current
 
     return redirect_to admin_sales_reports_path, inertia: { errors: errors }, alert: "Invalid form submission. Please fix the errors." if errors[:sales_report].any?
 

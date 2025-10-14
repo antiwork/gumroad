@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::SalesReportsController do
+describe Admin::SalesReportsController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
@@ -25,17 +26,13 @@ describe Admin::SalesReportsController do
       get :index
 
       expect(response).to be_successful
-      expect(response.body).to include("data-page")
-      expect(response.body).to include("Admin/SalesReports/Index")
+      expect(inertia.component).to eq "Admin/SalesReports/Index"
 
-      data_page = response.body.match(/data-page="([^"]+)"/)[1]
-      json_object = JSON.parse(CGI.unescapeHTML(data_page))
-      props = json_object["props"]
-
-      expect(props["title"]).to eq("Sales reports")
-      expect(props["countries"]).to eq Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
-      expect(props["job_history"]).to eq([JSON.parse(job_history)])
-      expect(props["authenticity_token"]).to be_present
+      props = inertia.props
+      expect(props[:title]).to eq("Sales reports")
+      expect(props[:countries]).to eq Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
+      expect(props[:job_history]).to eq([JSON.parse(job_history).symbolize_keys])
+      expect(props[:authenticity_token]).to be_present
     end
   end
 
@@ -77,15 +74,12 @@ describe Admin::SalesReportsController do
       post :create, params: params
     end
 
-    it "returns success JSON response" do
+    it "303 redirects to the sales reports page with a success message" do
       post :create, params: params
 
-      expect(response).to be_successful
-      expect(response.content_type).to include("application/json")
-
-      json_response = JSON.parse(response.body)
-      expect(json_response["success"]).to be true
-      expect(json_response["message"]).to eq("Sales report job enqueued successfully!")
+      expect(response).to redirect_to(admin_sales_reports_path)
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:notice]).to eq "Sales report job enqueued successfully!"
     end
 
     it "converts dates to strings before passing to job" do
@@ -100,6 +94,34 @@ describe Admin::SalesReportsController do
         true,
         nil
       )
+    end
+
+    context "when the form is invalid" do
+      let(:params) do
+        {
+          sales_report: {
+            country_code: "",
+            start_date: "",
+            end_date: ""
+          }
+        }
+      end
+
+      it "302 redirects to the sales reports page with an error message" do
+        post :create, params: params
+
+        expect(response).to redirect_to(admin_sales_reports_path)
+        expect(response).to have_http_status(:found)
+        expect(flash[:alert]).to eq "Invalid form submission. Please fix the errors."
+
+        expect(session[:inertia_errors]).to eq({
+          sales_report: {
+            country_code: "Please select a country",
+            start_date: "Invalid date format. Please use YYYY-MM-DD format",
+            end_date: "Invalid date format. Please use YYYY-MM-DD format"
+          }
+        })
+      end
     end
   end
 end
