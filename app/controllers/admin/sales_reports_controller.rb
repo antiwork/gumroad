@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 class Admin::SalesReportsController < Admin::BaseController
-  before_action :set_react_component_props, only: [:index]
-
   def index
     @title = "Sales reports"
+
+    render inertia: "Admin/SalesReports/Index", props: {
+      countries: Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] },
+      job_history: fetch_job_history
+    }
   end
 
   def create
@@ -12,31 +15,18 @@ class Admin::SalesReportsController < Admin::BaseController
     start_date_str = params[:sales_report][:start_date]
     end_date_str = params[:sales_report][:end_date]
 
-    # Validate country code
-    if country_code.blank?
-      return render json: { message: "Please select a country" }, status: :unprocessable_entity
-    end
+    errors = { sales_report: {} }
+    errors[:sales_report][:country_code] = "Please select a country" if country_code.blank?
+    errors[:sales_report][:start_date] = "Invalid date format. Please use YYYY-MM-DD format" if start_date_str.blank?
+    errors[:sales_report][:end_date] = "Invalid date format. Please use YYYY-MM-DD format" if end_date_str.blank?
 
-    unless ISO3166::Country[country_code]
-      return render json: { message: "Invalid country code" }, status: :unprocessable_entity
-    end
+    start_date = Date.parse(start_date_str)
+    end_date = Date.parse(end_date_str)
 
-    # Validate and parse dates
-    begin
-      start_date = Date.parse(start_date_str)
-      end_date = Date.parse(end_date_str)
-    rescue Date::Error, ArgumentError
-      return render json: { message: "Invalid date format. Please use YYYY-MM-DD format" }, status: :unprocessable_entity
-    end
+    errors[:sales_report][:start_date] = "Start date must be before end date" if start_date > end_date
+    errors[:sales_report][:start_date] = "Start date cannot be in the future" if start_date > Date.current
 
-    # Validate date range
-    if start_date > end_date
-      return render json: { message: "Start date must be before end date" }, status: :unprocessable_entity
-    end
-
-    if start_date > Date.current
-      return render json: { message: "Start date cannot be in the future" }, status: :unprocessable_entity
-    end
+    return redirect_to admin_sales_reports_path, inertia: { errors: errors }, alert: "Invalid form submission. Please fix the errors." if errors[:sales_report].any?
 
     job_id = GenerateSalesReportJob.perform_async(
       country_code,
@@ -48,20 +38,10 @@ class Admin::SalesReportsController < Admin::BaseController
 
     store_job_details(job_id, country_code, start_date, end_date)
 
-    render json: { success: true, message: "Sales report job enqueued successfully!" }
+    redirect_to admin_sales_reports_path, status: :see_other, notice: "Sales report job enqueued successfully!"
   end
 
   private
-    def set_react_component_props
-      @react_component_props = {
-        title: "Sales reports",
-        countries: Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] },
-        job_history: fetch_job_history,
-        form_action: admin_sales_reports_path,
-        authenticity_token: form_authenticity_token
-      }
-    end
-
     def fetch_job_history
       job_data = $redis.lrange(RedisKey.sales_report_jobs, 0, 19)
       job_data.map { |data| JSON.parse(data) }

@@ -20,7 +20,7 @@ describe Admin::BlockEmailDomainsController, type: :controller, inertia: true do
       get :show
 
       expect(response).to be_successful
-      expect(response.body).to include("data-page")
+      expect(flash[:notice]).to eq "Email domains blocked successfully!"
       expect(inertia.component).to eq "Admin/BlockEmailDomains/Show"
     end
   end

@@ -20,7 +20,7 @@ describe Admin::UnblockEmailDomainsController, type: :controller, inertia: true 
     it "renders the page to unsuspend users if admin" do
       get :show
       expect(response).to be_successful
-      expect(response.body).to include("data-page")
+      expect(flash[:notice]).to eq "Email domains unblocked successfully!"
       expect(inertia.component).to eq "Admin/UnblockEmailDomains/Show"
     end
   end

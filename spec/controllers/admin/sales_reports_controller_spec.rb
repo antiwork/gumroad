@@ -9,39 +9,33 @@ describe Admin::SalesReportsController do
   it_behaves_like "inherits from Admin::BaseController"
 
   let(:admin_user) { create(:admin_user) }
+
   before(:each) do
     sign_in admin_user
   end
 
   describe "GET index" do
+    let(:job_history) { '{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}' }
+
+    before do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([job_history])
+    end
+
     it "renders the page" do
       get :index
 
       expect(response).to be_successful
-      expect(response).to render_template(:index)
-    end
+      expect(response.body).to include("data-page")
+      expect(response.body).to include("Admin/SalesReports/Index")
 
-    it "sets React component props" do
-      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
+      data_page = response.body.match(/data-page="([^"]+)"/)[1]
+      json_object = JSON.parse(CGI.unescapeHTML(data_page))
+      props = json_object["props"]
 
-      get :index
-
-      expect(assigns(:react_component_props)).to be_present
-      expect(assigns(:react_component_props)[:title]).to eq("Sales reports")
-      expect(assigns(:react_component_props)[:countries]).to be_present
-      expect(assigns(:react_component_props)[:job_history]).to be_present
-      expect(assigns(:react_component_props)[:form_action]).to eq(admin_sales_reports_path)
-      expect(assigns(:react_component_props)[:authenticity_token]).to be_present
-    end
-
-    it "loads job history from Redis" do
-      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
-
-      get :index
-
-      job_history = assigns(:react_component_props)[:job_history]
-      expect(job_history).to be_present
-      expect(job_history.first["job_id"]).to eq("123")
+      expect(props["title"]).to eq("Sales reports")
+      expect(props["countries"]).to eq Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
+      expect(props["job_history"]).to eq([JSON.parse(job_history)])
+      expect(props["authenticity_token"]).to be_present
     end
   end
 
