@@ -2,6 +2,7 @@ import { Editor } from "@tiptap/core";
 import cx from "classnames";
 import { format } from "date-fns";
 import * as React from "react";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 import { sendSamplePriceChangeEmail } from "$app/data/membership_tiers";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
@@ -76,11 +77,11 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
   );
 
   return tiers.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Offer different tiers of this membership</h2>
       Sweeten the deal for your customers with different levels of access. Every membership needs at least one tier.
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalVersion ? (

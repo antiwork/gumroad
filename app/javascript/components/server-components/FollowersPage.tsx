@@ -20,6 +20,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/followers.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 const Layout = ({
   title,
@@ -229,7 +230,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
             ) : null}
           </div>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -255,7 +256,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
             ) : (
               <h2>No followers found</h2>
             )}
-          </div>
+          </Placeholder>
         )}
       </div>
     </Layout>

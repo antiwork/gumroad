@@ -20,6 +20,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 const formatProductNames = (incomingCollaborator: IncomingCollaborator) => {
   if (incomingCollaborator.products.length === 0) {
@@ -180,7 +181,7 @@ const TableRowLoadingSpinner = () => (
 
 const EmptyState = () => (
   <section className="p-4 md:p-8">
-    <div className="placeholder">
+    <Placeholder>
       <figure>
         <img src={placeholder} />
       </figure>
@@ -189,7 +190,7 @@ const EmptyState = () => (
       <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
         Learn more about collaborations
       </a>
-    </div>
+    </Placeholder>
   </section>
 );
 

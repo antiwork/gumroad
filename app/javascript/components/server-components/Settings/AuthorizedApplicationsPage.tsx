@@ -15,6 +15,7 @@ import { Layout } from "$app/components/Settings/Layout";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import placeholderAppIcon from "$assets/images/gumroad_app.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 type AuthorizedApplication = {
   name: string;
@@ -177,10 +178,10 @@ const AuthorizedApplicationsPage = (props: Props) => {
         </section>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <h3>Your account doesn't have any authorized applications.</h3>
             <p>Applications authorized to access your Gumroad account on your behalf will appear here.</p>
-          </div>
+          </Placeholder>
         </div>
       )}
     </Layout>

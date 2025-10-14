@@ -35,6 +35,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 const formatProductNames = (collaborator: Collaborator) => {
   if (collaborator.products.length === 0) {
@@ -268,7 +269,7 @@ const Collaborators = () => {
         </>
       ) : (
         <section className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -277,7 +278,7 @@ const Collaborators = () => {
             <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
               Learn more about collaborators
             </a>
-          </div>
+          </Placeholder>
         </section>
       )}
     </Layout>

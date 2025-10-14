@@ -14,6 +14,7 @@ import { Card } from "$app/components/Product/Card";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
@@ -177,14 +178,14 @@ export const ContentTab = () => {
               </div>
             </>
           ) : (
-            <section className="placeholder">
+            <Placeholder>
               <h2>Select products</h2>
               <p>Choose the products you want to include in your bundle</p>
               <Button color="primary" onClick={() => setIsSelecting(true)}>
                 <Icon name="plus" />
                 Add products
               </Button>
-            </section>
+            </Placeholder>
           )}
         </section>
       </form>

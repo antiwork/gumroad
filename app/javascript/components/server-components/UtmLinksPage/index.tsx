@@ -18,6 +18,7 @@ import { Sort } from "$app/components/useSortingTableDriver";
 
 import { UtmLinkForm } from "./UtmLinkForm";
 import UtmLinkList from "./UtmLinkList";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 export const UtmLinkLayout = ({
   title,
@@ -39,13 +40,13 @@ const ErrorBoundary = () => {
   return (
     <div>
       <div className="p-4 md:p-8">
-        <div className="placeholder">
+        <Placeholder>
           <p>
             {isRouteErrorResponse(error) && error.status === 404
               ? "The resource you're looking for doesn't exist."
               : "Something went wrong."}
           </p>
-        </div>
+        </Placeholder>
       </div>
     </div>
   );

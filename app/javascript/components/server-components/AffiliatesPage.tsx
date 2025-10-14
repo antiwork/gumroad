@@ -62,6 +62,7 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 type LayoutProps = {
   title: string;
@@ -319,7 +320,7 @@ const AffiliateRequestsTable = ({
           </tbody>
         </table>
       ) : (
-        <div className="placeholder">No requests yet</div>
+        <Placeholder>No requests yet</Placeholder>
       )}
 
       {showMoreItems ? <Button onClick={showMoreItems}>Load more</Button> : null}
@@ -573,12 +574,12 @@ const AffiliatesTab = () => {
                 ) : null}
               </>
             ) : (
-              <div className="placeholder">
+              <Placeholder>
                 <figure>
                   <img src={placeholder} />
                 </figure>
                 <h2>No affiliates found</h2>
-              </div>
+              </Placeholder>
             )}
           </>
         )}

@@ -14,6 +14,7 @@ import { Toggle } from "$app/components/Toggle";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/wishlists.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 type Wishlist = {
   id: string;
@@ -130,7 +131,7 @@ const WishlistsPage = ({
             </tbody>
           </table>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -139,7 +140,7 @@ const WishlistsPage = ({
             <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
               Learn more about wishlists
             </a>
-          </div>
+          </Placeholder>
         )}
 
         {deletingWishlist ? (

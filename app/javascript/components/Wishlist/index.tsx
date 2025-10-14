@@ -21,6 +21,7 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 export type WishlistItem = {
   id: string;
@@ -283,12 +284,12 @@ export const Wishlist = ({
         </ProductCardGrid>
 
         {items.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <Icon name="gift-fill" />
             </figure>
             {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
-          </div>
+          </Placeholder>
         ) : null}
 
         {isEditing ? (

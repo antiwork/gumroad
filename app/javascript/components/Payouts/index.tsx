@@ -526,7 +526,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
 
 const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: number }) => (
   <div className="period period-empty full column">
-    <div className="placeholder">
+    <div className="grid gap-3 rounded border border-dashed border-border p-6 text-center justify-items-center bg-filled">
       <figure>
         <img src={placeholder} />
       </figure>

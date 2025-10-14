@@ -11,6 +11,7 @@ import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
 import placeholder from "$assets/images/placeholders/wishlists-following.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 type Wishlist = {
   id: string;
@@ -94,7 +95,7 @@ const WishlistsFollowingPage = ({
             </tbody>
           </table>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -103,7 +104,7 @@ const WishlistsFollowingPage = ({
             <a href="/help/article/343-wishlists" target="_blank" rel="noreferrer">
               Learn more about wishlists
             </a>
-          </div>
+          </Placeholder>
         )}
       </section>
     </Layout>

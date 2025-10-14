@@ -22,6 +22,7 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholderImage from "$assets/images/placeholders/affiliate-signup-form.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 type InvalidProductAttrs = Set<"commission" | "destination_url">;
 
@@ -100,7 +101,7 @@ export const AffiliateSignupForm = () => {
     >
       {products.length === 0 ? (
         <section className="p-4! md:p-8!">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholderImage} />
             </figure>
@@ -113,7 +114,7 @@ export const AffiliateSignupForm = () => {
             >
               New product
             </NavigationButton>
-          </div>
+          </Placeholder>
         </section>
       ) : (
         <form>

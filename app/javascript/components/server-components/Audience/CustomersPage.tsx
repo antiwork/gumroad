@@ -84,6 +84,7 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -553,7 +554,7 @@ const CustomersPage = ({
             ) : null}
           </section>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -577,7 +578,7 @@ const CustomersPage = ({
                 </p>
               </>
             )}
-          </div>
+          </Placeholder>
         )}
         {selectedCustomer ? (
           <CustomerDrawer

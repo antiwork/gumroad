@@ -18,7 +18,7 @@ import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
-
+import { Placeholder } from "$app/components/ui/Placeholder";
 const MAX_PREVIEW_COUNT = 8;
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
@@ -59,14 +59,14 @@ export const CoverEditor = ({
         </div>
       </header>
       {covers.length === 0 ? (
-        <div className="placeholder">
+        <Placeholder>
           <CoverUploader
             permalink={permalink}
             setCovers={setCovers}
             isUploading={isUploading}
             setIsUploading={setIsUploading}
           />
-        </div>
+        </Placeholder>
       ) : (
         <div>
           <div

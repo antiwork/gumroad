@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -55,11 +56,11 @@ export const DurationsEditor = ({
   );
 
   return durations.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Add duration</h2>
       Create one or more call durations for customers to choose from.
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalDuration ? (

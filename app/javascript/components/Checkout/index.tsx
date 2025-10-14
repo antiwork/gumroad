@@ -30,6 +30,7 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 import { CartState, convertToUSD, hasFreeTrial, getDiscountedPrice, CartItem, findCartItem } from "./cartState";
 import { computeTip, computeTipForPrice, getTotalPrice, isProcessing, useState } from "./payment";
@@ -363,7 +364,7 @@ export const Checkout = ({
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -372,7 +373,7 @@ export const Checkout = ({
             <a className="button accent" href={discoverUrl}>
               Discover products
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </div>

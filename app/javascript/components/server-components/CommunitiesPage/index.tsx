@@ -13,19 +13,20 @@ import { getCommunities } from "$app/data/communities";
 import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
 import { CommunityView } from "./CommunityView";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 const ErrorBoundary = () => {
   const error = useRouteError();
   return (
     <div>
       <div>
-        <div className="placeholder">
+        <Placeholder>
           <p>
             {isRouteErrorResponse(error) && error.status === 404
               ? "The resource you're looking for doesn't exist."
               : "Something went wrong."}
           </p>
-        </div>
+        </Placeholder>
       </div>
     </div>
   );

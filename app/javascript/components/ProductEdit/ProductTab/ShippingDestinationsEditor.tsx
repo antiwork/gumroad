@@ -5,6 +5,7 @@ import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { ShippingDestination, useProductEditContext } from "$app/components/ProductEdit/state";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 export const ShippingDestinationsEditor = ({
   shippingDestinations,
@@ -56,14 +57,14 @@ export const ShippingDestinationsEditor = ({
           </div>
         </div>
       ) : (
-        <div className="placeholder">
+        <Placeholder>
           <h2>Add shipping destinations</h2>
           Choose where you're able to ship your physical product to
           <Button color="primary" onClick={addShippingDestination}>
             <Icon name="box" />
             Add shipping destination
           </Button>
-        </div>
+        </Placeholder>
       )}
     </section>
   );

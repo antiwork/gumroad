@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -56,11 +57,11 @@ export const VersionsEditor = ({
   );
 
   return versions.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Offer variations of this product</h2>
       Sweeten the deal for your customers with different options for format, version, etc
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalVersion ? (

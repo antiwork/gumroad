@@ -20,6 +20,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
 
@@ -313,7 +314,7 @@ const AffiliatedPage = ({
       ) : (
         <section className="p-4 md:p-8">
           {initialAffiliatedProducts.length === 0 ? (
-            <div className="placeholder">
+            <Placeholder>
               <figure>
                 <img src={placeholder} />
               </figure>
@@ -331,17 +332,17 @@ const AffiliatedPage = ({
                   learn more to get started
                 </a>
               </p>
-            </div>
+            </Placeholder>
           ) : (
             <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
               <StatsSection {...stats} />
               {state.affiliatedProducts.length === 0 ? (
-                <div className="placeholder">
+                <Placeholder>
                   <figure>
                     <img src={placeholder} />
                   </figure>
                   <h2>No affiliated products found.</h2>
-                </div>
+                </Placeholder>
               ) : (
                 <AffiliatedProductsTable
                   affiliatedProducts={affiliatedProducts}
