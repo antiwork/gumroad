@@ -7,15 +7,17 @@ class Products::ArchivedController < Sellers::BaseController
 
   before_action :fetch_product_and_enforce_ownership, only: %i[create destroy]
 
+  layout "inertia", only: [:index]
+
   def index
     authorize [:products, :archived, Link]
 
     memberships_pagination, memberships = paginated_memberships(page: 1)
     products_pagination, products = paginated_products(page: 1)
 
-    redirect_to products_url if memberships.none? && products.none?
+    return redirect_to products_url if memberships.none? && products.none?
 
-    @react_products_page_props = DashboardProductsPagePresenter.new(
+    props = DashboardProductsPagePresenter.new(
       pundit_user:,
       memberships:,
       memberships_pagination:,
@@ -24,6 +26,8 @@ class Products::ArchivedController < Sellers::BaseController
     ).page_props
 
     @title = "Archived products"
+
+    render inertia: "Products/Archived/Index", props:
   end
 
   def products_paged

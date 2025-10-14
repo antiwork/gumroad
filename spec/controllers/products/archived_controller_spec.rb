@@ -4,8 +4,9 @@ require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 require "shared_examples/with_sorting_and_pagination"
+require "inertia_rails/rspec"
 
-describe Products::ArchivedController do
+describe Products::ArchivedController, inertia: true do
   render_views
 
   it_behaves_like "inherits from Sellers::BaseController"
@@ -35,15 +36,22 @@ describe Products::ArchivedController do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).not_to include(membership.name)
-      expect(response.body).to include(archived_membership.name)
-      expect(response.body).not_to include(deleted_membership.name)
-      expect(response.body).not_to include(other_membership.name)
+      expect(assigns[:title]).to eq("Archived products")
 
-      expect(response.body).not_to include(product.name)
-      expect(response.body).to include(archived_product.name)
-      expect(response.body).not_to include(deleted_product.name)
-      expect(response.body).not_to include(other_product.name)
+      expect(inertia).to render_component("Products/Archived/Index")
+
+      memberships = inertia.props[:memberships]
+      products = inertia.props[:products]
+
+      expect(memberships.any? { |m| m[:name] == membership.name }).to be(false)
+      expect(memberships.any? { |m| m[:name] == archived_membership.name }).to be(true)
+      expect(memberships.any? { |m| m[:name] == deleted_membership.name }).to be(false)
+      expect(memberships.any? { |m| m[:name] == other_membership.name }).to be(false)
+
+      expect(products.any? { |p| p[:name] == product.name }).to be(false)
+      expect(products.any? { |p| p[:name] == archived_product.name }).to be(true)
+      expect(products.any? { |p| p[:name] == deleted_product.name }).to be(false)
+      expect(products.any? { |p| p[:name] == other_product.name }).to be(false)
     end
 
     context "when there are no archived products" do

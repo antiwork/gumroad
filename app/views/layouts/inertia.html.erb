@@ -4,8 +4,6 @@
   <% bclass = ["group/body"] %>
   <% bclass.push "mac" if request.headers["User-Agent"]&.include? "Macintosh" %>
   <% bclass.push(@body_class) if @body_class %>
-  <% show_nav = !@hide_layouts && user_signed_in? %>
-  <% bclass.push("sidebar-nav") if show_nav %>
   <% custom_context = RenderingExtension.custom_context(self) %>
   <body id="<%= @body_id %>" class="<%= bclass.join(" ") %>" style="<%= params[:as_embed] && "background: transparent" %>">
     <div id="design-settings" data-settings="<%= custom_context[:design_settings].to_json %>" style="display: none;"></div>

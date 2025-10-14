@@ -69,7 +69,7 @@ export type Upsell = {
   }[];
 };
 
-export type SortKey = "name" | "revenue" | "uses";
+export type SortKey = "name" | "revenue" | "uses" | "status";
 export type QueryParams = {
   sort: Sort<SortKey> | null;
   query: string | null;
@@ -267,7 +267,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                   <th {...thProps("name")}>Upsell</th>
                   <th {...thProps("revenue")}>Revenue</th>
                   <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("uses")}>Status</th>
+                  <th {...thProps("status")}>Status</th>
                 </tr>
               </thead>
               <tbody>

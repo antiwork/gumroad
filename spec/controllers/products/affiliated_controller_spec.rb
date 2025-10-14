@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Products::AffiliatedController do
+describe Products::AffiliatedController, inertia: true do
   include CurrencyHelper
   render_views
 
@@ -52,20 +53,20 @@ describe Products::AffiliatedController do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(response).to render_template(:index)
+      expect(assigns[:title]).to eq("Products")
+
+      expect(inertia).to render_component("Products/Affiliated/Index")
 
       # stats
-      ["Revenue", "Sales", "Affiliated creators", "Products"].each do |title|
-        expect(response.body).to include title
-      end
-      expect(response.body).to include formatted_dollar_amount(affiliate_sales.sum(&:affiliate_credit_cents))
-      expect(response.body).to include affiliate_sales.size.to_s
-      expect(response.body).to include affiliated_products.size.to_s
-      expect(response.body).to include affiliated_creators.size.to_s
+      stats = inertia.props[:stats]
+      expect(stats[:total_revenue]).to eq(affiliate_sales.sum(&:affiliate_credit_cents))
+      expect(stats[:total_sales]).to eq(affiliate_user.affiliate_credits.count)
+      expect(stats[:total_products]).to eq(affiliated_products.size)
+      expect(stats[:total_affiliated_creators]).to eq(affiliated_creators.size)
 
       # products
       affiliated_products.each do |product|
-        expect(response.body).to include product.name
+        expect(inertia.props[:affiliated_products].any? { |p| p[:product_name] == product.name }).to be(true)
       end
     end
 
