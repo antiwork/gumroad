@@ -2,7 +2,10 @@ import { format, parseISO } from "date-fns";
 import * as React from "react";
 import { XAxis, YAxis, Line, Area } from "recharts";
 
-import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import useChartTooltip from "$app/components/Analytics/useChartTooltip";
+import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
+
+import ChartTooltip from "./ChartTooltip";
 
 type ChurnDailyData = {
   date: string;
@@ -10,39 +13,6 @@ type ChurnDailyData = {
   churned_subscribers: number;
   churned_mrr_cents: number;
 };
-
-import useChartTooltip from "$app/components/Analytics/useChartTooltip";
-import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
-
-type DataPoint = {
-  date: string;
-  dateFormatted: string;
-  churnRate: number;
-  cancellations: number;
-  revenueLost: number;
-  label: string;
-};
-
-const ChartTooltip = ({ data }: { data: DataPoint }) => (
-  <>
-    <div>
-      <strong>{data.churnRate.toFixed(1)}%</strong> churn
-    </div>
-    <div>
-      <strong>{data.cancellations}</strong> {data.cancellations === 1 ? "cancellation" : "cancellations"}
-    </div>
-    <div>
-      <strong>
-        {formatPriceCentsWithCurrencySymbol("usd", data.revenueLost, {
-          symbolFormat: "short",
-          noCentsIfWhole: true,
-        })}
-      </strong>{" "}
-      revenue lost
-    </div>
-    <time className="block font-bold">{data.dateFormatted}</time>
-  </>
-);
 
 export const ChurnChart = ({ data }: { data: ChurnDailyData[] }) => {
   const dataPoints = React.useMemo(

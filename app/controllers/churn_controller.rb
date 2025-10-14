@@ -56,22 +56,24 @@ class ChurnController < Sellers::BaseController
       cache_key_value = cache_key(@start_date, @end_date)
 
       cached_data = Rails.cache.fetch(cache_key_value, expires_in: 24.hours) do
-        compute_churn_data
+        fetch_realtime_data
       end
 
       cached_data
     end
 
     def fetch_realtime_data
-      compute_churn_data
-    end
-
-    def compute_churn_data
       service = CreatorAnalytics::Churn.new(
         user: current_seller,
         start_date: @start_date,
         end_date: @end_date
       )
+
+      unless service.valid?
+        return {
+          error: "Invalid date range: #{service.errors.full_messages.join(', ')}"
+        }
+      end
 
       result = service.calculate
       daily_results = service.calculate_by_date
@@ -88,40 +90,8 @@ class ChurnController < Sellers::BaseController
       {
         start_date: @start_date.to_s,
         end_date: @end_date.to_s,
-        metrics: build_metrics(result),
+        metrics: service.build_metrics(result),
         daily_data: daily_data
       }
-    end
-
-    def build_metrics(result)
-      {
-        customer_churn_rate: result[:customer_churn_rate].to_f,
-        last_period_churn_rate: last_period_churn_rate.to_f,
-        churned_subscribers: result[:churned_subscribers],
-        churned_mrr_cents: result[:churned_mrr_cents]
-      }
-    end
-
-    def last_period_churn_rate
-      period_length = (@end_date - @start_date).to_i
-      last_period_end = @start_date - 1.day
-      last_period_start = last_period_end - period_length.days
-
-      if should_use_cache?
-        cache_key_value = cache_key(last_period_start, last_period_end)
-        Rails.cache.fetch(cache_key_value, expires_in: 24.hours) do
-          calculate_last_period_churn_rate(last_period_start, last_period_end)
-        end
-      else
-        calculate_last_period_churn_rate(last_period_start, last_period_end)
-      end
-    end
-
-    def calculate_last_period_churn_rate(start_date, end_date)
-      CreatorAnalytics::Churn.new(
-        user: current_seller,
-        start_date: start_date,
-        end_date: end_date
-      ).customer_churn_rate
     end
 end

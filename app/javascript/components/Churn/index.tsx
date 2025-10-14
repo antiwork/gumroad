@@ -21,7 +21,7 @@ export type ChurnData = {
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { ChurnChart } from "$app/components/Churn/ChurnChart";
-import { ChurnQuickStats } from "$app/components/Churn/ChurnQuickStats";
+import ChurnQuickStats from "$app/components/Churn/ChurnQuickStats";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Progress } from "$app/components/Progress";
 
@@ -90,7 +90,7 @@ const Churn = ({ has_subscription_products, initialData }: ChurnProps) => {
               Churn analytics are available for creators with active subscription products. Create a membership or
               subscription product to start tracking subscriber retention.
             </p>
-            <a href="/help/article/172-memberships" target="_blank" rel="noreferrer">
+            <a href={Routes.help_center_article_path("172-memberships")} target="_blank" rel="noreferrer">
               Learn more about memberships
             </a>
           </div>

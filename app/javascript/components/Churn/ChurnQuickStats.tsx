@@ -11,7 +11,7 @@ type ChurnMetrics = {
 
 import { Stats } from "$app/components/Stats";
 
-export const ChurnQuickStats = ({ metrics }: { metrics: ChurnMetrics | undefined }) => {
+const ChurnQuickStats = ({ metrics }: { metrics: ChurnMetrics | undefined }) => {
   const churnRate = metrics ? metrics.customer_churn_rate : 0;
   const lastPeriodChurnRate = metrics ? metrics.last_period_churn_rate : 0;
   const revenueLost = metrics ? metrics.churned_mrr_cents : 0;
@@ -36,3 +36,5 @@ export const ChurnQuickStats = ({ metrics }: { metrics: ChurnMetrics | undefined
     </div>
   );
 };
+
+export default ChurnQuickStats;
