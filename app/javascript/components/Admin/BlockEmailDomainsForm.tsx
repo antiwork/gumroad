@@ -1,17 +1,18 @@
-import { useForm } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
 import { showAlert } from "$app/components/server-components/Alert";
 
 export type Props = {
   action: string;
-  authenticity_token: string;
   header: string;
   button_label: string;
   notice_message: string;
 };
 
-const Form = ({ action, authenticity_token, header, button_label, notice_message }: Props) => {
+const Form = ({ action, header, button_label, notice_message }: Props) => {
+  const { authenticity_token } = usePage<{ authenticity_token: string }>().props;
+
   const form = useForm({
     authenticity_token,
     email_domains: {
