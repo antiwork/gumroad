@@ -165,8 +165,8 @@ table {
   }
 
   @include breakpoint-up(lg, true) {
-    border: solid 0.0625rem black;
-    border-radius: 4px;
+    border: $border;
+    border-radius: $table-border-radius;
 
     &,
     & > * {
