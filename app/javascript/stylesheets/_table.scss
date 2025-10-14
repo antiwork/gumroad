@@ -175,6 +175,24 @@ table {
       margin-bottom: spacer(4);
     }
 
+    & > thead {
+      & > * > * {
+        border-top: $border;
+
+        &:first-child {
+          border-left: $border;
+        }
+
+        &:last-child {
+          border-right: $border;
+        }
+
+        &.icon-cell {
+          border-right: $border;
+        }
+      }
+    }
+
     & > tbody,
     & > tfoot {
       & > * > * {
@@ -202,7 +220,17 @@ table {
       }
     }
 
-    & > tbody > :first-child {
+    &:has(thead) > thead > :first-child {
+      & > :first-child {
+        border-top-left-radius: $table-border-radius;
+      }
+
+      & > :last-child {
+        border-top-right-radius: $table-border-radius;
+      }
+    }
+
+    &:not(:has(thead)) > tbody > :first-child {
       & > :first-child {
         border-top-left-radius: $table-border-radius;
       }
