@@ -745,7 +745,7 @@ export const EmailForm = () => {
         }
       />
       <section className="space-y-4 p-4 md:p-8">
-        <div className="grid auto-cols-[3fr] grid-cols-1 items-start gap-12 gap-x-16 lg:grid-flow-col">
+        <div className="grid auto-cols-[3fr] grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-flow-col">
           <div className="stack">
             <div>
               <fieldset role="group">
