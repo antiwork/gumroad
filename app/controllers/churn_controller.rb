@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class ChurnController < Sellers::BaseController
-  layout "inertia", only: [:show]
+  layout "inertia"
 
   def show
     authorize :churn

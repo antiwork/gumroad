@@ -4,13 +4,21 @@ class CreatorAnalytics::Churn
   include ActiveModel::Validations
 
   validates :end_date, comparison: { greater_than: :start_date }
-  validates :time_window, inclusion: { in: 1..30, message: "must be between 1 and 30 days" }
+  validates :time_window, inclusion: { in: 1..31, message: "must be between 1 and 31 days" }
 
   def initialize(user:, start_date: nil, end_date: nil, params: {})
     @user = user
     @params = params
     @start_date = (start_date || parse_start_date).to_date
     @end_date = (end_date || parse_end_date).to_date
+  end
+
+  def start_date
+    @start_date
+  end
+
+  def end_date
+    @end_date
   end
 
   def time_window
@@ -107,11 +115,11 @@ class CreatorAnalytics::Churn
 
   private
     def parse_start_date
-      @params[:start_time]&.to_date || 30.days.ago.to_date
+      (@params[:start_time] || @params[:from])&.to_date || 30.days.ago.to_date
     end
 
     def parse_end_date
-      @params[:end_time]&.to_date || Date.current
+      (@params[:end_time] || @params[:to])&.to_date || Date.current
     end
 
     def should_use_cache?

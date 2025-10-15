@@ -1,4 +1,5 @@
 import { router } from "@inertiajs/react";
+import { lightFormat } from "date-fns";
 import * as React from "react";
 
 export type ChurnData = {
@@ -21,8 +22,8 @@ export type ChurnData = {
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { ChurnChart } from "$app/components/Churn/ChurnChart";
+import { ChurnDateRangePicker } from "$app/components/Churn/ChurnDateRangePicker";
 import ChurnQuickStats from "$app/components/Churn/ChurnQuickStats";
-import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Progress } from "$app/components/Progress";
 
 import placeholder from "$assets/images/placeholders/sales.png";
@@ -50,11 +51,14 @@ const Churn = ({ has_subscription_products, initialData }: ChurnProps) => {
   React.useEffect(() => {
     if (!hasContent) return;
 
+    const fromDate = lightFormat(dateRange.from, "yyyy-MM-dd");
+    const toDate = lightFormat(dateRange.to, "yyyy-MM-dd");
+
     router.reload({
       only: ["churn_data"],
       data: {
-        start_time: dateRange.from.toISOString().split("T")[0],
-        end_time: dateRange.to.toISOString().split("T")[0],
+        from: fromDate,
+        to: toDate,
       },
       onSuccess: (page) => {
         const churnData = page.props.churn_data;
@@ -66,7 +70,7 @@ const Churn = ({ has_subscription_products, initialData }: ChurnProps) => {
   }, [dateRange.from, dateRange.to, hasContent]);
 
   return (
-    <AnalyticsLayout selectedTab="churn" actions={hasContent ? <DateRangePicker {...dateRange} /> : null}>
+    <AnalyticsLayout selectedTab="churn" actions={hasContent ? <ChurnDateRangePicker {...dateRange} /> : null}>
       {hasContent ? (
         <div className="space-y-8 p-4 md:p-8">
           <ChurnQuickStats metrics={data?.metrics} />
