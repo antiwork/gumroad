@@ -11,20 +11,14 @@
       enter what is to the right of
       <code>@</code> character.
     </p>
-    <figure class="code">
-      <figcaption>
-        Example with comma-separated items
-      </figcaption>
-      <pre>example.com, example.net, list.example.org</pre>
-    </figure>
-    <figure class="code">
-      <figcaption>
-        Example with items separated by newline
-      </figcaption>
-      <pre>example.com
+    <%= render "shared/code_snippet", caption: "Example with comma-separated items" do %>
+example.com, example.net, list.example.org
+    <% end %>
+    <%= render "shared/code_snippet", caption: "Example with items separated by newline" do %>
+example.com
 example.net
-list.example.org</pre>
-    </figure>
+list.example.org
+    <% end %>
     <%= f.text_area :identifiers, placeholder: "Enter email domains here", rows: 10 %>
     <%= f.button button_label, class: "button primary" %>
   </section>

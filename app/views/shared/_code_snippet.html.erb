@@ -1,0 +1,8 @@
+<% caption ||= nil unless local_assigns.key?(:caption) %>
+
+<figure class="overflow-hidden rounded border border-border bg-background">
+  <% if caption.present? %>
+    <figcaption class="p-4"><%= caption %></figcaption>
+  <% end %>
+  <pre class="overflow-x-auto bg-muted-foreground p-4<%= ' border-t border-border' if caption.present? %>"><%= yield %></pre>
+</figure>
