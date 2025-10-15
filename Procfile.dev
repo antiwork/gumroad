@@ -3,4 +3,4 @@ webpack: npm run setup && ./bin/shakapacker-dev-server
 webpack-ssr: WEBPACK_SSR=true ./bin/shakapacker --watch
 sidekiq: RAILS_MAX_THREADS=5 USE_DB_WORKER_REPLICAS=true bundle exec sidekiq -q critical -q default -q low -q mongo
 anycable_rpc: ANYCABLE_SECRET="anycable-local-secret" ANYCABLE_RPC_HOST="localhost:50051" bundle exec anycable
-anycable_ws: ANYCABLE_HOST="cable.gumroad.dev" ANYCABLE_PORT="8080" ANYCABLE_RPC_HOST="localhost:50051" ANYCABLE_SECRET="anycable-local-secret" ANYCABLE_BROADCAST_ADAPTER="http,redisx" ANYCABLE_PUBSUB="redis" ANYCABLE_BROKER="memory" ANYCABLE_METRICS_PORT="8080" ANYCABLE_LOG_LEVEL="debug" ANYCABLE_DEBUG=true bin/anycable-go
+anycable_ws: ANYCABLE_HOST="${ANYCABLE_HOST:-cable.gumroad.dev}" ANYCABLE_PORT="8080" ANYCABLE_RPC_HOST="localhost:50051" ANYCABLE_SECRET="anycable-local-secret" ANYCABLE_BROADCAST_ADAPTER="http,redisx" ANYCABLE_PUBSUB="redis" ANYCABLE_BROKER="memory" ANYCABLE_METRICS_PORT="8080" ANYCABLE_LOG_LEVEL="debug" ANYCABLE_DEBUG=true bin/anycable-go
