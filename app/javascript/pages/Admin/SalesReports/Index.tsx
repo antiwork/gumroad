@@ -1,8 +1,8 @@
-import { usePage } from "@inertiajs/react";
 import * as React from "react";
+import { usePage } from "@inertiajs/react";
 
-import AdminSalesReports from "$app/components/Admin/SalesReports";
-import { type JobHistoryItem } from "$app/components/Admin/SalesReports/JobHistory";
+import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
+import AdminSalesReportsJobHistory, { type JobHistoryItem } from "$app/components/Admin/SalesReports/JobHistory";
 
 type PageProps = {
   countries: [string, string][];
@@ -10,10 +10,15 @@ type PageProps = {
   authenticity_token: string;
 };
 
-const AdminSalesReportsPage = () => {
+const AdminSalesReports = () => {
   const { countries, job_history: jobHistory, authenticity_token: authenticityToken } = usePage<PageProps>().props;
 
-  return <AdminSalesReports countries={countries} jobHistory={jobHistory} authenticityToken={authenticityToken} />;
+  return (
+    <>
+      <AdminSalesReportsForm countries={countries} authenticityToken={authenticityToken} />
+      <AdminSalesReportsJobHistory countries={countries} jobHistory={jobHistory} />
+    </>
+  );
 };
 
-export default AdminSalesReportsPage;
+export default AdminSalesReports;
