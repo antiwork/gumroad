@@ -70,7 +70,8 @@ class CustomerSurchargeController < ApplicationController
                                                 quantity:,
                                                 buyer_location:,
                                                 buyer_vat_id:,
-                                                from_discover:).calculate
+                                                from_discover:,
+                                                is_subscription_renewal: subscription_id.present?).calculate
 
       { sales_tax_result:, shipping_rate: }
     end

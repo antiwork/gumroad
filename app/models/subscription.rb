@@ -456,6 +456,7 @@ class Subscription < ApplicationRecord
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
       new_purchase.business_vat_id = original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
+
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
       license = original_purchase.license
@@ -507,6 +508,19 @@ class Subscription < ApplicationRecord
       end
       new_purchase.create_url_redirect!
       create_purchase_event(new_purchase, template_purchase: original_purchase)
+
+      # Preserve VAT ID information for plan changes (after purchase is saved)
+      if original_purchase.purchase_sales_tax_info&.business_vat_id.present?
+        new_purchase.create_purchase_sales_tax_info!(
+          business_vat_id: original_purchase.purchase_sales_tax_info.business_vat_id,
+          country_code: original_purchase.purchase_sales_tax_info.country_code,
+          ip_address: original_purchase.purchase_sales_tax_info.ip_address,
+          postal_code: original_purchase.purchase_sales_tax_info.postal_code,
+          state_code: original_purchase.purchase_sales_tax_info.state_code,
+          ip_country_code: original_purchase.purchase_sales_tax_info.ip_country_code,
+          elected_country_code: original_purchase.purchase_sales_tax_info.elected_country_code
+        )
+      end
 
       new_purchase
     end
@@ -929,10 +943,13 @@ class Subscription < ApplicationRecord
     end
 
     def get_vat_id_from_original_purchase(purchase)
-      if original_purchase.purchase_sales_tax_info&.business_vat_id
-        purchase.business_vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
-      elsif original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
-        purchase.business_vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
+      # Handle both regular and gift subscriptions
+      target_purchase = gift? ? true_original_purchase : original_purchase
+
+      if target_purchase.purchase_sales_tax_info&.business_vat_id
+        purchase.business_vat_id = target_purchase.purchase_sales_tax_info.business_vat_id
+      elsif target_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
+        purchase.business_vat_id = target_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
       end
     end
 

@@ -5,7 +5,7 @@ require_relative "../../../lib/utilities/geo_ip"
 class SalesTaxCalculator
   attr_accessor :tax_rate, :product, :price_cents, :shipping_cents, :quantity, :buyer_location, :buyer_vat_id, :state, :is_us_taxable_state, :is_ca_taxable, :is_quebec
 
-  def initialize(product:, price_cents:, shipping_cents: 0, quantity: 1, buyer_location:, buyer_vat_id: nil, from_discover: false)
+  def initialize(product:, price_cents:, shipping_cents: 0, quantity: 1, buyer_location:, buyer_vat_id: nil, from_discover: false, is_subscription_renewal: false)
     @tax_rate = nil
     @product = product
     @price_cents = price_cents
@@ -13,6 +13,7 @@ class SalesTaxCalculator
     @quantity = quantity
     @buyer_location = buyer_location
     @buyer_vat_id = buyer_vat_id
+    @is_subscription_renewal = is_subscription_renewal
     validate
     @state = if buyer_location[:country] == Compliance::Countries::USA.alpha2
       UsZipCodes.identify_state_code(buyer_location[:postal_code])
@@ -31,7 +32,7 @@ class SalesTaxCalculator
 
     return SalesTaxCalculation.zero_tax(price_cents) if product.user.has_brazilian_stripe_connect_account?
 
-    return SalesTaxCalculation.zero_business_vat(price_cents) if is_vat_id_valid?
+    return SalesTaxCalculation.zero_business_vat(price_cents) if should_skip_vat?
 
     sales_tax_calculation = calculate_with_taxjar
     return sales_tax_calculation if sales_tax_calculation
@@ -117,6 +118,16 @@ class SalesTaxCalculator
       raise SalesTaxCalculatorValidationError, "Price (cents) should be an Integer" unless @price_cents.is_a? Integer
       raise SalesTaxCalculatorValidationError, "Buyer Location should be a Hash" unless @buyer_location.is_a? Hash
       raise SalesTaxCalculatorValidationError, "Product should be a Link instance" unless @product.is_a? Link
+    end
+
+    def should_skip_vat?
+      return false unless @buyer_vat_id.present?
+
+      # For subscription renewals, trust the VAT ID without re-validation
+      return true if @is_subscription_renewal
+
+      # For new purchases, validate as normal
+      is_vat_id_valid?
     end
 
     def is_vat_id_valid?

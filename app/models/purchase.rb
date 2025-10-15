@@ -3244,7 +3244,8 @@ class Purchase < ApplicationRecord
                                           quantity:,
                                           buyer_location: { postal_code:, country: country_code, state:, ip_address: },
                                           buyer_vat_id: business_vat_id,
-                                          from_discover: was_product_recommended)
+                                          from_discover: was_product_recommended,
+                                          is_subscription_renewal: subscription.present? && !is_original_subscription_purchase)
 
       return unless in_eu_country || in_australia || in_singapore || in_norway || (in_other_taxable_country && Feature.active?("collect_tax_#{country_code.downcase}")) || calculator.is_us_taxable_state || calculator.is_ca_taxable
 

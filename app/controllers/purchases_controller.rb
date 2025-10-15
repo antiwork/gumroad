@@ -324,6 +324,21 @@ class PurchasesController < ApplicationController
     begin
       @chargeable.refund_gumroad_taxes!(refunding_user_id: logged_in_user&.id, note: address_fields.to_json, business_vat_id:) if business_vat_id
 
+      # After VAT refund, update original purchase for subscriptions
+      if business_vat_id && @chargeable.subscription.present?
+        # Handle both regular and gift subscriptions
+        target_purchase = @chargeable.subscription.gift? ?
+                          @chargeable.subscription.true_original_purchase :
+                          @chargeable.subscription.original_purchase
+
+        # Create or update purchase_sales_tax_info with VAT ID
+        if target_purchase.purchase_sales_tax_info
+          target_purchase.purchase_sales_tax_info.update!(business_vat_id: business_vat_id)
+        else
+          target_purchase.create_purchase_sales_tax_info!(business_vat_id: business_vat_id)
+        end
+      end
+
       invoice_html = render_to_string(locals: { invoice_presenter: }, formats: [:pdf], layout: false)
       pdf = PDFKit.new(invoice_html, page_size: "Letter").to_pdf
       s3_obj = @chargeable.upload_invoice_pdf(pdf)
