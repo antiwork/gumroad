@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class CustomersPresenter
+  include Rails.application.routes.url_helpers
   attr_reader :pundit_user, :customers, :pagination, :product, :count
 
   def initialize(pundit_user:, customers: [], pagination: nil, product: nil, count: 0)
@@ -30,6 +31,9 @@ class CustomersPresenter
       countries: Compliance::Countries.for_select.map(&:last),
       can_ping: pundit_user.seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
       show_refund_fee_notice: pundit_user.seller.show_refund_fee_notice?,
+      show_refund_payment_method_prompt: pundit_user.seller.show_refund_payment_method_prompt?,
+      refund_payment_method_settings_path: settings_payments_path(anchor: "refund-payment-method"),
+      dismiss_refund_payment_method_prompt_path: dismiss_refund_payment_banner_settings_payments_path,
     }
   end
 end

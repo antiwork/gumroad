@@ -67,6 +67,9 @@ describe CustomersPresenter do
           currency_type: "usd",
           can_ping: true,
           show_refund_fee_notice: false,
+          show_refund_payment_method_prompt: true,
+          refund_payment_method_settings_path: Rails.application.routes.url_helpers.settings_payments_path(anchor: "refund-payment-method"),
+          dismiss_refund_payment_method_prompt_path: Rails.application.routes.url_helpers.dismiss_refund_payment_banner_settings_payments_path,
         }
       )
     end

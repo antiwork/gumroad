@@ -893,6 +893,42 @@ describe "PurchaseRefunds", :vcr do
           expect(purchase.refunds.last).to be nil
         end
 
+        it "attempts to charge the backup refund payment method when available" do
+          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_call_original
+          MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+            MerchantAccount.create!(charge_processor_id: StripeChargeProcessor.charge_processor_id)
+          credit_card = CreditCard.create!(
+            stripe_fingerprint: "fp_backup",
+            visual: "**** **** **** 4242",
+            card_type: CardType::VISA,
+            stripe_customer_id: "cus_backup",
+            expiry_month: 4,
+            expiry_year: 2030,
+            charge_processor_id: StripeChargeProcessor.charge_processor_id
+          )
+          RefundPaymentMethod.create!(user: @user, credit_card:, cardholder_name: "Creator")
+
+          top_up_result = RefundBalanceTopUpService::Result.new(success?: true, charged_cents: 1_500, credited_cents: 1_500)
+          allow(RefundBalanceTopUpService).to receive(:new).and_wrap_original do |_method, args|
+            service_double = instance_double(RefundBalanceTopUpService)
+            allow(service_double).to receive(:ensure_funds) do
+              create(:balance, user: args[:user], amount_cents: top_up_result.credited_cents)
+              top_up_result
+            end
+            service_double
+          end
+
+          purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)
+          purchase.process!
+          purchase.mark_successful!
+
+          expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id, anything).and_call_original
+
+          purchase.reload.refund_and_save!(@user.id)
+          expect(purchase.errors[:base]).to be_empty
+          expect(purchase.reload.stripe_refunded).to be true
+        end
+
         it "doesn't issue a refund if the purchase was made on Gumroad-managed Stripe account" do
           stripe_account = create(:merchant_account_stripe, user: @user)
           purchase.chargeable = create(:chargeable, product_permalink: purchase.link.unique_permalink)

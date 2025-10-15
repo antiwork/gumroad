@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_15_120000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1804,6 +1804,16 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
     t.index ["user_id"], name: "index_recurring_services_on_user_id"
   end
 
+  create_table "refund_payment_methods", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "credit_card_id", null: false
+    t.string "cardholder_name", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["credit_card_id"], name: "index_refund_payment_methods_on_credit_card_id"
+    t.index ["user_id"], name: "index_refund_payment_methods_on_user_id", unique: true
+  end
+
   create_table "refund_policies", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.bigint "product_id"
@@ -2720,4 +2730,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_03_165816) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "refund_payment_methods", "credit_cards"
+  add_foreign_key "refund_payment_methods", "users"
 end

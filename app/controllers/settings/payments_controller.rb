@@ -50,6 +50,13 @@ class Settings::PaymentsController < Sellers::BaseController
 
     current_seller.tos_agreements.create!(ip: request.remote_ip)
 
+    if params[:refund_payment_method]
+      result = UpdateRefundPaymentMethod.new(user: current_seller, params: params[:refund_payment_method]).process
+      unless result[:success]
+        return render json: { success: false, error_message: result[:error_message] }
+      end
+    end
+
     return unless update_payout_method
 
     return unless update_user_compliance_info
@@ -134,6 +141,11 @@ class Settings::PaymentsController < Sellers::BaseController
     else
       render json: { error: current_seller.errors.full_messages.join(",") }, status: :bad_request
     end
+  end
+
+  def dismiss_refund_payment_banner
+    current_seller.dismiss_refund_payment_method_banner!
+    head :no_content
   end
 
   def remediation

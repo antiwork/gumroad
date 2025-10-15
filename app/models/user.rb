@@ -103,6 +103,7 @@ class User < ApplicationRecord
   has_many :seller_profile_rich_text_sections, foreign_key: :seller_id
   has_many :seller_profile_subscribe_sections, foreign_key: :seller_id
   has_many :seller_profile_featured_product_sections, foreign_key: :seller_id
+  has_one :refund_payment_method, dependent: :destroy
   has_many :seller_profile_wishlists_sections, foreign_key: :seller_id
   has_many :backtax_agreements
   has_many :custom_fields, foreign_key: :seller_id
@@ -155,6 +156,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_frequency, default: User::PayoutSchedule::WEEKLY
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :payouts_paused_by
+  attr_json_data_accessor :refund_payment_banner_dismissed_at
 
   validates :username, uniqueness: { case_sensitive: true },
                        length: { minimum: 3, maximum: 20 },
@@ -767,6 +769,14 @@ class User < ApplicationRecord
     return false if requires_credit_card?
     self.credit_card_id = nil
     save
+  end
+
+  def show_refund_payment_method_prompt?
+    refund_payment_method.blank? && refund_payment_banner_dismissed_at.blank?
+  end
+
+  def dismiss_refund_payment_method_banner!
+    update!(refund_payment_banner_dismissed_at: Time.current)
   end
 
   def timezone_id # TZInfo Identifier (TZ database name)

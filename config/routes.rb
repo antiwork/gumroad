@@ -448,6 +448,7 @@ Rails.application.routes.draw do
         post :opt_in_to_au_backtax_collection
         get :paypal_connect
         post :remove_credit_card
+        post :dismiss_refund_payment_banner
       end
       resource :stripe, controller: :stripe, only: [] do
         collection do

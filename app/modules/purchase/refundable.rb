@@ -45,8 +45,23 @@ class Purchase
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+          if seller.refund_payment_method.present?
+            coverage_result = RefundBalanceTopUpService.new(
+              user: seller,
+              purchase: self,
+              required_cents: amount_cents_to_refund
+            ).ensure_funds
+
+            unless coverage_result.success?
+              errors.add :base, coverage_result.error_message || "Your balance is insufficient to process this refund."
+              return false
+            end
+
+            seller.reload
+          else
+            errors.add :base, "Your balance is insufficient to process this refund."
+            return false
+          end
         end
       end
 
@@ -97,6 +112,7 @@ class Purchase
         refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
+        errors.add :base, "This charge has already been refunded."
         false
       rescue ChargeProcessorInsufficientFundsError => e
         logger.error "Creator's PayPal account does not have sufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
@@ -104,6 +120,7 @@ class Purchase
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
+        errors.add :base, e.message.presence || "Sorry, something went wrong while processing the refund."
         false
       rescue ChargeProcessorUnavailableError => e
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"

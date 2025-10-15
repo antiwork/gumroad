@@ -55,7 +55,7 @@ import { isValidEmail } from "$app/utils/email";
 import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
-import { AbortError, assertResponseError } from "$app/utils/request";
+import { AbortError, ResponseError, assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -97,6 +97,9 @@ export type CustomerPageProps = {
   countries: string[];
   can_ping: boolean;
   show_refund_fee_notice: boolean;
+  show_refund_payment_method_prompt: boolean;
+  refund_payment_method_settings_path: string;
+  dismiss_refund_payment_method_prompt_path: string;
 };
 
 const year = new Date().getFullYear();
@@ -120,6 +123,9 @@ const CustomersPage = ({
   countries,
   can_ping,
   show_refund_fee_notice,
+  show_refund_payment_method_prompt,
+  refund_payment_method_settings_path,
+  dismiss_refund_payment_method_prompt_path,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -139,6 +145,7 @@ const CustomersPage = ({
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
   const uid = React.useId();
+  const [showRefundBanner, setShowRefundBanner] = React.useState(show_refund_payment_method_prompt);
 
   const [includedItems, setIncludedItems] = React.useState<Item[]>(
     product_id ? [{ type: "product", id: product_id }] : [],
@@ -182,6 +189,22 @@ const CustomersPage = ({
 
   const includedProductIds = includedItems.filter(({ type }) => type === "product").map(({ id }) => id);
   const includedVariantIds = includedItems.filter(({ type }) => type === "variant").map(({ id }) => id);
+
+  const dismissRefundBanner = asyncVoid(async () => {
+    try {
+      const response = await request({
+        method: "POST",
+        url: dismiss_refund_payment_method_prompt_path,
+        accept: "json",
+      });
+      if (!response.ok) throw new ResponseError("Something went wrong. Please try again.");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+      return;
+    }
+    setShowRefundBanner(false);
+  });
 
   const loadCustomers = async (page: number) => {
     activeRequest.current?.cancel();
@@ -436,6 +459,33 @@ const CustomersPage = ({
           </>
         }
       />
+      {showRefundBanner ? (
+        <div
+          role="alert"
+          className="info"
+          style={{
+            margin: "0 var(--spacer-8) var(--spacer-8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "var(--spacer-6)",
+            padding: "var(--spacer-6)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
+            <strong>New: Refund customers instantly, even when your balance is low.</strong>
+            <p style={{ margin: 0 }}>
+              Add a backup payment method to cover refunds automatically if your balance can&apos;t.
+            </p>
+            <NavigationButton color="accent" href={refund_payment_method_settings_path}>
+              Set up backup method
+            </NavigationButton>
+          </div>
+          <button type="button" className="link" onClick={dismissRefundBanner}>
+            close
+          </button>
+        </div>
+      ) : null}
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <section className="paragraphs">
