@@ -39,9 +39,9 @@ describe Product::StructuredData do
         data = product.structured_data
 
         expect(data["author"]).to eq({
-          "@type" => "Person",
-          "name" => "John Doe"
-        })
+                                       "@type" => "Person",
+                                       "name" => "John Doe"
+                                     })
       end
 
       it "includes the product URL" do
@@ -289,4 +289,3 @@ describe Product::StructuredData do
     end
   end
 end
-
