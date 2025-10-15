@@ -12,7 +12,7 @@ class ChurnController < Sellers::BaseController
 
     render inertia: "Churn/Show",
            props: {
-             has_subscription_products: service.has_subscription_products?
+             has_subscription_products: service.has_subscription_products?,
              churn_data: InertiaRails.optional { service.fetch_churn_data }
            }
   end

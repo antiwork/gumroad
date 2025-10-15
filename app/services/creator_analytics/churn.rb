@@ -6,28 +6,22 @@ class CreatorAnalytics::Churn
   validates :end_date, comparison: { greater_than: :start_date }
   validates :time_window, inclusion: { in: 1..31, message: "must be between 1 and 31 days" }
 
+  attr_reader :start_date, :end_date, :user
+
   def initialize(user:, start_date: nil, end_date: nil, params: {})
     @user = user
     @params = params
-    @start_date = (start_date || parse_start_date).to_date
-    @end_date = (end_date || parse_end_date).to_date
-  end
-
-  def start_date
-    @start_date
-  end
-
-  def end_date
-    @end_date
+    @start_date = parse_date(start_date, :start)
+    @end_date = parse_date(end_date, :end)
   end
 
   def time_window
-    (@end_date - @start_date).to_i + 1
+    (end_date - start_date).to_i + 1
   end
 
   def calculate
     {
-      date: @end_date,
+      date: end_date,
       customer_churn_rate: customer_churn_rate,
       churned_subscribers: churned_count,
       churned_mrr_cents: churned_mrr
@@ -45,18 +39,16 @@ class CreatorAnalytics::Churn
   end
 
   def has_subscription_products?
-    @user.products.alive.is_recurring_billing.exists?
+    user.products.alive.is_recurring_billing.exists?
   end
 
   def calculate_by_date
-    earliest_date = @start_date - 29.days
-    all_subscriptions = fetch_subscriptions(from: earliest_date, to: @end_date)
+    earliest_date = start_date - 29.days
+    all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date)
 
-    (@start_date..@end_date).map do |date|
+    (start_date..end_date).map do |date|
       period_start = date - 29.days
-      period_end = date
-
-      calculate_for_period(period_start, period_end, all_subscriptions)
+      calculate_for_period(period_start, date, all_subscriptions)
     end
   end
 
@@ -75,59 +67,49 @@ class CreatorAnalytics::Churn
   end
 
   def fetch_realtime_data
-    unless valid?
-      return {
-        error: "Invalid date range: #{errors.full_messages.join(', ')}"
-      }
-    end
+    return { error: "Invalid date range: #{errors.full_messages.join(', ')}" } unless valid?
 
     result = calculate
     daily_results = calculate_by_date
 
-    daily_data = daily_results.map do |record|
-      {
-        date: record[:date].to_s,
-        customer_churn_rate: record[:customer_churn_rate].to_f,
-        churned_subscribers: record[:churned_subscribers],
-        churned_mrr_cents: record[:churned_mrr_cents]
-      }
-    end
-
     {
-      start_date: @start_date.to_s,
-      end_date: @end_date.to_s,
+      start_date: start_date.to_s,
+      end_date: end_date.to_s,
       metrics: build_metrics(result),
-      daily_data: daily_data
+      daily_data: format_daily_data(daily_results)
     }
   end
 
   def last_period_churn_rate
-    period_length = (@end_date - @start_date).to_i
-    last_period_end = @start_date - 1.day
+    period_length = (end_date - start_date).to_i
+    last_period_end = start_date - 1.day
     last_period_start = last_period_end - period_length.days
 
     CreatorAnalytics::Churn.new(
-      user: @user,
+      user: user,
       start_date: last_period_start,
       end_date: last_period_end
     ).customer_churn_rate
   end
 
   private
-    def parse_start_date
-      (@params[:start_time] || @params[:from])&.to_date || 30.days.ago.to_date
-    end
+    def parse_date(date_value, type)
+      return date_value.to_date if date_value
 
-    def parse_end_date
-      (@params[:end_time] || @params[:to])&.to_date || Date.current
+      case type
+      when :start
+        (@params[:start_time] || @params[:from])&.to_date || 31.days.ago.to_date
+      when :end
+        (@params[:end_time] || @params[:to])&.to_date || Date.current
+      end
     end
 
     def should_use_cache?
-      LargeSeller.where(user: @user).exists?
+      LargeSeller.where(user: user).exists?
     end
 
     def cache_key
-      "seller_daily_churn_metrics:#{@user.id}:#{@start_date}:#{@end_date}"
+      "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}"
     end
 
     def fetch_cached_data
@@ -137,39 +119,52 @@ class CreatorAnalytics::Churn
     end
 
     def calculate_for_period(period_start, period_end, subscriptions)
+      metrics = calculate_period_metrics(period_start, period_end, subscriptions)
+
+      {
+        date: period_end,
+        customer_churn_rate: metrics[:churn_rate],
+        churned_subscribers: metrics[:churned_count],
+        churned_mrr_cents: metrics[:churned_mrr]
+      }
+    end
+
+    def calculate_period_metrics(period_start, period_end, subscriptions)
       active_at_start = 0
       new_subscribers = 0
       churned_subs = []
 
       subscriptions.each do |sub|
-        if sub.created_at < period_start &&
-           (sub.deactivated_at.nil? || sub.deactivated_at >= period_start)
-          active_at_start += 1
-        end
-
-        if sub.created_at >= period_start && sub.created_at <= period_end
-          new_subscribers += 1
-        end
-
-        if sub.deactivated_at &&
-           sub.deactivated_at >= period_start &&
-           sub.deactivated_at <= period_end
-          churned_subs << sub
-        end
+        active_at_start += 1 if active_at_period_start?(sub, period_start)
+        new_subscribers += 1 if new_during_period?(sub, period_start, period_end)
+        churned_subs << sub if churned_during_period?(sub, period_start, period_end)
       end
 
       churned_count = churned_subs.count
       churned_mrr = churned_subs.sum { |sub| calculate_mrr_cents(sub) }
-
       total_base = active_at_start + new_subscribers
       churn_rate = total_base.zero? ? 0.0 : (churned_count.to_f / total_base * 100).round(2)
 
       {
-        date: period_end,
-        customer_churn_rate: churn_rate,
-        churned_subscribers: churned_count,
-        churned_mrr_cents: churned_mrr
+        churn_rate: churn_rate,
+        churned_count: churned_count,
+        churned_mrr: churned_mrr
       }
+    end
+
+    def active_at_period_start?(subscription, period_start)
+      subscription.created_at < period_start &&
+        (subscription.deactivated_at.nil? || subscription.deactivated_at >= period_start)
+    end
+
+    def new_during_period?(subscription, period_start, period_end)
+      subscription.created_at >= period_start && subscription.created_at <= period_end
+    end
+
+    def churned_during_period?(subscription, period_start, period_end)
+      subscription.deactivated_at &&
+        subscription.deactivated_at >= period_start &&
+        subscription.deactivated_at <= period_end
     end
 
     def total_subscriber_base
@@ -177,35 +172,28 @@ class CreatorAnalytics::Churn
     end
 
     def active_at_start_count
-      @active_at_start_count ||= subscription_products
-        .joins(:subscriptions)
-        .merge(active_at_start_scope)
-        .count
+      @active_at_start_count ||= count_subscriptions(active_at_start_scope)
     end
 
     def new_subscribers_count
-      @new_subscribers_count ||= subscription_products
-        .joins(:subscriptions)
-        .merge(Subscription.where(created_at: @start_date..@end_date))
-        .count
+      @new_subscribers_count ||= count_subscriptions(Subscription.where(created_at: start_date..end_date))
     end
 
     def churned_count
-      @churned_count ||= subscription_products
-        .joins(:subscriptions)
-        .merge(Subscription.where(deactivated_at: @start_date..@end_date))
-        .count
+      @churned_count ||= count_subscriptions(Subscription.where(deactivated_at: start_date..end_date))
     end
 
     def churned_mrr
-      @churned_mrr ||= churned_subscriptions.sum do |subscription|
-        calculate_mrr_cents(subscription)
-      end
+      @churned_mrr ||= churned_subscriptions.sum { |sub| calculate_mrr_cents(sub) }
     end
 
     def churned_subscriptions
-      @churned_subscriptions ||= fetch_subscriptions(from: @start_date, to: @end_date)
-        .where(deactivated_at: @start_date..@end_date)
+      @churned_subscriptions ||= fetch_subscriptions(from: start_date, to: end_date)
+        .where(deactivated_at: start_date..end_date)
+    end
+
+    def count_subscriptions(scope)
+      subscription_products.joins(:subscriptions).merge(scope).count
     end
 
     def calculate_mrr_cents(subscription)
@@ -213,21 +201,24 @@ class CreatorAnalytics::Churn
       return 0 unless payment_option&.price
 
       price = payment_option.price
+      normalize_to_monthly_revenue(price.price_cents, price.recurrence)
+    end
 
-      case price.recurrence
+    def normalize_to_monthly_revenue(price_cents, recurrence)
+      case recurrence
       when "monthly"
-        price.price_cents
+        price_cents
       when "yearly"
-        (price.price_cents / 12.0).round
+        (price_cents / 12.0).round
       when "quarterly"
-        (price.price_cents / 3.0).round
+        (price_cents / 3.0).round
       else
         0
       end
     end
 
     def subscription_products
-      @subscription_products ||= @user.products.alive.is_recurring_billing
+      @subscription_products ||= user.products.alive.is_recurring_billing
     end
 
     def fetch_subscriptions(from:, to:)
@@ -242,10 +233,21 @@ class CreatorAnalytics::Churn
     end
 
     def active_at_start_scope
-      Subscription.where("subscriptions.created_at < ?", @start_date)
+      Subscription.where("subscriptions.created_at < ?", start_date)
                   .where(
                     "subscriptions.deactivated_at IS NULL OR subscriptions.deactivated_at >= ?",
-                    @start_date
+                    start_date
                   )
+    end
+
+    def format_daily_data(daily_results)
+      daily_results.map do |record|
+        {
+          date: record[:date].to_s,
+          customer_churn_rate: record[:customer_churn_rate].to_f,
+          churned_subscribers: record[:churned_subscribers],
+          churned_mrr_cents: record[:churned_mrr_cents]
+        }
+      end
     end
 end
