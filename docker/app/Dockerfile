@@ -72,10 +72,17 @@ RUN apt-get update -y -qq \
 WORKDIR ${APP_DIR}
 
 # Bundler
-COPY Gemfile Gemfile.lock ${APP_DIR}/
+COPY Gemfile Gemfile.lock .ruby-version ${APP_DIR}/
 RUN gem install bundler:$(awk '/BUNDLED WITH/{getline; print}' Gemfile.lock | tr -d " ") \
+    && bundle config set path "${BUNDLE_PATH}" \
+    && bundle install --retry 3 --without production test \
     && gem install foreman \
-    && rm Gemfile Gemfile.lock
+    && rm -rf /usr/local/bundle/cache/*.gem \
+    && rm -rf ~/.bundle/cache
+
+# Node dependencies
+COPY package*.json ${APP_DIR}/
+RUN npm install
 
 COPY docker/app/entrypoint.sh /usr/local/bin/docker-entrypoint
 RUN chmod +x /usr/local/bin/docker-entrypoint
