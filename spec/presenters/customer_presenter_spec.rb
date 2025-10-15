@@ -124,6 +124,7 @@ describe CustomerPresenter do
           has_options: true,
           option: purchase1.variant_attributes.first.to_option,
           utm_link: nil,
+          download_count: nil,
         }
       )
 
@@ -192,6 +193,7 @@ describe CustomerPresenter do
           has_options: true,
           option: purchase2.variant_attributes.first.to_option,
           utm_link: nil,
+          download_count: 0,
         }
       )
     end
@@ -328,6 +330,56 @@ describe CustomerPresenter do
           ProductReviewVideoPresenter.new(alive_approved_video).props(pundit_user:),
           ProductReviewVideoPresenter.new(alive_pending_video).props(pundit_user:),
         )
+      end
+    end
+
+    context "purchase has downloads" do
+      let(:purchase) { create(:purchase) }
+
+      before do
+        create(:url_redirect, purchase:, uses: 5)
+      end
+
+      it "returns the download count" do
+        presenter = described_class.new(purchase: purchase.reload)
+        expect(presenter.download_count).to eq(5)
+      end
+    end
+
+    context "purchase without url_redirect" do
+      let(:purchase) { create(:purchase) }
+
+      it "returns 0 for download count" do
+        presenter = described_class.new(purchase:)
+        expect(presenter.download_count).to eq(0)
+      end
+    end
+
+    context "purchase for coffee product" do
+      let(:coffee_user) { create(:user, :eligible_for_service_products) }
+      let(:coffee_product) { create(:product, user: coffee_user, native_type: Link::NATIVE_TYPE_COFFEE) }
+      let(:purchase) { create(:purchase, link: coffee_product, seller: coffee_user) }
+
+      before do
+        create(:url_redirect, purchase:, uses: 10)
+      end
+
+      it "returns nil for download count" do
+        presenter = described_class.new(purchase: purchase.reload)
+        expect(presenter.download_count).to be_nil
+      end
+    end
+
+    context "purchase for bundle" do
+      let(:purchase) { create(:purchase, is_bundle_purchase: true) }
+
+      before do
+        create(:url_redirect, purchase:, uses: 10)
+      end
+
+      it "returns nil for download count" do
+        presenter = described_class.new(purchase: purchase.reload)
+        expect(presenter.download_count).to be_nil
       end
     end
   end

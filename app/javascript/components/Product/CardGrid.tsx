@@ -223,7 +223,7 @@ export const CardGrid = ({
   const [filetypesOpen, setFiletypesOpen] = React.useState(false);
 
   return (
-    <div className="with-sidebar">
+    <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
       {hideFilters ? null : (
         <div className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
           <header>

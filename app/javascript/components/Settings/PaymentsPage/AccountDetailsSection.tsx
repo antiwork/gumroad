@@ -1,5 +1,5 @@
 import cx from "classnames";
-import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
+import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -43,12 +43,8 @@ const AccountDetailsSection = ({
   const uid = React.useId();
 
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null) => {
-    try {
-      const countryCode: CountryCode = cast(country_code);
-      return parsePhoneNumber(phoneNumber, countryCode).format("E.164");
-    } catch {
-      return phoneNumber;
-    }
+    const countryCode: CountryCode = cast(country_code);
+    return parsePhoneNumberFromString(phoneNumber, countryCode)?.format("E.164") ?? phoneNumber;
   };
 
   return (
