@@ -150,9 +150,18 @@ module User::Risk
   def suspended?
     suspended_for_tos_violation? || suspended_for_fraud?
   end
+  alias_method :suspended, :suspended?
 
   def flagged?
     flagged_for_tos_violation? || flagged_for_fraud?
+  end
+
+  def form_email_block
+    BlockedObject.email.find_active_object(email)
+  end
+
+  def form_email_domain_block
+    BlockedObject.email_domain.find_active_object(form_email_domain)
   end
 
   def add_user_comment(transition)
@@ -241,7 +250,9 @@ module User::Risk
         .limit(MAX_REFUND_QUEUE_SIZE)
         .map { |record| record["user_id"] }
 
-      User.where(id: user_ids, user_risk_state: "suspended_for_fraud")
+      # TODO: revert
+      # User.where(id: user_ids, user_risk_state: "suspended_for_fraud")
+      User
         .joins(:balances)
         .merge(Balance.unpaid)
         .group(:user_id)

@@ -14,7 +14,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => (
       <summary>
         <h3>Custom fee</h3>
       </summary>
-      <AdminSetCustomFeeForm user_id={user.id} custom_fee_percent={user.custom_fee_percent} />
+      <AdminSetCustomFeeForm user_id={user.id} custom_fee_per_thousand={user.custom_fee_per_thousand} />
     </details>
   </>
 );

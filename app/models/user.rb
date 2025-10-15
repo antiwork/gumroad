@@ -340,6 +340,11 @@ class User < ApplicationRecord
     end
   end
 
+  alias_method :compliant, :compliant?
+  alias_method :on_probation, :on_probation?
+  alias_method :flagged_for_fraud, :flagged_for_fraud?
+  alias_method :flagged_for_tos_violation, :flagged_for_tos_violation?
+
   state_machine(:tier_state, initial: :tier_0) do
     state :tier_0, value: TIER_0
     state :tier_1, value: TIER_1
@@ -638,6 +643,10 @@ class User < ApplicationRecord
   def form_email
     return unconfirmed_email if unconfirmed_email.present?
     email if email.present?
+  end
+
+  def form_email_domain
+    Mail::Address.new(form_email).domain.presence
   end
 
   def currency_symbol

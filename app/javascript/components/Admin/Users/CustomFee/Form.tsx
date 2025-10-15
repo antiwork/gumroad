@@ -5,10 +5,10 @@ import { showAlert } from "$app/components/server-components/Alert";
 
 type AdminSetCustomFeeFormProps = {
   user_id: number;
-  custom_fee_percent: number | null;
+  custom_fee_per_thousand: number | null;
 };
 
-const AdminSetCustomFeeForm = ({ user_id, custom_fee_percent }: AdminSetCustomFeeFormProps) => (
+const AdminSetCustomFeeForm = ({ user_id, custom_fee_per_thousand }: AdminSetCustomFeeFormProps) => (
   <Form
     url={Routes.set_custom_fee_admin_user_path(user_id)}
     method="POST"
@@ -25,7 +25,7 @@ const AdminSetCustomFeeForm = ({ user_id, custom_fee_percent }: AdminSetCustomFe
             min="0"
             max="100"
             step="0.1"
-            defaultValue={custom_fee_percent ?? ""}
+            defaultValue={custom_fee_per_thousand ? custom_fee_per_thousand / 10 : ""}
             placeholder="Enter a custom fee percentage between 0 and 100. Submit blank to clear existing custom fee."
           />
           <button type="submit" className="button" disabled={isLoading} id="update-custom-fee">

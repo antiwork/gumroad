@@ -5,7 +5,6 @@ import { request, assertResponseError } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
 import { showAlert } from "$app/components/server-components/Alert";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 type UserStatsProps = {
   total: string;
@@ -23,8 +22,19 @@ type ResponseData = {
 
 const AdminUserStats = ({ user_id }: { user_id: number }) => {
   const [userStats, setUserStats] = React.useState<UserStatsProps | null>(null);
+  const [isVisible, setIsVisible] = React.useState(false);
+  const elementRef = React.useRef<HTMLUListElement>(null);
 
-  useRunOnce(() => {
+  React.useEffect(() => {
+    if (!elementRef.current) return;
+    const observer = new IntersectionObserver((entries) => setIsVisible(entries.some((entry) => entry.isIntersecting)));
+    observer.observe(elementRef.current);
+    return () => observer.disconnect();
+  }, [isVisible]);
+
+  React.useEffect(() => {
+    if (!isVisible) return;
+
     const fetchUserStats = async () => {
       try {
         const response = await request({
@@ -42,10 +52,10 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
     };
 
     void fetchUserStats();
-  });
+  }, [isVisible, user_id]);
 
   return (
-    <ul className="inline">
+    <ul ref={elementRef} className="inline">
       <li>{userStats ? `${userStats.total} total` : <Loading />}</li>
       <li>{userStats ? `${userStats.balance} balance` : <Loading />}</li>
       <li>{userStats ? `${userStats.chargeback_volume} vol CB` : <Loading />}</li>

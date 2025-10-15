@@ -7,8 +7,8 @@ type UndeleteActionProps = {
   user: User;
 };
 
-const UndeleteAction = ({ user: { id, deleted } }: UndeleteActionProps) =>
-  deleted && (
+const UndeleteAction = ({ user: { id, deleted_at } }: UndeleteActionProps) =>
+  deleted_at && (
     <AdminAction
       label="Undelete"
       url={Routes.enable_admin_user_path(id)}

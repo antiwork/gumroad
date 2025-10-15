@@ -3,10 +3,8 @@ import React from "react";
 import { formatDate } from "$app/utils/date";
 
 import { NoIcon, YesIcon } from "$app/components/Admin/Icons";
-import Loading from "$app/components/Admin/Loading";
 
 type ComplianceInfoComponentProps = {
-  isLoading: boolean;
   complianceInfo: ComplianceInfoProps | null;
 };
 
@@ -21,7 +19,7 @@ export type ComplianceInfoProps = {
   zip_code: string | null;
   country: string | null;
   country_code: string | null;
-  individual_tax_id: string | null;
+  has_individual_tax_id: boolean;
   business_name: string | null;
   business_type: string | null;
   business_street_address: string | null;
@@ -29,13 +27,11 @@ export type ComplianceInfoProps = {
   business_state: string | null;
   business_zip_code: string | null;
   business_country: string | null;
-  business_tax_id: string | null;
+  has_business_tax_id: boolean;
   created_at: string;
 };
 
-const ComplianceInfo = ({ complianceInfo, isLoading }: ComplianceInfoComponentProps) => {
-  if (isLoading) return <Loading />;
-
+const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
   if (!complianceInfo) return <div>No compliance info found.</div>;
 
   const {
@@ -49,7 +45,7 @@ const ComplianceInfo = ({ complianceInfo, isLoading }: ComplianceInfoComponentPr
     zip_code,
     country,
     country_code,
-    individual_tax_id,
+    has_individual_tax_id,
     business_name,
     business_type,
     business_street_address,
@@ -57,14 +53,14 @@ const ComplianceInfo = ({ complianceInfo, isLoading }: ComplianceInfoComponentPr
     business_state,
     business_zip_code,
     business_country,
-    business_tax_id,
+    has_business_tax_id,
     created_at,
   } = complianceInfo;
 
   return (
-    <div className="mt-4 grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2">
       <div className="paragraphs">
-        <h4 className="font-bold">Personal Info</h4>
+        <h3>Personal Info</h3>
         <dl>
           <dt>Is Business</dt>
           <dd>{is_business ? <YesIcon /> : <NoIcon />}</dd>
@@ -100,7 +96,7 @@ const ComplianceInfo = ({ complianceInfo, isLoading }: ComplianceInfoComponentPr
           </dd>
 
           <dt>Individual Tax ID Provided</dt>
-          <dd>{individual_tax_id ? <YesIcon /> : <NoIcon />}</dd>
+          <dd>{has_individual_tax_id ? <YesIcon /> : <NoIcon />}</dd>
         </dl>
       </div>
 
@@ -130,7 +126,7 @@ const ComplianceInfo = ({ complianceInfo, isLoading }: ComplianceInfoComponentPr
             <dd>{business_type}</dd>
 
             <dt>Tax ID Provided</dt>
-            <dd>{business_tax_id ? <YesIcon /> : <NoIcon />}</dd>
+            <dd>{has_business_tax_id ? <YesIcon /> : <NoIcon />}</dd>
           </dl>
         </div>
       ) : null}

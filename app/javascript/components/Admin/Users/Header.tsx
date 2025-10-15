@@ -64,21 +64,19 @@ const Header = ({ user, is_affiliate_user = false, url }: HeaderProps) => {
                 </CopyToClipboard>
               </li>
             ) : null}
-            {user.custom_fee_percent ? (
+            {user.custom_fee_per_thousand ? (
               <li>
                 <WithTooltip
                   tip="Custom fee that will be charged on all their new direct (non-discover) sales"
                   position="bottom"
                 >
-                  <span>Custom fee: {user.custom_fee_percent}%</span>
+                  <span>Custom fee: {user.custom_fee_per_thousand / 10}%</span>
                 </WithTooltip>
               </li>
             ) : null}
-            {user.has_payments ? (
-              <li>
-                <Link href={Routes.admin_user_payouts_url(user)}>Payouts</Link>
-              </li>
-            ) : null}
+            <li>
+              <Link href={Routes.admin_user_payouts_url(user)}>Payouts</Link>
+            </li>
           </ul>
 
           <AdminUserStats user_id={user.id} />

@@ -32,7 +32,6 @@ namespace :admin do
           post :sync
         end
       end
-      resource :compliance_info, only: :show
       resources :email_changes, only: :index
       resources :merchant_accounts, only: :index
       resource :payout_info, only: :show
