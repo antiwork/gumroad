@@ -1,6 +1,7 @@
 import { useForm } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
+import { subMonths } from "date-fns";
 import Errors from "$app/components/Admin/Form/Errors";
 
 type Props = {
@@ -18,16 +19,8 @@ type Errors = {
 };
 
 const AdminSalesReportsForm = ({ countries, authenticityToken }: Props) => {
-  const defaultStartDate = React.useMemo(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 1);
-    return date.toISOString().split("T")[0];
-  }, []);
-
-  const defaultEndDate = React.useMemo(() => {
-    const date = new Date();
-    return date.toISOString().split("T")[0];
-  }, []);
+  const defaultStartDate = React.useMemo(() => subMonths(new Date(), 1).toISOString().split("T")[0], []);
+  const defaultEndDate = React.useMemo(() => new Date().toISOString().split("T")[0], []);
 
   const form = useForm({
     authenticity_token: authenticityToken,
