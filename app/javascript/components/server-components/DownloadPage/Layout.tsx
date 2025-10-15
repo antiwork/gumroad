@@ -435,7 +435,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
         <>
           <span>Create an account to access all of your purchases in one place</span>
           <div>
-            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="override grid gap-4">
+            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid gap-4">
               <fieldset>
                 <input
                   type="password"

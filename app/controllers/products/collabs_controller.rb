@@ -3,13 +3,15 @@
 class Products::CollabsController < Sellers::BaseController
   before_action :authorize
 
+  layout "inertia", only: [:index]
+
   def index
     @title = "Products"
-    @props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
+    props = CollabProductsPagePresenter.new(**presenter_params).initial_page_props
 
     respond_to do |format|
-      format.html
-      format.json { render json: @props }
+      format.html { render inertia: "Products/Collabs/Index", props: }
+      format.json { render json: props }
     end
   end
 

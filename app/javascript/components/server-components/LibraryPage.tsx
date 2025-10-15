@@ -20,6 +20,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -381,7 +382,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
             </span>
           </div>
         ) : null}
-        <div className="with-sidebar">
+        <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
           {!showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9) ? (
             <div className="stack">
               <header>
@@ -522,7 +523,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
               ) : null}
             </div>
           ) : null}
-          <div className="product-card__column product-card__grid product-card-grid">
+          <ProductCardGrid>
             {filteredResults.slice(0, resultsLimit).map((result) => (
               <Card
                 key={result.purchase.id}
@@ -537,7 +538,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                 onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
               />
             ))}
-          </div>
+          </ProductCardGrid>
         </div>
         <DeleteProductModal
           deleting={deleting}

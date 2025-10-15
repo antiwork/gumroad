@@ -2,8 +2,8 @@ import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
+import { AffiliatedProduct, SortKey } from "$app/components/AffiliatedPage";
 import { PaginationProps } from "$app/components/Pagination";
-import { AffiliatedProduct, SortKey } from "$app/components/server-components/AffiliatedPage";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 type PagedAffiliatedProductsData = {

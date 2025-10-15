@@ -1,5 +1,5 @@
 import cx from "classnames";
-import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
+import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -43,16 +43,12 @@ const AccountDetailsSection = ({
   const uid = React.useId();
 
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null) => {
-    try {
-      const countryCode: CountryCode = cast(country_code);
-      return parsePhoneNumber(phoneNumber, countryCode).format("E.164");
-    } catch {
-      return phoneNumber;
-    }
+    const countryCode: CountryCode = cast(country_code);
+    return parsePhoneNumberFromString(phoneNumber, countryCode)?.format("E.164") ?? phoneNumber;
   };
 
   return (
-    <section className="override grid gap-8">
+    <section className="grid gap-8">
       {(complianceInfo.is_business ? complianceInfo.business_country !== "AE" : complianceInfo.country !== "AE") ? (
         <section>
           <fieldset>
@@ -97,7 +93,7 @@ const AccountDetailsSection = ({
         </section>
       ) : null}
       {complianceInfo.is_business ? (
-        <section className="override grid gap-8">
+        <section className="grid gap-8">
           <div
             style={{
               display: "grid",
@@ -624,7 +620,7 @@ const AccountDetailsSection = ({
           </fieldset>
         </section>
       ) : null}
-      <section className="override grid gap-8">
+      <section className="grid gap-8">
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
           <fieldset className={cx({ danger: errorFieldNames.has("first_name") })}>
             <legend>

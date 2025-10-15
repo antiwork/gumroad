@@ -1,4 +1,4 @@
-<article class="override grid gap-4 rounded border border-border bg-background p-4" data-product-id="<%= product.unique_permalink %>">
+<article class="grid gap-4 rounded border border-border bg-background p-4" data-product-id="<%= product.unique_permalink %>">
   <div class="paragraphs">
     <div style="display: flex; gap: var(--spacer-4); align-items: center">
       <%= link_to_if(product.preview_url, image_tag(cdn_url_for(product.preview_url) || asset_path("cover_placeholder.png"), style: "width: var(--form-element-height)", alt: "Preview image"), product.preview_url, target: "_blank") %>

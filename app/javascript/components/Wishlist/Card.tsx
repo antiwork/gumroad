@@ -120,8 +120,8 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
 };
 
 export const CardGrid = ({ children }: { children: React.ReactNode }) => (
-  <div className="grid" style={{ "--min-grid-absolute-size": "32rem", "--max-grid-relative-size": "50%" }}>
-    {children}
+  <div className="@container">
+    <div className="grid gap-4 @lg:grid-cols-2">{children}</div>
   </div>
 );
 

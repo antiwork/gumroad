@@ -5,6 +5,7 @@ require "shared_examples/affiliate_cookie_concern"
 require "shared_examples/authorize_called"
 require "shared_examples/collaborator_access"
 require "shared_examples/with_sorting_and_pagination"
+require "inertia_rails/rspec"
 
 def e404_test(action)
   it "404s when link isn't found" do
@@ -12,7 +13,7 @@ def e404_test(action)
   end
 end
 
-describe LinksController, :vcr do
+describe LinksController, :vcr, inertia: true do
   render_views
 
   context "within seller area" do
@@ -74,15 +75,9 @@ describe LinksController, :vcr do
 
       describe "shows the correct number of sales" do
         def expect_sales_count_in_inertia_response(expected_count)
-          data_page_match = response.body.match(/data-page="([^"]*)"/)
-          expect(data_page_match).to be_present, "Expected Inertia.js data-page attribute"
-
-          decoded_content = CGI.unescapeHTML(data_page_match[1])
-          json_data = JSON.parse(decoded_content)
-
-          products = json_data["props"]["react_products_page_props"]["products"]
+          products = inertia.props[:react_products_page_props][:products]
           expect(products).to be_present, "Expected products in Inertia.js response"
-          expect(products.first["successful_sales_count"]).to eq(expected_count)
+          expect(products.first[:successful_sales_count]).to eq(expected_count)
         end
 
         it "with a single sale" do
@@ -91,8 +86,7 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(inertia).to render_component("Products/Index")
 
           expect_sales_count_in_inertia_response(1)
         end
@@ -102,8 +96,7 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(inertia).to render_component("Products/Index")
 
           expect_sales_count_in_inertia_response(3_030)
         end
@@ -114,8 +107,7 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(inertia).to render_component("Products/Index")
 
           expect_sales_count_in_inertia_response(424_242)
         end
@@ -126,8 +118,7 @@ describe LinksController, :vcr do
           get(:index)
           expect(response).to be_successful
 
-          expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(inertia).to render_component("Products/Index")
 
           expect_sales_count_in_inertia_response(1_111)
         end
@@ -139,18 +130,11 @@ describe LinksController, :vcr do
 
           expect(response).to be_successful
 
-          expect(response.body).to include("data-page")
-          expect(response.body).to include("Products/index")
+          expect(inertia).to render_component("Products/Index")
 
-          data_page_match = response.body.match(/data-page="([^"]*)"/)
-          expect(data_page_match).to be_present
-
-          decoded_content = CGI.unescapeHTML(data_page_match[1])
-          json_data = JSON.parse(decoded_content)
-
-          products = json_data["props"]["react_products_page_props"]["products"]
+          products = inertia.props[:react_products_page_props][:products]
           expect(products).to be_present
-          expect(products.first["url_without_protocol"]).to be_present
+          expect(products.first[:url_without_protocol]).to be_present
         end
       end
     end
@@ -3007,10 +2991,16 @@ describe LinksController, :vcr do
         get :new
 
         expect(response).to be_successful
-        expect(response.body).to have_text("Publish your first product")
-        expect(assigns[:react_new_product_page_props]).to eq(
-          ProductPresenter.new_page_props(current_seller: seller)
-        )
+        expect(assigns[:title]).to eq("What are you creating?")
+
+        expect(inertia).to render_component("Products/New")
+
+        expected_props = ProductPresenter.new_page_props(current_seller: seller)
+        expected_props.each do |key, value|
+          expect(inertia.props[key]).to eq(JSON.parse(value.to_json))
+        end
+
+        expect(inertia.props[:show_orientation_text]).to eq(true)
       end
 
       it "does not show the introduction text if the user has memberships" do
@@ -3018,10 +3008,16 @@ describe LinksController, :vcr do
         get :new
 
         expect(response).to be_successful
-        expect(response.body).to have_text("What are you creating?")
-        expect(assigns[:react_new_product_page_props]).to eq(
-          ProductPresenter.new_page_props(current_seller: seller)
-        )
+        expect(assigns[:title]).to eq("What are you creating?")
+
+        expect(inertia).to render_component("Products/New")
+
+        expected_props = ProductPresenter.new_page_props(current_seller: seller)
+        expected_props.each do |key, value|
+          expect(inertia.props[key]).to eq(JSON.parse(value.to_json))
+        end
+
+        expect(inertia.props[:show_orientation_text]).to eq(false)
       end
 
       it "does not show the introduction text if the user has products" do
@@ -3029,10 +3025,16 @@ describe LinksController, :vcr do
         get :new
 
         expect(response).to be_successful
-        expect(response.body).to have_text("What are you creating?")
-        expect(assigns[:react_new_product_page_props]).to eq(
-          ProductPresenter.new_page_props(current_seller: seller)
-        )
+        expect(assigns[:title]).to eq("What are you creating?")
+
+        expect(inertia).to render_component("Products/New")
+
+        expected_props = ProductPresenter.new_page_props(current_seller: seller)
+        expected_props.each do |key, value|
+          expect(inertia.props[key]).to eq(JSON.parse(value.to_json))
+        end
+
+        expect(inertia.props[:show_orientation_text]).to eq(false)
       end
     end
 

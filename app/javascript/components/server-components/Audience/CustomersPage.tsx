@@ -904,6 +904,12 @@ const CustomerDrawer = ({
           <h5>{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
           {customer.quantity}
         </div>
+        {customer.download_count ? (
+          <div>
+            <h5>Download count</h5>
+            {customer.download_count}
+          </div>
+        ) : null}
         <div>
           <h5>Price</h5>
           <div>
@@ -2562,7 +2568,7 @@ const CommissionSection = ({
         <h3>Files</h3>
       </header>
       <section>
-        <section className="override grid gap-2">
+        <section className="grid gap-2">
           {commission.files.length ? (
             <div role="tree">
               {commission.files.map((file) => (

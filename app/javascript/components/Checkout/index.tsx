@@ -25,6 +25,7 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -212,9 +213,9 @@ export const Checkout = ({
         }
       />
       {isOpenTuple(cart.items, 1) ? (
-        <div className="override grid gap-8 p-4 md:p-8">
-          <div className="with-sidebar right lg:grid-flow-col" style={{ gridAutoColumns: "minmax(26rem, 1fr)" }}>
-            <div className="override grid gap-6">
+        <div className="grid gap-8 p-4 md:p-8">
+          <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
+            <div className="grid gap-6">
               <div className="cart" role="list">
                 {cart.items.map((item) => (
                   <CartItemComponent
@@ -347,12 +348,12 @@ export const Checkout = ({
               {recommendedProducts && recommendedProducts.length > 0 ? (
                 <section className="paragraphs">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
-                  <div className="product-card-grid narrow">
+                  <ProductCardGrid narrow>
                     {recommendedProducts.map((product, idx) => (
                       // All of this grid is off-screen. so we just eager load the first image
                       <Card key={product.id} product={product} eager={idx === 0} />
                     ))}
-                  </div>
+                  </ProductCardGrid>
                 </section>
               ) : null}
             </div>

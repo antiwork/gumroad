@@ -9,6 +9,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
@@ -222,7 +223,7 @@ export const CardGrid = ({
   const [filetypesOpen, setFiletypesOpen] = React.useState(false);
 
   return (
-    <div className="with-sidebar">
+    <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
       {hideFilters ? null : (
         <div className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
           <header>
@@ -350,13 +351,13 @@ export const CardGrid = ({
         </div>
       ) : (
         <div>
-          <div className="product-card-grid" ref={gridRef}>
+          <ProductCardGrid ref={gridRef}>
             {/* The first 4 images are above the fold, so we eagerily load them */}
             {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)
                 .map((_, i) => <div key={i} className="dummy" />)}
-          </div>
+          </ProductCardGrid>
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (
             <div className="mt-8 w-full text-center">
