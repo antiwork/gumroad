@@ -929,11 +929,22 @@ class Subscription < ApplicationRecord
     end
 
     def get_vat_id_from_original_purchase(purchase)
+      vat_id = nil
+      
       if original_purchase.purchase_sales_tax_info&.business_vat_id
-        purchase.business_vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
+        vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
       elsif original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
-        purchase.business_vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
+        vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
       end
+      
+      return unless vat_id
+      
+      purchase.business_vat_id = vat_id
+      
+      if purchase.purchase_sales_tax_info.present?
+        purchase.purchase_sales_tax_info.business_vat_id = vat_id
+        purchase.purchase_sales_tax_info.save!
+      end
     end
 
     def schedule_member_cancellation_workflow_jobs
