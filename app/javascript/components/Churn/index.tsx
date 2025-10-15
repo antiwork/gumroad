@@ -69,7 +69,10 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
     const fromDate = lightFormat(dateRange.from, "yyyy-MM-dd");
     const toDate = lightFormat(dateRange.to, "yyyy-MM-dd");
 
-    const selectedProductIds = productOptions.filter((product) => product.selected).map((product) => product.id);
+    const selectedProductIds = productOptions.reduce<string[]>((ids, { id, selected }) => {
+      if (selected) ids.push(id);
+      return ids;
+    }, []);
 
     router.reload({
       only: ["churn_data"],

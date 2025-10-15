@@ -56,7 +56,7 @@ class CreatorAnalytics::Churn
   def calculate_by_date
     @calculate_by_date ||= begin
       earliest_date = start_date - 29.days
-      all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date).load
+      all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date).to_a
 
       (start_date..end_date).map do |date|
         period_start = date - 29.days
