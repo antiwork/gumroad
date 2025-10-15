@@ -247,7 +247,6 @@ module User::Risk
         .group(:user_id)
         .having("SUM(amount_cents) > 0")
         .order(updated_at: :desc)
-        .limit(MAX_REFUND_QUEUE_SIZE)
     end
   end
 end

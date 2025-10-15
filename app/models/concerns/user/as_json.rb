@@ -4,9 +4,11 @@ module User::AsJson
   extend ActiveSupport::Concern
 
   def as_json(options = {})
+    return as_json_for_admin(impersonatable: options.delete(:impersonatable)) if options.delete(:admin)
+
     result =
       if options[:internal_use] || valid_api_scope?(options)
-        super(only: %i[name bio twitter_handle currency_type])
+        super(only: %i[name bio twitter_handle currency_type], methods: options[:methods], include: options[:include])
           .merge(common_fields_for_as_json)
           .merge(profile_url: avatar_url, email: form_email)
       else
@@ -24,6 +26,51 @@ module User::AsJson
     end
 
     result.with_indifferent_access
+  end
+
+  def as_json_for_admin(impersonatable: false)
+    as_json(
+      internal_use: true,
+      methods: [
+        :id,
+        :display_name,
+        :form_email,
+        :blocked_by_form_email_at,
+        :form_email_domain,
+        :blocked_by_form_email_domain_at,
+        :avatar_url,
+        :username,
+        :subdomain_with_protocol,
+        :support_email,
+        :custom_fee_percent,
+        :has_payments,
+        :updated_at,
+        :verified,
+        :deleted,
+        :deleted_at,
+        :all_adult_products,
+        :unpaid_balance_cents,
+        :compliant,
+        :suspended,
+        :flagged_for_fraud,
+        :flagged_for_tos_violation,
+        :on_probation,
+        :disable_paypal_sales
+      ],
+      include: {
+        admin_manageable_user_memberships: {
+          include: {
+            seller: {
+              only: [:id],
+              methods: [:avatar_url, :display_name_or_email]
+            }
+          }
+        }
+      }
+    ).merge(
+      impersonatable:,
+      user_risk_state: user_risk_state.humanize
+    )
   end
 
   private
