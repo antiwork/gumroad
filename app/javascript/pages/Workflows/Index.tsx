@@ -1,7 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { Workflow } from "$app/data/workflows";
+import { Workflow } from "$app/types/workflow";
 
 import WorkflowList from "$app/components/WorkflowsPage/WorkflowList";
 

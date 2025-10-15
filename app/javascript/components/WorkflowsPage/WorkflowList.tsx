@@ -1,10 +1,8 @@
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
-import { Workflow, deleteWorkflow } from "$app/data/workflows";
+import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
@@ -25,7 +23,7 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
   const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
-    <Link href={Routes.new_workflow_url()} className="button accent" inert={!canManageWorkflow || undefined}>
+    <Link href="/workflows/new" className="button accent" inert={!canManageWorkflow || undefined}>
       New workflow
     </Link>
   );
@@ -67,18 +65,20 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
                   ) : (
                     <Button
                       color="danger"
-                      onClick={asyncVoid(async () => {
-                        try {
-                          setDeletingWorkflow({ ...deletingWorkflow, state: "deleting" });
-                          await deleteWorkflow(deletingWorkflow.id);
-                          setWorkflows(workflows.filter((workflow) => workflow.external_id !== deletingWorkflow.id));
-                          setDeletingWorkflow(null);
-                          showAlert("Workflow deleted!", "success");
-                        } catch (e) {
-                          assertResponseError(e);
-                          showAlert("Sorry, something went wrong. Please try again.", "error");
-                        }
-                      })}
+                      onClick={() => {
+                        setDeletingWorkflow({ ...deletingWorkflow, state: "deleting" });
+                        router.delete(`/workflows/${deletingWorkflow.id}`, {
+                          onSuccess: () => {
+                            setWorkflows(workflows.filter((workflow) => workflow.external_id !== deletingWorkflow.id));
+                            setDeletingWorkflow(null);
+                            showAlert("Workflow deleted!", "success");
+                          },
+                          onError: () => {
+                            setDeletingWorkflow(null);
+                            showAlert("Sorry, something went wrong. Please try again.", "error");
+                          },
+                        });
+                      }}
                     >
                       Delete
                     </Button>
@@ -128,7 +128,7 @@ const WorkflowRow = ({
         <div className="button-group">
           <Link
             className="button"
-            href={Routes.edit_workflow_url(workflow.external_id)}
+            href={`/workflows/${workflow.external_id}/edit`}
             aria-label="Edit workflow"
             inert={!canManageWorkflow || undefined}
           >
@@ -188,7 +188,7 @@ const WorkflowRow = ({
       <div className="placeholder">
         <h4>
           No emails yet,{" "}
-          <Link href={Routes.workflow_emails_url(workflow.external_id)} inert={!canManageWorkflow || undefined}>
+          <Link href={`/workflows/${workflow.external_id}/emails`} inert={!canManageWorkflow || undefined}>
             add one
           </Link>
         </h4>

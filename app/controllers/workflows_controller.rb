@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class WorkflowsController < Sellers::BaseController
-  before_action :set_workflow, only: %i[edit emails]
-  before_action :authorize_workflow, only: %i[edit emails]
+  before_action :set_workflow, only: %i[edit update destroy]
+  before_action :authorize_workflow, only: %i[edit update destroy]
 
   layout "inertia"
 
@@ -16,25 +16,43 @@ class WorkflowsController < Sellers::BaseController
 
   def new
     authorize Workflow
-    create_user_event("workflows_view")
 
     workflow_presenter = WorkflowPresenter.new(seller: current_seller)
     render inertia: "Workflows/New", props: workflow_presenter.new_page_react_props
   end
 
   def edit
-     create_user_event("workflows_view")
+    create_user_event("workflows_view")
 
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Edit", props: workflow_presenter.edit_page_react_props
   end
 
-  def emails
-     create_user_event("workflows_view")
+  def create
+    authorize Workflow
 
-    workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-    render inertia: "Workflows/Emails", props: workflow_presenter.edit_page_react_props
+    success, message = save_workflow
+    if success
+      redirect_to workflow_emails_path(@workflow.external_id), notice: "Workflow created successfully!"
+    else
+      redirect_to new_workflow_path, alert: message
+    end
   end
+
+  def update
+    success, message = save_workflow
+    if success
+      redirect_to workflow_emails_path(@workflow.external_id), notice: "Workflow updated successfully!"
+    else
+      redirect_to edit_workflow_path(@workflow.external_id), alert: message
+    end
+  end
+
+  def destroy
+    @workflow.mark_deleted!
+    redirect_to workflows_path, notice: "Workflow deleted successfully!"
+  end
+
 
   private
     def set_title
@@ -49,5 +67,30 @@ class WorkflowsController < Sellers::BaseController
 
     def authorize_workflow
       authorize @workflow
+    end
+
+    def save_workflow
+      fetch_product_and_enforce_ownership if [Workflow::PRODUCT_TYPE, Workflow::VARIANT_TYPE].include?(workflow_params[:workflow_type])
+
+      service = Workflow::ManageService.new(seller: current_seller, params: workflow_params, product: @product, workflow: @workflow)
+      @workflow ||= service.workflow
+      service.process
+    end
+
+    def workflow_params
+      params.require(:workflow).permit(
+        :name, :workflow_type, :variant_external_id, :workflow_trigger,
+        :paid_more_than, :paid_less_than, :bought_from,
+        :created_after, :created_before, :permalink,
+        :send_to_past_customers, :save_action_name,
+        bought_products: [], not_bought_products: [], affiliate_products: [],
+        bought_variants: [], not_bought_variants: [],
+      )
+    end
+
+
+    def fetch_product_and_enforce_ownership
+      @product = current_seller.products.find_by_permalink(workflow_params[:permalink])
+      e404 unless @product
     end
 end

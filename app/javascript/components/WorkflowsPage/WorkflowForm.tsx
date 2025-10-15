@@ -6,15 +6,12 @@ import {
   WorkflowFormContext,
   Workflow,
   WorkflowType,
-  createWorkflow,
   LegacyWorkflowTrigger,
-  updateWorkflow,
   SaveActionName,
   ProductOption,
   VariantOption,
-} from "$app/data/workflows";
+} from "$app/types/workflow";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
@@ -256,25 +253,57 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       save_action_name: saveActionName,
     };
 
-    try {
-      setIsSaving(true);
-      const response = await (workflow ? updateWorkflow(workflow.external_id, payload) : createWorkflow(payload));
-      if (response.success) {
-        if (saveActionName === "save") {
-          showAlert("Changes saved!", "success");
-          router.visit(Routes.workflow_emails_url(response.workflow_id));
-        } else {
-          showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
-          router.reload();
-        }
-      } else {
-        showAlert(response.message, "error");
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    } finally {
-      setIsSaving(false);
+    setIsSaving(true);
+
+    const formData = new FormData();
+    formData.append("workflow[name]", payload.name);
+    formData.append("workflow[workflow_type]", payload.workflow_type);
+    formData.append("workflow[workflow_trigger]", payload.workflow_trigger || "");
+    formData.append("workflow[bought_products]", JSON.stringify(payload.bought_products));
+    formData.append("workflow[not_bought_products]", JSON.stringify(payload.not_bought_products));
+    formData.append("workflow[bought_variants]", JSON.stringify(payload.bought_variants));
+    formData.append("workflow[not_bought_variants]", JSON.stringify(payload.not_bought_variants));
+    formData.append("workflow[variant_external_id]", payload.variant_external_id || "");
+    formData.append("workflow[permalink]", payload.permalink || "");
+    formData.append("workflow[paid_more_than]", payload.paid_more_than?.toString() || "");
+    formData.append("workflow[paid_less_than]", payload.paid_less_than?.toString() || "");
+    formData.append("workflow[created_after]", payload.created_after || "");
+    formData.append("workflow[created_before]", payload.created_before || "");
+    formData.append("workflow[bought_from]", payload.bought_from || "");
+    formData.append("workflow[affiliate_products]", JSON.stringify(payload.affiliate_products));
+    formData.append("workflow[send_to_past_customers]", payload.send_to_past_customers.toString());
+    formData.append("workflow[save_action_name]", payload.save_action_name);
+
+    if (workflow) {
+      router.patch(`/workflows/${workflow.external_id}`, formData, {
+        onSuccess: () => {
+          setIsSaving(false);
+          if (saveActionName === "save") {
+            showAlert("Changes saved!", "success");
+          } else {
+            showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
+          }
+        },
+        onError: () => {
+          setIsSaving(false);
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+        },
+      });
+    } else {
+      router.post("/workflows", formData, {
+        onSuccess: () => {
+          setIsSaving(false);
+          if (saveActionName === "save") {
+            showAlert("Changes saved!", "success");
+          } else {
+            showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
+          }
+        },
+        onError: () => {
+          setIsSaving(false);
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+        },
+      });
     }
   });
 

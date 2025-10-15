@@ -12,16 +12,15 @@ import {
   Workflow,
   InstallmentDeliveryTimePeriod,
   INSTALLMENT_DELIVERY_TIME_PERIODS,
-  saveWorkflowInstallments,
   Installment,
   SaveActionName,
   AbandonedCartProduct,
-} from "$app/data/workflows";
+} from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request } from "$app/utils/request";
+import { request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
@@ -244,10 +243,16 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
         },
       };
 
-      try {
-        setIsSaving(true);
-        const response = await saveWorkflowInstallments(workflow.external_id, payload);
-        if (response.success) {
+      setIsSaving(true);
+
+      const formData = new FormData();
+      formData.append("workflow[send_to_past_customers]", payload.workflow.send_to_past_customers.toString());
+      formData.append("workflow[save_action_name]", payload.workflow.save_action_name);
+      formData.append("workflow[installments]", JSON.stringify(payload.workflow.installments));
+
+      router.patch(`/workflows/${workflow.external_id}/installments`, formData, {
+        onSuccess: () => {
+          setIsSaving(false);
           if (sendPreviewForEmailId) {
             showAlert("A preview has been sent to your email.", "success");
           } else {
@@ -260,28 +265,13 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
               "success",
             );
           }
-          setExpandedEmailIds((prev) => {
-            const updated = new Set(prev);
-            Object.entries(response.old_and_new_installment_id_mapping).forEach(([oldId, newId]) => {
-              if (updated.has(oldId) && oldId !== newId) {
-                updated.delete(oldId);
-                updated.add(newId);
-              }
-            });
-            return updated;
-          });
           router.reload();
-          setEmails(installmentsToEmails(response.workflow.installments));
-          filesDispatch({ type: "reset", files: installmentsFilesToFilesState(response.workflow.installments) });
-        } else {
-          showAlert(response.message, "error");
-        }
-      } catch (e) {
-        assertResponseError(e);
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      } finally {
-        setIsSaving(false);
-      }
+        },
+        onError: () => {
+          setIsSaving(false);
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+        },
+      });
     },
   );
   const isBusy =
