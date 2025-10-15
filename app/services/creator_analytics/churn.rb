@@ -64,45 +64,41 @@ class CreatorAnalytics::Churn
   end
 
   private
-          def calculate_for_period(period_start, period_end, subscriptions)
-            # Single pass through subscriptions to calculate all metrics
-            active_at_start = 0
-            new_subscribers = 0
-            churned_subs = []
+    def calculate_for_period(period_start, period_end, subscriptions)
+      active_at_start = 0
+      new_subscribers = 0
+      churned_subs = []
 
-            subscriptions.each do |sub|
-              # Check if subscription was active at start of period
-              if sub.created_at < period_start &&
-                 (sub.deactivated_at.nil? || sub.deactivated_at >= period_start)
-                active_at_start += 1
-              end
+      subscriptions.each do |sub|
+        if sub.created_at < period_start &&
+           (sub.deactivated_at.nil? || sub.deactivated_at >= period_start)
+          active_at_start += 1
+        end
 
-              # Check if subscription was created during period
-              if sub.created_at >= period_start && sub.created_at <= period_end
-                new_subscribers += 1
-              end
+        if sub.created_at >= period_start && sub.created_at <= period_end
+          new_subscribers += 1
+        end
 
-              # Check if subscription churned during period
-              if sub.deactivated_at &&
-                 sub.deactivated_at >= period_start &&
-                 sub.deactivated_at <= period_end
-                churned_subs << sub
-              end
-            end
+        if sub.deactivated_at &&
+           sub.deactivated_at >= period_start &&
+           sub.deactivated_at <= period_end
+          churned_subs << sub
+        end
+      end
 
-            churned_count = churned_subs.count
-            churned_mrr = churned_subs.sum { |sub| calculate_mrr_cents(sub) }
+      churned_count = churned_subs.count
+      churned_mrr = churned_subs.sum { |sub| calculate_mrr_cents(sub) }
 
-            total_base = active_at_start + new_subscribers
-            churn_rate = total_base.zero? ? 0.0 : (churned_count.to_f / total_base * 100).round(2)
+      total_base = active_at_start + new_subscribers
+      churn_rate = total_base.zero? ? 0.0 : (churned_count.to_f / total_base * 100).round(2)
 
-            {
-              date: period_end,
-              customer_churn_rate: churn_rate,
-              churned_subscribers: churned_count,
-              churned_mrr_cents: churned_mrr
-            }
-          end
+      {
+        date: period_end,
+        customer_churn_rate: churn_rate,
+        churned_subscribers: churned_count,
+        churned_mrr_cents: churned_mrr
+      }
+    end
 
     def total_subscriber_base
       @total_subscriber_base ||= active_at_start_count + new_subscribers_count
