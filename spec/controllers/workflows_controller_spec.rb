@@ -9,7 +9,7 @@ describe WorkflowsController, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:user) }
-  let(:workflow) { create(:workflow, user: seller) }
+  let(:workflow) { create(:workflow, seller: seller) }
 
   include_context "with user signed in as admin for seller"
 
@@ -42,6 +42,7 @@ describe WorkflowsController, type: :controller, inertia: true do
   describe "GET edit" do
     it_behaves_like "authorize called for action", :get, :edit do
       let(:record) { workflow }
+      let(:request_params) { { id: workflow.external_id } }
     end
 
     it "renders successfully with Inertia" do
@@ -54,8 +55,7 @@ describe WorkflowsController, type: :controller, inertia: true do
 
     context "when workflow doesn't exist" do
       it "returns 404" do
-        get :edit, params: { id: "nonexistent" }
-        expect(response).to have_http_status(:not_found)
+        expect { get :edit, params: { id: "nonexistent" } }.to raise_error(ActionController::RoutingError)
       end
     end
   end
@@ -63,6 +63,7 @@ describe WorkflowsController, type: :controller, inertia: true do
   describe "GET emails" do
     it_behaves_like "authorize called for action", :get, :emails do
       let(:record) { workflow }
+      let(:request_params) { { id: workflow.external_id } }
     end
 
     it "renders successfully with Inertia" do
@@ -75,8 +76,7 @@ describe WorkflowsController, type: :controller, inertia: true do
 
     context "when workflow doesn't exist" do
       it "returns 404" do
-        get :emails, params: { id: "nonexistent" }
-        expect(response).to have_http_status(:not_found)
+        expect { get :emails, params: { id: "nonexistent" } }.to raise_error(ActionController::RoutingError)
       end
     end
   end
