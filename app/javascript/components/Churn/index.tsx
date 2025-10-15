@@ -30,7 +30,7 @@ import placeholder from "$assets/images/placeholders/sales.png";
 
 export type ChurnProps = {
   has_subscription_products: boolean;
-  initialData?: ChurnData | null;
+  churn_data: ChurnData | null;
 };
 
 const isChurnData = (data: unknown): data is ChurnData =>
@@ -41,9 +41,9 @@ const isChurnData = (data: unknown): data is ChurnData =>
   "start_date" in data &&
   "end_date" in data;
 
-const Churn = ({ has_subscription_products, initialData }: ChurnProps) => {
+const Churn = ({ has_subscription_products, churn_data }: ChurnProps) => {
   const dateRange = useAnalyticsDateRange();
-  const [data, setData] = React.useState<ChurnData | null>(initialData || null);
+  const [data, setData] = React.useState<ChurnData | null>(churn_data || null);
 
   const hasContent = has_subscription_products;
 
