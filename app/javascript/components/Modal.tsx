@@ -67,7 +67,7 @@ export const Modal = ({
       {title ? (
         <h2 id={id} className={classNames("flex justify-between gap-4 items-start")}>
           {title}
-          {allowClose ? <button type="button" className={classNames("text-base/[1.4rem] after:text-base after:content-['\00a0'] after:inline after:bg-current after:min-h-[max(1lh,1em)] after:w-[1em] after:mask-center after:mask-size-[120%] after:mask-no-repeat after:shrink-0")} aria-label="Close" onClick={dispatchClose} /> : null}
+          {allowClose ? <button type="button" className={classNames("text-base/[1.4rem] after:icon-x after:text-base after:content-['\00a0'] after:inline after:bg-current after:min-h-[max(1lh,1em)] after:w-[1em] after:mask-center after:mask-size-[120%] after:mask-no-repeat after:shrink-0")} aria-label="Close" onClick={dispatchClose} /> : null}
         </h2>
       ) : null}
       {children}
