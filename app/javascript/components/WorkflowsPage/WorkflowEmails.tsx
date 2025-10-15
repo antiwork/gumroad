@@ -298,35 +298,19 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
           navigation={<EditPageNavigation workflowExternalId={workflow.external_id} />}
           actions={
             <>
-              {isBusy ? (
-                <button className="button" disabled>
-                  {workflow.published ? (
-                    <>
-                      <Icon name="x-square" />
-                      Cancel
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="arrow-left" />
-                      Back
-                    </>
-                  )}
-                </button>
-              ) : (
-                <Link href={Routes.workflows_url()} className="button">
-                  {workflow.published ? (
-                    <>
-                      <Icon name="x-square" />
-                      Cancel
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="arrow-left" />
-                      Back
-                    </>
-                  )}
-                </Link>
-              )}
+              <Link href={Routes.workflows_url()} className="button" inert={isBusy || undefined}>
+                {workflow.published ? (
+                  <>
+                    <Icon name="x-square" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <Icon name="arrow-left" />
+                    Back
+                  </>
+                )}
+              </Link>
               <Button color="primary" disabled={isBusy} onClick={() => handleSave()}>
                 Save changes
               </Button>

@@ -24,14 +24,10 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
   const loggedInUser = useLoggedInUser();
   const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
-  const newWorkflowButton = canManageWorkflow ? (
-    <Link href={Routes.new_workflow_url()} className="button accent">
+  const newWorkflowButton = (
+    <Link href={Routes.new_workflow_url()} className="button accent" inert={!canManageWorkflow || undefined}>
       New workflow
     </Link>
-  ) : (
-    <button className="button accent" disabled>
-      New workflow
-    </button>
   );
   const [deletingWorkflow, setDeletingWorkflow] = React.useState<{
     id: string;
@@ -130,15 +126,14 @@ const WorkflowRow = ({
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
         {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="button-group">
-          {canManageWorkflow ? (
-            <Link className="button" href={Routes.edit_workflow_url(workflow.external_id)} aria-label="Edit workflow">
-              <Icon name="pencil" />
-            </Link>
-          ) : (
-            <button className="button" disabled aria-label="Edit workflow">
-              <Icon name="pencil" />
-            </button>
-          )}
+          <Link
+            className="button"
+            href={Routes.edit_workflow_url(workflow.external_id)}
+            aria-label="Edit workflow"
+            inert={!canManageWorkflow || undefined}
+          >
+            <Icon name="pencil" />
+          </Link>
           <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
             <Icon name="trash2" />
           </Button>
@@ -192,13 +187,10 @@ const WorkflowRow = ({
       {header}
       <div className="placeholder">
         <h4>
-          {canManageWorkflow ? (
-            <>
-              No emails yet, <Link href={Routes.workflow_emails_url(workflow.external_id)}>add one</Link>
-            </>
-          ) : (
-            <>No emails yet, add one</>
-          )}
+          No emails yet,{" "}
+          <Link href={Routes.workflow_emails_url(workflow.external_id)} inert={!canManageWorkflow || undefined}>
+            add one
+          </Link>
         </h4>
       </div>
     </section>
