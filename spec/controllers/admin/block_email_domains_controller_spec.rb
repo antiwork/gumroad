@@ -20,7 +20,6 @@ describe Admin::BlockEmailDomainsController, type: :controller, inertia: true do
       get :show
 
       expect(response).to be_successful
-      expect(response.body).to include("data-page")
       expect(inertia.component).to eq "Admin/BlockEmailDomains/Show"
     end
   end
@@ -35,6 +34,7 @@ describe Admin::BlockEmailDomainsController, type: :controller, inertia: true do
         put :update, params: { email_domains: { identifiers: } }
         expect(BlockObjectWorker.jobs.size).to eq(2)
         expect(response).to redirect_to(admin_block_email_domains_url)
+        expect(flash[:notice]).to eq "Email domains blocked successfully!"
       end
 
       it "does not pass expiry date to BlockObjectWorker" do
@@ -52,6 +52,7 @@ describe Admin::BlockEmailDomainsController, type: :controller, inertia: true do
         put :update, params: { email_domains: { identifiers: } }
         expect(BlockObjectWorker.jobs.size).to eq(2)
         expect(response).to redirect_to(admin_block_email_domains_url)
+        expect(flash[:notice]).to eq "Email domains blocked successfully!"
       end
 
       it "does not pass expiry date to BlockObjectWorker" do

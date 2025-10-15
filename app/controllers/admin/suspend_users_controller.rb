@@ -23,7 +23,7 @@ class Admin::SuspendUsersController < Admin::BaseController
 
     SuspendUsersWorker.perform_async(current_user.id, user_ids, reason, additional_notes)
 
-    redirect_to admin_suspend_users_url, notice: "User suspension in progress!", status: :see_other, inertia: {}
+    redirect_to admin_suspend_users_url, notice: "User suspension in progress!", status: :see_other
   end
 
   private
