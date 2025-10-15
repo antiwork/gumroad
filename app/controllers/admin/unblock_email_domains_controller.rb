@@ -10,7 +10,7 @@ class Admin::UnblockEmailDomainsController < Admin::BaseController
 
   def update
     schedule_mass_unblock(identifiers: email_domains_params[:identifiers])
-    redirect_to admin_unblock_email_domains_url, status: :see_other, inertia: {}
+    redirect_to admin_unblock_email_domains_url, status: :see_other, notice: "Email domains unblocked successfully!"
   end
 
   private

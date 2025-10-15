@@ -1,8 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { showAlert } from "$app/components/server-components/Alert";
-
 type PageProps = {
   authenticity_token: string;
   suspend_reasons: string[];
@@ -36,10 +34,7 @@ const SuspendUsers = () => {
     event.preventDefault();
 
     form.put(Routes.admin_suspend_users_path(), {
-      onSuccess: () => {
-        showAlert("User suspension in progress!", "success");
-        form.reset();
-      },
+      onSuccess: () => form.reset(),
     });
   };
 
