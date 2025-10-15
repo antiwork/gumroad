@@ -34,6 +34,7 @@ import { Popover } from "$app/components/Popover";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { Modal } from "$app/components/Modal";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -659,6 +660,8 @@ const Form = ({
     pay_in_installments: false,
   };
 
+  const [isFormPreviewOpen, setIsFormPreviewOpen] = React.useState(true);
+
   const useLoadCartItem = (productId: string | null) => {
     React.useEffect(() => {
       if (!productId || cartItems[productId]) return;
@@ -928,11 +931,12 @@ const Form = ({
           </section>
         </form>
         <CheckoutPreview cartItem={previewCartItem}>
-          <dialog open aria-labelledby={`${uid}preview`}>
-            <header>
-              <h2 id={`${uid}preview`}>{offerText.value}</h2>
-              <button className="close" />
-            </header>
+          <Modal
+            open={isFormPreviewOpen}
+            title={offerText.value}
+            allowClose={true}
+            onClose={() => setIsFormPreviewOpen(false)}
+          >
             {isCrossSell ? (
               <CrossSellModal
                 crossSell={{
@@ -1005,7 +1009,7 @@ const Form = ({
                 decline={() => {}}
               />
             )}
-          </dialog>
+          </Modal>
         </CheckoutPreview>
       </div>
     </>
