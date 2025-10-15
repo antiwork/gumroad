@@ -116,9 +116,9 @@ describe Admin::SalesReportsController, type: :controller, inertia: true do
 
         expect(session[:inertia_errors]).to eq({
                                                  sales_report: {
-                                                   country_code: "Please select a country",
-                                                   start_date: "Invalid date format. Please use YYYY-MM-DD format",
-                                                   end_date: "Invalid date format. Please use YYYY-MM-DD format"
+                                                   country_code: ["Please select a country"],
+                                                   start_date: ["Invalid date format. Please use YYYY-MM-DD format"],
+                                                   end_date: ["Invalid date format. Please use YYYY-MM-DD format"]
                                                  }
                                                })
       end

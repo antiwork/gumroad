@@ -1,6 +1,7 @@
 import { useForm } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
+import Errors from "$app/components/Admin/Form/Errors";
 
 type Props = {
   countries: [string, string][];
@@ -8,11 +9,11 @@ type Props = {
 };
 
 type Errors = {
-  authenticity_token?: string;
+  authenticity_token?: string[];
   sales_report?: {
-    country_code?: string;
-    start_date?: string;
-    end_date?: string;
+    country_code?: string[];
+    start_date?: string[];
+    end_date?: string[];
   };
 };
 
@@ -70,7 +71,7 @@ const AdminSalesReportsForm = ({ countries, authenticityToken }: Props) => {
             </option>
           ))}
         </select>
-        {errors.sales_report?.country_code ? <p className="text-red">{errors.sales_report.country_code}</p> : null}
+        <Errors errors={errors?.sales_report?.country_code} label="Country code" />
 
         <label htmlFor="start_date">Start date</label>
         <input
@@ -83,7 +84,7 @@ const AdminSalesReportsForm = ({ countries, authenticityToken }: Props) => {
           }
           value={form.data.sales_report.start_date}
         />
-        {errors.sales_report?.start_date ? <p className="text-red">{errors.sales_report.start_date}</p> : null}
+        <Errors errors={errors?.sales_report?.start_date} label="Start date" />
 
         <label htmlFor="end_date">End date</label>
         <input
@@ -96,7 +97,7 @@ const AdminSalesReportsForm = ({ countries, authenticityToken }: Props) => {
           }
           value={form.data.sales_report.end_date}
         />
-        {errors.sales_report?.end_date ? <p className="text-red">{errors.sales_report.end_date}</p> : null}
+        <Errors errors={errors?.sales_report?.end_date} label="End date" />
 
         <button type="submit" className="button primary" disabled={form.processing}>
           {form.processing ? "Generating..." : "Generate report"}
