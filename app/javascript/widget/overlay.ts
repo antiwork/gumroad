@@ -8,19 +8,21 @@ const script = document.querySelector<HTMLScriptElement>("script[src*='/js/gumro
 const customDomain = script ? new URL(script.src).host : undefined;
 
 const overlay = document.createElement("div");
-overlay.className = "overlay";
+overlay.className = "fixed inset-0 box-border h-screen w-screen overflow-scroll bg-black/80 p-4 lg:px-[max((100%-71.25rem)/2,2rem)] lg:py-8";
 overlay.style.display = "none";
 
 const overlayCloseButton = document.createElement("button");
-overlayCloseButton.classList.add("close-button");
+overlayCloseButton.className = "button filled fixed top-3 right-3";
 overlayCloseButton.innerHTML = '<span class="icon icon-x"></span>';
 overlay.appendChild(overlayCloseButton);
 
 const overlayIframe = document.createElement("iframe");
+overlayIframe.className = "w-full border-0";
 overlay.appendChild(overlayIframe);
 
 const progressbar = document.createElement("div");
 progressbar.setAttribute("role", "progressbar");
+progressbar.className = "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2";
 progressbar.style.display = "none";
 
 const registerButton = (button: HTMLAnchorElement) => {
