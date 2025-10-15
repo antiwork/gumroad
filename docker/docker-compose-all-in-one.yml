@@ -1,10 +1,14 @@
 # https://docs.docker.com/compose/compose-file/
 
+x-service-healthy: &service_healthy
+  condition: service_healthy
+
 services:
   app:
     build:
       context: ..
       dockerfile: docker/app/Dockerfile
+    restart: unless-stopped
     env_file:
       - ../.env
     environment:
@@ -41,16 +45,23 @@ services:
       - bundle:/bundle_path
       - node_modules:/workspace/node_modules
     depends_on:
-      - db
-      - redis
-      - mongo
-      - elasticsearch
-      - memcached
+      db: *service_healthy
+      redis: *service_healthy
+      mongo: *service_healthy
+      elasticsearch: *service_healthy
+      memcached: *service_healthy
     tty: true
     stdin_open: true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/healthcheck || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
   db:
     image: mysql:8.0.32
+    restart: unless-stopped
     volumes:
       - mysql_data:/var/lib/mysql
     environment:
@@ -62,34 +73,69 @@ services:
       - "--default-authentication-plugin=mysql_native_password"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--character-set-server=utf8mb4"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
 
   redis:
     image: redis:7.0.7
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   mongo:
     image: mongo:3.6.16
+    restart: unless-stopped
     volumes:
       - mongo_data:/data/db
     command: "mongod --smallfiles"
+    healthcheck:
+      test: ["CMD-SHELL", "mongo --quiet --eval 'db.runCommand({ ping: 1 })' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 
   elasticsearch:
     image: elasticsearch:7.9.3
+    restart: unless-stopped
     environment:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - "discovery.type=single-node"
     volumes:
-      - elasticsearch7data:/data
+      - elasticsearch7data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
 
   memcached:
-    image: memcached:1.6.39
+    image: memcached:1.6.39-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "printf 'version\r\n' | nc -w 2 127.0.0.1 11211 | grep -q VERSION"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   nginx:
     image: nginx:1.23.3
+    restart: unless-stopped
     depends_on:
-      - app
+      app: *service_healthy
     volumes:
       - ./local-nginx/gumroad_dev_all_in_one.conf:/etc/nginx/conf.d/default.conf:Z
       - ./local-nginx/generate_dev_certs.sh:/docker-entrypoint.d/00-generate_dev_certs.sh:Z
@@ -99,6 +145,12 @@ services:
       - 8081:8081
       - 443:443
       - 3035:3035
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
 volumes:
   elasticsearch7data:
