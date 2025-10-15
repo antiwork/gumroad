@@ -269,7 +269,6 @@ const MenubarItem = ({
             if (newSelectedItem === selectedItem) handleToggleMenu(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          className="flex w-48 flex-col"
         />
       </div>
     </div>
@@ -344,7 +343,6 @@ const OverlayMenu = ({
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          className="fixed h-full w-80 max-w-[calc(100vw-1.25rem)] overflow-y-auto rounded-none!"
         />
       </div>
     </>
@@ -358,7 +356,6 @@ const ItemsList = ({
   open,
   onSelectItem,
   footer,
-  className,
 }: {
   menuId?: string;
   menuItem: MenuItemWithChildren;
@@ -366,7 +363,6 @@ const ItemsList = ({
   open: boolean;
   onSelectItem?: SelectItemHandler;
   footer?: React.ReactNode;
-  className?: string;
 }) => {
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
   React.useEffect(() => setDisplayedItem(initialMenuItem), [open]);
@@ -377,7 +373,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={classNames("overflow-hidden border-none! p-0! shadow-none!", className)}
+      className="fixed flex h-full w-80 max-w-[calc(100vw-1.25rem)] flex-col overflow-x-hidden overflow-y-auto rounded-none! border-none! p-0! shadow-none! lg:static lg:w-48 lg:max-w-none lg:overflow-y-hidden lg:rounded-sm"
     >
       {footer}
 
@@ -390,7 +386,7 @@ const ItemsList = ({
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
-          className="shrink-0 justify-normal gap-2 bg-inherit! p-4! whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!"
+          className="shrink-0 justify-normal gap-2 bg-inherit! p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!"
           role="menuitem"
         >
           <Icon name="outline-cheveron-left" />
@@ -401,7 +397,7 @@ const ItemsList = ({
         <a
           href={displayedItem.href}
           onClick={(e) => onSelectItem?.(displayedItem, e)}
-          className="shrink-0 justify-between gap-2 !p-4 whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!"
+          className="shrink-0 justify-between gap-2 p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!"
           role="menuitem"
         >
           All {displayedItem.label}
@@ -419,7 +415,7 @@ const ItemsList = ({
             } else return onSelectItem?.(item, e);
           }}
           className={classNames(
-            "shrink-0 justify-between gap-2 !p-4 whitespace-normal underline hover:bg-primary! hover:text-primary-contrast!",
+            "shrink-0 justify-between gap-2 p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!",
             {
               "flex! items-center! no-underline!": item.children.length,
             },
