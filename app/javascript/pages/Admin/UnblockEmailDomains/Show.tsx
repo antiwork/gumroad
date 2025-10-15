@@ -7,7 +7,6 @@ const AdminUnblockEmailDomains = () => (
     action={Routes.admin_unblock_email_domains_path()}
     header="To suspend email domains, please enter them separated by comma or newline."
     buttonLabel="Unblock email domains"
-    noticeMessage="Unblocking email domains in progress!"
   />
 );
 

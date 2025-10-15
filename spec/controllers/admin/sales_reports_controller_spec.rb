@@ -2,46 +2,37 @@
 
 require "spec_helper"
 require "shared_examples/admin_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe Admin::SalesReportsController do
+describe Admin::SalesReportsController, type: :controller, inertia: true do
   render_views
 
   it_behaves_like "inherits from Admin::BaseController"
 
   let(:admin_user) { create(:admin_user) }
+
   before(:each) do
     sign_in admin_user
   end
 
   describe "GET index" do
+    let(:job_history) { '{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}' }
+
+    before do
+      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return([job_history])
+    end
+
     it "renders the page" do
       get :index
 
       expect(response).to be_successful
-      expect(response).to render_template(:index)
-    end
+      expect(inertia.component).to eq "Admin/SalesReports/Index"
 
-    it "sets React component props" do
-      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
-
-      get :index
-
-      expect(assigns(:react_component_props)).to be_present
-      expect(assigns(:react_component_props)[:title]).to eq("Sales reports")
-      expect(assigns(:react_component_props)[:countries]).to be_present
-      expect(assigns(:react_component_props)[:job_history]).to be_present
-      expect(assigns(:react_component_props)[:form_action]).to eq(admin_sales_reports_path)
-      expect(assigns(:react_component_props)[:authenticity_token]).to be_present
-    end
-
-    it "loads job history from Redis" do
-      allow($redis).to receive(:lrange).with(RedisKey.sales_report_jobs, 0, 19).and_return(['{"job_id":"123","country_code":"US","start_date":"2023-01-01","end_date":"2023-03-31","enqueued_at":"2023-01-01T00:00:00Z","status":"processing"}'])
-
-      get :index
-
-      job_history = assigns(:react_component_props)[:job_history]
-      expect(job_history).to be_present
-      expect(job_history.first["job_id"]).to eq("123")
+      props = inertia.props
+      expect(props[:title]).to eq("Sales reports")
+      expect(props[:countries]).to eq Compliance::Countries.for_select.map { |alpha2, name| [name, alpha2] }
+      expect(props[:job_history]).to eq([JSON.parse(job_history).symbolize_keys])
+      expect(props[:authenticity_token]).to be_present
     end
   end
 
@@ -83,15 +74,12 @@ describe Admin::SalesReportsController do
       post :create, params: params
     end
 
-    it "returns success JSON response" do
+    it "303 redirects to the sales reports page with a success message" do
       post :create, params: params
 
-      expect(response).to be_successful
-      expect(response.content_type).to include("application/json")
-
-      json_response = JSON.parse(response.body)
-      expect(json_response["success"]).to be true
-      expect(json_response["message"]).to eq("Sales report job enqueued successfully!")
+      expect(response).to redirect_to(admin_sales_reports_path)
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:notice]).to eq "Sales report job enqueued successfully!"
     end
 
     it "converts dates to strings before passing to job" do
@@ -106,6 +94,34 @@ describe Admin::SalesReportsController do
         true,
         nil
       )
+    end
+
+    context "when the form is invalid" do
+      let(:params) do
+        {
+          sales_report: {
+            country_code: "",
+            start_date: "",
+            end_date: ""
+          }
+        }
+      end
+
+      it "302 redirects to the sales reports page with an error message" do
+        post :create, params: params
+
+        expect(response).to redirect_to(admin_sales_reports_path)
+        expect(response).to have_http_status(:found)
+        expect(flash[:alert]).to eq "Invalid form submission. Please fix the errors."
+
+        expect(session[:inertia_errors]).to eq({
+                                                 sales_report: {
+                                                   country_code: ["Please select a country"],
+                                                   start_date: ["Invalid date format. Please use YYYY-MM-DD format"],
+                                                   end_date: ["Invalid date format. Please use YYYY-MM-DD format"]
+                                                 }
+                                               })
+      end
     end
   end
 end
