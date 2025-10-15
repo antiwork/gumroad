@@ -3,7 +3,7 @@
 class CreatorAnalytics::Churn
   include ActiveModel::Validations
 
-  validates :end_date, comparison: { greater_than: :start_date }
+  validates :end_date, comparison: { greater_than_or_equal_to: :start_date }
   validates :time_window, inclusion: { in: 1..31, message: "must be between 1 and 31 days" }
 
   attr_reader :start_date, :end_date, :user, :products
@@ -21,12 +21,18 @@ class CreatorAnalytics::Churn
   end
 
   def calculate
-    {
-      date: end_date,
-      customer_churn_rate: customer_churn_rate,
-      churned_subscribers: churned_count,
-      churned_mrr_cents: churned_mrr
-    }
+    @calculate ||= begin
+      period_start = start_date - 29.days
+      subscriptions = fetch_subscriptions(from: period_start, to: end_date).to_a
+      metrics = calculate_period_metrics(period_start, end_date, subscriptions)
+
+      {
+        date: end_date,
+        customer_churn_rate: metrics[:churn_rate],
+        churned_subscribers: metrics[:churned_count],
+        churned_mrr_cents: metrics[:churned_mrr]
+      }
+    end
   end
 
   def fetch_churn_data
@@ -48,18 +54,19 @@ class CreatorAnalytics::Churn
   end
 
   def calculate_by_date
-    earliest_date = start_date - 29.days
-    all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date)
+    @calculate_by_date ||= begin
+      earliest_date = start_date - 29.days
+      all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date).load
 
-    (start_date..end_date).map do |date|
-      period_start = date - 29.days
-      calculate_for_period(period_start, date, all_subscriptions)
+      (start_date..end_date).map do |date|
+        period_start = date - 29.days
+        calculate_for_period(period_start, date, all_subscriptions)
+      end
     end
   end
 
   def customer_churn_rate
-    return 0.0 if total_subscriber_base.zero?
-    (churned_count.to_f / total_subscriber_base * 100).round(2)
+    calculate[:customer_churn_rate]
   end
 
   def build_metrics(result)
@@ -90,11 +97,20 @@ class CreatorAnalytics::Churn
     last_period_end = start_date - 1.day
     last_period_start = last_period_end - period_length.days
 
-    CreatorAnalytics::Churn.new(
+    self.class.customer_churn_rate(
       user: user,
       start_date: last_period_start,
       end_date: last_period_end,
       products: @products
+    )
+  end
+
+  def self.customer_churn_rate(user:, start_date:, end_date:, products: nil)
+    new(
+      user: user,
+      start_date: start_date,
+      end_date: end_date,
+      products: products
     ).customer_churn_rate
   end
 
@@ -108,10 +124,12 @@ class CreatorAnalytics::Churn
       when :end
         (@params[:end_time] || @params[:to])&.to_date || Date.current
       end
+    rescue Date::Error => e
+      raise ArgumentError, "Invalid date format: #{e.message}"
     end
 
     def parse_products
-      return nil unless @params[:products].present?
+      return Link.none unless @params[:products].present?
 
       @user.products.where(id: @params[:products])
     end
@@ -121,8 +139,14 @@ class CreatorAnalytics::Churn
     end
 
     def cache_key
-      product_ids = @products&.pluck(:id)&.sort&.join(",") || "all"
-      "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}:#{product_ids}"
+      @cache_key ||= begin
+        product_ids = if @products.respond_to?(:map)
+          @products.map(&:id).sort.join(",")
+        else
+          "all"
+        end
+        "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}:#{product_ids}"
+      end
     end
 
     def fetch_cached_data
@@ -171,13 +195,11 @@ class CreatorAnalytics::Churn
     end
 
     def new_during_period?(subscription, period_start, period_end)
-      subscription.created_at >= period_start && subscription.created_at <= period_end
+      subscription.created_at.between?(period_start, period_end)
     end
 
     def churned_during_period?(subscription, period_start, period_end)
-      subscription.deactivated_at &&
-        subscription.deactivated_at >= period_start &&
-        subscription.deactivated_at <= period_end
+      subscription.deactivated_at&.between?(period_start, period_end)
     end
 
     def total_subscriber_base
