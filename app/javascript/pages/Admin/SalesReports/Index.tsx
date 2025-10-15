@@ -1,5 +1,5 @@
-import * as React from "react";
 import { usePage } from "@inertiajs/react";
+import * as React from "react";
 
 import AdminSalesReportsForm from "$app/components/Admin/SalesReports/Form";
 import AdminSalesReportsJobHistory, { type JobHistoryItem } from "$app/components/Admin/SalesReports/JobHistory";
