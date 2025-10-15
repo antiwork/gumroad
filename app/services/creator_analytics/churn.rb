@@ -43,6 +43,10 @@ class CreatorAnalytics::Churn
     user.products.alive.is_recurring_billing.exists?
   end
 
+  def available_products
+    user.products_for_creator_analytics.select(&:is_recurring_billing?)
+  end
+
   def calculate_by_date
     earliest_date = start_date - 29.days
     all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date)

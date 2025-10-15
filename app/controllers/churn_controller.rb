@@ -14,7 +14,7 @@ class ChurnController < Sellers::BaseController
            props: {
              churn_props: {
                has_subscription_products: service.has_subscription_products?,
-               products: current_seller.products_for_creator_analytics.select(&:is_recurring_billing?).map do |product|
+               products: service.available_products.map do |product|
                  {
                    id: product.id,
                    name: product.name,
