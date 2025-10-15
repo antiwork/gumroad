@@ -91,7 +91,6 @@ import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlay
 import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
-import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
 
 ReactOnRails.register({
   AdminActionButton,
@@ -181,6 +180,5 @@ ReactOnRails.register({
   WishlistPage,
   WishlistsFollowingPage,
   WishlistsPage,
-  WorkflowsPage,
   UtmLinksPage,
 });

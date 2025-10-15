@@ -3,18 +3,13 @@
 require "spec_helper"
 require "shared_examples/authorize_called"
 require "shared_examples/sellers_base_controller_concern"
+require "inertia_rails/rspec"
 
-describe WorkflowsController do
+describe WorkflowsController, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
-  render_views
-
-  before do
-    @user = create(:user)
-    @product = create(:product, user: @user, price_cents: 0)
-  end
-
-  let(:seller) { @user }
+  let(:seller) { create(:user) }
+  let(:workflow) { create(:workflow, user: seller) }
 
   include_context "with user signed in as admin for seller"
 
@@ -23,9 +18,66 @@ describe WorkflowsController do
       let(:record) { Workflow }
     end
 
-    it "renders successfully" do
+    it "renders successfully with Inertia" do
       get :index
       expect(response).to be_successful
+      expect(inertia.component).to eq("Workflows/Index")
+      expect(inertia.props[:workflows]).to be_an(Array)
+    end
+  end
+
+  describe "GET new" do
+    it_behaves_like "authorize called for action", :get, :new do
+      let(:record) { Workflow }
+    end
+
+    it "renders successfully with Inertia" do
+      get :new
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Workflows/New")
+      expect(inertia.props[:context]).to be_present
+    end
+  end
+
+  describe "GET edit" do
+    it_behaves_like "authorize called for action", :get, :edit do
+      let(:record) { workflow }
+    end
+
+    it "renders successfully with Inertia" do
+      get :edit, params: { id: workflow.external_id }
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Workflows/Edit")
+      expect(inertia.props[:workflow]).to be_present
+      expect(inertia.props[:context]).to be_present
+    end
+
+    context "when workflow doesn't exist" do
+      it "returns 404" do
+        get :edit, params: { id: "nonexistent" }
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+  end
+
+  describe "GET emails" do
+    it_behaves_like "authorize called for action", :get, :emails do
+      let(:record) { workflow }
+    end
+
+    it "renders successfully with Inertia" do
+      get :emails, params: { id: workflow.external_id }
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Workflows/Emails")
+      expect(inertia.props[:workflow]).to be_present
+      expect(inertia.props[:context]).to be_present
+    end
+
+    context "when workflow doesn't exist" do
+      it "returns 404" do
+        get :emails, params: { id: "nonexistent" }
+        expect(response).to have_http_status(:not_found)
+      end
     end
   end
 end

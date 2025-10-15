@@ -397,7 +397,6 @@ Rails.application.routes.draw do
     get "/collaborators/*other", to: "collaborators#index"
 
     get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
-    get "/workflows/*other", to: "workflows#index" # route handled by react-router
     get "/emails/*other", to: "emails#index" # route handled by react-router
     get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
     get "/communities/*other", to: "communities#index" # route handled by react-router
@@ -807,6 +806,9 @@ Rails.application.routes.draw do
 
     # workflows
     get "/workflows", to: "workflows#index", as: :workflows
+    get "/workflows/new", to: "workflows#new", as: :new_workflow
+    get "/workflows/:id/edit", to: "workflows#edit", as: :edit_workflow
+    get "/workflows/:id/emails", to: "workflows#emails", as: :workflow_emails
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")

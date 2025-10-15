@@ -1,7 +1,6 @@
+import { Link, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData, useNavigate, useRevalidator } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import {
   WorkflowFormContext,
@@ -18,17 +17,17 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
-import { showAlert } from "$app/components/server-components/Alert";
+import { TagInput } from "$app/components/TagInput";
+import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
   EditPageNavigation,
   sendToPastCustomersCheckboxLabel,
   PublishButton,
-} from "$app/components/server-components/WorkflowsPage";
-import { TagInput } from "$app/components/TagInput";
-import { WithTooltip } from "$app/components/WithTooltip";
+} from "$app/components/WorkflowsPage";
 
 import abandonedCartTriggerImage from "$assets/images/workflows/triggers/abandoned_cart.svg";
 import audienceTriggerImage from "$assets/images/workflows/triggers/audience.svg";
@@ -85,11 +84,15 @@ type WorkflowFormState = {
   beforeDate: string;
   fromCountry: string;
 };
-const WorkflowForm = () => {
-  const navigate = useNavigate();
-  const { context, workflow } = cast<{ context: WorkflowFormContext; workflow?: Workflow }>(useLoaderData());
-  const loaderDataRevalidator = useRevalidator();
+
+type WorkflowFormProps = {
+  context: WorkflowFormContext;
+  workflow?: Workflow;
+};
+
+const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
   const wasPublishedPreviously = !!workflow?.first_published_at;
+  const { showAlert } = useClientAlert();
   const [formState, setFormState] = React.useState<WorkflowFormState>(() => {
     if (!workflow)
       return {
@@ -259,10 +262,10 @@ const WorkflowForm = () => {
       if (response.success) {
         if (saveActionName === "save") {
           showAlert("Changes saved!", "success");
-          navigate(`/workflows/${response.workflow_id}/emails`);
+          router.visit(`/workflows/${response.workflow_id}/emails`);
         } else {
           showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
-          loaderDataRevalidator.revalidate();
+          router.reload();
         }
       } else {
         showAlert(response.message, "error");
@@ -296,10 +299,17 @@ const WorkflowForm = () => {
       navigation={workflow ? <EditPageNavigation workflowExternalId={workflow.external_id} /> : null}
       actions={
         <>
-          <Link to="/workflows" className="button" inert={isSaving}>
-            <Icon name="x-square" />
-            Cancel
-          </Link>
+          {isSaving ? (
+            <button className="button" disabled>
+              <Icon name="x-square" />
+              Cancel
+            </button>
+          ) : (
+            <Link href="/workflows" className="button">
+              <Icon name="x-square" />
+              Cancel
+            </Link>
+          )}
           <Button color="primary" onClick={() => handleSave()} disabled={isSaving}>
             {workflow ? "Save changes" : "Save and continue"}
           </Button>

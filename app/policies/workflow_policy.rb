@@ -23,6 +23,10 @@ class WorkflowPolicy < ApplicationPolicy
     create?
   end
 
+  def emails?
+    create?
+  end
+
   def update?
     create?
   end

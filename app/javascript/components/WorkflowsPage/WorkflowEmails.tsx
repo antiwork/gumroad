@@ -1,10 +1,10 @@
+import { Link, router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLoaderData, useRevalidator } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
 import {
@@ -24,6 +24,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -42,20 +43,16 @@ import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
-import { showAlert } from "$app/components/server-components/Alert";
+import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
+import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
   EditPageNavigation,
   PublishButton,
   sendToPastCustomersCheckboxLabel,
-} from "$app/components/server-components/WorkflowsPage";
-import {
-  determineWorkflowTrigger,
-  WorkflowTrigger,
-} from "$app/components/server-components/WorkflowsPage/WorkflowForm";
-import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { WithTooltip } from "$app/components/WithTooltip";
+} from "$app/components/WorkflowsPage";
+import { determineWorkflowTrigger, WorkflowTrigger } from "$app/components/WorkflowsPage/WorkflowForm";
 
 type EmailFormState = {
   id: string;
@@ -92,10 +89,14 @@ const AbandonedCartProductsContext = React.createContext<{
 const AbandonedCartProductsProvider = AbandonedCartProductsContext.Provider;
 const useAbandonedCartProducts = () => assertDefined(React.useContext(AbandonedCartProductsContext));
 
-const WorkflowEmails = () => {
-  const { context, workflow } = cast<{ context: WorkflowFormContext; workflow: Workflow }>(useLoaderData());
-  const loaderDataRevalidator = useRevalidator();
+type WorkflowEmailsProps = {
+  context: WorkflowFormContext;
+  workflow: Workflow;
+};
+
+const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   const [sendToPastCustomers, setSendToPastCustomers] = React.useState(workflow.send_to_past_customers);
+  const { showAlert } = useClientAlert();
   const [isSaving, setIsSaving] = React.useState(false);
   const [files, filesDispatch] = React.useReducer(filesReducer, installmentsFilesToFilesState(workflow.installments));
   const [emails, setEmails] = React.useState<EmailFormState[]>(installmentsToEmails(workflow.installments));
@@ -269,7 +270,7 @@ const WorkflowEmails = () => {
             });
             return updated;
           });
-          loaderDataRevalidator.revalidate();
+          router.reload();
           setEmails(installmentsToEmails(response.workflow.installments));
           filesDispatch({ type: "reset", files: installmentsFilesToFilesState(response.workflow.installments) });
         } else {
@@ -297,19 +298,35 @@ const WorkflowEmails = () => {
           navigation={<EditPageNavigation workflowExternalId={workflow.external_id} />}
           actions={
             <>
-              <Link to="/workflows" className="button" inert={isBusy}>
-                {workflow.published ? (
-                  <>
-                    <Icon name="x-square" />
-                    Cancel
-                  </>
-                ) : (
-                  <>
-                    <Icon name="arrow-left" />
-                    Back
-                  </>
-                )}
-              </Link>
+              {isBusy ? (
+                <button className="button" disabled>
+                  {workflow.published ? (
+                    <>
+                      <Icon name="x-square" />
+                      Cancel
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="arrow-left" />
+                      Back
+                    </>
+                  )}
+                </button>
+              ) : (
+                <Link href="/workflows" className="button">
+                  {workflow.published ? (
+                    <>
+                      <Icon name="x-square" />
+                      Cancel
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="arrow-left" />
+                      Back
+                    </>
+                  )}
+                </Link>
+              )}
               <Button color="primary" disabled={isBusy} onClick={() => handleSave()}>
                 Save changes
               </Button>

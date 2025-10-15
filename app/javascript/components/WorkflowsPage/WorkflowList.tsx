@@ -1,6 +1,5 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
-import { Link, useLoaderData } from "react-router-dom";
-import { cast } from "ts-safe-cast";
 
 import { Workflow, deleteWorkflow } from "$app/data/workflows";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
@@ -8,23 +7,31 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
-import { showAlert } from "$app/components/server-components/Alert";
-import { Layout } from "$app/components/server-components/WorkflowsPage";
+import { Layout } from "$app/components/WorkflowsPage";
 
 import placeholder from "$assets/images/placeholders/workflows.png";
 
-const WorkflowList = () => {
+type WorkflowListProps = {
+  workflows: Workflow[];
+};
+
+const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
+  const { showAlert } = useClientAlert();
   const loggedInUser = useLoggedInUser();
-  const { workflows: initialWorkflows } = cast<{ workflows: Workflow[] }>(useLoaderData());
   const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
-  const newWorkflowButton = (
-    <Link to="/workflows/new" className="button accent" inert={!canManageWorkflow}>
+  const newWorkflowButton = canManageWorkflow ? (
+    <Link href="/workflows/new" className="button accent">
       New workflow
     </Link>
+  ) : (
+    <button className="button accent" disabled>
+      New workflow
+    </button>
   );
   const [deletingWorkflow, setDeletingWorkflow] = React.useState<{
     id: string;
@@ -123,14 +130,15 @@ const WorkflowRow = ({
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
         {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="button-group">
-          <Link
-            className="button"
-            to={`/workflows/${workflow.external_id}/edit`}
-            aria-label="Edit workflow"
-            inert={!canManageWorkflow}
-          >
-            <Icon name="pencil" />
-          </Link>
+          {canManageWorkflow ? (
+            <Link className="button" href={`/workflows/${workflow.external_id}/edit`} aria-label="Edit workflow">
+              <Icon name="pencil" />
+            </Link>
+          ) : (
+            <button className="button" disabled aria-label="Edit workflow">
+              <Icon name="pencil" />
+            </button>
+          )}
           <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
             <Icon name="trash2" />
           </Button>
@@ -184,12 +192,13 @@ const WorkflowRow = ({
       {header}
       <div className="placeholder">
         <h4>
-          <>
-            No emails yet,{" "}
-            <Link to={`/workflows/${workflow.external_id}/emails`} inert={!canManageWorkflow}>
-              add one
-            </Link>
-          </>
+          {canManageWorkflow ? (
+            <>
+              No emails yet, <Link href={`/workflows/${workflow.external_id}/emails`}>add one</Link>
+            </>
+          ) : (
+            <>No emails yet, add one</>
+          )}
         </h4>
       </div>
     </section>
