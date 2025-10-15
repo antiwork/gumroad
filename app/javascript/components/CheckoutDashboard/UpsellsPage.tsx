@@ -936,6 +936,7 @@ const Form = ({
             title={offerText.value}
             allowClose={true}
             onClose={() => setIsFormPreviewOpen(false)}
+            useNative={false}
           >
             {isCrossSell ? (
               <CrossSellModal

@@ -148,6 +148,7 @@ export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy:
       allowClose={true}
       onClose={() => {}}
       footer={<div>Last updated {new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}</div>}
+      useNative={false}
     >
       <div id={uid} style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>
     </Modal>
