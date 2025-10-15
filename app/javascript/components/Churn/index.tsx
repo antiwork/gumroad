@@ -20,6 +20,7 @@ export type ChurnData = {
 };
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
+import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { ChurnChart } from "$app/components/Churn/ChurnChart";
 import { ChurnDateRangePicker } from "$app/components/Churn/ChurnDateRangePicker";
@@ -28,8 +29,18 @@ import { Progress } from "$app/components/Progress";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
+export type Product = {
+  id: string;
+  name: string;
+  unique_permalink: string;
+  alive: boolean;
+};
+
 export type ChurnProps = {
-  has_subscription_products: boolean;
+  churn_props: {
+    has_subscription_products: boolean;
+    products: Product[];
+  };
   churn_data: ChurnData | null;
 };
 
@@ -41,9 +52,13 @@ const isChurnData = (data: unknown): data is ChurnData =>
   "start_date" in data &&
   "end_date" in data;
 
-const Churn = ({ has_subscription_products, churn_data }: ChurnProps) => {
+const Churn = ({ churn_props, churn_data }: ChurnProps) => {
+  const { has_subscription_products, products: initialProducts } = churn_props;
   const dateRange = useAnalyticsDateRange();
   const [data, setData] = React.useState<ChurnData | null>(churn_data || null);
+  const [products, setProducts] = React.useState(
+    initialProducts.map((product) => ({ ...product, selected: product.alive })),
+  );
 
   const hasContent = has_subscription_products;
 
@@ -54,11 +69,14 @@ const Churn = ({ has_subscription_products, churn_data }: ChurnProps) => {
     const fromDate = lightFormat(dateRange.from, "yyyy-MM-dd");
     const toDate = lightFormat(dateRange.to, "yyyy-MM-dd");
 
+    const selectedProducts = products.filter((product) => product.selected).map((product) => product.id);
+
     router.reload({
       only: ["churn_data"],
       data: {
         from: fromDate,
         to: toDate,
+        products: selectedProducts.length > 0 ? selectedProducts : undefined,
       },
       onSuccess: (page) => {
         const churnData = page.props.churn_data;
@@ -67,10 +85,20 @@ const Churn = ({ has_subscription_products, churn_data }: ChurnProps) => {
         }
       },
     });
-  }, [dateRange.from, dateRange.to, hasContent]);
+  }, [dateRange.from, dateRange.to, hasContent, products]);
 
   return (
-    <AnalyticsLayout selectedTab="churn" actions={hasContent ? <ChurnDateRangePicker {...dateRange} /> : null}>
+    <AnalyticsLayout
+      selectedTab="churn"
+      actions={
+        hasContent ? (
+          <>
+            <ProductsPopover products={products} setProducts={setProducts} />
+            <ChurnDateRangePicker {...dateRange} />
+          </>
+        ) : null
+      }
+    >
       {hasContent ? (
         <div className="space-y-8 p-4 md:p-8">
           <ChurnQuickStats metrics={data?.metrics} />

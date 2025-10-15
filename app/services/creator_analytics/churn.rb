@@ -6,13 +6,14 @@ class CreatorAnalytics::Churn
   validates :end_date, comparison: { greater_than: :start_date }
   validates :time_window, inclusion: { in: 1..31, message: "must be between 1 and 31 days" }
 
-  attr_reader :start_date, :end_date, :user
+  attr_reader :start_date, :end_date, :user, :products
 
-  def initialize(user:, start_date: nil, end_date: nil, params: {})
+  def initialize(user:, start_date: nil, end_date: nil, params: {}, products: nil)
     @user = user
     @params = params
     @start_date = parse_date(start_date, :start)
     @end_date = parse_date(end_date, :end)
+    @products = products || parse_products
   end
 
   def time_window
@@ -88,7 +89,8 @@ class CreatorAnalytics::Churn
     CreatorAnalytics::Churn.new(
       user: user,
       start_date: last_period_start,
-      end_date: last_period_end
+      end_date: last_period_end,
+      products: @products
     ).customer_churn_rate
   end
 
@@ -104,12 +106,19 @@ class CreatorAnalytics::Churn
       end
     end
 
+    def parse_products
+      return nil unless @params[:products].present?
+
+      @user.products.where(id: @params[:products])
+    end
+
     def should_use_cache?
       LargeSeller.where(user: user).exists?
     end
 
     def cache_key
-      "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}"
+      product_ids = @products&.pluck(:id)&.sort&.join(",") || "all"
+      "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}:#{product_ids}"
     end
 
     def fetch_cached_data
@@ -218,7 +227,14 @@ class CreatorAnalytics::Churn
     end
 
     def subscription_products
-      @subscription_products ||= user.products.alive.is_recurring_billing
+      @subscription_products ||= begin
+        base_products = user.products.alive.is_recurring_billing
+        if @products.present?
+          base_products.where(id: @products.map(&:id))
+        else
+          base_products
+        end
+      end
     end
 
     def fetch_subscriptions(from:, to:)
