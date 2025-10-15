@@ -313,7 +313,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                   )}
                 </button>
               ) : (
-                <Link href="/workflows" className="button">
+                <Link href={Routes.workflows_url()} className="button">
                   {workflow.published ? (
                     <>
                       <Icon name="x-square" />

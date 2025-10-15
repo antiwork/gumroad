@@ -25,7 +25,7 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
   const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = canManageWorkflow ? (
-    <Link href="/workflows/new" className="button accent">
+    <Link href={Routes.new_workflow_url()} className="button accent">
       New workflow
     </Link>
   ) : (
@@ -131,7 +131,7 @@ const WorkflowRow = ({
         {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="button-group">
           {canManageWorkflow ? (
-            <Link className="button" href={`/workflows/${workflow.external_id}/edit`} aria-label="Edit workflow">
+            <Link className="button" href={Routes.edit_workflow_url(workflow.external_id)} aria-label="Edit workflow">
               <Icon name="pencil" />
             </Link>
           ) : (
@@ -194,7 +194,7 @@ const WorkflowRow = ({
         <h4>
           {canManageWorkflow ? (
             <>
-              No emails yet, <Link href={`/workflows/${workflow.external_id}/emails`}>add one</Link>
+              No emails yet, <Link href={Routes.workflow_emails_url(workflow.external_id)}>add one</Link>
             </>
           ) : (
             <>No emails yet, add one</>

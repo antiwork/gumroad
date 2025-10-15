@@ -262,7 +262,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       if (response.success) {
         if (saveActionName === "save") {
           showAlert("Changes saved!", "success");
-          router.visit(`/workflows/${response.workflow_id}/emails`);
+          router.visit(Routes.workflow_emails_url(response.workflow_id));
         } else {
           showAlert(saveActionName === "save_and_publish" ? "Workflow published!" : "Unpublished!", "success");
           router.reload();
@@ -305,7 +305,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               Cancel
             </button>
           ) : (
-            <Link href="/workflows" className="button">
+            <Link href={Routes.workflows_url()} className="button">
               <Icon name="x-square" />
               Cancel
             </Link>
