@@ -29,14 +29,14 @@ export const Modal = ({
         }}
       >
         {title ? (
-          <Dialog.Title className="flex items-start justify-between gap-4">
-            <h2>{title}</h2>
+          <div className="flex items-start justify-between gap-4">
+            <Dialog.Title>{title}</Dialog.Title>
             {allowClose ? (
-              <Dialog.Close className="text-base">
+              <Dialog.Close className="text-base" aria-label="Close">
                 <Icon name="x" />
               </Dialog.Close>
             ) : null}
-          </Dialog.Title>
+          </div>
         ) : null}
         {children}
         {footer ? <footer className="grid gap-4 sm:flex sm:justify-end">{footer}</footer> : null}
