@@ -63,13 +63,14 @@ export const PriceTag = ({
         aria-describedby={tooltipUid}
       >
         <div
-          className="bg-accent px-2 py-1 text-black"
+          // Round up line height to prevent subpixel rendering issues - https://issues.chromium.org/issues/360846285
+          className="box-content h-[round(up,1lh,1px)] bg-accent px-2 py-1 text-black"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
           {priceTag}
         </div>
-        <svg viewBox="0 0 1 2" className="h-[round(up,1lh+--spacing(2),1px)]">
+        <svg viewBox="0 0 1 2" className="h-full">
           <polygon className="fill-accent" points="0,0 1,0 0,1 1,2 0,2" />
           <polyline points="1,0 0,1 1,2" fill="none" className="stroke-black" vectorEffect="non-scaling-stroke" />
         </svg>
