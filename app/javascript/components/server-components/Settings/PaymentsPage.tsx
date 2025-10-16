@@ -31,6 +31,7 @@ import BankAccountSection, {
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
+import { RefundPaymentMethodSection } from "$app/components/Settings/PaymentsPage/RefundPaymentMethodSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -143,6 +144,7 @@ type Props = {
     br: { code: string; name: string }[];
   };
   saved_card: SavedCreditCard | null;
+  refund_payment_card: SavedCreditCard | null;
   formatted_balance_to_forfeit_on_country_change: string | null;
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
@@ -1150,6 +1152,10 @@ const PaymentsPage = (props: Props) => {
             connectAccountFeeInfoText={props.fee_info.connect_account_fee_info_text}
           />
         ) : null}
+        <RefundPaymentMethodSection
+          refundCard={props.refund_payment_card}
+          isFormDisabled={props.is_form_disabled}
+        />
         {props.saved_card ? (
           <CreditCardForm
             card={props.saved_card}
