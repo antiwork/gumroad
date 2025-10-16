@@ -86,10 +86,9 @@ export const Modal = ({
               aria-label="Close"
               onClick={dispatchClose}
               className={classNames(
-                "text-base/[1.4rem]",
-                "after:icon-x after:text-base after:content-['\\00a0']",
-                "after:inline after:bg-current after:min-h-[max(1lh,1em)] after:w-[1em]",
-                "after:[mask-position:50%_50%] after:[mask-size:120%] after:[mask-repeat:no-repeat] after:shrink-0",
+                "icon-x after:text-base[1.4rem] after:content-['\xa0']",
+                "after:inline-block after:bg-current after:min-h-[max(1lh,1em)] after:w-[1em]",
+                "after:[mask-position:50%_50%] after:mask-no-repeat after:shrink-0",
               )}
             />
           )}
