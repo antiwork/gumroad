@@ -1,68 +1,50 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 
+import { Icon } from "$app/components/Icons";
+
 export const Modal = ({
-  open,
   title,
   children,
   footer,
   allowClose = true,
   onClose,
+  modal = true,
+  ...props
 }: {
-  open: boolean;
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   allowClose?: boolean;
   onClose?: () => void;
-}) => {
-  const dispatchClose = () => allowClose && onClose?.();
-  const ref = React.useRef<HTMLDialogElement | null>(null);
-  const [supportsNative, setSupportsNative] = React.useState(false);
-  React.useEffect(() => {
-    if (!ref.current) return;
-    if (supportsNative) {
-      if (open) ref.current.showModal();
-      else ref.current.close();
-    }
-    if ("showModal" in ref.current) setSupportsNative(true);
-  }, [open, supportsNative]);
-
-  const id = React.useId();
-
-  const handleCancel = (event: React.SyntheticEvent<HTMLDialogElement>) => {
-    if (event.target === ref.current) {
-      event.preventDefault();
-      dispatchClose();
-    }
-  };
-
+} & Omit<React.ComponentProps<typeof Dialog.Root>, "onOpenChange">) => {
+  const content = (
+    <>
+      <Dialog.Overlay className="fixed inset-0 z-10 bg-black/60" />
+      <Dialog.Content
+        className="bg-filled fixed top-[50%] left-[50%] z-20 flex max-w-175 min-w-80 translate-[-50%] flex-col gap-4 rounded border border-border p-8 shadow-lg"
+        onOpenAutoFocus={(e) => {
+          if (!modal) e.preventDefault();
+        }}
+      >
+        {title ? (
+          <Dialog.Title className="flex items-start justify-between gap-4">
+            <h2>{title}</h2>
+            {allowClose ? (
+              <Dialog.Close className="text-base">
+                <Icon name="x" />
+              </Dialog.Close>
+            ) : null}
+          </Dialog.Title>
+        ) : null}
+        {children}
+        {footer ? <footer className="grid gap-4 sm:flex sm:justify-end">{footer}</footer> : null}
+      </Dialog.Content>
+    </>
+  );
   return (
-    <dialog
-      open={supportsNative ? undefined : open}
-      ref={ref}
-      onClick={(e) => {
-        if (!ref.current) return;
-        if (!e.nativeEvent.isTrusted) return; // Indicates a synthetic event
-        const bounds = ref.current.getBoundingClientRect();
-        if (e.clientX < bounds.x || e.clientY < bounds.y || e.clientX > bounds.right || e.clientY > bounds.bottom)
-          dispatchClose();
-      }}
-      onCancel={handleCancel}
-      onKeyDown={(e) => {
-        // In Chrome, Escape doesn't correctly call the cancel event sometimes, but closes the dialog anyway.
-        // Handling Escape presses explicitly works around that.
-        if (e.key === "Escape") handleCancel(e);
-      }}
-      aria-labelledby={id}
-    >
-      {title ? (
-        <h2 id={id}>
-          {title}
-          {allowClose ? <button type="button" className="close" aria-label="Close" onClick={dispatchClose} /> : null}
-        </h2>
-      ) : null}
-      {children}
-      {footer ? <footer>{footer}</footer> : null}
-    </dialog>
+    <Dialog.Root onOpenChange={() => onClose?.()} modal={modal} {...props}>
+      {modal ? <Dialog.Portal>{content}</Dialog.Portal> : content}
+    </Dialog.Root>
   );
 };
