@@ -1,5 +1,4 @@
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { classNames } from "$app/utils/classNames";
 
 export const Modal = ({
@@ -9,7 +8,6 @@ export const Modal = ({
   footer,
   allowClose = true,
   onClose,
-  usePortal = false,
   useNative = true,
 }: {
   open: boolean;
@@ -18,7 +16,6 @@ export const Modal = ({
   footer?: React.ReactNode;
   allowClose?: boolean;
   onClose?: () => void;
-  usePortal?: boolean;
   useNative?: boolean;
 }) => {
   const dispatchClose = () => allowClose && onClose?.();
@@ -46,7 +43,7 @@ export const Modal = ({
     }
   };
 
-  const dialogElement = (
+  return (
     <dialog
       className={classNames(
         "bg-background text-foreground",
@@ -100,8 +97,4 @@ export const Modal = ({
       {footer && <footer className="grid gap-4 sm:flex sm:justify-end">{footer}</footer>}
     </dialog>
   );
-
-  return usePortal && typeof document !== "undefined"
-    ? createPortal(dialogElement, document.body)
-    : dialogElement;
 };
