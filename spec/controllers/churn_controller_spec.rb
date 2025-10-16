@@ -156,10 +156,27 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
         allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
         allow(service_instance).to receive(:has_subscription_products?).and_return(true)
         allow(service_instance).to receive(:available_products).and_return([product])
-        allow(service_instance).to receive(:fetch_churn_data).and_return({})
 
-        get :show, params: { only: ["churn_data"] }
+        mock_churn_data = {
+          start_date: "2024-01-01",
+          end_date: "2024-01-31",
+          metrics: {
+            customer_churn_rate: 5.5,
+            last_period_churn_rate: 4.2,
+            churned_subscribers: 10,
+            churned_mrr_cents: 5000
+          },
+          daily_data: []
+        }
+        allow(service_instance).to receive(:fetch_churn_data).and_return(mock_churn_data)
+
+        allow(InertiaRails).to receive(:optional) do |&block|
+          block.call
+        end
+
+        get :show
         expect(response).to be_successful
+        expect(inertia.props[:churn_data]).to eq(mock_churn_data)
       end
     end
 
