@@ -45,8 +45,24 @@ class Purchase
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+          # Try to charge refund card for the difference amount
+          if seller.refund_credit_card.present?
+            refund_card_service = ChargeSellerRefundCardService.new(seller, amount_cents_to_refund)
+            result = refund_card_service.call
+
+            if result.success?
+              # Refund card charged successfully, proceed with refund
+              logger.info("Refund card charged: #{result.charged_amount} cents for seller #{seller.id}")
+            else
+              # Refund card charge failed, show error
+              errors.add :base, "Unable to process refund: #{result.error_message}"
+              return false
+            end
+          else
+            # No refund card available, show insufficient balance error
+            errors.add :base, "Your balance is insufficient to process this refund."
+            return false
+          end
         end
       end
 
