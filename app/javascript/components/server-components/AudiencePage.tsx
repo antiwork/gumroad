@@ -17,6 +17,7 @@ import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ExportSubscribersPopover } from "$app/components/server-components/FollowersPage/ExportSubscribersPopover";
+import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/audience.png";
@@ -86,7 +87,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -98,7 +99,7 @@ const AudiencePage = ({ total_follower_count }: { total_follower_count: number }
             <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
               Learn more
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </AnalyticsLayout>

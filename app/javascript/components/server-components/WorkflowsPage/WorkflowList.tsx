@@ -13,6 +13,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/server-components/WorkflowsPage";
+import Placeholder from "$app/components/ui/Placeholder";
 
 import placeholder from "$assets/images/placeholders/workflows.png";
 
@@ -91,7 +92,7 @@ const WorkflowList = () => {
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -101,7 +102,7 @@ const WorkflowList = () => {
             <a href="/help/article/131-using-workflows-to-send-automated-updates" target="_blank" rel="noreferrer">
               Learn more about workflows
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </Layout>
@@ -182,7 +183,7 @@ const WorkflowRow = ({
   ) : (
     <section className="paragraphs" key={workflow.external_id}>
       {header}
-      <div className="placeholder">
+      <Placeholder>
         <h4>
           <>
             No emails yet,{" "}
@@ -191,7 +192,7 @@ const WorkflowRow = ({
             </Link>
           </>
         </h4>
-      </div>
+      </Placeholder>
     </section>
   );
 };
