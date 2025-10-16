@@ -6,15 +6,15 @@
       To suspend users for terms of service violations, please enter IDs of those users separated by comma or newline.
     </header>
 
-    <%= render "shared/code_snippet", caption: "Example with comma-separated items" do %>
-3322133, 3738461, 4724778
-    <% end %>
+    <%= react_component("CodeSnippet", props: {
+      caption: "Example with comma-separated items",
+      children: "3322133, 3738461, 4724778"
+    }, prerender: true) %>
 
-    <%= render "shared/code_snippet", caption: "Example with items separated by newline" do %>
-3322133
-3738461
-4724778
-    <% end %>
+    <%= react_component("CodeSnippet", props: {
+      caption: "Example with items separated by newline",
+      children: "3322133\n3738461\n4724778"
+    }, prerender: true) %>
 
     <%= f.text_area :identifiers, placeholder: "Enter user IDs here", rows: 10 %>
 
