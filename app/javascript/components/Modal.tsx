@@ -61,7 +61,7 @@ export const Modal = ({
       ref={ref}
       onClick={(e) => {
         if (!ref.current) return;
-        if (!e.nativeEvent.isTrusted) return;
+        if (!e.nativeEvent.isTrusted) return; // Indicates a synthetic event
         const bounds = ref.current.getBoundingClientRect();
         if (
           e.clientX < bounds.x ||
@@ -73,6 +73,8 @@ export const Modal = ({
       }}
       onCancel={handleCancel}
       onKeyDown={(e) => {
+        // In Chrome, Escape doesn't correctly call the cancel event sometimes, but closes the dialog anyway.
+        // Handling Escape presses explicitly works around that.
         if (e.key === "Escape") handleCancel(e);
       }}
       aria-labelledby={id}
@@ -88,7 +90,7 @@ export const Modal = ({
               className={classNames(
                 "icon-x after:text-base[1.4rem] after:content-['\xa0']",
                 "after:inline-block after:bg-current after:min-h-[max(1lh,1em)] after:w-[1em]",
-                "after:[mask-position:50%_50%] after:mask-no-repeat after:shrink-0",
+                "after:mask-center after:mask-size-[120%] after:mask-no-repeat after:shrink-0",
               )}
             />
           )}
