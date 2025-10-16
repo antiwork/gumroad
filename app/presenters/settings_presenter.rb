@@ -220,6 +220,7 @@ class SettingsPresenter
       canada_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.map { |code, name| { code:, name: } },
       states:,
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
+      refund_payment_card: CheckoutPresenter.saved_card(seller.refund_credit_card),
       formatted_balance_to_forfeit_on_country_change: seller.formatted_balance_to_forfeit(:country_change),
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       payouts_paused_internally: seller.payouts_paused_internally?,

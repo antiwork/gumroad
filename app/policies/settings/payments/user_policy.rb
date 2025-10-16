@@ -37,6 +37,14 @@ class Settings::Payments::UserPolicy < ApplicationPolicy
     update?
   end
 
+  def add_refund_payment_method?
+    update?
+  end
+
+  def remove_refund_payment_method?
+    update?
+  end
+
   def remediation?
     update?
   end
