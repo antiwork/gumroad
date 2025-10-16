@@ -1,5 +1,5 @@
 <% @description = "In this article: For just your Gumroad account Generating an access token For any Gumroad account Sign in with Gumroad Using a Redirect URI Enabling your applic" %>
-<div class="scoped-tailwind-preflight help-center-article">
+<div class="scoped-tailwind-preflight prose dark:prose-invert">
   <div>
     <p><b>In this article:</b></p>
     <ul>
@@ -44,9 +44,9 @@
     <p>If your website is built on Ruby on Rails, you can use the <a href="https://github.com/antiwork/omniauth-gumroad">Gumroad Omniauth gem</a> to enable "Sign in with Gumroad" in your software. Otherwise, use whatever OAuth/OmniAuth library your framework of choice supports. You will be provided with an Application ID (aka client_id ) and Application Secret (aka  client_secret ) to use in the authentication process.</p>
     <br>
     <p><b>Here is a step-by-step example:</b></p>
-    <ol>
+    <ul>
       <li>From the third-party app, send the user to Gumroad for authorization using a URL like this:</li>
-    </ol>
+    </ul>
     <pre><p><a href="https://gumroad.com/oauth/authorize?client_id=CLIENT_ID&amp;redirect_uri=REDIRECT_URI&amp;scope=SCOPE">https://gumroad.com/oauth/authorize?client_id=CLIENT_ID&amp;redirect_uri=REDIRECT_URI&amp;scope=SCOPE</a></p></pre>
     <p>2. Replace CLIENT_ID, REDIRECT_URI, and <a href="https://gumroad.com/api#api-scopes">SCOPE</a> with the correct values. Here's a sample URL:</p>
     <pre><p><a href="https://gumroad.com/oauth/authorize?client_id=f74e4939f6f9efe74f85ff034af9e9e04540d1e8fce609d652715db5480d4dbe&amp;redirect_uri=https://oauthdebugger.com/debug&amp;scope=edit_products">https://gumroad.com/oauth/authorize?client_id=f74e4939f6f9efe74f85ff034af9e9e04540d1e8fce609d652715db5480d4dbe&amp;redirect_uri=https://oauthdebugger.com/debug&amp;scope=edit_products</a></p></pre>
