@@ -24,6 +24,7 @@ import AdminSuspendForTosForm from "$app/components/server-components/Admin/Susp
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
 import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
@@ -126,6 +127,7 @@ ReactOnRails.register({
   AuthorizedApplicationsSettingsPage,
   BundleEditPage,
   CheckoutPage,
+  CodeSnippet,
   CommunitiesPage,
   CountrySelectionModal,
   CustomersDownloadPopover,

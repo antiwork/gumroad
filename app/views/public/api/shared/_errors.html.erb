@@ -28,13 +28,9 @@
         <br>
       </p>
       <p>To help you further, we provide a JSON object that goes more in-depth about the problem that led to the failed request. Errors responses from the api will follow the following format.</p>
-      <figure class="code">
-        <pre>
-{
-  "success": false,
-  "message": "The product could not be found."
-}</pre>
-      </figure>
+      <%= react_component "CodeSnippet", props: {
+            children: '{\n  "success": false,\n  "message": "The product could not be found."\n}'
+          }, prerender: false %>
       <p></p>
       <p>When present, the message will describe the particular problem and suggestions on what went wrong.</p>
     </div>
