@@ -1,6 +1,6 @@
-import classNames from "classnames";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
@@ -71,8 +71,8 @@ export const PriceTag = ({
         >
           {priceTag}
         </div>
-        <div className={classNames(borderClasses, "border-black")} />
-        <div className={classNames(borderClasses, "absolute top-0 right-px bottom-0 border-accent")} />
+        <div className={classNames("border-black", borderClasses)} />
+        <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
         <div role="tooltip" id={tooltipUid}>
           {priceTag}
         </div>
