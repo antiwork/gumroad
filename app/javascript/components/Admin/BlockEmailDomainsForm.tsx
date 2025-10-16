@@ -1,16 +1,13 @@
 import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { showAlert } from "$app/components/server-components/Alert";
-
 export type Props = {
   action: string;
   header: string;
   buttonLabel: string;
-  noticeMessage: string;
 };
 
-const Form = ({ action, header, buttonLabel, noticeMessage }: Props) => {
+const Form = ({ action, header, buttonLabel }: Props) => {
   const { authenticity_token } = usePage<{ authenticity_token: string }>().props;
 
   const form = useForm({
@@ -23,12 +20,7 @@ const Form = ({ action, header, buttonLabel, noticeMessage }: Props) => {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    form.put(action, {
-      onSuccess: () => {
-        showAlert(noticeMessage, "success");
-        form.reset();
-      },
-    });
+    form.put(action, { only: ["flash"], onSuccess: () => form.reset() });
   };
 
   const setIdentifiers = (event: React.ChangeEvent<HTMLTextAreaElement>) => {

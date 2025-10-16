@@ -3,6 +3,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
+import Placeholder from "$app/components/ui/Placeholder";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -148,10 +149,10 @@ export const ProductLevelSupportEmailsForm = React.memo(
 
     if (productLevelSupportEmails.length === 0) {
       return (
-        <div className="placeholder">
+        <Placeholder>
           <AddProductLevelSupportEmailButton onClick={handleAddEmail} />
           <div>Use a different reply-to email for specific products.</div>
-        </div>
+        </Placeholder>
       );
     }
 

@@ -12,6 +12,7 @@ import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/Settings/Layout";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import placeholderAppIcon from "$assets/images/gumroad_app.png";
@@ -177,10 +178,10 @@ const AuthorizedApplicationsPage = (props: Props) => {
         </section>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <h3>Your account doesn't have any authorized applications.</h3>
             <p>Applications authorized to access your Gumroad account on your behalf will appear here.</p>
-          </div>
+          </Placeholder>
         </div>
       )}
     </Layout>

@@ -9,6 +9,7 @@ import { ProductsLayout } from "$app/components/ProductsLayout";
 import { CollabsMembershipsTable } from "$app/components/ProductsPage/Collabs/MembershipsTable";
 import { CollabsProductsTable } from "$app/components/ProductsPage/Collabs/ProductsTable";
 import { Stats as StatsComponent } from "$app/components/Stats";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -44,7 +45,7 @@ const CollabsPage = ({
     <ProductsLayout selectedTab="collabs" title="Products" archivedTabVisible={archivedTabVisible}>
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -65,7 +66,7 @@ const CollabsPage = ({
                 learn more to get started
               </a>
             </p>
-          </div>
+          </Placeholder>
         ) : (
           <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
             <div className="stats-grid" aria-label="Stats">
