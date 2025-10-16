@@ -322,7 +322,7 @@ const OverlayMenu = ({
         <Icon name="filter" />
       </Button>
       <div
-        className="fixed top-0 left-0 z-20 h-full w-full bg-backdrop"
+        className="fixed top-0 left-0 z-20 h-full w-full bg-black/80"
         hidden={!menuOpen}
         style={menuTop ? { top: menuTop } : undefined}
       >
