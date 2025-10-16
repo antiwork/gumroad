@@ -521,7 +521,7 @@ const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
             editor={editor}
             productId={section.id}
             // Cancel out the element's height to prevent scroll jumping
-            className="-mt-[calc(1lh+--spacing(4)+2px)] border !bg-white !text-black shadow"
+            className="border !bg-white !text-black shadow lg:-mt-[calc(1lh+--spacing(4)+2px)]"
           />
         </div>
       ) : null}
