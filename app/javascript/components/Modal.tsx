@@ -22,6 +22,7 @@ export const Modal = ({
     <>
       <Dialog.Overlay className="fixed inset-0 z-10 bg-black/80" />
       <Dialog.Content
+        aria-modal={modal}
         className="bg-filled fixed top-[50%] left-[50%] z-20 flex max-w-175 min-w-80 translate-[-50%] flex-col gap-4 rounded border border-border p-8 shadow-lg dark:shadow-none"
         onOpenAutoFocus={(e) => {
           if (!modal) e.preventDefault();
