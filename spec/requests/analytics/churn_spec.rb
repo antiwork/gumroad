@@ -30,9 +30,9 @@ describe "Churn analytics", :js, :sidekiq_inline, type: :system do
       active_sub2 = create(:subscription, link: monthly_product, user: create(:user), created_at: "2023-12-01 12:00:00")
       new_sub = create(:subscription, link: monthly_product, user: create(:user), created_at: "2023-12-16 12:00:00")
       churned_sub1 = create(:subscription, link: monthly_product, user: create(:user),
-                           created_at: "2023-12-01 12:00:00", deactivated_at: "2023-12-20 12:00:00")
+                                           created_at: "2023-12-01 12:00:00", deactivated_at: "2023-12-20 12:00:00")
       churned_sub2 = create(:subscription, link: yearly_product, user: create(:user),
-                           created_at: "2023-12-01 12:00:00", deactivated_at: "2023-12-25 12:00:00")
+                                           created_at: "2023-12-01 12:00:00", deactivated_at: "2023-12-25 12:00:00")
 
       [active_sub1, active_sub2, new_sub, churned_sub1].each do |sub|
         payment_option = create(:payment_option, subscription: sub, price: monthly_price)
