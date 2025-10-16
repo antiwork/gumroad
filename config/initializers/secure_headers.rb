@@ -196,8 +196,6 @@ SecureHeaders::Configuration.default do |config|
     # Allow S3-compatible services like MinIO
     config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}"
     config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/"
-    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}"
-    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/"
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
     config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
@@ -211,10 +209,5 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:connect_src] << "http:"
     config.csp[:script_src] << "http:" # Required by Helper widget
     config.csp[:script_src] << "helperai.dev" # Required by Helper widget
-    # Allow S3-compatible services like MinIO
-    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}"
-    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/"
-    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}"
-    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/"
   end
 end
