@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_10_15_120000) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_16_195500) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1807,7 +1807,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_10_15_120000) do
   create_table "refund_payment_methods", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.integer "credit_card_id", null: false
-    t.string "cardholder_name", null: false
+    t.string "cardholder_name"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["credit_card_id"], name: "index_refund_payment_methods_on_credit_card_id"

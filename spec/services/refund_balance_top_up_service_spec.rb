@@ -3,7 +3,7 @@
 require "spec_helper"
 
 RSpec.describe RefundBalanceTopUpService do
-  let(:user) { create(:user, unpaid_balance_cents: 0) }
+  let(:user) { create(:user) }
   let!(:merchant_account) do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       MerchantAccount.create!(charge_processor_id: StripeChargeProcessor.charge_processor_id)
@@ -43,6 +43,19 @@ RSpec.describe RefundBalanceTopUpService do
     allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!).and_return(successful_charge_intent)
   end
 
+  def create_unpaid_balance(amount_cents)
+    Balance.create!(
+      user:,
+      merchant_account:,
+      currency: "usd",
+      holding_currency: "usd",
+      amount_cents: amount_cents,
+      holding_amount_cents: amount_cents,
+      state: "unpaid",
+      date: Date.current
+    )
+  end
+
   it "charges the backup card and credits the seller balance" do
     result = service.ensure_funds
 
@@ -63,8 +76,10 @@ RSpec.describe RefundBalanceTopUpService do
       kind_of(Integer),
       purchase.external_id,
       "Refund coverage top-up for purchase #{purchase.external_id}",
-      hash_including(metadata: hash_including(:purchase_id, :seller_id, :context)),
-      hash_including(off_session: true)
+      hash_including(
+        metadata: hash_including(:purchase_id, :seller_id, :context),
+        off_session: true
+      )
     )
   end
 
@@ -80,7 +95,7 @@ RSpec.describe RefundBalanceTopUpService do
   end
 
   it "does nothing when there is no deficit to cover" do
-    user.update!(unpaid_balance_cents: 5_000)
+    create_unpaid_balance(5_000)
 
     result = service.ensure_funds
 
@@ -138,7 +153,7 @@ RSpec.describe RefundBalanceTopUpService do
 
   it "surfaces processor card errors" do
     allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!)
-      .and_raise(ChargeProcessorCardError.new("Declined", nil))
+      .and_raise(ChargeProcessorCardError.new("card_declined", "Declined"))
 
     result = service.ensure_funds
 
@@ -148,6 +163,7 @@ RSpec.describe RefundBalanceTopUpService do
 
   it "returns an error when no refund payment method exists" do
     refund_payment_method.destroy!
+    user.reload
 
     result = service.ensure_funds
 
