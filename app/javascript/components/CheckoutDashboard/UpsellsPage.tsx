@@ -660,7 +660,7 @@ const Form = ({
     pay_in_installments: false,
   };
 
-  const [isFormPreviewOpen, setIsFormPreviewOpen] = React.useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = React.useState(true);
 
   const useLoadCartItem = (productId: string | null) => {
     React.useEffect(() => {
@@ -932,10 +932,10 @@ const Form = ({
         </form>
         <CheckoutPreview cartItem={previewCartItem}>
           <Modal
-            open={isFormPreviewOpen}
+            open={isPreviewOpen}
             title={offerText.value}
             allowClose={true}
-            onClose={() => setIsFormPreviewOpen(false)}
+            onClose={() => setIsPreviewOpen(false)}
             useNative={false}
           >
             {isCrossSell ? (
