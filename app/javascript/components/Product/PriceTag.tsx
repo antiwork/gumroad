@@ -56,7 +56,7 @@ export const PriceTag = ({
     </>
   );
   const tooltipUid = React.useId();
-  const borderClasses = "border-l-1 border-r-transparent border-[calc(0.5lh+--spacing(1))]";
+  const borderClasses = "border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1";
 
   return (
     <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
