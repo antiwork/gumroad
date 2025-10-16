@@ -136,7 +136,12 @@ describe("Bundle edit page", type: :system, js: true) do
       end
       select "7-day money back guarantee", from: "Refund period"
       find_field("Fine print (optional)", with: "This is a product-level refund policy").fill_in with: "I hate being small"
-      in_preview { expect(page).to have_modal("7-day money back guarantee", text: "I hate being small") }
+      in_preview do
+        within "[role=dialog]" do
+          expect(page).to have_selector("h2", text: "7-day money back guarantee")
+          expect(page).to have_text("I hate being small")
+        end
+      end
 
       product_page = window_opened_by { click_on "Preview" }
       expect(page).to have_alert(text: "Changes saved!")
