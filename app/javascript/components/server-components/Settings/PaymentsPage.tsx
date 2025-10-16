@@ -5,6 +5,7 @@ import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
 import { CardPayoutError, prepareCardTokenForPayouts } from "$app/data/card_payout_data";
+import { prepareRefundPaymentMethodToken, RefundPaymentMethodCardError } from "$app/data/refund_payment_method";
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
@@ -31,7 +32,9 @@ import BankAccountSection, {
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
+import RefundPaymentMethodSection from "$app/components/Settings/PaymentsPage/RefundPaymentMethodSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
+import type { RefundPaymentMethodCardData } from "$app/components/Settings/PaymentsPage/types";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -143,6 +146,11 @@ type Props = {
     br: { code: string; name: string }[];
   };
   saved_card: SavedCreditCard | null;
+  refund_payment_method: {
+    name_on_card: string | null;
+    saved_card: SavedCreditCard | null;
+    help_url: string;
+  };
   formatted_balance_to_forfeit_on_country_change: string | null;
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
@@ -273,6 +281,18 @@ const PaymentsPage = (props: Props) => {
 
   const [paypalEmailAddress, setPaypalEmailAddress] = React.useState(props.paypal_address);
   const [debitCard, setDebitCard] = React.useState<PayoutDebitCardData | null>(null);
+  const initialRefundPaymentName = React.useMemo(
+    () => props.refund_payment_method.name_on_card ?? "",
+    [props.refund_payment_method.name_on_card],
+  );
+  const [refundPaymentName, setRefundPaymentName] = React.useState(initialRefundPaymentName);
+  const hasInitialRefundSavedCard = React.useMemo(
+    () => Boolean(props.refund_payment_method.saved_card),
+    [props.refund_payment_method.saved_card],
+  );
+  const [refundPaymentCard, setRefundPaymentCard] = React.useState<RefundPaymentMethodCardData>(
+    hasInitialRefundSavedCard ? { type: "saved" } : undefined,
+  );
   const [showNewBankAccount, setShowNewBankAccount] = React.useState(!props.bank_account_details.account_number_visual);
 
   React.useEffect(() => {
@@ -734,7 +754,48 @@ const PaymentsPage = (props: Props) => {
       return;
     }
 
-    let data = {
+    const trimmedRefundPaymentName = refundPaymentName.trim();
+    const refundCardType = refundPaymentCard?.type;
+    const cardSelectionChanged = hasInitialRefundSavedCard
+      ? refundPaymentCard?.type !== "saved"
+      : Boolean(refundPaymentCard);
+    const isRemovingRefundPaymentMethod = hasInitialRefundSavedCard && !refundPaymentCard;
+    const nameChanged = trimmedRefundPaymentName !== initialRefundPaymentName;
+    let refundPaymentMethodPayload: Record<string, unknown> | undefined;
+
+    if (isRemovingRefundPaymentMethod) {
+      refundPaymentMethodPayload = { remove: true };
+    } else if (cardSelectionChanged || nameChanged) {
+      if (!hasInitialRefundSavedCard && refundCardType !== "new") {
+        showAlert("Please add a card to use as your backup refund method.", "error");
+        setIsSaving(false);
+        return;
+      }
+
+      refundPaymentMethodPayload = {};
+      if (trimmedRefundPaymentName) {
+        refundPaymentMethodPayload.name_on_card = trimmedRefundPaymentName;
+      }
+
+      if (refundCardType === "new" && refundPaymentCard && "element" in refundPaymentCard) {
+        try {
+          const tokenData = await prepareRefundPaymentMethodToken({
+            cardElement: refundPaymentCard.element,
+            ...(trimmedRefundPaymentName ? { name: trimmedRefundPaymentName } : {}),
+          });
+          refundPaymentMethodPayload.card = { stripe_token: tokenData.stripe_token };
+        } catch (e) {
+          if (e instanceof RefundPaymentMethodCardError) {
+            showAlert(e.stripeError.message ?? "We couldn't save that card. Please try again.", "error");
+            setIsSaving(false);
+            return;
+          }
+          throw e;
+        }
+      }
+    }
+
+    const payload: Record<string, unknown> = {
       user: complianceInfo,
       payouts_paused_by_user: payoutsPausedByUser,
       payout_threshold_cents: payoutThresholdCents.value,
@@ -742,11 +803,15 @@ const PaymentsPage = (props: Props) => {
     };
 
     if (selectedPayoutMethod === "bank") {
-      data = { ...data, ...{ bank_account: bankAccount } };
+      payload.bank_account = bankAccount;
     } else if (selectedPayoutMethod === "card") {
-      data = { ...data, ...{ card: cardData } };
+      payload.card = cardData;
     } else if (selectedPayoutMethod === "paypal") {
-      data = { ...data, ...{ payment_address: paypalEmailAddress } };
+      payload.payment_address = paypalEmailAddress;
+    }
+
+    if (refundPaymentMethodPayload) {
+      payload.refund_payment_method = refundPaymentMethodPayload;
     }
 
     try {
@@ -754,7 +819,7 @@ const PaymentsPage = (props: Props) => {
         method: "PUT",
         url: Routes.settings_payments_path(),
         accept: "json",
-        data,
+        data: payload,
       });
 
       const parsedResponse = cast<
@@ -1069,8 +1134,8 @@ const PaymentsPage = (props: Props) => {
                 </Button>
               ) : null}
               {props.user.country_code === "BR" ||
-              props.user.can_connect_stripe ||
-              props.stripe_connect.has_connected_stripe ? (
+                props.user.can_connect_stripe ||
+                props.stripe_connect.has_connected_stripe ? (
                 <Button
                   role="radio"
                   key="stripe"
@@ -1143,6 +1208,14 @@ const PaymentsPage = (props: Props) => {
             )}
           </section>
         </section>
+        <RefundPaymentMethodSection
+          isFormDisabled={props.is_form_disabled}
+          nameOnCard={refundPaymentName}
+          setNameOnCard={setRefundPaymentName}
+          savedCard={props.refund_payment_method.saved_card}
+          setCard={setRefundPaymentCard}
+          helpUrl={props.refund_payment_method.help_url}
+        />
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}

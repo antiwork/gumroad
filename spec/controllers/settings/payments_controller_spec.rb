@@ -159,6 +159,108 @@ describe Settings::PaymentsController, :vcr do
       end
     end
 
+    describe "refund payment method" do
+      let(:credit_card_record) do
+        CreditCard.create!(
+          stripe_fingerprint: "fp_test",
+          visual: "**** **** **** 4242",
+          card_type: CardType::VISA,
+          stripe_customer_id: "cus_test",
+          expiry_month: 4,
+          expiry_year: 2030,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id
+        )
+      end
+
+      before do
+        allow(ChargeProcessor).to receive(:get_chargeable_for_params).and_return(double)
+        allow(CreditCard).to receive(:create).and_return(credit_card_record)
+      end
+
+      it "saves a refund payment method when provided" do
+        expect do
+          put :update,
+              params: {
+                refund_payment_method: {
+                  name_on_card: "Creator Name",
+                  card: { stripe_token: "tok_test" }
+                }
+              },
+              as: :json
+        end.to change { user.reload.refund_payment_method }.from(nil)
+
+        method = user.refund_payment_method
+        expect(method.cardholder_name).to eq("Creator Name")
+        expect(method.credit_card).to eq(credit_card_record)
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "returns an error when card data cannot be verified" do
+        allow(ChargeProcessor).to receive(:get_chargeable_for_params).and_return(nil)
+
+        put :update,
+            params: {
+              refund_payment_method: {
+                name_on_card: "Creator Name",
+                card: { stripe_token: "tok_invalid" }
+              }
+            },
+            as: :json
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error_message"]).to eq("Please check your card information, we couldn't verify it.")
+      end
+
+      it "does not require refund payment params when unchanged" do
+        user.create_refund_payment_method!(cardholder_name: "Existing Name", credit_card: credit_card_record)
+
+        expect do
+          put :update, params: { user: {} }, as: :json
+        end.not_to change { user.reload.refund_payment_method&.cardholder_name }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "removes the refund payment method when requested" do
+        user.create_refund_payment_method!(cardholder_name: "Existing Name", credit_card: credit_card_record)
+
+        expect do
+          put :update,
+              params: { refund_payment_method: { remove: true }, user: {} },
+              as: :json
+        end.to change { user.reload.refund_payment_method }.to(nil)
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "returns an error when adding a refund card without providing the card data" do
+        put :update,
+            params: {
+              refund_payment_method: {
+                name_on_card: "Creator Name"
+              }
+            },
+            as: :json
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error_message"]).to eq("Please add a card to use as your backup refund method.")
+      end
+
+      it "stores card data even when the cardholder name is blank" do
+        put :update,
+            params: {
+              refund_payment_method: {
+                card: { stripe_token: "tok_test" }
+              }
+            },
+            as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(user.reload.refund_payment_method.cardholder_name).to be_nil
+        expect(user.refund_payment_method.credit_card).to eq(credit_card_record)
+      end
+    end
+
     describe "individual" do
       let(:all_params) do { user: params }.merge!(
         bank_account: {
@@ -1389,6 +1491,16 @@ describe Settings::PaymentsController, :vcr do
       post :remove_credit_card
       expect(response).to be_successful
       expect(user_with_credit_card.reload.credit_card).to be(nil)
+    end
+  end
+
+  describe "POST dismiss_refund_payment_banner" do
+    it "marks the refund payment method banner as dismissed for the seller" do
+      expect do
+        post :dismiss_refund_payment_banner
+      end.to change { seller.reload.refund_payment_banner_dismissed_at.present? }.from(false).to(true)
+
+      expect(response).to be_successful
     end
   end
 

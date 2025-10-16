@@ -220,6 +220,7 @@ class SettingsPresenter
       canada_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.map { |code, name| { code:, name: } },
       states:,
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
+      refund_payment_method: refund_payment_method_details,
       formatted_balance_to_forfeit_on_country_change: seller.formatted_balance_to_forfeit(:country_change),
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
@@ -283,6 +284,15 @@ class SettingsPresenter
         can_connect_stripe: seller.can_connect_stripe?,
         is_charged_paypal_payout_fee: seller.charge_paypal_payout_fee?,
         joined_at: seller.created_at.iso8601
+      }
+    end
+
+    def refund_payment_method_details
+      method = seller.refund_payment_method
+      {
+        name_on_card: method&.cardholder_name,
+        saved_card: CheckoutPresenter.saved_card(method&.credit_card),
+        help_url: "/help/article/refund-payment-method",
       }
     end
 

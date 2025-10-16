@@ -2,6 +2,7 @@ import { DirectUpload, Blob } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
+import refundHands from "images/illustrations/hands.png";
 import * as React from "react";
 
 import {
@@ -55,7 +56,7 @@ import { isValidEmail } from "$app/utils/email";
 import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
-import { AbortError, assertResponseError } from "$app/utils/request";
+import { AbortError, ResponseError, assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -98,6 +99,9 @@ export type CustomerPageProps = {
   countries: string[];
   can_ping: boolean;
   show_refund_fee_notice: boolean;
+  show_refund_payment_method_prompt: boolean;
+  refund_payment_method_settings_path: string;
+  dismiss_refund_payment_method_prompt_path: string;
 };
 
 const year = new Date().getFullYear();
@@ -121,6 +125,9 @@ const CustomersPage = ({
   countries,
   can_ping,
   show_refund_fee_notice,
+  show_refund_payment_method_prompt,
+  refund_payment_method_settings_path,
+  dismiss_refund_payment_method_prompt_path,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -140,6 +147,7 @@ const CustomersPage = ({
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
   const uid = React.useId();
+  const [showRefundBanner, setShowRefundBanner] = React.useState(show_refund_payment_method_prompt);
 
   const [includedItems, setIncludedItems] = React.useState<Item[]>(
     product_id ? [{ type: "product", id: product_id }] : [],
@@ -183,6 +191,22 @@ const CustomersPage = ({
 
   const includedProductIds = includedItems.filter(({ type }) => type === "product").map(({ id }) => id);
   const includedVariantIds = includedItems.filter(({ type }) => type === "variant").map(({ id }) => id);
+
+  const dismissRefundBanner = asyncVoid(async () => {
+    try {
+      const response = await request({
+        method: "POST",
+        url: dismiss_refund_payment_method_prompt_path,
+        accept: "json",
+      });
+      if (!response.ok) throw new ResponseError("Something went wrong. Please try again.");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+      return;
+    }
+    setShowRefundBanner(false);
+  });
 
   const loadCustomers = async (page: number) => {
     activeRequest.current?.cancel();
@@ -437,6 +461,11 @@ const CustomersPage = ({
           </>
         }
       />
+
+      {showRefundBanner ? (
+        <RefundPaymentMethodBanner href={refund_payment_method_settings_path} onClose={dismissRefundBanner} />
+      ) : null}
+
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <section className="paragraphs">
@@ -2588,6 +2617,51 @@ const CommissionSection = ({
           ) : null}
         </section>
       </section>
+    </section>
+  );
+};
+
+const RefundPaymentMethodBanner = ({ href, onClose }: { href: string; onClose?: () => void }) => {
+  const [show, setShow] = React.useState(false);
+
+  useRunOnce(() => {
+    if (localStorage.getItem("showRefundPaymentMethodBanner") !== "false") setShow(true);
+  });
+
+  if (!show) return null;
+
+  const handleClose = () => {
+    localStorage.setItem("showRefundPaymentMethodBanner", "false");
+    setShow(false);
+    if (onClose) onClose();
+  };
+
+  return (
+    <section className="mt-4 mb-6 px-4 md:mt-6 md:mb-8 md:px-8">
+      <div role="status" className="flex flex-col items-start gap-3 rounded border !border-pink bg-pink/20 p-3 text-sm">
+        <div className="flex w-full items-center gap-2">
+          <div className="flex items-center gap-3">
+            <img src={refundHands} alt="" className="h-12 w-10 shrink-0" aria-hidden />
+            <div className="leading-snug">
+              <span className="font-semibold">New:</span> Refund customers instantly, even when your balance is low. Add
+              a backup payment method to cover refunds automatically if your balance can&apos;t.
+              <div className="mt-0.5">
+                <a className="link inline-block" href={href}>
+                  Set up backup method
+                </a>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="link ml-auto self-center underline"
+            onClick={handleClose}
+            aria-label="Dismiss refund payment method banner"
+          >
+            close
+          </button>
+        </div>
+      </div>
     </section>
   );
 };
