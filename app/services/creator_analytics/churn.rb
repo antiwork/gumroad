@@ -201,7 +201,6 @@ class CreatorAnalytics::Churn
       subscription.deactivated_at&.between?(period_start, period_end)
     end
 
-
     def calculate_mrr_cents(subscription)
       payment_option = subscription.last_payment_option
       return 0 unless payment_option&.price

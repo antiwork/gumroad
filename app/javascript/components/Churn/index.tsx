@@ -1,7 +1,6 @@
 import { router } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 export type ChurnData = {
   start_date: string;
@@ -48,7 +47,6 @@ export type ChurnProps = {
 const Churn = ({ churn_props, churn_data }: ChurnProps) => {
   const { has_subscription_products, products: initialProducts } = churn_props;
   const dateRange = useAnalyticsDateRange();
-  const [data, setData] = React.useState<ChurnData | null>(churn_data || null);
   const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
@@ -74,10 +72,6 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
         to: toDate,
         products: selectedProductIds,
       },
-      onSuccess: (page) => {
-        const churnData = cast<ChurnData>(page.props.churn_data);
-        setData(churnData);
-      },
     });
   }, [dateRange.from, dateRange.to, hasContent, products]);
 
@@ -95,9 +89,9 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
     >
       {hasContent ? (
         <div className="space-y-8 p-4 md:p-8">
-          <ChurnQuickStats metrics={data?.metrics} />
-          {data ? (
-            <ChurnChart data={data.daily_data} />
+          <ChurnQuickStats metrics={churn_data?.metrics} />
+          {churn_data ? (
+            <ChurnChart data={churn_data.daily_data} />
           ) : (
             <div className="input">
               <Progress width="1em" />

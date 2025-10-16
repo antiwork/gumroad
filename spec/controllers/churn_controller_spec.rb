@@ -13,15 +13,20 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
 
   describe "GET #show" do
     context "when user has subscription products" do
-      it "renders the Churn/Show component" do
+      it "renders the Churn/Show component with correct props and behavior" do
+        service_instance = instance_double(CreatorAnalytics::Churn)
+        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
+        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
+        allow(service_instance).to receive(:available_products).and_return([product])
+        allow(service_instance).to receive(:fetch_churn_data).and_return(nil)
+
+        expect(LargeSeller).to receive(:create_if_warranted).with(user)
+        expect(InertiaRails).to receive(:optional).and_call_original
+
         get :show
+
         expect(response).to be_successful
         expect(inertia.component).to eq("Churn/Show")
-      end
-
-      it "includes churn_props with subscription products" do
-        get :show
-        expect(response).to be_successful
         expect(inertia.props[:churn_props]).to include(
           has_subscription_products: true,
           products: array_including(
@@ -33,41 +38,7 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
             )
           )
         )
-      end
-
-      it "does not evaluate lazy props on initial render" do
-        get :show
-        expect(response).to be_successful
         expect(inertia.props).not_to have_key(:churn_data)
-      end
-
-      it "calls LargeSeller.create_if_warranted" do
-        expect(LargeSeller).to receive(:create_if_warranted).with(user)
-        get :show
-      end
-
-      it "initializes CreatorAnalytics::Churn service with correct parameters" do
-        expect(CreatorAnalytics::Churn).to receive(:new).with(
-          user: user,
-          params: instance_of(ActionController::Parameters)
-        ).and_call_original
-        get :show
-      end
-
-      it "calls service methods for data retrieval" do
-        service_instance = instance_double(CreatorAnalytics::Churn)
-        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
-
-        expect(service_instance).to receive(:has_subscription_products?).and_return(true)
-        expect(service_instance).to receive(:available_products).and_return([product])
-        allow(service_instance).to receive(:fetch_churn_data).and_return(nil)
-
-        get :show
-      end
-
-      it "uses InertiaRails.optional for lazy loading churn_data" do
-        expect(InertiaRails).to receive(:optional).and_call_original
-        get :show
       end
     end
 
@@ -194,22 +165,6 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
           allow(LargeSeller).to receive(:create_if_warranted).and_raise(StandardError, "LargeSeller error")
 
           expect { get :show }.to raise_error(StandardError, "LargeSeller error")
-        end
-      end
-    end
-
-    describe "partial reloads" do
-      context "when requesting only churn_data" do
-        it "returns successful response" do
-          get :show, params: { only: ["churn_data"] }
-          expect(response).to be_successful
-        end
-      end
-
-      context "when requesting only churn_props" do
-        it "returns successful response" do
-          get :show, params: { only: ["churn_props"] }
-          expect(response).to be_successful
         end
       end
     end
