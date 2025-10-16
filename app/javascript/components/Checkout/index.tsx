@@ -25,6 +25,7 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -363,7 +364,7 @@ export const Checkout = ({
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -372,7 +373,7 @@ export const Checkout = ({
             <a className="button accent" href={discoverUrl}>
               Discover products
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 <% @description = "In this article: Your Affiliates - How does it work? Adding a new affiliate Method 1: Adding affiliates manually Method 2: Let affiliates sign up on their own E" %>
-<div class="scoped-tailwind-preflight help-center-article">
+<div class="scoped-tailwind-preflight prose dark:prose-invert">
   <div>
     <p><b>In this article:</b></p>
     <ul>
@@ -40,14 +40,14 @@
     <p>Both of these affiliate programs are optional. You can remove Your Affiliates or opt out of Gumroad Affiliates anytime. </p>
     <h3 id="Your-Affiliates---How-does-it-work"><span>Your Affiliates - How does it work?</span></h3>
     <p>In brief:</p>
-    <ol>
+    <ul>
       <li>Your affiliates create a Gumroad account (to get paid!). </li>
       <li>You add them as an affiliate to your product(s). </li>
       <li>They are sent an affiliate link that looks something like this:<a href="https://www.gumroad.com/a/1234567"> www.gumroad.com/a/1234567</a></li>
       <li>Note the "/a/" in it. That signifies that this is an affiliate link. They share that link with the world. </li>
       <li>When a customer clicks that link, their browser is "cookied" for 30 days. If they buy the products that your affiliate is assigned within 30 days, your affiliate is credited with the sale. We take our fee, and you and your affiliate split the remainder. </li>
       <li>After 7 days, your affiliate can be paid out for that sale. The same <a href="13-getting-paid"> payout rules</a> apply!</li>
-    </ol>
+    </ul>
     <p>To get started, go to your <a href="https://gumroad.com/affiliates">Affiliates Dashboard</a>. You can find the link at the bottom left of your dashboard. Click the arrow next to your username, then click Affiliates</p>
     <figure><%= image_tag "https://lh7-us.googleusercontent.com/docsz/AD_4nXdb98RI4F0VScrX8SURh3SaT-OYpepncrreGJa6K-iaUpHzO0BmfuJ1z_HW669GBQLUOY2JQox1x5KaM3Fllykw_D2vlY4mzHzmiwGWYAPdpFTQrvw77uduVMJMSbg4vRDwM4HuDOQOEgIR_jI0uyNT1uMc?key=IlXfEmf2yu_7yhYw2YKmPA" %></figure>
     <h3 id="Adding-a-new-affiliate"><span>Adding a new affiliate</span></h3>
@@ -60,10 +60,10 @@
     <figure><%= image_tag "https://lh7-us.googleusercontent.com/docsz/AD_4nXdt79oonZ9jrC3EisnX-nLSla1sS-5FJQ-jR69_J7w9ZfIRKNUu5adUeprGml3JcMY9S2K5JfomZiJr3RcfEAmXzxf8kgmXN0oA8X1GKbyjrQGdJRJOzhgFuameKwPap46VGPQEhO0V-wAT36XRNgvaG8w?key=IlXfEmf2yu_7yhYw2YKmPA" %></figure>
     <p>If you see this error message when trying to add an affiliate, it means they have either not created a Gumroad account yet or they have not confirmed the email address on their account.</p>
     <p>Make sure they have: </p>
-    <ol>
+    <ul>
       <li>Created an account and are logging in with the email address they have provided you.</li>
       <li>Confirmed their account’s email address. They can resend themselves a confirmation link from the<a href="https://gumroad.com/settings/"> settings page</a>.</li>
-    </ol>
+    </ul>
     <p>You may also see an error when attempting to add an affiliate that is already affiliated with another product. You can’t add multiple affiliates for the same email address; you will have to edit the existing affiliate record and enable that new product for them. You also cannot have a collaborator and an affiliate on the same product at the same time.</p>
     <h4><span>Give them a product to sell!</span></h4>
     <p>You can select one or more products you’d like your affiliate to sell. Click on “All products” if you want an affiliate to sell all of them.</p>
@@ -150,12 +150,12 @@
       <li> Click on gumroad.com (of course) from the various cookie origins, and look for the cookie name starting with _gumroad_affiliate_id_You can even check when your cookie will expire in the "Expires/Max-Age" column. </li>
     </ol>
     <h3 id="Why-was-an-affiliate-not-credited-for-a-sale"><span>Why was an affiliate not credited for a sale?</span></h3>
-    <ol>
+    <ul>
       <li>The customer's web browser does not accept "cookies." Our affiliate feature can only work if a browser accepts cookies. (Unless you are using a <a href="249-affiliate-faq#Stickyaffiliatelinks"> sticky link</a>).</li>
       <li>The sale was refunded - when that happens your affiliate commission is refunded, as well. </li>
       <li>The customer did not buy the product within 30 days of clicking your link. Our cookies expire after 30 days. Gumroad affiliate cookies expire after 7 days.</li>
       <li>The customer clicked a different affiliate's link after they clicked yours.</li>
-    </ol>
+    </ul>
     <h3 id="Order-of-Affiliate-Sales"><span>Order of Affiliate Sales</span></h3>
     <p>When two affiliates refer a customer to the same product, the affiliate whose link was clicked on most recently will be credited with the sale. You can check this with the _gumroad_affiliate_id_ cookie, as above. Each affiliate's cookie will be present, and the one with the highest "Expires/Max-Age" value (30 days after the click) will be credited with the sale.</p>
     <h3 id="Can-the-affiliate-links-be-shortenedpersonalized"><span>Can the affiliate links be shortened/personalized or combined with discount codes?</span></h3>

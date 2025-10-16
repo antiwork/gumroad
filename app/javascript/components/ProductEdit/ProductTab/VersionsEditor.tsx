@@ -9,6 +9,7 @@ import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
+import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -56,11 +57,11 @@ export const VersionsEditor = ({
   );
 
   return versions.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Offer variations of this product</h2>
       Sweeten the deal for your customers with different options for format, version, etc
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalVersion ? (

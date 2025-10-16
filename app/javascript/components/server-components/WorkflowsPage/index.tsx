@@ -22,6 +22,7 @@ import WorkflowForm, { WorkflowTrigger } from "$app/components/server-components
 import WorkflowList from "$app/components/server-components/WorkflowsPage/WorkflowList";
 import { Toggle } from "$app/components/Toggle";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import Placeholder from "$app/components/ui/Placeholder";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 type LayoutProps = {
@@ -138,13 +139,13 @@ const ErrorBoundary = () => {
   return (
     <div>
       <div>
-        <div className="placeholder">
+        <Placeholder>
           <p>
             {isRouteErrorResponse(error) && error.status === 404
               ? "The resource you're looking for doesn't exist."
               : "Something went wrong."}
           </p>
-        </div>
+        </Placeholder>
       </div>
     </div>
   );

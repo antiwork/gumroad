@@ -14,6 +14,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Stats as StatsComponent } from "$app/components/Stats";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -313,7 +314,7 @@ const AffiliatedPage = ({
       ) : (
         <section className="p-4 md:p-8">
           {initialAffiliatedProducts.length === 0 ? (
-            <div className="placeholder">
+            <Placeholder>
               <figure>
                 <img src={placeholder} />
               </figure>
@@ -331,17 +332,17 @@ const AffiliatedPage = ({
                   learn more to get started
                 </a>
               </p>
-            </div>
+            </Placeholder>
           ) : (
             <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
               <StatsSection {...stats} />
               {state.affiliatedProducts.length === 0 ? (
-                <div className="placeholder">
+                <Placeholder>
                   <figure>
                     <img src={placeholder} />
                   </figure>
                   <h2>No affiliated products found.</h2>
-                </div>
+                </Placeholder>
               ) : (
                 <AffiliatedProductsTable
                   affiliatedProducts={affiliatedProducts}

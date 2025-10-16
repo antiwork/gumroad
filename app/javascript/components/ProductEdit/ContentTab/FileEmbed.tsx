@@ -31,6 +31,7 @@ import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
 import { FileEmbedGroup, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const getDownloadUrl = (productId: string, file: FileEntry) =>
@@ -392,7 +393,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             )
           ) : (
             <div className="preview">
-              <div className="placeholder">
+              <Placeholder>
                 <label className="button primary">
                   {thumbnailInput}
                   <Icon name="upload-fill" />
@@ -406,7 +407,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 <div>
                   <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
                 </div>
-              </div>
+              </Placeholder>
             </div>
           )
         ) : null}
@@ -424,10 +425,10 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               ) : (
                 <>
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
-                  <div className="placeholder">
+                  <Placeholder>
                     {thumbnailInput}
                     <Icon name="upload-fill" />
-                  </div>
+                  </Placeholder>
                 </>
               )}
             </label>

@@ -1,5 +1,5 @@
 <% @description = "⚠️ Important: Our license key verification API requires the product_id parameter instead of product_permalink for all products created on or after Jan 9, 2023. " %>
-<div class="scoped-tailwind-preflight help-center-article">
+<div class="scoped-tailwind-preflight prose dark:prose-invert">
   <div>
     <div class="callout-yellow">
       <p>⚠️ <strong>Important:</strong> Our <a href="https://gumroad.com/api#licenses">license key verification API</a> requires the <code class="inline-code">product_id</code> parameter instead of <code class="inline-code">product_permalink</code> for all products created on or after Jan 9, 2023.</p>
@@ -61,11 +61,11 @@
     <h3 id="Managing-licenses-and-subscriptions-iiiW4">Managing licenses and subscriptions</h3>
     <br>
     <p>Our <a href="https://gumroad.com/api#licenses">Licenses API</a> will continue to return the key state as enabled until you disable it; however, we set the following fields with the appropriate timestamps so you can know if and when the membership has ended:</p>
-    <ol>
+    <ul>
       <li><code class="inline-code">subscription_ended_at</code> : Timestamp of a membership's end for a fixed-length membership, i.e. if the "Automatically end memberships after a number of months" setting is enabled on the product.</li>
       <li><code class="inline-code">subscription_cancelled_at</code> : Timestamp of a membership's end if it was cancelled by the customer or creator.</li>
       <li><code class="inline-code">subscription_failed_at</code> : Timestamp of a membership's end if it failed to renew (usually due to a card error)</li>
-    </ol>
+    </ul>
     <p>Please note that all these timestamps correspond to the membership end date and not the cancellation requested date/time. Also, successfully renewing or restarting the membership will reverse the values of these fields back to <code class="inline-code">null</code> . </p>
     <p>If one of these fields is not null, you can disable the license and terminate access to the software.</p>
     <h3 id="faqs">FAQs</h3>
