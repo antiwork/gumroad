@@ -22,9 +22,8 @@ class CreatorAnalytics::Churn
 
   def calculate
     @calculate ||= begin
-      period_start = start_date - 29.days
-      subscriptions = fetch_subscriptions(from: period_start, to: end_date).load
-      metrics = calculate_period_metrics(period_start, end_date, subscriptions)
+      subscriptions = fetch_subscriptions(from: start_date, to: end_date).load
+      metrics = calculate_period_metrics(start_date, end_date, subscriptions)
 
       {
         date: end_date,
