@@ -136,6 +136,25 @@ RSpec.describe ChargeProcessable do
   describe "integration with CreditCard model" do
     let(:credit_card) { build(:credit_card) }
 
+    before do
+      mock = double("Stripe::PaymentMethod")
+      customer_mock = double("Stripe::Customer")
+      allow(customer_mock).to receive(:id).and_return("stripe-customer-id")
+      card_mock = double("Stripe::Card")
+      allow(card_mock).to receive('[]').with(:brand).and_return("visa")
+      allow(card_mock).to receive('[]').with(:fingerprint).and_return("fingerprint")
+      allow(card_mock).to receive('[]').with(:last4).and_return("last4")
+      allow(card_mock).to receive('[]').with(:exp_month).and_return(12)
+      allow(card_mock).to receive('[]').with(:exp_year).and_return(2023)
+      allow(card_mock).to receive('[]').with(:funding).and_return("credit")
+      allow(card_mock).to receive('[]').with(:country).and_return("US")
+      allow(mock).to receive(:id).and_return("stripe-payment-method-id")
+      allow(mock).to receive(:customer).and_return(customer_mock)
+      allow(mock).to receive(:card).and_return(card_mock)
+      allow(Stripe::PaymentMethod).to receive(:create).and_return(mock)
+      allow(Stripe::PaymentMethod).to receive(:retrieve).and_return(mock)
+    end
+
     it "includes ChargeProcessable" do
       expect(credit_card.class.included_modules).to include(ChargeProcessable)
     end
