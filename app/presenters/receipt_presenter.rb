@@ -47,6 +47,10 @@ class ReceiptPresenter
     @_giftee_manage_subscription ||= ReceiptPresenter::GifteeManageSubscription.new(chargeable)
   end
 
+  def refund_policy_info
+    @_refund_policy_info ||= ReceiptPresenter::RefundPolicyInfo.new(chargeable)
+  end
+
   private
     attr_reader :chargeable
 end

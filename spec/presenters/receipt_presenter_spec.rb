@@ -102,6 +102,13 @@ describe ReceiptPresenter do
         expect(presenter.footer_info.send(:chargeable)).to eq(chargeable)
       end
     end
+
+    describe "#refund_policy_info" do
+      it "returns a RefundPolicyInfo object" do
+        expect(presenter.refund_policy_info).to be_a(ReceiptPresenter::RefundPolicyInfo)
+        expect(presenter.refund_policy_info.send(:chargeable)).to eq(chargeable)
+      end
+    end
   end
 
   describe "For Charge" do
@@ -203,6 +210,13 @@ describe ReceiptPresenter do
       it "returns a GifteeManageSubscription object" do
         expect(presenter.giftee_manage_subscription).to be_a(ReceiptPresenter::GifteeManageSubscription)
         expect(presenter.giftee_manage_subscription.send(:chargeable)).to eq(chargeable)
+      end
+    end
+
+    describe "#refund_policy_info" do
+      it "returns a RefundPolicyInfo object" do
+        expect(presenter.refund_policy_info).to be_a(ReceiptPresenter::RefundPolicyInfo)
+        expect(presenter.refund_policy_info.send(:chargeable)).to eq(chargeable)
       end
     end
   end

@@ -1,0 +1,13 @@
+<% if receipt_presenter.refund_policy_info.present? %>
+  <div>
+    <h3>Refund policy</h3>
+    <div>
+      <strong><%= receipt_presenter.refund_policy_info.title %></strong>
+    </div>
+    <% if receipt_presenter.refund_policy_info.fine_print.present? %>
+      <div style="margin-top: 8px;">
+        <%= simple_format(receipt_presenter.refund_policy_info.fine_print) %>
+      </div>
+    <% end %>
+  </div>
+<% end %>
