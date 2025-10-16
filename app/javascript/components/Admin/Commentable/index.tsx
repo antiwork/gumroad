@@ -43,11 +43,9 @@ const AdminCommentableComments = ({ endpoint, commentableType }: AdminCommentabl
   return (
     <>
       <hr />
+      <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
       <details open={open} onToggle={onToggle} className="space-y-2">
-        <summary>
-          <h3>Comments</h3>
-        </summary>
-        <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
+        <summary>Comments</summary>
         <AdminCommentableContent count={comments.length} comments={comments} isLoading={isLoading} />
       </details>
     </>

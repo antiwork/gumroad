@@ -3,7 +3,7 @@
 module Admin::Commentable
   def index
     render json: {
-      comments: json_payload(commentable.comments.includes(:author).references(:author).order(created_at: :desc))
+      comments: commentable.comments.includes(:author).references(:author).order(created_at: :desc).map { json_payload(_1) }
     }
   end
 
@@ -29,15 +29,14 @@ module Admin::Commentable
       params.require(:comment).permit(:content, :comment_type)
     end
 
-    def json_payload(serializable)
-      serializable.as_json(
-        only: %i[id author_name comment_type updated_at],
+    def json_payload(comment)
+      comment.as_json(
+        only: %i[id author_name comment_type content updated_at],
         include: {
           author: {
             only: %i[id name email],
           }
         },
-        methods: :content_formatted
-      )
+      ).reverse_merge(author: nil)
     end
 end

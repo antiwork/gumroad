@@ -1,13 +1,12 @@
+import { Link } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
+import { YesIcon, NoIcon } from "$app/components/Admin/Icons";
 import Loading from "$app/components/Admin/Loading";
-import MerchantAccount, {
-  type MerchantAccountProps,
-} from "$app/components/Admin/Users/MerchantAccounts/MerchantAccount";
 import type { User } from "$app/components/Admin/Users/User";
 
 type AdminUserMerchantAccountsProps = {
@@ -25,6 +24,22 @@ type MerchantAccountsContentProps = {
   has_stripe_account: boolean;
   isLoading: boolean;
 };
+
+export type MerchantAccountProps = {
+  id: number;
+  charge_processor_id: string;
+  alive: boolean;
+  charge_processor_alive: boolean;
+};
+
+const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_alive }: MerchantAccountProps) => (
+  <li>
+    <Link href={Routes.admin_merchant_account_path(id)}>
+      {id} - {charge_processor_id}
+    </Link>
+    {alive && charge_processor_alive ? <YesIcon /> : <NoIcon />}
+  </li>
+);
 
 const MerchantAccountsContent = ({
   user,

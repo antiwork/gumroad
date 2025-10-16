@@ -2,7 +2,11 @@ import { Link } from "@inertiajs/react";
 import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
-import type { UserMembership } from "$app/components/Admin/Users/User";
+import type { User, UserMembership } from "$app/components/Admin/Users/User";
+
+type MembershipsProps = {
+  user: User;
+};
 
 type MembershipProps = {
   membership: UserMembership;
@@ -34,4 +38,21 @@ const Membership = ({ membership }: MembershipProps) => (
   </div>
 );
 
-export default Membership;
+const Memberships = ({ user: { admin_manageable_user_memberships } }: MembershipsProps) =>
+  admin_manageable_user_memberships.length > 0 && (
+    <>
+      <hr />
+      <details>
+        <summary>
+          <h3>User memberships</h3>
+        </summary>
+        <div className="stack">
+          {admin_manageable_user_memberships.map((membership) => (
+            <Membership key={membership.id} membership={membership} />
+          ))}
+        </div>
+      </details>
+    </>
+  );
+
+export default Memberships;

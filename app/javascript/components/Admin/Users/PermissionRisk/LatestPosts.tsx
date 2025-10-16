@@ -4,12 +4,24 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
-import Post, { type PostProps } from "$app/components/Admin/Users/PermissionRisk/LatestPosts/Post";
 import type { User } from "$app/components/Admin/Users/User";
 
 type LatestPostsProps = {
   user: User;
 };
+
+export type PostProps = {
+  id: number;
+  name: string;
+  created_at: string;
+};
+
+const Post = ({ name, created_at }: PostProps) => (
+  <div>
+    <h5>{name}</h5>
+    <time>{created_at}</time>
+  </div>
+);
 
 const LatestPostsContent = ({ posts, isLoading }: { posts: PostProps[]; isLoading: boolean }) => {
   if (isLoading) return <Loading />;

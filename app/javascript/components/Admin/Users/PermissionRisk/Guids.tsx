@@ -1,12 +1,26 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
-import Guid from "$app/components/Admin/Users/PermissionRisk/Guids/Guid";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
+
+type GuidProps = {
+  guid: string;
+  user_ids: number[];
+};
+
+const Guid = ({ guid, user_ids }: GuidProps) => (
+  <div>
+    <h5>
+      <Link href={Routes.admin_compliance_guids_path(guid)}>{guid}</Link>
+    </h5>
+    <span>{user_ids.length} users</span>
+  </div>
+);
 
 const UserGuidsContent = ({ userGuids, isLoading }: { userGuids: UserGuids; isLoading: boolean }) => {
   if (isLoading) return <Loading />;

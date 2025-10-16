@@ -3,10 +3,7 @@ import React from "react";
 import { formatDate } from "$app/utils/date";
 
 import { NoIcon, YesIcon } from "$app/components/Admin/Icons";
-
-type ComplianceInfoComponentProps = {
-  complianceInfo: ComplianceInfoProps | null;
-};
+import type { User } from "$app/components/Admin/Users/User";
 
 export type ComplianceInfoProps = {
   is_business: boolean | null;
@@ -29,6 +26,14 @@ export type ComplianceInfoProps = {
   business_country: string | null;
   has_business_tax_id: boolean;
   created_at: string;
+};
+
+type AdminUserComplianceInfoProps = {
+  user: User;
+};
+
+type ComplianceInfoComponentProps = {
+  complianceInfo: ComplianceInfoProps | null;
 };
 
 const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
@@ -134,4 +139,11 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
   );
 };
 
-export default ComplianceInfo;
+const AdminUserComplianceInfo = ({ user }: AdminUserComplianceInfoProps) => (
+  <>
+    <hr />
+    <ComplianceInfo complianceInfo={user.alive_user_compliance_info} />
+  </>
+);
+
+export default AdminUserComplianceInfo;
