@@ -26,7 +26,7 @@ describe PdfStampingService::StampForPurchase do
 
         stamped_pdf = url_redirect.stamped_pdfs.first
         expect(stamped_pdf.product_file).to eq(product_file_one)
-        expect(stamped_pdf.url).to match(/s3.amazonaws.com/)
+        expect(stamped_pdf.url).to match(/#{AWS_S3_ENDPOINT}/)
         expect(url_redirect.reload.is_done_pdf_stamping?).to eq(true)
       end
 
@@ -61,7 +61,7 @@ describe PdfStampingService::StampForPurchase do
 
         def expect_stamped_pdf(stamped_pdf, product_file)
           expect(stamped_pdf.product_file).to eq(product_file)
-          expect(stamped_pdf.url).to match(/s3.amazonaws.com/)
+          expect(stamped_pdf.url).to match(/#{AWS_S3_ENDPOINT}/)
         end
       end
     end
