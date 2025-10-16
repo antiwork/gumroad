@@ -5,14 +5,12 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 
-export type ProductOption = Product & { selected: boolean };
-
 export const ProductsPopover = ({
   products,
   setProducts,
 }: {
-  products: ProductOption[];
-  setProducts: React.Dispatch<React.SetStateAction<ProductOption[]>>;
+  products: (Product & { selected: boolean })[];
+  setProducts: React.Dispatch<React.SetStateAction<(Product & { selected: boolean })[]>>;
 }) => (
   <Popover
     trigger={

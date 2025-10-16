@@ -49,7 +49,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
   const { has_subscription_products, products: initialProducts } = churn_props;
   const dateRange = useAnalyticsDateRange();
   const [data, setData] = React.useState<ChurnData | null>(churn_data || null);
-  const [productOptions, setProductOptions] = React.useState(
+  const [products, setProducts] = React.useState(
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
 
@@ -62,7 +62,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
     const fromDate = lightFormat(dateRange.from, "yyyy-MM-dd");
     const toDate = lightFormat(dateRange.to, "yyyy-MM-dd");
 
-    const selectedProductIds = productOptions.reduce<string[]>((ids, { id, selected }) => {
+    const selectedProductIds = products.reduce<string[]>((ids, { id, selected }) => {
       if (selected) ids.push(id);
       return ids;
     }, []);
@@ -79,7 +79,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
         setData(churnData);
       },
     });
-  }, [dateRange.from, dateRange.to, hasContent, productOptions]);
+  }, [dateRange.from, dateRange.to, hasContent, products]);
 
   return (
     <AnalyticsLayout
@@ -87,7 +87,7 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
       actions={
         hasContent ? (
           <>
-            <ProductsPopover products={productOptions} setProducts={setProductOptions} />
+            <ProductsPopover products={products} setProducts={setProducts} />
             <ChurnDateRangePicker {...dateRange} />
           </>
         ) : null
