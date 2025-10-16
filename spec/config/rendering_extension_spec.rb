@@ -132,6 +132,9 @@ describe "RenderingExtension" do
                   },
                   community: {
                     index: false,
+                  },
+                  churn: {
+                    show: true,
                   }
                 },
                 is_gumroad_admin: false,
