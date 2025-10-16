@@ -378,7 +378,7 @@ const ItemsList = ({
       {footer}
 
       {displayedItem.key !== initialMenuItem.key ? (
-        <a
+        <ItemsListItem
           key={`back${displayedItem.key}`}
           href={displayedItem.parent?.href ?? "#"}
           onClick={(e) => {
@@ -386,25 +386,19 @@ const ItemsList = ({
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
-          className="shrink-0 justify-normal gap-2 bg-inherit! p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!"
-          role="menuitem"
+          className="justify-normal bg-inherit!"
         >
           <Icon name="outline-cheveron-left" />
           <span>Back</span>
-        </a>
+        </ItemsListItem>
       ) : null}
       {displayedItem.key !== initialMenuItem.key || showAllItemOnInitialList ? (
-        <a
-          href={displayedItem.href}
-          onClick={(e) => onSelectItem?.(displayedItem, e)}
-          className="shrink-0 justify-between gap-2 p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!"
-          role="menuitem"
-        >
+        <ItemsListItem href={displayedItem.href} onClick={(e) => onSelectItem?.(displayedItem, e)}>
           All {displayedItem.label}
-        </a>
+        </ItemsListItem>
       ) : null}
       {displayedItem.children.map((item) => (
-        <a
+        <ItemsListItem
           key={item.key}
           href={item.href}
           onClick={(e) => {
@@ -414,20 +408,29 @@ const ItemsList = ({
               setDisplayedItem(item);
             } else return onSelectItem?.(item, e);
           }}
-          className={classNames(
-            "shrink-0 justify-between gap-2 p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!",
-            {
-              "flex! items-center! no-underline!": item.children.length,
-            },
-          )}
-          role="menuitem"
+          className={classNames({
+            "flex! items-center! no-underline!": item.children.length,
+          })}
           aria-haspopup={item.children.length ? "menu" : undefined}
         >
           {item.label}
           {item.children.length ? <Icon name="outline-cheveron-right" /> : null}
-        </a>
+        </ItemsListItem>
       ))}
       {displayedItem.image ? <img src={displayedItem.image} className="mt-auto w-full translate-6" /> : null}
     </div>
   );
 };
+
+export const ItemsListItem = ({ children, className, ...rest }: React.ComponentPropsWithoutRef<"a">) => (
+  <a
+    className={classNames(
+      "shrink-0 justify-between gap-2 p-4! whitespace-normal! underline hover:bg-primary! hover:text-primary-foreground!",
+      className,
+    )}
+    role="menuitem"
+    {...rest}
+  >
+    {children}
+  </a>
+);
