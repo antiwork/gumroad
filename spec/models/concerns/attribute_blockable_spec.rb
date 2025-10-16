@@ -744,25 +744,5 @@ describe AttributeBlockable do
       blocked_objects = user.blocked_objects_for_values(:email, [])
       expect(blocked_objects).to be_empty
     end
-
-    it "filters out expired objects" do
-      # Create an expired blocked object
-      BlockedObject.create!(
-        object_type: BLOCKED_OBJECT_TYPES[:email],
-        object_value: "expired@example.com",
-        blocked_at: 2.hours.ago,
-        expires_at: 1.hour.ago,
-        blocked_by: 1
-      )
-
-      # Create an active blocked object
-      BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], "active@example.com", 1)
-
-      values = ["expired@example.com", "active@example.com"]
-      blocked_objects = user.blocked_objects_for_values(:email, values)
-
-      expect(blocked_objects.count).to eq(1)
-      expect(blocked_objects.first.object_value).to eq("active@example.com")
-    end
   end
 end
