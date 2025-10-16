@@ -10,8 +10,12 @@ aws_config = {
   region: AWS_DEFAULT_REGION,
   credentials: Aws::Credentials.new(AWS_ACCESS_KEY, AWS_SECRET_KEY)
 }
-aws_config[:endpoint] = AWS_S3_ENDPOINT if AWS_S3_ENDPOINT.present?
-aws_config[:force_path_style] = true if Rails.env.test?
+
+# Support for MinIO in development and test environments
+if Rails.env.development? || Rails.env.test?
+  aws_config[:endpoint] = AWS_S3_ENDPOINT if AWS_S3_ENDPOINT.present?
+  aws_config[:force_path_style] = true
+end
 
 Aws.config.update(aws_config)
 
