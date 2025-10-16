@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import * as React from "react";
 
 import {
@@ -55,6 +56,7 @@ export const PriceTag = ({
     </>
   );
   const tooltipUid = React.useId();
+  const borderClasses = "border-l-1 border-r-transparent border-[calc(0.5lh+--spacing(1))]";
 
   return (
     <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
@@ -63,17 +65,14 @@ export const PriceTag = ({
         aria-describedby={tooltipUid}
       >
         <div
-          // Round up line height to prevent subpixel rendering issues - https://issues.chromium.org/issues/360846285
-          className="box-content h-[round(up,1lh,1px)] bg-accent px-2 py-1 text-black"
+          className="bg-accent px-2 py-1 text-black"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
           {priceTag}
         </div>
-        <svg viewBox="0 0 1 2" className="h-full">
-          <polygon className="fill-accent" points="0,0 1,0 0,1 1,2 0,2" />
-          <polyline points="1,0 0,1 1,2" fill="none" className="stroke-black" vectorEffect="non-scaling-stroke" />
-        </svg>
+        <div className={classNames(borderClasses, "border-black")} />
+        <div className={classNames(borderClasses, "absolute top-0 right-px bottom-0 border-accent")} />
         <div role="tooltip" id={tooltipUid}>
           {priceTag}
         </div>
