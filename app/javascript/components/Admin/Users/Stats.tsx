@@ -33,7 +33,7 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
   }, [isVisible]);
 
   React.useEffect(() => {
-    if (!isVisible) return;
+    if (!isVisible || userStats) return;
 
     const fetchUserStats = async () => {
       try {
@@ -52,7 +52,7 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
     };
 
     void fetchUserStats();
-  }, [isVisible, user_id]);
+  }, [isVisible, userStats, user_id]);
 
   return (
     <ul ref={elementRef} className="inline">

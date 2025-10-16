@@ -28,16 +28,16 @@ type MerchantAccountsContentProps = {
 export type MerchantAccountProps = {
   id: number;
   charge_processor_id: string;
-  alive: boolean;
+  deleted_at: string | null;
   charge_processor_alive: boolean;
 };
 
-const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_alive }: MerchantAccountProps) => (
+const MerchantAccount = ({ id, charge_processor_id, deleted_at, charge_processor_alive }: MerchantAccountProps) => (
   <li>
     <Link href={Routes.admin_merchant_account_path(id)}>
       {id} - {charge_processor_id}
     </Link>
-    {alive && charge_processor_alive ? <YesIcon /> : <NoIcon />}
+    {!deleted_at && charge_processor_alive ? <YesIcon /> : <NoIcon />}
   </li>
 );
 

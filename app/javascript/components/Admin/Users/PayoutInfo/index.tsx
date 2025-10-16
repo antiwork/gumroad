@@ -11,37 +11,42 @@ type AdminUserPayoutInfoProps = {
 };
 
 const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
-  const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<PayoutInfoProps | null>(null);
+  const [isVisible, setIsVisible] = React.useState(false);
+  const elementRef = React.useRef<HTMLDivElement>(null);
 
-  const fetchPayoutInfo = async () => {
-    setIsLoading(true);
-    const response = await request({
-      method: "GET",
-      url: Routes.admin_user_payout_info_path(user.id),
-      accept: "json",
-    });
-    setData(cast<PayoutInfoProps>(await response.json()));
-    setIsLoading(false);
-  };
+  React.useEffect(() => {
+    if (!elementRef.current) return;
+    const observer = new IntersectionObserver((entries) => setIsVisible(entries.some((entry) => entry.isIntersecting)));
+    observer.observe(elementRef.current);
+    return () => observer.disconnect();
+  }, [isVisible]);
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
-      void fetchPayoutInfo();
-    }
-  };
+  React.useEffect(() => {
+    if (!isVisible || data) return;
+
+    const fetchPayoutInfo = async () => {
+      setIsLoading(true);
+      const response = await request({
+        method: "GET",
+        url: Routes.admin_user_payout_info_path(user.id),
+        accept: "json",
+      });
+      setData(cast<PayoutInfoProps>(await response.json()));
+      setIsLoading(false);
+    };
+
+    void fetchPayoutInfo();
+  }, [isVisible, data, user.id]);
 
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>Payout Info</h3>
-        </summary>
+      <div ref={elementRef}>
+        <h3>Payout Info</h3>
         <PayoutInfo user_id={user.id} payoutInfo={data} isLoading={isLoading} />
-      </details>
+      </div>
     </>
   );
 };
