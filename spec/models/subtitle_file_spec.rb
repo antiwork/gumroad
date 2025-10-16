@@ -50,7 +50,7 @@ describe SubtitleFile do
 
         context "and subtitle is an S3 URL" do
           before do
-            @subtitle = build(:subtitle_file, url: "https://s3.amazonaws.com/gumroad/attachments/1234/abcdef/original/My Awesome Youtube video.mov")
+            @subtitle = build(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/gumroad/attachments/1234/abcdef/original/My Awesome Youtube video.mov")
           end
 
           it "is invalid" do
@@ -67,7 +67,7 @@ describe SubtitleFile do
 
         context "and subtitle is an S3 URL" do
           before do
-            @subtitle = build(:subtitle_file, url: "https://s3.amazonaws.com/gumroad/attachments/1234/abcdef/original/My Subtitle.sub")
+            @subtitle = build(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/gumroad/attachments/1234/abcdef/original/My Subtitle.sub")
           end
 
           it "is valid" do

@@ -245,7 +245,7 @@ describe User, :vcr do
 
   describe "has_cdn_url" do
     before do
-      stub_const("CDN_URL_MAP", { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}" => "https://public-files.gumroad.com", "https://s3.amazonaws.com/gumroad/" => "https://public-files.gumroad.com/res/gumroad/" })
+      stub_const("CDN_URL_MAP", { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}" => "https://public-files.gumroad.com", "#{AWS_S3_ENDPOINT}/gumroad/" => "https://public-files.gumroad.com/res/gumroad/" })
       puts "CDN_URL_MAP: #{CDN_URL_MAP}"
       puts "AWS_S3_ENDPOINT: #{AWS_S3_ENDPOINT}"
     end
