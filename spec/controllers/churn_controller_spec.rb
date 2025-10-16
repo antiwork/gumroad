@@ -78,13 +78,10 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
         get :show
         expect(response).to be_successful
         expect(inertia.props[:churn_props]).to include(
-          has_subscription_products: false
+          has_subscription_products: false,
+          products: be_empty
         )
-      end
-
-      it "returns empty products array" do
-        get :show
-        expect(inertia.props[:churn_props][:products]).to be_empty
+        expect(inertia.props[:churn_data]).to be_nil
       end
     end
 
@@ -148,7 +145,7 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
       end
 
       it "calculates data in real-time when churn_data is requested" do
-        allow(Rails.cache).to receive(:fetch).and_call_original
+        expect(Rails.cache).to receive(:fetch).and_call_original
 
         get :show, params: { only: ["churn_data"] }
         expect(response).to be_successful

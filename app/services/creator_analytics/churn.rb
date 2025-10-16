@@ -23,7 +23,7 @@ class CreatorAnalytics::Churn
   def calculate
     @calculate ||= begin
       period_start = start_date - 29.days
-      subscriptions = fetch_subscriptions(from: period_start, to: end_date).to_a
+      subscriptions = fetch_subscriptions(from: period_start, to: end_date).load
       metrics = calculate_period_metrics(period_start, end_date, subscriptions)
 
       {
@@ -56,11 +56,10 @@ class CreatorAnalytics::Churn
   def calculate_by_date
     @calculate_by_date ||= begin
       earliest_date = start_date - 29.days
-      all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date).to_a
+      all_subscriptions = fetch_subscriptions(from: earliest_date, to: end_date).load
 
       (start_date..end_date).map do |date|
-        period_start = date - 29.days
-        calculate_for_period(period_start, date, all_subscriptions)
+        calculate_for_period(29.days.before(date), date, all_subscriptions)
       end
     end
   end
@@ -202,34 +201,6 @@ class CreatorAnalytics::Churn
       subscription.deactivated_at&.between?(period_start, period_end)
     end
 
-    def total_subscriber_base
-      @total_subscriber_base ||= active_at_start_count + new_subscribers_count
-    end
-
-    def active_at_start_count
-      @active_at_start_count ||= count_subscriptions(active_at_start_scope)
-    end
-
-    def new_subscribers_count
-      @new_subscribers_count ||= count_subscriptions(Subscription.where(created_at: start_date..end_date))
-    end
-
-    def churned_count
-      @churned_count ||= count_subscriptions(Subscription.where(deactivated_at: start_date..end_date))
-    end
-
-    def churned_mrr
-      @churned_mrr ||= churned_subscriptions.sum { |sub| calculate_mrr_cents(sub) }
-    end
-
-    def churned_subscriptions
-      @churned_subscriptions ||= fetch_subscriptions(from: start_date, to: end_date)
-        .where(deactivated_at: start_date..end_date)
-    end
-
-    def count_subscriptions(scope)
-      subscription_products.joins(:subscriptions).merge(scope).count
-    end
 
     def calculate_mrr_cents(subscription)
       payment_option = subscription.last_payment_option

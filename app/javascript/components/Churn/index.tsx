@@ -1,6 +1,7 @@
 import { router } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
+import { cast } from "ts-safe-cast";
 
 export type ChurnData = {
   start_date: string;
@@ -44,14 +45,6 @@ export type ChurnProps = {
   churn_data: ChurnData | null;
 };
 
-const isChurnData = (data: unknown): data is ChurnData =>
-  typeof data === "object" &&
-  data !== null &&
-  "daily_data" in data &&
-  "metrics" in data &&
-  "start_date" in data &&
-  "end_date" in data;
-
 const Churn = ({ churn_props, churn_data }: ChurnProps) => {
   const { has_subscription_products, products: initialProducts } = churn_props;
   const dateRange = useAnalyticsDateRange();
@@ -82,10 +75,8 @@ const Churn = ({ churn_props, churn_data }: ChurnProps) => {
         products: selectedProductIds,
       },
       onSuccess: (page) => {
-        const churnData = page.props.churn_data;
-        if (isChurnData(churnData)) {
-          setData(churnData);
-        }
+        const churnData = cast<ChurnData>(page.props.churn_data);
+        setData(churnData);
       },
     });
   }, [dateRange.from, dateRange.to, hasContent, productOptions]);
