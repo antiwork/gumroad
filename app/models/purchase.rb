@@ -3324,7 +3324,7 @@ class Purchase < ApplicationRecord
     def validate_offer_code
       return if errors.present?
       # accept the offer code that was used when the buyer preordered/subscribed
-      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase
+      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || is_installment_payment
       return if discount_code.blank?
 
       if offer_code.nil?
