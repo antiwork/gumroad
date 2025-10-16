@@ -63,7 +63,7 @@ export const ReviewResponseForm = ({
   return (
     <section>
       {isEditing ? (
-        <form onSubmit={(event) => void respondToReview(event)} className="override grid gap-3">
+        <form onSubmit={(event) => void respondToReview(event)} className="grid gap-3">
           <textarea
             value={message}
             placeholder="Add a response to the review"

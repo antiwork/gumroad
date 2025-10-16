@@ -89,7 +89,7 @@ class Admin::BaseController < ApplicationController
         instance_variable_set("@#{key}", kwargs[:props][key])
       end
 
-      render template: kwargs[:inertia].downcase.to_s + "_old", layout: "admin_old"
+      render template: kwargs[:inertia].underscore, layout: "admin_old"
     end
 
   private

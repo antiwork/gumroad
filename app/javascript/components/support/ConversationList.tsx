@@ -3,6 +3,7 @@ import placeholderImage from "images/placeholders/support.png";
 import React from "react";
 
 import { Button } from "$app/components/Button";
+import Placeholder from "$app/components/ui/Placeholder";
 
 export function ConversationList({
   onSelect,
@@ -21,7 +22,7 @@ export function ConversationList({
   if (conversations.length === 0) {
     return (
       <section className="p-4 md:p-8">
-        <div className="placeholder">
+        <Placeholder>
           <figure>
             <img src={placeholderImage} />
           </figure>
@@ -33,7 +34,7 @@ export function ConversationList({
           <Button color="accent" onClick={onOpenNewTicket}>
             Contact support
           </Button>
-        </div>
+        </Placeholder>
       </section>
     );
   }

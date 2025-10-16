@@ -32,6 +32,7 @@ import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
@@ -268,7 +269,7 @@ const Collaborators = () => {
         </>
       ) : (
         <section className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -277,7 +278,7 @@ const Collaborators = () => {
             <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
               Learn more about collaborators
             </a>
-          </div>
+          </Placeholder>
         </section>
       )}
     </Layout>

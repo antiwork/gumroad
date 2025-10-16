@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" source(none); /* Should be layer(utilties) but that conflicts with the legacy non-layer CSS */
+@plugin "@tailwindcss/typography";
 /*
  * By default Tailwind checks all files in the project for classes, but in Gumroad that causes performance issues.
  * Whitelisting source directories solves the issue, but we need to keep the list up to date to cover all frontend code.
@@ -33,11 +34,37 @@
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
   --spacing-product-page: 75.25rem;
+  --grid-cols-sidebar: 1fr 3fr;
+
+  --animate-fade-in-down-out-up: fade-in-down-out-up 5s both;
+
+  @keyframes fade-in-down-out-up {
+    0% {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    5% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    95% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+  }
 }
 
 @layer base {
   .scoped-tailwind-preflight {
     @import "tailwindcss/preflight.css";
+
+    * {
+      border-color: var(--color-border);
+    }
   }
 }
 

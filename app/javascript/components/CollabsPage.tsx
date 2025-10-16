@@ -1,9 +1,7 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Membership, Product } from "$app/data/collabs";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { NavigationButton } from "$app/components/Button";
 import { PaginationProps } from "$app/components/Pagination";
@@ -11,20 +9,13 @@ import { ProductsLayout } from "$app/components/ProductsLayout";
 import { CollabsMembershipsTable } from "$app/components/ProductsPage/Collabs/MembershipsTable";
 import { CollabsProductsTable } from "$app/components/ProductsPage/Collabs/ProductsTable";
 import { Stats as StatsComponent } from "$app/components/Stats";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
 
-const CollabsPage = ({
-  memberships,
-  memberships_pagination: membershipsPagination,
-  products,
-  products_pagination: productsPagination,
-  stats,
-  archived_tab_visible: archivedTabVisible,
-  collaborators_disabled_reason: collaboratorsDisabledReason,
-}: {
+export type CollabsPageProps = {
   memberships: Membership[];
   memberships_pagination: PaginationProps;
   products: Product[];
@@ -37,14 +28,24 @@ const CollabsPage = ({
   };
   archived_tab_visible: boolean;
   collaborators_disabled_reason: string | null;
-}) => {
+};
+
+const CollabsPage = ({
+  memberships,
+  memberships_pagination: membershipsPagination,
+  products,
+  products_pagination: productsPagination,
+  stats,
+  archived_tab_visible: archivedTabVisible,
+  collaborators_disabled_reason: collaboratorsDisabledReason,
+}: CollabsPageProps) => {
   const userAgentInfo = useUserAgentInfo();
 
   return (
     <ProductsLayout selectedTab="collabs" title="Products" archivedTabVisible={archivedTabVisible}>
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -65,7 +66,7 @@ const CollabsPage = ({
                 learn more to get started
               </a>
             </p>
-          </div>
+          </Placeholder>
         ) : (
           <div style={{ display: "grid", gap: "var(--spacer-7)" }}>
             <div className="stats-grid" aria-label="Stats">
@@ -104,4 +105,4 @@ const CollabsPage = ({
   );
 };
 
-export default register({ component: CollabsPage, propParser: createCast() });
+export default CollabsPage;

@@ -3,7 +3,7 @@
 module Upsell::Sorting
   extend ActiveSupport::Concern
 
-  SORT_KEYS = ["name", "revenue", "uses"]
+  SORT_KEYS = ["name", "revenue", "uses", "status"]
 
   SORT_KEYS.each do |key|
     const_set(key.upcase, key)
@@ -23,6 +23,8 @@ module Upsell::Sorting
         left_outer_joins(:purchases_that_count_towards_volume)
           .group(:id)
           .order("SUM(purchases.quantity) #{direction}")
+      when STATUS
+        order(paused: direction)
       else
         all
       end

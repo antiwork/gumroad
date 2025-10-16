@@ -51,7 +51,7 @@ export const Review = ({
 
   return (
     <>
-      <section className="override grid gap-2">
+      <section className="grid gap-2">
         <span
           className="flex shrink-0 items-center gap-1"
           aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
@@ -66,7 +66,7 @@ export const Review = ({
         </section>
       </section>
       {review.response && !isEditing && !hideResponse ? (
-        <section className="override ml-4 grid gap-2">
+        <section className="ml-4 grid gap-2">
           <p className="m-0">{review.response.message}</p>
           <section className="flex flex-wrap items-center gap-1">
             {seller ? <ReviewUserAttribution avatarUrl={seller.avatar_url} name={seller.name} /> : null}

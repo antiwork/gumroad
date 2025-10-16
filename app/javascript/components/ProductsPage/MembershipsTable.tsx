@@ -86,7 +86,7 @@ export const ProductsPageMembershipsTable = (props: {
         <thead>
           <tr>
             <th />
-            <th {...thProps("name")} title="Sort by Name" className="pl-0 lg:relative lg:-left-20">
+            <th {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
             </th>
             <th {...thProps("successful_sales_count")} title="Sort by Members" className="lg:px-8">
@@ -169,7 +169,7 @@ export const ProductsPageMembershipsTable = (props: {
                 })()}
               </td>
               {membership.can_duplicate || membership.can_destroy ? (
-                <td className="whitespace-nowrap lg:px-8">
+                <td className="lg:px-8">
                   <ActionsPopover
                     product={membership}
                     onDuplicate={() => void loadMemberships(1)}

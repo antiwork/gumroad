@@ -88,7 +88,7 @@ export const ShareSection = ({
 
   return (
     <>
-      <div className="override grid grid-cols-[1fr_auto] gap-2">
+      <div className="grid grid-cols-[1fr_auto] gap-2">
         <ComboBox
           input={(props) => (
             <div {...props} className="input" aria-label="Add to wishlist">

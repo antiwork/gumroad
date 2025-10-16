@@ -6,6 +6,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import Placeholder from "$app/components/ui/Placeholder";
 
 export const ImageUploader = ({
   id,
@@ -35,13 +36,13 @@ export const ImageUploader = ({
     defaultImageUrl && `linear-gradient(${overlayColor}, ${overlayColor}), url(${defaultImageUrl}) center / cover`;
 
   return (
-    <div className="override grid grid-cols-[12.5rem_1fr] gap-5">
+    <div className="grid grid-cols-[12.5rem_1fr] gap-5">
       {uploading ? (
-        <div className="placeholder aspect-square items-center">
+        <Placeholder className="aspect-square items-center">
           <Progress width="2rem" />
-        </div>
+        </Placeholder>
       ) : imageUrl == null ? (
-        <div className="placeholder aspect-square items-center" style={{ background }}>
+        <Placeholder className="aspect-square items-center" style={{ background }}>
           <label className="button primary">
             <input
               type="file"
@@ -61,7 +62,7 @@ export const ImageUploader = ({
             <Icon name="upload-fill" />
             Upload
           </label>
-        </div>
+        </Placeholder>
       ) : (
         <figure className="relative aspect-square">
           <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded-sm border border-border bg-background" />

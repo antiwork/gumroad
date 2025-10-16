@@ -2,11 +2,12 @@ import React from "react";
 
 import { Membership, Product } from "$app/data/products";
 
-import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import ProductsPage from "./ProductsPage";
@@ -72,24 +73,24 @@ export const ProductsDashboardPage = ({
             </Popover>
           ) : null}
 
-          <NavigationButton href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
+          <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
-          </NavigationButton>
+          </NavigationButtonInertia>
         </>
       }
     >
       <section className="p-4 md:p-8">
         {memberships.length === 0 && products.length === 0 ? (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
             <h2>We’ve never met an idea we didn’t like.</h2>
             <p>Your first product doesn’t need to be perfect. Just put it out there, and see if it sticks.</p>
             <div>
-              <NavigationButton href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
+              <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
                 New product
-              </NavigationButton>
+              </NavigationButtonInertia>
             </div>
             <span>
               or{" "}
@@ -97,7 +98,7 @@ export const ProductsDashboardPage = ({
                 learn more about the products dashboard
               </a>
             </span>
-          </div>
+          </Placeholder>
         ) : (
           <ProductsPage
             memberships={memberships}
