@@ -37,6 +37,6 @@ module Purchase::Paypal
 
   private
     def paypal?
-      charge_processor_id == PaypalChargeProcessor.charge_processor_id
+      paypal_charge_processor?
     end
 end

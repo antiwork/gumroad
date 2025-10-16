@@ -14,14 +14,14 @@ FactoryBot.define do
     stripe_fingerprint { price_cents == 0 ? nil : "shfbeg5142fff" }
     stripe_transaction_id { price_cents == 0 ? nil : "2763276372637263" }
     card_type do
-      if charge_processor_id == PaypalChargeProcessor.charge_processor_id
+      if paypal_charge_processor?
         CardType::PAYPAL
       else
         "visa"
       end
     end
     card_visual do
-      if charge_processor_id == PaypalChargeProcessor.charge_processor_id
+      if paypal_charge_processor?
         "jane@paypal.com"
       else
         "**** **** **** 4062"
