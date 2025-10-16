@@ -1860,7 +1860,7 @@ describe Link, :vcr do
 
   context "when attributes have S3 URLs" do
     before do
-      stub_const("CDN_URL_MAP", { "https://s3.amazonaws.com/gumroad/" => "https://static-2.gumroad.com/res/gumroad/" })
+      stub_const("CDN_URL_MAP", { "#{AWS_S3_ENDPOINT}/gumroad/" => "https://static-2.gumroad.com/res/gumroad/" })
 
       @product = create(:product)
     end
@@ -1871,7 +1871,7 @@ describe Link, :vcr do
           <p class="">Sample description 1234</p><p class=""><br></p>
           <div class="medium-insert-images medium-insert-active contains-image-2085007717">
             <figure contenteditable="false">
-              <img src="https://s3.amazonaws.com/gumroad/files/sample/sample/original/sample.jpg" alt="">
+              <img src="#{AWS_S3_ENDPOINT}/gumroad/files/sample/sample/original/sample.jpg" alt="">
             </figure>
           </div>
         }
