@@ -72,10 +72,10 @@ const RefundPaymentMethodSection = ({
   );
 
   return (
-    <section id="refund-payment-method" className="stack gap-6">
-      <header className="stack gap-2">
+    <section className="p-4! md:p-8!">
+      <header>
         <h2>Refund payment method</h2>
-        <p>
+        <p className="text-muted text-sm leading-relaxed">
           Add a card to automatically cover refunds when your Gumroad balance is too low. You&apos;ll only be charged if
           your balance can&apos;t cover the refund amount.{" "}
           <a href={helpUrl} target="_blank" rel="noreferrer">
@@ -84,25 +84,30 @@ const RefundPaymentMethodSection = ({
           .
         </p>
       </header>
-      <fieldset>
-        <label htmlFor="refund-payment-method-name">Name on card</label>
-        <input
-          id="refund-payment-method-name"
-          type="text"
-          value={nameOnCard}
-          onChange={(evt) => setNameOnCard(evt.target.value)}
-          disabled={isFormDisabled}
-          placeholder="Cardholder name"
-        />
-      </fieldset>
-      <CreditCardInput
-        disabled={isFormDisabled}
-        savedCreditCard={savedCard}
-        onReady={setCardElement}
-        useSavedCard={shouldUseSavedCard}
-        setUseSavedCard={setUseSavedCard}
-        onChange={handleCardChange}
-      />
+      <section className="grid gap-8">
+        <fieldset className="w-full">
+          <label htmlFor="refund-payment-method-name">Name on card</label>
+          <input
+            id="refund-payment-method-name"
+            type="text"
+            value={nameOnCard}
+            onChange={(evt) => setNameOnCard(evt.target.value)}
+            disabled={isFormDisabled}
+            placeholder="John Doe"
+            autoComplete="cc-name"
+          />
+        </fieldset>
+        <div className="min-w-0">
+          <CreditCardInput
+            disabled={isFormDisabled}
+            savedCreditCard={savedCard}
+            onReady={setCardElement}
+            useSavedCard={shouldUseSavedCard}
+            setUseSavedCard={setUseSavedCard}
+            onChange={handleCardChange}
+          />
+        </div>
+      </section>
     </section>
   );
 };

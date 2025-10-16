@@ -2,6 +2,7 @@ import { DirectUpload, Blob } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
+import refundHands from "images/illustrations/hands.png";
 import * as React from "react";
 
 import {
@@ -459,33 +460,11 @@ const CustomersPage = ({
           </>
         }
       />
+
       {showRefundBanner ? (
-        <div
-          role="alert"
-          className="info"
-          style={{
-            margin: "0 var(--spacer-8) var(--spacer-8)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "var(--spacer-6)",
-            padding: "var(--spacer-6)",
-          }}
-        >
-          <div style={{ display: "grid", gap: "var(--spacer-2)" }}>
-            <strong>New: Refund customers instantly, even when your balance is low.</strong>
-            <p style={{ margin: 0 }}>
-              Add a backup payment method to cover refunds automatically if your balance can&apos;t.
-            </p>
-            <NavigationButton color="accent" href={refund_payment_method_settings_path}>
-              Set up backup method
-            </NavigationButton>
-          </div>
-          <button type="button" className="link" onClick={dismissRefundBanner}>
-            close
-          </button>
-        </div>
+        <RefundPaymentMethodBanner href={refund_payment_method_settings_path} onClose={dismissRefundBanner} />
       ) : null}
+
       <section className="p-4 md:p-8">
         {customers.length > 0 ? (
           <section className="paragraphs">
@@ -2637,6 +2616,51 @@ const CommissionSection = ({
           ) : null}
         </section>
       </section>
+    </section>
+  );
+};
+
+const RefundPaymentMethodBanner = ({ href, onClose }: { href: string; onClose?: () => void }) => {
+  const [show, setShow] = React.useState(false);
+
+  useRunOnce(() => {
+    if (localStorage.getItem("showRefundPaymentMethodBanner") !== "false") setShow(true);
+  });
+
+  if (!show) return null;
+
+  const handleClose = () => {
+    localStorage.setItem("showRefundPaymentMethodBanner", "false");
+    setShow(false);
+    if (onClose) onClose();
+  };
+
+  return (
+    <section className="mt-4 mb-6 px-4 md:mt-6 md:mb-8 md:px-8">
+      <div role="status" className="flex flex-col items-start gap-3 rounded border !border-pink bg-pink/20 p-3 text-sm">
+        <div className="flex w-full items-center gap-2">
+          <div className="flex items-center gap-3">
+            <img src={refundHands} alt="" className="h-12 w-10 shrink-0" aria-hidden />
+            <div className="leading-snug">
+              <span className="font-semibold">New:</span> Refund customers instantly, even when your balance is low. Add
+              a backup payment method to cover refunds automatically if your balance can&apos;t.
+              <div className="mt-0.5">
+                <a className="link inline-block" href={href}>
+                  Set up backup method
+                </a>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="link ml-auto self-center underline"
+            onClick={handleClose}
+            aria-label="Dismiss refund payment method banner"
+          >
+            close
+          </button>
+        </div>
+      </div>
     </section>
   );
 };

@@ -316,19 +316,8 @@ const PaymentsPage = (props: Props) => {
   };
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
-    if (!input) return false;
-    const cleaned = input.replace(/\s+/gu, "");
-    if (/^\+\d{6,}$/u.test(cleaned)) return true;
-
-    const directParse = parsePhoneNumberFromString(cleaned);
-    if (directParse?.isValid()) return true;
-
-    if (country_code) {
-      const countryCode: CountryCode = cast(country_code);
-      return Boolean(parsePhoneNumberFromString(cleaned, countryCode)?.isValid());
-    }
-
-    return false;
+    const countryCode: CountryCode = cast(country_code);
+    return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
   };
 
   const validateBankAccountFields = () => {
@@ -1145,8 +1134,8 @@ const PaymentsPage = (props: Props) => {
                 </Button>
               ) : null}
               {props.user.country_code === "BR" ||
-              props.user.can_connect_stripe ||
-              props.stripe_connect.has_connected_stripe ? (
+                props.user.can_connect_stripe ||
+                props.stripe_connect.has_connected_stripe ? (
                 <Button
                   role="radio"
                   key="stripe"
