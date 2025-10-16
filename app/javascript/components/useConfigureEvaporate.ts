@@ -12,6 +12,8 @@ export type UploadProgress = { percent: number; bitrate: number };
 type Props = { aws_access_key_id: string; s3_url: string; user_id: string };
 export const useConfigureEvaporate = (props: Props) => {
   const bucket = last(props.s3_url.split("/"));
+  // Extract the S3 endpoint from the s3_url (e.g., "https://s3.amazonaws.com" or "http://minio:9000")
+  const s3Endpoint = props.s3_url.substring(0, props.s3_url.lastIndexOf("/"));
 
   const evaporate = React.useMemo(
     () =>
@@ -21,8 +23,9 @@ export const useConfigureEvaporate = (props: Props) => {
         bucket,
         fetchCurrentServerTimeUrl: Routes.s3_utility_current_utc_time_string_path(),
         maxFileSize: MAX_FILE_SIZE,
+        s3Endpoint,
       }),
-    [props.aws_access_key_id, bucket],
+    [props.aws_access_key_id, bucket, s3Endpoint],
   );
 
   const s3UploadConfig = React.useMemo(
