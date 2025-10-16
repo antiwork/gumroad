@@ -244,14 +244,6 @@ class CreatorAnalytics::Churn
                   .where(link_id: subscription_products.select(:id))
     end
 
-    def active_at_start_scope
-      Subscription.where("subscriptions.created_at < ?", start_date)
-                  .where(
-                    "subscriptions.deactivated_at IS NULL OR subscriptions.deactivated_at >= ?",
-                    start_date
-                  )
-    end
-
     def format_daily_data(daily_results)
       daily_results.map do |record|
         {
