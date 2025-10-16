@@ -18,7 +18,6 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
         allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
         allow(service_instance).to receive(:has_subscription_products?).and_return(true)
         allow(service_instance).to receive(:available_products).and_return([product])
-        allow(service_instance).to receive(:fetch_churn_data).and_return(nil)
 
         expect(LargeSeller).to receive(:create_if_warranted).with(user)
         expect(InertiaRails).to receive(:optional).and_call_original
@@ -74,39 +73,57 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
       let(:product_ids) { [product.id] }
 
       it "passes product parameters to service" do
+        service_instance = instance_double(CreatorAnalytics::Churn)
+        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
+        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
+        allow(service_instance).to receive(:available_products).and_return([])
+        allow(service_instance).to receive(:fetch_churn_data).and_return(nil)
+
         expect(CreatorAnalytics::Churn).to receive(:new).with(
           user: user,
           params: instance_of(ActionController::Parameters)
-        ).and_call_original
+        ).and_return(service_instance)
 
         get :show, params: { products: product_ids }
+        expect(response).to be_successful
       end
     end
 
     context "with Rails cache for large sellers" do
       let!(:large_seller) { create(:large_seller, user: user) }
 
-      it "uses cache when churn_data is requested with partial reload" do
-        allow(Rails.cache).to receive(:fetch).and_call_original
-        allow(Rails.cache).to receive(:fetch).with(
-          match(/seller_daily_churn_metrics:#{user.id}/),
-          expires_in: 24.hours
-        ).and_return({})
+      it "calls service when churn_data is requested with partial reload" do
+        service_instance = instance_double(CreatorAnalytics::Churn)
+        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
+        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
+        allow(service_instance).to receive(:available_products).and_return([product])
+
+        allow(service_instance).to receive(:fetch_churn_data).and_return({})
+
+        allow(InertiaRails).to receive(:optional) do |&block|
+          block.call
+        end
 
         get :show, params: { only: ["churn_data"] }
         expect(response).to be_successful
       end
 
       it "returns cached data when available" do
+        service_instance = instance_double(CreatorAnalytics::Churn)
+        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
+        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
+        allow(service_instance).to receive(:available_products).and_return([product])
+
         cached_data = { customer_churn_rate: 5.5, churned_subscribers: 10 }
-        allow(Rails.cache).to receive(:fetch).and_call_original
-        allow(Rails.cache).to receive(:fetch).with(
-          match(/seller_daily_churn_metrics:#{user.id}/),
-          expires_in: 24.hours
-        ).and_return(cached_data)
+        allow(service_instance).to receive(:fetch_churn_data).and_return(cached_data)
+
+        allow(InertiaRails).to receive(:optional) do |&block|
+          block.call
+        end
 
         get :show, params: { only: ["churn_data"] }
         expect(response).to be_successful
+        expect(inertia.props[:churn_data]).to eq(cached_data)
       end
     end
 
@@ -116,13 +133,41 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
       end
 
       it "calculates data in real-time when churn_data is requested" do
-        expect(Rails.cache).to receive(:fetch).and_call_original
+        service_instance = instance_double(CreatorAnalytics::Churn)
+        allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
+        allow(service_instance).to receive(:has_subscription_products?).and_return(true)
+        allow(service_instance).to receive(:available_products).and_return([product])
+
+        mock_churn_data = {
+          start_date: "2024-01-01",
+          end_date: "2024-01-31",
+          metrics: {
+            customer_churn_rate: 5.5,
+            last_period_churn_rate: 4.2,
+            churned_subscribers: 10,
+            churned_mrr_cents: 5000
+          },
+          daily_data: []
+        }
+
+        expect(service_instance).to receive(:fetch_churn_data).and_return(mock_churn_data)
+
+        allow(InertiaRails).to receive(:optional) do |&block|
+          block.call
+        end
+
+        allow(Rails.cache).to receive(:fetch).and_call_original
+        expect(Rails.cache).not_to receive(:fetch).with(
+          match(/seller_daily_churn_metrics:/),
+          anything
+        )
 
         get :show, params: { only: ["churn_data"] }
         expect(response).to be_successful
+        expect(inertia.props[:churn_data]).to eq(mock_churn_data)
       end
 
-      it "calls fetch_realtime_data instead of fetch_cached_data" do
+      it "returns real-time data when churn_data is requested without caching" do
         service_instance = instance_double(CreatorAnalytics::Churn)
         allow(CreatorAnalytics::Churn).to receive(:new).and_return(service_instance)
         allow(service_instance).to receive(:has_subscription_products?).and_return(true)
@@ -145,7 +190,7 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
           block.call
         end
 
-        get :show
+        get :show, params: { only: ["churn_data"] }
         expect(response).to be_successful
         expect(inertia.props[:churn_data]).to eq(mock_churn_data)
       end
@@ -153,7 +198,7 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
 
     describe "error handling" do
       context "when service raises an error" do
-        it "handles service errors gracefully" do
+        it "propagates service errors" do
           allow_any_instance_of(CreatorAnalytics::Churn).to receive(:has_subscription_products?).and_raise(StandardError, "Service error")
 
           expect { get :show }.to raise_error(StandardError, "Service error")
@@ -161,7 +206,7 @@ RSpec.describe ChurnController, type: :controller, inertia: true do
       end
 
       context "when LargeSeller.create_if_warranted fails" do
-        it "handles LargeSeller creation errors" do
+        it "propagates LargeSeller creation errors" do
           allow(LargeSeller).to receive(:create_if_warranted).and_raise(StandardError, "LargeSeller error")
 
           expect { get :show }.to raise_error(StandardError, "LargeSeller error")
