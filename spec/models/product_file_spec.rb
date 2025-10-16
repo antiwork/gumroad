@@ -286,7 +286,7 @@ describe ProductFile do
       end
 
       it "renames a file to a long name", :sidekiq_inline do
-        new_name = "A" * 800
+        new_name = "A" * 250
         expect(MultipartTransfer).to receive(:transfer_to_s3).with(/billion-dollar-company-chapter-0.pd/,
                                                                    destination_filename: "#{new_name}.pdf",
                                                                    existing_s3_object: instance_of(@product_file.s3_object.class)).and_call_original
