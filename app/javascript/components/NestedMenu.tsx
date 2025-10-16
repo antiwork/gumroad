@@ -373,7 +373,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className="fixed flex h-full w-80 max-w-[calc(100vw-1.25rem)] flex-col overflow-x-hidden overflow-y-auto rounded-none! border-none! p-0! shadow-none! lg:static lg:w-48 lg:max-w-none lg:overflow-y-hidden lg:rounded-sm"
+      className="fixed flex h-full w-80 max-w-[calc(100vw-1.25rem)] flex-col overflow-x-hidden overflow-y-auto rounded-none! border-none! p-0! shadow-none! lg:static lg:w-48 lg:max-w-none lg:overflow-y-hidden lg:rounded-sm!"
     >
       {footer}
 
