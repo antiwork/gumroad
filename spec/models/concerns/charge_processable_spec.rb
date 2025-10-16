@@ -21,10 +21,6 @@ RSpec.describe ChargeProcessable do
       it "returns true" do
         expect(subject.stripe_charge_processor?).to be true
       end
-
-      it "has an alias method is_stripe_charge_processor" do
-        expect(subject.is_stripe_charge_processor).to be true
-      end
     end
 
     context "when charge_processor_id is not stripe" do
@@ -32,10 +28,6 @@ RSpec.describe ChargeProcessable do
 
       it "returns false" do
         expect(subject.stripe_charge_processor?).to be false
-      end
-
-      it "has an alias method is_stripe_charge_processor" do
-        expect(subject.is_stripe_charge_processor).to be false
       end
     end
 
@@ -55,10 +47,6 @@ RSpec.describe ChargeProcessable do
       it "returns true" do
         expect(subject.paypal_charge_processor?).to be true
       end
-
-      it "has an alias method is_paypal_charge_processor" do
-        expect(subject.is_paypal_charge_processor).to be true
-      end
     end
 
     context "when charge_processor_id is not paypal" do
@@ -66,10 +54,6 @@ RSpec.describe ChargeProcessable do
 
       it "returns false" do
         expect(subject.paypal_charge_processor?).to be false
-      end
-
-      it "has an alias method is_paypal_charge_processor" do
-        expect(subject.is_paypal_charge_processor).to be false
       end
     end
 
@@ -89,10 +73,6 @@ RSpec.describe ChargeProcessable do
       it "returns true" do
         expect(subject.braintree_charge_processor?).to be true
       end
-
-      it "has an alias method is_braintree_charge_processor" do
-        expect(subject.is_braintree_charge_processor).to be true
-      end
     end
 
     context "when charge_processor_id is not braintree" do
@@ -100,10 +80,6 @@ RSpec.describe ChargeProcessable do
 
       it "returns false" do
         expect(subject.braintree_charge_processor?).to be false
-      end
-
-      it "has an alias method is_braintree_charge_processor" do
-        expect(subject.is_braintree_charge_processor).to be false
       end
     end
 
