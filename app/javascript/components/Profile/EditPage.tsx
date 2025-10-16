@@ -275,11 +275,11 @@ export const EditProfile = (props: Props) => {
           </SectionLayout>
         ))
       ) : (
-        <section className="relative grid flex-1 border-b">
+        <SectionLayout className="grid flex-1">
           <AddSectionButton index={0} />
           <FollowFormBlock creatorProfile={props.creator_profile} />
           <AddSectionButton index={0} position="top" />
-        </section>
+        </SectionLayout>
       )}
     </SectionReducerContext.Provider>
   );
