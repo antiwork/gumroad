@@ -9,15 +9,15 @@ module Purchase::Blockable
     attr_blockable :browser_guid
     attr_blockable :ip_address
     attr_blockable :email
-    attr_blockable :paypal_email, attribute: :email
-    attr_blockable :gifter_email, attribute: :email
+    attr_blockable :paypal_email, object_type: :email
+    attr_blockable :gifter_email, object_type: :email
     attr_blockable :charge_processor_fingerprint
-    attr_blockable :purchaser_email, attribute: :email
-    attr_blockable :recent_stripe_fingerprint, attribute: :charge_processor_fingerprint
+    attr_blockable :purchaser_email, object_type: :email
+    attr_blockable :recent_stripe_fingerprint, object_type: :charge_processor_fingerprint
     attr_blockable :email_domain
-    attr_blockable :paypal_email_domain, attribute: :email_domain
-    attr_blockable :gifter_email_domain, attribute: :email_domain
-    attr_blockable :purchaser_email_domain, attribute: :email_domain
+    attr_blockable :paypal_email_domain, object_type: :email_domain
+    attr_blockable :gifter_email_domain, object_type: :email_domain
+    attr_blockable :purchaser_email_domain, object_type: :email_domain
 
     delegate :email, to: :purchaser, prefix: true, allow_nil: true
   end

@@ -2,6 +2,7 @@
 
 class BlockedObject
   include Mongoid::Document
+  include Mongoid::Timestamps
 
   # Block the IP for 6 months so that if the IP gets reallocated can be used again
   # Also prevents the list of blocked IPs to grow indefinitely
@@ -42,16 +43,24 @@ class BlockedObject
       blocked_object.unblock! if blocked_object
     end
 
+    def find_object(object_value)
+      find_by(object_value:)
+    rescue NoMethodError
+      BlockedObject.none
+    end
+
     def find_active_object(object_value)
-      active.find_by(object_value:)
+      active.find_object(object_value)
+    end
+
+    def find_objects(object_values)
+      where(:object_value.in => object_values)
     rescue NoMethodError
       BlockedObject.none
     end
 
     def find_active_objects(object_values)
-      active.where(:object_value.in => object_values)
-    rescue NoMethodError
-      BlockedObject.none
+      active.find_objects(object_values)
     end
   end
 

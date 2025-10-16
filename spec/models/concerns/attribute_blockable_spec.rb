@@ -175,7 +175,7 @@ describe AttributeBlockable do
           test_model_class = Class.new(ApplicationRecord) do
             self.table_name = "users"
             include AttributeBlockable
-            attr_blockable :email_list, attribute: :email
+            attr_blockable :email_list, object_type: :email
 
             def email_list
               ["blocked1@example.com", "blocked2@example.com", "unblocked@example.com"]
@@ -217,7 +217,7 @@ describe AttributeBlockable do
           test_model_class = Class.new(ApplicationRecord) do
             self.table_name = "users"
             include AttributeBlockable
-            attr_blockable :email_list, attribute: :email
+            attr_blockable :email_list, object_type: :email
 
             def email_list
               ["blocked1@example.com", "blocked2@example.com", "unblocked@example.com"]
@@ -265,7 +265,7 @@ describe AttributeBlockable do
           user = create(:user, email: "cached_test@example.com")
           user.block_by_email!
           user.blocked_by_email? # Populate cache
-          expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+          expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
 
           user.unblock_by_email!
           expect(user.blocked_by_attributes["email"]).to be_nil
@@ -282,25 +282,33 @@ describe AttributeBlockable do
       end
 
       it "includes configuration for each attr_blockable declaration" do
-        # User has: attr_blockable :email, :form_email, :form_email_domain
+        # User has: attr_blockable :email, :form_email (object_type: :email),
+        #           :email_domain, :form_email_domain (object_type: :email_domain),
+        #           :account_created_ip (object_type: :ip_address)
         expect(User.blockable_attributes).to include(
-          { attribute: :email, blockable_method: :email }
+          { object_type: :email, blockable_method: :email }
         )
         expect(User.blockable_attributes).to include(
-          { attribute: :email, blockable_method: :form_email }
+          { object_type: :email, blockable_method: :form_email }
         )
         expect(User.blockable_attributes).to include(
-          { attribute: :email_domain, blockable_method: :form_email_domain }
+          { object_type: :email_domain, blockable_method: :email_domain }
+        )
+        expect(User.blockable_attributes).to include(
+          { object_type: :email_domain, blockable_method: :form_email_domain }
+        )
+        expect(User.blockable_attributes).to include(
+          { object_type: :ip_address, blockable_method: :account_created_ip }
         )
       end
 
       it "tracks custom attribute mappings correctly" do
-        # form_email uses :email as the attribute
+        # form_email uses :email as the object_type
         form_email_config = User.blockable_attributes.find do |attr|
           attr[:blockable_method] == :form_email
         end
 
-        expect(form_email_config).to eq({ attribute: :email, blockable_method: :form_email })
+        expect(form_email_config).to eq({ object_type: :email, blockable_method: :form_email })
       end
 
       it "returns unique entries per model class" do
@@ -316,11 +324,11 @@ describe AttributeBlockable do
         end
 
         expect(test_model_class.blockable_attributes).to include(
-          { attribute: :test_attribute, blockable_method: :test_attribute }
+          { object_type: :test_attribute, blockable_method: :test_attribute }
         )
         # User's attributes shouldn't include the test model's attributes
         expect(User.blockable_attributes).not_to include(
-          { attribute: :test_attribute, blockable_method: :test_attribute }
+          { object_type: :test_attribute, blockable_method: :test_attribute }
         )
       end
     end
@@ -334,11 +342,13 @@ describe AttributeBlockable do
       it "includes all blockable method names defined on the model" do
         expect(User.blockable_method_names).to include(:email)
         expect(User.blockable_method_names).to include(:form_email)
+        expect(User.blockable_method_names).to include(:email_domain)
         expect(User.blockable_method_names).to include(:form_email_domain)
+        expect(User.blockable_method_names).to include(:account_created_ip)
       end
 
-      it "returns only method names without attribute info" do
-        expect(User.blockable_method_names).to eq([:email, :form_email, :form_email_domain])
+      it "returns only method names without object_type info" do
+        expect(User.blockable_method_names).to eq([:email, :form_email, :email_domain, :form_email_domain, :account_created_ip])
       end
     end
 
@@ -357,14 +367,16 @@ describe AttributeBlockable do
         users_with_preload.each do |user|
           # Check that the cache has been populated for all blockable methods
           if user.email == blocked_email
-            expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+            expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
           else
             expect(user.blocked_by_attributes["email"]).to be_nil
           end
 
-          # The cache should have entries for form_email and form_email_domain too
+          # The cache should have entries for all blockable methods
           expect(user.blocked_by_attributes).to have_key("form_email")
+          expect(user.blocked_by_attributes).to have_key("email_domain")
           expect(user.blocked_by_attributes).to have_key("form_email_domain")
+          expect(user.blocked_by_attributes).to have_key("account_created_ip")
         end
       end
 
@@ -429,7 +441,7 @@ describe AttributeBlockable do
 
         users_with_preload.each do |user|
           if user.email == blocked_email
-            expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+            expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
           else
             expect(user.blocked_by_attributes["email"]).to be_nil
           end
@@ -461,17 +473,17 @@ describe AttributeBlockable do
           BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], email, 1)
         end
 
-        allow(BlockedObject).to receive(:find_active_objects).and_call_original
+        allow(BlockedObject).to receive(:find_objects).and_call_original
 
         result = User.where(id: perf_users.map(&:id)).with_blocked_attributes_for(:email)
 
         expect(result.size).to eq(5)
         result.each do |user|
-          expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+          expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
           expect(user.blocked_by_email?).to be true
         end
 
-        expect(BlockedObject).to have_received(:find_active_objects).once
+        expect(BlockedObject).to have_received(:find_objects).once
       end
 
       it "handles empty result sets gracefully" do
@@ -503,7 +515,7 @@ describe AttributeBlockable do
         self.table_name = "users"
         include AttributeBlockable
 
-        attr_blockable :current_sign_in_ip, attribute: :current_sign_in_ip
+        attr_blockable :current_sign_in_ip, object_type: :ip_address
 
         def self.name
           "TestModel"
@@ -521,12 +533,12 @@ describe AttributeBlockable do
   end
 
   describe "edge cases and error handling" do
-    it "handles missing BLOCKED_OBJECT_TYPES gracefully" do
+    it "raises an error for missing BLOCKED_OBJECT_TYPES" do
       user = create(:user, username: "testuser")
 
       expect do
         user.blocked_at_by_method(:username)
-      end.not_to raise_error
+      end.to raise_error(NoMethodError)
     end
 
     it "handles expired blocked objects" do
@@ -541,7 +553,10 @@ describe AttributeBlockable do
       )
 
       user = create(:user, email: expired_email)
+
       expect(user.blocked_by_email?).to be false
+      expect(user.block_by_email_expires_at).to be_present
+      expect(user.block_by_email_created_at).to be_present
     end
 
     it "handles blocked objects without expires_at" do
@@ -557,6 +572,7 @@ describe AttributeBlockable do
 
       user = create(:user, email: permanent_blocked_email)
       expect(user.blocked_by_email?).to be true
+      expect(user.block_by_email_expires_at).to be_nil
     end
   end
 
@@ -570,7 +586,7 @@ describe AttributeBlockable do
       user = create(:user, email: blocked_email)
       expect(user.blocked_by_attributes["email"]).to be_nil
       user.blocked_by_email? # Populate cache
-      expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+      expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
       user.reload # Clear cache
       expect(user.blocked_by_attributes["email"]).to be_nil
       expect(user.blocked_by_email?).to be true
@@ -605,7 +621,7 @@ describe AttributeBlockable do
 
     it "updates blocked_by_attributes cache" do
       user.block_by_method(:email, "methodtest@example.com")
-      expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+      expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
     end
 
     it "accepts by_user_id parameter" do
@@ -659,7 +675,7 @@ describe AttributeBlockable do
 
     it "clears blocked_by_attributes cache when unblocking" do
       user.blocked_by_email? # Populate cache
-      expect(user.blocked_by_attributes["email"]).to be_a(DateTime)
+      expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
 
       user.unblock_by_method(:email, "unblocktest@example.com")
       expect(user.blocked_by_attributes["email"]).to be_nil
@@ -678,7 +694,7 @@ describe AttributeBlockable do
       test_model = Class.new(ApplicationRecord) do
         self.table_name = "users"
         include AttributeBlockable
-        attr_blockable :current_sign_in_ip, attribute: :current_sign_in_ip
+        attr_blockable :current_sign_in_ip, object_type: :ip_address
 
         def self.name
           "TestUnblockModel"
