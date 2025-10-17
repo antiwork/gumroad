@@ -12,7 +12,9 @@ export type UploadProgress = { percent: number; bitrate: number };
 type Props = { aws_access_key_id: string; s3_url: string; user_id: string };
 export const useConfigureEvaporate = (props: Props) => {
   const bucket = last(props.s3_url.split("/"));
-  // Extract the S3 endpoint from the s3_url (e.g., "https://s3.amazonaws.com" or "http://minio:9000")
+  // Extract the S3 endpoint from the s3_url by removing the bucket name
+  // e.g., "https://s3.amazonaws.com/my-bucket" -> "https://s3.amazonaws.com"
+  // e.g., "http://minio:9000/my-bucket" -> "http://minio:9000"
   const s3Endpoint = props.s3_url.substring(0, props.s3_url.lastIndexOf("/"));
 
   const evaporate = React.useMemo(
