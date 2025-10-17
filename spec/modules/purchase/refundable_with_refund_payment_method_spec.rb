@@ -33,6 +33,10 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
     allow(link).to receive(:variant_extra_cost).and_return(0)
     allow(link).to receive(:minimum_paid_price_cents).and_return(1000)
     
+    # Mock the variant_categories_alive association to avoid N+1 queries
+    allow(link).to receive(:variant_categories_alive).and_return([])
+    allow(link).to receive(:association_cached?).with(:variant_categories_alive).and_return(false)
+    
     link
   end
 
