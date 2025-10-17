@@ -422,7 +422,7 @@ describe Api::V2::PayoutsController do
           @params.merge!(access_token: @token.token)
         end
 
-        it "includes sales in the payout response when sales exist" do
+        it "includes sales & transactions in the payout response when sales exist" do
           product = create(:product, user: @seller)
           balance = create(:balance, user: @seller)
           @payout.balances = [balance]
@@ -436,19 +436,27 @@ describe Api::V2::PayoutsController do
           expect(response_payout).to have_key("sales")
           expect(response_payout["sales"]).to be_an(Array)
           expect(response_payout["sales"].length).to eq(1)
+          expect(response_payout["transactions"]).to be_an(Array)
+          expect(response_payout).to have_key("transactions")
+          expect(response_payout["transactions"].length).to eq(1)
 
           sale_id = response_payout["sales"].first
           expect(sale_id).to be_a(String)
           expect(sale_id).to eq(successful_sale.external_id)
+          first_transaction = response_payout["transactions"].first
+          expect(first_transaction[0]).to eq("Sale")
         end
 
-        it "includes sales array even when no sales exist" do
+        it "includes sales & transactions arrays even when no sales exist" do
           get :show, params: @params
 
           response_payout = response.parsed_body["payout"]
           expect(response_payout).to have_key("sales")
           expect(response_payout["sales"]).to be_an(Array)
           expect(response_payout["sales"]).to be_empty
+          expect(response_payout).to have_key("transactions")
+          expect(response_payout["transactions"]).to be_an(Array)
+          expect(response_payout["transactions"]).to be_empty
         end
       end
 
@@ -458,7 +466,7 @@ describe Api::V2::PayoutsController do
           @params.merge!(access_token: @token.token)
         end
 
-        it "excludes sales from the payout response" do
+        it "excludes sales & transactions from the payout response" do
           product = create(:product, user: @seller)
           balance = create(:balance, user: @seller)
           @payout.balances = [balance]
@@ -470,15 +478,17 @@ describe Api::V2::PayoutsController do
 
           response_payout = response.parsed_body["payout"]
           expect(response_payout).not_to have_key("sales")
+          expect(response_payout).not_to have_key("transactions")
         end
 
-        it "returns standard payout data without sales key" do
+        it "returns standard payout data without sales & transaction keys" do
           get :show, params: @params
 
           response_payout = response.parsed_body["payout"]
           expected_keys = %w[id amount currency status created_at processed_at payment_processor bank_account_visual paypal_email]
           expect(response_payout.keys).to match_array(expected_keys)
           expect(response_payout).not_to have_key("sales")
+          expect(response_payout).not_to have_key("transactions")
         end
       end
 

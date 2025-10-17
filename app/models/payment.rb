@@ -208,7 +208,15 @@ class Payment < ApplicationRecord
       json[:disputed_sales] = disputed_sales.map(&:external_id)
     end
 
+    if options[:include_transactions]
+      json[:transactions] = transactions
+    end
+
     json
+  end
+
+  def transactions
+    @transactions ||= Exports::Payouts::Data.new(id).perform
   end
 
   def successful_sales
