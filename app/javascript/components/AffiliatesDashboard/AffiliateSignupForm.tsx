@@ -83,8 +83,11 @@ export const AffiliateSignupForm = () => {
           <WithTooltip position="bottom" tip={data.affiliates_disabled_reason}>
             <Link
               to="/affiliates/new"
-              className="button"
-              inert={!loggedInUser?.policies.direct_affiliate.create || data.affiliates_disabled_reason !== null}
+              className={`inline-flex items-center justify-center gap-2 no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor] ${
+                !loggedInUser?.policies.direct_affiliate.create || data.affiliates_disabled_reason !== null
+                  ? "opacity-30 cursor-not-allowed pointer-events-none"
+                  : "cursor-pointer"
+              }`}
             >
               Add affiliate
             </Link>

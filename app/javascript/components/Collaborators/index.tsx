@@ -116,9 +116,12 @@ const CollaboratorDetails = ({
       <section className="mt-auto flex gap-4">
         <Link
           to={`/collaborators/${selectedCollaborator.id}/edit`}
-          className="button flex-1"
+          className={`inline-flex items-center justify-center gap-2 no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor] flex-1 ${
+            !loggedInUser?.policies.collaborator.update || navigation.state !== "idle"
+              ? "opacity-30 cursor-not-allowed pointer-events-none"
+              : "cursor-pointer"
+          }`}
           aria-label="Edit"
-          inert={!loggedInUser?.policies.collaborator.update || navigation.state !== "idle"}
         >
           Edit
         </Link>
@@ -167,7 +170,10 @@ const Collaborators = () => {
         <WithTooltip position="bottom" tip={collaborators_disabled_reason}>
           <Link
             to="/collaborators/new"
-            className="button accent"
+            className="inline-flex items-center justify-center gap-2 cursor-pointer no-underline text-base leading-[1.4] px-4 py-3 rounded border
+  [border-color:rgb(var(--color)/var(--border-alpha))]
+  bg-accent  dark:text-black
+  transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor]"
             inert={
               !loggedInUser?.policies.collaborator.create ||
               navigation.state !== "idle" ||
@@ -236,7 +242,7 @@ const Collaborators = () => {
                       <div className="actions" onClick={(e) => e.stopPropagation()}>
                         <Link
                           to={`/collaborators/${collaborator.id}/edit`}
-                          className="button"
+                          className="inline-flex items-center justify-center gap-2 cursor-pointer no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor]"
                           aria-label="Edit"
                           inert={!loggedInUser?.policies.collaborator.update || navigation.state !== "idle"}
                         >

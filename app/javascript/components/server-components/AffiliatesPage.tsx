@@ -148,7 +148,8 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       aria-label="Toggle Search"
       trigger={
         <WithTooltip tip="Search" position="bottom">
-          <div className="button">
+          <div className="inline-flex items-center justify-center gap-2 cursor-pointer no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor]
+">
             <Icon name="solid-search" />
           </div>
         </WithTooltip>
@@ -447,8 +448,9 @@ const AffiliatesTab = () => {
           <WithTooltip position="bottom" tip={data.affiliates_disabled_reason}>
             <Link
               to="/affiliates/new"
-              className="button accent"
-              inert={!loggedInUser?.policies.direct_affiliate.create}
+              className={`inline-flex items-center justify-center gap-2 cursor-pointer no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-[rgb(var(--accent))] text-[rgb(var(--contrast-accent))] transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor] ${
+                !loggedInUser?.policies.direct_affiliate.create ? "opacity-30 cursor-not-allowed pointer-events-none" : ""
+              }`}
               style={
                 data.affiliates_disabled_reason !== null
                   ? { pointerEvents: "none", cursor: "not-allowed", opacity: 0.3 }
@@ -481,7 +483,16 @@ const AffiliatesTab = () => {
                         Affiliates
                         <div className="text-base">
                           <WithTooltip tip="Export" position="top">
-                            <a href={Routes.export_affiliates_path()} className="button primary" aria-label="Export">
+                            <a href={Routes.export_affiliates_path()} className={`
+    inline-flex items-center justify-center gap-2 px-4 py-3 rounded border
+    text-base leading-[1.4] transition-transform ease-out duration-150
+    bg-[rgb(var(--primary))] text-[rgb(var(--contrast-primary))]
+    border-[rgb(var(--color)/var(--border-alpha))]
+    hover:bg-[rgb(var(--accent))] hover:-translate-x-1 hover:-translate-y-1
+    hover:shadow-[0.25rem_0.25rem_0_rgb(var(--color))]
+    disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none
+    flex-1
+  `} aria-label="Export">
                               <Icon name="download" />
                             </a>
                           </WithTooltip>
@@ -537,9 +548,10 @@ const AffiliatesTab = () => {
 
                                 <Link
                                   to={`/affiliates/${affiliate.id}/edit`}
-                                  className="button"
+                                  className={`inline-flex items-center justify-center gap-2 cursor-pointer no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor] ${!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"? 'opacity-30 cursor-not-allowed pointer-events-none'
+                                    : ''}`}
                                   aria-label="Edit"
-                                  inert={!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"}
+
                                 >
                                   <Icon name="pencil" />
                                 </Link>
@@ -641,9 +653,12 @@ const AffiliateDetails = ({
       <section style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
         <Link
           to={`/affiliates/${selectedAffiliate.id}/edit`}
-          className="button"
+          className={`inline-flex items-center justify-center gap-2 no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 flex-1 ${
+            !loggedInUser?.policies.direct_affiliate.update || navigation.state !== 'idle'
+              ? 'opacity-30 cursor-not-allowed pointer-events-none'
+              : ''
+          }`}
           aria-label="Edit"
-          inert={!loggedInUser?.policies.direct_affiliate.update || navigation.state !== "idle"}
         >
           Edit
         </Link>
@@ -794,7 +809,8 @@ const Form = ({ title, headerLabel, submitLabel }: FormProps) => {
       title={title}
       actions={
         <>
-          <Link to="/affiliates" className="button" inert={navigation.state !== "idle"}>
+          <Link to="/affiliates" className={`inline-flex items-center justify-center gap-2 cursor-pointer no-underline text-base leading-[1.4] px-4 py-3 rounded border [border-color:rgb(var(--color)/var(--border-alpha))] bg-transparent text-current transition-transform ease-out duration-150 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[0.25rem_0.25rem_0_currentColor] ${
+    navigation.state !== "idle" ? "opacity-30 cursor-not-allowed pointer-events-none" : ""}`}>
             <Icon name="x-square" />
             Cancel
           </Link>
