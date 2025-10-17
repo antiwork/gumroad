@@ -213,7 +213,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
         visit edit_link_path(@product.unique_permalink) + "/content"
         within find_embed(name: "chapter2") do
           click_on "Edit"
-          expect(page).to have_subtitle_row(name: "nyt")
+          expect(page).to have_subtitle_row(name: "test")
         end
       end
 
