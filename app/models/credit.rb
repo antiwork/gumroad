@@ -113,7 +113,7 @@ class Credit < ApplicationRecord
 
     credit = new
     credit.user = refund.purchase.seller
-    credit.merchant_account = refund.purchase.charge_processor_id == StripeChargeProcessor.charge_processor_id ?
+    credit.merchant_account = refund.purchase.stripe_charge_processor? ?
                                   MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) :
                                   MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id)
     credit.amount_cents = credit_amount
@@ -173,7 +173,7 @@ class Credit < ApplicationRecord
 
     credit = new
     credit.user = refund.purchase.seller
-    credit.merchant_account = refund.purchase.charge_processor_id == StripeChargeProcessor.charge_processor_id ?
+    credit.merchant_account = refund.purchase.stripe_charge_processor? ?
                                   MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) :
                                   MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id)
     credit.amount_cents = amount_to_credit

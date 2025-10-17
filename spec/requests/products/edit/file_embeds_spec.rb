@@ -194,7 +194,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
         video_uri = URI.parse("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{video_path}").to_s
         video_product_file = create(:product_file, url: video_uri.to_s)
         @product.product_files = [video_product_file]
-        pdf_path = "attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+        pdf_path = "attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
         pdf_uri = URI.parse("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{pdf_path}").to_s
         subtitle_file = build(:subtitle_file, url: pdf_uri.to_s, product_file_id: video_product_file.id)
         # Skip subtitle validation to allow saving an invalid file type

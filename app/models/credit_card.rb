@@ -2,6 +2,7 @@
 
 class CreditCard < ApplicationRecord
   include PurchaseErrorCode
+  include ChargeProcessable
 
   has_many :users
   has_one :purchase
@@ -15,8 +16,8 @@ class CreditCard < ApplicationRecord
   validates :stripe_fingerprint, presence: true
   validates :visual, :card_type, presence: true
   validates :stripe_customer_id, :expiry_month, :expiry_year, presence: true, if: -> { card_type != CardType::PAYPAL }
-  validates :braintree_customer_id, presence: true, if: -> { charge_processor_id == BraintreeChargeProcessor.charge_processor_id }
-  validates :paypal_billing_agreement_id, presence: true, if: -> { charge_processor_id == PaypalChargeProcessor.charge_processor_id }
+  validates :braintree_customer_id, presence: { if: :braintree_charge_processor? }
+  validates :paypal_billing_agreement_id, presence: { if: :paypal_charge_processor? }
   validates :charge_processor_id, presence: true
 
   def as_json
@@ -85,7 +86,7 @@ class CreditCard < ApplicationRecord
   end
 
   def charge_processor_unavailable_error
-    charge_processor_id.blank? || charge_processor_id == StripeChargeProcessor.charge_processor_id ?
+    charge_processor_id.blank? || stripe_charge_processor? ?
       PurchaseErrorCode::STRIPE_UNAVAILABLE :
       PurchaseErrorCode::PAYPAL_UNAVAILABLE
   end
