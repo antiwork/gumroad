@@ -41,5 +41,4 @@ mv helperai.dev+1.pem helperai_dev.crt
 mv helperai.dev+1-key.pem helperai_dev.key
 echo "SSL certificates for helperai.dev generated successfully!"
 
-
 echo "SSL certificates generated successfully in docker/local-nginx/certs/"

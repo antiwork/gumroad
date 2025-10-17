@@ -89,21 +89,22 @@ services:
       - ./fixture-files-private.txt:/fixture-files-private.txt:ro
       - ./fixture-files-public.txt:/fixture-files-public.txt:ro
     entrypoint: >
-      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin; echo \"Copying private fixture files to MinIO bucket...\"; while IFS= read -r file || [ -n \"$$file\" ]; do
+      /bin/sh -c " /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin > /dev/null 2>&1; echo \"Copying private fixture files to MinIO bucket...\"; while IFS= read -r file || [ -n \"$$file\" ]; do
         [ -z \"$$file\" ] && continue;
         if [ -f \"/fixtures/$$file\" ]; then
           echo \"Copying '$$file' to gumroad-specs/specs/ (private)\";
-          /usr/bin/mc cp \"/fixtures/$$file\" \"myminio/gumroad-specs/specs/$$file\";
+          /usr/bin/mc cp \"/fixtures/$$file\" \"myminio/gumroad-specs/specs/$$file\" > /dev/null 2>&1;
         else
-          echo \"Warning: '$$file' not found in fixtures directory\";
+          echo \"Error: '$$file' not found in fixtures directory\";
+          exit 1;
         fi;
       done < /fixture-files-private.txt; echo \"Copying public fixture files to MinIO bucket...\"; while IFS= read -r file || [ -n \"$$file\" ]; do
         [ -z \"$$file\" ] && continue;
         if [ -f \"/fixtures/$$file\" ]; then
           echo \"Copying '$$file' to gumroad-specs/specs/ (public)\";
-          /usr/bin/mc cp \"/fixtures/$$file\" \"myminio/gumroad-specs/specs/$$file\";
+          /usr/bin/mc cp \"/fixtures/$$file\" \"myminio/gumroad-specs/specs/$$file\" > /dev/null 2>&1;
           echo \"Setting public-read ACL for '$$file'\";
-          /usr/bin/mc anonymous set download \"myminio/gumroad-specs/specs/$$file\";
+          /usr/bin/mc anonymous set download \"myminio/gumroad-specs/specs/$$file\" > /dev/null 2>&1;
         else
           echo \"Error: '$$file' not found in fixtures directory\";
           exit 1;
