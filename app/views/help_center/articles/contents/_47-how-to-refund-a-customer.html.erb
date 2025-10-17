@@ -1,4 +1,4 @@
-<% @description = "In this article: Full refund Partial refund PayPal refund After issuing a refund Handling negative balances Refund fees Please only issue refunds from your Gumr" %>
+<% @description = "In this article: Full refund Partial refund PayPal refund Refund payment method After issuing a refund Refund fees Please only issue refunds from your Gumroad dashboard." %>
 <div class="scoped-tailwind-preflight prose dark:prose-invert">
   <div>
     <p><strong>In this article:</strong></p>
@@ -6,12 +6,13 @@
       <li><a href="#full">Full refund</a></li>
       <li><a href="#partial">Partial refund</a></li>
       <li><a href="#paypal">PayPal refund</a></li>
+      <li><a href="#refund-payment-method">Refund payment method</a></li>
       <li><a href="#after">After issuing a refund</a></li>
       <li><a href="#Refund-fees-hk-4p">Refund fees</a></li>
     </ul>
     <br>
     <div class="callout-red">
-      <p>Refunds can only be processed if your balance is able to cover the transaction amount. If your balance is too low you will need to make additional sales until the refund can be issued.</p>
+      <p>Refunds can be processed if your balance is able to cover the transaction amount. If your balance is too low, you can either make additional sales or set up a refund payment method to automatically cover the difference.</p>
       <p>Please only issue refunds from your Gumroad dashboard. Our system does not support refunds issued directly from Stripe or PayPal accounts.</p>
     </div>
     <h3 id="full">Full refund</h3>
@@ -25,6 +26,21 @@
     <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/62469f0eab585b230a8a7601/file-nnUgqbE3pw.gif" %></figure>
     <h3 id="paypal">PayPal refund</h3>
     <p>If you refund a <a href="275-paypal-connect">PayPal Connect</a> purchase, PayPal keeps its fees on the sale but refunds 100% of the amount to the customer. In this case, you would be responsible for Gumroad and PayPal's fees.</p>
+    <h3 id="refund-payment-method">Refund payment method</h3>
+    <p>If your balance is insufficient to cover a refund, you can set up a refund payment method to automatically charge your credit card for the difference. This ensures you can always process refunds for your customers, even when your balance is low.</p>
+    <p><strong>How it works:</strong></p>
+    <ul>
+      <li>When you issue a refund, Gumroad first tries to use your available balance</li>
+      <li>If your balance is insufficient, your refund payment method is automatically charged for the difference</li>
+      <li>You're only charged when needed - if your balance covers the refund, your card won't be charged</li>
+    </ul>
+    <p><strong>Setting up a refund payment method:</strong></p>
+    <ol>
+      <li>Go to your <a href="https://gumroad.com/settings/payments">Payment settings</a> page</li>
+      <li>Scroll down to the "Refund payment method" section</li>
+      <li>Enter your card information and click "Update settings"</li>
+    </ol>
+    <p>You can remove your refund payment method at any time from the same settings page.</p>
     <h3 id="after">After issuing a refund</h3>
     <p>Customers receive an email confirmation after a refund is issued. Credit card funds usually take 5-10 business days to appear on the buyer’s account while PayPal refunds are immediate. </p>
     <p>In the case of a full refund, customers will no longer be able to access the content or receive the respective product’s updates.</p>
