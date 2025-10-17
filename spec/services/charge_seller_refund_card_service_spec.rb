@@ -7,6 +7,13 @@ RSpec.describe ChargeSellerRefundCardService do
   let(:refund_amount_cents) { 1000 }
   let(:service) { described_class.new(seller, refund_amount_cents) }
 
+  # Mock Stripe calls to avoid VCR issues
+  before do
+    allow(Stripe::Charge).to receive(:create).and_return(
+      double("Stripe::Charge", status: "succeeded", id: "ch_test_123")
+    )
+  end
+
   describe "#call" do
     context "when seller has no refund credit card" do
       it "returns failure with appropriate message" do
@@ -18,12 +25,23 @@ RSpec.describe ChargeSellerRefundCardService do
       end
     end
 
-    context "when seller has refund credit card" do
-      let(:refund_credit_card) { create(:credit_card, stripe_customer_id: "cus_123", stripe_card_id: "card_123") }
+        context "when seller has refund credit card" do
+          let(:refund_credit_card) do
+            # Create a credit card without making real Stripe calls
+            CreditCard.new(
+              stripe_customer_id: "cus_123",
+              stripe_fingerprint: "card_123",
+              card_type: "Visa",
+              visual: "****4242",
+              expiry_month: 12,
+              expiry_year: 2025
+            )
+          end
 
-      before do
-        seller.update!(refund_credit_card: refund_credit_card)
-      end
+          before do
+            refund_credit_card.save!(validate: false) # Skip validations to avoid Stripe calls
+            seller.update!(refund_credit_card: refund_credit_card)
+          end
 
       context "when seller has sufficient balance" do
         before do

@@ -23,6 +23,10 @@ class ChargeSellerRefundCardService
     @error_message.nil?
   end
 
+  def charged_amount
+    @charged_amount || 0
+  end
+
   private
 
   def process_stripe_charge(charge_amount)
@@ -47,7 +51,7 @@ class ChargeSellerRefundCardService
       amount: amount,
       currency: 'usd',
       customer: seller.refund_credit_card.stripe_customer_id,
-      source: seller.refund_credit_card.stripe_card_id,
+      source: seller.refund_credit_card.stripe_fingerprint,
       description: "Refund payment method charge for seller #{seller.id}"
     )
   end
@@ -60,9 +64,5 @@ class ChargeSellerRefundCardService
   def failure(message)
     @error_message = message
     self
-  end
-
-  def charged_amount
-    @charged_amount || 0
   end
 end

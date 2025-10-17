@@ -41,6 +41,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 import logo from "$assets/images/logo-g.svg";
 
 export type PayoutDebitCardData = { type: "saved" } | { type: "new"; element: StripeCardElement } | undefined;
+export type RefundCardData = { type: "saved" } | { type: "new"; element: StripeCardElement } | null;
 
 export type User = {
   country_supports_native_payouts: boolean;
@@ -246,6 +247,10 @@ const PaymentsPage = (props: Props) => {
   };
 
   const [payoutsPausedByUser, setPayoutsPausedByUser] = React.useState(props.payouts_paused_by_user);
+
+  // Refund payment method state (following debit card pattern)
+  const [refundCard, setRefundCard] = React.useState<RefundCardData | null>(null);
+  const [refundNameOnCard, setRefundNameOnCard] = React.useState("");
 
   const [payoutThresholdCents, setPayoutThresholdCents] = React.useState<{ value: number | null; error?: boolean }>({
     value: props.payout_threshold_cents,
@@ -751,6 +756,23 @@ const PaymentsPage = (props: Props) => {
       data = { ...data, ...{ payment_address: paypalEmailAddress } };
     }
 
+    // Add refund card data if present and no existing refund card (following debit card pattern)
+    if (!props.refund_payment_card && refundCard && refundCard.type === "new") {
+      try {
+        const refundCardData = await prepareCardTokenForPayouts({
+          cardElement: refundCard.element
+        });
+        data = { ...data, refund_card: refundCardData } as any;
+      } catch (e) {
+        if (e instanceof CardPayoutError) {
+          setErrorMessage({ message: "Please check your refund card information", code: null });
+          setIsSaving(false);
+          return;
+        }
+        throw e;
+      }
+    }
+
     try {
       const response = await request({
         method: "PUT",
@@ -1155,6 +1177,10 @@ const PaymentsPage = (props: Props) => {
         <RefundPaymentMethodSection
           refundCard={props.refund_payment_card}
           isFormDisabled={props.is_form_disabled}
+          refundCardData={refundCard}
+          setRefundCard={setRefundCard}
+          nameOnCard={refundNameOnCard}
+          onNameOnCardChange={setRefundNameOnCard}
         />
         {props.saved_card ? (
           <CreditCardForm

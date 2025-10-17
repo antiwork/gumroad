@@ -54,6 +54,21 @@ class Settings::PaymentsController < Sellers::BaseController
 
     return unless update_user_compliance_info
 
+    # Handle refund payment method
+    if params[:refund_card].present? && !current_seller.refund_credit_card.present?
+      chargeable = ChargeProcessor.get_chargeable_for_params(params[:refund_card], nil)
+      return render(json: { success: false, error_message: "Invalid refund card information" }) if chargeable.nil?
+
+      credit_card = CreditCard.create(chargeable)
+      if credit_card.errors.present?
+        return render(json: { success: false, error_message: credit_card.errors.full_messages.to_sentence })
+      end
+
+      unless current_seller.update(refund_credit_card_id: credit_card.id)
+        return render(json: { success: false, error_message: current_seller.errors.full_messages.to_sentence })
+      end
+    end
+
     if params[:payout_threshold_cents].present? && params[:payout_threshold_cents] < current_seller.minimum_payout_threshold_cents
       return render json: { success: false, error_message: "Your payout threshold must be greater than the minimum payout amount" }
     end
