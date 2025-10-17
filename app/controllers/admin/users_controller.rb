@@ -45,7 +45,7 @@ class Admin::UsersController < Admin::BaseController
     render inertia: "Admin/RefundQueues/Show",
       props: {
         users: User.refund_queue
-          .includes(:admin_manageable_user_memberships)
+          .includes(:admin_manageable_user_memberships, :comments)
           .map { |user| user.as_json(admin: true, impersonatable: policy([:admin, :impersonators, user]).create?) }
       }
   end

@@ -19,10 +19,6 @@ const AdminCommentableComments = ({ count, comments, isLoading }: AdminCommentab
 
   return (
     <div>
-      <h4 className="mb-2 font-bold">
-        {comments.length} of {count === 1 ? "1 comment" : `${count} comments`}
-      </h4>
-
       {isLoading ? <Loading /> : null}
 
       <div className="rows" role="list">

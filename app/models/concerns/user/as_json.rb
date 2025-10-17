@@ -32,7 +32,6 @@ module User::AsJson
     as_json(
       internal_use: true,
       methods: [
-        :id,
         :display_name,
         :form_email,
         :form_email_block,
@@ -69,8 +68,10 @@ module User::AsJson
         }
       }
     ).merge(
+      id:,
       impersonatable:,
-      user_risk_state: user_risk_state.humanize
+      user_risk_state: user_risk_state.humanize,
+      comment_count: comments.size
     )
   end
 

@@ -8,11 +8,12 @@ import AdminCommentableContent from "$app/components/Admin/Commentable/Content";
 import AdminCommentableForm from "$app/components/Admin/Commentable/Form";
 
 type AdminCommentableProps = {
+  count?: number;
   endpoint: string;
   commentableType: string;
 };
 
-const AdminCommentableComments = ({ endpoint, commentableType }: AdminCommentableProps) => {
+const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCommentableProps) => {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [comments, setComments] = React.useState<CommentProps[]>([]);
@@ -45,7 +46,7 @@ const AdminCommentableComments = ({ endpoint, commentableType }: AdminCommentabl
       <hr />
       <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
       <details open={open} onToggle={onToggle} className="space-y-2">
-        <summary>Comments</summary>
+        <summary>{comments.length > 0 || count != null ? `${comments.length || count} comments` : "Comments"}</summary>
         <AdminCommentableContent count={comments.length} comments={comments} isLoading={isLoading} />
       </details>
     </>
