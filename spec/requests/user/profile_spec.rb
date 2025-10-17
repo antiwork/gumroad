@@ -58,7 +58,7 @@ describe "User profile page", type: :system, js: true do
         wait_for_ajax
 
         within find_product_card(product) do
-          expect(page).to have_selector(".price", text: "$4.50")
+          expect(page).to have_selector("[itemprop='price']", text: "$4.50")
         end
       end
     end
