@@ -261,9 +261,10 @@
               <%= purchase_refund_policy_tooltip(purchase_refund_policy) %>
             <% end %>
           </strong>
-          <% if purchase.purchase_refund_policy.fine_print.present? %>
+          <% fine_print_to_display = purchase.purchase_refund_policy.fine_print.presence || purchase.link.product_refund_policy&.fine_print %>
+          <% if fine_print_to_display.present? %>
             <br>
-            <%= simple_format(purchase.purchase_refund_policy.fine_print) %>
+            <%= simple_format(fine_print_to_display) %>
           <% end %>
           <% if purchase.purchase_refund_policy.max_refund_period_in_days.present? %>
             <br>
