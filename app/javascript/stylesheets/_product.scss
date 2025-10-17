@@ -302,8 +302,7 @@ article {
               grid-column: 2 / -1;
             }
 
-            .user:first-child,
-            .rating {
+            .user:first-child {
               grid-column: unset;
             }
           }
