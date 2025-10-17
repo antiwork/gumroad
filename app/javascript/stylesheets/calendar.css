@@ -84,5 +84,4 @@
 .calendar .react-calendar__tile--active {
   /* Match SCSS: @include bg-color(accent) */
   background-color: rgb(var(--accent));
-  color: rgb(var(--contrast-accent));
 }
