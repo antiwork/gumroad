@@ -71,7 +71,7 @@ export const PriceTag = ({
         >
           {priceTag}
         </div>
-        <div className={classNames("border-current", borderClasses)} />
+        <div className={classNames("border-border", borderClasses)} />
         <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
         <div role="tooltip" id={tooltipUid}>
           {priceTag}
