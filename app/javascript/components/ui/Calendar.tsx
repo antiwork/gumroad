@@ -16,7 +16,7 @@ export function Calendar({ className, defaultMonth, ...props }: React.ComponentP
       className={classNames("p-3 **:[thead]:block!", className)}
       captionLayout="label"
       formatters={{
-        formatWeekdayName: (date) => date.toLocaleString("default", { weekday: "narrow" }),
+        formatWeekdayName: (date) => date.toLocaleString("en-US", { weekday: "narrow" }),
       }}
       month={month}
       onMonthChange={setMonth}
