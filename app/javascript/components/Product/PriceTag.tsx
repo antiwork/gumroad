@@ -65,13 +65,13 @@ export const PriceTag = ({
         aria-describedby={tooltipUid}
       >
         <div
-          className="bg-accent px-2 py-1 text-black"
+          className="bg-accent px-2 py-1 text-contrast-accent"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
           {priceTag}
         </div>
-        <div className={classNames("border-black", borderClasses)} />
+        <div className={classNames("border-current", borderClasses)} />
         <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
         <div role="tooltip" id={tooltipUid}>
           {priceTag}
