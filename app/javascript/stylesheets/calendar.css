@@ -1,0 +1,88 @@
+.calendar {
+  /* Layout + shape */
+  @apply rounded border border-solid p-4;
+  /* Keep variable-driven border color */
+  border-width: 0.0625rem;
+  border-color: rgb(var(--parent-color) / var(--border-alpha));
+}
+
+.calendar .react-calendar__navigation {
+  @apply flex;
+}
+
+.calendar .react-calendar__navigation__label {
+  @apply grow text-center font-bold;
+}
+
+.calendar .react-calendar__navigation__label:disabled {
+  @apply opacity-100;
+}
+
+.calendar .react-calendar__navigation__arrow {
+  @apply text-sm leading-[1.3];
+}
+
+.calendar .react-calendar__viewContainer {
+  @apply text-center;
+}
+
+.calendar .react-calendar__month-view__weekdays {
+  @apply pt-2 pb-2 font-bold;
+}
+
+.calendar .react-calendar__month-view__weekdays abbr {
+  @apply text-sm leading-[1.3] no-underline;
+}
+
+.calendar .react-calendar__month-view__days {
+  @apply overflow-hidden rounded-lg border border-solid;
+  /* Keep variable-driven border color */
+  border-width: 0.0625rem;
+  border-color: rgb(var(--parent-color) / var(--border-alpha));
+}
+
+.calendar .react-calendar__month-view__days__day {
+  @apply relative py-2;
+}
+
+.calendar .react-calendar__month-view__days__day:disabled {
+  @apply opacity-100;
+}
+
+.calendar .react-calendar__month-view__days__day:disabled abbr {
+  @apply opacity-30;
+}
+
+.calendar .react-calendar__month-view__days__day::before,
+.calendar .react-calendar__month-view__days__day::after {
+  content: "";
+  @apply absolute;
+}
+
+.calendar .react-calendar__month-view__days__day:nth-child(n + 8)::before {
+  @apply top-0 left-0 w-full border-t;
+  border-top-width: 0.0625rem;
+  border-top-style: solid;
+  border-color: rgb(var(--parent-color) / var(--border-alpha));
+}
+
+.calendar .react-calendar__month-view__days__day:not(:nth-child(7n))::after {
+  @apply top-0 right-0 h-full border-r;
+  border-right-width: 0.0625rem;
+  border-top-style: solid;
+  border-color: rgb(var(--parent-color) / var(--border-alpha));
+}
+
+.calendar .react-calendar__month-view__days__day--neighboringMonth abbr {
+  visibility: hidden;
+}
+
+.calendar .react-calendar__month-view__days__day--neighboringMonth.react-calendar__tile--active {
+  @apply bg-inherit;
+}
+
+.calendar .react-calendar__tile--active {
+  /* Match SCSS: @include bg-color(accent) */
+  background-color: rgb(var(--accent));
+  color: rgb(var(--contrast-accent));
+}

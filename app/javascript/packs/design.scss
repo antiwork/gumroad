@@ -11,7 +11,6 @@
 @import "../stylesheets/aside";
 @import "../stylesheets/button";
 @include buttons;
-@import "../stylesheets/calendar";
 @import "../stylesheets/cart";
 @import "../stylesheets/chart";
 @import "../stylesheets/carousel";
@@ -42,3 +41,5 @@
 @import "../stylesheets/onboarding";
 
 @import "../stylesheets/legacy";
+
+@import "../stylesheets/calendar.css";
