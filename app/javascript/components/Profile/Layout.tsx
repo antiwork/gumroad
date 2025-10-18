@@ -1,7 +1,7 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
+import { classNames } from "$app/utils/classNames";
 
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
@@ -22,15 +22,16 @@ type Props = {
 export const Layout = ({ className, creatorProfile, hideFollowForm, children }: Props) => {
   const cartItemsCount = useCartItemsCount();
   const loggedInUser = useLoggedInUser();
+  const isReaderMode = className?.includes("reader");
 
   return (
-    <div className={cx("profile", className)}>
-      <header className="relative z-20 bg-background">
-        <section>
+    <div className={classNames("grid min-h-full grid-rows-[auto_1fr]", className)}>
+      <header className="relative z-20 grid grid-cols-1 bg-background text-xl leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6">
+        <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (
             <NavigationButton
-              style={{ position: "absolute", left: "var(--spacer-3)" }}
+              className="absolute left-3"
               color="filled"
               href={Routes.admin_impersonate_url({ user_identifier: creatorProfile.external_id })}
             >
@@ -38,17 +39,17 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
             </NavigationButton>
           ) : null}
           <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
-          <a href={Routes.root_path()} style={{ textDecoration: "none" }}>
+          <a href={Routes.root_path()} className="no-underline">
             {creatorProfile.name}
           </a>
         </section>
         {!hideFollowForm ? (
-          <section>
+          <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
             <FollowForm creatorProfile={creatorProfile} />
           </section>
         ) : null}
         {creatorProfile.twitter_handle || cartItemsCount ? (
-          <section className="links">
+          <section className="col-start-2 row-start-1 flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
             {creatorProfile.twitter_handle ? (
               <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
                 <Icon name="twitter" />
@@ -58,9 +59,16 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </section>
         ) : null}
       </header>
-      <main>
+      <main
+        className={classNames(
+          "row-auto",
+          isReaderMode && "[&>article]:text-xl [&>article]:leading-[1.4]",
+          isReaderMode && "lg:[&>article]:pr-[max(calc(100%-50rem-max(calc((100%-71.25rem)/2),4rem)),4rem)]",
+          isReaderMode && "lg:[&>.comments]:pr-[max(calc(100%-50rem-max(calc((100%-71.25rem)/2),4rem)),4rem)]",
+        )}
+      >
         {children}
-        <PoweredByFooter />
+        <PoweredByFooter className="lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 lg:text-left" />
       </main>
     </div>
   );
