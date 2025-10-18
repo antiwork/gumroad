@@ -746,7 +746,7 @@ const PaymentsPage = (props: Props) => {
       payouts_paused_by_user: payoutsPausedByUser,
       payout_threshold_cents: payoutThresholdCents.value,
       payout_frequency: payoutFrequency,
-    };
+    } as any;
 
     if (selectedPayoutMethod === "bank") {
       data = { ...data, ...{ bank_account: bankAccount } };
@@ -771,6 +771,8 @@ const PaymentsPage = (props: Props) => {
         }
         throw e;
       }
+    } else if (props.refund_payment_card && !refundCard) {
+      data = { ...data, refund_card: null };
     }
 
     try {
