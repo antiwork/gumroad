@@ -137,7 +137,7 @@ RSpec.describe ChargeSellerRefundCardService do
 
       context "when seller has exact balance needed" do
         before do
-          allow(seller).to receive(:unpaid_balance_cents).and_return(1000) # Exactly $10.00
+          allow(seller).to receive(:unpaid_balance_cents).and_return(1000)
         end
 
         it "returns success without charging" do

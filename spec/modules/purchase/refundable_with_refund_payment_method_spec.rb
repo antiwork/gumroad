@@ -6,7 +6,7 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
   let(:seller) { create(:user) }
   let(:purchaser) { create(:user) }
   let(:merchant_account) do
-    # Create a test merchant account
+
     MerchantAccount.create!(
       charge_processor_id: "stripe",
       charge_processor_merchant_id: "test_merchant_123",
@@ -16,7 +16,6 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
   end
 
   let(:link) do
-    # Create a test product (Link) for the purchase
     link = Link.new(
       user: seller,
       name: "Test Product",
@@ -27,16 +26,15 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
       unique_permalink: "test_product_abc"
     )
     link.save!(validate: false) # Skip validations to avoid permalink format issues
-    
-    # Mock the price methods that the refund process needs
+
     allow(link).to receive(:base_product_price_cents).and_return(1000)
     allow(link).to receive(:variant_extra_cost).and_return(0)
     allow(link).to receive(:minimum_paid_price_cents).and_return(1000)
-    
-    # Mock the variant_categories_alive association to avoid N+1 queries
+
+
     allow(link).to receive(:variant_categories_alive).and_return([])
     allow(link).to receive(:association_cached?).with(:variant_categories_alive).and_return(false)
-    
+
     link
   end
 
@@ -72,11 +70,11 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
     allow(Stripe::Charge).to receive(:create).and_return(
       double("Stripe::Charge", status: "succeeded", id: "ch_test_123")
     )
-    
+
     # Mock purchase validation to avoid financial_transaction_validation issues
     allow_any_instance_of(Purchase).to receive(:valid?).and_return(true)
     allow_any_instance_of(Purchase).to receive(:save!).and_return(true)
-    
+
     # Mock the complex price validation methods
     allow_any_instance_of(Purchase).to receive(:minimum_paid_price_cents).and_return(1000)
     allow_any_instance_of(Purchase).to receive(:minimum_paid_price_cents_per_unit_before_discount).and_return(1000)
@@ -158,7 +156,6 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
           end
 
         it "logs the refund card charge" do
-          # Allow any info log messages since the exact message may vary
           allow(Rails.logger).to receive(:info)
 
           purchase.refund_and_save!(refunding_user_id)
@@ -207,7 +204,7 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
 
     context "when seller has exact balance needed" do
       before do
-        allow(seller).to receive(:unpaid_balance_cents).and_return(1000) # Exactly $10.00
+        allow(seller).to receive(:unpaid_balance_cents).and_return(1000)
       end
 
       it "processes refund without charging refund card" do
@@ -221,15 +218,15 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
     end
 
     context "with partial refunds" do
-      let(:partial_amount_cents) { 500 } # $5.00 partial refund
+      let(:partial_amount_cents) { 500 }
 
       before do
-        allow(seller).to receive(:unpaid_balance_cents).and_return(300) # $3.00 balance
+        allow(seller).to receive(:unpaid_balance_cents).and_return(300)
       end
 
       context "and seller has refund credit card" do
         let(:refund_credit_card) do
-          # Create a credit card without making real Stripe calls
+
           CreditCard.new(
             stripe_customer_id: "cus_123",
             stripe_fingerprint: "card_123",
@@ -241,7 +238,7 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
         end
 
         before do
-          refund_credit_card.save!(validate: false) # Skip validations to avoid Stripe calls
+          refund_credit_card.save!(validate: false)
           seller.update!(refund_credit_card: refund_credit_card)
           refund_card_service = double("ChargeSellerRefundCardService")
           allow(ChargeSellerRefundCardService).to receive(:new).and_return(refund_card_service)
@@ -267,25 +264,25 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
         account = MerchantAccount.create!(
           charge_processor_id: "stripe",
           charge_processor_merchant_id: "acct_external_123",
-          user_id: seller.id, # Seller's own account
+          user_id: seller.id,
           json_data: { meta: { stripe_connect: "true" } }
         )
-        
+
         # Mock the account to appear as if it's still connected and active
         allow(account).to receive(:is_a_stripe_connect_account?).and_return(true)
         allow(account).to receive(:active?).and_return(true)
         allow(account).to receive(:connected?).and_return(true)
-        
+
         account
       end
-      
+
       let(:non_gumroad_purchase) do
-        # Create a purchase that doesn't use Gumroad merchant account (external Stripe account)
+
         purchase = Purchase.new(
           seller: seller,
           purchaser: purchaser,
           link: link,
-          price_cents: 1000, # Paid product
+          price_cents: 1000,
           displayed_price_cents: 1000,
           total_transaction_cents: 1000,
           email: purchaser.email,
@@ -297,8 +294,8 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
           stripe_transaction_id: "ch_test_#{SecureRandom.hex(8)}",
           purchase_state: "successful",
           succeeded_at: Time.current,
-          created_at: Time.current, # Add created_at timestamp
-          merchant_account: external_merchant_account, # External Stripe account
+          created_at: Time.current,
+          merchant_account: external_merchant_account,
           gumroad_tax_cents: 0,
           tax_cents: 0,
           fee_cents: 100,
@@ -310,7 +307,7 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
       end
 
       before do
-        allow(seller).to receive(:unpaid_balance_cents).and_return(100) # Low balance
+        allow(seller).to receive(:unpaid_balance_cents).and_return(100)
       end
 
       it "does not check balance or charge refund card" do
@@ -318,7 +315,6 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
 
         result = non_gumroad_purchase.refund_and_save!(refunding_user_id)
 
-        # Debug: Print errors if refund failed
         unless result
           puts "Refund failed with errors: #{non_gumroad_purchase.errors.full_messages}"
         end
@@ -332,7 +328,7 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
 
   describe "error handling" do
     before do
-      allow(seller).to receive(:unpaid_balance_cents).and_return(500) # Insufficient balance
+      allow(seller).to receive(:unpaid_balance_cents).and_return(500)
       refund_credit_card = CreditCard.new(
         stripe_customer_id: "cus_123",
         stripe_fingerprint: "card_123",
@@ -341,7 +337,7 @@ RSpec.describe Purchase::Refundable, "with refund payment method" do
         expiry_month: 12,
         expiry_year: 2025
       )
-      refund_credit_card.save!(validate: false) # Skip validations to avoid Stripe calls
+      refund_credit_card.save!(validate: false)
       seller.update!(refund_credit_card: refund_credit_card)
     end
 
