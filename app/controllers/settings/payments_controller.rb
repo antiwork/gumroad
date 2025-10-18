@@ -151,36 +151,6 @@ class Settings::PaymentsController < Sellers::BaseController
     end
   end
 
-  def add_refund_payment_method
-    authorize
-
-    if params[:refund_card].present?
-      chargeable = ChargeProcessor.get_chargeable_for_params(params[:refund_card], nil)
-      return render(json: { success: false, error_message: "Invalid card information" }) if chargeable.nil?
-
-      credit_card = CreditCard.create(chargeable)
-      if credit_card.errors.present?
-        return render(json: { success: false, error_message: credit_card.errors.full_messages.to_sentence })
-      end
-
-      if current_seller.update(refund_credit_card_id: credit_card.id)
-        render json: { success: true }
-      else
-        render json: { success: false, error_message: current_seller.errors.full_messages.to_sentence }
-      end
-    else
-      render json: { success: false, error_message: "No refund card information provided" }
-    end
-  end
-
-  def remove_refund_payment_method
-    authorize
-    if current_seller.update(refund_credit_card_id: nil)
-      head :no_content
-    else
-      render json: { error: current_seller.errors.full_messages.join(",") }, status: :bad_request
-    end
-  end
 
   def remediation
     authorize
