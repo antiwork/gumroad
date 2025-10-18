@@ -168,7 +168,7 @@ const MainPage = (props: Props) => {
                       void resendConfirmationEmail();
                     }}
                   >
-                    {isResendingConfirmationEmail ? "Resending..." : "Resend confirmation?"}
+                    {isResendingConfirmationEmail ? "Resending..." : <strong>Resend confirmation?</strong>}
                   </button>
                 )}
               </small>

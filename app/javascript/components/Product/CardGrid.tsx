@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
 import { SORT_KEYS, PROFILE_SORT_KEYS } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -9,6 +10,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import Placeholder from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
@@ -223,7 +225,12 @@ export const CardGrid = ({
   const [filetypesOpen, setFiletypesOpen] = React.useState(false);
 
   return (
-    <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
+    <div
+      className={classNames(
+        "grid grid-cols-1 items-start gap-x-16 gap-y-8",
+        !hideFilters && "lg:grid-cols-[var(--grid-cols-sidebar)]",
+      )}
+    >
       {hideFilters ? null : (
         <div className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
           <header>
@@ -345,10 +352,10 @@ export const CardGrid = ({
         </div>
       )}
       {results?.products.length === 0 ? (
-        <div className="placeholder">
+        <Placeholder>
           <Icon name="archive-fill" />
           No products found
-        </div>
+        </Placeholder>
       ) : (
         <div>
           <ProductCardGrid ref={gridRef}>

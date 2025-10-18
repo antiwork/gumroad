@@ -21,6 +21,7 @@ import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDat
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
+import Placeholder from "$app/components/ui/Placeholder";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
@@ -204,7 +205,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -216,7 +217,7 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
               Learn more about the analytics dashboard
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </AnalyticsLayout>

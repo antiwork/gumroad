@@ -1,11 +1,4 @@
 <%= render("shared/recaptcha_script") %>
 <%= load_pack("subscription_magic_link") %>
 
-<div class="modals-container flex flex-1">
-  <div class="modal gr-auth showing squished" style="display: contents">
-    <%= react_component "SubscriptionManagerMagicLink", props: @react_component_props, prerender: true %>
-  </div>
-  <aside class="avatars-container">
-    <img src="<%= image_url("auth/background.png") %>">
-  </aside>
-</div>
+<%= react_component "SubscriptionManagerMagicLink", props: @react_component_props, prerender: true %>

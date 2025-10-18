@@ -35,6 +35,7 @@ import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Select } from "$app/components/Select";
 import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -320,7 +321,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
             ) : null}
           </section>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={placeholder} />
             </figure>
@@ -333,7 +334,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
             <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
               Learn more about upsells
             </a>
-          </div>
+          </Placeholder>
         )}
         {selectedUpsell ? (
           <UpsellDrawer
