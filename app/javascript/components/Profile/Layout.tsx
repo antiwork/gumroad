@@ -26,7 +26,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
 
   return (
     <div className={classNames("grid min-h-full grid-rows-[auto_1fr]", className)}>
-      <header className="relative z-20 grid grid-cols-1 bg-background text-xl leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6">
+      <header className="relative z-20 grid grid-cols-1 bg-background text-[1.15rem] leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6">
         <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (
@@ -62,13 +62,14 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
       <main
         className={classNames(
           "row-auto",
-          isReaderMode && "[&>article]:text-xl [&>article]:leading-[1.4]",
+          "[&>*]:lg:px-[max(calc((100%-71.25rem)/2),4rem)]",
+          isReaderMode && "[&>article]:text-[1.15rem] [&>article]:leading-[1.4]",
           isReaderMode && "lg:[&>article]:pr-[max(calc(100%-50rem-max(calc((100%-71.25rem)/2),4rem)),4rem)]",
           isReaderMode && "lg:[&>.comments]:pr-[max(calc(100%-50rem-max(calc((100%-71.25rem)/2),4rem)),4rem)]",
         )}
       >
         {children}
-        <PoweredByFooter className="lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 lg:text-left" />
+        <PoweredByFooter className="lg:py-6 lg:text-left" />
       </main>
     </div>
   );
