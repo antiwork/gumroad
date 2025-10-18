@@ -68,7 +68,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
         )}
       >
         {children}
-        <PoweredByFooter className="lg:py-6 lg:text-left" />
+        <PoweredByFooter className="py-8 text-center lg:py-16" />
       </main>
     </div>
   );
