@@ -1,15 +1,11 @@
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { SavedCreditCard } from "$app/parsers/card";
 import { StripeCardElement } from "@stripe/stripe-js";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { CreditCardInput } from "$app/components/Checkout/CreditCardInput";
 import { Icon } from "$app/components/Icons";
-import { showAlert } from "$app/components/server-components/Alert";
 import { RefundCardData } from "$app/components/server-components/Settings/PaymentsPage";
 
 type Props = {
@@ -32,23 +28,11 @@ export const RefundPaymentMethodSection = ({
 }: Props) => {
   const [status, setStatus] = React.useState<"removing" | "removed" | null>(null);
 
-  // Remove card functionality (copied from CreditCardForm.tsx)
-  const remove = asyncVoid(async () => {
-    setStatus("removing");
-    try {
-      const response = await request({
-        url: "/settings/payments/remove_refund_payment_method",
-        method: "DELETE",
-        accept: "json",
-      });
-      if (!response.ok) throw new ResponseError(cast<{ error: string }>(await response.json()).error);
-      setStatus("removed");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-      setStatus(null);
-    }
-  });
+  // Remove card functionality - clears data for main form submission
+  const remove = () => {
+    setRefundCard(null);
+    setStatus("removed");
+  };
 
   // Handle card element ready (following debit card pattern)
   const handleCardReady = (element: StripeCardElement) => {

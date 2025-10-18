@@ -67,6 +67,8 @@ class Settings::PaymentsController < Sellers::BaseController
       unless current_seller.update(refund_credit_card_id: credit_card.id)
         return render(json: { success: false, error_message: current_seller.errors.full_messages.to_sentence })
       end
+    elsif params[:refund_card].nil? && current_seller.refund_credit_card.present?
+      current_seller.update!(refund_credit_card_id: nil)
     end
 
     if params[:payout_threshold_cents].present? && params[:payout_threshold_cents] < current_seller.minimum_payout_threshold_cents
