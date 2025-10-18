@@ -24,7 +24,7 @@ const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
         {(isLoading) => (
           <fieldset>
             <div className="grid grid-cols-[1fr_auto] gap-3">
-              <input type="email" name="update_email[email_address]" placeholder={user.email ?? ""} required />
+              <input type="email" name="update_email[email_address]" placeholder={user.email} required />
               <button type="submit" className="button" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update email"}
               </button>
