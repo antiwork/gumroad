@@ -202,7 +202,7 @@ local:
 
 stop_local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
-		$(DOCKER_COMPOSE_CMD) -f docker/$(LOCAL_DOCKER_COMPOSE_CONFIG) down
+		$(DOCKER_COMPOSE_CMD) -f docker/$(LOCAL_DOCKER_COMPOSE_CONFIG) down --volumes
 
 
 
