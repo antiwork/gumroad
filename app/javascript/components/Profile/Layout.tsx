@@ -49,7 +49,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </section>
         ) : null}
         {creatorProfile.twitter_handle || cartItemsCount ? (
-          <section className="col-start-2 row-start-1 flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
+          <section className="col-start-2 row-start-1 flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:row-auto lg:border-none lg:p-0">
             {creatorProfile.twitter_handle ? (
               <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
                 <Icon name="twitter" />
@@ -61,7 +61,6 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
       </header>
       <main
         className={classNames(
-          "row-auto",
           "[&>*]:lg:px-[max(calc((100%-71.25rem)/2),4rem)]",
           isReaderMode && "[&>article]:text-[1.15rem] [&>article]:leading-[1.4]",
           isReaderMode && "lg:[&>article]:pr-[max(calc(100%-50rem-max(calc((100%-71.25rem)/2),4rem)),4rem)]",
@@ -69,7 +68,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
         )}
       >
         {children}
-        <PoweredByFooter className="lg:py-6 lg:text-left" />
+        <PoweredByFooter className="lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 lg:text-left" />
       </main>
     </div>
   );
