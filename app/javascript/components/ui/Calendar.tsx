@@ -8,6 +8,7 @@ const forceUnicodeRenderAsText = (unicode: string) => `${unicode}\u{FE0E}`;
 export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof DayPicker>) {
   const defaultClassNames = getDefaultClassNames();
   const [month, setMonth] = React.useState(defaultMonth ?? props.startMonth ?? new Date());
+  // Workaround for react-day-picker not updating the current month when `startMonth` changes (https://github.com/gpbl/react-day-picker/blob/main/src/useCalendar.ts#L111)
   React.useEffect(() => {
     setMonth(defaultMonth ?? props.startMonth ?? new Date());
   }, [defaultMonth, props.startMonth]);
