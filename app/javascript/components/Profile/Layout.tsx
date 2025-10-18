@@ -27,7 +27,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
   return (
     <div className={classNames("grid min-h-full grid-rows-[auto_1fr]", className)}>
       <header className="relative z-20 grid grid-cols-1 bg-background text-[1.15rem] leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 [.squished_&]:lg:px-0">
-        <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
+        <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0">
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (
             <NavigationButton
@@ -44,12 +44,12 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
           </a>
         </section>
         {!hideFollowForm ? (
-          <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0 [&:not(:first-child)]:col-span-2 lg:[&:not(:first-child)]:col-auto">
+          <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0">
             <FollowForm creatorProfile={creatorProfile} />
           </section>
         ) : null}
         {creatorProfile.twitter_handle || cartItemsCount ? (
-          <section className="col-start-2 row-start-1 flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:row-auto lg:border-none lg:p-0">
+          <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:col-start-2 lg:row-auto lg:row-start-1 lg:border-none lg:p-0">
             {creatorProfile.twitter_handle ? (
               <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
                 <Icon name="twitter" />
@@ -68,7 +68,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
         )}
       >
         {children}
-        <PoweredByFooter className="lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 lg:text-left [.squished_&]:lg:px-0" />
+        <PoweredByFooter className="lg:py-6 lg:text-left" />
       </main>
     </div>
   );
