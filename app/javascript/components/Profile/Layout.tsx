@@ -26,7 +26,7 @@ export const Layout = ({ className, creatorProfile, hideFollowForm, children }: 
 
   return (
     <div className={classNames("grid min-h-full grid-rows-[auto_1fr]", className)}>
-  <header className="relative z-20 grid grid-cols-1 bg-background text-[1.15rem] leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 [.squished_&]:lg:px-4">
+      <header className="relative z-20 grid grid-cols-1 bg-background text-[1.15rem] leading-[1.4] lg:grid-flow-col lg:items-center lg:gap-8 lg:border-b lg:border-border lg:px-[max(calc((100%-71.25rem)/2),4rem)] lg:py-6 [.squished_&]:lg:px-4">
         <section className="flex items-center gap-3 border-b border-border p-4 pt-8 pb-8 lg:border-none lg:p-0">
           {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
           creatorProfile.external_id !== loggedInUser.id ? (
