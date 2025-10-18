@@ -153,7 +153,6 @@ class Settings::PaymentsController < Sellers::BaseController
     end
   end
 
-
   def remediation
     authorize
 
