@@ -13,23 +13,23 @@ export type AlertPayload = { message: string; status: "success" | "danger" | "in
 const ALERT_STYLES = {
   success: {
     icon: "solid-check-circle" as const,
-    container: "border-green bg-green/20",
-    iconColor: "text-green",
+    container: "border-alert-success bg-alert-success/20",
+    iconColor: "text-alert-success",
   },
   danger: {
     icon: "x-circle-fill" as const,
-    container: "border-red bg-red/20",
-    iconColor: "text-red",
+    container: "border-alert-danger bg-alert-danger/20",
+    iconColor: "text-alert-danger",
   },
   warning: {
     icon: "solid-shield-exclamation" as const,
-    container: "border-orange bg-orange/20",
-    iconColor: "text-orange",
+    container: "border-alert-warning bg-alert-warning/20",
+    iconColor: "text-alert-warning",
   },
   info: {
     icon: "info-circle-fill" as const,
-    container: "border-purple bg-purple/20",
-    iconColor: "text-purple",
+    container: "border-alert-info bg-alert-info/20",
+    iconColor: "text-alert-info",
   },
 };
 
