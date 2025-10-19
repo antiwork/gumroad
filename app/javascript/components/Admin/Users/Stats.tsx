@@ -5,6 +5,7 @@ import { request, assertResponseError } from "$app/utils/request";
 
 import Loading from "$app/components/Admin/Loading";
 import { showAlert } from "$app/components/server-components/Alert";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type UserStatsProps = {
   total: string;
@@ -22,15 +23,8 @@ type ResponseData = {
 
 const AdminUserStats = ({ user_id }: { user_id: number }) => {
   const [userStats, setUserStats] = React.useState<UserStatsProps | null>(null);
-  const [isVisible, setIsVisible] = React.useState(false);
   const elementRef = React.useRef<HTMLUListElement>(null);
-
-  React.useEffect(() => {
-    if (!elementRef.current) return;
-    const observer = new IntersectionObserver((entries) => setIsVisible(entries.some((entry) => entry.isIntersecting)));
-    observer.observe(elementRef.current);
-    return () => observer.disconnect();
-  }, [isVisible]);
+  const isVisible = useIsIntersecting(elementRef);
 
   React.useEffect(() => {
     if (!isVisible || userStats) return;

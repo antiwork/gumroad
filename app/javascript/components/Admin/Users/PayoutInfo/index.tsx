@@ -5,6 +5,7 @@ import { request } from "$app/utils/request";
 
 import PayoutInfo, { type PayoutInfoProps } from "$app/components/Admin/Users/PayoutInfo/PayoutInfo";
 import type { User } from "$app/components/Admin/Users/User";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserPayoutInfoProps = {
   user: User;
@@ -13,15 +14,8 @@ type AdminUserPayoutInfoProps = {
 const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<PayoutInfoProps | null>(null);
-  const [isVisible, setIsVisible] = React.useState(false);
   const elementRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!elementRef.current) return;
-    const observer = new IntersectionObserver((entries) => setIsVisible(entries.some((entry) => entry.isIntersecting)));
-    observer.observe(elementRef.current);
-    return () => observer.disconnect();
-  }, [isVisible]);
+  const isVisible = useIsIntersecting(elementRef);
 
   React.useEffect(() => {
     if (!isVisible || data) return;
