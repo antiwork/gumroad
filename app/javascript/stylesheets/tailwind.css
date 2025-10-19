@@ -33,6 +33,11 @@
   --color-success: rgb(var(--success));
   --color-danger: rgb(var(--danger));
 
+  --color-alert-success: var(--color-green);
+  --color-alert-danger: var(--color-red);
+  --color-alert-warning: var(--color-orange);
+  --color-alert-info: var(--color-purple);
+
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;
 
