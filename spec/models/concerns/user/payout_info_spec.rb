@@ -152,4 +152,3 @@ describe User::PayoutInfo do
     end
   end
 end
-

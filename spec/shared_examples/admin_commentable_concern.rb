@@ -15,29 +15,29 @@ RSpec.shared_examples_for "Admin::Commentable" do
     context "when there are comments" do
       let!(:comment1) do
         create(:comment,
-          commentable: commentable_object,
-          author: admin_user,
-          content: "First comment",
-          comment_type: "note",
-          created_at: 2.days.ago)
+               commentable: commentable_object,
+               author: admin_user,
+               content: "First comment",
+               comment_type: "note",
+               created_at: 2.days.ago)
       end
 
       let!(:comment2) do
         create(:comment,
-          commentable: commentable_object,
-          author: admin_user,
-          content: "Second comment",
-          comment_type: "note",
-          created_at: 1.day.ago)
+               commentable: commentable_object,
+               author: admin_user,
+               content: "Second comment",
+               comment_type: "note",
+               created_at: 1.day.ago)
       end
 
       let!(:unrelated_comment) do
         create(:comment,
-          commentable: create(:user),
-          author: admin_user,
-          content: "Unrelated comment",
-          comment_type: "note",
-          created_at: 3.days.ago)
+               commentable: create(:user),
+               author: admin_user,
+               content: "Unrelated comment",
+               comment_type: "note",
+               created_at: 3.days.ago)
       end
 
       it "returns all comments in descending order" do

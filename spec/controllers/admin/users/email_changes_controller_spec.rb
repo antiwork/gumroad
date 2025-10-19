@@ -60,4 +60,3 @@ describe Admin::Users::EmailChangesController do
     end
   end
 end
-

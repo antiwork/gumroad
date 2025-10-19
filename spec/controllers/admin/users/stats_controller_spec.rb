@@ -30,4 +30,3 @@ describe Admin::Users::StatsController do
     end
   end
 end
-

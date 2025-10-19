@@ -78,4 +78,3 @@ describe Admin::Users::MerchantAccountsController do
     end
   end
 end
-
