@@ -83,8 +83,11 @@ const UserCard = ({ user, is_affiliate_user = false }: Props) => {
       <AdminUserMemberships user={user} />
       <AdminUserPermissionRisk user={user} />
       <AdminUserComplianceInfo user={user} />
-      <AdminUserPayoutInfo user={user} />
-      <AdminUserMerchantAccounts user={user} />
+      <hr />
+      <div className="grid grid-cols-2 gap-4">
+        <AdminUserPayoutInfo user={user} />
+        <AdminUserMerchantAccounts user={user} />
+      </div>
       <AdminUserEmailChanges user={user} />
       <AdminUserChangeEmail user={user} />
       <AdminUserCustomFee user={user} />

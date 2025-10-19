@@ -35,13 +35,10 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   }, [isVisible, data, user.id]);
 
   return (
-    <>
-      <hr />
-      <div ref={elementRef}>
-        <h3>Payout Info</h3>
-        <PayoutInfo user_id={user.id} payoutInfo={data} isLoading={isLoading} />
-      </div>
-    </>
+    <div ref={elementRef}>
+      <h3>Payout Info</h3>
+      <PayoutInfo user_id={user.id} payoutInfo={data} isLoading={isLoading} />
+    </div>
   );
 };
 

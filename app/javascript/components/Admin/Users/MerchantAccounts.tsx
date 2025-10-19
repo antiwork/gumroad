@@ -6,8 +6,9 @@ import { request } from "$app/utils/request";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
 import { YesIcon, NoIcon } from "$app/components/Admin/Icons";
-import Loading from "$app/components/Admin/Loading";
+import AdminLoading from "$app/components/Admin/Loading";
 import type { User } from "$app/components/Admin/Users/User";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserMerchantAccountsProps = {
   user: User;
@@ -16,13 +17,6 @@ type AdminUserMerchantAccountsProps = {
 type AdminUserMerchantAccountsData = {
   has_stripe_account: boolean;
   merchant_accounts: MerchantAccountProps[];
-};
-
-type MerchantAccountsContentProps = {
-  user: User;
-  merchant_accounts: MerchantAccountProps[];
-  has_stripe_account: boolean;
-  isLoading: boolean;
 };
 
 export type MerchantAccountProps = {
@@ -41,21 +35,38 @@ const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_aliv
   </li>
 );
 
-const MerchantAccountsContent = ({
-  user,
-  merchant_accounts,
-  has_stripe_account,
-  isLoading,
-}: MerchantAccountsContentProps) => {
-  if (isLoading) {
-    return <Loading />;
-  }
+const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => {
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [data, setData] = React.useState<AdminUserMerchantAccountsData | null>(null);
+  const elementRef = React.useRef<HTMLDivElement>(null);
+  const isVisible = useIsIntersecting(elementRef);
+
+  React.useEffect(() => {
+    if (!isVisible || data) return;
+
+    const fetchMerchantAccounts = async () => {
+      setIsLoading(true);
+      const response = await request({
+        method: "GET",
+        url: Routes.admin_user_merchant_accounts_path(user.id),
+        accept: "json",
+      });
+      setData(cast<AdminUserMerchantAccountsData>(await response.json()));
+      setIsLoading(false);
+    };
+
+    void fetchMerchantAccounts();
+  }, [isVisible, user.id]);
 
   return (
-    <>
-      {merchant_accounts.length > 0 ? (
+    <div ref={elementRef}>
+      <h3>Merchant Accounts</h3>
+
+      {isLoading ? <AdminLoading /> : null}
+
+      {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
         <ul className="inline">
-          {merchant_accounts.map((merchant_account) => (
+          {data.merchant_accounts.map((merchant_account: MerchantAccountProps) => (
             <MerchantAccount key={merchant_account.id} {...merchant_account} />
           ))}
         </ul>
@@ -65,7 +76,7 @@ const MerchantAccountsContent = ({
         </div>
       )}
 
-      {!has_stripe_account && (
+      {!data?.has_stripe_account && (
         <div className="button-group mt-2">
           <AdminActionButton
             label="Create Managed Account"
@@ -75,51 +86,7 @@ const MerchantAccountsContent = ({
           />
         </div>
       )}
-    </>
-  );
-};
-
-const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => {
-  const [open, setOpen] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [data, setData] = React.useState<AdminUserMerchantAccountsData>({
-    has_stripe_account: false,
-    merchant_accounts: [],
-  });
-
-  const fetchMerchantAccounts = async () => {
-    setIsLoading(true);
-    const response = await request({
-      method: "GET",
-      url: Routes.admin_user_merchant_accounts_path(user.id),
-      accept: "json",
-    });
-    setData(cast<AdminUserMerchantAccountsData>(await response.json()));
-    setIsLoading(false);
-  };
-
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
-      void fetchMerchantAccounts();
-    }
-  };
-
-  return (
-    <>
-      <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>Merchant Accounts</h3>
-        </summary>
-        <MerchantAccountsContent
-          user={user}
-          isLoading={isLoading}
-          merchant_accounts={data.merchant_accounts}
-          has_stripe_account={data.has_stripe_account}
-        />
-      </details>
-    </>
+    </div>
   );
 };
 
