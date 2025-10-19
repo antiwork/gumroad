@@ -250,9 +250,7 @@ module User::Risk
         .limit(MAX_REFUND_QUEUE_SIZE)
         .map { |record| record["user_id"] }
 
-      # TODO: revert
-      # User.where(id: user_ids, user_risk_state: "suspended_for_fraud")
-      User
+      User.where(id: user_ids, user_risk_state: "suspended_for_fraud")
         .joins(:balances)
         .merge(Balance.unpaid)
         .group(:user_id)
