@@ -65,7 +65,7 @@ export const PriceTag = ({
         aria-describedby={tooltipUid}
       >
         <div
-          className="text-contrast-accent bg-accent px-2 py-1"
+          className="bg-accent px-2 py-1 text-accent-foreground"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
