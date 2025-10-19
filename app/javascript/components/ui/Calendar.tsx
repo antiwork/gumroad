@@ -3,8 +3,6 @@ import { DayPicker, getDefaultClassNames } from "react-day-picker";
 
 import { classNames } from "$app/utils/classNames";
 
-const forceUnicodeRenderAsText = (unicode: string) => `${unicode}\u{FE0E}`;
-
 export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof DayPicker>) {
   const defaultClassNames = getDefaultClassNames();
   const [month, setMonth] = React.useState(defaultMonth ?? props.startMonth ?? new Date());
@@ -35,12 +33,13 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         // react-day-picker doesn't render cells at all if they fall outside `endMonth`, so can't use not-last here
         day: classNames("not-[&:nth-child(7)]:border-r", defaultClassNames.day),
         day_button: classNames("py-2 w-full text-center", defaultClassNames.day_button),
-        selected: classNames("bg-accent text-contrast-accent", defaultClassNames.selected),
+        selected: classNames("bg-accent text-accent-foreground", defaultClassNames.selected),
       }}
       components={{
         Chevron: ({ className, orientation, disabled }) => (
           <div className={classNames({ "text-muted cursor-not-allowed": disabled }, className)}>
-            {forceUnicodeRenderAsText(orientation === "left" ? "◀" : "▶")}
+            {/* Force the chevrons to be rendered as text rather than emoji images */}
+            {`${orientation === "left" ? "◀" : "▶"}\u{FE0E}`}
           </div>
         ),
       }}
