@@ -25,9 +25,8 @@ describe Admin::Users::EmailChangesController do
         get :index, params: { user_id: user.id }, format: :json
 
         expect(response).to have_http_status(:success)
-        json_response = JSON.parse(response.body)
 
-        expect(json_response).to match(
+        expect(response.parsed_body).to match(
           "email_changes" => [
             {
               "created_at" => an_instance_of(String),
@@ -52,10 +51,10 @@ describe Admin::Users::EmailChangesController do
         get :index, params: { user_id: user.id }, format: :json
 
         expect(response).to have_http_status(:success)
-        json_response = JSON.parse(response.body)
-
-        expect(json_response["email_changes"]).to be_empty
-        expect(json_response["fields"]).to eq(%w(email payment_address))
+        expect(response.parsed_body).to eq(
+          "email_changes" => [],
+          "fields" => ["email", "payment_address"]
+        )
       end
     end
   end
