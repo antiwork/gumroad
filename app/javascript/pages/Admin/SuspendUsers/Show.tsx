@@ -49,7 +49,7 @@ const SuspendUsers = () => {
           newline.
         </header>
 
-        <CodeSnippet caption="Example with comma-separated items">3322133 3738461 4724778</CodeSnippet>
+        <CodeSnippet caption="Example with comma-separated items">3322133, 3738461, 4724778</CodeSnippet>
 
         <CodeSnippet caption="Example with items separated by newline">
           3322133

@@ -41,7 +41,9 @@ const Form = ({ action, header, buttonLabel }: Props) => {
           <code>john@list.example.org</code>, enter what is to the right of the <code>@</code> character.
         </p>
 
-        <CodeSnippet caption="Example with comma-separated items">example.com example.net list.example.org</CodeSnippet>
+        <CodeSnippet caption="Example with comma-separated items">
+          example.com, example.net, list.example.org
+        </CodeSnippet>
 
         <CodeSnippet caption="Example with items separated by newline">
           example.com
