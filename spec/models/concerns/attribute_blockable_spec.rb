@@ -642,13 +642,13 @@ describe AttributeBlockable do
     end
   end
 
-  describe "#block_by_method" do
+  describe "#block_by_method!" do
     let(:user) { create(:user, email: "methodtest@example.com") }
 
     it "blocks objects by the specified method and value" do
       expect(user.blocked_by_email?).to be false
 
-      user.block_by_method(:email, "methodtest@example.com")
+      user.block_by_method!(:email, "methodtest@example.com")
       expect(user.blocked_by_email?).to be true
     end
 
@@ -656,7 +656,7 @@ describe AttributeBlockable do
       user1 = create(:user, email: "multi1@example.com")
       user2 = create(:user, email: "multi2@example.com")
 
-      user1.block_by_method(:email, "multi1@example.com", "multi2@example.com")
+      user1.block_by_method!(:email, "multi1@example.com", "multi2@example.com")
 
       expect(user1.blocked_by_email?).to be true
       expect(user2.blocked_by_email?).to be true
@@ -664,18 +664,18 @@ describe AttributeBlockable do
 
     it "ignores blank values" do
       expect do
-        user.block_by_method(:email, "", nil, "valid@example.com")
+        user.block_by_method!(:email, "", nil, "valid@example.com")
       end.to change { BlockedObject.count }.by(1)
     end
 
     it "updates blocked_by_attributes cache" do
-      user.block_by_method(:email, "methodtest@example.com")
+      user.block_by_method!(:email, "methodtest@example.com")
       expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
     end
 
     it "accepts by_user_id parameter" do
       expect do
-        user.block_by_method(:email, "methodtest@example.com", by_user_id: 123)
+        user.block_by_method!(:email, "methodtest@example.com", by_user_id: 123)
       end.to change { BlockedObject.count }.by(1)
 
       blocked_object = BlockedObject.find_by(object_value: "methodtest@example.com")
@@ -684,7 +684,7 @@ describe AttributeBlockable do
 
     it "accepts expires_in parameter" do
       expect do
-        user.block_by_method(:email, "expired@example.com", expires_in: 1.hour)
+        user.block_by_method!(:email, "expired@example.com", expires_in: 1.hour)
       end.to change { BlockedObject.count }.by(1)
 
       blocked_object = BlockedObject.find_by(object_value: "expired@example.com")
@@ -692,17 +692,17 @@ describe AttributeBlockable do
     end
   end
 
-  describe "#unblock_by_method" do
+  describe "#unblock_by_method!" do
     let(:user) { create(:user, email: "unblocktest@example.com") }
 
     before do
-      user.block_by_method(:email, "unblocktest@example.com")
+      user.block_by_method!(:email, "unblocktest@example.com")
     end
 
     it "unblocks objects by the specified method and value" do
       expect(user.blocked_by_email?).to be true
 
-      user.unblock_by_method(:email, "unblocktest@example.com")
+      user.unblock_by_method!(:email, "unblocktest@example.com")
       user.reload
       expect(user.blocked_by_email?).to be false
     end
@@ -711,11 +711,11 @@ describe AttributeBlockable do
       user1 = create(:user, email: "unmulti1@example.com")
       user2 = create(:user, email: "unmulti2@example.com")
 
-      user1.block_by_method(:email, "unmulti1@example.com", "unmulti2@example.com")
+      user1.block_by_method!(:email, "unmulti1@example.com", "unmulti2@example.com")
       expect(user1.blocked_by_email?).to be true
       expect(user2.blocked_by_email?).to be true
 
-      user1.unblock_by_method(:email, "unmulti1@example.com", "unmulti2@example.com")
+      user1.unblock_by_method!(:email, "unmulti1@example.com", "unmulti2@example.com")
       user1.reload
       user2.reload
       expect(user1.blocked_by_email?).to be false
@@ -726,13 +726,13 @@ describe AttributeBlockable do
       user.blocked_by_email? # Populate cache
       expect(user.blocked_by_attributes["email"]).to be_a(BlockedObject)
 
-      user.unblock_by_method(:email, "unblocktest@example.com")
+      user.unblock_by_method!(:email, "unblocktest@example.com")
       expect(user.blocked_by_attributes["email"]).to be_nil
     end
 
     it "handles non-existent blocked objects gracefully" do
       expect do
-        user.unblock_by_method(:email, "nonexistent@example.com")
+        user.unblock_by_method!(:email, "nonexistent@example.com")
       end.not_to raise_error
     end
 
@@ -753,7 +753,7 @@ describe AttributeBlockable do
       model = test_model.new(current_sign_in_ip: blocked_ip)
       expect(model.blocked_by_current_sign_in_ip?).to be true
 
-      model.unblock_by_method(:current_sign_in_ip, blocked_ip)
+      model.unblock_by_method!(:current_sign_in_ip, blocked_ip)
       expect(model.blocked_by_current_sign_in_ip?).to be false
     end
   end
