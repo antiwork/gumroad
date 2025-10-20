@@ -6,7 +6,7 @@ import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 
 export type Props = {
-  trigger: React.ReactNode;
+  trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
   children: React.ReactNode | ((close: () => void) => React.ReactNode);
   className?: string;
   open?: boolean;
@@ -51,10 +51,12 @@ export const Popover = ({
     if (focusElement instanceof HTMLElement) focusElement.focus();
   }, [open]);
 
+  const renderedTrigger = typeof trigger === "function" ? trigger(open) : trigger;
+
   return (
     <Details
       className={cx("popover toggle", position, className)}
-      summary={trigger}
+      summary={renderedTrigger}
       summaryProps={{
         inert: disabled,
         "aria-label": ariaLabel,

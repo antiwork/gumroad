@@ -1,5 +1,6 @@
 import React from "react";
 
+import AdminNavFooterTrigger from "$app/components/Admin/Nav/FooterTrigger";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -21,12 +22,8 @@ function NavbarFooter() {
       <NavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
       <Popover
         position="top"
-        trigger={
-          <>
-            <img className="user-avatar" src={currentSeller?.avatarUrl} alt="Your avatar" />
-            {currentSeller?.name || currentSeller?.email}
-          </>
-        }
+        trigger={(open: boolean) => <AdminNavFooterTrigger user={currentSeller} open={open} />}
+        className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white"
       >
         <div role="menu">
           {teamMemberships != null && teamMemberships.length > 0 ? (
@@ -34,7 +31,7 @@ function NavbarFooter() {
               {teamMemberships.map((teamMembership) => (
                 <NavLinkDropdownMembershipItem key={teamMembership.id} teamMembership={teamMembership} />
               ))}
-              <hr />
+              <hr className="my-2" />
             </>
           ) : null}
           <NavLinkDropdownItem

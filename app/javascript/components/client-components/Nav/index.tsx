@@ -17,7 +17,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, useNav } from "$app/components/Nav";
+import { Nav as NavFramework, NavLink, NavSection, useNav } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -53,8 +53,14 @@ export const ClientNavLink = ({
     : undefined;
 
   return (
-    <Link aria-current={ariaCurrent} href={href} title={text} {...(onClick && { onClick })}>
-      {icon ? <Icon name={icon} /> : null}
+    <Link
+      aria-current={ariaCurrent}
+      href={href}
+      title={text}
+      {...(onClick && { onClick })}
+      className="flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent aria-[current=page]:text-accent"
+    >
+      {icon ? <Icon name={icon} className="mr-4" /> : null}
       {text}
       {badge ? (
         <>
@@ -107,7 +113,7 @@ export const Nav = (props: Props) => {
   return (
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
-      <section>
+      <NavSection>
         <ClientNavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <ClientNavLink
           text="Products"
@@ -144,8 +150,8 @@ export const Nav = (props: Props) => {
         {loggedInUser?.policies.community.index ? (
           <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
         ) : null}
-      </section>
-      <section>
+      </NavSection>
+      <NavSection>
         <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
@@ -155,7 +161,7 @@ export const Nav = (props: Props) => {
             additionalPatterns={[Routes.wishlists_url(routeParams)]}
           />
         ) : null}
-      </section>
+      </NavSection>
     </NavFramework>
   );
 };

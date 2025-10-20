@@ -5,6 +5,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
+import AdminNavFooterTrigger from "$app/components/Admin/Nav/FooterTrigger";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -14,6 +15,7 @@ import {
   NavLinkDropdownItem,
   UnbecomeDropdownItem,
   NavLinkDropdownMembershipItem,
+  NavSection,
 } from "$app/components/Nav";
 import { Popover } from "$app/components/Popover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
@@ -85,12 +87,8 @@ export const Nav = (props: Props) => {
           />
           <Popover
             position="top"
-            trigger={
-              <>
-                <img className="user-avatar" src={currentSeller?.avatarUrl} alt="Your avatar" />
-                {currentSeller?.name || currentSeller?.email}
-              </>
-            }
+            trigger={(open: boolean) => <AdminNavFooterTrigger user={currentSeller} open={open} />}
+            className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white"
           >
             <div role="menu">
               {teamMemberships != null && teamMemberships.length > 0 ? (
@@ -98,7 +96,7 @@ export const Nav = (props: Props) => {
                   {teamMemberships.map((teamMembership) => (
                     <NavLinkDropdownMembershipItem key={teamMembership.id} teamMembership={teamMembership} />
                   ))}
-                  <hr />
+                  <hr className="my-2" />
                 </>
               ) : null}
               <NavLinkDropdownItem
@@ -115,7 +113,7 @@ export const Nav = (props: Props) => {
       }
       {...props}
     >
-      <section>
+      <NavSection>
         <NavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <NavLink
           text="Products"
@@ -152,8 +150,8 @@ export const Nav = (props: Props) => {
         {loggedInUser?.policies.community.index ? (
           <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
         ) : null}
-      </section>
-      <section>
+      </NavSection>
+      <NavSection>
         <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
@@ -163,7 +161,7 @@ export const Nav = (props: Props) => {
             additionalPatterns={[Routes.wishlists_url(routeParams)]}
           />
         ) : null}
-      </section>
+      </NavSection>
     </NavFramework>
   );
 };

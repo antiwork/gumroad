@@ -5,6 +5,8 @@ import { cast } from "ts-safe-cast";
 import { CurrentUser } from "$app/types/user";
 import { assertResponseError } from "$app/utils/request";
 
+import AdminNavFooterTrigger from "$app/components/Admin/Nav/FooterTrigger";
+import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -50,12 +52,8 @@ const AdminNavFooter = () => {
   return (
     <Popover
       position="top"
-      trigger={
-        <>
-          <img className="user-avatar" src={loggedInUser?.avatarUrl} alt="Your avatar" />
-          {loggedInUser?.name}
-        </>
-      }
+      trigger={(open: boolean) => <AdminNavFooterTrigger user={loggedInUser} open={open} />}
+      className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white"
     >
       <div role="menu">
         {current_user.impersonated_user ? (
@@ -64,16 +62,16 @@ const AdminNavFooter = () => {
               <img className="user-avatar" src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
               <span>{current_user.impersonated_user.name}</span>
             </a>
-            <hr />
+            <hr className="my-2" />
           </>
         ) : null}
-        <Link role="menuitem" href={Routes.logout_url()} method="delete">
-          <span className="icon icon-box-arrow-in-right-fill"></span>
+        <Link role="menuitem" href={Routes.logout_url()} method="delete" className="w-full">
+          <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
           Logout
         </Link>
         {loggedInUser?.isImpersonating ? (
-          <a role="menuitem" href="#" onClick={handleUnbecome}>
-            <span className="icon icon-box-arrow-in-right-fill"></span>
+          <a role="menuitem" href="#" onClick={handleUnbecome} className="w-full">
+            <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
             Unbecome
           </a>
         ) : null}

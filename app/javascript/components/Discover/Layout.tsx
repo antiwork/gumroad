@@ -219,13 +219,24 @@ const TaxonomyCategoryBreadcrumbs = ({
   taxonomies: Taxonomy[];
   onClickTaxonomy: (taxonomySlugPath?: string) => void;
 }) => (
-  <div role="navigation" className="breadcrumbs mt-4" aria-label="Breadcrumbs">
-    <ol itemScope itemType="https://schema.org/BreadcrumbList">
+  <div role="navigation" className="mt-4" aria-label="Breadcrumbs">
+    <ol
+      itemScope
+      itemType="https://schema.org/BreadcrumbList"
+      className="flex list-none flex-wrap p-0 text-xl leading-[1.3]"
+    >
       {taxonomyPath.split("/").map((slug, index, breadcrumbs) => {
         const taxonomySlugPath = breadcrumbs.slice(0, index + 1).join("/");
         const label = taxonomies.find((t) => t.slug === slug)?.label ?? slug;
+
         return (
-          <li key={taxonomySlugPath} itemProp="itemListElement" itemScope itemType="https://schema.org/ListItem">
+          <li
+            key={taxonomySlugPath}
+            itemProp="itemListElement"
+            itemScope
+            itemType="https://schema.org/ListItem"
+            className="after:mx-2 after:content-['/'] last:after:mx-0 last:after:content-none"
+          >
             <a
               href={`/${taxonomySlugPath}`}
               onClick={(e) => {
@@ -235,6 +246,7 @@ const TaxonomyCategoryBreadcrumbs = ({
               }}
               aria-current={index === breadcrumbs.length - 1 ? "page" : undefined}
               itemProp="item"
+              className="aria-[current=page]:no-underline"
             >
               <span itemProp="name">{label}</span>
             </a>
