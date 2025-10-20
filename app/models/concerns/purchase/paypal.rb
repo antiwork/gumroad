@@ -12,7 +12,7 @@ module Purchase::Paypal
   end
 
   def paypal_email
-    card_visual.presence if paypal?
+    card_visual.presence if paypal_charge_processor?
   end
 
   def charged_using_paypal_connect_account?
@@ -28,15 +28,10 @@ module Purchase::Paypal
   end
 
   def paypal_fee_usd_cents
-    return 0 unless paypal?
+    return 0 unless paypal_charge_processor?
     return 0 if processor_fee_cents_currency.blank?
     return 0 if processor_fee_cents.to_i == 0
 
     get_usd_cents(processor_fee_cents_currency, processor_fee_cents)
   end
-
-  private
-    def paypal?
-      charge_processor_id == PaypalChargeProcessor.charge_processor_id
-    end
 end

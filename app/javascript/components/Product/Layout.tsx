@@ -300,7 +300,9 @@ const CtaBar = ({
           creatorName={product.seller?.name}
         />
         <h3>{product.name}</h3>
-        {product.ratings != null && product.ratings.count > 0 ? <RatingsSummary ratings={product.ratings} /> : null}
+        {product.ratings != null && product.ratings.count > 0 ? (
+          <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
+        ) : null}
         <CtaButton
           product={product}
           purchase={purchase}
