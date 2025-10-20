@@ -121,7 +121,7 @@ export const Nav = ({ title, children, footer }: Props) => {
       <nav
         aria-label="Main"
         className={classNames(
-          "flex flex-col overflow-y-auto bg-black text-nav-foreground lg:static lg:w-[12.8125rem]",
+          "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-nav-foreground lg:static lg:w-[12.8125rem]",
           {
             "fixed z-10 size-full lg:static lg:w-[12.8125rem]": open,
           },
