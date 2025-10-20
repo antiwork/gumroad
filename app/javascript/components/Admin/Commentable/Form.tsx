@@ -1,4 +1,4 @@
-import { useForm } from "@inertiajs/react";
+import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -13,8 +13,13 @@ type AdminCommentableFormProps = {
   commentableType: string;
 };
 
+type PageProps = {
+  authenticity_token: string;
+};
+
 const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: AdminCommentableFormProps) => {
-  const form = useForm("AdminAddComment", { comment: { content: "" } });
+  const { authenticity_token } = usePage<PageProps>().props;
+  const form = useForm("AdminAddComment", { comment: { content: "" }, authenticity_token });
   const {
     data: {
       comment: { content },
@@ -36,6 +41,7 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
     // eslint-disable-next-line no-alert
     if (confirm("Are you sure you want to post this comment?")) {
       const formData = new FormData();
+      formData.append("authenticity_token", authenticity_token);
       formData.append("comment[content]", content);
       const response = await request({
         method: "POST",
@@ -56,6 +62,7 @@ const AdminCommentableForm = ({ endpoint, onCommentAdded, commentableType }: Adm
 
   return (
     <form onSubmit={(e) => void onSubmit(e)}>
+      <input type="hidden" name="authenticity_token" value={authenticity_token} />
       <fieldset>
         <div className="input-with-button">
           <textarea
