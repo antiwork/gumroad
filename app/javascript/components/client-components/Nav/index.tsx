@@ -58,7 +58,7 @@ export const ClientNavLink = ({
       href={href}
       title={text}
       {...(onClick && { onClick })}
-      className="flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent aria-[current=page]:text-accent"
+      className="flex items-center truncate border-y border-nav-foreground/50 border-b-transparent px-6 py-4 no-underline last:border-b-nav-foreground/50 hover:text-accent aria-[current=page]:text-accent"
     >
       {icon ? <Icon name={icon} className="mr-4" /> : null}
       {text}

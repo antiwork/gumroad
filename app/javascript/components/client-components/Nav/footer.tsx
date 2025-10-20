@@ -23,7 +23,7 @@ function NavbarFooter() {
       <Popover
         position="top"
         trigger={(open: boolean) => <AdminNavFooterTrigger user={currentSeller} open={open} />}
-        className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white/35"
+        className="border-y border-nav-foreground/50 border-b-transparent after:border-t-nav-foreground! after:dark:border-t-nav-foreground/35! [&>.dropdown]:mx-4"
       >
         <div role="menu">
           {teamMemberships != null && teamMemberships.length > 0 ? (

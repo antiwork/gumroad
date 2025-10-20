@@ -56,7 +56,7 @@ const BaseNavLink = ({
       aria-current={ariaCurrent}
       href={href}
       title={text}
-      className="flex items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 no-underline last:border-b-white/50 hover:text-accent aria-[current=page]:text-accent"
+      className="flex items-center truncate border-y border-nav-foreground/50 border-b-transparent px-6 py-4 no-underline last:border-b-nav-foreground/50 hover:text-accent aria-[current=page]:text-accent"
       {...props}
     >
       {icon ? <Icon name={icon} className="mr-4" /> : null}
@@ -121,7 +121,7 @@ export const Nav = ({ title, children, footer }: Props) => {
       <nav
         aria-label="Main"
         className={classNames(
-          "flex flex-col flex-wrap-reverse overflow-y-auto bg-black text-white lg:static lg:w-[12.8125rem]",
+          "flex flex-col overflow-y-auto bg-black text-nav-foreground lg:static lg:w-[12.8125rem]",
           {
             "fixed z-10 size-full lg:static lg:w-[12.8125rem]": open,
           },
