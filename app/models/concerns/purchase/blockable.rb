@@ -92,7 +92,7 @@ module Purchase::Blockable
   end
 
   def charge_processor_fingerprint
-    charge_processor_id == StripeChargeProcessor.charge_processor_id ? stripe_fingerprint : card_visual
+    stripe_charge_processor? ? stripe_fingerprint : card_visual
   end
 
   def pause_payouts_for_seller_based_on_chargeback_rate!

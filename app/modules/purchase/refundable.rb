@@ -30,7 +30,7 @@ class Purchase
       return if stripe_transaction_id.blank? || stripe_refunded || amount_refundable_cents <= 0
 
       if (merchant_account.is_a_stripe_connect_account? && !merchant_account.active?) ||
-          (charge_processor_id == PaypalChargeProcessor.charge_processor_id &&
+          (paypal_charge_processor? &&
               !seller_native_paypal_payment_enabled?)
         errors.add :base, "We cannot refund this sale because you have disconnected the associated payment account on " \
                         "#{charge_processor_id.titleize}. Please connect it and try again."

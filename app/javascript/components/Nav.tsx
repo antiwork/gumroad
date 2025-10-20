@@ -112,7 +112,7 @@ export const Nav = ({ title, children, footer, compact }: Props) => {
 
   return (
     <NavContext.Provider value={contextValue}>
-      <nav aria-label="Main" className={classNames({ compact, open })}>
+      <nav aria-label="Main" className={classNames("main-nav", { compact, open })}>
         <div className="navbar">
           <a href={Routes.root_url()}>
             <span className="logo-g">&nbsp;</span>

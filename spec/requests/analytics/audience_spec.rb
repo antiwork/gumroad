@@ -47,9 +47,9 @@ describe "Audience analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_ref
 
     it "shows the chart" do
       visit audience_dashboard_path(from: "2023-12-01", to: "2023-12-31")
-      expect(page).to have_css(".point", count: 31)
+      expect(page).to have_css('[data-testid="chart-dot"]', count: 31)
 
-      chart = find(".chart")
+      chart = find('[data-testid="chart"]')
       chart.hover
       expect(chart).to have_tooltip(text: "1 new follower\n1 follower removed\n2 total followers\nSaturday, December 16")
 
@@ -59,7 +59,7 @@ describe "Audience analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_ref
       fill_in "To (including)", with: "12/18/2023"
       find("body").click # Blur the date field to trigger the update
 
-      expect(page).to have_css(".point", count: 2)
+      expect(page).to have_css('[data-testid="chart-dot"]', count: 2)
       chart.hover
       expect(chart).to have_tooltip(text: "0 new followers\n2 total followers\nSunday, December 17")
     end

@@ -4,6 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import Placeholder from "$app/components/ui/Placeholder";
 
 import { Layout, LayoutProps } from "./Layout";
 
@@ -56,7 +57,7 @@ const MembershipInactive = ({
     subscription_id: string;
   } | null;
 }) => (
-  <div className="placeholder">
+  <Placeholder>
     <figure>
       <img src={placeholderImage} />
     </figure>
@@ -73,7 +74,7 @@ const MembershipInactive = ({
         </a>
       ) : null
     ) : null}
-  </div>
+  </Placeholder>
 );
 
 const InstallmentPlanFailedOrCancelled = ({
@@ -86,7 +87,7 @@ const InstallmentPlanFailedOrCancelled = ({
     is_alive_or_restartable: boolean | null;
   };
 }) => (
-  <div className="placeholder">
+  <Placeholder>
     <figure>
       <img src={placeholderImage} />
     </figure>
@@ -101,27 +102,27 @@ const InstallmentPlanFailedOrCancelled = ({
     ) : (
       <p>You cannot access the content of {product_name} because your installment plan is no longer active.</p>
     )}
-  </div>
+  </Placeholder>
 );
 
 const AccessExpired = () => (
-  <div className="placeholder">
+  <Placeholder>
     <figure>
       <img src={placeholderImage} />
     </figure>
     <h2>Access expired</h2>
     <p>It looks like your access to this product has expired. Please contact the creator for further assistance.</p>
-  </div>
+  </Placeholder>
 );
 
 const RentalExpired = () => (
-  <div className="placeholder">
+  <Placeholder>
     <figure>
       <img src={placeholderImage} />
     </figure>
     <h2>Your rental has expired</h2>
     <p>Rentals expire 30 days after purchase or 72 hours after you’ve begun watching it.</p>
-  </div>
+  </Placeholder>
 );
 
 type EmailConfirmationProps = {
@@ -136,7 +137,7 @@ type EmailConfirmationProps = {
     | undefined;
 };
 const EmailConfirmation = ({ confirmation_info, authenticity_token }: EmailConfirmationProps) => (
-  <div className="placeholder">
+  <Placeholder>
     <h2>You've viewed this product a few times already</h2>
     <p>Once you enter the email address used to purchase this product, you'll be able to access it again.</p>
     {confirmation_info ? (
@@ -157,7 +158,7 @@ const EmailConfirmation = ({ confirmation_info, authenticity_token }: EmailConfi
         </Button>
       </form>
     ) : null}
-  </div>
+  </Placeholder>
 );
 
 export default register({ component: WithoutContent, propParser: createCast() });
