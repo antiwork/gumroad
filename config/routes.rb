@@ -919,9 +919,6 @@ Rails.application.routes.draw do
           resources :incomings, only: [:index]
         end
 
-        resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
-          put :save_installments, on: :member
-        end
         resources :installments, only: [:index, :new, :edit, :create, :update, :destroy] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
