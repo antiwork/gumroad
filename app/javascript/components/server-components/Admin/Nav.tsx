@@ -39,7 +39,7 @@ export const Nav = ({ title, current_user }: Props) => {
         <Popover
           position="top"
           trigger={(open: boolean) => <AdminNavFooterTrigger user={loggedInUser} open={open} />}
-          className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white"
+          className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white/35"
         >
           <div role="menu">
             {current_user.impersonated_user ? (

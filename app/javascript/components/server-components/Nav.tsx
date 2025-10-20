@@ -88,7 +88,7 @@ export const Nav = (props: Props) => {
           <Popover
             position="top"
             trigger={(open: boolean) => <AdminNavFooterTrigger user={currentSeller} open={open} />}
-            className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white"
+            className="border-y border-white/50 border-b-transparent after:border-t-white! [&>.dropdown]:mx-4 [&>.dropdown]:border-white/35"
           >
             <div role="menu">
               {teamMemberships != null && teamMemberships.length > 0 ? (
