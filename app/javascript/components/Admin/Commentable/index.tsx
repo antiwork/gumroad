@@ -17,6 +17,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [comments, setComments] = React.useState<CommentProps[]>([]);
+  const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
 
   const fetchComments = async () => {
     setIsLoading(true);
@@ -39,15 +40,18 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
     }
   };
 
-  const appendComment = (comment: CommentProps) => setComments([comment, ...comments]);
+  const onCommentAdded = (comment: CommentProps) => {
+    setComments([comment, ...comments]);
+    setCommentsCount(commentsCount + 1);
+  };
 
   return (
     <>
       <hr />
-      <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
+      <AdminCommentableForm endpoint={endpoint} onCommentAdded={onCommentAdded} commentableType={commentableType} />
       <details open={open} onToggle={onToggle} className="space-y-2">
-        <summary>{comments.length > 0 || count != null ? `${comments.length || count} comments` : "Comments"}</summary>
-        <AdminCommentableContent count={comments.length} comments={comments} isLoading={isLoading} />
+        <summary>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</summary>
+        <AdminCommentableContent count={commentsCount} comments={comments} isLoading={isLoading} />
       </details>
     </>
   );
