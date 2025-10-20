@@ -70,7 +70,7 @@ module AdminHelper
     email_blocked_content = email_blocked_object&.blocked? && "Email blocked #{email_blocked_object.blocked_at.to_formatted_s(:long)} (block created #{email_blocked_object.created_at.to_formatted_s(:long)})"
     email_domain_blocked_content = email_domain_blocked_object&.blocked? && "#{email_domain} blocked #{email_domain_blocked_object.blocked_at.to_formatted_s(:long)} (block created #{email_domain_blocked_object.created_at.to_formatted_s(:long)})"
 
-    return unless email_blocked_content || email_domain_blocked_content
+    return if email_blocked_content.nil? && email_domain_blocked_content.nil?
 
     content = tag.div(class: "paragraphs") do
       concat tag.span(email_blocked_content) if email_blocked_content
