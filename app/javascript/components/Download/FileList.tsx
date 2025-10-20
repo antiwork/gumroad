@@ -677,7 +677,7 @@ const VideoEmbedPreview = ({
           onClick={() => void startPlaying()}
           aria-label="Watch"
         >
-          {isFetchingMediaUrls ? <LoadingSpinner width="4em" /> : <PlayVideoIcon />}
+          {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
         </button>
       </TrackClick>
     </figure>

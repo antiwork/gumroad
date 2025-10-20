@@ -4,6 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -31,7 +32,7 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
   return userStats ? (
     <ul className="inline" dangerouslySetInnerHTML={{ __html: userStats }} />
   ) : (
-    <div role="progressbar" style={{ display: "inline-block", width: "0.75em" }} />
+    <LoadingSpinner className="size-3" />
   );
 };
 

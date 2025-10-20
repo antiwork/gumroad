@@ -1,15 +1,14 @@
 import * as React from "react";
 
-import { Progress } from "$app/components/Progress";
+import { classNames } from "$app/utils/classNames";
 
-type Props = {
-  // It's only grey for now, but we can add a white variation when needed.
-  color?: "grey";
-  width?: string;
-};
-export const LoadingSpinner = ({ color = "grey", width = "1em" }: Props) => (
-  <>
-    <Progress width={width} />
-    <div className={`loading-spinner-component loading-spinner-component--${color} legacy-only`} />
-  </>
+import loadingSpinner from "$assets/images/loading-rainbow.svg";
+
+export const LoadingSpinner = ({ className, ...props }: React.HTMLAttributes<HTMLElement>) => (
+  <img
+    src={loadingSpinner}
+    className={classNames("size-[1em] animate-spin", className)}
+    role="progressbar"
+    {...props}
+  />
 );

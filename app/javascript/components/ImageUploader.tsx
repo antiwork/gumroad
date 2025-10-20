@@ -4,7 +4,7 @@ import FileUtils from "$app/utils/file";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
-import { Progress } from "$app/components/Progress";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
 
@@ -39,7 +39,7 @@ export const ImageUploader = ({
     <div className="grid grid-cols-[12.5rem_1fr] gap-5">
       {uploading ? (
         <Placeholder className="aspect-square items-center">
-          <Progress width="2rem" />
+          <LoadingSpinner className="size-8" />
         </Placeholder>
       ) : imageUrl == null ? (
         <Placeholder className="aspect-square items-center" style={{ background }}>

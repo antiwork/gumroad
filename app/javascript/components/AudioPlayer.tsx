@@ -135,7 +135,7 @@ export const AudioPlayer = (props: Props) => {
           </time>
         </>
       ) : (
-        <LoadingSpinner width="2em" />
+        <LoadingSpinner className="size-8" />
       )}
     </div>
   );

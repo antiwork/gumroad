@@ -26,8 +26,8 @@ content.appendChild(overlayIframe);
 
 const progressbar = document.createElement("div");
 progressbar.setAttribute("role", "progressbar");
-progressbar.className = "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2";
-progressbar.style.display = "none";
+progressbar.className = "gumroad-progress-bar";
+document.body.appendChild(progressbar);
 
 const registerButton = (button: HTMLAnchorElement) => {
   if (!!button.closest("[data-gumroad-ignore='true']") || !!button.closest(".gumroad-product-embed")) return;
@@ -43,7 +43,7 @@ const registerButton = (button: HTMLAnchorElement) => {
     url.searchParams.set("overlay", "true");
     button.addEventListener("click", (evt) => {
       evt.preventDefault();
-      progressbar.style.display = "";
+      progressbar.style.display = "block";
       overlayIframe.src = url.toString();
     });
   }
@@ -68,7 +68,6 @@ onLoad(() => {
   const widget = document.createElement("div");
   widget.className = "widget";
   shadowRoot.appendChild(widget);
-  widget.appendChild(progressbar);
   widget.appendChild(overlay);
   document.body.appendChild(root);
 
