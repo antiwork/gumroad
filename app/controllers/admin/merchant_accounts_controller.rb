@@ -11,7 +11,7 @@ class Admin::MerchantAccountsController < Admin::BaseController
     def load_live_attributes
       return unless @merchant_account.charge_processor_merchant_id.present?
 
-      if @merchant_account.charge_processor_id == StripeChargeProcessor.charge_processor_id
+      if @merchant_account.stripe_charge_processor?
         stripe_account = Stripe::Account.retrieve(@merchant_account.charge_processor_merchant_id)
         @live_attributes = {
           "Charges enabled" => stripe_account.charges_enabled,
@@ -19,7 +19,7 @@ class Admin::MerchantAccountsController < Admin::BaseController
           "Disabled reason" => stripe_account.requirements.disabled_reason,
           "Fields needed" => stripe_account.requirements.as_json
         }
-      elsif @merchant_account.charge_processor_id == PaypalChargeProcessor.charge_processor_id
+      elsif @merchant_account.paypal_charge_processor?
         paypal_account_details = @merchant_account.paypal_account_details
         if paypal_account_details.present?
           @live_attributes = {

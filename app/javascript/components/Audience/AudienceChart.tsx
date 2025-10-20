@@ -29,7 +29,7 @@ const ChartTooltip = ({ data: { newFollowers, followersRemoved, total, title } }
         <strong>{total}</strong> total {total === 1 ? "follower" : "followers"}
       </div>
     ) : null}
-    <time>{title}</time>
+    <time className="block font-bold">{title}</time>
   </>
 );
 

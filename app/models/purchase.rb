@@ -9,7 +9,8 @@ class Purchase < ApplicationRecord
           Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
-          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Paypal, Receipt, UnusedColumns, SecureExternalId
+          Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Paypal, Receipt, UnusedColumns, SecureExternalId,
+          ChargeProcessable
 
   extend PreorderHelper
   extend ProductsHelper
@@ -832,7 +833,7 @@ class Purchase < ApplicationRecord
 
   def charged_using_gumroad_merchant_account?
     (merchant_account&.is_managed_by_gumroad?) ||
-        (charge_processor_id == StripeChargeProcessor.charge_processor_id && !charged_using_stripe_connect_account?)
+        (stripe_charge_processor? && !charged_using_stripe_connect_account?)
   end
 
   def charged_using_stripe_connect_account?
@@ -2232,7 +2233,7 @@ class Purchase < ApplicationRecord
   end
 
   def formatted_error_message
-    if charge_processor_id == StripeChargeProcessor.charge_processor_id
+    if stripe_charge_processor?
       PurchaseErrorCode::STRIPE_ERROR_CODES.find { |err_code, _err_msg| stripe_error_code.to_s.include?(err_code) }&.last
     else
       PurchaseErrorCode::PAYPAL_ERROR_CODES[stripe_error_code.to_s]
@@ -2469,7 +2470,7 @@ class Purchase < ApplicationRecord
   end
 
   def is_an_off_session_charge_on_indian_card?
-    charge_processor_id == StripeChargeProcessor.charge_processor_id && card_country == "IN" && (preorder.present? || is_recurring_subscription_charge)
+    stripe_charge_processor? && card_country == "IN" && (preorder.present? || is_recurring_subscription_charge)
   end
 
   # Off-session charges on Indian cards remain in processing for 26 hours on Stripe.
@@ -2843,7 +2844,7 @@ class Purchase < ApplicationRecord
     end
 
     def charge_processor_unavailable_error
-      if charge_processor_id.blank? || charge_processor_id == StripeChargeProcessor.charge_processor_id
+      if charge_processor_id.blank? || stripe_charge_processor?
         PurchaseErrorCode::STRIPE_UNAVAILABLE
       else
         PurchaseErrorCode::PAYPAL_UNAVAILABLE

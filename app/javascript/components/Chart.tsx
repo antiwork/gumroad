@@ -12,7 +12,6 @@ type DotProps = {
   cx: number;
   cy: number;
   width: number;
-  fill: string;
 };
 
 export const Chart = ({
@@ -29,7 +28,11 @@ export const Chart = ({
 } & React.ComponentPropsWithoutRef<typeof ComposedChart>) => {
   const uid = React.useId();
   return (
-    <section className="chart" aria-describedby={tooltip ? uid : undefined}>
+    <section
+      className="rounded border border-border bg-background p-6 text-foreground"
+      data-testid="chart"
+      aria-describedby={tooltip ? uid : undefined}
+    >
       <div className="relative">
         <ResponsiveContainer aspect={aspect ?? 1092 / 450} maxHeight={650} ref={containerRef}>
           <ComposedChart margin={{ top: 32, right: 0, bottom: 16, left: 0 }} {...props} />
@@ -76,19 +79,19 @@ export const lineProps = (
   dotRef: (element: SVGCircleElement) => void,
   dotCount: number,
 ): React.PropsWithoutRef<LineProps> => ({
-  className: "line",
-  stroke: "",
-  strokeWidth: "",
+  stroke: "rgb(var(--accent))",
+  strokeWidth: 2,
   isAnimationActive: false,
-  dot: ({ key, cx, cy, width, fill }: DotProps) => (
+  dot: ({ key, cx, cy, width }: DotProps) => (
     <circle
-      className="point"
       ref={dotRef}
       key={key}
       cx={cx}
       cy={cy}
       r={Math.min(width / dotCount / 7, 8)}
-      fill={fill}
+      fill="rgb(var(--accent))"
+      stroke="none"
+      data-testid="chart-dot"
     />
   ),
 });
