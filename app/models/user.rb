@@ -424,6 +424,10 @@ class User < ApplicationRecord
     username.presence || form_email
   end
 
+  def display_name_or_email
+    display_name(prefer_email_over_default_username: true)
+  end
+
   def support_or_form_email
     support_email.presence || form_email
   end
