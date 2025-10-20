@@ -462,6 +462,55 @@ describe AttributeBlockable do
 
         expect(blocked_users.map(&:email)).to eq([mixed_blocked_email, "another@example.com"])
       end
+
+      it "works with custom method names that map to different object types" do
+        custom_blocked_email = "custom_blocked@example.com"
+        custom_unblocked_email = "custom_unblocked@example.com"
+
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email, 1)
+
+        test_users = [
+          create(:user, email: custom_blocked_email),
+          create(:user, email: custom_unblocked_email)
+        ]
+
+        result_users = User.where(id: test_users.map(&:id)).with_blocked_attributes_for(:form_email)
+        blocked_users = result_users.select(&:blocked_by_form_email?)
+        unblocked_users = result_users.reject(&:blocked_by_form_email?)
+
+        expect(blocked_users.map(&:email)).to eq([custom_blocked_email])
+        expect(unblocked_users.map(&:email)).to eq([custom_unblocked_email])
+
+        result_users.each do |user|
+          if user.email == custom_blocked_email
+            expect(user.blocked_by_attributes["form_email"]).to be_a(BlockedObject)
+          else
+            expect(user.blocked_by_attributes["form_email"]).to be_nil
+          end
+        end
+      end
+
+      it "uses the correct BlockedObject scope for custom method names" do
+        custom_blocked_email_1 = "scope_test1@example.com"
+        custom_blocked_email_2 = "scope_test2@example.com"
+        custom_blocked_email_domain = "example.com"
+
+        test_users = [
+          create(:user, email: custom_blocked_email_1),
+          create(:user, email: custom_blocked_email_2)
+        ]
+
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email_1, 1)
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], custom_blocked_email_2, 1)
+        BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], custom_blocked_email_domain, 1)
+
+        allow(BlockedObject).to receive(:find_objects).and_call_original
+
+        User.where(id: test_users.map(&:id)).with_blocked_attributes_for(:form_email, :email_domain).to_a
+
+        expect(BlockedObject).to have_received(:find_objects).with([custom_blocked_email_1, custom_blocked_email_2]).once
+        expect(BlockedObject).to have_received(:find_objects).with([custom_blocked_email_domain]).once
+      end
     end
 
     describe "performance" do

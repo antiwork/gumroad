@@ -17,7 +17,11 @@
 #
 # This generates several instance methods:
 # - +blocked_by_email?+ - Returns true if the email is blocked
+# - +blocked_by_email_at?+ - Returns true if blocked_at timestamp is present
 # - +blocked_by_email_at+ - Returns the timestamp when blocked, or nil
+# - +blocked_by_email_object+ - Returns the BlockedObject record
+# - +block_by_email_created_at+ - Returns when the block was created
+# - +block_by_email_expires_at+ - Returns when the block expires, or nil
 # - +block_by_email!+ - Blocks the email value
 # - +unblock_by_email!+ - Unblocks the email value
 # - +blocked_emails+ - Returns array of blocked email values
@@ -49,8 +53,8 @@
 # The concern tracks all blockable attributes defined on a model:
 #
 #   User.blockable_attributes
-#   # => [{ attribute: :email, blockable_method: :email },
-#   #     { attribute: :email, blockable_method: :form_email }]
+#   # => [{ object_type: :email, blockable_method: :email },
+#   #     { object_type: :email, blockable_method: :form_email }]
 #
 #   User.blockable_method_names
 #   # => [:email, :form_email]
@@ -77,7 +81,7 @@ module AttributeBlockable
   extend ActiveSupport::Concern
 
   # Returns the cache hash for blocked attribute lookups.
-  # Structure: { "method_name" => timestamp_or_nil }
+  # Structure: { "method_name" => blocked_object_or_nil }
   #
   # @return [Hash] Cache of blocked attribute statuses
   def blocked_by_attributes
@@ -174,11 +178,11 @@ module AttributeBlockable
           values = @records.filter_map { |record| record.try(method_name).presence }.uniq
           return if values.empty?
 
-          # Look up the actual attribute type from the blockable_attributes registry
+          # Look up the actual object type from the blockable_attributes registry
           # For example: form_email maps to :email, form_email_domain maps to :email_domain
           model_class = @records.first.class
           blockable_config = model_class.blockable_attributes.find { |attr| attr[:blockable_method] == method_name.to_sym }
-          attribute_type = blockable_config ? blockable_config[:attribute] : method_name.to_sym
+          attribute_type = blockable_config ? blockable_config[:object_type] : method_name.to_sym
 
           scope = BLOCKED_OBJECT_TYPES.fetch(attribute_type, :all)
           blocked_objects_by_value = BlockedObject.send(scope).find_objects(values).index_by(&:object_value)
@@ -196,13 +200,16 @@ module AttributeBlockable
     # Defines blockable attribute methods for the given attribute.
     #
     # Generates the following instance methods:
-    # - +blocked_by_{method}_at?+ - Boolean check for blocked status
-    # - +blocked_by_{method}?+ - Alias for the above
-    # - +blocked_by_{method}_at+ - Returns timestamp or nil
+    # - +blocked_by_{method}?+ - Returns true if the value is currently blocked
+    # - +blocked_by_{method}_at?+ - Returns true if blocked_at timestamp is present
+    # - +blocked_by_{method}_at+ - Returns the blocked_at timestamp or nil
+    # - +block_by_{method}_created_at+ - Returns when the block was created
+    # - +block_by_{method}_expires_at+ - Returns when the block expires, or nil
+    # - +blocked_{pluralized_method}_objects+ - Returns BlockedObject records
+    # - +blocked_{pluralized_method}+ - Returns array of blocked values
     # - +block_by_{method}!+ - Blocks the attribute value
     # - +unblock_by_{method}!+ - Unblocks the attribute value
-    # - +blocked_{pluralized_method}+ - Returns array of blocked values
-    # - +blocked_{pluralized_method}_objects+ - Returns BlockedObject records
+    # - +blocked_by_{method}_object+ - Returns the BlockedObject record
     #
     # @param blockable_method [Symbol, String] The method name to make blockable
     # @param object_type [Symbol, String, nil] The BlockedObject type to use (defaults to blockable_method)
