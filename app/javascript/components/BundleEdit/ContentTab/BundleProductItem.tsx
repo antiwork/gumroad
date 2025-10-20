@@ -38,7 +38,7 @@ export const BundleProductItem = ({
       media={<Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />}
       title={<h4>{bundleProduct.name}</h4>}
       body={
-        <ul className="pl-0">
+        <ul className="mt-auto pl-0">
           <li>
             <strong>Qty:</strong> {bundleProduct.quantity}
           </li>
@@ -50,8 +50,8 @@ export const BundleProductItem = ({
         </ul>
       }
       footer={
-        <ul className="pl-0">
-          {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
+        bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
+          <ul className="pl-0">
             <li>
               <Popover
                 trigger={<div className="link">Configure</div>}
@@ -110,7 +110,11 @@ export const BundleProductItem = ({
                 </div>
               </Popover>
             </li>
-          ) : null}
+          </ul>
+        ) : null
+      }
+      end={
+        <ul>
           <li>
             <button className="link" onClick={removeBundleProduct}>
               Remove
@@ -118,6 +122,7 @@ export const BundleProductItem = ({
           </li>
         </ul>
       }
+      endClassName="mt-auto"
     />
   );
 };

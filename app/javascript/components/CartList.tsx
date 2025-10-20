@@ -39,7 +39,7 @@ export function CartListItem({
   return (
     <div role="listitem" className={classNames("override grid border-border not-first:border-t", className)}>
       <section className="col-span-3 grid grid-cols-[3.625rem_1fr_auto] gap-x-4 rounded-sm p-4 **:list-none not-first:rounded-none sm:grid-cols-[8.5rem_1fr_auto] sm:p-0 sm:pr-4">
-        <figure className="rounded-sm border border-foreground sm:h-full sm:rounded-none sm:border-y-0 sm:border-l-0 sm:border-foreground">
+        <figure className="h-fit rounded-sm border border-foreground sm:h-full sm:rounded-none sm:border-y-0 sm:border-l-0 sm:border-foreground">
           {media}
         </figure>
         <section className="flex flex-col gap-1 last:items-end sm:py-4">

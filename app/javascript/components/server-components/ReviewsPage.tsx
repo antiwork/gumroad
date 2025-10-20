@@ -68,12 +68,6 @@ const ReviewsPage = ({
     inputRefs.current[purchases[0].id]?.focus();
   }, [purchases.length]);
 
-  const products = reviews.map((r, i) => ({ id: i.toString(), email_digest: "123", product: r.product }));
-
-  if (products !== purchases) {
-    setPurchases(products);
-  }
-
   return (
     <Layout selectedTab="reviews" followingWishlistsEnabled={following_wishlists_enabled}>
       {purchases.length ? (

@@ -26,6 +26,6 @@ export const BundleProductSelector = ({
     }
     end={<input type="checkbox" checked={!!selected} onChange={onToggle} />}
     endClassName="justify-center"
-    className="sm:grid-cols-[5rem_1fr_auto]"
+    className="sm:*:grid-cols-[5rem_1fr_auto]"
   />
 );
