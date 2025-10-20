@@ -5,6 +5,7 @@ import { ProductNativeType } from "$app/parsers/product";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { CartList, CartListItem } from "$app/components/CartList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
@@ -67,6 +68,12 @@ const ReviewsPage = ({
     inputRefs.current[purchases[0].id]?.focus();
   }, [purchases.length]);
 
+  const products = reviews.map((r, i) => ({ id: i.toString(), email_digest: "123", product: r.product }));
+
+  if (products !== purchases) {
+    setPurchases(products);
+  }
+
   return (
     <Layout selectedTab="reviews" followingWishlistsEnabled={following_wishlists_enabled}>
       {purchases.length ? (
@@ -74,48 +81,45 @@ const ReviewsPage = ({
           <h2>{`${purchases.length} ${purchases.length === 1 ? "product" : "products"} awaiting review`}</h2>
           <div className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
             {purchases.map((purchase) => (
-              <div className="cart h-min" role="list" key={purchase.id}>
-                <div key={purchase.id} role="listitem">
-                  <section>
-                    <figure>
-                      <Thumbnail url={purchase.product.thumbnail_url} nativeType={purchase.product.native_type} />
-                    </figure>
-                    <section>
+              <CartList className="h-min" key={purchase.id}>
+                <CartListItem
+                  key={purchase.id}
+                  media={<Thumbnail url={purchase.product.thumbnail_url} nativeType={purchase.product.native_type} />}
+                  title={
+                    <>
                       <a href={purchase.product.url}>
                         <h4>{purchase.product.name}</h4>
                       </a>
                       <a href={purchase.product.seller.url}>{purchase.product.seller.name}</a>
-                    </section>
-                    <section />
-                  </section>
-                  <section className="footer">
-                    <ReviewForm
-                      permalink={purchase.product.permalink}
-                      purchaseId={purchase.id}
-                      purchaseEmailDigest={purchase.email_digest}
-                      review={null}
-                      onChange={(newReview) => {
-                        setReviews((prevReviews) => [
-                          ...prevReviews,
-                          {
-                            ...purchase,
-                            ...newReview,
-                            id: (newReviewId++).toString(),
-                            review: newReview,
-                            purchase_id: purchase.id,
-                            purchase_email_digest: purchase.email_digest,
-                          },
-                        ]);
-                        setPurchases((prevPurchases) =>
-                          prevPurchases.filter((prevPurchase) => prevPurchase.id !== purchase.id),
-                        );
-                      }}
-                      style={{ display: "grid", gap: "var(--spacer-4)" }}
-                      ref={(el) => (inputRefs.current[purchase.id] = el)}
-                    />
-                  </section>
-                </div>
-              </div>
+                    </>
+                  }
+                >
+                  <ReviewForm
+                    permalink={purchase.product.permalink}
+                    purchaseId={purchase.id}
+                    purchaseEmailDigest={purchase.email_digest}
+                    review={null}
+                    onChange={(newReview) => {
+                      setReviews((prevReviews) => [
+                        ...prevReviews,
+                        {
+                          ...purchase,
+                          ...newReview,
+                          id: (newReviewId++).toString(),
+                          review: newReview,
+                          purchase_id: purchase.id,
+                          purchase_email_digest: purchase.email_digest,
+                        },
+                      ]);
+                      setPurchases((prevPurchases) =>
+                        prevPurchases.filter((prevPurchase) => prevPurchase.id !== purchase.id),
+                      );
+                    }}
+                    style={{ display: "grid", gap: "var(--spacer-4)" }}
+                    ref={(el) => (inputRefs.current[purchase.id] = el)}
+                  />
+                </CartListItem>
+              </CartList>
             ))}
           </div>
         </section>

@@ -18,12 +18,14 @@ import {
   AbandonedCartProduct,
 } from "$app/data/workflows";
 import { assert, assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { CartList, CartListItem } from "$app/components/CartList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -645,37 +647,30 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
     <NodeViewWrapper className="paragraphs" style={isPreview ? {} : { userSelect: "none", cursor: "not-allowed" }}>
       <div className="has-tooltip top" aria-describedby={tooltipUid} style={{ display: "grid" }}>
         {abandonedCartProducts.length > 0 ? (
-          <div className="cart" role="list">
+          <CartList>
             {abandonedCartProducts.slice(0, shownProductCount).map((product) => (
-              <div role="listitem" key={product.unique_permalink} style={isPreview ? {} : { pointerEvents: "none" }}>
-                <section>
-                  <figure style={{ margin: 0 }}>
-                    {product.thumbnail_url ? (
-                      <img src={product.thumbnail_url} style={{ objectFit: "initial", borderRadius: 0 }} />
-                    ) : null}
-                  </figure>
-                  <section>
-                    <h4>
-                      <a
-                        href={product.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        tabIndex={isPreview ? undefined : -1}
-                      >
-                        {product.name}
-                      </a>
-                    </h4>
-                    <footer>
-                      <SellerByLine isPreview={isPreview} />
-                    </footer>
-                  </section>
-                  <section>
-                    <footer></footer>
-                  </section>
-                </section>
-              </div>
+              <CartListItem
+                key={product.unique_permalink}
+                media={
+                  product.thumbnail_url ? (
+                    <img src={product.thumbnail_url} className="rounded-none object-fill" />
+                  ) : null
+                }
+                title={
+                  <a
+                    href={product.url}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    tabIndex={isPreview ? undefined : -1}
+                  >
+                    <h4>{product.name}</h4>
+                  </a>
+                }
+                body={<SellerByLine isPreview={isPreview} />}
+                className={classNames({ "pointer-events-none": !isPreview })}
+              />
             ))}
-          </div>
+          </CartList>
         ) : (
           <Placeholder>
             {showAddProductCTA ? (

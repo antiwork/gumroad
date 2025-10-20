@@ -13,6 +13,7 @@ import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } 
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { CartList, CartListItem, CartPriceItem } from "$app/components/CartList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Popover } from "$app/components/Popover";
 import { Card } from "$app/components/Product/Card";
@@ -217,7 +218,7 @@ export const Checkout = ({
         <div className="grid gap-8 p-4 md:p-8">
           <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[2fr_minmax(26rem,1fr)]">
             <div className="grid gap-6">
-              <div className="cart" role="list">
+              <CartList>
                 {cart.items.map((item) => (
                   <CartItemComponent
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
@@ -227,73 +228,65 @@ export const Checkout = ({
                     updateCart={updateCart}
                   />
                 ))}
-                <div className="cart-summary">
+
+                <div className="grid gap-4 p-4">
                   {state.surcharges.type === "loaded" ? (
                     <>
-                      <div>
-                        <h4>Subtotal</h4>
-                        <div>{formatPrice(subtotal)}</div>
-                      </div>
-                      {tip ? (
-                        <div>
-                          <h4>Tip</h4>
-                          <div>{formatPrice(tip)}</div>
-                        </div>
-                      ) : null}
-                      {state.surcharges.result.tax_included_cents ? (
-                        <div>
-                          <h4>{nameOfSalesTaxForCountry(state.country)} (included)</h4>
-                          <div>{formatPrice(state.surcharges.result.tax_included_cents)}</div>
-                        </div>
-                      ) : null}
-                      {state.surcharges.result.tax_cents ? (
-                        <div>
-                          <h4>{nameOfSalesTaxForCountry(state.country)}</h4>
-                          <div>{formatPrice(state.surcharges.result.tax_cents)}</div>
-                        </div>
-                      ) : null}
-                      {state.surcharges.result.shipping_rate_cents ? (
-                        <div>
-                          <h4>Shipping rate</h4>
-                          <div>{formatPrice(state.surcharges.result.shipping_rate_cents)}</div>
-                        </div>
-                      ) : null}
+                      <CartPriceItem title="Subtotal" price={subtotal} useExpandedCurrencySymbol />
+                      <CartPriceItem title="Tip" price={tip} useExpandedCurrencySymbol />
+                      <CartPriceItem
+                        title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
+                        price={state.surcharges.result.tax_included_cents}
+                        useExpandedCurrencySymbol
+                      />
+                      <CartPriceItem
+                        title={nameOfSalesTaxForCountry(state.country)}
+                        price={state.surcharges.result.tax_cents}
+                        useExpandedCurrencySymbol
+                      />
+                      <CartPriceItem
+                        title="Shipping rate"
+                        price={state.surcharges.result.shipping_rate_cents}
+                        useExpandedCurrencySymbol
+                      />
                     </>
                   ) : null}
                   {visibleDiscounts.length || discount > 0 ? (
-                    <div>
-                      <h4>
-                        Discounts
-                        {cart.items.some((item) => !!item.product.ppp_details && item.price !== 0) &&
-                        !cart.rejectPppDiscount ? (
-                          <WithTooltip
-                            tip="This discount is applied based on the cost of living in your country."
-                            position="top"
-                          >
-                            <button
-                              className="pill small dismissable"
-                              onClick={() => updateCart({ rejectPppDiscount: true })}
-                              aria-label="Purchasing power parity discount"
+                    <CartPriceItem
+                      title={
+                        <>
+                          Discounts
+                          {cart.items.some((item) => !!item.product.ppp_details && item.price !== 0) &&
+                          !cart.rejectPppDiscount ? (
+                            <WithTooltip
+                              tip="This discount is applied based on the cost of living in your country."
+                              position="top"
                             >
-                              Purchasing power parity discount
-                            </button>
-                          </WithTooltip>
-                        ) : null}
-                        {visibleDiscounts.map((code) => (
-                          <div
-                            className="pill small dismissable"
-                            onClick={() =>
-                              updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
-                            }
-                            key={code.code}
-                            aria-label="Discount code"
-                          >
-                            {code.code}
-                          </div>
-                        ))}
-                      </h4>
-                      {discount > 0 ? <div>{formatPrice(-discount)}</div> : null}
-                    </div>
+                              <button
+                                className="pill small dismissable"
+                                onClick={() => updateCart({ rejectPppDiscount: true })}
+                                aria-label="Purchasing power parity discount"
+                              >
+                                Purchasing power parity discount
+                              </button>
+                            </WithTooltip>
+                          ) : null}
+                          {visibleDiscounts.map((code) => (
+                            <div
+                              className="pill small dismissable"
+                              onClick={() =>
+                                updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
+                              }
+                              key={code.code}
+                              aria-label="Discount code"
+                            >
+                              {code.code}
+                            </div>
+                          ))}
+                        </>
+                      }
+                      price={discount > 0 ? -discount : null}
+                    />
                   ) : null}
                   {cart.items.some((item) => item.product.has_offer_codes) ? (
                     <form
@@ -317,35 +310,31 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer>
-                      <h4>Total</h4>
-                      <div>{formatPrice(total)}</div>
+                    <footer className="grid gap-4 p-4">
+                      <CartPriceItem title="Total" price={total} className="*:text-lg" useExpandedCurrencySymbol />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
-                      <div className="cart-summary">
-                        <div>
-                          <h4>Payment today</h4>
-                          <div>
-                            {formatPrice(total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal)}
-                          </div>
-                        </div>
-                        {commissionCompletionTotal > 0 ? (
-                          <div>
-                            <h4>Payment after completion</h4>
-                            <div>{formatPrice(commissionCompletionTotal)}</div>
-                          </div>
-                        ) : null}
-                        {futureInstallmentsWithoutTipsTotal > 0 ? (
-                          <div>
-                            <h4>Future installments</h4>
-                            <div>{formatPrice(futureInstallmentsWithoutTipsTotal)}</div>
-                          </div>
-                        ) : null}
+                      <div className="grid gap-4 p-4">
+                        <CartPriceItem
+                          title="Payment today"
+                          price={total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal}
+                          useExpandedCurrencySymbol
+                        />
+                        <CartPriceItem
+                          title="Payment after completion"
+                          price={commissionCompletionTotal}
+                          useExpandedCurrencySymbol
+                        />
+                        <CartPriceItem
+                          title="Future installments"
+                          price={futureInstallmentsWithoutTipsTotal}
+                          useExpandedCurrencySymbol
+                        />
                       </div>
                     ) : null}
                   </>
                 ) : null}
-              </div>
+              </CartList>
               {recommendedProducts && recommendedProducts.length > 0 ? (
                 <section className="paragraphs">
                   <h2>Customers who bought {cart.items.length === 1 ? "this item" : "these items"} also bought</h2>
@@ -436,42 +425,42 @@ const CartItemComponent = ({
   const price = hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity;
 
   return (
-    <div role="listitem">
-      <section>
-        <figure>
-          <a href={item.product.url}>
-            <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
-          </a>
-        </figure>
-        <section>
-          <a href={item.product.url}>
-            <h4>{item.product.name}</h4>
-          </a>
-          <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
-          <footer>
-            <ul>
-              <li>
-                <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
-              </li>
-              {option?.name ? (
-                <li>
-                  <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
-                </li>
-              ) : null}
-              {item.recurrence ? (
-                <li>
-                  <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
-                </li>
-              ) : null}
-              {item.call_start_time ? (
-                <li>
-                  <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
-                </li>
-              ) : null}
-            </ul>
-          </footer>
-        </section>
-        <section>
+    <CartListItem
+      media={
+        <a href={item.product.url}>
+          <Thumbnail url={item.product.thumbnail_url} nativeType={item.product.native_type} />
+        </a>
+      }
+      title={
+        <a href={item.product.url}>
+          <h4>{item.product.name}</h4>
+        </a>
+      }
+      body={<a href={item.product.creator.profile_url}>{item.product.creator.name}</a>}
+      footer={
+        <ul>
+          <li>
+            <strong>{item.product.is_multiseat_license ? "Seats:" : "Qty:"}</strong> {item.quantity}
+          </li>
+          {option?.name ? (
+            <li>
+              <strong>{variantLabel(item.product.native_type)}:</strong> {option.name}
+            </li>
+          ) : null}
+          {item.recurrence ? (
+            <li>
+              <strong>Membership:</strong> {recurrenceNames[item.recurrence]}
+            </li>
+          ) : null}
+          {item.call_start_time ? (
+            <li>
+              <strong>Time:</strong> {formatCallDate(new Date(item.call_start_time), { date: { hideYear: true } })}
+            </li>
+          ) : null}
+        </ul>
+      }
+      end={
+        <>
           <span className="current-price" aria-label="Price">
             {formatPrice(convertToUSD(item, price))}
           </span>
@@ -480,7 +469,7 @@ const CartItemComponent = ({
               <span>
                 {item.product.free_trial.duration.amount === 1
                   ? `one ${item.product.free_trial.duration.unit}`
-                  : `item.product.free_trial.duration.amount ${item.product.free_trial.duration.unit}s`}{" "}
+                  : `${item.product.free_trial.duration.amount} ${item.product.free_trial.duration.unit}s`}{" "}
                 free
               </span>
               {item.recurrence ? (
@@ -498,7 +487,7 @@ const CartItemComponent = ({
               recurrenceNames[item.recurrence]
             )
           ) : null}
-          <footer>
+          <footer className="mt-auto">
             <ul>
               {(item.product.rental && !item.product.rental.rent_only) ||
               item.product.is_quantity_enabled ||
@@ -542,7 +531,6 @@ const CartItemComponent = ({
                   className="link"
                   onClick={() => {
                     const newItems = cart.items.filter((i) => i !== item);
-
                     updateCart({
                       discountCodes: cart.discountCodes.filter(({ products }) =>
                         Object.keys(products).some((permalink) =>
@@ -562,40 +550,35 @@ const CartItemComponent = ({
               </li>
             </ul>
           </footer>
-        </section>
-      </section>
+        </>
+      }
+    >
       {item.product.bundle_products.length > 0 ? (
-        <section className="footer">
+        <>
           <h4>This bundle contains...</h4>
-          <div role="list" className="cart">
+          <CartList>
             {item.product.bundle_products.map((bundleProduct) => (
-              <div role="listitem" key={bundleProduct.product_id}>
-                <section>
-                  <figure>
-                    <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
-                  </figure>
-                  <section>
-                    <h4>{bundleProduct.name}</h4>
-                    <footer>
-                      <ul>
-                        <li>
-                          <strong>Qty:</strong> {bundleProduct.quantity}
-                        </li>
-                        {bundleProduct.variant ? (
-                          <li>
-                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
-                          </li>
-                        ) : null}
-                      </ul>
-                    </footer>
-                  </section>
-                  <section></section>
-                </section>
-              </div>
+              <CartListItem
+                key={bundleProduct.product_id}
+                media={<Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />}
+                title={<h4>{bundleProduct.name}</h4>}
+                footer={
+                  <ul>
+                    <li>
+                      <strong>Qty:</strong> {bundleProduct.quantity}
+                    </li>
+                    {bundleProduct.variant ? (
+                      <li>
+                        <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant.name}
+                      </li>
+                    ) : null}
+                  </ul>
+                }
+              />
             ))}
-          </div>
-        </section>
+          </CartList>
+        </>
       ) : null}
-    </div>
+    </CartListItem>
   );
 };

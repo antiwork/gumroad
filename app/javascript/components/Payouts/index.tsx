@@ -3,11 +3,12 @@ import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
 import { createInstantPayout } from "$app/data/payout";
-import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { CartPriceItem } from "$app/components/CartList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -815,10 +816,10 @@ const Payouts = ({
               </fieldset>
               <fieldset>
                 <legend>Payout details</legend>
-                <div className="cart">
-                  <div className="cart-summary">
-                    <div>
-                      <p>Sent to</p>
+                <div className="rounded-sm border border-border bg-background not-first:border-t">
+                  <div className="grid gap-4 p-4">
+                    <div className="grid grid-flow-col justify-between gap-4">
+                      <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>
                       <div>
                         {instant_payout.bank_account_type === "CARD" ? (
                           <p>
@@ -839,25 +840,18 @@ const Payouts = ({
                         )}
                       </div>
                     </div>
-                    <div>
-                      <p>Amount</p>
-                      <div>${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}</div>
-                    </div>
-                    <div>
-                      <p>Instant payout fee ({INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)</p>
-                      <div>
-                        -$
-                        {formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}
-                      </div>
-                    </div>
+                    <CartPriceItem title="Amount" price={instantPayoutAmountCents} />
+                    <CartPriceItem
+                      title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
+                      price={instantPayoutFee}
+                    />
                   </div>
-                  <footer>
-                    <p>
-                      <strong>You'll receive</strong>
-                    </p>
-                    <div>
-                      ${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}
-                    </div>
+                  <footer className="grid gap-4 p-4">
+                    <CartPriceItem
+                      title="You'll receive"
+                      price={instantPayoutAmountCents - instantPayoutFee}
+                      className="*:text-lg"
+                    />
                   </footer>
                 </div>
                 {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
