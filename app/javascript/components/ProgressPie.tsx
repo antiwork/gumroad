@@ -17,8 +17,8 @@ export const ProgressPie = ({
 }: { progress: number } & React.HTMLAttributes<HTMLDivElement>) => {
   const radius = 0.5;
   const angle = -Math.PI / 2 + 2 * Math.PI * progress;
-  const arcEndX = radius + radius * Math.cos(angle);
-  const arcEndY = radius + radius * Math.sin(angle);
+  const arcEndX = radius * (1 + Math.cos(angle));
+  const arcEndY = radius * (1 + Math.sin(angle));
   const pathString = `
   M ${radius} ${radius}
   V 0
