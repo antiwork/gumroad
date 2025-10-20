@@ -23,11 +23,9 @@ type ResponseData = {
 
 const AdminUserStats = ({ user_id }: { user_id: number }) => {
   const [userStats, setUserStats] = React.useState<UserStatsProps | null>(null);
-  const elementRef = React.useRef<HTMLUListElement>(null);
-  const isVisible = useIsIntersecting(elementRef);
 
-  React.useEffect(() => {
-    if (!isVisible || userStats) return;
+  const elementRef = useIsIntersecting<HTMLUListElement>((isIntersecting) => {
+    if (!isIntersecting || userStats) return;
 
     const fetchUserStats = async () => {
       try {
@@ -46,7 +44,7 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
     };
 
     void fetchUserStats();
-  }, [isVisible, userStats, user_id]);
+  });
 
   return (
     <ul ref={elementRef} className="inline">

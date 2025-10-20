@@ -1,16 +1,25 @@
 import * as React from "react";
 
-export const useIsIntersecting = (element: React.RefObject<HTMLElement>) => {
-  const [isIntersecting, setIsIntersecting] = React.useState(false);
+import { useRefToLatest } from "$app/components/useRefToLatest";
+
+export const useIsIntersecting = <T extends HTMLElement = HTMLElement>(
+  callback: (isIntersecting: boolean) => void,
+  options?: IntersectionObserverInit,
+) => {
+  const elementRef = React.useRef<T>(null);
+  const callbackRef = useRefToLatest(callback);
 
   React.useEffect(() => {
-    if (!element.current) return;
-    const observer = new IntersectionObserver((entries) =>
-      setIsIntersecting(entries.some((entry) => entry.isIntersecting)),
-    );
-    observer.observe(element.current);
-    return () => observer.disconnect();
-  }, [element]);
+    if (!elementRef.current) return;
 
-  return isIntersecting;
+    const observer = new IntersectionObserver((entries) => {
+      const isIntersecting = entries.some((entry) => entry.isIntersecting);
+      callbackRef.current(isIntersecting);
+    }, options);
+
+    observer.observe(elementRef.current);
+    return () => observer.disconnect();
+  }, [options]);
+
+  return elementRef;
 };

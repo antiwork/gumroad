@@ -14,11 +14,9 @@ type AdminUserPayoutInfoProps = {
 const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<PayoutInfoProps | null>(null);
-  const elementRef = React.useRef<HTMLDivElement>(null);
-  const isVisible = useIsIntersecting(elementRef);
 
-  React.useEffect(() => {
-    if (!isVisible || data) return;
+  const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {
+    if (!isIntersecting || data) return;
 
     const fetchPayoutInfo = async () => {
       setIsLoading(true);
@@ -32,7 +30,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
     };
 
     void fetchPayoutInfo();
-  }, [isVisible, data, user.id]);
+  });
 
   return (
     <div ref={elementRef}>

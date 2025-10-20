@@ -38,11 +38,9 @@ const MerchantAccount = ({ id, charge_processor_id, alive, charge_processor_aliv
 const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<AdminUserMerchantAccountsData | null>(null);
-  const elementRef = React.useRef<HTMLDivElement>(null);
-  const isVisible = useIsIntersecting(elementRef);
 
-  React.useEffect(() => {
-    if (!isVisible || data) return;
+  const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {
+    if (!isIntersecting || data) return;
 
     const fetchMerchantAccounts = async () => {
       setIsLoading(true);
@@ -56,7 +54,7 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
     };
 
     void fetchMerchantAccounts();
-  }, [isVisible, user.id]);
+  });
 
   return (
     <div ref={elementRef}>
