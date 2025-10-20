@@ -1,4 +1,4 @@
-import { Link } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
 import { Workflow } from "$app/types/workflow";
@@ -129,7 +129,7 @@ const WorkflowRow = ({
         <div className="button-group">
           <Link
             className="button"
-            href={`/workflows/${workflow.external_id}/edit`}
+            href={Routes.edit_workflow_path(workflow.external_id)}
             aria-label="Edit workflow"
             inert={!canManageWorkflow || undefined}
           >
@@ -189,7 +189,7 @@ const WorkflowRow = ({
       <Placeholder>
         <h4>
           No emails yet,{" "}
-          <Link href={`/workflows/${workflow.external_id}/emails`} inert={!canManageWorkflow || undefined}>
+          <Link href={Routes.workflow_emails_path(workflow.external_id)} inert={!canManageWorkflow || undefined}>
             add one
           </Link>
         </h4>

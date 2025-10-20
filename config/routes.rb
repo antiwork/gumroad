@@ -810,7 +810,7 @@ Rails.application.routes.draw do
     post "/workflows", to: "workflows#create"
     get "/workflows/:id/edit", to: "workflows#edit", as: :edit_workflow
     patch "/workflows/:id", to: "workflows#update", as: :workflow
-    delete "/workflows/:id", to: "workflows#destroy", as: :workflow
+    delete "/workflows/:id", to: "workflows#destroy", as: :delete_workflow
 
     # workflow emails
     get "/workflows/:workflow_id/emails", to: "workflows/emails#index", as: :workflow_emails

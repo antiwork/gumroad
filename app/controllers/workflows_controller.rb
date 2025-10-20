@@ -22,8 +22,6 @@ class WorkflowsController < Sellers::BaseController
   end
 
   def edit
-    create_user_event("workflows_view")
-
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Edit", props: workflow_presenter.edit_page_react_props
   end

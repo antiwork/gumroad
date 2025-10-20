@@ -20,7 +20,7 @@ import { assert, assertDefined } from "$app/utils/assert";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
 import { asyncVoid } from "$app/utils/promise";
-import { request } from "$app/utils/request";
+import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
