@@ -278,7 +278,7 @@ export const ReviewForm = React.forwardRef<
         videoState.kind === "recorded" ? videoState.file.size : 0,
       )}{" "}
       -{" "}
-      <button onClick={cancelUpload} type="button" className="link">
+      <button onClick={cancelUpload} type="button" className="underline">
         Cancel
       </button>
     </div>
