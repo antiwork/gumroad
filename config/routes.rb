@@ -805,18 +805,10 @@ Rails.application.routes.draw do
     get "/posts", to: redirect("/emails")
 
     # workflows
-    get "/workflows", to: "workflows#index", as: :workflows
-    get "/workflows/new", to: "workflows#new", as: :new_workflow
-    post "/workflows", to: "workflows#create"
-    get "/workflows/:id/edit", to: "workflows#edit", as: :edit_workflow
-    patch "/workflows/:id", to: "workflows#update", as: :workflow
-    delete "/workflows/:id", to: "workflows#destroy", as: :delete_workflow
-
-    # workflow emails
-    get "/workflows/:workflow_id/emails", to: "workflows/emails#index", as: :workflow_emails
-
-    # workflow installments
-    patch "/workflows/:workflow_id/installments", to: "workflows/installments#update", as: :workflow_installments
+    resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
+      get "emails", to: "workflows/emails#index", as: :emails
+      patch "installments", to: "workflows/installments#update", as: :installments
+    end
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
