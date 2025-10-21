@@ -119,7 +119,7 @@ class Order::ChargeService
   def setup_for_future_charges_without_charging(purchases, chargeable, card_already_saved)
     merchant_account = purchases.first.merchant_account
 
-    if merchant_account.charge_processor_id == StripeChargeProcessor.charge_processor_id && !card_already_saved
+    if merchant_account.stripe_charge_processor? && !card_already_saved
       mandate_options = mandate_options_for_stripe(purchases:, with_currency: true)
       self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 

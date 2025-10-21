@@ -26,7 +26,7 @@ RSpec.describe ProductReview::UpdateService do
     end
 
     context "with video_options" do
-      let(:video_url) { "#{S3_BASE_URL}/video.mp4" }
+      let(:video_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/video.mp4" }
       let(:blob) do
         ActiveStorage::Blob.create_and_upload!(
           io: fixture_file_upload("test-small.jpg"),

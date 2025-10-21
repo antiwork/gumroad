@@ -137,7 +137,7 @@ const DiscoverEligibilityPromo = () => {
         .
       </div>
       <button
-        className="link close"
+        className="close underline"
         onClick={() => {
           localStorage.setItem("showDiscoverEligibilityPromo", "false");
           setShow(false);

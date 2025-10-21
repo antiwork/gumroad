@@ -2669,7 +2669,7 @@ describe Purchase, :vcr do
 
     it "returns correct purchase info" do
       allow(purchase).to receive(:url_redirect).and_return(url_redirect)
-      url = "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3?AWSAccessKeyId=AKIAJU7Y4N2WOSYMBKBA&Expires=1375117394&"
+      url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3?AWSAccessKeyId=AKIAJU7Y4N2WOSYMBKBA&Expires=1375117394&"
       url += "Signature=NVzpNIuQlqCyGrx%2BiySqSXBhis4%3D&response-content-disposition=attachment"
       allow(url_redirect).to receive(:redirect_or_s3_location).and_return(url)
 

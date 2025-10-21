@@ -189,9 +189,9 @@ describe ProductFilesArchive do
         folder_1 = create(:product_folder, link: product, name: "folder 1")
         folder_2 = create(:product_folder, link: product, name: "folder 2")
 
-        file_1 = create(:product_file, link: product, description: "pencil", url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png", folder_id: folder_1.id)
-        file_2 = create(:product_file, link: product, description: "manual", url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf", folder_id: folder_2.id)
-        file_3 = create(:product_file, link: product, description: "file without a folder", url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf", folder_id: nil)
+        file_1 = create(:product_file, link: product, description: "pencil", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png", folder_id: folder_1.id)
+        file_2 = create(:product_file, link: product, description: "manual", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf", folder_id: folder_2.id)
+        file_3 = create(:product_file, link: product, description: "file without a folder", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf", folder_id: nil)
 
         archive = product.product_files_archives.create!(product_files: product.product_files)
 
@@ -480,7 +480,7 @@ describe ProductFilesArchive do
       product = create(:product)
       product_files_archive = create(:product_files_archive_without_url, link: product)
       product_files_archive.set_url_if_not_present
-      expect(product_files_archive.url).to start_with("https://s3.amazonaws.com/gumroad-specs/attachments_zipped/")
+      expect(product_files_archive.url).to start_with("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments_zipped/")
       expect(product_files_archive.url.split("/").last).to eq("The_Works_of_Edgar_Gumstein.zip")
     end
   end
@@ -491,7 +491,7 @@ describe ProductFilesArchive do
       entity_archive = create(:product_files_archive_without_url, link: product)
       entity_archive.set_url_if_not_present
 
-      expect(entity_archive.url).to start_with("https://s3.amazonaws.com/gumroad-specs/attachments_zipped/")
+      expect(entity_archive.url).to start_with("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments_zipped/")
       expect(entity_archive.url.split("/").last).to eq("Product_name.zip")
     end
 
@@ -511,7 +511,7 @@ describe ProductFilesArchive do
       folder_archive = create(:product_files_archive_without_url, link: product, folder_id:, product_files: [file1, file2])
       folder_archive.set_url_if_not_present
 
-      expect(folder_archive.url).to start_with("https://s3.amazonaws.com/gumroad-specs/attachments_zipped/")
+      expect(folder_archive.url).to start_with("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments_zipped/")
       expect(folder_archive.url.split("/").last).to eq("Folder_1.zip")
     end
   end

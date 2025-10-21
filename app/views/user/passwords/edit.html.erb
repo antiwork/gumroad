@@ -1,32 +1,3 @@
-<%= load_pack("base") %>
+<%= load_pack("signup") %>
 
-<main class="squished">
-  <header>
-    <a class="logo-full" href="<%= HomePageLinkService.root %>"></a>
-    <div class="actions">
-      <a href="<%= login_path(next: params[:next]) %>">Log in</a>
-    </div>
-    <h1>Reset your password</h1>
-  </header>
-  <%= form_for(:user, as: :user, url: password_path(:user), html: {method: :put, id: "reset-password-form", autocomplete: "off"}) do |f| %>
-    <section>
-      <%= f.hidden_field :reset_password_token, value: @reset_password_token %>
-      <fieldset>
-        <legend>
-          <label for="user_password">Enter a new password</label>
-        </legend>
-        <%= f.password_field :password, placeholder: "Password", autofocus: true %>
-      </fieldset>
-      <fieldset>
-        <legend>
-          <label for="user_password_confirmation">Enter same password to confirm</label>
-        </legend>
-        <%= f.password_field :password_confirmation, placeholder: "Password (to confirm)" %>
-      </fieldset>
-      <button class="button primary" type="submit">Reset password</button>
-    </section>
-  <% end %>
-</main>
-<aside>
-  <img src="<%= image_url("auth/background.png") %>">
-</aside>
+<%= react_component "PasswordResetPage", props: { reset_password_token: @reset_password_token }, prerender: true %>

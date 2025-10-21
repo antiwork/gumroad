@@ -37,10 +37,10 @@ describe Preorder, :vcr do
         good_card = build(:chargeable)
         link = create(:product, price_cents: 600, is_in_preorder_state: true)
         link.product_files << create(
-          :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/6996320f4de6424990904fcda5808cef/original/Don&amp;#39;t Stop.mp3"
+          :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/6996320f4de6424990904fcda5808cef/original/Don&amp;#39;t Stop.mp3"
         )
         link.product_files << create(
-          :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/a1a5b8c8c38749e2b3cb27099a817517/original/Alice&#39;s Adventures in Wonderland.pdf"
+          :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/a1a5b8c8c38749e2b3cb27099a817517/original/Alice&#39;s Adventures in Wonderland.pdf"
         )
         preorder_link = create(:preorder_link, link:, release_at: 2.days.from_now)
         authorization_purchase = build(:purchase, link:, chargeable: good_card, purchase_state: "in_progress", is_preorder_authorization: true)

@@ -26,7 +26,6 @@ import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
 import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
@@ -51,6 +50,7 @@ import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpC
 import LibraryPage from "$app/components/server-components/LibraryPage";
 import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
+import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
 import PayoutCreditCard from "$app/components/server-components/PayoutPage/CreditCard";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
@@ -92,6 +92,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 ReactOnRails.register({
   AdminActionButton,
@@ -121,11 +122,11 @@ ReactOnRails.register({
   ApplicationEditPage,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudienceCustomersPage,
   AudiencePage,
   AuthorizedApplicationsSettingsPage,
   BundleEditPage,
   CheckoutPage,
+  CodeSnippet,
   CommunitiesPage,
   CountrySelectionModal,
   CustomersDownloadPopover,
@@ -148,6 +149,7 @@ ReactOnRails.register({
   LoginPage,
   MainSettingsPage,
   Nav,
+  PasswordResetPage,
   PasswordSettingsPage,
   PaymentsSettingsPage,
   PayoutCreditCard,
