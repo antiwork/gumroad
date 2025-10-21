@@ -5,7 +5,7 @@ export type JobHistoryItem = {
   country_code: string;
   start_date: string;
   end_date: string;
-  sales_type: string;
+  sales_type?: string;
   enqueued_at: string;
   status: string;
   download_url?: string;
@@ -64,7 +64,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory }: Pro
               <td>
                 {job.start_date} to {job.end_date}
               </td>
-              <td>{salesTypeCodeToName[job.sales_type] || job.sales_type}</td>
+              <td>{job.sales_type ? salesTypeCodeToName[job.sales_type] : null}</td>
               <td>{new Date(job.enqueued_at).toLocaleString()}</td>
               <td>{job.status}</td>
               <td>
