@@ -24,7 +24,6 @@ import AdminSuspendForTosForm from "$app/components/server-components/Admin/Susp
 import AdminUserGuids from "$app/components/server-components/Admin/UserGuids";
 import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
-import CodeSnippet from "$app/components/ui/CodeSnippet";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
 import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
@@ -93,6 +92,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 ReactOnRails.register({
   AdminActionButton,
