@@ -35,7 +35,7 @@ export const Form = ({
 
     const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
     if (csrfToken) {
-      formData.append('authenticity_token', csrfToken);
+      formData.append("authenticity_token", csrfToken);
     }
 
     setIsLoading(true);
