@@ -19,6 +19,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Select } from "$app/components/Select";
 import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Stack } from "$app/components/ui/Stack";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 
@@ -124,7 +125,7 @@ const FormPage = ({
               name or more specific instructions.
             </div>
             {customFields.length > 0 ? (
-              <div className="stack">
+              <Stack>
                 {customFields.map((field, i) => (
                   <div key={field.key}>
                     <div className="paragraphs">
@@ -226,7 +227,7 @@ const FormPage = ({
                     </div>
                   </div>
                 ))}
-              </div>
+              </Stack>
             ) : null}
             <div>
               <Button

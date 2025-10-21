@@ -4,6 +4,8 @@ import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
 
+import { Stack } from "$app/components/ui/Stack";
+
 import {
   Address,
   Customer,
@@ -285,7 +287,7 @@ const CustomersPage = ({
                 </WithTooltip>
               }
             >
-              <div className="stack" style={{ width: "35rem" }}>
+              <Stack style={{ width: "35rem" }}>
                 <div>
                   <ProductSelect
                     products={products.filter(
@@ -395,7 +397,7 @@ const CustomersPage = ({
                     onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
                   />
                 </div>
-              </div>
+              </Stack>
             </Popover>
             <Popover
               aria-label="Export"
@@ -888,7 +890,7 @@ const CustomerDrawer = ({
           }
         />
       ) : null}
-      <section className="stack">
+      <Stack as="section">
         <h3 className="flex gap-1">
           Order information
           {!subscription && customer.transaction_url_for_seller ? (
@@ -994,7 +996,7 @@ const CustomerDrawer = ({
             </div>
           </>
         ) : null}
-      </section>
+      </Stack>
       {customer.utm_link ? <UtmLinkStack link={customer.utm_link} showHeader /> : null}
       {customer.review ? (
         <ReviewSection
@@ -1004,7 +1006,7 @@ const CustomerDrawer = ({
         />
       ) : null}
       {customer.custom_fields.length > 0 ? (
-        <section className="stack">
+        <Stack as="section">
           <header>
             <h3>Information provided</h3>
           </header>
@@ -1025,7 +1027,7 @@ const CustomerDrawer = ({
             );
             return field.type === "file" ? <div key={idx}>{content}</div> : content;
           })}
-        </section>
+        </Stack>
       ) : null}
       {customer.has_options && !isCoffee && customer.product.native_type !== "call" ? (
         <OptionSection
@@ -1038,7 +1040,7 @@ const CustomerDrawer = ({
         />
       ) : null}
       {customer.is_bundle_purchase ? (
-        <section className="stack">
+        <Stack as="section">
           <header>
             <h3>Content</h3>
           </header>
@@ -1056,7 +1058,7 @@ const CustomerDrawer = ({
               </div>
             </section>
           )}
-        </section>
+        </Stack>
       ) : null}
       {license ? (
         <LicenseSection
@@ -1130,7 +1132,7 @@ const CustomerDrawer = ({
       ) : null}
       {customer.call ? <CallSection call={customer.call} onChange={(call) => onChange({ ...customer, call })} /> : null}
       {!showCharges && !customer.refunded && !customer.chargedback && customer.price.cents_refundable > 0 ? (
-        <section className="stack">
+        <Stack as="section">
           <header>
             <h3>Refund</h3>
           </header>
@@ -1152,7 +1154,7 @@ const CustomerDrawer = ({
               }
             />
           </section>
-        </section>
+        </Stack>
       ) : null}
       {subscription?.status === "alive" ? (
         <SubscriptionCancellationSection
@@ -1172,11 +1174,11 @@ const CustomerDrawer = ({
         />
       ) : null}
       {canPing && !subscription ? (
-        <section className="stack">
+        <Stack as="section">
           <div>
             <PingButton purchaseId={customer.id} />
           </div>
-        </section>
+        </Stack>
       ) : null}
       {customer.is_access_revoked !== null && !isCoffee && !commission ? (
         <AccessSection
@@ -1200,7 +1202,7 @@ const CustomerDrawer = ({
         <CommissionSection commission={commission} onChange={(commission) => onChange({ commission })} />
       ) : null}
       {missedPosts?.length !== 0 ? (
-        <section className="stack">
+        <Stack as="section">
           <header>
             <h3>Send missed posts</h3>
           </header>
@@ -1242,10 +1244,10 @@ const CustomerDrawer = ({
               </div>
             </section>
           )}
-        </section>
+        </Stack>
       ) : null}
       {emails?.length !== 0 ? (
-        <section className="stack">
+        <Stack as="section">
           <header>
             <h3>Emails received</h3>
           </header>
@@ -1307,7 +1309,7 @@ const CustomerDrawer = ({
               </div>
             </section>
           )}
-        </section>
+        </Stack>
       ) : null}
     </aside>
   );
@@ -1356,7 +1358,7 @@ const AddressSection = ({
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>Shipping address</h3>
       </header>
@@ -1476,7 +1478,7 @@ const AddressSection = ({
         <h5>Shipping charged</h5>
         {price}
       </div>
-    </section>
+    </Stack>
   );
 };
 
@@ -1497,7 +1499,7 @@ const TrackingSection = ({
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <h3>Tracking information</h3>
       {tracking.shipped ? (
         tracking.url ? (
@@ -1528,7 +1530,7 @@ const TrackingSection = ({
           </fieldset>
         </div>
       )}
-    </section>
+    </Stack>
   );
 };
 
@@ -1567,7 +1569,7 @@ const EmailSection = ({
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>{label}</h3>
       </header>
@@ -1629,7 +1631,7 @@ const EmailSection = ({
           </fieldset>
         </section>
       ) : null}
-    </section>
+    </Stack>
   );
 };
 
@@ -1743,7 +1745,7 @@ const ReviewSection = ({
   purchaseId: string;
   onChange: (review: Review) => void;
 }) => (
-  <section className="stack">
+  <Stack as="section">
     <h3>Review</h3>
     <section>
       <h5>Rating</h5>
@@ -1769,7 +1771,7 @@ const ReviewSection = ({
       purchaseId={purchaseId}
       onChange={(response) => onChange({ ...review, response })}
     />
-  </section>
+  </Stack>
 );
 
 const OptionSection = ({
@@ -1824,7 +1826,7 @@ const OptionSection = ({
   const title = isSubscription ? "Tier" : "Version";
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>{title}</h3>
       </header>
@@ -1875,7 +1877,7 @@ const OptionSection = ({
           </div>
         )}
       </section>
-    </section>
+    </Stack>
   );
 };
 
@@ -1883,7 +1885,7 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
   if (!link) return null;
 
   return (
-    <section className="stack">
+    <Stack as="section">
       {showHeader ? (
         <>
           <section>
@@ -1932,7 +1934,7 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
           {link.content}
         </div>
       ) : null}
-    </section>
+    </Stack>
   );
 };
 
@@ -1946,7 +1948,7 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>License key</h3>
       </header>
@@ -1966,7 +1968,7 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
           </Button>
         )}
       </div>
-    </section>
+    </Stack>
   );
 };
 
@@ -1983,7 +1985,7 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>Seats</h3>
       </header>
@@ -2016,7 +2018,7 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
           </button>
         </section>
       )}
-    </section>
+    </Stack>
   );
 };
 
@@ -2030,7 +2032,7 @@ const SubscriptionCancellationSection = ({
   const [open, setOpen] = React.useState(false);
   const constructor = isInstallmentPlan ? "installment plan" : "subscription";
   return (
-    <section className="stack">
+    <Stack as="section">
       <div>
         <Button color="danger" onClick={() => setOpen(true)}>
           Cancel {constructor}
@@ -2051,7 +2053,7 @@ const SubscriptionCancellationSection = ({
           Would you like to cancel this {constructor}?
         </Modal>
       </div>
-    </section>
+    </Stack>
   );
 };
 
@@ -2109,7 +2111,7 @@ const AccessSection = ({
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <div>
         {isAccessRevoked ? (
           <Button disabled={isLoading} onClick={() => void handleClick(false)}>
@@ -2121,7 +2123,7 @@ const AccessSection = ({
           </Button>
         )}
       </div>
-    </section>
+    </Stack>
   );
 };
 
@@ -2349,7 +2351,7 @@ const ChargesSection = ({
     onChange(charges.map((charge) => (charge.id === id ? { ...charge, ...update } : charge)));
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>Charges</h3>
       </header>
@@ -2384,7 +2386,7 @@ const ChargesSection = ({
           <div>No charges yet</div>
         </section>
       )}
-    </section>
+    </Stack>
   );
 };
 
@@ -2406,7 +2408,7 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>Call</h3>
       </header>
@@ -2438,7 +2440,7 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
           </fieldset>
         </form>
       </section>
-    </section>
+    </Stack>
   );
 };
 
@@ -2564,7 +2566,7 @@ const CommissionSection = ({
   };
 
   return (
-    <section className="stack">
+    <Stack as="section">
       <header>
         <h3>Files</h3>
       </header>
@@ -2588,7 +2590,7 @@ const CommissionSection = ({
           ) : null}
         </section>
       </section>
-    </section>
+    </Stack>
   );
 };
 
