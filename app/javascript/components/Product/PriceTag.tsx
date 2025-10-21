@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
@@ -55,17 +56,23 @@ export const PriceTag = ({
     </>
   );
   const tooltipUid = React.useId();
+  const borderClasses = "border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1";
 
   return (
     <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
-      <div className={`has-tooltip ${tooltipPosition}`} aria-describedby={tooltipUid}>
+      <div
+        className={`has-tooltip ${tooltipPosition} grid-flow-col border border-r-0 border-border`}
+        aria-describedby={tooltipUid}
+      >
         <div
-          className="price"
+          className="bg-accent px-2 py-1 text-accent-foreground"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
           {priceTag}
         </div>
+        <div className={classNames("border-border", borderClasses)} />
+        <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
         <div role="tooltip" id={tooltipUid}>
           {priceTag}
         </div>

@@ -66,6 +66,19 @@ describe LibraryPresenter do
       expect(purchases[0][:creator]).to be_nil
     end
 
+    it "handles users without a name set" do
+      creator.update(name: nil)
+      purchases, _ = described_class.new(buyer).library_cards
+
+      expect(purchases[0][:product][:creator]).to eq(
+        {
+          name: creator.username,
+          profile_url: creator.profile_url(recommended_by: "library"),
+          avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
+        }
+      )
+    end
+
     context "when a user has purchased a subscription multiple times" do
       let!(:purchase_2) do
         create(:membership_purchase, link: product, purchaser: buyer).tap { _1.create_url_redirect! }

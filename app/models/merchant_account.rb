@@ -4,6 +4,7 @@ class MerchantAccount < ApplicationRecord
   include Deletable
   include ExternalId
   include JsonData
+  include ChargeProcessable
 
   belongs_to :user, optional: true
   has_many :purchases
@@ -40,14 +41,14 @@ class MerchantAccount < ApplicationRecord
   end
 
   def can_accept_charges?
-    charge_processor_id != StripeChargeProcessor.charge_processor_id ||
+    !stripe_charge_processor? ||
         is_a_stripe_connect_account? ||
         Country.new(country).can_accept_stripe_charges?
   end
 
   # Logic should match `.stripe_connect` scope
   def is_a_stripe_connect_account?
-    charge_processor_id == StripeChargeProcessor.charge_processor_id &&
+    stripe_charge_processor? &&
         user_id.present? &&
         json_data.dig("meta", "stripe_connect") == "true"
   end
@@ -57,11 +58,11 @@ class MerchantAccount < ApplicationRecord
   end
 
   def is_a_paypal_connect_account?
-    charge_processor_id == PaypalChargeProcessor.charge_processor_id
+    paypal_charge_processor?
   end
 
   def is_a_gumroad_managed_stripe_account?
-    charge_processor_id == StripeChargeProcessor.charge_processor_id && json_data.dig("meta", "stripe_connect") != "true"
+    stripe_charge_processor? && json_data.dig("meta", "stripe_connect") != "true"
   end
 
   # Public: Returns who holds the funds for charges created for this merchant account.
@@ -99,6 +100,7 @@ class MerchantAccount < ApplicationRecord
   def charge_processor_alive?
     charge_processor_alive_at.present? && !charge_processor_deleted?
   end
+  alias_method :charge_processor_alive, :charge_processor_alive?
 
   def charge_processor_verified?
     charge_processor_verified_at.present?

@@ -10,7 +10,6 @@ class TwoFactorAuthenticationController < ApplicationController
   # Get /two-factor
   def new
     @hide_layouts = true
-    @body_class = "onboarding-page"
   end
 
   # POST /two-factor.json

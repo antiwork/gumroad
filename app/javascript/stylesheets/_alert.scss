@@ -4,8 +4,9 @@ $alert-icons: (
   warning: "solid-shield-exclamation",
   info: "info-circle-fill",
 );
+
 [role="alert"],
-[role="status"] {
+[role="status"]:not(.tailwind-override) {
   display: grid;
   grid-template-columns: 1fr;
   align-items: start;
@@ -30,6 +31,7 @@ $alert-icons: (
   .close {
     align-self: center;
     grid-column: 1;
+
     @include breakpoint-up(sm) {
       grid-column: 2;
     }

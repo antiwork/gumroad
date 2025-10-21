@@ -56,7 +56,7 @@ const urlsMigratedtoInertia = [
   Routes.admin_block_email_domains_url(),
   Routes.admin_unblock_email_domains_url(),
   Routes.admin_sales_reports_url(),
-  // Routes.admin_refund_queue_url(),
+  Routes.admin_refund_queue_url(),
   // Routes.admin_search_users_url(),
   // Routes.admin_search_purchases_url(),
   // Routes.admin_compliance_guids_url(),

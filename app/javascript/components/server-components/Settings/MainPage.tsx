@@ -162,7 +162,7 @@ const MainPage = (props: Props) => {
                 This email address has not been confirmed yet.{" "}
                 {resentConfirmationEmail ? null : (
                   <button
-                    className="link"
+                    className="underline"
                     onClick={(e) => {
                       e.preventDefault();
                       void resendConfirmationEmail();
@@ -583,7 +583,7 @@ const InvalidateActiveSessionsSection = () => {
   return (
     <section className="p-4! md:p-8!">
       <fieldset>
-        <button className="link" type="button" onClick={() => setIsConfirmationDialogOpen(true)}>
+        <button className="underline" type="button" onClick={() => setIsConfirmationDialogOpen(true)}>
           Sign out from all active sessions
         </button>
         <small>You will be signed out from all your active sessions including this session.</small>
