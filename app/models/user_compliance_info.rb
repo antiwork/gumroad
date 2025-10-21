@@ -162,6 +162,16 @@ class UserComplianceInfo < ApplicationRecord
     is_business? ? business_tax_id : individual_tax_id
   end
 
+  def has_individual_tax_id?
+    individual_tax_id.present?
+  end
+  alias_method :has_individual_tax_id, :has_individual_tax_id?
+
+  def has_business_tax_id?
+    business_tax_id.present?
+  end
+  alias_method :has_business_tax_id, :has_business_tax_id?
+
   private
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create

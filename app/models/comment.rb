@@ -5,6 +5,7 @@ class Comment < ApplicationRecord
   include Deletable
   include JsonData
 
+  COMMENT_TYPE_NOTE = "note"
   COMMENT_TYPE_USER_SUBMITTED = "user_submitted"
   COMMENT_TYPE_PAYOUT_NOTE = "payout_note"
   COMMENT_TYPE_COMPLIANT = "compliant"
@@ -39,6 +40,7 @@ class Comment < ApplicationRecord
   before_save :trim_extra_newlines, if: :content_changed?
   after_commit :notify_seller_of_new_comment, on: :create
 
+  scope :with_type_note, -> { where(comment_type: COMMENT_TYPE_NOTE) }
   scope :with_type_payout_note, -> { where(comment_type: COMMENT_TYPE_PAYOUT_NOTE) }
   scope :with_type_on_probation, -> { where(comment_type: COMMENT_TYPE_ON_PROBATION) }
   scope :with_type_payouts_paused, -> { where(comment_type: COMMENT_TYPE_PAYOUTS_PAUSED) }

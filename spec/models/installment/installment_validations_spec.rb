@@ -70,7 +70,7 @@ describe "InstallmentValidations" do
     end
 
     it "disallows records with no message" do
-      installment = build(:installment, name: "installment1", message: nil, url: "https://s3.amazonaws.com/gumroad-specs/myfile.jpeg", link: create(:product))
+      installment = build(:installment, name: "installment1", message: nil, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/myfile.jpeg", link: create(:product))
       expect(installment).to_not be_valid
     end
   end

@@ -193,6 +193,9 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:script_src] << ROOT_DOMAIN # Required to load gumroad.js for overlay/embed.
     config.csp[:connect_src] << "ws://#{ANYCABLE_HOST}:8080" # Required by AnyCable
     config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8080" # Required by AnyCable
+    # Allow S3-compatible services like MinIO
+    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}"
+    config.csp[:connect_src] << "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/"
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
     config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS

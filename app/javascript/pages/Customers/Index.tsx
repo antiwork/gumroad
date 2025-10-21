@@ -1,7 +1,7 @@
 import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { default as CustomersPage, CustomerPageProps } from "$app/components/server-components/Audience/CustomersPage";
+import { default as CustomersPage, CustomerPageProps } from "$app/components/Audience/CustomersPage";
 
 function index() {
   const { customers_presenter } = usePage<{ customers_presenter: CustomerPageProps }>().props;
