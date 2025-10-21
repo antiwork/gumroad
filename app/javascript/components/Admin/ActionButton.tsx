@@ -50,11 +50,14 @@ export const AdminActionButton = ({
 
     setState("loading");
 
+    const csrfToken = cast<string>($("meta[name=csrf-token]").attr("content"));
+
     try {
       const response = await request({
         url,
         method: method || "POST",
         accept: "json",
+        data: { authenticity_token: csrfToken },
       });
 
       if (!response.ok) throw new ResponseError("Something went wrong.");
