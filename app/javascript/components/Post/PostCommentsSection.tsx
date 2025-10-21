@@ -241,12 +241,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
 
   return (
     <article className="override grid grid-cols-[max-content_1fr] gap-3">
-      <UserAvatar
-        size="large"
-        className="col-start-1 row-span-2 row-start-1"
-        alt="Comment author avatar"
-        src={comment.author_avatar_url}
-      />
+      <UserAvatar size="large" className="col-start-1 row-span-2 row-start-1" alt="" src={comment.author_avatar_url} />
       <div className="relative col-start-2 grid gap-3 whitespace-pre-wrap">
         {comment.replies.length > 0 || replyDraft != null ? (
           <div className="absolute top-12 -left-9 h-[calc(100%-3rem)] border-l border-border" />
@@ -364,12 +359,13 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
+    <section className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
+      <h3 className="sr-only">Write a comment</h3>
       {showAvatar ? (
         <UserAvatar
           size="large"
           className="col-start-1 row-span-2 row-start-1"
-          alt="Current user avatar"
+          alt=""
           src={loggedInUser?.avatarUrl ?? defaultUserAvatar}
         />
       ) : null}
@@ -382,7 +378,7 @@ const CommentTextarea = ({
         </div>
       )}
       {loggedInUser != null || purchase_id != null ? <div className="flex justify-end gap-3">{children}</div> : null}
-    </div>
+    </section>
   );
 };
 
