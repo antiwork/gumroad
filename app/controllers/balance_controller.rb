@@ -7,26 +7,29 @@ class BalanceController < Sellers::BaseController
 
   PAST_PAYMENTS_PER_PAGE = 3
 
-  before_action :set_on_balance_page
+  layout "inertia", only: [:index]
 
   def index
     authorize :balance
 
     @title = "Payouts"
-    @seller_stats = UserBalanceStatsService.new(user: current_seller).fetch
+    seller_stats = UserBalanceStatsService.new(user: current_seller).fetch
     pagination, past_payouts = fetch_payouts
-    @payout_presenter = PayoutsPresenter.new(
-      next_payout_period_data: @seller_stats[:next_payout_period_data],
-      processing_payout_periods_data: @seller_stats[:processing_payout_periods_data],
+    payout_presenter = PayoutsPresenter.new(
+      next_payout_period_data: seller_stats[:next_payout_period_data],
+      processing_payout_periods_data: seller_stats[:processing_payout_periods_data],
       seller: current_seller,
       pagination:,
       past_payouts:
     )
 
-    render inertia: "Payouts/index",
-           props: inertia_props(payout_presenter: @payout_presenter.props)
+    render inertia: "Payouts/Index",
+           props: { payout_presenter: payout_presenter.props }
   end
 
+  # TODO:
+  # - Remove this action and use InertiaRails.merge with the index action to load next page
+  # - Rename this controller to PayoutsController for consistency
   def payments_paged
     authorize :balance, :index?
 
@@ -39,10 +42,6 @@ class BalanceController < Sellers::BaseController
   end
 
   private
-    def set_on_balance_page
-      @on_balance_page = true
-    end
-
     def fetch_payouts
       payouts = current_seller.payments
         .completed

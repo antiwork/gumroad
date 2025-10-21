@@ -1,22 +1,5 @@
 @use "sass:math";
 
-.product-card-grid {
-  --min-grid-absolute-size: #{size(9)};
-  --max-grid-relative-size: 20%;
-
-  @extend .grid;
-
-  @include breakpoint-up(lg) {
-    --min-grid-absolute-size: #{size(16)};
-  }
-
-  &.narrow {
-    @include breakpoint-up(lg) {
-      --min-grid-absolute-size: #{size(12)};
-    }
-  }
-}
-
 .product-cta {
   @include bg-color(filled);
   display: flex;
@@ -31,14 +14,6 @@
 
     @include breakpoint-up(lg) {
       display: unset;
-    }
-  }
-
-  .rating {
-    display: none;
-
-    @include breakpoint-up(lg) {
-      display: flex;
     }
   }
 
@@ -316,8 +291,7 @@ article {
             outline-offset: 0;
           }
 
-          .user:first-child,
-          .rating {
+          .user:first-child {
             grid-column: 1 / -1;
           }
 
@@ -328,8 +302,7 @@ article {
               grid-column: 2 / -1;
             }
 
-            .user:first-child,
-            .rating {
+            .user:first-child {
               grid-column: unset;
             }
           }

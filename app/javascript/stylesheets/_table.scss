@@ -1,4 +1,4 @@
-table {
+table:not(.custom-table) {
   border-spacing: 0;
   width: 100%;
   display: grid;
@@ -18,10 +18,21 @@ table {
   }
 
   & > thead,
+  & > tfoot {
+    & > * > * {
+      padding: spacer(3) spacer(4);
+    }
+  }
+  & > tbody {
+    & > * > * {
+      padding: spacer(4);
+    }
+  }
+
+  & > thead,
   & > tbody,
   & > tfoot {
     & > * > * {
-      padding: spacer(4);
       text-align: left;
       vertical-align: middle;
     }
@@ -109,7 +120,6 @@ table {
   }
 
   & > thead th {
-    padding-top: 0;
     white-space: nowrap;
 
     &[aria-sort] {
@@ -155,6 +165,9 @@ table {
   }
 
   @include breakpoint-up(lg, true) {
+    border: $border;
+    border-radius: $table-border-radius;
+
     &,
     & > * {
       display: revert;
@@ -180,14 +193,6 @@ table {
       & > * > * {
         border-top: $border;
 
-        &:first-child {
-          border-left: $border;
-        }
-
-        &:last-child {
-          border-right: $border;
-        }
-
         &[data-label]:before {
           display: none;
         }
@@ -195,20 +200,6 @@ table {
         &.icon-cell {
           border-right: $border;
         }
-      }
-
-      &:last-child > tr:last-child > * {
-        border-bottom: $border;
-      }
-    }
-
-    & > tbody > :first-child {
-      & > :first-child {
-        border-top-left-radius: $table-border-radius;
-      }
-
-      & > :last-child {
-        border-top-right-radius: $table-border-radius;
       }
     }
 

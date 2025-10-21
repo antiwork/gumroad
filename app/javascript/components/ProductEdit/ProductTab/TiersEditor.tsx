@@ -27,6 +27,7 @@ import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Toggle } from "$app/components/Toggle";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -76,11 +77,11 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
   );
 
   return tiers.length === 0 ? (
-    <div className="placeholder">
+    <Placeholder>
       <h2>Offer different tiers of this membership</h2>
       Sweeten the deal for your customers with different levels of access. Every membership needs at least one tier.
       {addButton}
-    </div>
+    </Placeholder>
   ) : (
     <>
       {deletionModalVersion ? (
@@ -201,7 +202,7 @@ const TierEditor = ({
         </WithTooltip>
       </div>
       {isOpen ? (
-        <Drawer className="override grid gap-6">
+        <Drawer className="grid gap-6">
           <fieldset>
             <label htmlFor={`${uid}-name`}>Name</label>
             <div className="input">
@@ -424,7 +425,7 @@ You can modify or cancel your membership at any time.`;
       open={tier.apply_price_changes_to_existing_memberships}
     >
       <div className="dropdown">
-        <div className="override grid gap-6">
+        <div className="grid gap-6">
           {initialEffectiveDate ? (
             <div role="alert" className="warning">
               You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}

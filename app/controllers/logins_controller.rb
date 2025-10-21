@@ -11,7 +11,6 @@ class LoginsController < Devise::SessionsController
 
   def new
     @hide_layouts = true
-    @body_class = "onboarding-page"
     return redirect_to login_path(next: request.referrer) if params[:next].blank? && request_referrer_is_a_valid_after_login_path?
     @auth_presenter = AuthPresenter.new(params:, application: @application)
   end

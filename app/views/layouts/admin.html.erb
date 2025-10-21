@@ -1,31 +1,17 @@
 <!DOCTYPE html>
 <html class="admin" lang="en">
   <%= render("layouts/admin/head") %>
-  <% bclass = [] %>
-  <% bclass.push(@body_class) if @body_class %>
-  <% bclass.push("responsive") %>
-  <% bclass.push("responsive-nav") %>
-  <% bclass.push("is-logged-in") %>
-  <% bclass.push("is-nav-visible") %>
-  <body class="<%= bclass.join(" ") %>" id="<%= @body_id %>">
-    <%= render("layouts/shared/flash") %>
 
-    <div class="md:flex h-screen">
-      <%= react_component "AdminNav", props: { title: @title, current_user: current_user_props(current_user, impersonated_user) }, prerender: true %>
+  <% custom_context = RenderingExtension.custom_context(self) %>
 
-      <main class="flex-1 flex flex-col h-screen overflow-y-auto">
-        <header class="flex items-center justify-between border-b border-border p-4 md:p-8">
-          <h1><%= @title %></h1>
-          <div class="flex items-center gap-2">
-            <%= react_component "AdminSearchPopover", props: { card_types: card_types_for_react }, prerender: true %>
-          </div>
-        </header>
-        <div class="p-4 md:p-8"><%= yield %></div>
-      </main>
-    </div>
+  <%= tag.body class: class_names(@body_class, "responsive", "responsive-nav", "is-logged-in", "is-nav-visible") do %>
+    <%= tag.div id: "design-settings", data: { settings: custom_context[:design_settings].to_json }, class: "hidden" %>
+    <%= tag.div id: "user-agent-info", data: { settings: custom_context[:user_agent_info].to_json }, class: "hidden" %>
+
+    <%= yield %>
 
     <%= javascript_include_tag "application" %>
-    <%= load_pack("admin") %>
+    <%= load_pack("admin_inertia") %>
     <%= yield :script %>
-  </body>
+  <% end %>
 </html>

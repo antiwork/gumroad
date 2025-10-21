@@ -32,7 +32,7 @@ import {
   ReducerContext as SectionReducerContext,
   useSectionImageUploadSettings,
 } from "$app/components/Profile/EditSections";
-import { Section, PageProps as SectionsProps } from "$app/components/Profile/Sections";
+import { Section, SectionLayout, PageProps as SectionsProps } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -119,7 +119,7 @@ const SectionEditor = ({
     <SectionReducerContext.Provider value={reducer}>
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
         {sections.map((section, i) => (
-          <section key={section.id} id={section.id} className="border-b border-border px-4 py-8 lg:py-16">
+          <SectionLayout key={section.id} id={section.id}>
             <AddSectionButton index={i} />
             {section.id ? (
               <EditSection section={section} />
@@ -127,7 +127,7 @@ const SectionEditor = ({
               <div className="mx-auto w-full max-w-6xl">{children}</div>
             )}
             {i === sections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
-          </section>
+          </SectionLayout>
         ))}
       </ImageUploadSettingsContext.Provider>
     </SectionReducerContext.Provider>
@@ -165,8 +165,15 @@ export const Layout = (
   );
 
   const mainSection = (
-    <section className={classNames("border-b border-border lg:py-16", props.sections.length > 0 ? "px-4 py-8" : "p-4")}>
-      {productView}
+    <section className="border-b border-border">
+      <div
+        className={classNames(
+          "mx-auto w-full max-w-product-page lg:py-16",
+          props.sections.length > 0 ? "px-4 py-8" : "p-4 lg:px-8",
+        )}
+      >
+        {productView}
+      </div>
     </section>
   );
 
@@ -293,7 +300,9 @@ const CtaBar = ({
           creatorName={product.seller?.name}
         />
         <h3>{product.name}</h3>
-        {product.ratings != null && product.ratings.count > 0 ? <RatingsSummary ratings={product.ratings} /> : null}
+        {product.ratings != null && product.ratings.count > 0 ? (
+          <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
+        ) : null}
         <CtaButton
           product={product}
           purchase={purchase}

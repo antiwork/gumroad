@@ -1,4 +1,4 @@
-<div class="card">
+<div class="grid gap-4 rounded border border-border bg-background p-4">
   <div style="display: grid; gap: var(--spacer-2)">
     <h2 class="purchase-title">
       <%= link_to(purchase.formatted_display_price, admin_purchase_path(purchase)) %>
@@ -122,7 +122,7 @@
             <%= purchase.card_type.upcase %>
             *#<%= purchase.card_visual.delete("*").delete(" ") %> <%= "(#{purchase.card_country})" if purchase.card_country.present? %>
           <% end %>
-          <% if purchase.charge_processor_id == StripeChargeProcessor.charge_processor_id %>
+          <% if purchase.stripe_charge_processor? %>
             |
             <%= link_to_stripe_fingerprint_search(purchase.stripe_fingerprint, target: "_blank") %>
           <% end %>
@@ -261,9 +261,10 @@
               <%= purchase_refund_policy_tooltip(purchase_refund_policy) %>
             <% end %>
           </strong>
-          <% if purchase.purchase_refund_policy.fine_print.present? %>
+          <% fine_print_to_display = purchase.purchase_refund_policy.fine_print.presence || purchase.link.product_refund_policy&.fine_print %>
+          <% if fine_print_to_display.present? %>
             <br>
-            <%= simple_format(purchase.purchase_refund_policy.fine_print) %>
+            <%= simple_format(fine_print_to_display) %>
           <% end %>
           <% if purchase.purchase_refund_policy.max_refund_period_in_days.present? %>
             <br>

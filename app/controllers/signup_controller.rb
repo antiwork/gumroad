@@ -8,7 +8,6 @@ class SignupController < Devise::RegistrationsController
 
   def new
     @hide_layouts = true
-    @body_class = "onboarding-page"
     @auth_presenter = AuthPresenter.new(params:, application: @application)
   end
 

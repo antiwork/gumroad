@@ -20,6 +20,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -141,7 +142,7 @@ type GettingStartedItemProps = {
 };
 
 const Greeter = () => (
-  <div className="placeholder">
+  <Placeholder>
     <figure>
       <img src={placeholderImage} />
     </figure>
@@ -152,7 +153,7 @@ const Greeter = () => (
     <a href="/help/article/149-adding-a-product" target="_blank" rel="noreferrer">
       Learn more about creating products
     </a>
-  </div>
+  </Placeholder>
 );
 
 const GettingStartedItem = ({
@@ -211,9 +212,9 @@ const ProductsTable = ({ sales }: TableProps) => {
 
   if (sales.every((b) => b.sales === 0)) {
     return (
-      <div className="override grid gap-4">
+      <div className="grid gap-4">
         <h2>Best selling</h2>
-        <div className="placeholder">
+        <Placeholder>
           <p>
             You haven't made any sales yet. Learn how to{" "}
             <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
@@ -224,7 +225,7 @@ const ProductsTable = ({ sales }: TableProps) => {
               sell on Gumroad Discover
             </a>
           </p>
-        </div>
+        </Placeholder>
       </div>
     );
   }
@@ -336,7 +337,7 @@ export const DashboardPage = ({
 
       {loggedInUser?.policies.settings_payments_user.show
         ? Object.values(getting_started_stats).some((v) => !v) && (
-            <div className="override grid gap-4 p-4 md:p-8">
+            <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
                 <h2>Getting started</h2>
                 <a
@@ -355,7 +356,7 @@ export const DashboardPage = ({
                   />
                 </a>
               </div>
-              <div className="override grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
                 {GETTING_STARTED_ITEMS.map((item) => (
                   <GettingStartedItem
                     key={item.name}
@@ -382,7 +383,7 @@ export const DashboardPage = ({
         <ProductsTable sales={sales} />
       </div>
 
-      <div className="override grid gap-4 p-4 md:p-8">
+      <div className="grid gap-4 p-4 md:p-8">
         <h2>Activity</h2>
 
         <div className="stats-grid">

@@ -1,6 +1,6 @@
 import { StripeCardElement } from "@stripe/stripe-js";
 import cx from "classnames";
-import { CountryCode, parsePhoneNumber } from "libphonenumber-js";
+import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
 
@@ -234,6 +234,13 @@ const PaymentsPage = (props: Props) => {
   const updatePayoutMethod = (newPayoutMethod: PayoutMethod) => {
     setSelectedPayoutMethod(newPayoutMethod);
     setErrorFieldNames(new Set());
+    if (props.user.country_code === "AE") {
+      if (newPayoutMethod === "paypal") {
+        updateComplianceInfo({ is_business: false });
+      } else if (newPayoutMethod === "bank") {
+        updateComplianceInfo({ is_business: true });
+      }
+    }
   };
 
   const [payoutsPausedByUser, setPayoutsPausedByUser] = React.useState(props.payouts_paused_by_user);
@@ -245,11 +252,6 @@ const PaymentsPage = (props: Props) => {
 
   const [complianceInfo, setComplianceInfo] = React.useState(props.compliance_info);
   const updateComplianceInfo = (newComplianceInfo: Partial<ComplianceInfo>) => {
-    if (props.user.country_code === "AE") {
-      if (!complianceInfo.is_business && newComplianceInfo.is_business) updatePayoutMethod("bank");
-      else if (complianceInfo.is_business && "is_business" in newComplianceInfo && !newComplianceInfo.is_business)
-        updatePayoutMethod("paypal");
-    }
     if (
       props.user.country_code &&
       newComplianceInfo.updated_country_code &&
@@ -295,11 +297,7 @@ const PaymentsPage = (props: Props) => {
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = cast(country_code);
-    try {
-      return input && parsePhoneNumber(input, countryCode).isValid();
-    } catch {
-      return false;
-    }
+    return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
   };
 
   const validateBankAccountFields = () => {
@@ -1024,7 +1022,7 @@ const PaymentsPage = (props: Props) => {
               </a>
             </div>
           </header>
-          <section className="override grid gap-8">
+          <section className="grid gap-8">
             <div className="radio-buttons" role="radiogroup">
               {props.bank_account_details.show_bank_account ? (
                 <>
@@ -1135,7 +1133,6 @@ const PaymentsPage = (props: Props) => {
                 canadaBusinessTypes={props.canada_business_types}
                 states={props.states}
                 errorFieldNames={errorFieldNames}
-                payoutMethod={selectedPayoutMethod}
               />
             ) : (
               <StripeConnectSection

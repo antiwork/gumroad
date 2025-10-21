@@ -17,6 +17,8 @@ import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import Placeholder from "$app/components/ui/Placeholder";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -265,7 +267,7 @@ export const Wishlist = ({
         {description ? <h4>{description}</h4> : null}
       </PageHeader>
       <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
-        <div className="product-card-grid" ref={gridRef}>
+        <ProductCardGrid ref={gridRef}>
           {items.map((item) => (
             <WishlistItemCard
               key={item.id}
@@ -279,15 +281,15 @@ export const Wishlist = ({
               }}
             />
           ))}
-        </div>
+        </ProductCardGrid>
 
-        {can_edit && items.length === 0 ? (
-          <div className="placeholder">
+        {items.length === 0 ? (
+          <Placeholder>
             <figure>
               <Icon name="gift-fill" />
             </figure>
-            Products from your wishlist will be displayed here
-          </div>
+            {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
+          </Placeholder>
         ) : null}
 
         {isEditing ? (

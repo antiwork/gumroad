@@ -5,6 +5,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { Icon } from "$app/components/Icons";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -46,7 +47,7 @@ export function SupportHeader({
         actions={
           isHelpArticle ? (
             <a href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-              <span className="icon icon-solid-search"></span>
+              <Icon name="solid-search" />
             </a>
           ) : isAnonymousUserOnHelpCenter ? (
             <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>

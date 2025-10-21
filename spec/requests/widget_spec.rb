@@ -27,6 +27,10 @@ describe "Widget Page scenario", js: true, type: :system do
       select_tab("Embed")
 
       expect(page).to have_field("Widget code", with: %(<script src="#{UrlService.root_domain_with_protocol}/js/gumroad-embed.js"></script>\n<div class="gumroad-product-embed"><a href="#{@demo_product.long_url}">Loading...</a></div>))
+
+      # wait for embed iframe to load, so no layout shift happens when hovering the copy button
+      expect(page).to have_css("iframe[src*='embed=true'][style*='height']", wait: 10)
+
       copy_button = find_button("Copy embed code")
       copy_button.hover
       expect(page).to have_content("Copy to Clipboard")
@@ -77,6 +81,9 @@ describe "Widget Page scenario", js: true, type: :system do
       within_section "Share your product", section_element: :section do
         select_tab("Embed")
         expect(page).to have_field("Widget code", with: %(<script src="#{@base_url}/js/gumroad-embed.js"></script>\n<div class="gumroad-product-embed"><a href="#{@product.long_url}">Loading...</a></div>))
+
+        # wait for embed iframe to load, so no layout shift happens when hovering the copy button
+        expect(page).to have_css("iframe[src*='embed=true'][style*='height']", wait: 10)
 
         copy_button = find_button("Copy embed code")
         expect(copy_button).not_to have_tooltip(text: "Copy to Clipboard")

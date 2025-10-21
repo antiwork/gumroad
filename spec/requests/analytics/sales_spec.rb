@@ -60,16 +60,16 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
     it "shows the sales chart" do
       visit sales_dashboard_path(from: "2023-12-01", to: "2023-12-31")
-      expect(page).to have_css(".point", count: 31)
-      expect(page).to have_css("path.bar", count: 5)
+      expect(page).to have_css('[data-testid="chart-dot"]', count: 31)
+      expect(page).to have_css('[data-testid="chart-bar"]', count: 5)
 
-      chart = find(".chart")
+      chart = find('[data-testid="chart"]')
       chart.hover
       expect(chart).to have_tooltip(text: "3 views\n1 sale\n(33.3% conversion)\n$5\nSaturday, December 16")
 
       select "Monthly", from: "Aggregate by"
-      expect(page).to have_css(".point", count: 1)
-      expect(page).to have_css("path.bar", count: 2)
+      expect(page).to have_css('[data-testid="chart-dot"]', count: 1)
+      expect(page).to have_css('[data-testid="chart-bar"]', count: 2)
       chart.hover
       expect(chart).to have_tooltip(text: "6 views\n4 sales\n(66.7% conversion)\n$12\nDecember 2023")
 
@@ -78,7 +78,7 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       select_disclosure "Select products..." do
         uncheck "Product 1"
       end
-      expect(page).to have_css("path.bar", count: 3)
+      expect(page).to have_css('[data-testid="chart-bar"]', count: 3)
 
       select_disclosure "12/1/2023 – 12/31/2023" do
         click_on "Custom range..."
@@ -87,8 +87,8 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       end
       find("body").click # Blur the date field to trigger the update
 
-      expect(page).to have_css(".point", count: 2)
-      expect(page).to have_css("path.bar", count: 2)
+      expect(page).to have_css('[data-testid="chart-dot"]', count: 2)
+      expect(page).to have_css('[data-testid="chart-bar"]', count: 2)
     end
 
     it "shows the referrers table" do

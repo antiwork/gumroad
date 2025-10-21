@@ -24,6 +24,7 @@ import { Popover } from "$app/components/Popover";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
 import { extractSortParam } from "$app/components/server-components/UtmLinksPage";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -303,16 +304,16 @@ const UtmLinkList = () => {
         </section>
       ) : query ? (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={noLinksFoundPlaceholder} />
             </figure>
             <h4>No links found for "{query}"</h4>
-          </div>
+          </Placeholder>
         </div>
       ) : (
         <div className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <figure>
               <img src={noLinksYetPlaceholder} />
             </figure>
@@ -322,7 +323,7 @@ const UtmLinkList = () => {
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
               Learn more about UTM tracking
             </a>
-          </div>
+          </Placeholder>
         </div>
       )}
     </AnalyticsLayout>

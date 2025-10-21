@@ -5,6 +5,8 @@ require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
 describe Checkout::FormController do
+  render_views
+
   let(:seller) { create(:named_seller) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
 
@@ -15,12 +17,34 @@ describe Checkout::FormController do
   include_context "with user signed in as admin for seller"
 
   describe "GET show" do
-    it "returns HTTP success and assigns correct instance variables" do
+    it "returns HTTP success and renders correct inertia props" do
       get :show
 
       expect(response).to be_successful
       expect(assigns[:title]).to eq("Checkout form")
-      expect(assigns[:form_props]).to eq(Checkout::FormPresenter.new(pundit_user:).form_props)
+
+      expect(response.body).to include("data-page=")
+
+      page_data_match = response.body.match(/data-page="([^"]*)"/)
+      expect(page_data_match).to be_present, "Expected Inertia.js data-page attribute"
+
+      page_data = JSON.parse(CGI.unescapeHTML(page_data_match[1]))
+      expect(page_data["component"]).to eq("Checkout/Form/Show")
+
+      props = page_data["props"]
+      expect(props).to be_present
+
+      form_props = {
+        pages: props["pages"],
+        user: props["user"].deep_symbolize_keys,
+        cart_item: props["cart_item"],
+        custom_fields: props["custom_fields"],
+        card_product: props["card_product"],
+        products: props["products"]
+      }
+
+      expected_props = Checkout::FormPresenter.new(pundit_user: controller.pundit_user).form_props
+      expect(form_props).to eq(expected_props)
     end
   end
 

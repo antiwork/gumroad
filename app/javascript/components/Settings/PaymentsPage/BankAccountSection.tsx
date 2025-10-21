@@ -922,7 +922,7 @@ const BankAccountSection = ({
   return (
     <>
       <div className="whitespace-pre-line">{feeInfoText}</div>
-      <section className="override grid gap-8">
+      <section className="grid gap-8">
         <fieldset className={cx({ danger: errorFieldNames.has("account_holder_full_name") })}>
           <legend>
             <label htmlFor={`${uid}-account-holder-full-name`}>Pay to the order of</label>
@@ -937,9 +937,9 @@ const BankAccountSection = ({
           />
           <small>Must exactly match the name on your bank account</small>
         </fieldset>
-        <div className="override grid gap-2">
+        <div className="grid gap-2">
           {showNewBankAccount ? (
-            <div className="override grid gap-5 md:auto-cols-fr md:grid-flow-col">
+            <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               {user.country_code === "CA" ? (
                 <>
                   <fieldset className={cx({ danger: errorFieldNames.has("transit_number") })}>

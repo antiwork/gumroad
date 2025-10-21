@@ -3,9 +3,9 @@ import { XAxis, YAxis, Bar, Line, Cell } from "recharts";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { type AnalyticsDailyTotal } from "$app/components/Analytics";
 import useChartTooltip from "$app/components/Analytics/useChartTooltip";
 import { Chart, xAxisProps, yAxisProps, lineProps } from "$app/components/Chart";
-import { AnalyticsDailyTotal } from "$app/components/server-components/AnalyticsPage";
 
 type DataPoint = {
   views: number;
@@ -34,7 +34,7 @@ const ChartTooltip = ({ data: { views, sales, totals, title } }: { data: DataPoi
         </strong>
       </div>
     ) : null}
-    <time>{title}</time>
+    <time className="block font-bold">{title}</time>
   </>
 );
 
@@ -100,10 +100,10 @@ export const SalesChart = ({
           })
         }
       />
-      <Bar dataKey="sales" stackId="stack" className="bar level2" />
-      <Bar dataKey="viewsWithoutSales" stackId="stack" radius={[4, 4, 0, 0]}>
+      <Bar dataKey="sales" stackId="stack" className="fill-current" data-testid="chart-bar" />
+      <Bar dataKey="viewsWithoutSales" stackId="stack" radius={[4, 4, 0, 0]} data-testid="chart-bar">
         {dataPoints.map((_, index) => (
-          <Cell key={index} className={`bar ${tooltip?.index === index ? "highlight" : ""}`} />
+          <Cell key={index} className={tooltip?.index === index ? "fill-foreground/20" : "fill-foreground/10"} />
         ))}
       </Bar>
       <Line {...lineProps(dotRef, dataPoints.length)} dataKey="totals" yAxisId="totals" />

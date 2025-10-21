@@ -24,9 +24,18 @@ describe Purchase::Accounting do
   describe "#tax_dollars" do
     it "returns tax_cents in dollars" do
       purchase = create(:purchase)
+      allow(purchase).to receive(:gumroad_tax_cents).and_return(0)
       allow(purchase).to receive(:tax_cents).and_return(1234)
 
       expect(purchase.tax_dollars).to eq(12.34)
+    end
+
+    it "returns gumroad_tax_cents in dollars if present" do
+      purchase = create(:purchase)
+      allow(purchase).to receive(:gumroad_tax_cents).and_return(5678)
+      allow(purchase).to receive(:tax_cents).and_return(0)
+
+      expect(purchase.tax_dollars).to eq(56.78)
     end
   end
 

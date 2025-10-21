@@ -478,7 +478,7 @@ export const RichTextEditorToolbar = ({
                         <React.Fragment key={i}>
                           {item.name === "horizontalRule" ? (
                             <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                              <span className="icon icon-horizontal-rule" />
+                              <Icon name="horizontal-rule" />
                               <span>Divider</span>
                             </div>
                           ) : (

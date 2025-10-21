@@ -1,18 +1,27 @@
-import { Inertia } from "@inertiajs/inertia";
 import React from "react";
 
-function useRouteLoading() {
+const useRouteLoading = () => {
   const [isRouteLoading, setIsRouteLoading] = React.useState(false);
 
   React.useEffect(() => {
-    const startHandler = () => setIsRouteLoading(true);
-    const finishHandler = () => setIsRouteLoading(false);
+    const startHandler = (event: DocumentEventMap["inertia:start"]) => {
+      const { prefetch, only = [], preserveScroll } = event.detail.visit;
+      const shouldPreserveScroll = preserveScroll !== false;
+      setIsRouteLoading(!prefetch && !shouldPreserveScroll && only.length === 0);
+    };
 
-    Inertia.on("start", startHandler);
-    Inertia.on("finish", finishHandler);
+    const finishHandler = (_event: DocumentEventMap["inertia:finish"]) => setIsRouteLoading(false);
+
+    document.addEventListener("inertia:start", startHandler);
+    document.addEventListener("inertia:finish", finishHandler);
+
+    return () => {
+      document.removeEventListener("inertia:start", startHandler);
+      document.removeEventListener("inertia:finish", finishHandler);
+    };
   }, []);
 
   return isRouteLoading;
-}
+};
 
 export default useRouteLoading;

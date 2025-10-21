@@ -1,7 +1,7 @@
 <main class="p-4 md:p-8">
   <%= load_pack("api") %>
   <div>
-    <div class="with-sidebar">
+    <div class="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
       <%= render "public/api/shared/navigation" %>
       <article style="display: grid; gap: var(--spacer-6)">
         <div class="stack" id="api-intro">

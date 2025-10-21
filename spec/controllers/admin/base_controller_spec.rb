@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe Admin::BaseController do
+describe Admin::BaseController, type: :controller, inertia: true do
   render_views
   class DummyPolicy < ApplicationPolicy
     def index_with_policy?
@@ -112,8 +113,9 @@ describe Admin::BaseController do
           it "returns the desired response" do
             get :index
 
-            expect(response).to have_http_status(:ok)
-            expect(response).to render_template(:index)
+            expect(response).to be_successful
+            expect(inertia.component).to eq "Admin/Base/Index"
+            expect(inertia.props[:title]).to eq("Admin")
           end
         end
 
@@ -121,8 +123,9 @@ describe Admin::BaseController do
           it "returns the desired response" do
             get :index
 
-            expect(response).to have_http_status(:ok)
-            expect(response).to render_template(:index)
+            expect(response).to be_successful
+            expect(inertia.component).to eq "Admin/Base/Index"
+            expect(inertia.props[:title]).to eq("Admin")
           end
         end
       end

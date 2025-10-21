@@ -12,6 +12,7 @@ import { Popover } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
@@ -69,15 +70,9 @@ const ReviewsPage = ({
   return (
     <Layout selectedTab="reviews" followingWishlistsEnabled={following_wishlists_enabled}>
       {purchases.length ? (
-        <section className="space-y-4 p-4 md:p-8">
+        <section className="@container space-y-4 p-4 md:p-8">
           <h2>{`${purchases.length} ${purchases.length === 1 ? "product" : "products"} awaiting review`}</h2>
-          <div
-            className="grid"
-            style={{
-              "--max-grid-relative-size": "33%",
-              "--min-grid-absolute-size": "18rem",
-            }}
-          >
+          <div className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
             {purchases.map((purchase) => (
               <div className="cart h-min" role="list" key={purchase.id}>
                 <div key={purchase.id} role="listitem">
@@ -126,17 +121,17 @@ const ReviewsPage = ({
         </section>
       ) : reviews.length > 0 ? (
         <section className="p-4 md:p-8">
-          <div className="placeholder">
+          <Placeholder>
             <h2>You've reviewed all your products!</h2>
             <NavigationButton href={discoverUrl} color="accent">
               Discover more
             </NavigationButton>
-          </div>
+          </Placeholder>
         </section>
       ) : null}
       <section className="p-4 md:p-8">
-        {reviews.length === 0 ? (
-          <div className="placeholder">
+        {reviews.length === 0 && purchases.length === 0 ? (
+          <Placeholder>
             <figure>
               <img src={placeholderImage} />
             </figure>
@@ -148,8 +143,8 @@ const ReviewsPage = ({
             <a href="/help/article/344-rate-and-review-your-purchase" target="_blank" rel="noreferrer">
               Learn more about reviews
             </a>
-          </div>
-        ) : (
+          </Placeholder>
+        ) : reviews.length > 0 ? (
           <table>
             <caption>Your reviews</caption>
             <tbody>
@@ -166,7 +161,7 @@ const ReviewsPage = ({
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
       </section>
     </Layout>
   );

@@ -309,6 +309,16 @@ describe "Wishlist show page", :js, type: :system do
     end
   end
 
+  context "when viewing as a non-editor" do
+    it "shows the empty state message for viewers" do
+      logout
+      wishlist.wishlist_products.destroy_all
+      visit wishlist_url(wishlist.external_id_numeric, host: wishlist.user.subdomain_with_protocol)
+
+      expect(page).to have_text("This wishlist is currently empty")
+    end
+  end
+
   describe "discover layout" do
     let(:discover_url) { wishlist_url(wishlist.external_id_numeric, host: wishlist.user.subdomain_with_protocol, layout: Product::Layout::DISCOVER) }
     let(:non_discover_url) { wishlist_url(wishlist.external_id_numeric, host: wishlist.user.subdomain_with_protocol) }

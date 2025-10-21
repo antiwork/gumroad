@@ -457,9 +457,9 @@ describe("Checkout upsells page", type: :system, js: true) do
 
       choose "Add another product to the cart"
 
-      fill_in "Name", with: "Complete course upsell"
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+      fill_in "Name", with: "Complete course upsell", fill_options: { clear: :backspace }
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
       select_combo_box_option search: "Product 1", from: "Apply to these products"
       select_combo_box_option search: "Product 2", from: "Product to offer"
@@ -727,9 +727,9 @@ describe("Checkout upsells page", type: :system, js: true) do
 
     expect(find_field("Name").value).to eq("Upsell 2 (copy)")
 
-    fill_in "Name", with: "Complete course upsell"
-    fill_in "Offer text", with: "Enhance your learning experience"
-    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
+    fill_in "Name", with: "Complete course upsell", fill_options: { clear: :backspace }
+    fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
     choose "Add another product to the cart"
 

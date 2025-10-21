@@ -10,6 +10,8 @@ import { CardProduct } from "$app/parsers/product";
 import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import Placeholder from "$app/components/ui/Placeholder";
+import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 
 export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
   name: "moreLikeThis",
@@ -130,24 +132,24 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
         <h2>Customers who bought this product also bought</h2>
         <br />
         {isLoading ? (
-          <div className="product-card-grid narrow">
+          <ProductCardGrid narrow>
             {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="dummy h-128" />
             ))}
-          </div>
+          </ProductCardGrid>
         ) : recommendedProducts && recommendedProducts.length > 0 ? (
-          <div className="product-card-grid narrow" inert={editor.isEditable}>
+          <ProductCardGrid narrow inert={editor.isEditable}>
             {recommendedProducts.map((product) => (
               <div key={product.id}>
                 <Card product={product} />
               </div>
             ))}
-          </div>
+          </ProductCardGrid>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             <Icon name="archive-fill" />
             <p>No products found</p>
-          </div>
+          </Placeholder>
         )}
       </div>
     </NodeViewWrapper>

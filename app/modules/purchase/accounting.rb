@@ -16,7 +16,7 @@ class Purchase
     end
 
     def tax_dollars
-      convert_cents_to_dollars(tax_cents)
+      convert_cents_to_dollars(gumroad_responsible_for_tax? ? gumroad_tax_cents : tax_cents)
     end
 
     def shipping_dollars
