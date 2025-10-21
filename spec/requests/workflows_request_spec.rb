@@ -16,7 +16,7 @@ describe "Workflows API", type: :request do
     allow_any_instance_of(WorkflowsController).to receive(:current_user).and_return(seller)
     allow_any_instance_of(WorkflowsController).to receive(:current_seller).and_return(seller)
     allow_any_instance_of(WorkflowsController).to receive(:authenticate_user!).and_return(true)
-    
+
     create(:merchant_account_stripe_connect, user: seller)
   end
 
@@ -48,7 +48,7 @@ describe "Workflows API", type: :request do
 
       it "sets flash notice on successful creation" do
         post "/workflows", params: valid_params
-        
+
         expect(response).to have_http_status(:redirect)
         # Flash is set but not accessible in request specs after redirect
         # The redirect itself confirms successful creation
@@ -160,12 +160,12 @@ describe "Workflows API", type: :request do
 
       it "updates the workflow and redirects" do
         original_name = workflow.name
-        
+
         patch "/workflows/#{workflow.external_id}", params: valid_update_params
 
         expect(response).to have_http_status(:redirect)
         expect(response).to redirect_to("/workflows/#{workflow.external_id}/emails")
-        
+
         workflow.reload
         expect(workflow.name).to eq("Updated Workflow Name")
         expect(workflow.name).not_to eq(original_name)
@@ -173,7 +173,7 @@ describe "Workflows API", type: :request do
 
       it "successfully redirects after update" do
         patch "/workflows/#{workflow.external_id}", params: valid_update_params
-        
+
         expect(response).to have_http_status(:redirect)
         # Flash is set but not accessible in request specs
       end
@@ -192,7 +192,7 @@ describe "Workflows API", type: :request do
         patch "/workflows/#{workflow.external_id}", params: name_update_params
 
         expect(response).to have_http_status(:redirect)
-        
+
         workflow.reload
         expect(workflow.name).to eq("Complex Updated Workflow")
       end
@@ -211,7 +211,7 @@ describe "Workflows API", type: :request do
         patch "/workflows/#{workflow.external_id}", params: empty_name_params
 
         expect(response).to have_http_status(:redirect)
-        
+
         workflow.reload
         expect(workflow.name).to eq("")
       end
@@ -331,14 +331,14 @@ describe "Workflows API", type: :request do
 
       expect(response).to have_http_status(:redirect)
       expect(response).to redirect_to("/workflows")
-      
+
       workflow.reload
       expect(workflow.deleted_at).to be_present
     end
 
     it "successfully redirects after deletion" do
       delete "/workflows/#{workflow.external_id}"
-      
+
       expect(response).to have_http_status(:redirect)
       # Flash is set but not accessible in request specs
     end
@@ -397,7 +397,7 @@ describe "Workflows API", type: :request do
       it "successfully updates workflow name" do
         # Use the existing workflow from let block
         original_name = workflow.name
-        
+
         patch "/workflows/#{workflow.external_id}", params: {
           workflow: { name: "Updated Name for Existing" },
         }
