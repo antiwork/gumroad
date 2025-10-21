@@ -47,7 +47,7 @@ export const PageListTab = ({
   return (
     <Component
       className={classNames(
-        "flex items-center gap-2 p-4 not-first:border-t first:rounded-t-sm last:rounded-b-sm",
+        "tailwind-override flex items-center gap-2 p-4 text-left not-first:border-t first:rounded-t-sm last:rounded-b-sm",
         isSelected && "bg-muted-foreground",
         className,
       )}
