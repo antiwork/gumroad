@@ -7,6 +7,7 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { PageListTab } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 
@@ -66,10 +67,29 @@ export const PageTab = ({
     "outline-key": "Page has license key",
   };
   return (
-    <div role="tab" onClick={onClick} aria-selected={selected}>
-      {!disabled ? <div aria-grabbed={dragging} /> : null}
+    <PageListTab
+      onClick={onClick}
+      isSelected={selected}
+      className="group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted-foreground [&_.sortable-ghost]:outline [&_.sortable-ghost]:outline-accent [&_.sortable-ghost]:outline-dashed [&_.sortable-ghost>_*]:opacity-30"
+    >
+      {!disabled ? (
+        <Icon
+          name="outline-drag"
+          className="invisible absolute left-0 text-muted-foreground group-hover/tab:visible"
+          aria-grabbed={dragging}
+        />
+      ) : null}
       <Icon name={icon} aria-label={iconLabels[icon]} />
-      <span className="content">{renaming ? <EditorContent editor={editor} /> : titleWithFallback(page.title)}</span>
+      <span className="flex-1">
+        {renaming ? (
+          <>
+            <EditorContent editor={editor} className="cursor-text" />
+            <span className="absolute inset-0 outline-2 -outline-offset-2 outline-accent" />
+          </>
+        ) : (
+          titleWithFallback(page.title)
+        )}
+      </span>
       {renaming || disabled ? null : (
         <span onClick={(e) => e.stopPropagation()}>
           <Popover trigger={<Icon name="three-dots" />}>
@@ -84,6 +104,6 @@ export const PageTab = ({
           </Popover>
         </span>
       )}
-    </div>
+    </PageListTab>
   );
 };

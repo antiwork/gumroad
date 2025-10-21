@@ -18,7 +18,7 @@ import { Popover } from "$app/components/Popover";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { License, useContentFiles } from "$app/components/server-components/DownloadPage/WithContent";
-import { titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
+import { fileGroupRowsClassName, titleWithFallback } from "$app/components/TiptapExtensions/FileEmbedGroup";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
 import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";
@@ -67,7 +67,7 @@ export const RichContentView = ({
 
   return (
     <LicenseProvider value={licenseInfo}>
-      <EditorContent className="rich-text" editor={editor} />
+      <EditorContent className="rich-text grid h-full flex-1" editor={editor} />
     </LicenseProvider>
   );
 };
@@ -280,7 +280,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
             <NodeViewContent id={uid} role="group" />
           ) : (
             <div role="group">
-              <NodeViewContent id={uid} className="rows" />
+              <NodeViewContent id={uid} className={fileGroupRowsClassName} />
             </div>
           )}
         </div>

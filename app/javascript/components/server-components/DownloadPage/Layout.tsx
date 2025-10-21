@@ -14,6 +14,7 @@ import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
+import { PageListLayout } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -239,16 +240,19 @@ export const Layout = ({
           <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}
         {settings || pageList ? (
-          <div className="has-sidebar p-4 md:p-8">
-            <div className="paragraphs">
-              {pageList}
-              {isDesktop ? settings : null}
-            </div>
+          <PageListLayout
+            pageList={
+              <>
+                {pageList}
+                {isDesktop ? settings : null}
+              </>
+            }
+          >
             <div className="paragraphs">
               {children}
               {!isDesktop ? settings : null}
             </div>
-          </div>
+          </PageListLayout>
         ) : (
           <div className="paragraphs flex-1 p-4 md:p-8">{children}</div>
         )}

@@ -341,7 +341,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           })
           .run();
       }}
-      className={cx({ "file-dropzone": isDropZone })}
+      className={cx({ "relative rounded-sm border border-dashed border-accent": isDropZone })}
       contentEditable={false}
     >
       <div className={cx("embed", { selected })} role={isInGroup ? "treeitem" : undefined}>
@@ -653,8 +653,8 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         ) : null}
       </div>
       {isDropZone ? (
-        <div className="backdrop">
-          <div className="button primary">Create folder with 2 items</div>
+        <div className="absolute inset-0 bg-black/80">
+          <div className="button primary absolute inset-0">Create folder with 2 items</div>
         </div>
       ) : null}
     </NodeViewWrapper>

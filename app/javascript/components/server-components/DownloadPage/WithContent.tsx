@@ -25,6 +25,7 @@ import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
+import { PageList, PageListTab } from "$app/components/server-components/DownloadPage/PageListLayout";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
 import { PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
@@ -279,22 +280,21 @@ const WithContent = ({
       }
       pageList={
         showPageList && isDesktop ? (
-          <div role="tablist" className="pagelist" aria-label="Table of Contents">
+          <PageList aria-label="Table of Contents">
             {pages.map((page, index) => (
-              <div
+              <PageListTab
                 key={page.page_id}
-                role="tab"
-                aria-selected={index === activePageIndex}
+                isSelected={index === activePageIndex}
                 onClick={() => setActivePageIndex(index)}
               >
                 <Icon
                   name={pageIcons[index] ?? "file-text"}
                   aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
                 />
-                <span className="content">{page.title ?? "Untitled"}</span>
-              </div>
+                <span className="flex-1">{page.title ?? "Untitled"}</span>
+              </PageListTab>
             ))}
-          </div>
+          </PageList>
         ) : null
       }
     >
@@ -334,7 +334,10 @@ const WithContent = ({
       </PurchaseInfoProvider>
 
       {showPageList ? (
-        <div role="navigation" style={{ marginTop: "auto" }}>
+        <div
+          role="navigation"
+          className="mt-auto grid grid-cols-[auto_1fr_1fr] gap-4 border-t border-border pt-4 lg:flex lg:justify-end"
+        >
           {isDesktop ? null : (
             <Popover
               aria-label="Table of Contents"
