@@ -7,8 +7,11 @@ class Workflows::InstallmentsController < Sellers::BaseController
   def update
     service = Workflow::SaveInstallmentsService.new(seller: current_seller, params: save_installments_params, workflow: @workflow, preview_email_recipient: impersonating_user || logged_in_user)
     success, message = service.process
+
+    # For Inertia, we redirect on success to refresh the page state
+    # The frontend handles the success/error messages via router.reload()
     if success
-      redirect_to workflow_emails_path(@workflow.external_id), notice: "Installments saved successfully!"
+      redirect_to workflow_emails_path(@workflow.external_id)
     else
       redirect_to workflow_emails_path(@workflow.external_id), alert: message
     end

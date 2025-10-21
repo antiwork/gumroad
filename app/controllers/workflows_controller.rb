@@ -11,19 +11,30 @@ class WorkflowsController < Sellers::BaseController
     create_user_event("workflows_view")
 
     workflows_presenter = WorkflowsPresenter.new(seller: current_seller)
-    render inertia: "Workflows/Index", props: workflows_presenter.workflows_props
+    render inertia: "Workflows/Index", props: {
+      # Use lambda for lazy evaluation - only evaluated when needed for partial reloads
+      workflows: -> { workflows_presenter.workflows_props[:workflows] },
+      context: -> { workflows_presenter.workflows_props[:context] },
+    }
   end
 
   def new
     authorize Workflow
 
     workflow_presenter = WorkflowPresenter.new(seller: current_seller)
-    render inertia: "Workflows/New", props: workflow_presenter.new_page_react_props
+    render inertia: "Workflows/New", props: {
+      # Use lambda for lazy evaluation - context has expensive product/variant queries
+      context: -> { workflow_presenter.new_page_react_props[:context] },
+    }
   end
 
   def edit
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-    render inertia: "Workflows/Edit", props: workflow_presenter.edit_page_react_props
+    render inertia: "Workflows/Edit", props: {
+      # Use lambdas for lazy evaluation
+      workflow: -> { workflow_presenter.edit_page_react_props[:workflow] },
+      context: -> { workflow_presenter.edit_page_react_props[:context] },
+    }
   end
 
   def create
@@ -33,7 +44,12 @@ class WorkflowsController < Sellers::BaseController
     if success
       redirect_to workflow_emails_path(@workflow.external_id), notice: "Workflow created successfully!"
     else
-      redirect_to new_workflow_path, alert: message
+      # Stay on the same page with errors for Inertia partial reload
+      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
+      render inertia: "Workflows/New", props: {
+        context: -> { workflow_presenter.new_page_react_props[:context] },
+        errors: message,
+      }, status: :unprocessable_entity
     end
   end
 
@@ -42,7 +58,13 @@ class WorkflowsController < Sellers::BaseController
     if success
       redirect_to workflow_emails_path(@workflow.external_id), notice: "Workflow updated successfully!"
     else
-      redirect_to edit_workflow_path(@workflow.external_id), alert: message
+      # Stay on the same page with errors for Inertia partial reload
+      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
+      render inertia: "Workflows/Edit", props: {
+        workflow: -> { workflow_presenter.edit_page_react_props[:workflow] },
+        context: -> { workflow_presenter.edit_page_react_props[:context] },
+        errors: message,
+      }, status: :unprocessable_entity
     end
   end
 

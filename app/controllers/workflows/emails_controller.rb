@@ -10,7 +10,11 @@ class Workflows::EmailsController < Sellers::BaseController
     create_user_event("workflows_view")
 
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-    render inertia: "Workflows/Emails", props: workflow_presenter.edit_page_react_props
+    render inertia: "Workflows/Emails", props: {
+      # Use lambdas for lazy evaluation - context has expensive product/variant queries
+      workflow: -> { workflow_presenter.edit_page_react_props[:workflow] },
+      context: -> { workflow_presenter.edit_page_react_props[:context] },
+    }
   end
 
   private
