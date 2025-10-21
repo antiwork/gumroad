@@ -19,7 +19,7 @@ end
 module Capybara
   module RSpecMatchers
     def have_product_card(product = nil, **rest)
-      have_selector(".product-card", text: product&.name, **rest)
+      have_selector(".product-card header", text: product&.name, **rest)
     end
   end
 end
