@@ -145,7 +145,16 @@ class CustomerPresenter
         term: utm_link.utm_term,
         content: utm_link.utm_content,
       } : nil,
+      download_count: download_count
     }
+  end
+
+  def download_count
+    return nil if purchase.is_bundle_purchase?
+    product = purchase.link
+    return nil if product.native_type == Link::NATIVE_TYPE_COFFEE
+
+    purchase.url_redirect&.uses || 0
   end
 
   def charge

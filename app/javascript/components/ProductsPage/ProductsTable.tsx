@@ -87,7 +87,7 @@ export const ProductsPageProductsTable = (props: {
         <thead>
           <tr>
             <th />
-            <th {...thProps("name")} title="Sort by Name" className="pl-0 lg:relative lg:-left-20">
+            <th {...thProps("name")} title="Sort by Name" className="lg:relative lg:-left-20">
               Name
             </th>
             <th {...thProps("successful_sales_count")} title="Sort by Sales" className="lg:px-8">

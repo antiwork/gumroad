@@ -51,6 +51,7 @@ import HelpCenterArticlesIndexPage from "$app/components/server-components/HelpC
 import LibraryPage from "$app/components/server-components/LibraryPage";
 import LoginPage from "$app/components/server-components/LoginPage";
 import Nav from "$app/components/server-components/Nav";
+import PasswordResetPage from "$app/components/server-components/PasswordResetPage";
 import PayoutCreditCard from "$app/components/server-components/PayoutPage/CreditCard";
 import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
@@ -148,6 +149,7 @@ ReactOnRails.register({
   LoginPage,
   MainSettingsPage,
   Nav,
+  PasswordResetPage,
   PasswordSettingsPage,
   PaymentsSettingsPage,
   PayoutCreditCard,

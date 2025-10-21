@@ -40,7 +40,7 @@ const BaseNavLink = ({
   component = "a",
   ...props
 }: BaseNavLinkProps) => {
-  const { href: originalHref } = new URL(useOriginalLocation());
+  const { href: originalHref } = new URL(typeof window !== "undefined" ? window.location.href : useOriginalLocation());
   const ariaCurrent = [href, ...additionalPatterns].some((pattern) => {
     const escaped = escapeRegExp(pattern);
     return new RegExp(exactHrefMatch ? `^${escaped}/?$` : escaped, "u").test(originalHref);
@@ -112,7 +112,7 @@ export const Nav = ({ title, children, footer, compact }: Props) => {
 
   return (
     <NavContext.Provider value={contextValue}>
-      <nav aria-label="Main" className={classNames({ compact, open })}>
+      <nav aria-label="Main" className={classNames("main-nav", { compact, open })}>
         <div className="navbar">
           <a href={Routes.root_url()}>
             <span className="logo-g">&nbsp;</span>

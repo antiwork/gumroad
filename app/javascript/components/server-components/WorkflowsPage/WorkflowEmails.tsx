@@ -53,6 +53,7 @@ import {
   determineWorkflowTrigger,
   WorkflowTrigger,
 } from "$app/components/server-components/WorkflowsPage/WorkflowForm";
+import Placeholder from "$app/components/ui/Placeholder";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -346,13 +347,13 @@ const WorkflowEmails = () => {
                 <FilesDispatchProvider value={filesDispatch}>
                   <section className="space-y-4 p-4 md:p-8">
                     {emails.length === 0 ? (
-                      <div className="placeholder">
+                      <Placeholder>
                         <h2>Create emails for your workflow</h2>
                         <h4>Users will receive workflows as email messages with links to any files you've attached.</h4>
                         <Button color="primary" onClick={handleAddEmail}>
                           Create email
                         </Button>
-                      </div>
+                      </Placeholder>
                     ) : (
                       <>
                         <div className="rows">
@@ -676,7 +677,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
             ))}
           </div>
         ) : (
-          <div className="placeholder">
+          <Placeholder>
             {showAddProductCTA ? (
               <span>
                 <a href={Routes.new_product_path()}>Add a product</a> to have it show up here
@@ -684,7 +685,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
             ) : (
               "No products selected"
             )}
-          </div>
+          </Placeholder>
         )}
         {isPreview ? null : (
           <div role="tooltip" id={tooltipUid}>

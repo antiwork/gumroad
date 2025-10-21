@@ -2,5 +2,11 @@
 
 <div>
   <%= react_component "Alert", props: { initial: nil }, prerender: true %>
-  <%= react_component "AdminSalesReportsPage", props: @react_component_props, prerender: true %>
+
+  <%= react_component "AdminSalesReportsPage", props: {
+    countries: @countries,
+    job_history: @job_history,
+    form_action: admin_sales_reports_path,
+    authenticity_token: form_authenticity_token,
+  } %>
 </div>
