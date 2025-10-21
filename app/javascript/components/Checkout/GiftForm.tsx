@@ -66,7 +66,7 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
             <div role="alert" className="info">
               <div>
                 {gift.name}'s email has been hidden for privacy purposes.{" "}
-                <button className="link" onClick={() => setCancellingPresetGift(true)}>
+                <button className="underline" onClick={() => setCancellingPresetGift(true)}>
                   Cancel gift option
                 </button>
               </div>

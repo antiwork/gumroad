@@ -375,7 +375,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
               You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
               <button
                 type="button"
-                className="link"
+                className="underline"
                 onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
               >
                 Click here to view
@@ -393,7 +393,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                     : "No products found"}
                 </div>
                 {isDesktop ? null : (
-                  <button className="link" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
+                  <button className="underline" onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>
                     Filter
                   </button>
                 )}
@@ -493,7 +493,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                       ))}
                       <div>
                         {creators.length > 5 && !showingAllCreators ? (
-                          <button className="link" onClick={() => setShowingAllCreators(true)}>
+                          <button className="underline" onClick={() => setShowingAllCreators(true)}>
                             Show more
                           </button>
                         ) : null}

@@ -289,7 +289,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         )}
         {replyDraft == null && comment.depth < max_allowed_depth ? (
           <footer>
-            <button className="link" onClick={() => setReplyDraft("")}>
+            <button className="underline" onClick={() => setReplyDraft("")}>
               Reply
             </button>
           </footer>
