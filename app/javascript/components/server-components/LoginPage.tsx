@@ -90,7 +90,7 @@ export const LoginPage = ({
             <fieldset>
               <legend>
                 <label htmlFor={`${uid}-password`}>Password</label>
-                <button type="button" className="link" onClick={() => setShowForgotPassword(true)}>
+                <button type="button" className="font-normal underline" onClick={() => setShowForgotPassword(true)}>
                   Forgot your password?
                 </button>
               </legend>

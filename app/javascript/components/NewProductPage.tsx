@@ -310,7 +310,7 @@ const NewProductPage = ({
                       Learn more
                     </a>
                   </div>
-                  <button className="link col-start-3! self-center" onClick={() => void dismissAiPromo()}>
+                  <button className="col-start-3! self-center underline" onClick={() => void dismissAiPromo()}>
                     close
                   </button>
                 </div>

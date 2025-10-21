@@ -36,6 +36,7 @@ export const ClientAlertProvider = ({ children }: { children: React.ReactNode })
         message,
         status: status === "error" ? "danger" : status,
         html: options.html ?? false,
+        timestamp: Date.now(),
       };
 
       setState({
