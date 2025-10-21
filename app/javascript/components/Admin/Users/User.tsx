@@ -30,6 +30,11 @@ export type UserMembership = {
   created_at: string;
 };
 
+type BlockedObject = {
+  blocked_at: string;
+  created_at: string;
+};
+
 export type User = {
   id: number;
   email: string;
@@ -39,9 +44,9 @@ export type User = {
   username: string;
   profile_url: string;
   form_email: string;
-  form_email_block: { blocked_at: string; created_at: string } | null;
+  blocked_by_form_email_object: BlockedObject | null;
   form_email_domain: string;
-  form_email_domain_block: { blocked_at: string; created_at: string } | null;
+  blocked_by_form_email_domain_object: BlockedObject | null;
   subdomain_with_protocol: string;
   custom_fee_per_thousand: number | null;
   impersonatable: boolean;

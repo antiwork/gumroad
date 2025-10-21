@@ -34,9 +34,9 @@ module User::AsJson
       methods: [
         :display_name,
         :form_email,
-        :form_email_block,
+        :blocked_by_form_email_object,
         :form_email_domain,
-        :form_email_domain_block,
+        :blocked_by_form_email_domain_object,
         :avatar_url,
         :username,
         :subdomain_with_protocol,
