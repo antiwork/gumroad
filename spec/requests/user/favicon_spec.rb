@@ -41,6 +41,6 @@ describe "User favicons", type: :system, js: true do
       end
       click_on "Update settings"
       wait_for_ajax
-      expect(@user.reload.avatar_url).to match("gumroad-specs.s3.amazonaws.com/#{@user.avatar_variant.key}")
+      expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
     end
 end

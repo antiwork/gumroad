@@ -1467,7 +1467,7 @@ const AddressSection = ({
             <br />
             {currentAddress.country}
           </p>
-          <button className="link" onClick={() => setIsEditing(true)}>
+          <button className="underline" onClick={() => setIsEditing(true)}>
             Edit
           </button>
         </div>
@@ -1600,7 +1600,7 @@ const EmailSection = ({
         <section>
           <h5>{currentEmail}</h5>
           {onSave ? (
-            <button className="link" onClick={() => setIsEditing(true)}>
+            <button className="underline" onClick={() => setIsEditing(true)}>
               Edit
             </button>
           ) : (
@@ -1864,7 +1864,7 @@ const OptionSection = ({
           ) : (
             <>
               <h5>{option?.name ?? "None selected"}</h5>
-              <button className="link" onClick={() => setIsEditing(true)}>
+              <button className="underline" onClick={() => setIsEditing(true)}>
                 Edit
               </button>
             </>
@@ -2011,7 +2011,7 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
       ) : (
         <section>
           <h5>{seats}</h5>
-          <button className="link" onClick={() => setIsEditing(true)}>
+          <button className="underline" onClick={() => setIsEditing(true)}>
             Edit
           </button>
         </section>
@@ -2298,7 +2298,7 @@ const ChargeRow = ({
           {purchase.chargedback ? <span className="pill small">Chargedback</span> : null}
         </section>
         {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
-          <button className="link" onClick={() => setIsRefunding((prev) => !prev)}>
+          <button className="underline" onClick={() => setIsRefunding((prev) => !prev)}>
             Refund Options
           </button>
         ) : null}

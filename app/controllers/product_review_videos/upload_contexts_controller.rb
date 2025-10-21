@@ -6,7 +6,7 @@ class ProductReviewVideos::UploadContextsController < ApplicationController
   def show
     render json: {
       aws_access_key_id: AWS_ACCESS_KEY,
-      s3_url: "https://s3.amazonaws.com/#{S3_BUCKET}",
+      s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
       user_id: logged_in_user.external_id,
     }
   end

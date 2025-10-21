@@ -18,21 +18,21 @@ describe Api::Mobile::PurchasesController do
     before do
       @mobile_friendly_pdf_product = create(:product, user: @user)
       create(:product_file, link_id: @mobile_friendly_pdf_product.id,
-                            url: "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf")
+                            url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf")
       @mobile_friendly_movie_product = create(:product, user: @user)
-      create(:product_file, link_id: @mobile_friendly_movie_product.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+      create(:product_file, link_id: @mobile_friendly_movie_product.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
       @mobile_friendly_mp3_product = create(:product, user: @user)
-      create(:product_file, link_id: @mobile_friendly_mp3_product.id, url: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3")
+      create(:product_file, link_id: @mobile_friendly_mp3_product.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
       @subscription_product = create(:membership_product, subscription_duration: "monthly", user: @user)
 
       @mobile_zip_file_product = create(:product, user: @user)
-      create(:product_file, link_id: @mobile_zip_file_product.id, url: "https://s3.amazonaws.com/gumroad-specs/specs/test.zip")
+      create(:product_file, link_id: @mobile_zip_file_product.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.zip")
     end
 
     describe "successful response format" do
       it "returns product and file data" do
         product = create(:product, user: @user, name: "The Works of Edgar Gumstein", description: "A collection of works spanning 1984 — 1994")
-        create(:product_file, link: product, description: "A song", url: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3")
+        create(:product_file, link: product, description: "A song", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
         purchase = create(:purchase_with_balance, link: product, purchaser: @purchaser, seller: @user, is_rental: true)
 
         get :index, params: @params
@@ -279,7 +279,7 @@ describe Api::Mobile::PurchasesController do
           purchase
         end
         product = create(:product, price_cents: 600, is_in_preorder_state: true, name: "preorder link")
-        create(:product_file, link_id: product.id, url: "https://s3.amazonaws.com/gumroad-specs/specs/preorder.zip")
+        create(:product_file, link_id: product.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/preorder.zip")
         preorder_link = create(:preorder_link, link: product, release_at: 2.days.from_now)
         good_card = build(:chargeable)
         authorization_purchase = create(:purchase,

@@ -30,6 +30,8 @@
   --color-accent: rgb(var(--accent));
   --color-accent-foreground: rgb(var(--contrast-accent));
   --color-muted-foreground: rgb(var(--color) / var(--gray-1));
+  --color-success: rgb(var(--success));
+  --color-danger: rgb(var(--danger));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;
   --shadow-lg: 0.5rem 0.5rem 0 currentColor;

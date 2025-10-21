@@ -6,7 +6,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
   before do
     @creator = create(:named_user)
     purchaser_email = "one@gr.test"
-    @preview_image_url = "https://s3.amazonaws.com/gumroad-specs/specs/kFDzu.png"
+    @preview_image_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png"
     @a = create(:product_with_files, user: @creator, name: "Digital Product A", created_at: 20.minutes.ago, preview_url: @preview_image_url)
     @a.tag!("Audio")
     create(:price, link: @a, price_cents: 300)

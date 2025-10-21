@@ -26,7 +26,6 @@ import AdminUserStats from "$app/components/server-components/Admin/UserStats";
 import AffiliateRequestPage from "$app/components/server-components/AffiliateRequestPage";
 import AffiliatesPage from "$app/components/server-components/AffiliatesPage";
 import Alert from "$app/components/server-components/Alert";
-import AudienceCustomersPage from "$app/components/server-components/Audience/CustomersPage";
 import AudiencePage from "$app/components/server-components/AudiencePage";
 import BundleEditPage from "$app/components/server-components/BundleEditPage";
 import CheckoutPage from "$app/components/server-components/CheckoutPage";
@@ -93,6 +92,7 @@ import WishlistPage from "$app/components/server-components/WishlistPage";
 import WishlistsFollowingPage from "$app/components/server-components/WishlistsFollowingPage";
 import WishlistsPage from "$app/components/server-components/WishlistsPage";
 import WorkflowsPage from "$app/components/server-components/WorkflowsPage";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 ReactOnRails.register({
   AdminActionButton,
@@ -122,11 +122,11 @@ ReactOnRails.register({
   ApplicationEditPage,
   HelpCenterArticlesIndexPage,
   SupportHeader,
-  AudienceCustomersPage,
   AudiencePage,
   AuthorizedApplicationsSettingsPage,
   BundleEditPage,
   CheckoutPage,
+  CodeSnippet,
   CommunitiesPage,
   CountrySelectionModal,
   CustomersDownloadPopover,

@@ -62,7 +62,7 @@ module S3Retrievable
         user_external_id = user.try(:external_id)
         starting_index = 7
         max_split_count = 8
-        if user_external_id && send(column) =~ %r{\Ahttps://s3.amazonaws.com/#{S3_BUCKET}/\w+/#{user_external_id}/}
+        if user_external_id && send(column) =~ %r{\A#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/\w+/#{user_external_id}/}
           starting_index = 8
           max_split_count = 9
         end

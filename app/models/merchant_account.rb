@@ -100,6 +100,7 @@ class MerchantAccount < ApplicationRecord
   def charge_processor_alive?
     charge_processor_alive_at.present? && !charge_processor_deleted?
   end
+  alias_method :charge_processor_alive, :charge_processor_alive?
 
   def charge_processor_verified?
     charge_processor_verified_at.present?

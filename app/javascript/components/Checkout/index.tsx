@@ -539,7 +539,7 @@ const CartItemComponent = ({
               ) : null}
               <li>
                 <button
-                  className="link"
+                  className="underline"
                   onClick={() => {
                     const newItems = cart.items.filter((i) => i !== item);
 

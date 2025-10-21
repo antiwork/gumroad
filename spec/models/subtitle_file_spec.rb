@@ -50,7 +50,7 @@ describe SubtitleFile do
 
         context "and subtitle is an S3 URL" do
           before do
-            @subtitle = build(:subtitle_file, url: "https://s3.amazonaws.com/gumroad/attachments/1234/abcdef/original/My Awesome Youtube video.mov")
+            @subtitle = build(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/gumroad/attachments/1234/abcdef/original/My Awesome Youtube video.mov")
           end
 
           it "is invalid" do
@@ -67,7 +67,7 @@ describe SubtitleFile do
 
         context "and subtitle is an S3 URL" do
           before do
-            @subtitle = build(:subtitle_file, url: "https://s3.amazonaws.com/gumroad/attachments/1234/abcdef/original/My Subtitle.sub")
+            @subtitle = build(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/gumroad/attachments/1234/abcdef/original/My Subtitle.sub")
           end
 
           it "is valid" do
@@ -92,8 +92,8 @@ describe SubtitleFile do
   end
 
   describe "#has_alive_duplicate_files?" do
-    let!(:file_1) { create(:subtitle_file, url: "https://s3.amazonaws.com/gumroad-specs/some-file.srt") }
-    let!(:file_2) { create(:subtitle_file, url: "https://s3.amazonaws.com/gumroad-specs/some-file.srt") }
+    let!(:file_1) { create(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/some-file.srt") }
+    let!(:file_2) { create(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/some-file.srt") }
 
     it "returns true if there's an alive record with the same url" do
       file_1.mark_deleted
