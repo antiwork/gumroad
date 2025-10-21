@@ -18,6 +18,7 @@ import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
+import { Stack } from "$app/components/ui/Stack";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { useClientAlert } from "$app/components/ClientAlertProvider";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -479,7 +480,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
               <h2>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</h2>
               <button className="close" aria-label="Close" onClick={() => setSelectedOfferCodeId(null)} />
             </header>
-            <section className="stack">
+            <Stack as="section">
               <h3>Details</h3>
               <div>
                 <h5>Code</h5>
@@ -537,9 +538,9 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                   )}
                 </div>
               ) : null}
-            </section>
+            </Stack>
             {selectedOfferCode.products ? (
-              <section className="stack">
+              <Stack as="section">
                 <h3>Products</h3>
                 {selectedOfferCode.products.map((product) => {
                   const uses =
@@ -564,7 +565,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                     </div>
                   );
                 })}
-              </section>
+              </Stack>
             ) : null}
             <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
               <Button onClick={() => setView("create")} disabled={!selectedOfferCode.can_update || isLoading}>

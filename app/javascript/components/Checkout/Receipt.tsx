@@ -7,6 +7,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
+import { Stack } from "$app/components/ui/Stack";
 import { useState } from "$app/components/Checkout/payment";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { Icon } from "$app/components/Icons";
@@ -45,14 +46,14 @@ const FailedLineItemResultEntry = ({ name, result }: { name: string; result: Err
   return (
     <>
       <div>
-        <section className="stack borderless">
+        <Stack as="section" borderless>
           <div>
             <LineItem
               name={name}
               price={"formatted_price" in result ? (result.formatted_price ?? undefined) : undefined}
             />
           </div>
-        </section>
+        </Stack>
       </div>
       <div>
         <div
@@ -77,7 +78,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
   return (
     <>
       <div>
-        <section className="stack borderless">
+        <Stack as="section" borderless>
           <div>
             <LineItem
               name={`${name} ${result.variants_displayable}`}
@@ -146,26 +147,26 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
               </a>
             </div>
           </div>
-        </section>
+        </Stack>
       </div>
 
       {result.has_shipping_to_show ? (
         <div>
-          <section className="stack borderless">
+          <Stack as="section" borderless>
             <div>
               <LineItem name="Shipping" price={result.shipping_amount} />
             </div>
-          </section>
+          </Stack>
         </div>
       ) : null}
 
       {result.has_sales_tax_to_show ? (
         <div>
-          <section className="stack borderless">
+          <Stack as="section" borderless>
             <div>
               <LineItem name={result.sales_tax_label ?? ""} price={result.sales_tax_amount} />
             </div>
-          </section>
+          </Stack>
         </div>
       ) : null}
     </>
@@ -263,7 +264,7 @@ export const Receipt = ({
   const [state] = useState();
   if (state.status.type !== "finished") return null;
   return (
-    <div className="stack mx-auto my-8 max-w-2xl">
+    <Stack className="mx-auto my-8 max-w-2xl">
       <header>
         <h4 className="relative">
           Checkout
@@ -303,6 +304,6 @@ export const Receipt = ({
           }}
         />
       ) : null}
-    </div>
+    </Stack>
   );
 };

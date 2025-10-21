@@ -4,6 +4,8 @@ import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover } from "$app/components/Popover";
+import { Stack } from "$app/components/ui/Stack";
+
 
 export type ProductOption = Product & { selected: boolean };
 
@@ -22,7 +24,7 @@ export const ProductsPopover = ({
       </span>
     }
   >
-    <div className="stack">
+    <Stack>
       <div>
         <fieldset>
           <label>
@@ -66,6 +68,6 @@ export const ProductsPopover = ({
           Toggle selected
         </Button>
       </div>
-    </div>
+    </Stack>
   </Popover>
 );

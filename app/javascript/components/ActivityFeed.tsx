@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
-
+import { Stack } from "$app/components/ui/Stack";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -66,7 +66,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
   }
 
   return (
-    <div className="stack">
+    <Stack>
       {items.map(({ type, timestamp, details }, i) => (
         <div key={i}>
           <span className="flex gap-3">
@@ -79,6 +79,6 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
           </span>
         </div>
       ))}
-    </div>
+    </Stack>
   );
 };

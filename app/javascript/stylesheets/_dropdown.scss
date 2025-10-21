@@ -21,8 +21,9 @@
     left: spacer(3);
   }
 
-  > [role="menu"],
-  > .stack {
+  >[role="menu"],
+  >.stack,
+  >.stack-component {
     &:only-child {
       box-shadow: none;
       margin: -(spacer(4));
@@ -78,12 +79,13 @@
   }
 
   &:has(> summary button) {
-    > .dropdown {
+    >.dropdown {
       margin-left: -$button-hover-transform-length;
     }
 
     &.top {
-      > .dropdown,
+
+      >.dropdown,
       &::after {
         margin-bottom: $button-hover-transform-length;
       }

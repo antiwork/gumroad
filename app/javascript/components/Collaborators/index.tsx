@@ -27,6 +27,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import CollaboratorForm from "$app/components/Collaborators/Form";
+import { Stack } from "$app/components/ui/Stack";
 import { IncomingCollaborators } from "$app/components/Collaborators/IncomingCollaborators";
 import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
@@ -96,14 +97,14 @@ const CollaboratorDetails = ({
         </div>
       ) : null}
 
-      <section className="stack">
+      <Stack as="section">
         <h3>Email</h3>
         <div>
           <span>{selectedCollaborator.email}</span>
         </div>
-      </section>
+      </Stack>
 
-      <section className="stack">
+      <Stack as="section">
         <h3>Products</h3>
         {selectedCollaborator.products.map((product) => (
           <section key={product.id}>
@@ -111,7 +112,7 @@ const CollaboratorDetails = ({
             <div>{formatAsPercent(product.percent_commission || selectedCollaborator.percent_commission || 0)}</div>
           </section>
         ))}
-      </section>
+      </Stack>
 
       <section className="mt-auto flex gap-4">
         <Link

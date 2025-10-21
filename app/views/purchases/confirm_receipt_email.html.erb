@@ -1,4 +1,6 @@
-<main class="stack single-page-form horizontal-form">
+<%# TODO: When migrating to React/Inertia, use the Stack component instead of these Tailwind classes %>
+<% stack_classes = "grid bg-filled border border-border rounded stack-component [&>*]:flex [&>*]:flex-wrap [&>*]:items-center [&>*]:p-4 [&>*]:gap-4 [&>*]:justify-between [&>*:not(:first-child)]:border-t [&>*:not(:first-child)]:border-border [&>*>:first-child]:flex-grow [&>*>:first-child:where(.button,fieldset)]:flex-[0_1_0%] [&>*>:where(.button,fieldset)+:where(.button,fieldset)]:flex-1 [&>*_h4]:font-bold [&>*_h5]:font-bold [&>*_h6]:font-bold [&>details]:block [&>details_summary]:grid [&>details_summary]:grid-flow-col [&>details_summary]:grid-cols-[1fr_auto] [&>details_summary::before]:col-start-2 h-min m-4 mx-auto max-w-[28rem] w-[calc(100%-2*1rem)] [&>header]:text-center [&>footer]:text-center [&>*]:flex-col [&>*]:items-start" %>
+<main class="<%= stack_classes %> single-page-form horizontal-form">
   <header>
     <h2>Confirm your email address</h2>
     <p>Please enter the email address used to purchase this product to view your receipt.</p>
