@@ -25,7 +25,12 @@ export const ProgressPie = ({
   A ${radius} ${radius} 0 ${progress > 0.5 ? 1 : 0} 1 ${arcEndX} ${arcEndY}
   Z`;
   return (
-    <div className={classNames("w-8 rounded-full border", className)} {...props}>
+    <div
+      className={classNames("w-8 rounded-full border", className)}
+      role="progressbar"
+      aria-valuenow={Math.round(progress * 10000) / 100}
+      {...props}
+    >
       {progress === 1 ? (
         <div className="rounded-full bg-accent p-1 text-center">
           <Icon name="outline-check" />
