@@ -687,7 +687,7 @@ describe LinksController, :vcr, inertia: true do
       describe "content_updated_at" do
         it "is updated when a new file is uploaded" do
           freeze_time do
-            url = "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png"
+            url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"
             post(:update, params: @params.merge!(files: [{ id: SecureRandom.uuid, url: }]), format: :json)
 
             @product.reload
@@ -1487,7 +1487,7 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "preserves correct s3 key for s3 files containing percent and ampersand" do
-          urls = ["https://s3.amazonaws.com/gumroad-specs/specs/test file %26 & ) %29.txt"]
+          urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test file %26 & ) %29.txt"]
           post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
           expect(response).to be_successful
           product_file = @product.alive_product_files.first
@@ -1495,36 +1495,36 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "saves the files properly" do
-          urls = ["https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png",
-                  "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf"]
+          urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png",
+                  "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"]
           post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
           expect(response).to be_successful
           expect(@product.alive_product_files.count).to eq 2
-          expect(@product.alive_product_files[0].url).to eq "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png"
-          expect(@product.alive_product_files[1].url).to eq "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf"
+          expect(@product.alive_product_files[0].url).to eq "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"
+          expect(@product.alive_product_files[1].url).to eq "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"
         end
 
         it "has pdf filetype" do
-          urls = ["https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png",
-                  "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf"]
+          urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png",
+                  "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"]
           post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
           expect(@product.has_filetype?("pdf")).to be(true)
         end
 
         it "supports deleting and adding files" do
-          @product.product_files << create(:product_file, link: @product, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png")
+          @product.product_files << create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
           @product.save!
 
-          urls = ["https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf"]
+          urls = ["#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"]
           post :update, params: @params.merge!(files: files_data_from_urls(urls)), format: :json
           expect(response).to be_successful
           expect(@product.reload.alive_product_files.count).to eq 1
-          expect(@product.alive_product_files.first.url).to eq "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf"
+          expect(@product.alive_product_files.first.url).to eq "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf"
         end
 
         it "allows 0 files for unpublished product" do
           @product.purchase_disabled_at = Time.current
-          @product.product_files << create(:product_file, link: @product, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png")
+          @product.product_files << create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
           @product.save!
 
           post :update, params: @params.merge!(files: {}), format: :json
@@ -1532,7 +1532,7 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "updates product's rich content when file embed IDs exist in product_rich_content" do
-          urls = %w[https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf]
+          urls = %W[#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png #{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf]
           files_data = files_data_from_urls(urls)
           rich_content = create(:product_rich_content, entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }])
           old_rich_content = rich_content.description
@@ -1559,7 +1559,7 @@ describe LinksController, :vcr, inertia: true do
           version2_new_rich_content_description = [{ "type" => "fileEmbed", "attrs" => { "id" => external_id2, "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]
 
           post :update, params: @params.merge!(
-            files: [{ id: external_id1, url: "https://s3.amazonaws.com/gumroad-specs/attachment/#{external_id1}/original/pencil.png" }, { id: external_id2, url: "https://s3.amazonaws.com/gumroad-specs/attachment/#{external_id2}/original/manual.pdf" }],
+            files: [{ id: external_id1, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/#{external_id1}/original/pencil.png" }, { id: external_id2, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/#{external_id2}/original/manual.pdf" }],
             variants: [{ id: version1.external_id, name: version1.name, rich_content: [{ id: version1_rich_content1.external_id, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content1_updated_description } }, { id: nil, title: "Version 1 - Page 2", description: { type: "doc", content: version1_new_rich_content_description } }] }, { id: version2.external_id, name: version2.name, rich_content: [{ id: nil, title: "Version 2 - Page 1", description: { type: "doc", content: version2_new_rich_content_description } }] }]
           ), format: :json
 
@@ -1978,7 +1978,7 @@ describe LinksController, :vcr, inertia: true do
       end
 
       it "enqueues a RenameProductFileWorker job" do
-        @product.product_files << create(:product_file, link: @product, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png")
+        @product.product_files << create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
         @product.save!
         post :update, params: {
           id: @product.unique_permalink,

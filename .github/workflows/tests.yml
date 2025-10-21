@@ -3,9 +3,9 @@ name: Tests
 on:
   push:
     branches:
-      - '**'
+      - "**"
     tags-ignore:
-      - 'production-*'
+      - "production-*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -178,6 +178,10 @@ jobs:
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             $WEB_REPO:test-${{ github.sha }} \
             docker/ci/wait_on_connection.sh db_test 3306
+
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh minio 9000
         timeout-minutes: 5
 
       - name: Setup test database
@@ -210,8 +214,6 @@ jobs:
             -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
             -e KNAPSACK_PRO_PROJECT_DIR=/app \
             -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT=true \
-            -e S3_DELETER_ACCESS_KEY_ID=${{ secrets.S3_DELETER_ACCESS_KEY_ID }} \
-            -e S3_DELETER_SECRET_ACCESS_KEY=${{ secrets.S3_DELETER_SECRET_ACCESS_KEY }} \
             -e CI=true \
             -e IN_DOCKER=true \
             $WEB_REPO:test-${{ github.sha }} \
@@ -303,6 +305,10 @@ jobs:
           docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             $WEB_REPO:test-${{ github.sha }} \
             docker/ci/wait_on_connection.sh db_test 3306
+
+          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            $WEB_REPO:test-${{ github.sha }} \
+            docker/ci/wait_on_connection.sh minio 9000
         timeout-minutes: 5
       - name: Setup test database
         env:

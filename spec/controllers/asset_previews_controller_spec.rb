@@ -6,7 +6,7 @@ require "shared_examples/authorize_called"
 describe AssetPreviewsController do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
-  let(:s3_url) { "https://s3.amazonaws.com/gumroad-specs/specs/amir.png" }
+  let(:s3_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.png" }
 
   include_context "with user signed in as admin for seller"
 

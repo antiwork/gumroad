@@ -15,7 +15,7 @@ describe GenerateSalesReportJob do
     before do
       @mock_service = double("ExpiringS3FileService")
       allow(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
-      allow(@mock_service).to receive(:perform).and_return("https://gumroad-specs.s3.amazonaws.com/test-url")
+      allow(@mock_service).to receive(:perform).and_return("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/test-url")
     end
 
     before do
@@ -110,7 +110,7 @@ describe GenerateSalesReportJob do
     before do
       @mock_service = double("ExpiringS3FileService")
       allow(ExpiringS3FileService).to receive(:new).and_return(@mock_service)
-      allow(@mock_service).to receive(:perform).and_return("https://gumroad-specs.s3.amazonaws.com/test-url")
+      allow(@mock_service).to receive(:perform).and_return("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/test-url")
     end
 
     before do

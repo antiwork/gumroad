@@ -7,7 +7,7 @@ describe HandleSnsTranscoderEventWorker do
     before do
       @product = create(:product)
       @product.product_files << create(:product_file, link: @product,
-                                                      url: "https://s3.amazonaws.com/gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/test.mp4",
+                                                      url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/files/43a5363194e74e9ee75b6203eaea6705/original/test.mp4",
                                                       filegroup: "video", width: 640, height: 360, bitrate: 3_000)
     end
 

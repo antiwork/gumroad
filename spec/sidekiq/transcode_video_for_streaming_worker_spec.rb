@@ -121,7 +121,7 @@ describe TranscodeVideoForStreamingWorker do
       end
 
       it "transcodes the video when input video key is more than 255 bytes long", :vcr do
-        product_file.update!(url: "https://s3.amazonaws.com/gumroad-specs/specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+audience+without+much+of+a+hassle.mov")
+        product_file.update!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/Identify+Relevant+important+FB+Groups+(Not+just+your+FB+Page)+of+your+geographical+location+area+and+post+OFFERS%2C+social+media+posts+there+also+to+get+Branding+%26+Visibility+%2B+more+likes+on+FB+Page+and+to+get+some+more+traction+from+your+audience+without+much+of+a+hassle.mov")
 
         expect do
           expect do
