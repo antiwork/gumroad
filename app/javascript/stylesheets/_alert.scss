@@ -6,7 +6,7 @@ $alert-icons: (
 );
 
 [role="alert"],
-[role="status"]:not(.override) {
+[role="status"]:not(.tailwind-override) {
   display: grid;
   grid-template-columns: 1fr;
   align-items: start;
