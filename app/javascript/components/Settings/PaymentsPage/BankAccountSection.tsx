@@ -1,9 +1,10 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { FormFieldName, User } from "$app/components/server-components/Settings/PaymentsPage";
 
 export type BankAccount =
@@ -923,7 +924,7 @@ const BankAccountSection = ({
     <>
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <section className="grid gap-8">
-        <fieldset className={cx({ danger: errorFieldNames.has("account_holder_full_name") })}>
+        <fieldset className={classNames({ danger: errorFieldNames.has("account_holder_full_name") })}>
           <legend>
             <label htmlFor={`${uid}-account-holder-full-name`}>Pay to the order of</label>
           </legend>
@@ -942,7 +943,7 @@ const BankAccountSection = ({
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
               {user.country_code === "CA" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("transit_number") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("transit_number") })}>
                     <legend>
                       <label htmlFor={`${uid}-transit-number`}>Transit #</label>
                     </legend>
@@ -957,7 +958,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ transit_number: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("institution_number") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("institution_number") })}>
                     <legend>
                       <label htmlFor={`${uid}-institution-number`}>Institution #</label>
                     </legend>
@@ -974,7 +975,7 @@ const BankAccountSection = ({
                   </fieldset>
                 </>
               ) : user.country_code === "AU" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bsb_number") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bsb_number") })}>
                   <legend>
                     <label htmlFor={`${uid}-bsb-number`}>BSB</label>
                   </legend>
@@ -990,7 +991,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "GB" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("sort_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("sort_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-sort-code`}>Sort code</label>
                   </legend>
@@ -1006,7 +1007,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "IN" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("ifsc") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("ifsc") })}>
                   <legend>
                     <label htmlFor={`${uid}-ifsc`}>IFSC</label>
                   </legend>
@@ -1023,7 +1024,7 @@ const BankAccountSection = ({
                 </fieldset>
               ) : user.country_code === "HK" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("clearing_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("clearing_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-clearing-code`}>Clearing Code</label>
                     </legend>
@@ -1038,7 +1039,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ clearing_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1056,7 +1057,7 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "SG" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1071,7 +1072,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1089,7 +1090,7 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "JP" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1104,7 +1105,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1121,7 +1122,7 @@ const BankAccountSection = ({
                   </fieldset>
                 </>
               ) : user.country_code === "TH" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1137,7 +1138,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "KR" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1153,7 +1154,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "VN" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank Code</label>
                   </legend>
@@ -1169,7 +1170,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "TW" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1185,7 +1186,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "ID" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1201,7 +1202,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1217,7 +1218,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "RS" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1234,7 +1235,7 @@ const BankAccountSection = ({
                 </fieldset>
               ) : user.country_code === "TT" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1249,7 +1250,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1267,7 +1268,7 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "JM" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1282,7 +1283,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1299,7 +1300,7 @@ const BankAccountSection = ({
                   </fieldset>
                 </>
               ) : user.country_code === "UY" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1315,7 +1316,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "AG" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1331,7 +1332,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "LC" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1347,7 +1348,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "TZ" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1363,7 +1364,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "NA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1379,7 +1380,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "PH" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank Identifier Code (BIC)</label>
                   </legend>
@@ -1395,7 +1396,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "ZA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1411,7 +1412,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "KE" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1427,7 +1428,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MY" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1444,7 +1445,7 @@ const BankAccountSection = ({
                 </fieldset>
               ) : user.country_code === "CL" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("account_type") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("account_type") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-account-type`}>Bank account type</label>
                     </legend>
@@ -1465,7 +1466,7 @@ const BankAccountSection = ({
                       </option>
                     </select>
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1483,7 +1484,7 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "CO" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("account_type") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("account_type") })}>
                     <legend>
                       <label htmlFor={`${uid}-account-type`}>Account Type</label>
                     </legend>
@@ -1504,7 +1505,7 @@ const BankAccountSection = ({
                       </option>
                     </select>
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank Code</label>
                     </legend>
@@ -1521,7 +1522,7 @@ const BankAccountSection = ({
                   </fieldset>
                 </>
               ) : user.country_code === "RW" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1537,7 +1538,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "EC" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1553,7 +1554,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "BW" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1569,7 +1570,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "OM" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1585,7 +1586,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "PY" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1601,7 +1602,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MG" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1617,7 +1618,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "GH" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1633,7 +1634,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "US" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("routing_number") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("routing_number") })}>
                   <legend>
                     <label htmlFor={`${uid}-routing-number`}>Routing number</label>
                   </legend>
@@ -1649,7 +1650,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MD" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1665,7 +1666,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "PA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1682,7 +1683,7 @@ const BankAccountSection = ({
                 </fieldset>
               ) : user.country_code === "DO" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1697,7 +1698,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code (optional)</label>
                     </legend>
@@ -1713,7 +1714,7 @@ const BankAccountSection = ({
                 </>
               ) : user.country_code === "UZ" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1728,7 +1729,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1745,7 +1746,7 @@ const BankAccountSection = ({
                   </fieldset>
                 </>
               ) : user.country_code === "BO" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                   </legend>
@@ -1761,7 +1762,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "NG" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1777,7 +1778,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "AM" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1794,7 +1795,7 @@ const BankAccountSection = ({
                 </fieldset>
               ) : user.country_code === "LK" ? (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                     </legend>
@@ -1809,7 +1810,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                     <legend>
                       <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                     </legend>
@@ -1826,7 +1827,7 @@ const BankAccountSection = ({
                   </fieldset>
                 </>
               ) : user.country_code === "ET" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1842,7 +1843,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "BN" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1858,7 +1859,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "GY" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1874,7 +1875,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MK" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1890,7 +1891,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "BD" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>Bank Code</label>
                   </legend>
@@ -1906,7 +1907,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "BT" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1922,7 +1923,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "LA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1938,7 +1939,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MZ" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1954,7 +1955,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "QA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1970,7 +1971,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "GA" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -1986,7 +1987,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "BS" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -2002,7 +2003,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "KH" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -2018,7 +2019,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MN" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -2034,7 +2035,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "DZ" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -2050,7 +2051,7 @@ const BankAccountSection = ({
                   />
                 </fieldset>
               ) : user.country_code === "MO" ? (
-                <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                   <legend>
                     <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                   </legend>
@@ -2069,7 +2070,7 @@ const BankAccountSection = ({
               {user.country_supports_iban ? (
                 <>
                   {user.country_code === "PK" || user.country_code === "TR" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2085,7 +2086,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "GT" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2101,7 +2102,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "BA" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2117,7 +2118,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "EG" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2133,7 +2134,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "SA" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2149,7 +2150,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "MU" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2165,7 +2166,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "KZ" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2181,7 +2182,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "SV" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2197,7 +2198,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "AL" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2213,7 +2214,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "BH" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2229,7 +2230,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "JO" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2246,7 +2247,7 @@ const BankAccountSection = ({
                     </fieldset>
                   ) : user.country_code === "AZ" ? (
                     <>
-                      <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                      <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                         <legend>
                           <label htmlFor={`${uid}-bank-code`}>Bank code</label>
                         </legend>
@@ -2261,7 +2262,7 @@ const BankAccountSection = ({
                           onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                         />
                       </fieldset>
-                      <fieldset className={cx({ danger: errorFieldNames.has("branch_code") })}>
+                      <fieldset className={classNames({ danger: errorFieldNames.has("branch_code") })}>
                         <legend>
                           <label htmlFor={`${uid}-branch-code`}>Branch code</label>
                         </legend>
@@ -2278,7 +2279,7 @@ const BankAccountSection = ({
                       </fieldset>
                     </>
                   ) : user.country_code === "AO" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2294,7 +2295,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "SM" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2310,7 +2311,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : user.country_code === "KW" ? (
-                    <fieldset className={cx({ danger: errorFieldNames.has("bank_code") })}>
+                    <fieldset className={classNames({ danger: errorFieldNames.has("bank_code") })}>
                       <legend>
                         <label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</label>
                       </legend>
@@ -2326,7 +2327,7 @@ const BankAccountSection = ({
                       />
                     </fieldset>
                   ) : null}
-                  <fieldset className={cx({ danger: errorFieldNames.has("account_number") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("account_number") })}>
                     <legend>
                       <label htmlFor={`${uid}-account-number`}>IBAN</label>
                     </legend>
@@ -2340,7 +2341,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ account_number: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("account_number_confirmation") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("account_number_confirmation") })}>
                     <legend>
                       <label htmlFor={`${uid}-confirm-account-number`}>Confirm IBAN</label>
                     </legend>
@@ -2357,7 +2358,7 @@ const BankAccountSection = ({
                 </>
               ) : (
                 <>
-                  <fieldset className={cx({ danger: errorFieldNames.has("account_number") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("account_number") })}>
                     <legend>
                       <label htmlFor={`${uid}-account-number`}>
                         {user.country_code && ["US", "MX", "AR", "PE"].includes(user.country_code)
@@ -2375,7 +2376,7 @@ const BankAccountSection = ({
                       onChange={(evt) => updateBankAccount({ account_number: evt.target.value })}
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: errorFieldNames.has("account_number_confirmation") })}>
+                  <fieldset className={classNames({ danger: errorFieldNames.has("account_number_confirmation") })}>
                     <legend>
                       <label htmlFor={`${uid}-confirm-account-number`}>
                         {user.country_code && ["US", "MX", "AR", "PE"].includes(user.country_code)
@@ -2439,13 +2440,13 @@ const BankAccountSection = ({
         </div>
       </section>
 
-      {hasConnectedStripe ? (
+      {hasConnectedStripe && (
         <section>
-          <div role="alert" className="warning">
+          <InlineAlert variant="warning">
             You cannot change your payout method to bank account because you have a stripe account connected.
-          </div>
+          </InlineAlert>
         </section>
-      ) : null}
+      )}
     </>
   );
 };

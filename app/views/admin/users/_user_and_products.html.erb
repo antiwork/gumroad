@@ -1,7 +1,7 @@
 <%= load_pack("admin_review") %>
 
 <% if user.deleted? %>
-  <div role="alert" class="danger">
+  <div role="alert" class="rounded border border-alert-danger bg-alert-danger/20 px-4 py-2">
     <strong>Account Deleted:</strong> This user account was deleted on <%= format_datetime_with_relative_tooltip(user.deleted_at) %>.
   </div>
 <% end %>
@@ -30,7 +30,7 @@
 
     <div id="products-tab" class="tab-panel">
       <% if products.none? %>
-        <div class="info" role="status"><%= is_affiliate_user ? "No affiliated products." : "No products created." %></div>
+        <div class="rounded border border-alert-info bg-alert-info/20 px-4 py-2" role="status"><%= is_affiliate_user ? "No affiliated products." : "No products created." %></div>
       <% else %>
         <% products.each do |product| %>
           <%= render("admin/links/product", product: product, show_purchases: true, is_affiliate_user: is_affiliate_user, user_id: user.id) %>

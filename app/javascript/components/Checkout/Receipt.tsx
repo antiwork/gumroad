@@ -10,6 +10,7 @@ import { CartItem } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -209,9 +210,9 @@ export const CreateAccountForm = ({
       className="paragraphs"
     >
       {status === "success" ? (
-        <div className="success" role="alert">
+        <InlineAlert variant="success">
           Done! Your account has been created. You'll get a confirmation email shortly.
-        </div>
+        </InlineAlert>
       ) : (
         <>
           <div>

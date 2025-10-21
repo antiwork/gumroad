@@ -20,6 +20,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Creator } from "$app/components/Checkout/cartState";
+import { InlineAlert } from "$app/components/InlineAlert";
 import {
   createReducer,
   StateContext,
@@ -333,16 +334,12 @@ const SubscriptionManager = ({
         <h2>{product.name}</h2>
       </header>
 
-      {!hasSavedCard && subscription.is_gift ? (
-        <div>
-          <div role="alert" className="warning">
-            <div>
-              Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method
-              below to ensure that your {subscriptionEntity} renews.
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {!hasSavedCard && subscription.is_gift && (
+        <InlineAlert variant="warning">
+          Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method below
+          to ensure that your {subscriptionEntity} renews.
+        </InlineAlert>
+      )}
 
       {!subscription.is_installment_plan ? (
         <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr" }}>

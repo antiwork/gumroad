@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { ProfileSection } from "$app/components/ProductEdit/state";
 
@@ -61,12 +62,10 @@ export const ProfileSectionsEditor = ({
           })}
         </fieldset>
       ) : (
-        <div role="status" className="info">
-          <div>
-            You currently have no sections in your profile to display this,{" "}
-            <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
-          </div>
-        </div>
+        <InlineAlert variant="info" role="status">
+          You currently have no sections in your profile to display this,{" "}
+          <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
+        </InlineAlert>
       )}
     </section>
   );

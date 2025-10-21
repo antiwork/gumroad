@@ -265,8 +265,12 @@ const TeamMembersSection = ({
       <header>
         <h2 ref={ref}>Team members</h2>
       </header>
-      {deletedMember ? (
-        <div role="alert" className="success">
+      {deletedMember && (
+        <div
+          role="alert"
+          className="grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded border border-alert-success bg-alert-success/20 px-4 py-2"
+        >
+          <Icon name="solid-check-circle" className="min-h-[1lh] w-[1em] text-alert-success" />
           <div>
             {deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was removed from team members
           </div>
@@ -291,7 +295,7 @@ const TeamMembersSection = ({
             Undo
           </button>
         </div>
-      ) : null}
+      )}
       <table>
         <thead>
           <tr>

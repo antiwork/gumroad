@@ -70,14 +70,18 @@ export const ShareTab = () => {
                 Learn more
               </a>
             </header>
-            {isListedOnDiscover ? (
-              <div role="status" className="success">
+            {isListedOnDiscover && (
+              <div
+                role="status"
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded border border-alert-success bg-alert-success/20 px-4 py-2"
+              >
+                <Icon name="solid-check-circle" className="min-h-[1lh] w-[1em] text-alert-success" />
                 <div>{product.name} is listed on Gumroad Discover.</div>
                 <a className="close" href={discoverLink.toString()}>
                   View
                 </a>
               </div>
-            ) : null}
+            )}
             <div className="paragraphs">
               <p>
                 Gumroad Discover recommends your products to prospective customers for a flat 30% fee on each sale,

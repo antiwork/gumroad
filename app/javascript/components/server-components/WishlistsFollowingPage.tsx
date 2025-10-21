@@ -83,7 +83,7 @@ const WishlistsFollowingPage = ({
                     <div className="actions">
                       <Popover aria-label="Actions" trigger={<Icon name="three-dots" />}>
                         <div role="menu">
-                          <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
+                          <div role="menuitem" className="text-alert-danger" onClick={() => void destroy(wishlist)}>
                             <Icon name="bookmark-x" /> Unfollow
                           </div>
                         </div>

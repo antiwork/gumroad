@@ -7,6 +7,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
@@ -64,11 +65,7 @@ export const TwoFactorAuthenticationPage = ({
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
         <section>
-          {loginState.type === "error" ? (
-            <div role="alert" className="danger">
-              {loginState.message}
-            </div>
-          ) : null}
+          {loginState.type === "error" && <InlineAlert variant="danger">{loginState.message}</InlineAlert>}
           <fieldset>
             <legend>
               <label htmlFor={uid}>Authentication Token</label>

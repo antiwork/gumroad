@@ -27,6 +27,7 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 
 import { NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -431,19 +432,19 @@ export const Product = ({
       <section>
         <section>
           {notForSaleMessage ? (
-            <div role="status" className="warning">
+            <InlineAlert variant="warning" role="status" showIcon={false}>
               {notForSaleMessage}
-            </div>
+            </InlineAlert>
           ) : product.native_type === "commission" ? (
-            <div role="status" className="info">
+            <InlineAlert variant="info" role="status" showIcon={false}>
               Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining balance
               will be charged upon completion.
-            </div>
+            </InlineAlert>
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
               (discountedPriceCents < priceCents || discountCode.discount.minimum_quantity) && !pppDiscounted ? (
-                <div role="status" className="success">
+                <InlineAlert variant="success" role="status" showIcon={false}>
                   <div className="paragraphs">
                     {discountCode.discount.minimum_quantity
                       ? `Get ${
@@ -487,16 +488,16 @@ export const Product = ({
                       />
                     ) : null}
                   </div>
-                </div>
+                </InlineAlert>
               ) : null
             ) : (
-              <div role="status" className="danger">
+              <InlineAlert variant="danger" role="status" showIcon={false}>
                 {discountCode.error_code === "sold_out"
                   ? "Sorry, the discount code you wish to use has expired."
                   : discountCode.error_code === "invalid_offer"
                     ? "Sorry, the discount code you wish to use is invalid."
                     : "Sorry, the discount code you wish to use is inactive."}
-              </div>
+              </InlineAlert>
             )
           ) : null}
           <ConfigurationSelector
@@ -506,41 +507,39 @@ export const Product = ({
             discount={discountCode?.valid ? discountCode.discount : null}
             ref={configurationSelectorRef}
           />
-          {product.ppp_details && pppDiscounted ? (
-            <div role="status" className="info">
-              <div>
-                This product supports purchasing power parity. Because you're located in{" "}
-                <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
-                <b>
-                  {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
-                    style: "percent",
-                  })}
-                </b>{" "}
-                to{" "}
-                <b>
-                  {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
-                    symbolFormat: "long",
-                  })}
-                </b>
-                .
-                {discountCode?.valid
-                  ? " This discount will be applied because it is greater than the offer code discount."
-                  : null}
-              </div>
-            </div>
-          ) : null}
-          {product.free_trial ? (
-            <div role="status" className="info">
+          {product.ppp_details && pppDiscounted && (
+            <InlineAlert variant="info" role="status" showIcon={false}>
+              This product supports purchasing power parity. Because you're located in{" "}
+              <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
+              <b>
+                {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
+                  style: "percent",
+                })}
+              </b>{" "}
+              to{" "}
+              <b>
+                {formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, {
+                  symbolFormat: "long",
+                })}
+              </b>
+              .
+              {discountCode?.valid
+                ? " This discount will be applied because it is greater than the offer code discount."
+                : null}
+            </InlineAlert>
+          )}
+          {product.free_trial && (
+            <InlineAlert variant="info" role="status" showIcon={false}>
               All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
               trial
-            </div>
-          ) : null}
-          {product.duration_in_months ? (
-            <div role="status" className="info">
+            </InlineAlert>
+          )}
+          {product.duration_in_months && (
+            <InlineAlert variant="info" role="status" showIcon={false}>
               This membership will automatically end after{" "}
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
-            </div>
-          ) : null}
+            </InlineAlert>
+          )}
           <CtaButton
             ref={ctaButtonRef}
             product={product}
@@ -553,31 +552,29 @@ export const Product = ({
               if (!validate()) e.preventDefault();
             }}
           />
-          {product.sales_count !== null ? (
-            <div role="status" className="info">
-              <span>
-                <strong>{product.sales_count.toLocaleString()}</strong>{" "}
-                {product.recurrences
-                  ? "member"
-                  : product.preorder
-                    ? "pre-order"
-                    : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
-                      ? "sale"
-                      : "download"}
-                {product.sales_count === 1 ? "" : "s"}
-              </span>
-            </div>
-          ) : null}
-          {product.preorder ? (
-            <div role="status" className="info">
+          {product.sales_count !== null && (
+            <InlineAlert variant="info" role="status" showIcon={false}>
+              <strong>{product.sales_count.toLocaleString()}</strong>{" "}
+              {product.recurrences
+                ? "member"
+                : product.preorder
+                  ? "pre-order"
+                  : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
+                    ? "sale"
+                    : "download"}
+              {product.sales_count === 1 ? "" : "s"}
+            </InlineAlert>
+          )}
+          {product.preorder && (
+            <InlineAlert variant="info" role="status" showIcon={false}>
               Available on {formatDate(parseISO(product.preorder.release_date))}
-            </div>
-          ) : null}
-          {product.streamable ? (
-            <div role="status" className="info">
+            </InlineAlert>
+          )}
+          {product.streamable && (
+            <InlineAlert variant="info" role="status" showIcon={false}>
               Watch link provided after purchase
-            </div>
-          ) : null}
+            </InlineAlert>
+          )}
           {product.summary || product.attributes.length > 0 ? (
             <div className="stack">
               {product.summary ? <p>{product.summary}</p> : null}

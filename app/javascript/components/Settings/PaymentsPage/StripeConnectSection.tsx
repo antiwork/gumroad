@@ -6,6 +6,7 @@ import { request, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 
@@ -83,12 +84,12 @@ const StripeConnectSection = ({
                 Disconnect Stripe account
               </Button>
             </p>
-            {!stripeConnect.stripe_disconnect_allowed ? (
-              <div role="alert" className="warning">
+            {!stripeConnect.stripe_disconnect_allowed && (
+              <InlineAlert variant="warning">
                 You cannot disconnect your Stripe account because it is being used for active subscription or preorder
                 payments.
-              </div>
-            ) : null}
+              </InlineAlert>
+            )}
           </div>
         ) : (
           <div>

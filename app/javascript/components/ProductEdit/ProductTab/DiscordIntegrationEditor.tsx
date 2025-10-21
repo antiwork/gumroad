@@ -5,6 +5,7 @@ import { DISCORD_CLIENT_ID, DISCORD_OAUTH_URL } from "$app/utils/integrations";
 import { startOauthRedirectChecker } from "$app/utils/oauth";
 
 import { Button } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Progress } from "$app/components/Progress";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -121,13 +122,13 @@ export const DiscordIntegrationEditor = ({
               </div>
               {product.variants.length > 0 ? (
                 <>
-                  {product.variants.every(({ integrations }) => !integrations.discord) ? (
-                    <div role="status" className="warning">
+                  {product.variants.every(({ integrations }) => !integrations.discord) && (
+                    <InlineAlert variant="warning" role="status">
                       {product.native_type === "membership"
                         ? "Your integration is not assigned to any tier. Check your tiers' settings."
                         : "Your integration is not assigned to any version. Check your versions' settings."}
-                    </div>
-                  ) : null}
+                    </InlineAlert>
+                  )}
                   <Toggle
                     value={product.variants.every(({ integrations }) => integrations.discord)}
                     onChange={setEnabledForOptions}

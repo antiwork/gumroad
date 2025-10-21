@@ -4,6 +4,7 @@ import { cast, createCast } from "ts-safe-cast";
 import { assertResponseError, request } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { InlineAlert } from "$app/components/InlineAlert";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type UserGuids = { guid: string; user_ids: number[] }[];
@@ -44,9 +45,9 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
             ))}
           </div>
         ) : (
-          <div role="status" className="info">
+          <InlineAlert variant="info" role="status" showIcon={false}>
             No GUIDs found.
-          </div>
+          </InlineAlert>
         )
       ) : (
         <div role="progressbar" style={{ display: "inline-block", width: "0.75em" }} />

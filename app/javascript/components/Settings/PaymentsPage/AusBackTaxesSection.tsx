@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { InlineAlert } from "$app/components/InlineAlert";
 import { TaxesCollectionModal } from "$app/components/server-components/TaxesCollectionModal";
 
 const AusBackTaxesSection = ({
@@ -28,9 +29,7 @@ const AusBackTaxesSection = ({
     <div>
       {opted_in_to_au_backtax ? (
         <div className="paragraphs">
-          <div role="alert" className="success">
-            You've opted in to backtaxes collection.
-          </div>
+          <InlineAlert variant="success">You've opted in to backtaxes collection.</InlineAlert>
           <p>
             From 2018 to 2022, you made {total_amount_to_au} in sales to customers located in Australia. Taxes on these
             sales were not collected at the time.{" "}
@@ -53,9 +52,9 @@ const AusBackTaxesSection = ({
         </div>
       ) : (
         <div className="paragraphs">
-          <div role="alert" className="warning">
+          <InlineAlert variant="warning">
             The Australian government is claiming taxes for your sales between 2018 to 2022.
-          </div>
+          </InlineAlert>
           <p>
             From 2018 to 2022, you made {total_amount_to_au} in sales to customers located in Australia. Taxes on these
             sales were not collected at the time.{" "}

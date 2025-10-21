@@ -1,5 +1,6 @@
-import cx from "classnames";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 import { Link, useLoaderData } from "react-router-dom";
 import { cast } from "ts-safe-cast";
 
@@ -14,6 +15,7 @@ import { isUrlValid } from "$app/utils/url";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { AffiliatesNavigation, Layout } from "$app/components/server-components/AffiliatesPage";
@@ -150,10 +152,10 @@ export const AffiliateSignupForm = () => {
                   </CopyToClipboard>
                 ) : null}
               </div>
-              {enableAffiliateLink ? null : (
-                <div role="alert" className="warning">
+              {!enableAffiliateLink && (
+                <InlineAlert variant="warning">
                   You must enable and set up the commission for at least one product before sharing your affiliate link.
-                </div>
+                </InlineAlert>
               )}
             </fieldset>
           </section>
@@ -236,10 +238,10 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
         <label htmlFor={uid}>{product.name}</label>
       </td>
       <td data-label="Commission">
-        <fieldset className={cx({ danger: invalidAttrs.has("commission") })}>
+        <fieldset className={classNames({ danger: invalidAttrs.has("commission") })}>
           <NumberInput onChange={(value) => onChange({ fee_percent: value ?? 0 })} value={product.fee_percent}>
             {(inputProps) => (
-              <div className={cx("input", { disabled: disabled || !product.enabled })}>
+              <div className={classNames("input", { disabled: disabled || !product.enabled })}>
                 <input
                   type="text"
                   autoComplete="off"
@@ -254,7 +256,7 @@ export const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => 
         </fieldset>
       </td>
       <td data-label="Destination URL (optional)">
-        <fieldset className={cx({ danger: invalidAttrs.has("destination_url") })}>
+        <fieldset className={classNames({ danger: invalidAttrs.has("destination_url") })}>
           <input
             type="text"
             aria-label="destination_url"

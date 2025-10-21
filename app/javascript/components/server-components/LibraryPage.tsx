@@ -115,7 +115,7 @@ export const Card = ({
               <Icon name="archive" />
               &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
             </div>
-            <div className="danger" role="menuitem" onClick={() => onDelete()}>
+            <div className="text-alert-danger" role="menuitem" onClick={() => onDelete()}>
               <Icon name="trash2" />
               &ensp;Delete permanently
             </div>

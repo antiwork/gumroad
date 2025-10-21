@@ -9,6 +9,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout } from "$app/components/Profile/Layout";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -69,7 +70,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
             </div>
           </header>
           {formStatus.type === "success" ? (
-            <div role="alert" className="success">
+            <InlineAlert variant="success">
               <div className="paragraphs">
                 <p>Your request has been submitted! We will send you an email notification when you are approved.</p>
                 {formStatus.requesterHasExistingAccount ? null : (
@@ -80,7 +81,7 @@ const AffiliateRequestPage = ({ creator_profile }: Props) => {
                   </p>
                 )}
               </div>
-            </div>
+            </InlineAlert>
           ) : (
             <>
               {loggedInUser?.name ? null : (

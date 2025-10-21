@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
 
+import { InlineAlert } from "$app/components/InlineAlert";
 import { PayoutCreditCard } from "$app/components/server-components/PayoutPage/CreditCard";
 import { PayoutDebitCardData } from "$app/components/server-components/Settings/PaymentsPage";
 
@@ -23,13 +24,13 @@ const DebitCardSection = ({
     <section className="grid gap-8">
       <PayoutCreditCard saved_card={savedCard} is_form_disabled={isFormDisabled} setDebitCard={setDebitCard} />
     </section>
-    {hasConnectedStripe ? (
+    {hasConnectedStripe && (
       <section>
-        <div role="alert" className="warning">
+        <InlineAlert variant="warning">
           You cannot change your payout method to card because you have a stripe account connected.
-        </div>
+        </InlineAlert>
       </section>
-    ) : null}
+    )}
   </>
 );
 export default DebitCardSection;

@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
 
@@ -13,6 +12,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Preview } from "$app/components/Preview";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -79,7 +79,7 @@ const NotifyAboutProductUpdatesAlert = () => {
 
   return (
     <div
-      className={cx("fixed top-4 right-1/2", isVisible ? "visible" : "invisible")}
+      className={classNames("fixed top-4 right-1/2", isVisible ? "visible" : "invisible")}
       style={{
         transform: `translateX(50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
         transition: "all 0.3s ease-out 0.5s",
@@ -89,7 +89,7 @@ const NotifyAboutProductUpdatesAlert = () => {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div role="alert" className="info">
+      <InlineAlert variant="info">
         <div className="paragraphs">
           Changes saved! Would you like to notify your customers about those changes?
           <div className="flex gap-2">
@@ -114,7 +114,7 @@ const NotifyAboutProductUpdatesAlert = () => {
             </NavigationButton>
           </div>
         </div>
-      </div>
+      </InlineAlert>
     </div>
   );
 };

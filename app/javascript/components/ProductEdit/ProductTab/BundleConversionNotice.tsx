@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Modal } from "$app/components/Modal";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 
@@ -17,7 +18,7 @@ export const BundleConversionNotice = () => {
 
   return (
     <>
-      <div role="status" className="info">
+      <InlineAlert variant="info" role="status">
         <div className="paragraphs">
           <p>
             <strong>Looks like this product could be a great bundle!</strong> With bundles, your customers can get
@@ -30,7 +31,7 @@ export const BundleConversionNotice = () => {
             </Button>
           </div>
         </div>
-      </div>
+      </InlineAlert>
       <Modal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}

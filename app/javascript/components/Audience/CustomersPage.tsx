@@ -1,5 +1,5 @@
 import { DirectUpload, Blob } from "@rails/activestorage";
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
@@ -63,6 +63,7 @@ import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
@@ -791,44 +792,35 @@ const CustomerDrawer = ({
         <button className="close" aria-label="Close" onClick={onClose} />
       </header>
       {commission ? <CommissionStatusPill commission={commission} /> : null}
-      {customer.is_additional_contribution ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Additional amount: </strong>
-            This is an additional contribution, added to a previous purchase of this product.
-          </div>
-        </div>
-      ) : null}
-      {customer.ppp ? (
-        <div role="status" className="info">
-          <div>
-            This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
-            located in <b>{customer.ppp.country}</b>.
-          </div>
-        </div>
-      ) : null}
-      {customer.giftee_email ? (
-        <div role="status" className="info">
+      {customer.is_additional_contribution && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
+          <strong>Additional amount: </strong>
+          This is an additional contribution, added to a previous purchase of this product.
+        </InlineAlert>
+      )}
+      {customer.ppp && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
+          This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
+          located in <b>{customer.ppp.country}</b>.
+        </InlineAlert>
+      )}
+      {customer.giftee_email && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
           {customer.email} purchased this for {customer.giftee_email}.
-        </div>
-      ) : null}
-      {customer.is_preorder ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Pre-order: </strong>
-            This is a pre-order authorization. The customer's card has not been charged yet.
-          </div>
-        </div>
-      ) : null}
-      {customer.affiliate && customer.affiliate.type !== "Collaborator" ? (
-        <div role="status" className="info">
-          <div>
-            <strong>Affiliate: </strong>
-            An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}
-            .
-          </div>
-        </div>
-      ) : null}
+        </InlineAlert>
+      )}
+      {customer.is_preorder && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
+          <strong>Pre-order: </strong>
+          This is a pre-order authorization. The customer's card has not been charged yet.
+        </InlineAlert>
+      )}
+      {customer.affiliate && customer.affiliate.type !== "Collaborator" && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
+          <strong>Affiliate: </strong>
+          An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}.
+        </InlineAlert>
+      )}
       <EmailSection
         label="Email"
         email={customer.email}
@@ -1315,7 +1307,7 @@ const CustomerDrawer = ({
 
 const CommissionStatusPill = ({ commission }: { commission: Commission }) => (
   <span
-    className={cx("pill small", {
+    className={classNames("pill small", {
       primary: commission.status === "completed",
       danger: commission.status === "cancelled",
     })}
@@ -1507,11 +1499,9 @@ const TrackingSection = ({
             </NavigationButton>
           </div>
         ) : (
-          <div>
-            <div role="status" className="success">
-              Shipped
-            </div>
-          </div>
+          <InlineAlert variant="success" role="status" showIcon={false}>
+            Shipped
+          </InlineAlert>
         )
       ) : (
         <div>
@@ -1831,7 +1821,7 @@ const OptionSection = ({
       <section>
         {options.length > 0 ? (
           isEditing ? (
-            <fieldset className={cx({ danger: selectedOptionId.error })}>
+            <fieldset className={classNames({ danger: selectedOptionId.error })}>
               <select
                 value={selectedOptionId.value ?? "None selected"}
                 name={title}
@@ -1890,15 +1880,15 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
             <h3>UTM link</h3>
           </section>
           <div>
-            <small role="status" className="info">
-              <span>
+            <InlineAlert variant="info" role="status" showIcon={false}>
+              <small>
                 This sale was driven by a{" "}
                 <a href={link.utm_url} target="_blank" rel="noreferrer">
                   UTM link
                 </a>
                 .
-              </span>
-            </small>
+              </small>
+            </InlineAlert>
           </div>
         </>
       ) : null}
@@ -2183,7 +2173,7 @@ const RefundForm = ({
 
   return (
     <>
-      <fieldset className={cx({ danger: refundAmountCents.error })}>
+      <fieldset className={classNames({ danger: refundAmountCents.error })}>
         <PriceInput
           cents={refundAmountCents.value}
           onChange={(value) => setRefundAmountCents({ value })}
@@ -2212,16 +2202,16 @@ const RefundForm = ({
             refundButton
           )}
         </div>
-        {showRefundFeeNotice ? (
-          <div role="status" className="info">
+        {showRefundFeeNotice && (
+          <InlineAlert variant="info" role="status" showIcon={false}>
             <p>
               Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
               <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
                 Learn more
               </a>
             </p>
-          </div>
-        ) : null}
+          </InlineAlert>
+        )}
       </fieldset>
       <div style={{ display: "contents" }}>
         <Modal
@@ -2361,13 +2351,13 @@ const ChargesSection = ({
         </section>
       ) : charges.length > 0 ? (
         <>
-          {remainingCharges !== null ? (
+          {remainingCharges !== null && (
             <section>
-              <div role="status" className="info">
+              <InlineAlert variant="info" role="status" showIcon={false}>
                 {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
-              </div>
+              </InlineAlert>
             </section>
-          ) : null}
+          )}
           {charges.map((charge) => (
             <ChargeRow
               key={charge.id}

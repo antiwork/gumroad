@@ -1,6 +1,6 @@
 import { DirectUpload } from "@rails/activestorage";
 import { Content, Editor, JSONContent } from "@tiptap/core";
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
 import { Link, Location, useLoaderData, useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -34,6 +34,7 @@ import {
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
@@ -720,7 +721,7 @@ export const EmailForm = () => {
                   )}
                 </div>
                 <Separator>OR</Separator>
-                <fieldset className={cx({ danger: invalidFields.has("scheduleDate") })}>
+                <fieldset className={classNames({ danger: invalidFields.has("scheduleDate") })}>
                   <DateInput
                     withTime
                     aria-label="Schedule date"
@@ -810,7 +811,7 @@ export const EmailForm = () => {
               </fieldset>
             </div>
             <div>
-              <fieldset role="group" className={cx({ danger: invalidFields.has("channel") })}>
+              <fieldset role="group" className={classNames({ danger: invalidFields.has("channel") })}>
                 <legend>Channel</legend>
                 {hasAudience ? (
                   <label htmlFor={`${uid}-channel_email`}>
@@ -875,19 +876,17 @@ export const EmailForm = () => {
                           {section.name || "Unnamed section"}
                         </label>
                       ))}
-                      {installment?.published_at ? null : (
-                        <div className="info" role="status">
-                          <div>The post will be shown in the selected profile sections once it is published.</div>
-                        </div>
+                      {!installment?.published_at && (
+                        <InlineAlert variant="info" role="status" showIcon={false}>
+                          The post will be shown in the selected profile sections once it is published.
+                        </InlineAlert>
                       )}
                     </>
                   ) : (
-                    <div className="info" role="status">
-                      <div>
-                        You currently have no sections in your profile to display this,{" "}
-                        <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
-                      </div>
-                    </div>
+                    <InlineAlert variant="info" role="status" showIcon={false}>
+                      You currently have no sections in your profile to display this,{" "}
+                      <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
+                    </InlineAlert>
                   )
                 ) : null}
               </fieldset>
@@ -964,7 +963,7 @@ export const EmailForm = () => {
                     gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr)",
                   }}
                 >
-                  <fieldset className={cx({ danger: invalidFields.has("paidMoreThan") })}>
+                  <fieldset className={classNames({ danger: invalidFields.has("paidMoreThan") })}>
                     <legend>
                       <label htmlFor={`${uid}-paid_more_than`}>Paid more than</label>
                     </legend>
@@ -982,7 +981,7 @@ export const EmailForm = () => {
                       placeholder="0"
                     />
                   </fieldset>
-                  <fieldset className={cx({ danger: invalidFields.has("paidLessThan") })}>
+                  <fieldset className={classNames({ danger: invalidFields.has("paidLessThan") })}>
                     <legend>
                       <label htmlFor={`${uid}-paid_less_than`}>Paid less than</label>
                     </legend>
@@ -1011,7 +1010,7 @@ export const EmailForm = () => {
                     gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                   }}
                 >
-                  <fieldset className={cx({ danger: invalidFields.has("afterDate") })}>
+                  <fieldset className={classNames({ danger: invalidFields.has("afterDate") })}>
                     <legend>
                       <label htmlFor={`${uid}-after_date`}>After</label>
                     </legend>
@@ -1029,7 +1028,7 @@ export const EmailForm = () => {
                     />
                     <small>00:00 {context.timezone}</small>
                   </fieldset>
-                  <fieldset className={cx({ danger: invalidFields.has("beforeDate") })}>
+                  <fieldset className={classNames({ danger: invalidFields.has("beforeDate") })}>
                     <legend>
                       <label htmlFor={`${uid}-before_date`}>Before</label>
                     </legend>
@@ -1089,7 +1088,7 @@ export const EmailForm = () => {
           <S3UploadConfigProvider value={s3UploadConfig}>
             <EvaporateUploaderProvider value={evaporateUploader}>
               <div className="grid gap-6">
-                <fieldset className={cx({ danger: invalidFields.has("title") })}>
+                <fieldset className={classNames({ danger: invalidFields.has("title") })}>
                   <input
                     ref={titleRef}
                     type="text"
@@ -1103,7 +1102,7 @@ export const EmailForm = () => {
                   />
                 </fieldset>
                 {isPublished ? (
-                  <fieldset className={cx({ danger: invalidFields.has("publishDate") })}>
+                  <fieldset className={classNames({ danger: invalidFields.has("publishDate") })}>
                     <input
                       ref={publishDateRef}
                       type="date"

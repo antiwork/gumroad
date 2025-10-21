@@ -1,9 +1,11 @@
-import cx from "classnames";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useState, getErrors } from "$app/components/Checkout/payment";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Modal } from "$app/components/Modal";
 
 export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
@@ -39,16 +41,14 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
 
       {gift ? (
         <div className="paragraphs w-full">
-          {isMembership ? (
-            <div role="alert" className="info">
-              <div>
-                Note: Free trials will be charged immediately. The membership will not auto-renew. The recipient must
-                update the payment method to renew the membership.
-              </div>
-            </div>
-          ) : null}
+          {isMembership && (
+            <InlineAlert variant="info">
+              Note: Free trials will be charged immediately. The membership will not auto-renew. The recipient must
+              update the payment method to renew the membership.
+            </InlineAlert>
+          )}
           {gift.type === "normal" ? (
-            <fieldset className={cx({ danger: hasError })}>
+            <fieldset className={classNames({ danger: hasError })}>
               <legend>
                 <label htmlFor={giftEmailUID}>Recipient email</label>
               </legend>
@@ -63,13 +63,13 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
               />
             </fieldset>
           ) : (
-            <div role="alert" className="info">
-              <div>
+            <>
+              <InlineAlert variant="info">
                 {gift.name}'s email has been hidden for privacy purposes.{" "}
                 <button className="underline" onClick={() => setCancellingPresetGift(true)}>
                   Cancel gift option
                 </button>
-              </div>
+              </InlineAlert>
               <Modal
                 open={cancellingPresetGift}
                 onClose={() => setCancellingPresetGift(false)}
@@ -92,7 +92,7 @@ export const GiftForm = ({ isMembership }: { isMembership: boolean }) => {
                 You are about to switch off the gift option. To gift this wishlist again, you will need to return to the
                 wishlist page and select "Gift this product".
               </Modal>
-            </div>
+            </>
           )}
           <fieldset className="w-full">
             <legend>

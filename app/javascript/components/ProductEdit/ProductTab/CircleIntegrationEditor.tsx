@@ -4,6 +4,7 @@ import { CircleCommunity, CircleSpaceGroup, fetchCommunities, fetchSpaceGroups }
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -139,9 +140,9 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : communities.status === "error" ? (
-              <div role="alert" className="danger">
+              <InlineAlert variant="danger">
                 Could not retrieve communities from Circle. Please check your API key.
-              </div>
+              </InlineAlert>
             ) : (
               <fieldset>
                 <legend>
@@ -170,9 +171,7 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : spaceGroups.status === "error" ? (
-              <div role="alert" className="danger">
-                Could not retrieve space groups from Circle. Please try again.
-              </div>
+              <InlineAlert variant="danger">Could not retrieve space groups from Circle. Please try again.</InlineAlert>
             ) : (
               <>
                 <fieldset>
@@ -211,13 +210,13 @@ export const CircleIntegrationEditor = ({
                 ) : null}
                 {product.variants.length > 0 ? (
                   <>
-                    {product.variants.every(({ integrations }) => !integrations.circle) ? (
-                      <div role="status" className="warning">
+                    {product.variants.every(({ integrations }) => !integrations.circle) && (
+                      <InlineAlert variant="warning" role="status">
                         {product.native_type === "membership"
                           ? "Your integration is not assigned to any tier. Check your tiers' settings."
                           : "Your integration is not assigned to any version. Check your versions' settings."}
-                      </div>
-                    ) : null}
+                      </InlineAlert>
+                    )}
                     <Toggle
                       value={product.variants.every(({ integrations }) => integrations.circle)}
                       onChange={setEnabledForOptions}

@@ -5,6 +5,7 @@ import { ProductPurchase, fetchProductPurchases } from "$app/data/admin/admin_pr
 import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
+import { InlineAlert } from "$app/components/InlineAlert";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const AdminProductPurchases = ({
@@ -94,11 +95,11 @@ const AdminProductPurchases = ({
           </div>
         ) : null}
         {isLoading ? <div role="progressbar" style={{ width: "0.75rem" }} /> : null}
-        {purchases?.length === 0 ? (
-          <div className="info" role="status">
+        {purchases?.length === 0 && (
+          <InlineAlert variant="info" role="status" showIcon={false}>
             No purchases have been made.
-          </div>
-        ) : null}
+          </InlineAlert>
+        )}
         {hasMore ? (
           <button className="button small" onClick={() => void loadPurchases()} disabled={isLoading}>
             {isLoading ? "Loading..." : "Load more"}

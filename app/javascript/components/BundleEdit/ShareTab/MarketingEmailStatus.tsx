@@ -5,6 +5,7 @@ import { paramsToQueryString } from "$app/utils/url";
 
 import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { NavigationButton } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { newEmailPath } from "$app/components/server-components/EmailsPage";
 
 export const MarketingEmailStatus = () => {
@@ -28,7 +29,7 @@ export const MarketingEmailStatus = () => {
   };
 
   return (
-    <div role="status" className="info">
+    <InlineAlert variant="info" role="status">
       <div className="paragraphs">
         <strong>
           Your product bundle is ready. Would you like to send an email about this offer to existing customers?
@@ -55,6 +56,6 @@ export const MarketingEmailStatus = () => {
           Draft and send
         </NavigationButton>
       </div>
-    </div>
+    </InlineAlert>
   );
 };

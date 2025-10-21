@@ -110,7 +110,7 @@ const ActionsPopover = ({
             </div>
           ) : null}
           <div
-            className="danger"
+            className="text-alert-danger"
             inert={!product.can_destroy || isDeleting}
             role="menuitem"
             onClick={() => setConfirmingDelete(true)}

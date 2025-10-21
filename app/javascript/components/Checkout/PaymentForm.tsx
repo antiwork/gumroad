@@ -11,8 +11,9 @@ import { DataCollector, PayPal } from "braintree-web";
 import * as BraintreeClient from "braintree-web/client";
 import * as BraintreeDataCollector from "braintree-web/data-collector";
 import * as BraintreePaypal from "braintree-web/paypal";
-import cx from "classnames";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import { preparePaymentRequestPaymentMethodData } from "$app/data/card_payment_method_data";
@@ -33,6 +34,7 @@ import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import {
@@ -136,7 +138,7 @@ const StateInput = () => {
   }
 
   return (
-    <fieldset className={cx({ danger: errors.has("state") })}>
+    <fieldset className={classNames({ danger: errors.has("state") })}>
       <legend>
         <label htmlFor={`${uid}state`}>{stateLabel}</label>
       </legend>
@@ -175,7 +177,7 @@ const ZipCodeInput = () => {
   const label = state.country === "US" || state.country === "PH" ? "ZIP code" : "Postal";
 
   return (
-    <fieldset className={cx({ danger: errors.has("zipCode") })}>
+    <fieldset className={classNames({ danger: errors.has("zipCode") })}>
       <legend>
         <label htmlFor={`${uid}zipCode`}>{label}</label>
       </legend>
@@ -218,13 +220,13 @@ const EmailAddress = () => {
   return (
     <div>
       <div className="paragraphs">
-        <fieldset className={cx({ danger: errors.has("email") })}>
+        <fieldset className={classNames({ danger: errors.has("email") })}>
           <legend>
             <label htmlFor={`${uid}email`}>
               <h4>Email address</h4>
             </label>
           </legend>
-          <div className={cx("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
+          <div className={classNames("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
             <input
               id={`${uid}email`}
               type="email"
@@ -384,7 +386,7 @@ const SharedInputs = () => {
               </div>
             ) : null}
             {showVatIdInput ? (
-              <fieldset className={cx({ danger: errors.has("vatId") })}>
+              <fieldset className={classNames({ danger: errors.has("vatId") })}>
                 <legend>
                   <label htmlFor={`${uid}vatId`}>{vatLabel}</label>
                 </legend>
@@ -503,7 +505,7 @@ const CustomerDetails = () => {
                 </label>
               ) : null}
             </h4>
-            <fieldset className={cx({ danger: errors.has("fullName") })}>
+            <fieldset className={classNames({ danger: errors.has("fullName") })}>
               <legend>
                 <label htmlFor={`${uid}fullName`}>Full name</label>
               </legend>
@@ -517,7 +519,7 @@ const CustomerDetails = () => {
                 onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
               />
             </fieldset>
-            <fieldset className={cx({ danger: errors.has("address") })}>
+            <fieldset className={classNames({ danger: errors.has("address") })}>
               <legend>
                 <label htmlFor={`${uid}address`}>Street address</label>
               </legend>
@@ -532,7 +534,7 @@ const CustomerDetails = () => {
               />
             </fieldset>
             <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
-              <fieldset className={cx({ danger: errors.has("city") })}>
+              <fieldset className={classNames({ danger: errors.has("city") })}>
                 <legend>
                   <label htmlFor={`${uid}city`}>City</label>
                 </legend>
@@ -590,13 +592,11 @@ const CustomerDetails = () => {
           ) : null}
         </div>
       ) : null}
-      {state.warning ? (
-        <div>
-          <div role="status" className="warning">
-            {state.warning}
-          </div>
-        </div>
-      ) : null}
+      {state.warning && (
+        <InlineAlert variant="warning" role="status">
+          {state.warning}
+        </InlineAlert>
+      )}
       {isTippingEnabled(state) ? <TipSelector /> : null}
       {state.products.length === 1 && state.products[0]?.canGift && !state.products[0]?.payInInstallments ? (
         <GiftForm isMembership={state.products[0]?.nativeType === "membership"} />
@@ -786,7 +786,7 @@ const TipSelector = () => {
           </div>
         ) : null}
         {state.tip.type === "fixed" ? (
-          <fieldset className={cx({ danger: errors.has("tip") })}>
+          <fieldset className={classNames({ danger: errors.has("tip") })}>
             <PriceInput
               hasError={errors.has("tip")}
               ariaLabel="Tip"
@@ -1141,7 +1141,7 @@ const StripePaymentRequest = () => {
         button: (
           <PaymentMethodRadio paymentMethod="stripePaymentRequest">
             <span
-              className={cx("brand-icon", {
+              className={classNames("brand-icon", {
                 "brand-icon-google": paymentMethods.googlePay,
                 "brand-icon-apple": paymentMethods.applePay,
               })}
@@ -1203,15 +1203,13 @@ export const PaymentForm = ({
   }, [state.status.type]);
 
   return (
-    <div ref={paymentFormRef} className={cx("stack", className)} aria-label="Payment form">
-      {isTestPurchase ? (
-        <div>
-          <div role="alert" className="info">
-            This will be a test purchase as you are the creator of at least one of the products. Your payment method
-            will not be charged.
-          </div>
-        </div>
-      ) : null}
+    <div ref={paymentFormRef} className={classNames("stack", className)} aria-label="Payment form">
+      {isTestPurchase && (
+        <InlineAlert variant="info">
+          This will be a test purchase as you are the creator of at least one of the products. Your payment method will
+          not be charged.
+        </InlineAlert>
+      )}
       <EmailAddress />
       {!isFreePurchase ? (
         <>
@@ -1227,13 +1225,7 @@ export const PaymentForm = ({
               ) : null}
             </div>
           </div>
-          {notice ? (
-            <div>
-              <div role="alert" className="info">
-                {notice}
-              </div>
-            </div>
-          ) : null}
+          {notice && <InlineAlert variant="info">{notice}</InlineAlert>}
           <CreditCard />
         </>
       ) : null}

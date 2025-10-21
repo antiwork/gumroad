@@ -9,6 +9,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
@@ -160,8 +161,8 @@ export const ShareSection = ({
           </div>
         </Popover>
       </div>
-      {saveState.type === "success" ? (
-        <div role="alert" className="success">
+      {saveState.type === "success" && (
+        <InlineAlert variant="success">
           {saveState.newlyCreated ? (
             <span>
               Wishlist created! <a href={Routes.wishlists_url()}>Edit it here.</a>
@@ -169,8 +170,8 @@ export const ShareSection = ({
           ) : (
             "Added to wishlist!"
           )}
-        </div>
-      ) : null}
+        </InlineAlert>
+      )}
     </>
   );
 };

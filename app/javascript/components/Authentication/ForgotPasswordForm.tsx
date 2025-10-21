@@ -5,6 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -35,11 +36,7 @@ export const ForgotPasswordForm = ({ onClose }: { onClose: () => void }) => {
         <span>or</span>
       </Separator>
       <section>
-        {saveState.type === "error" ? (
-          <div role="alert" className="danger">
-            {saveState.message}
-          </div>
-        ) : null}
+        {saveState.type === "error" && <InlineAlert variant="danger">{saveState.message}</InlineAlert>}
         <fieldset>
           <legend>
             <label htmlFor={uid}>Email to send reset instructions to</label>

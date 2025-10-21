@@ -9,6 +9,7 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
 import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecorder";
@@ -316,9 +317,9 @@ export const ReviewForm = React.forwardRef<
   );
 
   const disabledStatusWarning = disabledStatus && (
-    <div role="status" className="warning">
+    <InlineAlert variant="warning" role="status">
       {disabledStatus}
-    </div>
+    </InlineAlert>
   );
 
   return (

@@ -1,4 +1,4 @@
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
 import { is } from "ts-safe-cast";
@@ -423,7 +423,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                               </div>
                               <div
                                 role="menuitem"
-                                className="danger"
+                                className="text-alert-danger"
                                 inert={!offerCode.can_update || isLoading}
                                 onClick={asyncVoid(async (e) => {
                                   e.stopPropagation();
@@ -844,7 +844,7 @@ const Form = ({
               </div>
             </div>
           </header>
-          <fieldset className={cx({ danger: name.error })}>
+          <fieldset className={classNames({ danger: name.error })}>
             <legend>
               <label htmlFor={`${uid}name`}>Name</label>
             </legend>
@@ -858,7 +858,7 @@ const Form = ({
               aria-invalid={name.error}
             />
           </fieldset>
-          <fieldset className={cx({ danger: code.error })}>
+          <fieldset className={classNames({ danger: code.error })}>
             <legend>
               <label htmlFor={`${uid}code`}>Discount code</label>
             </legend>
@@ -881,7 +881,7 @@ const Form = ({
               </Button>
             </div>
           </fieldset>
-          <fieldset className={cx({ danger: selectedProductIds.error })}>
+          <fieldset className={classNames({ danger: selectedProductIds.error })}>
             <legend>
               <label htmlFor={`${uid}products`}>Products</label>
             </legend>
@@ -983,7 +983,7 @@ const Form = ({
               }
             >
               <div className="dropdown">
-                <fieldset className={cx({ danger: maxQuantity.error })}>
+                <fieldset className={classNames({ danger: maxQuantity.error })}>
                   <legend>
                     <label htmlFor={`${uid}quantity`}>Quantity</label>
                   </legend>
@@ -1044,7 +1044,7 @@ const Form = ({
                     No end date
                   </label>
                 </fieldset>
-                <fieldset className={cx({ danger: expiresAt.error })}>
+                <fieldset className={classNames({ danger: expiresAt.error })}>
                   <legend>
                     <label htmlFor={`${uid}expiresAt`}>Valid until</label>
                   </legend>
@@ -1077,7 +1077,7 @@ const Form = ({
               }
             >
               <div className="dropdown">
-                <fieldset className={cx({ danger: minimumAmount.error })}>
+                <fieldset className={classNames({ danger: minimumAmount.error })}>
                   <legend>
                     <label htmlFor={`${uid}minimumAmount`}>Minimum amount</label>
                   </legend>
@@ -1108,7 +1108,7 @@ const Form = ({
               }
             >
               <div className="dropdown">
-                <fieldset className={cx({ danger: minimumQuantity.error })}>
+                <fieldset className={classNames({ danger: minimumQuantity.error })}>
                   <legend>
                     <label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</label>
                   </legend>

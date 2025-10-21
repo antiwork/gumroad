@@ -1,4 +1,4 @@
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import {
   addMinutes,
   compareAsc,
@@ -33,6 +33,7 @@ import { recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recu
 
 import { Breaklines } from "$app/components/Breaklines";
 import { Button } from "$app/components/Button";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
@@ -55,7 +56,7 @@ const PWYWInput = React.forwardRef<
   const uid = React.useId();
 
   return (
-    <fieldset className={cx({ danger: hasError })}>
+    <fieldset className={classNames({ danger: hasError })}>
       {!hideLabel ? (
         <legend>
           <label htmlFor={uid}>Name a fair price:</label>
@@ -238,11 +239,11 @@ export const OptionRadioButton = ({
       itemScope
       style={recurrence ? { flexDirection: "column" } : undefined}
     >
-      {status ? (
-        <div role="status" className="info">
+      {status && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
           {status}
-        </div>
-      ) : null}
+        </InlineAlert>
+      )}
       {hidePrice ? null : (
         <div className="pill">
           {discountedPriceCents < priceCents ? (
@@ -394,9 +395,9 @@ const CallDateAndTimeSelector = ({
 
   if (firstAvailableStartTime === null && !isLoading) {
     return (
-      <div role="status" className="warning">
+      <InlineAlert variant="warning" role="status" showIcon={false}>
         {product.options.length > 1 ? "There are no available times for this option." : "There are no available times."}
-      </div>
+      </InlineAlert>
     );
   }
 

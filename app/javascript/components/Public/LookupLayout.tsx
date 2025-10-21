@@ -1,9 +1,11 @@
-import cx from "classnames"
 import React, { useEffect, useRef } from "react"
+
+import { classNames } from "$app/utils/classNames"
 
 import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
 import { assertResponseError } from "$app/utils/request"
 
+import { InlineAlert } from "$app/components/InlineAlert"
 import { showAlert } from "$app/components/server-components/Alert"
 
 const LookupLayout = ({ children, title, type }: {
@@ -87,11 +89,11 @@ const LookupLayout = ({ children, title, type }: {
         {success !== null && (
           <div ref={messageRef} style={{ marginBottom: "var(--spacer-7)" }}>
             {success ? (
-              <div className="success" role="status">
+              <InlineAlert variant="success" role="status">
                 We were able to find a match! It has been emailed to you. Sorry about the inconvenience.
-              </div>
+              </InlineAlert>
             ) : (
-              <div className="warning" role="status">
+              <InlineAlert variant="warning" role="status">
                 <div>
                   <p>We weren't able to find a match. Email <a href="mailto:support@gumroad.com">support@gumroad.com</a> with more information, and we'll respond promptly with any information we find about the {type}.</p>
                   {type === "charge" ? (
@@ -107,7 +109,7 @@ const LookupLayout = ({ children, title, type }: {
                     </li>
                   </ul>) : null}
                 </div>
-              </div>
+              </InlineAlert>
             )}
           </div>
         )}
@@ -120,7 +122,7 @@ const LookupLayout = ({ children, title, type }: {
               <h2>{type === "charge" ? "What was I charged for?" : "Look up your license key"}</h2>
               {type === "charge" ? "Fill out this form and we'll send you a receipt for your charge." : "We'll send you a receipt including your license key."}
             </header>
-            <fieldset className={cx({ danger: email.error })}>
+            <fieldset className={classNames({ danger: email.error })}>
               <label htmlFor="email">What email address did you use?</label>
               <input
                 id="email"
@@ -132,7 +134,7 @@ const LookupLayout = ({ children, title, type }: {
               />
             </fieldset>
             {type === "charge" && (
-              <fieldset className={cx({ danger: last4.error })}>
+              <fieldset className={classNames({ danger: last4.error })}>
                 <label htmlFor="cc_last_four">Last 4 digits of your card</label>
                 <input
                   id="cc_last_four"
@@ -163,7 +165,7 @@ const LookupLayout = ({ children, title, type }: {
               <h2>Did you pay with PayPal?</h2>
               Enter the invoice ID from PayPal's email receipt and we'll look it up.
             </header>
-            <fieldset className={cx({ danger: invoiceId.error })}>
+            <fieldset className={classNames({ danger: invoiceId.error })}>
               <label htmlFor="invoice_id">PayPal Invoice ID</label>
               <input
                 id="invoice_id"

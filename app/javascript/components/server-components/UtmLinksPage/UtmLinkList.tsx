@@ -229,7 +229,7 @@ const UtmLinkList = () => {
                           &ensp;Duplicate
                         </div>
                         <div
-                          className="danger"
+                          className="text-alert-danger"
                           role="menuitem"
                           onClick={() =>
                             setDeletingUtmLink({ id: link.id, title: link.title, state: "delete-confirmation" })

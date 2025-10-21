@@ -77,7 +77,7 @@ export const PageTab = ({
               <div role="menuitem" onClick={() => setRenaming(true)}>
                 <Icon name="pencil" /> Rename
               </div>
-              <div className="danger" role="menuitem" onClick={onDelete}>
+              <div className="text-alert-danger" role="menuitem" onClick={onDelete}>
                 <Icon name="trash2" /> Delete
               </div>
             </div>

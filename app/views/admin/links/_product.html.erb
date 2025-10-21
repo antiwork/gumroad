@@ -36,7 +36,7 @@
     <div class="js-product-description with-rich-text">
       <% product_description = product.html_safe_description %>
       <% if strip_tags(product_description).blank? %>
-        <div class="info" role="status">No description provided.</div>
+        <div class="rounded border border-alert-info bg-alert-info/20 px-4 py-2" role="status">No description provided.</div>
       <% else %>
         <%= product_description %>
       <% end %>
@@ -51,7 +51,7 @@
     <% if product.filegroup %>
       <%= react_component "AdminProductAttributesAndInfo", props: { productData: ProductPresenter.new(product: product).admin_info }, prerender: true %>
     <% else %>
-      <div class="info" role="status">No additional details.</div>
+      <div class="rounded border border-alert-info bg-alert-info/20 px-4 py-2" role="status">No additional details.</div>
     <% end %>
   </details>
 

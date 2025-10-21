@@ -14,6 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Popover } from "$app/components/Popover";
 import { Card } from "$app/components/Product/Card";
 import {
@@ -525,11 +526,7 @@ const CartItemComponent = ({
                         }
                         showInstallmentPlan
                       />
-                      {error ? (
-                        <div role="alert" className="danger">
-                          {error}
-                        </div>
-                      ) : null}
+                      {error && <InlineAlert variant="danger">{error}</InlineAlert>}
                       <Button color="accent" onClick={saveChanges}>
                         Save changes
                       </Button>

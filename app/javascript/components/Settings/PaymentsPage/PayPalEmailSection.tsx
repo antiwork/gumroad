@@ -1,6 +1,8 @@
-import cx from "classnames";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
+
+import { InlineAlert } from "$app/components/InlineAlert";
 import { FormFieldName, PayoutMethod } from "$app/components/server-components/Settings/PaymentsPage";
 
 const PayPalEmailSection = ({
@@ -29,11 +31,11 @@ const PayPalEmailSection = ({
   const uid = React.useId();
   return (
     <section className="grid gap-8">
-      {showPayPalPayoutsFeeNote ? (
-        <div className="info" role="status">
+      {showPayPalPayoutsFeeNote && (
+        <InlineAlert variant="info" role="status" showIcon={false}>
           PayPal payouts are subject to a 2% processing fee.
-        </div>
-      ) : null}
+        </InlineAlert>
+      )}
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <div>
         {countrySupportsNativePayouts && !isFormDisabled ? (
@@ -41,7 +43,7 @@ const PayPalEmailSection = ({
             Switch to direct deposit
           </button>
         ) : null}
-        <fieldset className={cx({ danger: errorFieldNames.has("paypal_email_address") })}>
+        <fieldset className={classNames(errorFieldNames.has("paypal_email_address") && "danger")}>
           <legend>
             <label htmlFor={`${uid}-paypal-email`}>PayPal Email</label>
           </legend>
@@ -55,21 +57,19 @@ const PayPalEmailSection = ({
             onChange={(evt) => setPaypalEmailAddress(evt.target.value)}
           />
         </fieldset>
-        {hasConnectedStripe ? (
-          <div role="alert" className="warning">
+        {hasConnectedStripe && (
+          <InlineAlert variant="warning">
             You cannot change your payout method to PayPal because you have a stripe account connected.
-          </div>
-        ) : null}
+          </InlineAlert>
+        )}
       </div>
-      {user.country_code === "UA" ? (
-        <div role="alert" className="warning">
-          <div>
-            PayPal blocks commercial payments to Ukraine, which will prevent payouts to your PayPal account until
-            further notice. Your balance will remain in your Gumroad account until this restriction is lifted or payouts
-            are directed to a PayPal account outside of Ukraine.
-          </div>
-        </div>
-      ) : null}
+      {user.country_code === "UA" && (
+        <InlineAlert variant="warning">
+          PayPal blocks commercial payments to Ukraine, which will prevent payouts to your PayPal account until further
+          notice. Your balance will remain in your Gumroad account until this restriction is lifted or payouts are
+          directed to a PayPal account outside of Ukraine.
+        </InlineAlert>
+      )}
     </section>
   );
 };

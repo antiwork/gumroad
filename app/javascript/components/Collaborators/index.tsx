@@ -30,6 +30,7 @@ import CollaboratorForm from "$app/components/Collaborators/Form";
 import { IncomingCollaborators } from "$app/components/Collaborators/IncomingCollaborators";
 import { Layout } from "$app/components/Collaborators/Layout";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import Placeholder from "$app/components/ui/Placeholder";
@@ -90,11 +91,11 @@ const CollaboratorDetails = ({
         <button className="close" aria-label="Close" onClick={onClose} />
       </header>
 
-      {selectedCollaborator.setup_incomplete ? (
-        <div role="alert" className="warning">
+      {selectedCollaborator.setup_incomplete && (
+        <InlineAlert variant="warning">
           Collaborators won't receive their cut until they set up a payout account in their Gumroad settings.
-        </div>
-      ) : null}
+        </InlineAlert>
+      )}
 
       <section className="stack">
         <h3>Email</h3>

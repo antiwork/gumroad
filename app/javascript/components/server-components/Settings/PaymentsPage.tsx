@@ -1,5 +1,5 @@
 import { StripeCardElement } from "@stripe/stripe-js";
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast, createCast } from "ts-safe-cast";
@@ -14,6 +14,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { PriceInput } from "$app/components/PriceInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/server-components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
@@ -886,9 +887,9 @@ const PaymentsPage = (props: Props) => {
             <StripeConnectEmbeddedNotificationBanner />
           ) : (
             <div className="flex flex-col">
-              <div role="status" className="success">
+              <InlineAlert variant="success" role="status" showIcon={false}>
                 Your account details have been verified!
-              </div>
+              </InlineAlert>
               <div className="mt-4 flex items-center">
                 <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
                 <span className="text-muted text-sm">
@@ -917,17 +918,17 @@ const PaymentsPage = (props: Props) => {
           />
         ) : null}
 
-        {errorMessage ? (
+        {errorMessage && (
           <div className="mb-12 px-8">
-            <div role="status" className="danger">
+            <InlineAlert variant="danger" role="status" showIcon={false}>
               {errorMessage.code === "stripe_error" ? (
                 <div>Your account could not be updated due to an error with Stripe.</div>
               ) : (
                 errorMessage.message
               )}
-            </div>
+            </InlineAlert>
           </div>
-        ) : null}
+        )}
         <section className="p-4! md:p-8!">
           <header>
             <h2>Payout schedule</h2>
@@ -951,20 +952,18 @@ const PaymentsPage = (props: Props) => {
                 payouts.
               </small>
             </fieldset>
-            {payoutFrequency === "daily" && props.payout_frequency_daily_supported ? (
-              <div role="status" className="info">
-                <div>
-                  Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
-                  <b>3% fee</b>.
-                </div>
-              </div>
-            ) : null}
-            {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
-              <div role="status" className="danger">
-                <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
-              </div>
+            {payoutFrequency === "daily" && props.payout_frequency_daily_supported && (
+              <InlineAlert variant="info" role="status" showIcon={false}>
+                Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
+                <b>3% fee</b>.
+              </InlineAlert>
             )}
-            <fieldset className={cx({ danger: payoutThresholdCents.error })}>
+            {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
+              <InlineAlert variant="danger" role="status" showIcon={false}>
+                Your account is no longer eligible for daily payouts. Please update your schedule.
+              </InlineAlert>
+            )}
+            <fieldset className={classNames({ danger: payoutThresholdCents.error })}>
               <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>
               <PriceInput
                 id="payout_threshold_cents"

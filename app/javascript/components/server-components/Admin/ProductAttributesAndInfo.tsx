@@ -3,6 +3,7 @@ import { createCast } from "ts-safe-cast";
 
 import { register } from "$app/utils/serverComponentUtil";
 
+import { InlineAlert } from "$app/components/InlineAlert";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 type Props = {
@@ -45,34 +46,32 @@ export const ProductAttributesAndInfo = ({ productData }: Props) => {
 
   return hasNoAttributes && preorder == null && !should_show_sales_count && !has_stream_only_files ? null : (
     <div className="product-info grid gap-4">
-      {should_show_sales_count ? (
-        <div role="alert" className="info">
-          <div>
-            <strong>{sales_count.toLocaleString(userAgentInfo.locale)}</strong> {salesUnit}
-            {sales_count === 1 ? "" : "s"}
-          </div>
-        </div>
-      ) : null}
-      {preorder != null ? (
+      {should_show_sales_count && (
+        <InlineAlert variant="info" showIcon={false}>
+          <strong>{sales_count.toLocaleString(userAgentInfo.locale)}</strong> {salesUnit}
+          {sales_count === 1 ? "" : "s"}
+        </InlineAlert>
+      )}
+      {preorder != null && (
         <>
-          <div role="alert" className="info">
+          <InlineAlert variant="info" showIcon={false}>
             Available on {preorder.release_date_fmt}
-          </div>
+          </InlineAlert>
           <h5 className="product-info-preorder-indicator legacy-only">Available on {preorder.release_date_fmt}</h5>
         </>
-      ) : null}
+      )}
 
-      {has_stream_only_files ? (
+      {has_stream_only_files && (
         <>
-          <div role="alert" className="info">
+          <InlineAlert variant="info" showIcon={false}>
             Watch link provided after purchase
-          </div>
+          </InlineAlert>
           <div className="product-info-stream-only-indicator legacy-only">
             <h5>Available to stream instantly</h5>
             <small>Watch link provided after purchase</small>
           </div>
         </>
-      ) : null}
+      )}
       {hasNoAttributes ? null : (
         <div className="stack">
           {custom_summary ? (

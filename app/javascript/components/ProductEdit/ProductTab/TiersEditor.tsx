@@ -1,7 +1,8 @@
 import { Editor } from "@tiptap/core";
-import cx from "classnames";
 import { format } from "date-fns";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 
 import { sendSamplePriceChangeEmail } from "$app/data/membership_tiers";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
@@ -18,6 +19,7 @@ import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
@@ -426,11 +428,11 @@ You can modify or cancel your membership at any time.`;
     >
       <div className="dropdown">
         <div className="grid gap-6">
-          {initialEffectiveDate ? (
-            <div role="alert" className="warning">
+          {initialEffectiveDate && (
+            <InlineAlert variant="warning">
               You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}
-            </div>
-          ) : null}
+            </InlineAlert>
+          )}
           <div>
             <strong>
               We'll send an email reminder to your active members stating the new price 7 days prior to their next
@@ -460,7 +462,7 @@ You can modify or cancel your membership at any time.`;
               Get a sample
             </button>
           </div>
-          <fieldset className={cx({ danger: effectiveDate.error })}>
+          <fieldset className={classNames({ danger: effectiveDate.error })}>
             <legend>
               <label htmlFor={`${uid}-date`}>Effective date for existing customers</label>
             </legend>

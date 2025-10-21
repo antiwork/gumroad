@@ -1,4 +1,4 @@
-import cx from "classnames";
+import { classNames } from "$app/utils/classNames";
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
@@ -7,6 +7,7 @@ import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
+import { InlineAlert } from "$app/components/InlineAlert";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
 import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
@@ -173,20 +174,20 @@ const GettingStartedItem = ({
     <div className="flex w-full items-center gap-2">
       <IconComponent isChecked={completed} width={36} height={36} className="flex-none" />
       <span className="mb-1 flex-1 leading-tight font-semibold">{name}</span>
-      <Icon name={iconName} className={cx("flex-none", iconClasses)} />
+      <Icon name={iconName} className={classNames("flex-none", iconClasses)} />
     </div>
   ) : (
     <div className="my-3 flex flex-col items-center gap-1">
       <IconComponent isChecked={completed} width={60} height={60} />
       <span className="leading-tight font-semibold">{name}</span>
-      <Icon name={iconName} className={cx("absolute top-2 right-2", iconClasses)} />
+      <Icon name={iconName} className={classNames("absolute top-2 right-2", iconClasses)} />
       <p className="text-sm opacity-80">{description}</p>
     </div>
   );
 
   if (completed) {
     return (
-      <div className={cx(commonClasses, "button filled cursor-default!")} data-status="completed">
+      <div className={classNames(commonClasses, "button filled cursor-default!")} data-status="completed">
         {content}
       </div>
     );
@@ -319,21 +320,17 @@ export const DashboardPage = ({
         actions={Object.keys(tax_forms).length > 0 && <DownloadTaxFormsPopover taxForms={tax_forms} />}
         className="border-b-0 sm:border-b"
       />
-      {stripe_verification_message ? (
-        <div role="alert" className="warning">
-          <div>
-            {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
-          </div>
-        </div>
-      ) : null}
-      {show_1099_download_notice ? (
-        <div role="alert" className="info">
-          <div>
-            Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>.
-          </div>
-        </div>
-      ) : null}
+      {stripe_verification_message && (
+        <InlineAlert variant="warning">
+          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
+        </InlineAlert>
+      )}
+      {show_1099_download_notice && (
+        <InlineAlert variant="info">
+          Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
+          <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>.
+        </InlineAlert>
+      )}
 
       {loggedInUser?.policies.settings_payments_user.show
         ? Object.values(getting_started_stats).some((v) => !v) && (
