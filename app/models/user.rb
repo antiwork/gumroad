@@ -663,10 +663,6 @@ class User < ApplicationRecord
     to_email_domain(form_email)
   end
 
-  def form_email_domain
-    Mail::Address.new(form_email).domain.presence
-  end
-
   def currency_symbol
     symbol_for(currency_type)
   end
