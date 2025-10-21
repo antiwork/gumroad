@@ -104,7 +104,7 @@ export const WidgetsPage = ({ display_product_select, products, affiliated_produ
               <legend>
                 <label htmlFor={followFormEmbedUID}>Subscribe form embed code</label>
                 <CopyToClipboard text={followFormEmbedHTML} copyTooltip="Copy to Clipboard" tooltipPosition="top">
-                  <button type="button" className="link">
+                  <button type="button" className="font-normal underline">
                     Copy embed code
                   </button>
                 </CopyToClipboard>

@@ -36,7 +36,7 @@ export const CreditCardInput = ({
       <legend>
         <label>Card information</label>
         {savedCreditCard ? (
-          <button className="link" disabled={disabled} onClick={() => setUseSavedCard(!useSavedCard)}>
+          <button className="font-normal underline" disabled={disabled} onClick={() => setUseSavedCard(!useSavedCard)}>
             {useSavedCard ? "Use a different card?" : "Use saved card"}
           </button>
         ) : null}
