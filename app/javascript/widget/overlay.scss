@@ -13,26 +13,3 @@ a.gumroad-button {
   $icons: [];
   @import "../stylesheets/icons";
 }
-
-@keyframes gumroad-spinner {
-  from {
-    rotate: 0;
-  }
-
-  to {
-    rotate: 360deg;
-  }
-}
-
-.gumroad-progress-bar {
-  width: size(5);
-  aspect-ratio: 1;
-  background: url("~images/loading-rainbow.svg") no-repeat;
-  background-size: cover;
-  animation: gumroad-spinner 1s infinite linear;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-  display: none;
-}

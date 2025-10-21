@@ -4,12 +4,6 @@ import { classNames } from "$app/utils/classNames";
 
 import { Icon } from "$app/components/Icons";
 
-declare module "react" {
-  export interface CSSProperties {
-    "--progress"?: number | string;
-  }
-}
-
 export const ProgressPie = ({
   progress,
   className,
