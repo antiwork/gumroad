@@ -20,17 +20,17 @@ export const ProgressPie = ({
   Z`;
   return (
     <div
-      className={classNames("w-8 rounded-full border", className)}
+      className={classNames("rounded-full border border-border", className)}
       role="progressbar"
       aria-valuenow={Math.round(progress * 10000) / 100}
       {...props}
     >
       {progress === 1 ? (
-        <div className="rounded-full bg-accent p-1 text-center">
+        <div className="rounded-full bg-accent p-1 text-2xl/none text-accent-foreground">
           <Icon name="outline-check" />
         </div>
       ) : (
-        <svg viewBox="0 0 1 1">
+        <svg viewBox="0 0 1 1" className="w-8">
           <path className="fill-accent" d={pathString} />
         </svg>
       )}
