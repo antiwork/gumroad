@@ -24,7 +24,6 @@ type Errors = {
 const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Props) => {
   const defaultStartDate = React.useMemo(() => subMonths(new Date(), 1).toISOString().split("T")[0], []);
   const defaultEndDate = React.useMemo(() => new Date().toISOString().split("T")[0], []);
-  const defaultSalesType = React.useMemo(() => sales_types[0]?.[0], []);
 
   const form = useForm({
     authenticity_token: authenticityToken,
@@ -32,7 +31,7 @@ const AdminSalesReportsForm = ({ countries, sales_types, authenticityToken }: Pr
       country_code: "",
       start_date: defaultStartDate,
       end_date: defaultEndDate,
-      sales_type: defaultSalesType,
+      sales_type: "",
     },
   });
 
