@@ -17,6 +17,7 @@ import {
   Ratings,
   RatingsWithPercentages,
 } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { formatDate } from "$app/utils/date";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
@@ -355,7 +356,9 @@ export const Product = ({
               )}
             </div>
           ) : null}
-          {product.ratings != null && product.ratings.count > 0 ? <RatingsSummary ratings={product.ratings} /> : null}
+          {product.ratings != null && product.ratings.count > 0 ? (
+            <RatingsSummary className="max-sm:col-span-full" ratings={product.ratings} />
+          ) : null}
         </section>
         {purchase !== null ? (
           <ExistingPurchaseStack
@@ -793,8 +796,8 @@ const Review = ({
   </>
 );
 
-export const RatingsSummary = ({ ratings }: { ratings: Ratings }) => (
-  <div className="flex shrink-0 items-center gap-1">
+export const RatingsSummary = ({ ratings, className }: { ratings: Ratings; className?: string }) => (
+  <div className={classNames("flex shrink-0 items-center gap-1", className)}>
     <RatingStars rating={ratings.average} />
     <span className="rating-number">
       {ratings.count} {ratings.count === 1 ? "rating" : "ratings"}

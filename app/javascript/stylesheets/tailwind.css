@@ -28,6 +28,7 @@
   --color-foreground: rgb(var(--color));
   --color-border: rgb(var(--color) / var(--border-alpha));
   --color-accent: rgb(var(--accent));
+  --color-accent-foreground: rgb(var(--contrast-accent));
   --color-muted-foreground: rgb(var(--color) / var(--gray-1));
 
   --shadow: 0.25rem 0.25rem 0 currentColor;

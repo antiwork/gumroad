@@ -15,7 +15,6 @@ import {
   subMinutes,
 } from "date-fns";
 import * as React from "react";
-import Calendar from "react-calendar";
 
 import { CallAvailability, getRemainingCallAvailabilities } from "$app/data/call_availabilities";
 import { Discount } from "$app/parsers/checkout";
@@ -38,6 +37,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Calendar } from "$app/components/ui/Calendar";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const PWYWInput = React.forwardRef<
@@ -284,8 +284,6 @@ const getClientTimeZone = () => ({
 const roundToNearestDisplayTime = (time: Date) =>
   roundToNearestMinutes(time, { nearestTo: 30, roundingMethod: "ceil" });
 
-const forceUnicodeRenderAsText = (unicode: string) => `${unicode}\u{FE0E}`;
-
 const CallDateAndTimeSelector = ({
   product,
   selectedOption,
@@ -302,7 +300,7 @@ const CallDateAndTimeSelector = ({
 
   const clientTimeZone = getClientTimeZone();
   const callDurationInMinutes = selectedOption.duration_in_minutes ?? 0;
-  const selectedStartTime = rawSelectedStartTime ? new Date(rawSelectedStartTime) : null;
+  const selectedStartTime = rawSelectedStartTime ? new Date(rawSelectedStartTime) : undefined;
   const lastAvailability = availabilities.length > 0 ? availabilities[availabilities.length - 1] : null;
 
   useRunOnce(() => void loadAvailabilities());
@@ -417,27 +415,14 @@ const CallDateAndTimeSelector = ({
           {isLoading ? <LoadingSpinner /> : null}
         </h4>
         <Calendar
-          locale="en-US"
-          className="calendar"
-          minDetail="month"
-          maxDetail="month"
-          view="month"
-          minDate={firstAvailableStartTime ?? new Date()}
-          maxDate={lastAvailability ? new Date(lastAvailability.end_time) : new Date()}
-          value={selectedStartTime}
-          formatShortWeekday={(_, date) => date.toLocaleString("en-US", { weekday: "short" }).charAt(0)}
-          prevLabel={forceUnicodeRenderAsText("◀")}
-          prevAriaLabel="Previous month"
-          nextLabel={forceUnicodeRenderAsText("▶")}
-          nextAriaLabel="Next month"
-          prev2Label={null}
-          next2Label={null}
-          tileDisabled={({ date }) => !isAvailableOnDate(date)}
-          selectRange={false}
-          onChange={(date) => {
-            if (date instanceof Date) {
-              setSelectedDateFromReactCalendar(date);
-            }
+          locale={{ code: "en-US" }}
+          mode="single"
+          selected={selectedStartTime}
+          startMonth={firstAvailableStartTime ?? new Date()}
+          endMonth={lastAvailability ? new Date(lastAvailability.end_time) : new Date()}
+          disabled={(date) => !isAvailableOnDate(date)}
+          onSelect={(date) => {
+            if (date) setSelectedDateFromReactCalendar(date);
           }}
         />
       </section>

@@ -1,4 +1,3 @@
-import cx from "classnames";
 import { parseISO } from "date-fns";
 import * as React from "react";
 
@@ -10,6 +9,7 @@ import {
   Comment,
   PaginatedComments,
 } from "$app/data/comments";
+import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
 import { assertResponseError } from "$app/utils/request";
 
@@ -20,6 +20,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Popover } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { UserAvatar } from "$app/components/server-components/CommunitiesPage/UserAvatar";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
 
@@ -152,7 +153,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         ))}
       </div>
       {data.pagination.next !== null ? (
-        <div style={{ display: "flex", justifyContent: "center", marginTop: "var(--spacer-6)" }}>
+        <div className="mt-6 flex justify-center">
           <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
             {loadingMore ? "Loading more comments..." : "Load more comments"}
           </Button>
@@ -239,14 +240,17 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
   };
 
   return (
-    <article className="comment">
-      <img className="user-avatar" alt="Comment author avatar" src={comment.author_avatar_url} />
-      <div className="body">
-        <header>
-          <span className="user-name">{comment.author_name}</span>
+    <article className="override grid grid-cols-[max-content_1fr] gap-3">
+      <UserAvatar size="large" className="col-start-1 row-span-2 row-start-1" alt="" src={comment.author_avatar_url} />
+      <div className="relative col-start-2 grid gap-3 whitespace-pre-wrap">
+        {comment.replies.length > 0 || replyDraft != null ? (
+          <div className="absolute top-12 -left-9 h-[calc(100%-3rem)] border-l border-border" />
+        ) : null}
+        <header className="flex flex-wrap items-center gap-3">
+          <span className="text-decoration-none font-bold">{comment.author_name}</span>
           <time title={formatDate(parseISO(comment.created_at))}>{comment.created_at_humanized}</time>
           {comment.author_id === seller_id ? <span className="pill small">Creator</span> : null}
-          <div style={{ marginLeft: "auto" }}>
+          <div className="ml-auto">
             {comment.is_editable || comment.is_deletable ? (
               <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
                 {(close) => (
@@ -291,34 +295,49 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
           </footer>
         ) : null}
       </div>
-      {replyDraft != null ? (
-        <CommentTextarea
-          value={replyDraft}
-          onChange={(event) => setReplyDraft(event.target.value)}
-          disabled={isPosting}
-        >
-          <Button onClick={() => setReplyDraft(null)} disabled={isPosting}>
-            Cancel
-          </Button>
+      <div className="col-start-2">
+        {replyDraft != null ? (
+          <div className="relative mt-5 -ml-6 max-w-none">
+            <div className="absolute -top-12 right-full -left-3 h-18 w-3 rounded-bl-lg border-b border-l border-border" />
+            {comment.replies.length > 0 ? (
+              <div className="absolute top-0 -left-3 h-full border-l border-border" />
+            ) : null}
+            <CommentTextarea
+              value={replyDraft}
+              onChange={(event) => setReplyDraft(event.target.value)}
+              disabled={isPosting}
+            >
+              <Button onClick={() => setReplyDraft(null)} disabled={isPosting}>
+                Cancel
+              </Button>
 
-          <Button
-            color="primary"
-            disabled={!(loggedInUser || purchase_id) || isPosting}
-            onClick={() => void postReply()}
-          >
-            {isPosting ? "Posting..." : "Post"}
-          </Button>
-        </CommentTextarea>
-      ) : null}
-
-      {comment.replies.map((reply) => (
-        <CommentContainer
-          key={reply.id}
-          comment={reply}
-          upsertComment={upsertComment}
-          confirmCommentDeletion={confirmCommentDeletion}
-        />
-      ))}
+              <Button
+                color="primary"
+                disabled={!(loggedInUser || purchase_id) || isPosting}
+                onClick={() => void postReply()}
+              >
+                {isPosting ? "Posting..." : "Post"}
+              </Button>
+            </CommentTextarea>
+          </div>
+        ) : null}
+      </div>
+      <div className="col-start-2">
+        {comment.replies.map((reply, index) => (
+          <div key={reply.id} className="relative mt-5 -ml-6 max-w-none">
+            <div className="absolute -top-12 right-full -left-3 h-18 w-3 rounded-bl-lg border-b border-l border-border" />
+            {index < comment.replies.length - 1 ? (
+              <div className="absolute top-0 -left-3 h-full border-l border-border" />
+            ) : null}
+            <CommentContainer
+              comment={reply}
+              key={reply.id}
+              upsertComment={upsertComment}
+              confirmCommentDeletion={confirmCommentDeletion}
+            />
+          </div>
+        ))}
+      </div>
     </article>
   );
 };
@@ -340,9 +359,14 @@ const CommentTextarea = ({
   }, [props.value]);
 
   return (
-    <div className={cx({ comment: showAvatar })} style={showAvatar ? {} : { display: "grid", gap: "var(--spacer-3)" }}>
+    <div className={classNames("override grid gap-3", showAvatar && "relative grid-cols-[max-content_1fr]")}>
       {showAvatar ? (
-        <img className="user-avatar" alt="Current user avatar" src={loggedInUser?.avatarUrl ?? defaultUserAvatar} />
+        <UserAvatar
+          size="large"
+          className="col-start-1 row-span-2 row-start-1"
+          alt=""
+          src={loggedInUser?.avatarUrl ?? defaultUserAvatar}
+        />
       ) : null}
       {loggedInUser || purchase_id ? (
         <textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />
@@ -352,11 +376,7 @@ const CommentTextarea = ({
           <a href={Routes.signup_url({ host: appDomain })}>Register</a> to join the conversation
         </div>
       )}
-      {loggedInUser != null || purchase_id != null ? (
-        <div style={{ display: "grid", justifyContent: "end", gap: "var(--spacer-3)", gridAutoFlow: "column" }}>
-          {children}
-        </div>
-      ) : null}
+      {loggedInUser != null || purchase_id != null ? <div className="flex justify-end gap-3">{children}</div> : null}
     </div>
   );
 };
