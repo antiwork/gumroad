@@ -17,7 +17,7 @@ export const CodeContainer = ({ codeToCopy }: { codeToCopy: string }) => {
       <legend>
         <label htmlFor={uid}>Copy and paste this code into your website</label>
         <CopyToClipboard tooltipPosition="bottom" text={codeToCopy}>
-          <button type="button" className="link">
+          <button type="button" className="font-normal underline">
             Copy embed code
           </button>
         </CopyToClipboard>

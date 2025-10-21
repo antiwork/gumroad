@@ -299,7 +299,7 @@ const NewProductPage = ({
               {ai_generation_enabled && aiPromoVisible ? (
                 <div
                   role="status"
-                  className="grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
+                  className="tailwind-override grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
                 >
                   <img src={hands} alt="Hands" className="h-12 w-12 self-center" />
                   <div>
@@ -310,7 +310,7 @@ const NewProductPage = ({
                       Learn more
                     </a>
                   </div>
-                  <button className="link col-start-3! self-center" onClick={() => void dismissAiPromo()}>
+                  <button className="col-start-3! self-center underline" onClick={() => void dismissAiPromo()}>
                     close
                   </button>
                 </div>
