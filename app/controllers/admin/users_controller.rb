@@ -41,13 +41,13 @@ class Admin::UsersController < Admin::BaseController
 
   def refund_queue
     @title = "Refund queue"
+    @users = User.refund_queue.includes(:admin_manageable_user_memberships, :comments)
 
     render inertia: "Admin/RefundQueues/Show",
            props: {
-             users: User.refund_queue
-               .includes(:admin_manageable_user_memberships, :comments)
-               .map { |user| user.as_json(admin: true, impersonatable: policy([:admin, :impersonators, user]).create?) }
-           }
+             users: @users.map { |user| user.as_json(admin: true, impersonatable: policy([:admin, :impersonators, user]).create?) }
+           },
+           legacy_template: "admin/users/refund_queue"
   end
 
   def enable
