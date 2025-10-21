@@ -41,7 +41,7 @@ class Admin::UsersController < Admin::BaseController
 
   def refund_queue
     @title = "Refund queue"
-    @users = User.refund_queue.includes(:admin_manageable_user_memberships, :comments)
+    @users = User.refund_queue.with_attached_avatar.includes(:admin_manageable_user_memberships, :links, :purchases)
 
     render inertia: "Admin/RefundQueues/Show",
            props: {
