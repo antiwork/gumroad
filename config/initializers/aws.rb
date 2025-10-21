@@ -33,7 +33,7 @@ KINDLE_EMAIL_REGEX = /\A(?=.{3,255}$)(                                         #
                      @kindle\.com\z/xi
 
 S3_BUCKET = {
-  development: "gumroad_dev",
+  development: "gumroad-dev",
   staging: "gumroad_dev",
   test: "gumroad-specs",
   production: "gumroad"
