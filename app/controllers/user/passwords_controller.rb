@@ -15,9 +15,6 @@ class User::PasswordsController < Devise::PasswordsController
   end
 
   def edit
-    @hide_layouts = true
-    @body_class = "onboarding-page"
-
     @reset_password_token = params[:reset_password_token]
     @user = User.find_or_initialize_with_error_by(:reset_password_token,
                                                   Devise.token_generator.digest(User, :reset_password_token, @reset_password_token))
@@ -30,26 +27,23 @@ class User::PasswordsController < Devise::PasswordsController
   end
 
   def update
-    @hide_layouts = true
-    @body_class = "onboarding-page"
-
     @reset_password_token = params[:user][:reset_password_token]
     @user = User.reset_password_by_token(params[:user])
 
     if @user.errors.present?
-      flash[:alert] = if @user.errors[:password_confirmation].present?
+      error_message = if @user.errors[:password_confirmation].present?
         "Those two passwords didn't match."
       elsif @user.errors[:password].present?
         @user.errors.full_messages.first
       else
         "That reset password token doesn't look valid (or may have expired)."
       end
-      render :edit
+      render json: { error_message: error_message }, status: :unprocessable_entity
     else
       flash[:notice] = "Your password has been reset, and you're now logged in."
       @user.invalidate_active_sessions!
       sign_in @user unless @user.deleted?
-      redirect_to root_url
+      head :no_content
     end
   end
 

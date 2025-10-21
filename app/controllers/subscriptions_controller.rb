@@ -38,8 +38,6 @@ class SubscriptionsController < ApplicationController
   end
 
   def magic_link
-    @body_class = "onboarding-page"
-
     @react_component_props = SubscriptionsPresenter.new(subscription: @subscription).magic_link_props
   end
 

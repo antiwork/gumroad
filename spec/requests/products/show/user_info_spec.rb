@@ -23,7 +23,7 @@ describe("ProductUserInfoScenario", type: :system, js: true) do
     offer_code = create(:offer_code, code: "free", products: [product], amount_cents: 2000)
 
     visit "/l/#{product.unique_permalink}"
-    expect(page).to(have_selector(".price", text: "$20"))
+    expect(page).to(have_selector("[itemprop='price']", text: "$20"))
 
     visit "/l/#{product.unique_permalink}/?offer_code=#{offer_code.code}"
     expect(page).to have_selector("[role='status']", text: "$20 off will be applied at checkout (Code FREE)")

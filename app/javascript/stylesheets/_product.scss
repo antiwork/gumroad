@@ -17,14 +17,6 @@
     }
   }
 
-  .rating {
-    display: none;
-
-    @include breakpoint-up(lg) {
-      display: flex;
-    }
-  }
-
   @include breakpoint-up(lg) {
     padding: spacer(4) $body-padding-desktop-center;
   }
@@ -299,8 +291,7 @@ article {
             outline-offset: 0;
           }
 
-          .user:first-child,
-          .rating {
+          .user:first-child {
             grid-column: 1 / -1;
           }
 
@@ -311,8 +302,7 @@ article {
               grid-column: 2 / -1;
             }
 
-            .user:first-child,
-            .rating {
+            .user:first-child {
               grid-column: unset;
             }
           }

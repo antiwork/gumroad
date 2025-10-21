@@ -11,13 +11,9 @@
 @import "../stylesheets/aside";
 @import "../stylesheets/button";
 @include buttons;
-@import "../stylesheets/calendar";
 @import "../stylesheets/cart";
-@import "../stylesheets/chart";
 @import "../stylesheets/carousel";
 @import "../stylesheets/containers";
-@import "../stylesheets/comment";
-@import "../stylesheets/custom_sections";
 @import "../stylesheets/dropdown";
 @import "../stylesheets/figure";
 @import "../stylesheets/forms";
@@ -26,7 +22,6 @@
 @import "../stylesheets/nested_menu";
 @import "../stylesheets/pagination";
 @import "../stylesheets/pill";
-@import "../stylesheets/price";
 @import "../stylesheets/product";
 @import "../stylesheets/profile";
 @import "../stylesheets/progress";
@@ -39,6 +34,5 @@
 @import "../stylesheets/tooltip";
 
 @import "../stylesheets/product_content";
-@import "../stylesheets/onboarding";
 
 @import "../stylesheets/legacy";
