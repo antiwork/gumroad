@@ -15,6 +15,8 @@ class Workflow::SaveInstallmentsService
   end
 
   def process
+    return [false, "Installments data is required"] unless params[:installments].present?
+
     if workflow.abandoned_cart_type? && params[:installments].size != 1
       @error = "An abandoned cart workflow can only have one email."
       return [false, error]
@@ -65,6 +67,8 @@ class Workflow::SaveInstallmentsService
     attr_reader :params, :seller, :workflow, :preview_email_recipient
 
     def delete_removed_installments
+      return unless params[:installments].present?
+
       deleted_external_ids = workflow.installments.alive.map(&:external_id) - params[:installments].pluck(:id)
       workflow.installments.by_external_ids(deleted_external_ids).find_each do |installment|
         installment.mark_deleted!

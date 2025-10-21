@@ -255,27 +255,30 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     setIsSaving(true);
 
-    const formData = new FormData();
-    formData.append("workflow[name]", payload.name);
-    formData.append("workflow[workflow_type]", payload.workflow_type);
-    formData.append("workflow[workflow_trigger]", payload.workflow_trigger || "");
-    formData.append("workflow[bought_products]", JSON.stringify(payload.bought_products));
-    formData.append("workflow[not_bought_products]", JSON.stringify(payload.not_bought_products));
-    formData.append("workflow[bought_variants]", JSON.stringify(payload.bought_variants));
-    formData.append("workflow[not_bought_variants]", JSON.stringify(payload.not_bought_variants));
-    formData.append("workflow[variant_external_id]", payload.variant_external_id || "");
-    formData.append("workflow[permalink]", payload.permalink || "");
-    formData.append("workflow[paid_more_than]", payload.paid_more_than?.toString() || "");
-    formData.append("workflow[paid_less_than]", payload.paid_less_than?.toString() || "");
-    formData.append("workflow[created_after]", payload.created_after || "");
-    formData.append("workflow[created_before]", payload.created_before || "");
-    formData.append("workflow[bought_from]", payload.bought_from || "");
-    formData.append("workflow[affiliate_products]", JSON.stringify(payload.affiliate_products));
-    formData.append("workflow[send_to_past_customers]", payload.send_to_past_customers.toString());
-    formData.append("workflow[save_action_name]", payload.save_action_name);
+    const workflowData = {
+      workflow: {
+        name: payload.name,
+        workflow_type: payload.workflow_type,
+        workflow_trigger: payload.workflow_trigger || "",
+        bought_products: payload.bought_products,
+        not_bought_products: payload.not_bought_products,
+        bought_variants: payload.bought_variants,
+        not_bought_variants: payload.not_bought_variants,
+        variant_external_id: payload.variant_external_id || "",
+        permalink: payload.permalink || "",
+        paid_more_than: payload.paid_more_than?.toString() || "",
+        paid_less_than: payload.paid_less_than?.toString() || "",
+        created_after: payload.created_after || "",
+        created_before: payload.created_before || "",
+        bought_from: payload.bought_from || "",
+        affiliate_products: payload.affiliate_products,
+        send_to_past_customers: payload.send_to_past_customers,
+        save_action_name: payload.save_action_name,
+      },
+    };
 
     if (workflow) {
-      router.patch(`/workflows/${workflow.external_id}`, formData, {
+      router.patch(`/workflows/${workflow.external_id}`, workflowData, {
         onSuccess: () => {
           setIsSaving(false);
           if (saveActionName === "save") {
@@ -290,7 +293,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         },
       });
     } else {
-      router.post("/workflows", formData, {
+      router.post("/workflows", workflowData, {
         onSuccess: () => {
           setIsSaving(false);
           if (saveActionName === "save") {

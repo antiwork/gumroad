@@ -110,7 +110,9 @@ class WorkflowsController < Sellers::BaseController
 
 
     def fetch_product_and_enforce_ownership
-      @product = current_seller.products.find_by_permalink(workflow_params[:permalink])
+      permalink = workflow_params[:permalink]
+      @product = current_seller.products.visible.find_by(unique_permalink: permalink) ||
+                 current_seller.products.visible.find_by(custom_permalink: permalink)
       e404 unless @product
     end
 end
