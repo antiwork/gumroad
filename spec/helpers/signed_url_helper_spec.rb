@@ -5,7 +5,7 @@ require "spec_helper"
 describe SignedUrlHelper do
   before do
     pdf_path = "attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
-    pdf_uri = URI.parse("https://s3.amazonaws.com/gumroad-specs/#{pdf_path}").to_s
+    pdf_uri = URI.parse("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{pdf_path}").to_s
 
     @file = create(:product_file, url: pdf_uri.to_s)
     s3_double = double
@@ -50,7 +50,7 @@ describe SignedUrlHelper do
       .to_not include("cache_key=caIWHGT4Qhqo6KoxDMNXwQ")
 
     %w(jpg jpeg png epub brushset scrivtemplate zip).each do |extension|
-      file_path = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.#{extension}"
+      file_path = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.#{extension}"
       file = create(:product_file, url: URI.parse(file_path).to_s)
 
       expect(signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename))

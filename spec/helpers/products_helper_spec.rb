@@ -23,9 +23,9 @@ describe ProductsHelper do
       filename = "kFDzu.png"
       @product = create(:product, preview: fixture_file_upload(filename, "image/png"))
       stub_const("CDN_URL_MAP",
-                 "https://s3.amazonaws.com/gumroad/" => "https://asset.host.example.com/res/gumroad/",
-                 "https://s3.amazonaws.com/gumroad-staging/" => "https://asset.host.example.com/res/gumroad-staging/",
-                 "https://gumroad-specs.s3.amazonaws.com/" => "https://asset.host.example.com/res/gumroad-specs/")
+                 "#{AWS_S3_ENDPOINT}/gumroad/" => "https://asset.host.example.com/res/gumroad/",
+                 "#{AWS_S3_ENDPOINT}/gumroad-staging/" => "https://asset.host.example.com/res/gumroad-staging/",
+                 "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/" => "https://asset.host.example.com/res/gumroad-specs/")
     end
 
     it "returns correct cloudfront url for gumroad-specs bucket" do
@@ -33,12 +33,12 @@ describe ProductsHelper do
     end
 
     it "returns correct cloudfront url for gumroad-staging bucket" do
-      expect(@product).to receive(:preview_url).and_return("https://s3.amazonaws.com/gumroad-staging/#{@product.preview.file.key}")
+      expect(@product).to receive(:preview_url).and_return("#{AWS_S3_ENDPOINT}/gumroad-staging/#{@product.preview.file.key}")
       expect(cdn_url_for(@product.preview_url)).to eq("https://asset.host.example.com/res/gumroad-staging/#{@product.preview.file.key}")
     end
 
     it "returns unchanged s3 url for other bucket" do
-      url = "https://s3.amazonaws.com/gumroad_other/#{@product.preview.file.key}"
+      url = "#{AWS_S3_ENDPOINT}/gumroad_other/#{@product.preview.file.key}"
       expect(@product).to receive(:preview_url).and_return(url)
       expect(cdn_url_for(@product.preview_url)).to eq(url)
     end
