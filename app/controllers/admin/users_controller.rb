@@ -22,10 +22,6 @@ class Admin::UsersController < Admin::BaseController
     end
   end
 
-  def stats
-    render partial: "stats", locals: { user: @user }
-  end
-
   def refund_balance
     RefundUnpaidPurchasesWorker.perform_async(@user.id, current_user.id)
     render json: { success: true }
