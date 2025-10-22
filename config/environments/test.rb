@@ -40,7 +40,7 @@ Rails.application.configure do
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "#{PROTOCOL}://#{ASSET_DOMAIN}"
 
-  config.active_storage.service = :amazon
+  config.active_storage.service = :test
 
   config.action_mailer.perform_caching = true
 

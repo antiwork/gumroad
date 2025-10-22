@@ -12,6 +12,7 @@ class TeamMembership < ApplicationRecord
     self.const_set("ROLE_#{role.upcase}", role)
 
     scope "role_#{role}", -> { where(role:) }
+    scope "role_not_#{role}", -> { where.not(role:) }
     define_method("role_#{role}?") do
       attributes["role"] == role
     end

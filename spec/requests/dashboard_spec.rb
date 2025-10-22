@@ -144,7 +144,7 @@ describe "Dashboard", js: true, type: :system do
     end
 
     it "displays a 1099 form ready notice with a link to download if eligible" do
-      download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+      download_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
       allow_any_instance_of(User).to receive(:eligible_for_1099?).and_return(true)
       allow_any_instance_of(User).to receive(:tax_form_1099_download_url).and_return(download_url)
 
@@ -165,7 +165,7 @@ describe "Dashboard", js: true, type: :system do
   end
 
   describe "download tax forms button" do
-    download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+    download_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
 
     before do
       freeze_time

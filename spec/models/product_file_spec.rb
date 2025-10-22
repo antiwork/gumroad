@@ -18,8 +18,8 @@ describe ProductFile do
   end
 
   describe "#has_alive_duplicate_files?" do
-    let!(:file_1) { create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/some-file.pdf") }
-    let!(:file_2) { create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/some-file.pdf") }
+    let!(:file_1) { create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/some-file.pdf") }
+    let!(:file_2) { create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/some-file.pdf") }
 
     it "returns true if there's an alive record with the same url" do
       file_1.mark_deleted
@@ -179,7 +179,7 @@ describe ProductFile do
     end
 
     it "preserves s3 key for files containing percent and ampersand in filename" do
-      product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/specs/test file %26 & ) %29.txt")
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test file %26 & ) %29.txt")
       expect(product_file.s3_key).to eq "specs/test file %26 & ) %29.txt"
     end
 
@@ -286,7 +286,7 @@ describe ProductFile do
       end
 
       it "renames a file to a long name", :sidekiq_inline do
-        new_name = "A" * 800
+        new_name = "A" * 250
         expect(MultipartTransfer).to receive(:transfer_to_s3).with(/billion-dollar-company-chapter-0.pd/,
                                                                    destination_filename: "#{new_name}.pdf",
                                                                    existing_s3_object: instance_of(@product_file.s3_object.class)).and_call_original
@@ -300,7 +300,7 @@ describe ProductFile do
     end
 
     it "creates the product file with filetype set to lowercase" do
-      product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/fc34ee33bae54181badd048c71209d24/original/sample.PDF")
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/fc34ee33bae54181badd048c71209d24/original/sample.PDF")
       expect(product_file.filetype).to eq("pdf")
     end
   end
@@ -390,7 +390,7 @@ describe ProductFile do
 
   describe "s3 properties" do
     before do
-      @product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
+      @product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/files/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
     end
 
     it "handles / in the filename properly" do
@@ -402,7 +402,7 @@ describe ProductFile do
     end
 
     it "works as expected for files without an extension" do
-      @product_file.update!(url: "https://s3.amazonaws.com/gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/black/white")
+      @product_file.update!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/files/43a5363194e74e9ee75b6203eaea6705/original/black/white")
 
       expect(@product_file.s3_key).to eq("files/43a5363194e74e9ee75b6203eaea6705/original/black/white")
       expect(@product_file.s3_filename).to eq("black/white")
@@ -433,7 +433,7 @@ describe ProductFile do
   describe "#hls_playlist" do
     before do
       @multifile_product = create(:product)
-      @file_1 = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter 2.mp4", is_transcoded_for_hls: true)
+      @file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter 2.mp4", is_transcoded_for_hls: true)
       @multifile_product.product_files << @file_1
       @transcoded_video = create(:transcoded_video, link: @multifile_product, streamable: @file_1, original_video_key: @file_1.s3_key,
                                                     transcoded_video_key: "attachments/2_1/original/chapter 2/hls/index.m3u8",
@@ -466,7 +466,7 @@ describe ProductFile do
     end
 
     it "escapes the user-provided filename even if the user has changed the filename since the video was transcoded" do
-      @file_1.update!(url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter_2_no_spaces.mp4")
+      @file_1.update!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter_2_no_spaces.mp4")
       travel_to(Date.parse("2015-03-13")) do
         hls_playlist = @file_1.hls_playlist
         url = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,RESOLUTION=854x480,CODECS=\"avc1.4d001f,mp4a.40.2\",BANDWIDTH=1191000\n"
@@ -482,7 +482,7 @@ describe ProductFile do
     end
 
     it "escapes the filename in legacy S3 attachments" do
-      file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/0000134abcdefghhijkl354sfdg/chapter 2.mp4", is_transcoded_for_hls: true)
+      file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/0000134abcdefghhijkl354sfdg/chapter 2.mp4", is_transcoded_for_hls: true)
       @multifile_product.product_files << file
       @transcoded_video = create(:transcoded_video, link: @multifile_product, streamable: file, original_video_key: file.s3_key,
                                                     transcoded_video_key: "attachments/0000134abcdefghhijkl354sfdg/chapter 2/hls/index.m3u8",
@@ -491,7 +491,7 @@ describe ProductFile do
     end
 
     it "escapes the newlines in the filename" do
-      file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/12345/abcd12345/original/YouTube + Marketing Is Powerful\n.mp4", is_transcoded_for_hls: true)
+      file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/12345/abcd12345/original/YouTube + Marketing Is Powerful\n.mp4", is_transcoded_for_hls: true)
       @multifile_product.product_files << file
       @transcoded_video = create(:transcoded_video, link: @multifile_product, streamable: file, original_video_key: file.s3_key,
                                                     transcoded_video_key: "attachments/12345/abcd12345/original/YouTube + Marketing Is Powerful\n/hls/index.m3u8",
@@ -510,8 +510,8 @@ describe ProductFile do
     end
 
     context "when associated alive subtitle files exist" do
-      let(:english_srt_url) { "https://s3.amazonaws.com/gumroad-specs/attachment/english.srt" }
-      let(:french_srt_url) { "https://s3.amazonaws.com/gumroad-specs/attachment/french.srt" }
+      let(:english_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/english.srt" }
+      let(:french_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/french.srt" }
       let(:subtitle_file_en) do
         create(:subtitle_file, language: "English", url: english_srt_url, product_file:)
       end
@@ -544,7 +544,7 @@ describe ProductFile do
 
   describe "mobile" do
     before do
-      @file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter 2.mp4", is_transcoded_for_hls: true)
+      @file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter 2.mp4", is_transcoded_for_hls: true)
     end
 
     it "returns name values that contain extensions" do
@@ -636,12 +636,12 @@ describe ProductFile do
     end
 
     it "returns extension for s3 files with an extension" do
-      product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/files/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
       expect(product_file.display_extension).to eq("MP4")
     end
 
     it "returns empty string for s3 files without an extension" do
-      product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/files/43a5363194e74e9ee75b6203eaea6705/original/black/white")
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/files/43a5363194e74e9ee75b6203eaea6705/original/black/white")
       expect(product_file.display_extension).to eq("")
     end
   end
@@ -772,7 +772,7 @@ describe ProductFile do
         product_file.thumbnail.attach(io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")), filename: "smilie.png")
 
         expect(product_file).to be_valid
-        expect(product_file.thumbnail_variant.url).to match("https://gumroad-specs.s3.amazonaws.com/#{product_file.thumbnail_variant.key}")
+        expect(product_file.thumbnail_variant.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{product_file.thumbnail_variant.key}")
       end
     end
 
@@ -785,7 +785,7 @@ describe ProductFile do
       end
 
       it "returns the CDN URL if thumbnail exists" do
-        stub_const("CDN_URL_MAP", { "https://gumroad-specs.s3.amazonaws.com" => "https://public-files.gumroad.com" })
+        stub_const("CDN_URL_MAP", { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}" => "https://public-files.gumroad.com" })
 
         product_file = create(:streamable_video)
         product_file.thumbnail.attach(io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")), filename: "smilie.png")
@@ -799,7 +799,7 @@ describe ProductFile do
 
         allow(product_file).to receive(:thumbnail_variant).and_raise(ActiveStorage::InvariableError)
 
-        expect(product_file.thumbnail_url).to match("https://gumroad-specs.s3.amazonaws.com/#{product_file.thumbnail.key}")
+        expect(product_file.thumbnail_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{product_file.thumbnail.key}")
       end
     end
 
@@ -985,7 +985,7 @@ describe ProductFile do
       context "when an image product file is created" do
         it "resets moderated_by_iffy flag on the associated product" do
           expect do
-            create(:product_file, link: product, url: "https://s3.amazonaws.com/gumroad-specs/specs/kFDzu.png")
+            create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png")
           end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
         end
       end

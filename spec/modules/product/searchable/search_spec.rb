@@ -213,17 +213,17 @@ describe "Product::Searchable - Search scenarios" do
         @creator = create(:recommendable_user)
 
         non_recommendable_product = create(:product, name: "non-recommendable product", user: @creator)
-        create(:product_file, link: non_recommendable_product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf")
-        create(:product_file, link: non_recommendable_product, url: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3")
+        create(:product_file, link: non_recommendable_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf")
+        create(:product_file, link: non_recommendable_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
 
         @pdf_product = create(:product, :recommendable, name: "PDF product", user: @creator)
-        create(:product_file, link: @pdf_product, url: "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf")
+        create(:product_file, link: @pdf_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf")
 
         @mp3_product = create(:product, :recommendable, name: "MP3 product", user: @creator)
-        create(:product_file, link: @mp3_product, url: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3")
+        create(:product_file, link: @mp3_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
 
         @adult_mp3_product = create(:product, :recommendable, user: @creator, is_adult: true)
-        create(:product_file, link: @adult_mp3_product, url: "https://s3.amazonaws.com/gumroad-specs/specs/magic.mp3")
+        create(:product_file, link: @adult_mp3_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
 
         Link.import(refresh: true, force: true)
       end

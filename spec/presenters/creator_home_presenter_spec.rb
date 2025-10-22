@@ -307,7 +307,7 @@ describe CreatorHomePresenter do
     end
 
     describe "tax forms" do
-      download_url = "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
+      download_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
 
       before do
         seller.update!(created_at: 2.years.ago)
