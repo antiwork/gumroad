@@ -24,7 +24,7 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
   const [workflows, setWorkflows] = React.useState(initialWorkflows);
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
-    <Link href="/workflows/new" className="button accent" inert={!canManageWorkflow || undefined}>
+    <Link href={Routes.new_workflow_path()} className="button accent" inert={!canManageWorkflow || undefined}>
       New workflow
     </Link>
   );
@@ -68,7 +68,7 @@ const WorkflowList = ({ workflows: initialWorkflows }: WorkflowListProps) => {
                       color="danger"
                       onClick={() => {
                         setDeletingWorkflow({ ...deletingWorkflow, state: "deleting" });
-                        router.delete(`/workflows/${deletingWorkflow.id}`, {
+                        router.delete(Routes.workflow_path(deletingWorkflow.id), {
                           onSuccess: () => {
                             setWorkflows(workflows.filter((workflow) => workflow.external_id !== deletingWorkflow.id));
                             setDeletingWorkflow(null);

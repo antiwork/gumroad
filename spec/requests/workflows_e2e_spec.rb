@@ -31,7 +31,7 @@ describe "Workflows End-to-End", js: true, type: :system do
       expect(page).to have_alert(text: "Changes saved!")
 
       workflow = Workflow.last
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
 
       expect(workflow.name).to eq("E2E Seller workflow")
       expect(workflow.workflow_type).to eq(Workflow::SELLER_TYPE)
@@ -151,7 +151,7 @@ describe "Workflows End-to-End", js: true, type: :system do
       end
 
       # Step 3: Verify we're on edit page
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/edit")
+      expect(page).to have_current_path(edit_workflow_path(workflow.external_id))
       expect(page).to have_input_labelled "Name", with: "Original Workflow Name"
 
       # Step 4: Edit the name
@@ -162,7 +162,7 @@ describe "Workflows End-to-End", js: true, type: :system do
 
       # Step 6: Verify success
       expect(page).to have_alert(text: "Changes saved!")
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
 
       # Step 7: Verify workflow was updated
       workflow.reload
@@ -190,7 +190,7 @@ describe "Workflows End-to-End", js: true, type: :system do
     end
 
     it "validates date ranges when editing" do
-      visit "/workflows/#{workflow.external_id}/edit"
+      visit edit_workflow_path(workflow.external_id)
 
       fill_in "Purchased after", with: "01/01/2024"
       fill_in "Purchased before", with: "01/01/2023"  # Invalid
@@ -332,7 +332,7 @@ describe "Workflows End-to-End", js: true, type: :system do
       expect(page).to have_alert(text: "Changes saved!")
 
       workflow = Workflow.last
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
 
       # Step 2: Verify we're on the emails page with correct UI
       expect(page).to have_tab_button("Details", open: false)
@@ -356,7 +356,7 @@ describe "Workflows End-to-End", js: true, type: :system do
     let!(:workflow) { create(:seller_workflow, seller:, name: "Edit Test Workflow") }
 
     it "shows and clears validation errors in real-time" do
-      visit "/workflows/#{workflow.external_id}/edit"
+      visit edit_workflow_path(workflow.external_id)
 
       # Add invalid date range
       fill_in "Purchased after", with: "01/01/2024"
@@ -390,13 +390,13 @@ describe "Workflows End-to-End", js: true, type: :system do
         click_on "Edit workflow"
       end
 
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/edit")
+      expect(page).to have_current_path(edit_workflow_path(workflow.external_id))
       expect(page).to have_field("Name")
       expect(page).to have_input_labelled "Name", with: "Navigation Test"
     end
 
     it "can navigate from edit to emails and back" do
-      visit "/workflows/#{workflow.external_id}/edit"
+      visit edit_workflow_path(workflow.external_id)
       expect(page).to have_field("Name")
 
       # Navigate using tab buttons (use tab button selector)
@@ -404,7 +404,7 @@ describe "Workflows End-to-End", js: true, type: :system do
         click_on "Emails"
       end
 
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
       expect(page).to have_text("Create emails for your workflow")
 
       # Navigate back
@@ -412,7 +412,7 @@ describe "Workflows End-to-End", js: true, type: :system do
         click_on "Details"
       end
 
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/edit")
+      expect(page).to have_current_path(edit_workflow_path(workflow.external_id))
       expect(page).to have_field("Name")
     end
   end
@@ -428,7 +428,7 @@ describe "Workflows End-to-End", js: true, type: :system do
       click_on "New workflow", match: :first
 
       # Verify we navigated (URL changed)
-      expect(page).to have_current_path("/workflows/new")
+      expect(page).to have_current_path(new_workflow_path)
 
       # Verify the HTML didn't completely reload (Inertia SPA behavior)
       # In a full page load, the entire DOM would be replaced
@@ -444,7 +444,7 @@ describe "Workflows End-to-End", js: true, type: :system do
 
       # Verify we're on emails page after save
       workflow = Workflow.last
-      expect(page).to have_current_path("/workflows/#{workflow.external_id}/emails")
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
 
       # Verify Inertia SPA behavior - shell persists
       expect(page).to have_selector("#inertia-shell")

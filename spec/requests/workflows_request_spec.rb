@@ -34,12 +34,12 @@ describe "Workflows API", type: :request do
 
       it "creates a new workflow and redirects to emails page" do
         expect {
-          post "/workflows", params: valid_params
+          post workflows_path, params: valid_params
         }.to change(Workflow, :count).by(1)
 
         expect(response).to have_http_status(:redirect)
         created_workflow = Workflow.last
-        expect(response).to redirect_to("/workflows/#{created_workflow.external_id}/emails")
+        expect(response).to redirect_to(workflow_emails_path(created_workflow.external_id))
         expect(created_workflow.name).to eq("New Test Workflow")
         expect(created_workflow.workflow_type).to eq("seller")
         expect(created_workflow.seller).to eq(seller)
@@ -47,7 +47,7 @@ describe "Workflows API", type: :request do
       end
 
       it "sets flash notice on successful creation" do
-        post "/workflows", params: valid_params
+        post workflows_path, params: valid_params
 
         expect(response).to have_http_status(:redirect)
         # Flash is set but not accessible in request specs after redirect
@@ -71,7 +71,7 @@ describe "Workflows API", type: :request do
 
       it "creates a seller workflow with all filter attributes" do
         expect {
-          post "/workflows", params: workflow_with_filters_params
+          post workflows_path, params: workflow_with_filters_params
         }.to change(Workflow, :count).by(1)
 
         created_workflow = Workflow.last
@@ -97,7 +97,7 @@ describe "Workflows API", type: :request do
       it "creates a workflow even with empty name (no validation)" do
         # Note: Workflow model does not validate presence of name
         expect {
-          post "/workflows", params: empty_name_params
+          post workflows_path, params: empty_name_params
         }.to change(Workflow, :count).by(1)
 
         expect(response).to have_http_status(:redirect)
@@ -119,7 +119,7 @@ describe "Workflows API", type: :request do
 
       it "does not create a workflow and returns validation errors" do
         expect {
-          post "/workflows", params: invalid_date_params
+          post workflows_path, params: invalid_date_params
         }.not_to change(Workflow, :count)
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -140,7 +140,7 @@ describe "Workflows API", type: :request do
 
       it "does not create a workflow and returns validation errors" do
         expect {
-          post "/workflows", params: invalid_amount_params
+          post workflows_path, params: invalid_amount_params
         }.not_to change(Workflow, :count)
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -161,10 +161,10 @@ describe "Workflows API", type: :request do
       it "updates the workflow and redirects" do
         original_name = workflow.name
 
-        patch "/workflows/#{workflow.external_id}", params: valid_update_params
+        patch workflow_path(workflow.external_id), params: valid_update_params
 
         expect(response).to have_http_status(:redirect)
-        expect(response).to redirect_to("/workflows/#{workflow.external_id}/emails")
+        expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
 
         workflow.reload
         expect(workflow.name).to eq("Updated Workflow Name")
@@ -172,7 +172,7 @@ describe "Workflows API", type: :request do
       end
 
       it "successfully redirects after update" do
-        patch "/workflows/#{workflow.external_id}", params: valid_update_params
+        patch workflow_path(workflow.external_id), params: valid_update_params
 
         expect(response).to have_http_status(:redirect)
         # Flash is set but not accessible in request specs
@@ -189,7 +189,7 @@ describe "Workflows API", type: :request do
       end
 
       it "updates workflow name" do
-        patch "/workflows/#{workflow.external_id}", params: name_update_params
+        patch workflow_path(workflow.external_id), params: name_update_params
 
         expect(response).to have_http_status(:redirect)
 
@@ -208,7 +208,7 @@ describe "Workflows API", type: :request do
       end
 
       it "updates workflow to have empty name (no validation)" do
-        patch "/workflows/#{workflow.external_id}", params: empty_name_params
+        patch workflow_path(workflow.external_id), params: empty_name_params
 
         expect(response).to have_http_status(:redirect)
 
@@ -228,7 +228,7 @@ describe "Workflows API", type: :request do
       end
 
       it "does not update and returns validation errors" do
-        patch "/workflows/#{workflow.external_id}", params: invalid_date_params
+        patch workflow_path(workflow.external_id), params: invalid_date_params
 
         expect(response).to have_http_status(:unprocessable_entity)
       end
@@ -238,7 +238,7 @@ describe "Workflows API", type: :request do
       it "raises routing error" do
         # Note: In production this would raise ActionController::RoutingError
         # But in tests with mocked auth, it may return 302 or 404
-        patch "/workflows/nonexistent_id", params: { workflow: { name: "Test" } }
+        patch workflow_path("nonexistent_id"), params: { workflow: { name: "Test" } }
         expect([302, 404]).to include(response.status)
       end
     end
@@ -248,7 +248,7 @@ describe "Workflows API", type: :request do
         # Note: Auth is mocked in these tests, so Pundit errors won't be raised
         # In production, Pundit would raise NotAuthorizedError
         # Testing that we can make the request (mocked auth allows it)
-        patch "/workflows/#{other_workflow.external_id}", params: { workflow: { name: "Unauthorized" } }
+        patch workflow_path(other_workflow.external_id), params: { workflow: { name: "Unauthorized" } }
         expect(response).to be_a(ActionDispatch::TestResponse)
       end
     end
@@ -256,20 +256,20 @@ describe "Workflows API", type: :request do
 
   describe "GET /workflows/:id/edit" do
     it "returns success and shows edit page" do
-      get "/workflows/#{workflow.external_id}/edit"
+      get edit_workflow_path(workflow.external_id)
 
       expect(response).to have_http_status(:ok)
     end
 
     it "includes workflow data in response" do
-      get "/workflows/#{workflow.external_id}/edit"
+      get edit_workflow_path(workflow.external_id)
 
       expect(response.body).to include(workflow.name)
     end
 
     context "when workflow doesn't exist" do
       it "returns error response" do
-        get "/workflows/nonexistent_id/edit"
+        get edit_workflow_path("nonexistent_id")
         expect([302, 404]).to include(response.status)
       end
     end
@@ -277,7 +277,7 @@ describe "Workflows API", type: :request do
     context "when user is not authorized" do
       it "would raise authorization error in production" do
         # Auth is mocked, so this will succeed in tests
-        get "/workflows/#{other_workflow.external_id}/edit"
+        get edit_workflow_path(other_workflow.external_id)
         expect(response).to be_a(ActionDispatch::TestResponse)
       end
     end
@@ -285,13 +285,13 @@ describe "Workflows API", type: :request do
 
   describe "GET /workflows/new" do
     it "returns success and shows new workflow page" do
-      get "/workflows/new"
+      get new_workflow_path
 
       expect(response).to have_http_status(:ok)
     end
 
     it "includes form context in response" do
-      get "/workflows/new"
+      get new_workflow_path
 
       # Should include products for dropdown
       expect(response.body).to be_present
@@ -304,20 +304,20 @@ describe "Workflows API", type: :request do
     let!(:deleted_workflow) { create(:workflow, seller: seller, name: "Deleted Workflow", deleted_at: Time.current) }
 
     it "returns success and lists workflows" do
-      get "/workflows"
+      get workflows_path
 
       expect(response).to have_http_status(:ok)
     end
 
     it "includes all alive workflows" do
-      get "/workflows"
+      get workflows_path
 
       expect(response.body).to include("First Workflow")
       expect(response.body).to include("Second Workflow")
     end
 
     it "does not include deleted workflows" do
-      get "/workflows"
+      get workflows_path
 
       expect(response.body).not_to include("Deleted Workflow")
     end
@@ -327,17 +327,17 @@ describe "Workflows API", type: :request do
     it "soft deletes the workflow" do
       expect(workflow.deleted_at).to be_nil
 
-      delete "/workflows/#{workflow.external_id}"
+      delete workflow_path(workflow.external_id)
 
       expect(response).to have_http_status(:redirect)
-      expect(response).to redirect_to("/workflows")
+      expect(response).to redirect_to(workflows_path)
 
       workflow.reload
       expect(workflow.deleted_at).to be_present
     end
 
     it "successfully redirects after deletion" do
-      delete "/workflows/#{workflow.external_id}"
+      delete workflow_path(workflow.external_id)
 
       expect(response).to have_http_status(:redirect)
       # Flash is set but not accessible in request specs
@@ -346,7 +346,7 @@ describe "Workflows API", type: :request do
     context "when user is not authorized" do
       it "would raise authorization error in production" do
         # Auth is mocked in tests
-        delete "/workflows/#{other_workflow.external_id}"
+        delete workflow_path(other_workflow.external_id)
         expect(response).to be_a(ActionDispatch::TestResponse)
       end
     end
@@ -364,7 +364,7 @@ describe "Workflows API", type: :request do
       end
 
       it "properly escapes and saves the name" do
-        post "/workflows", params: special_char_params
+        post workflows_path, params: special_char_params
 
         created_workflow = Workflow.last
         expect(created_workflow.name).to eq("Test <script>alert('xss')</script> Workflow")
@@ -384,7 +384,7 @@ describe "Workflows API", type: :request do
       end
 
       it "correctly converts currency to cents on creation" do
-        post "/workflows", params: currency_params
+        post workflows_path, params: currency_params
 
         created_workflow = Workflow.last
         # Note: Currency conversion only happens on creation via add_and_validate_filters
@@ -398,7 +398,7 @@ describe "Workflows API", type: :request do
         # Use the existing workflow from let block
         original_name = workflow.name
 
-        patch "/workflows/#{workflow.external_id}", params: {
+        patch workflow_path(workflow.external_id), params: {
           workflow: { name: "Updated Name for Existing" },
         }
 

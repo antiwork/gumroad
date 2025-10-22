@@ -278,7 +278,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
     };
 
     if (workflow) {
-      router.patch(`/workflows/${workflow.external_id}`, workflowData, {
+      router.patch(Routes.workflow_path(workflow.external_id), workflowData, {
         onSuccess: () => {
           setIsSaving(false);
           if (saveActionName === "save") {
@@ -293,7 +293,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         },
       });
     } else {
-      router.post("/workflows", workflowData, {
+      router.post(Routes.workflows_path(), workflowData, {
         onSuccess: () => {
           setIsSaving(false);
           if (saveActionName === "save") {

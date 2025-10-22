@@ -24,11 +24,11 @@ export const EditPageNavigation = (props: { workflowExternalId: string }) => {
 
   return (
     <Tabs>
-      <Tab isSelected={currentUrl.includes(`/workflows/${props.workflowExternalId}/edit`)} asChild>
-        <Link href={`/workflows/${props.workflowExternalId}/edit`}>Details</Link>
+      <Tab isSelected={currentUrl.includes(Routes.edit_workflow_path(props.workflowExternalId))} asChild>
+        <Link href={Routes.edit_workflow_path(props.workflowExternalId)}>Details</Link>
       </Tab>
-      <Tab isSelected={currentUrl.includes(`/workflows/${props.workflowExternalId}/emails`)} asChild>
-        <Link href={`/workflows/${props.workflowExternalId}/emails`}>Emails</Link>
+      <Tab isSelected={currentUrl.includes(Routes.workflow_emails_path(props.workflowExternalId))} asChild>
+        <Link href={Routes.workflow_emails_path(props.workflowExternalId)}>Emails</Link>
       </Tab>
     </Tabs>
   );
