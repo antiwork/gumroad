@@ -149,7 +149,7 @@ export const useLazyPaginatedFetch = <T>(
   const [currentData, setCurrentData] = React.useState<T>(initialData);
 
   const mode = options.mode || "replace";
-  const perPage = options.perPage ?? 5;
+  const perPage = options.perPage ?? 20;
 
   const core = useLazyFetchCore(
     initialData,
