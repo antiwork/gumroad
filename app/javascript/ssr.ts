@@ -33,7 +33,6 @@ import CommunitiesPage from "$app/components/server-components/CommunitiesPage";
 import CountrySelectionModal from "$app/components/server-components/CountrySelectionModal";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
-import DashboardPage from "$app/components/server-components/DashboardPage";
 import DeveloperWidgetsPage from "$app/components/server-components/Developer/WidgetsPage";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
@@ -131,7 +130,6 @@ ReactOnRails.register({
   CountrySelectionModal,
   CustomersDownloadPopover,
   CustomersFilterPopover,
-  DashboardPage,
   DeveloperWidgetsPage,
   Discover,
   DiscoverProductPage,
