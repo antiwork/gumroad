@@ -4,7 +4,13 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe "Workflows End-to-End", js: true, type: :system do
+  include RichTextEditorHelpers
+
   let(:seller) { create(:named_seller) }
+
+  def find_email_row(name)
+    find("[aria-label='Email'] h3", text: name, exact_text: true).ancestor("[aria-label='Email']")
+  end
 
   before do
     # Create products after seller is set up
@@ -319,6 +325,67 @@ describe "Workflows End-to-End", js: true, type: :system do
   end
 
   describe "Complete workflow creation flow (full E2E)" do
+    it "creates workflow, adds email, and saves it successfully" do
+      # Step 1: Create workflow
+      visit workflows_path
+      click_on "New workflow", match: :first
+
+      fill_in "Name", with: "Workflow with Email"
+      choose "Purchase"
+      check "Also send to past customers"
+
+      click_on "Save and continue"
+      expect(page).to have_alert(text: "Changes saved!")
+
+      workflow = Workflow.last
+      expect(page).to have_current_path(workflow_emails_path(workflow.external_id))
+
+      # Step 2: Verify we're on the emails page
+      expect(page).to have_tab_button("Details", open: false)
+      expect(page).to have_tab_button("Emails", open: true)
+      expect(page).to have_text("Create emails for your workflow")
+
+      # Step 3: Create an email
+      expect(workflow.installments.alive.count).to eq(0)
+
+      click_on "Create email"
+
+      # Wait for email to be created (default "Untitled" email appears)
+      expect(page).to have_text("Untitled")
+
+      # Find the email row and interact with it
+      within find_email_row("Untitled") do
+        # Fill in email subject
+        fill_in "Subject", with: "Welcome to our product!"
+
+        # Fill in the email message using the rich text editor helper
+        message_editor = find("[aria-label='Email message']")
+        set_rich_text_editor_input(message_editor, to_text: "Thank you for your purchase! We're excited to have you.")
+      end
+
+      # Wait for debounced editor update (500ms)
+      sleep 0.6
+
+      # Save the email
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+
+      # Step 4: Wait for the save to complete and page to reload
+      # The success is visible when we can see the saved subject in the UI
+      expect(page).to have_text("Welcome to our product!")
+
+      # Give time for the database transaction to commit
+      sleep 0.5
+
+      # Verify email was saved in database
+      workflow.reload
+      expect(workflow.installments.alive.count).to eq(1)
+
+      installment = workflow.installments.alive.first
+      expect(installment.name).to eq("Welcome to our product!")
+      expect(installment.message).to include("Thank you for your purchase")
+    end
+
     it "creates workflow and navigates to emails page" do
       # Step 1: Create workflow
       visit workflows_path
