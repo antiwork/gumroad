@@ -39,6 +39,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import { useOnChangeSync } from "../useOnChange";
+import { Stack } from "$app/components/ui/Stack";
 
 type Props = {
   product: {
@@ -327,7 +328,7 @@ const SubscriptionManager = ({
       : null;
 
   return (
-    <div className="stack input-group mx-auto my-8 max-w-2xl">
+    <Stack className="input-group mx-auto my-8 max-w-2xl">
       <header>
         {`Manage ${subscriptionEntity}`}
         <h2>{product.name}</h2>
@@ -383,7 +384,7 @@ const SubscriptionManager = ({
           </Button>
         </div>
       ) : null}
-    </div>
+    </Stack>
   );
 };
 

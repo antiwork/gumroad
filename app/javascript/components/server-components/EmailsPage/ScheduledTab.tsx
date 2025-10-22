@@ -33,6 +33,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import scheduledPlaceholder from "$assets/images/placeholders/scheduled_posts.png";
+import { Stack } from "$app/components/ui/Stack";
 
 export const ScheduledTab = () => {
   const data = cast<{ installments: ScheduledInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
@@ -178,7 +179,7 @@ export const ScheduledTab = () => {
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
                 </header>
-                <div className="stack">
+                <Stack>
                   <div>
                     <h5>Sent to</h5>
                     {selectedInstallment.recipient_description}
@@ -198,7 +199,7 @@ export const ScheduledTab = () => {
                       timeZone: currentSeller.timeZone.name,
                     })}
                   </div>
-                </div>
+                </Stack>
                 <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
                   {selectedInstallment.shown_on_profile ? (

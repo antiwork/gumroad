@@ -21,6 +21,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/followers.png";
+import { Stack } from "$app/components/ui/Stack";
 
 const Layout = ({
   title,
@@ -210,7 +211,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                   <h2>Details</h2>
                   <button className="close" onClick={() => setSelectedFollowerId(null)} title="Close" />
                 </header>
-                <div className="stack">
+                <Stack>
                   <div>
                     <div>
                       <h4>Email</h4>

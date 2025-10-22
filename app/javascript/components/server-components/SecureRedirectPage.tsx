@@ -5,6 +5,7 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Stack } from "$app/components/ui/Stack";
 
 type SecureRedirectPageProps = {
   message: string;
@@ -80,7 +81,7 @@ const SecureRedirectPage = ({
   };
 
   return (
-    <div className="stack single-page-form horizontal-form">
+    <Stack className="single-page-form horizontal-form">
       <header>
         <h2>Confirm access</h2>
         <p>{message}</p>
@@ -108,7 +109,7 @@ const SecureRedirectPage = ({
           {isSubmitting ? "Processing..." : "Continue"}
         </Button>
       </form>
-    </div>
+    </Stack>
   );
 };
 

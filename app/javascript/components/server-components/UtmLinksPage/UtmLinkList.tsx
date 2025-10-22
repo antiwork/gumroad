@@ -32,6 +32,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import noLinksYetPlaceholder from "$assets/images/placeholders/utm_links_empty.png";
 import noLinksFoundPlaceholder from "$assets/images/placeholders/utm_links_not_found.png";
+import { Stack } from "$app/components/ui/Stack";
 
 const duplicateLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/new?copy_from=${link.id}`;
 const editLinkPath = (link: SavedUtmLink) => `/dashboard/utm_links/${link.id}/edit`;
@@ -419,7 +420,7 @@ const UtmLinkDetails = ({
         <h2>{utmLink.title}</h2>
         <button className="close" aria-label="Close details" onClick={onClose} />
       </header>
-      <section className="stack">
+      <Stack as ="section">
         <div>
           <h3>Details</h3>
         </div>
@@ -463,8 +464,8 @@ const UtmLinkDetails = ({
             {utmLink.content}
           </div>
         ) : null}
-      </section>
-      <section className="stack">
+      </Stack>
+      <Stack as="section">
         <h3>Statistics</h3>
         <div>
           <h5>Clicks</h5>
@@ -496,8 +497,8 @@ const UtmLinkDetails = ({
             )}
           </div>
         </div>
-      </section>
-      <section className="stack">
+      </Stack>
+      <Stack as="section">
         <div>
           <h3>Short link</h3>
           <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link">
@@ -509,8 +510,8 @@ const UtmLinkDetails = ({
         <div>
           <h5>{utmLink.short_url}</h5>
         </div>
-      </section>
-      <section className="stack">
+      </Stack>
+      <Stack as="section">
         <div>
           <h3>UTM link</h3>
           <CopyToClipboard text={utmLink.utm_url} copyTooltip="Copy UTM link">
@@ -522,7 +523,7 @@ const UtmLinkDetails = ({
         <div>
           <h5>{utmLink.utm_url}</h5>
         </div>
-      </section>
+      </Stack>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-4)" }}>
         <Link to={duplicateLinkPath(utmLink)} className="button">
           {" "}

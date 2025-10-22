@@ -63,6 +63,7 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
+import { Stack } from "$app/components/ui/Stack";
 
 type LayoutProps = {
   title: string;
@@ -612,7 +613,7 @@ const AffiliateDetails = ({
         const productStatistics = statistics?.products[product.id];
 
         return (
-          <section key={product.id} className="stack">
+          <Stack as = "section" key={product.id}>
             <h3>{product.name}</h3>
             {statistics ? (
               <>
@@ -635,7 +636,7 @@ const AffiliateDetails = ({
                 <Button>Copy link</Button>
               </CopyToClipboard>
             </div>
-          </section>
+          </Stack>
         );
       })}
       <section style={{ display: "grid", gap: "var(--spacer-4)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>

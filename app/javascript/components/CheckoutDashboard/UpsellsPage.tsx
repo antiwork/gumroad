@@ -40,6 +40,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholder from "$assets/images/placeholders/upsells.png";
+import { Stack } from "$app/components/ui/Stack";
 
 type Variant = {
   id: string;
@@ -398,7 +399,7 @@ const UpsellDrawer = ({
         <h2>{selectedUpsell.name}</h2>
         <button className="close" aria-label="Close" onClick={onClose} />
       </header>
-      <section className="stack">
+      <Stack as = "section">
         <h3>Details</h3>
         <div>
           <h5>Offer text</h5>
@@ -436,14 +437,14 @@ const UpsellDrawer = ({
           <h5>Status</h5>
           <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
         </div>
-      </section>
+      </Stack>
       <section className="grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
           {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
         </Button>
       </section>
       {selectedUpsell.cross_sell ? (
-        <section className="stack">
+        <Stack as = "section">
           <h3>Selected products</h3>
           {selectedUpsell.universal ? (
             <div>
@@ -461,24 +462,24 @@ const UpsellDrawer = ({
               </div>
             ))
           )}
-        </section>
+        </Stack>
       ) : (
-        <section className="stack">
+        <Stack as = "section">
           <h3>Selected product</h3>
           <div>
             <h5>{selectedUpsell.product.name}</h5>
           </div>
-        </section>
+        </Stack>
       )}
       {selectedUpsell.cross_sell ? (
-        <section className="stack">
+        <Stack as = "section">
           <h3>Offered product</h3>
           <div>
             <h5>{formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}</h5>
           </div>
-        </section>
+        </Stack>
       ) : (
-        <section className="stack">
+        <Stack as = "section">
           <h3>Offers</h3>
           {selectedUpsell.upsell_variants.map((upsellVariant) => (
             <div key={upsellVariant.id}>
@@ -490,7 +491,7 @@ const UpsellDrawer = ({
               </div>
             </div>
           ))}
-        </section>
+        </Stack>
       )}
       <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>

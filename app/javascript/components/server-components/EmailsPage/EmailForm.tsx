@@ -49,6 +49,7 @@ import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Stack } from "$app/components/ui/Stack";
 
 type ProductOrVariantOption = {
   id: string;
@@ -746,7 +747,7 @@ export const EmailForm = () => {
       />
       <section className="space-y-4 p-4 md:p-8">
         <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
-          <div className="stack">
+          <Stack>
             <div>
               <fieldset role="group">
                 <legend>
@@ -1085,7 +1086,7 @@ export const EmailForm = () => {
                 </label>
               </fieldset>
             </div>
-          </div>
+          </Stack>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <EvaporateUploaderProvider value={evaporateUploader}>
               <div className="grid gap-6">

@@ -20,6 +20,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
+import { Stack } from "$app/components/ui/Stack";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
 const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
@@ -350,7 +351,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
           </WithTooltip>
         ) : null}
       </div>
-      <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
+      <Stack style={{ marginTop: "var(--spacer-4)" }}>
         <div>
           <h4>Sales</h4>
           <div>{formatDollarAmount(payoutPeriodData.sales_cents)}</div>
@@ -520,7 +521,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             </span>
           </div>
         </div>
-      </div>
+      </Stack>
     </section>
   );
 };

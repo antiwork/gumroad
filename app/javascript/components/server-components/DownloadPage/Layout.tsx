@@ -17,6 +17,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { Stack } from "$app/components/ui/Stack";
 
 type ContentUnavailabilityReasonCode =
   | "inactive_membership"
@@ -122,7 +123,7 @@ export const Layout = ({
       {content_unavailability_reason_code !== "email_confirmation_required" ? (
         <>
           {(purchase?.allows_review || disabledStatus) && purchase?.product_permalink ? (
-            <div className="stack">
+            <Stack>
               <ReviewForm
                 permalink={purchase.product_permalink}
                 purchaseId={purchase.id}
@@ -130,7 +131,7 @@ export const Layout = ({
                 review={purchase.review}
                 disabledStatus={disabledStatus}
               />
-            </div>
+            </Stack>
           ) : null}
           {purchase?.email ? (
             <AddToLibrary
@@ -141,7 +142,7 @@ export const Layout = ({
             />
           ) : null}
           {purchase ? (
-            <div className="stack">
+            <Stack>
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
                   <details>
@@ -201,7 +202,7 @@ export const Layout = ({
                   </div>
                 </details>
               ) : null}
-            </div>
+            </Stack>
           ) : null}
         </>
       ) : null}
@@ -279,7 +280,7 @@ const CallDetails = ({ call }: { call: Call }) => {
   const formattedEndDate = formatDate(endTime);
 
   return (
-    <div className="stack">
+    <Stack>
       <div>
         <h5>
           {`${formatTime(startTime)} - ${formatTime(endTime)} ${
@@ -298,13 +299,13 @@ const CallDetails = ({ call }: { call: Call }) => {
           </a>
         </div>
       ) : null}
-    </div>
+    </Stack>
   );
 };
 
 export const EntityInfo = ({ entityName, creator }: { entityName: string | null; creator: LayoutProps["creator"] }) =>
   entityName || creator ? (
-    <div className="stack">
+    <Stack>
       {entityName ? <div>{entityName}</div> : null}
       {creator ? (
         <div>
@@ -320,7 +321,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
           </span>
         </div>
       ) : null}
-    </div>
+    </Stack>
   ) : null;
 
 const PurchaseDeleteButton = ({
@@ -419,7 +420,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
   if (add_to_library_option === "none") return null;
 
   return (
-    <div className="stack">
+    <Stack>
       {add_to_library_option === "add_to_library_button" ? (
         <>
           <span>Access this product from anywhere, forever:</span>
@@ -454,6 +455,6 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
           </div>
         </>
       )}
-    </div>
+    </Stack>
   );
 };

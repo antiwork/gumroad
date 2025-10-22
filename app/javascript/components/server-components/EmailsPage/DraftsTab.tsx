@@ -34,6 +34,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import draftsPlaceholder from "$assets/images/placeholders/draft_posts.png";
+import { Stack } from "$app/components/ui/Stack";
 
 export const DraftsTab = () => {
   const data = cast<{ installments: DraftInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
@@ -158,7 +159,7 @@ export const DraftsTab = () => {
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
                 </header>
-                <div className="stack">
+                <Stack>
                   <div>
                     <h5>Sent to</h5>
                     {selectedInstallment.recipient_description}
@@ -178,7 +179,7 @@ export const DraftsTab = () => {
                       timeZone: currentSeller.timeZone.name,
                     })}
                   </div>
-                </div>
+                </Stack>
                 <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
                   {selectedInstallment.shown_on_profile ? (

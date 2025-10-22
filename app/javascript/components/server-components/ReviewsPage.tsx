@@ -16,6 +16,7 @@ import Placeholder from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
+import { Stack } from "$app/components/ui/Stack";
 
 const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
 
@@ -207,7 +208,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
               </Button>
             }
           >
-            <div className="stack">
+            <Stack>
               <ReviewForm
                 permalink={review.product.permalink}
                 purchaseId={review.purchase_id}
@@ -215,7 +216,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                 review={review}
                 onChange={(newReview) => onChange({ ...review, ...newReview })}
               />
-            </div>
+            </Stack>
           </Popover>
         </div>
       </td>

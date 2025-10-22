@@ -9,6 +9,7 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Stack } from "$app/components/ui/Stack";
 
 type FieldState = { value: string; error?: boolean };
 
@@ -107,7 +108,7 @@ const GenerateInvoicePage = ({
 
   return (
     <>
-      <main className="stack">
+      <Stack as = "main">
         <header>
           <h4>{form_info.heading}</h4>
         </header>
@@ -270,7 +271,7 @@ const GenerateInvoicePage = ({
             Download
           </Button>
         </footer>
-      </main>
+      </Stack>
       <PoweredByFooter />
     </>
   );

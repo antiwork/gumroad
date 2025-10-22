@@ -25,6 +25,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import publishedPlaceholder from "$assets/images/placeholders/published_posts.png";
+import { Stack } from "$app/components/ui/Stack";
 
 export const PublishedTab = () => {
   const data = cast<{ installments: PublishedInstallment[]; pagination: Pagination } | undefined>(useLoaderData());
@@ -184,7 +185,7 @@ export const PublishedTab = () => {
                   <h2>{selectedInstallment.name}</h2>
                   <button className="close" aria-label="Close" onClick={() => setSelectedInstallmentId(null)} />
                 </header>
-                <div className="stack">
+                <Stack>
                   <div>
                     <h5>Sent</h5>
                     {new Date(selectedInstallment.published_at).toLocaleString(userAgentInfo.locale, {
@@ -220,7 +221,7 @@ export const PublishedTab = () => {
                       placeholder: "n/a",
                     })}
                   </div>
-                </div>
+                </Stack>
                 <div className="grid grid-flow-col gap-4">
                   {selectedInstallment.send_emails ? <ViewEmailButton installment={selectedInstallment} /> : null}
                   {selectedInstallment.shown_on_profile ? (

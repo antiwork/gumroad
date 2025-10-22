@@ -37,6 +37,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
 import { FeaturedProductView, Post, PostsView, PageProps as BasePageProps, SubscribeView } from "./Sections";
+import { Stack } from "$app/components/ui/Stack";
 
 type ProductsSection = SavedProductsSection & { search_results: SearchResults };
 type EditProduct = { id: string; name: string };
@@ -178,7 +179,7 @@ export const EditorMenu = ({
           {activeSubmenu}
         </div>
       ) : (
-        <div className="stack" style={{ width: "300px" }}>
+        <Stack style={{ width: "300px" }}>
           {items.map((item, key) =>
             isSubmenu(item) ? (
               <button onClick={() => setMenuState(key)} key={key}>
@@ -191,7 +192,7 @@ export const EditorMenu = ({
               item
             ),
           )}
-        </div>
+        </Stack>
       )}
     </Popover>
   );

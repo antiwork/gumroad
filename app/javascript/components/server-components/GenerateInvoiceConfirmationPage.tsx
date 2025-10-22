@@ -4,15 +4,16 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
+import { Stack } from "$app/components/ui/Stack";
 
 type EmailConfirmationProps = {
   invoice_url: string;
 };
 
 const GenerateInvoiceConfirmationPage = ({ invoice_url }: EmailConfirmationProps) => (
-  <main className="stack single-page-form horizontal-form">
+  <Stack as = "main" className="single-page-form horizontal-form">
     <EmailConfirmation invoice_url={invoice_url} />
-  </main>
+  </Stack>
 );
 
 const EmailConfirmation = ({ invoice_url }: EmailConfirmationProps) => (

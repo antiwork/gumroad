@@ -4,6 +4,7 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { Stack } from "$app/components/ui/Stack";
 
 type Props = {
   productData: {
@@ -74,7 +75,7 @@ export const ProductAttributesAndInfo = ({ productData }: Props) => {
         </>
       ) : null}
       {hasNoAttributes ? null : (
-        <div className="stack">
+        <Stack>
           {custom_summary ? (
             <div>
               <p>{custom_summary}</p>
@@ -86,7 +87,7 @@ export const ProductAttributesAndInfo = ({ productData }: Props) => {
               <div>{fileInfoAttr.value}</div>
             </div>
           ))}
-        </div>
+        </Stack>
       )}
     </div>
   );

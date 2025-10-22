@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
 import Placeholder from "$app/components/ui/Placeholder";
+import { Stack } from "$app/components/ui/Stack";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -86,7 +87,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   );
 
   return files.length ? (
-    <div className="stack">
+    <Stack>
       <div>
         <div role="tree">
           {files.map((file, index) => (
@@ -106,7 +107,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
         </div>
       </div>
       <div style={{ justifyContent: "center" }}>{fileUpload}</div>
-    </div>
+    </Stack>
   ) : (
     <Placeholder>
       {fileUpload}

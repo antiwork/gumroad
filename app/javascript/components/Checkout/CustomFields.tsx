@@ -1,7 +1,7 @@
 import cx from "classnames";
 import uniqBy from "lodash/uniqBy";
 import * as React from "react";
-
+import {Stack} from "$app/components/ui/Stack";
 import { CustomFieldDescriptor } from "$app/parsers/product";
 
 import { Creator } from "$app/components/Checkout/cartState";
@@ -149,7 +149,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
             <legend>
               <label>{product.name}</label>
             </legend>
-            <div className="stack">
+            <Stack>
               <div>
                 <section className="paragraphs">
                   {customFields.map((field) => (
@@ -157,7 +157,7 @@ const SellerCustomFields = ({ seller }: { seller: Creator }) => {
                   ))}
                 </section>
               </div>
-            </div>
+            </Stack>
           </fieldset>
         ))}
       </section>

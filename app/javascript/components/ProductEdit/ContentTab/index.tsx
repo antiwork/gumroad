@@ -65,6 +65,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { Stack } from "$app/components/ui/Stack";
 
 const PageTabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
   <div ref={ref} role="tablist" className="pagelist">
@@ -833,10 +834,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
               ) : null}
               {isDesktop ? (
                 <>
-                  <div className="stack">
+                  <Stack>
                     <ReviewForm permalink="" purchaseId="" review={null} preview />
-                  </div>
-                  <div className="stack">
+                  </Stack>
+                  <Stack>
                     {product.native_type === "membership" ? (
                       <details>
                         <summary inert>Membership</summary>
@@ -848,7 +849,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <details>
                       <summary inert>Library</summary>
                     </details>
-                  </div>
+                  </Stack>
                   <EntityInfo
                     entityName={selectedVariant ? `${product.name} - ${selectedVariant.name}` : product.name}
                     creator={seller}

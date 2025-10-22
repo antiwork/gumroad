@@ -21,6 +21,7 @@ import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
+import { Stack } from "$app/components/ui/Stack";
 
 const formatProductNames = (incomingCollaborator: IncomingCollaborator) => {
   if (incomingCollaborator.products.length === 0) {
@@ -77,14 +78,14 @@ const IncomingCollaboratorDetails = ({
         <button className="close" aria-label="Close" onClick={onClose} />
       </header>
 
-      <section className="stack">
+      <Stack as = "section">
         <h3>Email</h3>
         <div>
           <span>{selected.seller_email}</span>
         </div>
-      </section>
+      </Stack>
 
-      <section className="stack">
+      <Stack as = "section">
         <h3>Products</h3>
         {selected.products.map((product) => (
           <section key={product.id}>
@@ -94,7 +95,7 @@ const IncomingCollaboratorDetails = ({
             <div>{formatAsPercent(product.affiliate_percentage)}</div>
           </section>
         ))}
-      </section>
+      </Stack>
 
       <section className="mt-auto flex gap-4">
         {selected.invitation_accepted ? (

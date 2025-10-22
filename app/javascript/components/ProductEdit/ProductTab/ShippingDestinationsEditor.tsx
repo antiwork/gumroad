@@ -6,6 +6,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { ShippingDestination, useProductEditContext } from "$app/components/ProductEdit/state";
 import Placeholder from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Stack } from "$app/components/ui/Stack";
 
 export const ShippingDestinationsEditor = ({
   shippingDestinations,
@@ -34,7 +35,7 @@ export const ShippingDestinationsEditor = ({
         <h2>Shipping destinations</h2>
       </header>
       {shippingDestinations.length > 0 ? (
-        <div className="stack">
+        <Stack>
           {shippingDestinations.map((shippingDestination, index) => (
             <ShippingDestinationRow
               shippingDestination={shippingDestination}
@@ -55,7 +56,7 @@ export const ShippingDestinationsEditor = ({
               Add shipping destination
             </Button>
           </div>
-        </div>
+        </Stack>
       ) : (
         <Placeholder>
           <h2>Add shipping destinations</h2>

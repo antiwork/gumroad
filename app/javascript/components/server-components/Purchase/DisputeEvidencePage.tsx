@@ -22,6 +22,7 @@ import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { Stack } from "$app/components/ui/Stack";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
 
@@ -146,7 +147,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
   const disputeReason = disputeReasons[dispute_evidence.dispute_reason];
 
   return (
-    <div className="stack">
+    <Stack>
       <header>
         Dispute evidence
         <h2>Submit additional information</h2>
@@ -335,7 +336,7 @@ const DisputeEvidencePage = ({ dispute_evidence, disputable, products }: Props) 
           </div>
         </>
       )}
-    </div>
+    </Stack>
   );
 };
 

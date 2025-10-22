@@ -63,6 +63,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { Stack } from "$app/components/ui/Stack";
 
 export type Seller = { id: string; name: string; avatar_url: string; profile_url: string };
 
@@ -579,7 +580,7 @@ export const Product = ({
             </div>
           ) : null}
           {product.summary || product.attributes.length > 0 ? (
-            <div className="stack">
+            <Stack>
               {product.summary ? <p>{product.summary}</p> : null}
               {product.attributes.map(({ name, value }, idx) => (
                 <div key={idx}>
@@ -587,7 +588,7 @@ export const Product = ({
                   <div>{value}</div>
                 </div>
               ))}
-            </div>
+            </Stack>
           ) : null}
           <ShareSection product={product} selection={selection} wishlists={wishlists} />
           {product.refund_policy ? (
@@ -645,7 +646,7 @@ const ExistingPurchaseStack = ({
 
   return (
     <section>
-      <div className="stack">
+      <Stack>
         {purchase.membership ? (
           <>
             <div>
@@ -690,7 +691,7 @@ const ExistingPurchaseStack = ({
             purchaseEmailDigest={purchase.email_digest}
           />
         ) : null}
-      </div>
+      </Stack>
     </section>
   );
 };

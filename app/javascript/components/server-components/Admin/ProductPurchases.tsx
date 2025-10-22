@@ -6,6 +6,7 @@ import { assertResponseError } from "$app/utils/request";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { showAlert } from "$app/components/server-components/Alert";
+import { Stack } from "$app/components/ui/Stack";
 
 const AdminProductPurchases = ({
   product_id,
@@ -55,7 +56,7 @@ const AdminProductPurchases = ({
       </summary>
       <div className="paragraphs">
         {purchases && purchases.length > 0 ? (
-          <div className="stack">
+          <Stack>
             {purchases.map((purchase) => (
               <div key={purchase.id}>
                 <div>
@@ -91,7 +92,7 @@ const AdminProductPurchases = ({
                 </div>
               </div>
             ))}
-          </div>
+          </Stack>
         ) : null}
         {isLoading ? <div role="progressbar" style={{ width: "0.75rem" }} /> : null}
         {purchases?.length === 0 ? (

@@ -29,6 +29,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import placeholder from "$assets/images/placeholders/library.png";
+import { Stack } from "$app/components/ui/Stack";
 
 export type Result = {
   product: {
@@ -385,7 +386,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
         ) : null}
         <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
           {!showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9) ? (
-            <div className="stack">
+            <Stack>
               <header>
                 <div>
                   {filteredResults.length
@@ -522,7 +523,7 @@ const LibraryPage = ({ results, creators, bundles, reviews_page_enabled, followi
                   ) : null}
                 </>
               ) : null}
-            </div>
+            </Stack>
           ) : null}
           <ProductCardGrid>
             {filteredResults.slice(0, resultsLimit).map((result) => (

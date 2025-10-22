@@ -16,6 +16,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
+import { Stack } from "$app/components/ui/Stack";
 
 export const SORT_BY_LABELS = {
   default: "Default",
@@ -232,7 +233,7 @@ export const CardGrid = ({
       )}
     >
       {hideFilters ? null : (
-        <div className="stack overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
+        <Stack className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
           <header>
             {title ?? "Filters"}
             {anyFilters ? (
@@ -349,7 +350,7 @@ export const CardGrid = ({
             </div>
           </details>
           {appendFilters}
-        </div>
+        </Stack>
       )}
       {results?.products.length === 0 ? (
         <Placeholder>

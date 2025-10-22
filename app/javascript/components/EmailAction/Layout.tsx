@@ -1,18 +1,19 @@
 import * as React from "react";
 
 import { useDomains } from "$app/components/DomainSettings";
+import { Stack } from "$app/components/ui/Stack";
 
 export const Layout = ({ heading, children }: { heading: string; children: React.ReactNode }) => {
   const { rootDomain } = useDomains();
 
   return (
     <>
-      <div className="stack">
+      <Stack>
         <header>
           <h2>{heading}</h2>
         </header>
         <p>{children}</p>
-      </div>
+      </Stack>
       <footer
         style={{
           textAlign: "center",
