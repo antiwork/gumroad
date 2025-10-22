@@ -13,7 +13,7 @@ import * as BraintreeDataCollector from "braintree-web/data-collector";
 import * as BraintreePaypal from "braintree-web/paypal";
 import cx from "classnames";
 import * as React from "react";
-
+import { Stack } from "$app/components/ui/Stack";
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
 import { preparePaymentRequestPaymentMethodData } from "$app/data/card_payment_method_data";
 import {
@@ -1203,7 +1203,7 @@ export const PaymentForm = ({
   }, [state.status.type]);
 
   return (
-    <div ref={paymentFormRef} className={cx("stack", className)} aria-label="Payment form">
+    <Stack ref={paymentFormRef} className={className} aria-label="Payment form">
       {isTestPurchase ? (
         <div>
           <div role="alert" className="info">
@@ -1247,6 +1247,6 @@ export const PaymentForm = ({
         </>
       ) : null}
       {recaptcha.container}
-    </div>
+    </Stack>
   );
 };

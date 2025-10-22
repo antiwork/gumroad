@@ -226,7 +226,7 @@ export const FollowersPage = ({ followers: initialFollowers, per_page, total }: 
                       </Button>
                     </div>
                   </div>
-                </div>
+                </Stack>
               </aside>
             ) : null}
           </div>
