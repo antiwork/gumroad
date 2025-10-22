@@ -49,7 +49,13 @@ class WorkflowsController < Sellers::BaseController
   def update
     success, message = save_workflow
     if success
-      redirect_to workflow_emails_path(@workflow.external_id), notice: "Workflow updated successfully!"
+      # For publish/unpublish actions, stay on edit page; otherwise go to emails page
+      if ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name])
+        notice_message = workflow_params[:save_action_name] == "save_and_publish" ? "Workflow published!" : "Unpublished!"
+        redirect_to edit_workflow_path(@workflow.external_id), notice: notice_message
+      else
+        redirect_to workflow_emails_path(@workflow.external_id), notice: "Changes saved!"
+      end
     else
       workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
       render inertia: "Workflows/Edit", props: {
