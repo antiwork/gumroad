@@ -19,10 +19,7 @@ class BlockedObject
     define_method("#{object_type}?") { self.object_type == object_type }
   end
   validates_inclusion_of :object_type, in: BLOCKED_OBJECT_TYPES.values
-  validates :expires_at, presence: {
-    if: [:ip_address?, :blocked_at?],
-    unless: :expires_at?
-  }
+  validates :expires_at, presence: { if: %i[ip_address? blocked_at?] }
 
   scope :active, -> { where(:blocked_at.ne => nil).any_of({ expires_at: nil }, { :expires_at.gt => Time.current }) }
 
