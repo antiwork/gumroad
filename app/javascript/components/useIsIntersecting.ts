@@ -2,9 +2,10 @@ import * as React from "react";
 
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
-export const useIsIntersecting = <T extends HTMLElement = HTMLElement>(
+const useIsIntersecting = <T extends HTMLElement = HTMLElement>(
   callback: (isIntersecting: boolean) => void,
   options?: IntersectionObserverInit,
+  dependencies?: React.DependencyList,
 ) => {
   const elementRef = React.useRef<T>(null);
   const callbackRef = useRefToLatest(callback);
@@ -19,7 +20,9 @@ export const useIsIntersecting = <T extends HTMLElement = HTMLElement>(
 
     observer.observe(elementRef.current);
     return () => observer.disconnect();
-  }, [options]);
+  }, [options, dependencies]);
 
   return elementRef;
 };
+
+export default useIsIntersecting;

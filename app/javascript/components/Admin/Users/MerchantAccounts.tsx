@@ -8,7 +8,7 @@ import AdminActionButton from "$app/components/Admin/ActionButton";
 import { YesIcon, NoIcon } from "$app/components/Admin/Icons";
 import AdminLoading from "$app/components/Admin/Loading";
 import type { User } from "$app/components/Admin/Users/User";
-import { useIsIntersecting } from "$app/components/useIsIntersecting";
+import useIsIntersecting from "$app/components/useIsIntersecting";
 
 type AdminUserMerchantAccountsProps = {
   user: User;

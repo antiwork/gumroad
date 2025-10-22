@@ -1,7 +1,7 @@
 import React from "react";
 import { cast } from "ts-safe-cast";
 
-import { request } from "$app/utils/request";
+import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 
 import type { CommentProps } from "$app/components/Admin/Commentable/Comment";
 import AdminCommentableContent from "$app/components/Admin/Commentable/Content";
@@ -15,20 +15,33 @@ type AdminCommentableProps = {
 
 const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCommentableProps) => {
   const [open, setOpen] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [comments, setComments] = React.useState<CommentProps[]>([]);
+
+  const {
+    data: comments,
+    isLoading,
+    setData: setComments,
+    fetchData: fetchComments,
+    hasMore,
+    pagination,
+    setHasMore,
+    hasLoaded,
+    setHasLoaded,
+  } = useLazyPaginatedFetch<CommentProps[]>([], {
+    url: endpoint,
+    responseParser: (data: unknown) => {
+      const result = cast<{ comments: CommentProps[] }>(data);
+      return result.comments;
+    },
+    mode: "append",
+  });
+
   const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
 
-  const fetchComments = async () => {
-    setIsLoading(true);
-    const response = await request({
-      method: "GET",
-      url: endpoint,
-      accept: "json",
-    });
-    const data = cast<{ comments: CommentProps[] }>(await response.json());
-    setComments(data.comments);
-    setIsLoading(false);
+  const resetComments = () => {
+    setComments([]);
+    setCommentsCount(pagination.count);
+    setHasLoaded(false);
+    setHasMore(true);
   };
 
   const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
@@ -36,22 +49,35 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
     if (e.currentTarget.open) {
       void fetchComments();
     } else {
-      setComments([]);
+      resetComments();
     }
   };
 
-  const onCommentAdded = (comment: CommentProps) => {
+  const appendComment = (comment: CommentProps) => {
     setComments([comment, ...comments]);
     setCommentsCount(commentsCount + 1);
+  };
+
+  const fetchNextPage = () => {
+    if (pagination.next) {
+      void fetchComments({ page: pagination.next });
+    }
   };
 
   return (
     <>
       <hr />
-      <AdminCommentableForm endpoint={endpoint} onCommentAdded={onCommentAdded} commentableType={commentableType} />
       <details open={open} onToggle={onToggle} className="space-y-2">
-        <summary>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</summary>
-        <AdminCommentableContent count={commentsCount} comments={comments} isLoading={isLoading} />
+      <summary>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</summary>
+        <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
+        <AdminCommentableContent
+          count={commentsCount}
+          comments={comments}
+          hasLoaded={hasLoaded}
+          isLoading={isLoading}
+          hasMore={hasMore}
+          onLoadMore={fetchNextPage}
+        />
       </details>
     </>
   );
