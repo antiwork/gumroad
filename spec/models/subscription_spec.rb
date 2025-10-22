@@ -3027,6 +3027,27 @@ describe Subscription, :vcr do
           expect(subscription.current_subscription_price_cents).to eq(300)
         end
       end
+
+      context "locks price when" do
+        before do
+          create(:installment_plan_purchase, link: product, subscription: subscription, purchase_state: :successful)
+          subscription.reload
+        end
+
+        it "product price changes" do
+          product.update!(price_cents: 60000)
+          subscription.reload
+          expect(subscription.current_subscription_price_cents).to eq(333)
+        end
+
+        it "installment plan changes" do
+          product.installment_plan.destroy_if_no_payment_options!
+          product.reset_installment_plan
+          create(:product_installment_plan, link: product, number_of_installments: 5, recurrence: "monthly")
+          subscription.reload
+          expect(subscription.current_subscription_price_cents).to eq(333)
+        end
+      end
     end
   end
 

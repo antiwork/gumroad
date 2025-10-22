@@ -71,6 +71,7 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :perceived_price_cents
   attr_json_data_accessor :recommender_model_name
   attr_json_data_accessor :custom_fee_per_thousand
+  attr_json_data_accessor :total_price_before_installments_cents
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -1240,16 +1241,17 @@ class Purchase < ApplicationRecord
     return 0 if is_gift_receiver_purchase
     return perceived_price_cents if perceived_price_cents.present? && is_applying_plan_change
 
-    if is_recurring_subscription_charge
+    if is_recurring_subscription_charge && subscription.is_installment_plan
+      minimum_price = calculate_installment_payment_price_cents(for_recurring: true)
+    elsif is_recurring_subscription_charge
       minimum_price = subscription.current_subscription_price_cents
     elsif is_preorder_charge?
       minimum_price = preorder.authorization_purchase.displayed_price_cents
     else
-      minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
-      # We want an offer code to apply to every quantity separately ($2 offer code on 2 CDs = $4 off).
-      minimum_price_cents *= quantity
-
-      minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+      minimum_price_cents = discounted_total_before_installments_cents
+      if is_original_subscription_purchase && is_installment_payment && total_price_before_installments_cents.nil?
+        self.total_price_before_installments_cents = minimum_price_cents
+      end
 
       minimum_price = minimum_price_cents
 
@@ -1258,7 +1260,7 @@ class Purchase < ApplicationRecord
       elsif link.native_type == Link::NATIVE_TYPE_COMMISSION
         minimum_price *= Commission::COMMISSION_DEPOSIT_PROPORTION
       elsif is_installment_payment
-        minimum_price = calculate_installment_payment_price_cents(minimum_price_cents)
+        minimum_price = calculate_installment_payment_price_cents(for_recurring: false, total_price_cents: minimum_price_cents)
       end
 
       # We allow offer codes that are larger than the price of the product. In that case minimum_price_cents could be negative here. Set it to 0.
@@ -2570,8 +2572,7 @@ class Purchase < ApplicationRecord
     else
       total_transaction_amount_for_gumroad_cents * 1.0 / charge.gumroad_amount_cents
     end
-    purchase_seller_portion = (total_transaction_cents - total_transaction_amount_for_gumroad_cents) * 1.0 /
-        (charge.amount_cents - charge.gumroad_amount_cents)
+    purchase_seller_portion = (total_transaction_cents - total_transaction_amount_for_gumroad_cents) * 1.0 / (charge.amount_cents - charge.gumroad_amount_cents)
 
     issued_amount_cents = (total_issued_amount_cents * purchase_portion).floor
     settled_amount_cents = (combined_flow_of_funds.settled_amount.cents * purchase_portion).floor
@@ -2619,6 +2620,27 @@ class Purchase < ApplicationRecord
       errors.add :base, "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout."
       self.error_code = PurchaseErrorCode::PPP_CARD_COUNTRY_NOT_MATCHING
     end
+  end
+
+  def calculate_installment_payment_price_cents(for_recurring: is_recurring_subscription_charge, total_price_cents: nil)
+    return unless is_installment_payment
+    plan = installment_plan || subscription&.payment_options&.alive&.order(:id)&.first&.installment_plan || link.installment_plan
+    if for_recurring
+      nth_installment = subscription.purchases.successful.count
+      total_price_cents = subscription.original_purchase.total_price_before_installments_cents || subscription.original_purchase.discounted_total_before_installments_cents
+    else
+      nth_installment = 0
+    end
+    payment_plan = plan.calculate_installment_payment_price_cents(total_price_cents)
+    payment_plan[nth_installment] || payment_plan.last
+  end
+
+  def discounted_total_before_installments_cents
+    minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
+    # We want an offer code to apply to every quantity separately ($2 offer code on 2 CDs = $4 off).
+    minimum_price_cents *= quantity
+    minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && original_offer_code.blank?
+    minimum_price_cents
   end
 
   private
@@ -3385,14 +3407,6 @@ class Purchase < ApplicationRecord
       customizable_price? ? perceived_price_cents : nil
     end
 
-    def calculate_installment_payment_price_cents(total_price_cents)
-      return unless is_installment_payment
-
-      nth_installment = subscription&.purchases&.successful&.count || 0
-      installment_payments = fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
-      installment_payments[nth_installment] || installment_payments.last
-    end
-
     def calculate_price_range_cents
       return unless price_range
 
@@ -3820,9 +3834,5 @@ class Purchase < ApplicationRecord
       if rand < probability
         Iffy::Product::IngestJob.perform_async(link.id)
       end
-    end
-
-    def fetch_installment_plan
-      installment_plan || subscription&.last_payment_option&.installment_plan
     end
 end

@@ -62,6 +62,7 @@ describe "Product with installment plan", type: :system, js: true do
       charge_occurrence_count: 3,
       recurrence: "monthly",
     )
+    expect(purchase.total_price_before_installments_cents).to eq(1000)
     expect(subscription.last_payment_option.installment_plan).to eq(installment_plan)
 
     visit purchase.receipt_url
@@ -70,6 +71,7 @@ describe "Product with installment plan", type: :system, js: true do
     travel_to(1.month.from_now)
     RecurringChargeWorker.new.perform(subscription.id)
     expect(subscription.purchases.successful.count).to eq(2)
+    expect(subscription.purchases.successful.last.total_price_before_installments_cents).to be_nil
     expect(subscription.purchases.successful.last).to have_attributes(
       price_cents: 333,
       is_installment_payment: true,
@@ -274,11 +276,13 @@ describe "Product with installment plan", type: :system, js: true do
         charge_occurrence_count: 3,
         recurrence: "monthly",
       )
+      expect(purchase.total_price_before_installments_cents).to eq(1000)
       expect(subscription.last_payment_option.installment_plan).to eq(installment_plan)
 
       travel_to(1.month.from_now)
       RecurringChargeWorker.new.perform(subscription.id)
       expect(subscription.purchases.successful.count).to eq(2)
+      expect(subscription.purchases.successful.last.total_price_before_installments_cents).to be_nil
       expect(subscription.purchases.successful.last).to have_attributes(
         price_cents: 333,
         is_installment_payment: true,

@@ -3367,8 +3367,10 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.subscription).to have_attributes(
         is_installment_plan: true,
         charge_occurrence_count: 3,
-        recurrence: "monthly",
-      )
+        recurrence: "monthly"
+        )
+      expect(purchase.total_price_before_installments_cents).to eq(600)
+      expect(purchase.minimum_paid_price_cents).to eq(200)
       expect(purchase.subscription.credit_card).to be_present
       expect(purchase.subscription.last_payment_option.installment_plan).to eq(installment_plan)
     end

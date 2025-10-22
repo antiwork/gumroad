@@ -6527,4 +6527,27 @@ describe Purchase, :vcr do
       end
     end
   end
+
+  describe "#minimum_paid_price_cents" do
+    describe "installment plans" do
+      let(:product) { create(:product, :with_installment_plan, user: create(:user)) }
+      let(:subscription) { create(:subscription, link: product, is_installment_plan: true) }
+      let(:installment_plan) { product.installment_plan }
+
+      context "storing total price" do
+        it "stores total_price_before_installments_cents during set_price_and_rate" do
+          purchase = build(:purchase, link: product, is_original_subscription_purchase: true, subscription:, is_installment_payment: true, installment_plan:)
+          expect(purchase.total_price_before_installments_cents).to be_nil
+          purchase.minimum_paid_price_cents
+          expect(purchase.total_price_before_installments_cents).to eq(3000)
+        end
+
+        it "does not overwrite existing total_price_before_installments_cents" do
+          purchase = build(:purchase, link: product, is_original_subscription_purchase: true, subscription:, is_installment_payment: true, installment_plan:, total_price_before_installments_cents: 5000)
+          purchase.minimum_paid_price_cents
+          expect(purchase.total_price_before_installments_cents).to eq(5000)
+        end
+      end
+    end
+  end
 end
