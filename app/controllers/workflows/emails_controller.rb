@@ -11,9 +11,8 @@ class Workflows::EmailsController < Sellers::BaseController
 
     workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
     render inertia: "Workflows/Emails", props: {
-      # Use lambdas for lazy evaluation - context has expensive product/variant queries
-      workflow: -> { workflow_presenter.edit_page_react_props[:workflow] },
-      context: -> { workflow_presenter.edit_page_react_props[:context] },
+      workflow: -> { workflow_presenter.workflow_props },
+      context: -> { workflow_presenter.workflow_form_context_props },
     }
   end
 

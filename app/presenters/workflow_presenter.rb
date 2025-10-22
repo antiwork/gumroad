@@ -60,8 +60,7 @@ class WorkflowPresenter
     props
   end
 
-  private
-    def workflow_form_context_props
+  def workflow_form_context_props
       user_presenter = UserPresenter.new(user: seller)
 
       {

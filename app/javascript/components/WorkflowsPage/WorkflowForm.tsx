@@ -279,6 +279,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     if (workflow) {
       router.patch(Routes.workflow_path(workflow.external_id), workflowData, {
+        only: ["workflow"],
         onSuccess: () => {
           setIsSaving(false);
           if (saveActionName === "save") {

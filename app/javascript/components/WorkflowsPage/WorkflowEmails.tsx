@@ -266,7 +266,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
               "success",
             );
           }
-          router.reload();
+          router.reload({ only: ["workflow"] });
         },
         onError: () => {
           setIsSaving(false);
