@@ -106,7 +106,6 @@ class WorkflowsController < Sellers::BaseController
       )
     end
 
-
     def fetch_product_and_enforce_ownership
       permalink = workflow_params[:permalink]
       @product = current_seller.products.visible.find_by(unique_permalink: permalink) ||

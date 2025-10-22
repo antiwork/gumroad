@@ -40,17 +40,14 @@ class Workflows::EmailsController < Sellers::BaseController
     end
 
     def parsed_installments_params
-      # Parse JSON string from FormData if present
       workflow_params = params.require(:workflow)
 
       if workflow_params[:installments].is_a?(String)
         parsed_installments = JSON.parse(workflow_params[:installments])
-        # Convert to hash before merging
         workflow_params_hash = workflow_params.to_unsafe_h.merge(installments: parsed_installments)
         workflow_params = ActionController::Parameters.new(workflow_params_hash)
       end
 
-      # Permit the parameters
       workflow_params.permit(
         :send_to_past_customers, :save_action_name,
         installments: [
