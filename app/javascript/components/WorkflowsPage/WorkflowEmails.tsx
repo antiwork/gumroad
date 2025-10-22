@@ -251,7 +251,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
       formData.append("workflow[save_action_name]", payload.workflow.save_action_name);
       formData.append("workflow[installments]", JSON.stringify(payload.workflow.installments));
 
-      router.patch(Routes.workflow_installments_path(workflow.external_id), formData, {
+      router.patch(Routes.workflow_emails_path(workflow.external_id), formData, {
         onSuccess: () => {
           setIsSaving(false);
           if (sendPreviewForEmailId) {

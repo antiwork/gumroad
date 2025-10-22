@@ -806,8 +806,7 @@ Rails.application.routes.draw do
 
     # workflows
     resources :workflows, only: [:index, :new, :create, :edit, :update, :destroy] do
-      get "emails", to: "workflows/emails#index", as: :emails
-      patch "installments", to: "workflows/installments#update", as: :installments
+      resource :emails, only: [:show, :update], controller: "workflows/emails"
     end
 
     # utm links
