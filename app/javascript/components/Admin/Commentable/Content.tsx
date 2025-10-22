@@ -34,12 +34,12 @@ const AdminCommentableContent = ({
       onLoadMore();
     },
     undefined,
-    [isLoading, hasMore]
+    [isLoading, hasMore],
   );
 
   return (
     <div>
-      {isLoading && !hasLoaded && <Loading />}
+      {isLoading && !hasLoaded ? <Loading /> : null}
 
       <div className="rows" role="list">
         {comments.map((comment) => (
@@ -47,11 +47,7 @@ const AdminCommentableContent = ({
         ))}
       </div>
 
-      {hasMore && (
-        <div ref={elementRef}>
-          {isLoading && <Loading />}
-        </div>
-      )}
+      {hasMore ? <div ref={elementRef}>{isLoading ? <Loading /> : null}</div> : null}
     </div>
   );
 };
