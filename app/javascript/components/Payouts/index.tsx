@@ -734,7 +734,7 @@ const Payouts = ({
       <div className="space-y-8 p-4 md:p-8">
         {!instant_payout
           ? show_instant_payouts_notice && (
-              <InlineAlert variant="info" role="status" showIcon={false}>
+              <InlineAlert variant="info" role="status">
                 <p>
                   To enable <strong>instant</strong> payouts,{" "}
                   <a href={Routes.settings_payments_path()}>update your payout method</a> to one of the{" "}
@@ -747,7 +747,7 @@ const Payouts = ({
             )
           : instant_payout.payable_amount_cents >= MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS && (
               <div>
-                <InlineAlert variant="info" role="status" showIcon={false}>
+                <InlineAlert variant="info" role="status">
                   <b>
                     You have{" "}
                     {formatPriceCentsWithCurrencySymbol("usd", instant_payout.payable_amount_cents, {
@@ -864,7 +864,7 @@ const Payouts = ({
                       </footer>
                     </div>
                     {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS && (
-                      <InlineAlert variant="info" role="status" showIcon={false}>
+                      <InlineAlert variant="info" role="status">
                         Your balance exceeds the maximum amount for a single instant payout, so we'll automatically
                         split your balance into multiple payouts.
                       </InlineAlert>
@@ -874,7 +874,7 @@ const Payouts = ({
               </div>
             )}
         {payouts_status === "paused" && (
-          <InlineAlert variant="warning" role="status" showIcon={false}>
+          <InlineAlert variant="warning" role="status">
             <p>
               {payouts_paused_by === "stripe" ? (
                 <strong>
@@ -902,20 +902,20 @@ const Payouts = ({
         )}
         {next_payout_period_data != null ? (
           next_payout_period_data.has_stripe_connect ? (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
             </InlineAlert>
           ) : (
             <section className="grid gap-4">
               {next_payout_period_data.payout_note &&
                 !["processing", "paused"].includes(next_payout_period_data.status) && (
-                  <InlineAlert variant="info" role="status" showIcon={false}>
+                  <InlineAlert variant="info" role="status">
                     <p>{next_payout_period_data.payout_note}</p>
                   </InlineAlert>
                 )}
               {next_payout_period_data.status === "not_payable" ? (
                 pastPayoutPeriodData.length > 0 ? (
-                  <InlineAlert variant="info" role="status" showIcon={false}>
+                  <InlineAlert variant="info" role="status">
                     <p>
                       Reach a balance of at least{" "}
                       {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {

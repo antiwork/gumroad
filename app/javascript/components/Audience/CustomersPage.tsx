@@ -793,30 +793,30 @@ const CustomerDrawer = ({
       </header>
       {commission ? <CommissionStatusPill commission={commission} /> : null}
       {customer.is_additional_contribution && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           <strong>Additional amount: </strong>
           This is an additional contribution, added to a previous purchase of this product.
         </InlineAlert>
       )}
       {customer.ppp && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they are
           located in <b>{customer.ppp.country}</b>.
         </InlineAlert>
       )}
       {customer.giftee_email && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           {customer.email} purchased this for {customer.giftee_email}.
         </InlineAlert>
       )}
       {customer.is_preorder && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           <strong>Pre-order: </strong>
           This is a pre-order authorization. The customer's card has not been charged yet.
         </InlineAlert>
       )}
       {customer.affiliate && customer.affiliate.type !== "Collaborator" && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           <strong>Affiliate: </strong>
           An affiliate ({customer.affiliate.email}) helped you make this sale and received {customer.affiliate.amount}.
         </InlineAlert>
@@ -1499,7 +1499,7 @@ const TrackingSection = ({
             </NavigationButton>
           </div>
         ) : (
-          <InlineAlert variant="success" role="status" showIcon={false}>
+          <InlineAlert variant="success" role="status">
             Shipped
           </InlineAlert>
         )
@@ -1880,7 +1880,7 @@ const UtmLinkStack = ({ link, showHeader }: { link: Customer["utm_link"]; showHe
             <h3>UTM link</h3>
           </section>
           <div>
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               <small>
                 This sale was driven by a{" "}
                 <a href={link.utm_url} target="_blank" rel="noreferrer">
@@ -2203,7 +2203,7 @@ const RefundForm = ({
           )}
         </div>
         {showRefundFeeNotice && (
-          <InlineAlert variant="info" role="status" showIcon={false}>
+          <InlineAlert variant="info" role="status">
             <p>
               Going forward, Gumroad does not return any fees when a payment is refunded.{" "}
               <a href="/help/article/47-how-to-refund-a-customer" target="_blank" rel="noreferrer">
@@ -2353,7 +2353,7 @@ const ChargesSection = ({
         <>
           {remainingCharges !== null && (
             <section>
-              <InlineAlert variant="info" role="status" showIcon={false}>
+              <InlineAlert variant="info" role="status">
                 {`${remainingCharges} ${remainingCharges > 1 ? "charges" : "charge"} remaining`}
               </InlineAlert>
             </section>

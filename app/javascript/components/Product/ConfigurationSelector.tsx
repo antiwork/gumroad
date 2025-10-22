@@ -240,7 +240,7 @@ export const OptionRadioButton = ({
       style={recurrence ? { flexDirection: "column" } : undefined}
     >
       {status && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           {status}
         </InlineAlert>
       )}
@@ -395,7 +395,7 @@ const CallDateAndTimeSelector = ({
 
   if (firstAvailableStartTime === null && !isLoading) {
     return (
-      <InlineAlert variant="warning" role="status" showIcon={false}>
+      <InlineAlert variant="warning" role="status">
         {product.options.length > 1 ? "There are no available times for this option." : "There are no available times."}
       </InlineAlert>
     );

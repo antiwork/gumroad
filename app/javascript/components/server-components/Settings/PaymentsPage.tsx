@@ -887,7 +887,7 @@ const PaymentsPage = (props: Props) => {
             <StripeConnectEmbeddedNotificationBanner />
           ) : (
             <div className="flex flex-col">
-              <InlineAlert variant="success" role="status" showIcon={false}>
+              <InlineAlert variant="success" role="status">
                 Your account details have been verified!
               </InlineAlert>
               <div className="mt-4 flex items-center">
@@ -920,7 +920,7 @@ const PaymentsPage = (props: Props) => {
 
         {errorMessage && (
           <div className="mb-12 px-8">
-            <InlineAlert variant="danger" role="status" showIcon={false}>
+            <InlineAlert variant="danger" role="status">
               {errorMessage.code === "stripe_error" ? (
                 <div>Your account could not be updated due to an error with Stripe.</div>
               ) : (
@@ -953,13 +953,13 @@ const PaymentsPage = (props: Props) => {
               </small>
             </fieldset>
             {payoutFrequency === "daily" && props.payout_frequency_daily_supported && (
-              <InlineAlert variant="info" role="status" showIcon={false}>
+              <InlineAlert variant="info" role="status">
                 Every day, your balance from the previous day will be sent to you via instant payouts, subject to a{" "}
                 <b>3% fee</b>.
               </InlineAlert>
             )}
             {payoutFrequency === "daily" && !props.payout_frequency_daily_supported && (
-              <InlineAlert variant="danger" role="status" showIcon={false}>
+              <InlineAlert variant="danger" role="status">
                 Your account is no longer eligible for daily payouts. Please update your schedule.
               </InlineAlert>
             )}

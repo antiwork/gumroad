@@ -432,11 +432,11 @@ export const Product = ({
       <section>
         <section>
           {notForSaleMessage ? (
-            <InlineAlert variant="warning" role="status" showIcon={false}>
+            <InlineAlert variant="warning" role="status">
               {notForSaleMessage}
             </InlineAlert>
           ) : product.native_type === "commission" ? (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining balance
               will be charged upon completion.
             </InlineAlert>
@@ -444,7 +444,7 @@ export const Product = ({
           {discountCode ? (
             discountCode.valid ? (
               (discountedPriceCents < priceCents || discountCode.discount.minimum_quantity) && !pppDiscounted ? (
-                <InlineAlert variant="success" role="status" showIcon={false}>
+                <InlineAlert variant="success" role="status">
                   <div className="paragraphs">
                     {discountCode.discount.minimum_quantity
                       ? `Get ${
@@ -491,7 +491,7 @@ export const Product = ({
                 </InlineAlert>
               ) : null
             ) : (
-              <InlineAlert variant="danger" role="status" showIcon={false}>
+              <InlineAlert variant="danger" role="status">
                 {discountCode.error_code === "sold_out"
                   ? "Sorry, the discount code you wish to use has expired."
                   : discountCode.error_code === "invalid_offer"
@@ -508,7 +508,7 @@ export const Product = ({
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted && (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               This product supports purchasing power parity. Because you're located in{" "}
               <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
               <b>
@@ -529,13 +529,13 @@ export const Product = ({
             </InlineAlert>
           )}
           {product.free_trial && (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
               trial
             </InlineAlert>
           )}
           {product.duration_in_months && (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               This membership will automatically end after{" "}
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
             </InlineAlert>
@@ -553,7 +553,7 @@ export const Product = ({
             }}
           />
           {product.sales_count !== null && (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               <strong>{product.sales_count.toLocaleString()}</strong>{" "}
               {product.recurrences
                 ? "member"
@@ -566,12 +566,12 @@ export const Product = ({
             </InlineAlert>
           )}
           {product.preorder && (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               Available on {formatDate(parseISO(product.preorder.release_date))}
             </InlineAlert>
           )}
           {product.streamable && (
-            <InlineAlert variant="info" role="status" showIcon={false}>
+            <InlineAlert variant="info" role="status">
               Watch link provided after purchase
             </InlineAlert>
           )}

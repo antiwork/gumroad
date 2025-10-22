@@ -96,7 +96,7 @@ const AdminProductPurchases = ({
         ) : null}
         {isLoading ? <div role="progressbar" style={{ width: "0.75rem" }} /> : null}
         {purchases?.length === 0 && (
-          <InlineAlert variant="info" role="status" showIcon={false}>
+          <InlineAlert variant="info" role="status">
             No purchases have been made.
           </InlineAlert>
         )}

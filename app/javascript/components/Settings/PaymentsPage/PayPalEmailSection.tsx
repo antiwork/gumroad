@@ -32,7 +32,7 @@ const PayPalEmailSection = ({
   return (
     <section className="grid gap-8">
       {showPayPalPayoutsFeeNote && (
-        <InlineAlert variant="info" role="status" showIcon={false}>
+        <InlineAlert variant="info" role="status">
           PayPal payouts are subject to a 2% processing fee.
         </InlineAlert>
       )}

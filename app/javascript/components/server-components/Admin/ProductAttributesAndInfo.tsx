@@ -47,25 +47,21 @@ export const ProductAttributesAndInfo = ({ productData }: Props) => {
   return hasNoAttributes && preorder == null && !should_show_sales_count && !has_stream_only_files ? null : (
     <div className="product-info grid gap-4">
       {should_show_sales_count && (
-        <InlineAlert variant="info" showIcon={false}>
+        <InlineAlert variant="info">
           <strong>{sales_count.toLocaleString(userAgentInfo.locale)}</strong> {salesUnit}
           {sales_count === 1 ? "" : "s"}
         </InlineAlert>
       )}
       {preorder != null && (
         <>
-          <InlineAlert variant="info" showIcon={false}>
-            Available on {preorder.release_date_fmt}
-          </InlineAlert>
+          <InlineAlert variant="info">Available on {preorder.release_date_fmt}</InlineAlert>
           <h5 className="product-info-preorder-indicator legacy-only">Available on {preorder.release_date_fmt}</h5>
         </>
       )}
 
       {has_stream_only_files && (
         <>
-          <InlineAlert variant="info" showIcon={false}>
-            Watch link provided after purchase
-          </InlineAlert>
+          <InlineAlert variant="info">Watch link provided after purchase</InlineAlert>
           <div className="product-info-stream-only-indicator legacy-only">
             <h5>Available to stream instantly</h5>
             <small>Watch link provided after purchase</small>

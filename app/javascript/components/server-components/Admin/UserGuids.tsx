@@ -45,7 +45,7 @@ const AdminUserGuids = ({ user_id }: { user_id: number }) => {
             ))}
           </div>
         ) : (
-          <InlineAlert variant="info" role="status" showIcon={false}>
+          <InlineAlert variant="info" role="status">
             No GUIDs found.
           </InlineAlert>
         )

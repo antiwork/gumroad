@@ -877,13 +877,13 @@ export const EmailForm = () => {
                         </label>
                       ))}
                       {!installment?.published_at && (
-                        <InlineAlert variant="info" role="status" showIcon={false}>
+                        <InlineAlert variant="info" role="status">
                           The post will be shown in the selected profile sections once it is published.
                         </InlineAlert>
                       )}
                     </>
                   ) : (
-                    <InlineAlert variant="info" role="status" showIcon={false}>
+                    <InlineAlert variant="info" role="status">
                       You currently have no sections in your profile to display this,{" "}
                       <a href={Routes.root_url({ host: currentSeller.subdomain })}>create one here</a>
                     </InlineAlert>

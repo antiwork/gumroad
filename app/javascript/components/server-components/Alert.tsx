@@ -13,22 +13,22 @@ export type AlertPayload = { message: string; status: "success" | "danger" | "in
 const ALERT_STYLES = {
   success: {
     icon: "solid-check-circle" as const,
-    container: "border-alert-success bg-alert-success/20",
+    container: "border-alert-success bg-green-50 dark:bg-green-950",
     iconColor: "text-alert-success",
   },
   danger: {
     icon: "x-circle-fill" as const,
-    container: "border-alert-danger bg-alert-danger/20",
+    container: "border-alert-danger bg-red-50 dark:bg-red-950",
     iconColor: "text-alert-danger",
   },
   warning: {
     icon: "solid-shield-exclamation" as const,
-    container: "border-alert-warning bg-alert-warning/20",
+    container: "border-alert-warning bg-yellow-50 dark:bg-yellow-950",
     iconColor: "text-alert-warning",
   },
   info: {
     icon: "info-circle-fill" as const,
-    container: "border-alert-info bg-alert-info/20",
+    container: "border-alert-info bg-blue-50 dark:bg-blue-950",
     iconColor: "text-alert-info",
   },
 };
@@ -71,8 +71,8 @@ const Alert = ({ initial }: { initial: AlertPayload | null }) => {
     <div
       role="alert"
       className={classNames(
-        "fixed top-4 left-1/2 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 md:max-w-sm",
-        "grid grid-cols-[auto_1fr] items-center gap-2 rounded border px-4 py-2",
+        "fixed top-4 left-1/2 w-max max-w-sm -translate-x-1/2 px-2",
+        "flex items-start gap-2 rounded border px-4 py-2",
         styles.container,
         isVisible ? "visible" : "invisible",
       )}
@@ -82,7 +82,7 @@ const Alert = ({ initial }: { initial: AlertPayload | null }) => {
         zIndex: 30,
       }}
     >
-      <Icon name={styles.icon} className={classNames("min-h-[1lh] w-[1em]", styles.iconColor)} />
+      <Icon name={styles.icon} className={classNames("mt-0.5 w-4", styles.iconColor)} />
       <div dangerouslySetInnerHTML={alert.html ? { __html: alert.message } : undefined}>
         {!alert.html ? alert.message : null}
       </div>
