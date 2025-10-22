@@ -15,6 +15,19 @@
 
   <p>Hi! <%= mail_to(@chargeable.gifter_email) %> bought this as a gift for you. We hope you like it!</p>
 
+  <%# Optional product-level additional text for the gift receipt as well %>
+  <% begin %>
+    <% first_item = @receipt_presenter.items_infos.first %>
+    <% additional_text = first_item&.product&.receipt_additional_text %>
+    <% if additional_text.present? %>
+      <div class="with-top-margin">
+        <%= raw(h(additional_text).gsub(/\r?\n/, '<br>')) %>
+      </div>
+    <% end %>
+  <% rescue %>
+    <%# No-op if items not available %>
+  <% end %>
+
   <% if @chargeable.gift_note.present? %>
     <div>
       <div class="promo" role="status">

@@ -196,10 +196,39 @@ export const ProductTab = () => {
                     options={CUSTOM_BUTTON_TEXT_OPTIONS}
                   />
                 ) : null}
+                <fieldset>
+                  <label htmlFor={`${uid}-view-content-text`}>View Content button text</label>
+                  <input
+                    id={`${uid}-view-content-text`}
+                    type="text"
+                    maxLength={25}
+                    placeholder="View Content"
+                    value={product.custom_view_content_button_text ?? "View Content"}
+                    onChange={(evt) =>
+                      updateProduct({ custom_view_content_button_text: evt.target.value.slice(0, 25) })
+                    }
+                  />
+                  <div className="hint">
+                    Used for the customer “View content” CTA after purchase. Max 25 characters.
+                  </div>
+                </fieldset>
                 <CustomSummaryInput
                   value={product.custom_summary}
                   onChange={(value) => updateProduct({ custom_summary: value })}
                 />
+                <fieldset>
+                  <label htmlFor={`${uid}-receipt-additional-text`}>Receipt additional text</label>
+                  <textarea
+                    id={`${uid}-receipt-additional-text`}
+                    maxLength={100}
+                    placeholder="Optional note shown on the receipt and receipt email"
+                    value={product.receipt_additional_text ?? ""}
+                    onChange={(evt) => updateProduct({ receipt_additional_text: evt.target.value.slice(0, 100) })}
+                  />
+                  <div className="hint">
+                    Shown under the receipt header in both the web receipt and email. Max 100 characters.
+                  </div>
+                </fieldset>
                 <AttributesEditor
                   customAttributes={product.custom_attributes}
                   setCustomAttributes={(custom_attributes) => updateProduct({ custom_attributes })}

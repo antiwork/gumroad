@@ -15,3 +15,16 @@
     </div>
   <% end %>
 </div>
+
+<%# Optional product-level additional text shown under the header %>
+<% begin %>
+  <% first_item = receipt_presenter.items_infos.first %>
+  <% additional_text = first_item&.product&.receipt_additional_text %>
+  <% if additional_text.present? %>
+    <div class="with-top-margin">
+      <%= raw(h(additional_text).gsub(/\r?\n/, '<br>')) %>
+    </div>
+  <% end %>
+<% rescue %>
+  <%# No-op if items not available %>
+<% end %>

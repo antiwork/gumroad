@@ -132,6 +132,17 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
+// Truncate string to a maximum length (no-op for null/undefined)
+const clamp = (value: string | null | undefined, max: number): string | null =>
+  value == null ? null : value.slice(0, max);
+
+// Enforce known max-length limits before saving
+const sanitizeProductFields = (product: Product): Product => ({
+  ...product,
+  custom_view_content_button_text: clamp(product.custom_view_content_button_text, 25),
+  receipt_additional_text: clamp(product.receipt_additional_text, 100),
+});
+
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
@@ -153,11 +164,16 @@ const ProductEditPage = (props: Props) => {
   const save = async () => {
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, product, currencyType);
+      // Ensure string fields respect UI limits even if bypassed elsewhere
+      const sanitized = sanitizeProductFields(product);
+      // If sanitization changed anything, update local state for UI consistency
+      if (sanitized !== product && !isEqual(sanitized, product)) setProduct(sanitized);
+
+      const response = await saveProduct(props.unique_permalink, props.id, sanitized, currencyType);
       if (response.warning_message) showAlert(response.warning_message, "warning");
       else {
         const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
-          product,
+          sanitized,
           lastSavedProductRef.current,
         );
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
@@ -173,7 +189,7 @@ const ProductEditPage = (props: Props) => {
         } else {
           showAlert("Changes saved!", "success");
         }
-        lastSavedProductRef.current = structuredClone(product);
+        lastSavedProductRef.current = structuredClone(sanitized);
       }
     } catch (e) {
       assertResponseError(e);

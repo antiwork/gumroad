@@ -92,6 +92,8 @@ export type Product = {
   price_cents: number;
   suggested_price_cents: number | null;
   customizable_price: boolean;
+  custom_view_content_button_text: string | null;
+  receipt_additional_text: string | null;
   eligible_for_installment_plans: boolean;
   allow_installment_plan: boolean;
   installment_plan: InstallmentPlan | null;

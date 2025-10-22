@@ -93,6 +93,8 @@ class ProductPresenter
         suggested_price_cents: product.suggested_price_cents,
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         custom_button_text_option: product.custom_button_text_option.presence,
+        custom_view_content_button_text: product.custom_view_content_button_text.presence,
+        receipt_additional_text: product.receipt_additional_text,
         custom_summary: product.custom_summary,
         custom_attributes: product.custom_attributes,
         file_attributes: product.file_info_for_product_page.map { { name: _1.to_s, value: _2 } },

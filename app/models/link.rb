@@ -197,6 +197,7 @@ class Link < ApplicationRecord
   validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
+  validate :receipt_additional_text_length
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -956,7 +957,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text custom_attributes purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option custom_view_content_button_text receipt_additional_text custom_attributes purchase_terms].each do |method_name|
     define_method "save_#{method_name}" do |argument|
       self.json_data ||= {}
       self.json_data[method_name] = argument
@@ -964,10 +965,26 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option custom_view_content_button_text receipt_additional_text purchase_terms].each do |method_name|
     define_method method_name do
       self.json_data.present? ? self.json_data[method_name] : nil
     end
+  end
+
+  # Override to sanitize receipt additional text input. Keep newlines; strip HTML tags and leading/trailing whitespace.
+  def save_receipt_additional_text(argument)
+    cleaned = if argument.nil?
+      nil
+    else
+      text = argument.to_s
+      # Strip all HTML tags to ensure plain text only, but preserve newlines.
+      text_without_tags = strip_tags(text)
+      text_without_tags.strip
+    end
+
+    self.json_data ||= {}
+    self.json_data["receipt_additional_text"] = cleaned
+    save
   end
 
   def admin_url
