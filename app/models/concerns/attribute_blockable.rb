@@ -17,15 +17,9 @@
 #
 # This generates several instance methods:
 # - +blocked_by_email?+ - Returns true if the email is blocked
-# - +blocked_by_email_at?+ - Returns true if blocked_at timestamp is present
-# - +blocked_by_email_at+ - Returns the timestamp when blocked, or nil
 # - +blocked_by_email_object+ - Returns the BlockedObject record
-# - +block_by_email_created_at+ - Returns when the block was created
-# - +block_by_email_expires_at+ - Returns when the block expires, or nil
 # - +block_by_email!+ - Blocks the email value
 # - +unblock_by_email!+ - Unblocks the email value
-# - +blocked_emails+ - Returns array of blocked email values
-# - +blocked_emails_objects+ - Returns BlockedObject records
 #
 # == Preventing N+1 Queries
 #
@@ -201,15 +195,9 @@ module AttributeBlockable
     #
     # Generates the following instance methods:
     # - +blocked_by_{method}?+ - Returns true if the value is currently blocked
-    # - +blocked_by_{method}_at?+ - Returns true if blocked_at timestamp is present
-    # - +blocked_by_{method}_at+ - Returns the blocked_at timestamp or nil
-    # - +block_by_{method}_created_at+ - Returns when the block was created
-    # - +block_by_{method}_expires_at+ - Returns when the block expires, or nil
-    # - +blocked_{pluralized_method}_objects+ - Returns BlockedObject records
-    # - +blocked_{pluralized_method}+ - Returns array of blocked values
+    # - +blocked_by_{method}_object+ - Returns the BlockedObject record
     # - +block_by_{method}!+ - Blocks the attribute value
     # - +unblock_by_{method}!+ - Unblocks the attribute value
-    # - +blocked_by_{method}_object+ - Returns the BlockedObject record
     #
     # @param blockable_method [Symbol, String] The method name to make blockable
     # @param object_type [Symbol, String, nil] The BlockedObject type to use (defaults to blockable_method)
@@ -217,7 +205,7 @@ module AttributeBlockable
     # @example Basic usage
     #   attr_blockable :email
     #   # user.blocked_by_email?
-    #   # user.blocked_by_email_at
+    #   # user.blocked_by_email_object&.blocked_at
     #   # user.block_by_email!(by_user_id: current_user.id)
     #
     # @example With custom attribute mapping
@@ -232,18 +220,10 @@ module AttributeBlockable
     def attr_blockable(blockable_method, object_type: nil)
       object_type ||= blockable_method
 
-      define_method("blocked_by_#{blockable_method}_at?") { (blocked_object_by_method(object_type, blockable_method:)&.blocked_at).present? }
       define_method("blocked_by_#{blockable_method}?") { blocked_object_by_method(object_type, blockable_method:)&.blocked? || false }
-      define_method("blocked_by_#{blockable_method}_at") { blocked_object_by_method(object_type, blockable_method:)&.blocked_at }
-      define_method("block_by_#{blockable_method}_created_at") { blocked_object_by_method(object_type, blockable_method:)&.created_at }
-      define_method("block_by_#{blockable_method}_expires_at") { blocked_object_by_method(object_type, blockable_method:)&.expires_at }
 
-      define_method("blocked_#{blockable_method.to_s.pluralize}_objects") do
-        blocked_objects_for_values(object_type, Array.wrap(send(blockable_method)))
-      end
-
-      define_method("blocked_#{blockable_method.to_s.pluralize}") do
-        send("blocked_#{blockable_method.to_s.pluralize}_objects").map(&:object_value)
+      define_method("blocked_by_#{blockable_method}_object") do
+        blocked_object_by_method(object_type, blockable_method:)
       end
 
       define_method("block_by_#{blockable_method}!") do |by_user_id: nil, expires_in: nil|
@@ -254,10 +234,6 @@ module AttributeBlockable
       define_method("unblock_by_#{blockable_method}!") do
         return if (value = send(blockable_method)).blank?
         unblock_by_method!(object_type, value)
-      end
-
-      define_method("blocked_by_#{blockable_method}_object") do
-        blocked_object_by_method(object_type, blockable_method:)
       end
 
       # Register this blockable attribute for introspection
