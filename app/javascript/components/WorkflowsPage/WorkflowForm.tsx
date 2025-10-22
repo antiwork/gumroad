@@ -255,30 +255,8 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
 
     setIsSaving(true);
 
-    const workflowData = {
-      workflow: {
-        name: payload.name,
-        workflow_type: payload.workflow_type,
-        workflow_trigger: payload.workflow_trigger || "",
-        bought_products: payload.bought_products,
-        not_bought_products: payload.not_bought_products,
-        bought_variants: payload.bought_variants,
-        not_bought_variants: payload.not_bought_variants,
-        variant_external_id: payload.variant_external_id || "",
-        permalink: payload.permalink || "",
-        paid_more_than: payload.paid_more_than?.toString() || "",
-        paid_less_than: payload.paid_less_than?.toString() || "",
-        created_after: payload.created_after || "",
-        created_before: payload.created_before || "",
-        bought_from: payload.bought_from || "",
-        affiliate_products: payload.affiliate_products,
-        send_to_past_customers: payload.send_to_past_customers,
-        save_action_name: payload.save_action_name,
-      },
-    };
-
     if (workflow) {
-      router.patch(Routes.workflow_path(workflow.external_id), workflowData, {
+      router.patch(Routes.workflow_path(workflow.external_id), payload, {
         only: ["workflow"],
         onSuccess: () => {
           setIsSaving(false);
@@ -294,7 +272,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         },
       });
     } else {
-      router.post(Routes.workflows_path(), workflowData, {
+      router.post(Routes.workflows_path(), payload, {
         onSuccess: () => {
           setIsSaving(false);
           if (saveActionName === "save") {
