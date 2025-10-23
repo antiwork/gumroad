@@ -56,7 +56,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
           hasLoaded={hasLoaded}
           isLoading={isLoading}
           hasMore={hasMore}
-          onLoadMore={fetchNextPage}
+          onLoadMore={() => void fetchNextPage()}
         />
       </details>
     </>

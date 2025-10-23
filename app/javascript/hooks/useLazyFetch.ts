@@ -1,6 +1,8 @@
 import React from "react";
 import { cast } from "ts-safe-cast";
+
 import { assertResponseError, request } from "$app/utils/request";
+
 import { showAlert } from "$app/components/server-components/Alert";
 
 interface UseLazyFetchOptions<T> {
@@ -138,28 +140,23 @@ export const useLazyPaginatedFetch = <T>(
   const mode = options.mode || "replace";
   const perPage = options.perPage ?? 20;
 
-  const core = useLazyFetchCore(
-    initialData,
-    options,
-    (responseData, parsedData) => {
-      const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
-      setPagination(paginationData);
+  const core = useLazyFetchCore(initialData, options, (responseData, parsedData) => {
+    const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
+    setPagination(paginationData);
 
-      const canFetchMore = paginationData.next !== null;
-      setHasMore(canFetchMore);
+    const canFetchMore = paginationData.next !== null;
+    setHasMore(canFetchMore);
 
-      if (mode === "replace") {
-        setCurrentData(parsedData);
-        return;
-      }
+    if (mode === "replace") {
+      setCurrentData(parsedData);
+      return;
+    }
 
-      setCurrentData((prev) => mergeArrayData(prev, parsedData, mode));
-    },
-  );
+    setCurrentData((prev) => mergeArrayData(prev, parsedData, mode));
+  });
 
   const fetchData = React.useCallback(
-    (queryParams: QueryParams = {}): Promise<void> =>
-      core.fetchData({ ...queryParams, per_page: perPage }),
+    (queryParams: QueryParams = {}): Promise<void> => core.fetchData({ ...queryParams, per_page: perPage }),
     [core.fetchData, perPage],
   );
 
