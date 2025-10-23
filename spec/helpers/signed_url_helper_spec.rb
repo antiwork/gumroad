@@ -33,14 +33,14 @@ describe SignedUrlHelper do
     allow(@s3_object_double).to receive(:content_length).and_return(8_000_000_000)
 
     expect(signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename, cache_group: "read"))
-      .to match(/cloudfront\.net.*cache_group=read/)
+      .to match(/#{Regexp.escape(CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL)}.*cache_group=read/o)
   end
 
   it "returns a Cloudflare read url with the proper cache_group paramter if file size < 8GB" do
     allow(@s3_object_double).to receive(:content_length).and_return(1_000_000_000)
 
     expect(signed_download_url_for_s3_key_and_filename(@file.s3_key, @file.s3_filename, cache_group: "read"))
-      .to match(/staging-files\.gumroad\.com.*cache_group=read.*verify=/)
+      .to match(/#{Regexp.escape(CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL)}.*cache_group=read.*verify=/o)
   end
 
   it "contains the cache_key parameter in the query string for files with specific extensions" do
@@ -54,7 +54,7 @@ describe SignedUrlHelper do
       file = create(:product_file, url: URI.parse(file_path).to_s)
 
       expect(signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename))
-          .to match(/staging-files\.gumroad\.com.*cache_key=caIWHGT4Qhqo6KoxDMNXwQ.*/)
+          .to match(/#{Regexp.escape(CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL)}.*cache_key=caIWHGT4Qhqo6KoxDMNXwQ.*/o)
     end
   end
 
