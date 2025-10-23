@@ -62,7 +62,41 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
 
       expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
       expect(response).to have_http_status(:see_other)
-      expect(flash[:notice]).to eq("Changes saved!")
+      expect(flash[:notice]).to eq(Workflows::EmailsController::FLASH_CHANGES_SAVED)
+    end
+
+    it "redirects with published message when save_action_name is save_and_publish" do
+      allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([true, nil])
+
+      patch :update, params: {
+        workflow_id: workflow.external_id,
+        workflow: {
+          send_to_past_customers: true,
+          save_action_name: "save_and_publish",
+          installments: []
+        }
+      }
+
+      expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:notice]).to eq(Workflows::EmailsController::FLASH_WORKFLOW_PUBLISHED)
+    end
+
+    it "redirects with unpublished message when save_action_name is save_and_unpublish" do
+      allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([true, nil])
+
+      patch :update, params: {
+        workflow_id: workflow.external_id,
+        workflow: {
+          send_to_past_customers: true,
+          save_action_name: "save_and_unpublish",
+          installments: []
+        }
+      }
+
+      expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
+      expect(response).to have_http_status(:see_other)
+      expect(flash[:notice]).to eq(Workflows::EmailsController::FLASH_WORKFLOW_UNPUBLISHED)
     end
 
     context "when save fails" do
@@ -72,7 +106,7 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
         allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([false, errors])
       end
 
-      it "303 redirects with Inertia errors" do
+      it "redirects with Inertia errors and alert message" do
         patch :update, params: {
           workflow_id: workflow.external_id,
           workflow: {
@@ -83,7 +117,7 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
         }
 
         expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
-        expect(response).to have_http_status(:see_other)
+        expect(flash[:alert]).to eq("Please fix the errors and try again.")
         expect(session[:inertia_errors]).to be_present
       end
     end

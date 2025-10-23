@@ -28,11 +28,15 @@ class Workflows::EmailsController < Sellers::BaseController
   end
 
   def update
-    service = Workflow::SaveInstallmentsService.new(seller: current_seller, params: installments_params, workflow: @workflow, preview_email_recipient: impersonating_user || logged_in_user)
+    service = Workflow::SaveInstallmentsService.new(
+      seller: current_seller,
+      params: installments_params,
+      workflow: @workflow,
+      preview_email_recipient: preview_recipient
+    )
     success, errors = service.process
 
     if success
-      # Determine the flash message based on save_action_name
       flash_message = case installments_params[:save_action_name]
       when "save_and_publish"
         FLASH_WORKFLOW_PUBLISHED
@@ -42,18 +46,9 @@ class Workflows::EmailsController < Sellers::BaseController
         FLASH_CHANGES_SAVED
       end
 
-      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow.reload)
-      render inertia: "Workflows/Emails/Index", props: {
-        workflow: -> { workflow_presenter.workflow_props },
-        context: -> { workflow_presenter.workflow_form_context_props },
-        flash: { message: flash_message, status: "success" },
-      }
+      redirect_to workflow_emails_path(@workflow.external_id), status: :see_other, notice: flash_message
     else
-      workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-      render inertia: "Workflows/Emails/Index", props: {
-        workflow: -> { workflow_presenter.workflow_props },
-        context: -> { workflow_presenter.workflow_form_context_props },
-      }, status: :unprocessable_entity, inertia: { errors: errors }
+      redirect_to workflow_emails_path(@workflow.external_id), status: :see_other, inertia: { errors: errors }, alert: "Please fix the errors and try again."
     end
   end
 
@@ -66,6 +61,10 @@ class Workflows::EmailsController < Sellers::BaseController
 
     def authorize_workflow
       authorize @workflow
+    end
+
+    def preview_recipient
+      impersonating_user || logged_in_user
     end
 
     def installments_params
