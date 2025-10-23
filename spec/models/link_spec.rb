@@ -843,15 +843,15 @@ describe Link, :vcr do
         end
 
         it "doesn't transcode video when the link is draft" do
-          video_file = create(:product_file, link_id: @video_link.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+          video_file = create(:product_file, link_id: @video_link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
 
           expect(TranscodeVideoForStreamingWorker).not_to have_enqueued_sidekiq_job(video_file.id, video_file.class.name)
         end
 
         it "transcodes video files on publishing the product only if `queue_for_transcoding?` is true for the product file" do
-          video_file_1 = create(:product_file, link_id: @video_link.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
-          video_file_2 = create(:product_file, link_id: @video_link.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter3.mp4")
-          video_file_3 = create(:product_file, link_id: @video_link.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter4.mp4")
+          video_file_1 = create(:product_file, link_id: @video_link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
+          video_file_2 = create(:product_file, link_id: @video_link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter3.mp4")
+          video_file_3 = create(:product_file, link_id: @video_link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter4.mp4")
           video_file_3.delete!
 
           @video_link.publish!
@@ -887,13 +887,13 @@ describe Link, :vcr do
               end
             end
 
-            create(:product_file, link: @video_link, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png")
+            create(:product_file, link: @video_link, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
             @video_link.publish!
           end
 
           it "transcodes video when the link is already published" do
             allow_any_instance_of(Link).to receive(:auto_transcode_videos?).and_return(true)
-            video_file = create(:product_file, link_id: @video_link.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+            video_file = create(:product_file, link_id: @video_link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
             allow(video_file).to receive(:s3_object).and_return(@s3_double)
             allow(video_file).to receive(:confirm_s3_key!)
             video_file.analyze
@@ -904,7 +904,7 @@ describe Link, :vcr do
           it "doesn't transcode when the link is unpublished" do
             @video_link.unpublish!
 
-            video_file = create(:product_file, link_id: @video_link.id, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+            video_file = create(:product_file, link_id: @video_link.id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
             allow(video_file).to receive(:s3_object).and_return(@s3_double)
             allow(video_file).to receive(:confirm_s3_key!)
             video_file.analyze
@@ -1860,7 +1860,7 @@ describe Link, :vcr do
 
   context "when attributes have S3 URLs" do
     before do
-      stub_const("CDN_URL_MAP", { "https://s3.amazonaws.com/gumroad/" => "https://static-2.gumroad.com/res/gumroad/" })
+      stub_const("CDN_URL_MAP", { "#{AWS_S3_ENDPOINT}/gumroad/" => "https://static-2.gumroad.com/res/gumroad/" })
 
       @product = create(:product)
     end
@@ -1871,7 +1871,7 @@ describe Link, :vcr do
           <p class="">Sample description 1234</p><p class=""><br></p>
           <div class="medium-insert-images medium-insert-active contains-image-2085007717">
             <figure contenteditable="false">
-              <img src="https://s3.amazonaws.com/gumroad/files/sample/sample/original/sample.jpg" alt="">
+              <img src="#{AWS_S3_ENDPOINT}/gumroad/files/sample/sample/original/sample.jpg" alt="">
             </figure>
           </div>
         }

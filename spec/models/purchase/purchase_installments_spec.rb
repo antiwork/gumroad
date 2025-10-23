@@ -201,7 +201,7 @@ describe "PurchaseInstallments", :vcr do
       before do
         @product = create(:product)
         @product.product_files << create(
-          :product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
+          :product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
         )
         @purchase = create(:purchase_with_balance, link: @product)
       end

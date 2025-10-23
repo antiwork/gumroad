@@ -226,7 +226,7 @@ class ProductPresenter
       ratings: product.rating_stats,
       seller: UserPresenter.new(user:).author_byline_props,
       existing_files:,
-      s3_url: "https://s3.amazonaws.com/#{S3_BUCKET}",
+      s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
       aws_key: AWS_ACCESS_KEY,
       available_countries: ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } },
       google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),

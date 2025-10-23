@@ -107,7 +107,7 @@ class DropboxFile < ApplicationRecord
     destination_key = "attachments/#{s3_guid}/original/#{filename}"
     Aws::S3::Resource.new.bucket(S3_BUCKET).object(destination_key).upload_file(tempfile.path,
                                                                                 content_type: fetch_content_type)
-    self.s3_url = "https://s3.amazonaws.com/#{S3_BUCKET}/#{destination_key}"
+    self.s3_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{destination_key}"
     mark_successfully_uploaded!
   end
 

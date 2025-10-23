@@ -27,7 +27,7 @@ describe Workflow::SaveInstallmentsService do
     end
 
     def process_and_perform_assertions_for_created_installments
-      params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, files: [{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/file1.mp4", position: 1, stream_only: true, subtitle_files: [{ url: "https://s3.amazonaws.com/gumroad-specs/attachment/sub1-uuid/en.srt", language: "English" }, { url: "https://s3.amazonaws.com/gumroad-specs/attachment/sub2-uuid/es.srt", language: "Spanish" }] }, { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/file.pdf", position: 2, stream_only: false, subtitle_files: [] }])]
+      params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, files: [{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/file1.mp4", position: 1, stream_only: true, subtitle_files: [{ url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub1-uuid/en.srt", language: "English" }, { url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub2-uuid/es.srt", language: "Spanish" }] }, { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/file.pdf", position: 2, stream_only: false, subtitle_files: [] }])]
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
       expect { service.process }.to change { workflow.installments.alive.count }.by(1)
       installment = workflow.installments.alive.last
@@ -46,13 +46,13 @@ describe Workflow::SaveInstallmentsService do
       expect(installment.installment_rule.time_period).to eq("hour")
       expect(installment.alive_product_files.count).to eq(2)
       file1 = installment.alive_product_files.first
-      expect(file1.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/file1.mp4")
+      expect(file1.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/file1.mp4")
       expect(file1.position).to eq(1)
       expect(file1.stream_only).to be(true)
       expect(file1.filegroup).to eq("video")
-      expect(file1.subtitle_files.alive.pluck(:language, :url)).to eq([["English", "https://s3.amazonaws.com/gumroad-specs/attachment/sub1-uuid/en.srt"], ["Spanish", "https://s3.amazonaws.com/gumroad-specs/attachment/sub2-uuid/es.srt"]])
+      expect(file1.subtitle_files.alive.pluck(:language, :url)).to eq([["English", "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub1-uuid/en.srt"], ["Spanish", "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub2-uuid/es.srt"]])
       file2 = installment.alive_product_files.last
-      expect(file2.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/file.pdf")
+      expect(file2.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/file.pdf")
       expect(file2.position).to eq(2)
       expect(file2.stream_only).to be(false)
       expect(file2.filegroup).to eq("document")
@@ -60,12 +60,12 @@ describe Workflow::SaveInstallmentsService do
 
     def process_and_perform_assertions_for_updated_installments
       installment = create(:workflow_installment, seller:, link: product, workflow:, name: "Installment 1", message: "Message 1")
-      video = create(:product_file, installment:, url: "https://s3.amazonaws.com/gumroad-specs/attachment/video.mp", link: nil, position: 1, stream_only: true)
-      video.subtitle_files << create(:subtitle_file, product_file: video, language: "English", url: "https://s3.amazonaws.com/gumroad-specs/attachment/sub1-uuid/en.srt")
-      video.subtitle_files << create(:subtitle_file, product_file: video, language: "Spanish", url: "https://s3.amazonaws.com/gumroad-specs/attachment/sub2-uuid/es.srt")
-      pdf = create(:product_file, installment:, url: "https://s3.amazonaws.com/gumroad-specs/attachment/doc.pdf", link: nil, position: 2, stream_only: false)
-      audio = create(:product_file, installment:, url: "https://s3.amazonaws.com/gumroad-specs/attachment/audio.mp3", link: nil, position: 3, stream_only: false)
-      params[:installments] = [default_installment_params.merge(id: installment.external_id, name: "Installment 1 (edited)", message: "Updated message", time_duration: 2, time_period: "day", files: [{ external_id: video.external_id, url: "https://s3.amazonaws.com/gumroad-specs/attachment/video.mp4", position: 1, stream_only: true, subtitle_files: [{ url: "https://s3.amazonaws.com/gumroad-specs/attachment/sub1-uuid/en.srt", language: "English" }, { url: "https://s3.amazonaws.com/gumroad-specs/attachment/sub2-uuid/es.srt", language: "German" }] }, { external_id: pdf.external_id, url: "https://s3.amazonaws.com/gumroad-specs/attachment/doc.pdf", position: 2, stream_only: false, subtitle_files: [] }, { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/book.epub", position: 3, stream_only: false, subtitle_files: [] }])]
+      video = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/video.mp", link: nil, position: 1, stream_only: true)
+      video.subtitle_files << create(:subtitle_file, product_file: video, language: "English", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub1-uuid/en.srt")
+      video.subtitle_files << create(:subtitle_file, product_file: video, language: "Spanish", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub2-uuid/es.srt")
+      pdf = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/doc.pdf", link: nil, position: 2, stream_only: false)
+      audio = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/audio.mp3", link: nil, position: 3, stream_only: false)
+      params[:installments] = [default_installment_params.merge(id: installment.external_id, name: "Installment 1 (edited)", message: "Updated message", time_duration: 2, time_period: "day", files: [{ external_id: video.external_id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/video.mp4", position: 1, stream_only: true, subtitle_files: [{ url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub1-uuid/en.srt", language: "English" }, { url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub2-uuid/es.srt", language: "German" }] }, { external_id: pdf.external_id, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/doc.pdf", position: 2, stream_only: false, subtitle_files: [] }, { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/book.epub", position: 3, stream_only: false, subtitle_files: [] }])]
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
       expect { service.process }.to change { workflow.installments.alive.count }.by(0)
       expect(installment.reload.name).to eq("Installment 1 (edited)")
@@ -83,18 +83,18 @@ describe Workflow::SaveInstallmentsService do
       expect(installment.installment_rule.time_period).to eq("day")
       expect(installment.alive_product_files.count).to eq(3)
       file1 = installment.alive_product_files.first
-      expect(file1.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/video.mp4")
+      expect(file1.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/video.mp4")
       expect(file1.position).to eq(1)
       expect(file1.stream_only).to be(true)
       expect(file1.filegroup).to eq("video")
-      expect(file1.subtitle_files.alive.pluck(:language, :url)).to eq([["English", "https://s3.amazonaws.com/gumroad-specs/attachment/sub1-uuid/en.srt"], ["German", "https://s3.amazonaws.com/gumroad-specs/attachment/sub2-uuid/es.srt"]])
+      expect(file1.subtitle_files.alive.pluck(:language, :url)).to eq([["English", "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub1-uuid/en.srt"], ["German", "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/sub2-uuid/es.srt"]])
       file2 = installment.alive_product_files.second
-      expect(file2.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/doc.pdf")
+      expect(file2.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/doc.pdf")
       expect(file2.position).to eq(2)
       expect(file2.stream_only).to be(false)
       expect(file2.filegroup).to eq("document")
       file3 = installment.alive_product_files.last
-      expect(file3.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/book.epub")
+      expect(file3.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/book.epub")
       expect(file3.position).to eq(3)
       expect(file3.stream_only).to be(false)
       expect(file3.filegroup).to eq("document")
@@ -295,7 +295,7 @@ describe Workflow::SaveInstallmentsService do
 
     it "deletes installments that are missing from the params" do
       installment = create(:installment, workflow:)
-      attached_file = create(:product_file, installment:, url: "https://s3.amazonaws.com/gumroad-specs/attachment/doc.pdf", link: nil)
+      attached_file = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/doc.pdf", link: nil)
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
       expect { service.process }.to change { workflow.installments.alive.count }.by(-1)
       expect(installment.reload.deleted_at).to be_present

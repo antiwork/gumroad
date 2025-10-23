@@ -21,8 +21,8 @@ describe("Library Scenario", type: :system, js: true) do
   context "membership purchases" do
     let(:product) do
       create(:membership_product, block_access_after_membership_cancellation: true,
-                                  product_files: [create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png"),
-                                                  create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pen.png")])
+                                  product_files: [create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"),
+                                                  create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pen.png")])
     end
     let!(:purchase1) do
       create(:membership_purchase, created_at: 1.month.ago, link: product, purchaser: @user).tap { _1.create_url_redirect! }

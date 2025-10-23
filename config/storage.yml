@@ -1,6 +1,12 @@
 test:
-  service: Disk
-  root: <%= Rails.root.join("tmp/storage") %>
+  service: S3
+  endpoint: <%= GlobalConfig.get("AWS_S3_ENDPOINT") %>
+  access_key_id: <%= GlobalConfig.get("AWS_ACCESS_KEY_ID") %>
+  secret_access_key: <%= GlobalConfig.get("AWS_SECRET_ACCESS_KEY") %>
+  region: us-east-1
+  bucket: <%= PUBLIC_STORAGE_S3_BUCKET %>
+  public: true
+  force_path_style: true
 
 local:
   service: Disk
@@ -14,21 +20,3 @@ amazon:
   region: us-east-1
   bucket: <%= PUBLIC_STORAGE_S3_BUCKET %>
   public: true
-# Remember not to checkin your GCS keyfile to a repository
-# google:
-#   service: GCS
-#   project: your_project
-#   credentials: <%= Rails.root.join("path/to/gcs.keyfile") %>
-#   bucket: your_own_bucket
-
-# Use rails credentials:edit to set the Azure Storage secret (as azure_storage:storage_access_key)
-# microsoft:
-#   service: AzureStorage
-#   storage_account_name: your_account_name
-#   storage_access_key: <%= Rails.application.credentials.dig(:azure_storage, :storage_access_key) %>
-#   container: your_container_name
-
-# mirror:
-#   service: Mirror
-#   primary: local
-#   mirrors: [ amazon, google, microsoft ]
