@@ -104,7 +104,7 @@ describe Api::Internal::InstallmentsController do
           bought_variants: [],
           created_after: "2024-01-01",
           created_before: "2024-01-31",
-          files: [{ external_id: SecureRandom.uuid, stream_only: false, subtitles: [], url: "https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt" }],
+          files: [{ external_id: SecureRandom.uuid, stream_only: false, subtitles: [], url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt" }],
           installment_type: "product",
           link_id: product.unique_permalink,
           message: "<p>Hello, world!</p>",
@@ -151,7 +151,7 @@ describe Api::Internal::InstallmentsController do
       expect(installment.send_emails).to be(true)
       expect(installment.shown_on_profile).to be(true)
       expect(installment.published?).to be(false)
-      expect(installment.product_files.sole.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt")
+      expect(installment.product_files.sole.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt")
       expect(response.parsed_body["installment_id"]).to eq(installment.external_id)
       expect(response.parsed_body["full_url"]).to eq(installment.full_url)
     end
@@ -356,7 +356,7 @@ describe Api::Internal::InstallmentsController do
           bought_variants: [],
           created_after: "2024-01-01",
           created_before: "2024-01-31",
-          files: [{ external_id: SecureRandom.uuid, stream_only: false, subtitles: [], url: "https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt" }],
+          files: [{ external_id: SecureRandom.uuid, stream_only: false, subtitles: [], url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt" }],
           installment_type: "product",
           link_id: product.unique_permalink,
           message: "<p>Hello, world!</p>",
@@ -405,21 +405,21 @@ describe Api::Internal::InstallmentsController do
       expect(installment.send_emails).to be(true)
       expect(installment.shown_on_profile).to be(true)
       expect(installment.published?).to be(false)
-      expect(installment.product_files.sole.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt")
+      expect(installment.product_files.sole.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt")
       expect(response.parsed_body["installment_id"]).to eq(installment.external_id)
       expect(response.parsed_body["full_url"]).to eq(installment.full_url)
     end
 
     it "marks the old file as deleted" do
-      installment.product_files.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachment/old-url.txt")
+      installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/old-url.txt")
       expect do
         put :update, params: params.merge(id: installment.external_id), as: :json
       end.to change { installment.reload.product_files.count }.from(1).to(2)
-      expect(installment.product_files.alive.sole.url).to eq("https://s3.amazonaws.com/gumroad-specs/attachment/some-url.txt")
+      expect(installment.product_files.alive.sole.url).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt")
     end
 
     it "removes the existing files" do
-      installment.product_files.create!(url: "https://s3.amazonaws.com/gumroad-specs/attachment/old-url.txt")
+      installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/old-url.txt")
       expect do
         put :update, params: params.deep_merge(id: installment.external_id, installment: { files: [] }), as: :json
       end.to change { installment.reload.product_files.alive.count }.from(1).to(0)

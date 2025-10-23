@@ -199,4 +199,40 @@ describe UserComplianceInfo do
       expect(user_compliance_info.deleted_at).to_not be_nil
     end
   end
+
+  describe "#has_individual_tax_id?" do
+    describe "when individual_tax_id is present" do
+      let(:user_compliance_info) { create(:user_compliance_info, individual_tax_id: "123456789") }
+
+      it "returns true" do
+        expect(user_compliance_info.has_individual_tax_id?).to eq(true)
+      end
+    end
+
+    describe "when individual_tax_id is nil" do
+      let(:user_compliance_info) { create(:user_compliance_info, individual_tax_id: nil) }
+
+      it "returns false" do
+        expect(user_compliance_info.has_individual_tax_id?).to eq(false)
+      end
+    end
+  end
+
+  describe "#has_business_tax_id?" do
+    describe "when business_tax_id is present" do
+      let(:user_compliance_info) { create(:user_compliance_info_business, business_tax_id: "98-7654321") }
+
+      it "returns true" do
+        expect(user_compliance_info.has_business_tax_id?).to eq(true)
+      end
+    end
+
+    describe "when business_tax_id is nil" do
+      let(:user_compliance_info) { create(:user_compliance_info_business, business_tax_id: nil) }
+
+      it "returns false" do
+        expect(user_compliance_info.has_business_tax_id?).to eq(false)
+      end
+    end
+  end
 end

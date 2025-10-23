@@ -7,7 +7,7 @@ describe "Mobile API Request Specs" do
 
   describe "product download urls" do
     before do
-      base_url = "https://s3.amazonaws.com/gumroad-specs/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
+      base_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
       @product.product_files << @product.product_files << create(:product_file, url: base_url)
       purchase = create(:purchase_with_balance, link: @product)
       @url_redirect = purchase.url_redirect
@@ -43,14 +43,14 @@ describe "Mobile API Request Specs" do
     end
 
     it "does not add external_link_url for non external link files" do
-      @product.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+      @product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
 
       expect(@url_redirect.product_json_data[:file_data].last.key?(:external_link_url)).to eq(false)
     end
   end
 
   it "serves stream urls that are usable" do
-    @product.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true)
+    @product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true)
     @transcoded_video = create(:transcoded_video, link: @product, streamable: @product.product_files.last, original_video_key: @product.product_files.last.s3_key,
                                                   transcoded_video_key: "attachments/2_1/original/chapter2/hls/index.m3u8", is_hls: true,
                                                   state: "completed")
