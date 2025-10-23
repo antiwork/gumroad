@@ -86,7 +86,11 @@ const useLazyFetchCore = <T>(
   };
 };
 
-const useFetchOnMount = (options: { fetchUnlessLoaded?: boolean }, hasLoaded: boolean, fetchFn: () => Promise<void>) => {
+const useFetchOnMount = (
+  options: { fetchUnlessLoaded?: boolean },
+  hasLoaded: boolean,
+  fetchFn: () => Promise<void>,
+) => {
   const fetchUnlessLoaded = options.fetchUnlessLoaded ?? true;
 
   React.useEffect(() => {
