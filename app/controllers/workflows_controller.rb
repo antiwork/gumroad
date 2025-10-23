@@ -8,7 +8,7 @@ class WorkflowsController < Sellers::BaseController
 
   FLASH_CHANGES_SAVED = "Changes saved!"
   FLASH_WORKFLOW_PUBLISHED = "Workflow published!"
-  FLASH_WORKFLOW_UNPUBLISHED = "Unpublished!"
+  FLASH_WORKFLOW_UNPUBLISHED = "Workflow unpublished!"
   FLASH_WORKFLOW_DELETED = "Workflow deleted!"
 
   inertia_share do
@@ -19,18 +19,16 @@ class WorkflowsController < Sellers::BaseController
       title: @title
     )
 
-    workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-    workflow_shared_props = {
-      context: -> { workflow_presenter.workflow_form_context_props }
-    }
-
     if @workflow
       workflow_presenter = WorkflowPresenter.new(seller: current_seller, workflow: @workflow)
-      workflow_shared_props[:workflow] = -> { workflow_presenter.workflow_props }
-      workflow_shared_props[:context] = -> { workflow_presenter.workflow_form_context_props }
+      workflow_props = {
+        workflow: -> { workflow_presenter.workflow_props },
+        context: -> { workflow_presenter.workflow_form_context_props }
+      }
+      parent_shared_data.merge(workflow_props)
+    else
+      parent_shared_data
     end
-
-    parent_shared_data.merge(workflow_shared_props)
   end
 
   def index
@@ -43,7 +41,10 @@ class WorkflowsController < Sellers::BaseController
 
   def new
     authorize Workflow
-    render inertia: "Workflows/New"
+    workflow_presenter = WorkflowPresenter.new(seller: current_seller)
+    render inertia: "Workflows/New", props: {
+      context: -> { workflow_presenter.workflow_form_context_props }
+    }
   end
 
   def create
@@ -65,18 +66,20 @@ class WorkflowsController < Sellers::BaseController
     success, errors = save_workflow
     if success
       notice_message = case workflow_params[:save_action_name]
-                      when "save_and_publish"
-                        FLASH_WORKFLOW_PUBLISHED
-                      when "unpublish"
-                        FLASH_WORKFLOW_UNPUBLISHED
-                      else
-                        FLASH_CHANGES_SAVED
-                      end
+      when "save_and_publish"
+        FLASH_WORKFLOW_PUBLISHED
+      when "unpublish"
+        FLASH_WORKFLOW_UNPUBLISHED
+      else
+        FLASH_CHANGES_SAVED
+      end
 
       # For publish/unpublish actions, stay on edit page; otherwise go to emails page
-      redirect_path = ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name]) ?
-                      edit_workflow_path(@workflow.external_id) :
-                      workflow_emails_path(@workflow.external_id)
+      redirect_path = if ["save_and_publish", "unpublish"].include?(workflow_params[:save_action_name])
+                        edit_workflow_path(@workflow.external_id)
+                      else
+                        workflow_emails_path(@workflow.external_id)
+                      end
 
       redirect_to redirect_path, notice: notice_message, status: :see_other
     else
