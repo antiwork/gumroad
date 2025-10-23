@@ -8,7 +8,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 interface UseLazyFetchOptions<T> {
   url: string;
   responseParser: (data: unknown) => T;
-  fetchOnMount?: boolean;
+  fetchUnlessLoaded?: boolean;
 }
 
 interface UseLazyFetchResult<T> {
@@ -86,14 +86,14 @@ const useLazyFetchCore = <T>(
   };
 };
 
-const useFetchOnMount = (options: { fetchOnMount?: boolean }, hasLoaded: boolean, fetchFn: () => Promise<void>) => {
-  const fetchOnMount = options.fetchOnMount ?? true;
+const useFetchOnMount = (options: { fetchUnlessLoaded?: boolean }, hasLoaded: boolean, fetchFn: () => Promise<void>) => {
+  const fetchUnlessLoaded = options.fetchUnlessLoaded ?? true;
 
   React.useEffect(() => {
-    if (fetchOnMount && !hasLoaded) {
+    if (fetchUnlessLoaded && !hasLoaded) {
       void fetchFn();
     }
-  }, [fetchOnMount, hasLoaded, fetchFn]);
+  }, [fetchUnlessLoaded, hasLoaded, fetchFn]);
 };
 
 export const useLazyFetch = <T>(initialData: T, options: UseLazyFetchOptions<T>): UseLazyFetchResult<T> => {

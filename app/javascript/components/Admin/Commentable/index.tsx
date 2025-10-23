@@ -30,7 +30,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
       return result.comments;
     },
     mode: "append",
-    fetchOnMount: open,
+    fetchUnlessLoaded: open,
   });
 
   const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
