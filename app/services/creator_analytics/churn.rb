@@ -54,20 +54,22 @@ class CreatorAnalytics::Churn
       start_date: start_date,
       end_date: end_date,
       products: products
-    ).send(:customer_churn_rate)
+    ).send(:calculate_churn_rate)
   end
 
   private
     def fetch_realtime_data
       raise ArgumentError, "Invalid date range: #{errors.full_messages.join(', ')}" unless valid?
 
-      result = calculate
-      daily_results = calculate_by_date
+      subs = subscriptions_for_period
+      period_metrics = calculate_period_metrics(start_date, end_date, subs)
+      daily_results = build_daily_results(subs)
+      last_period_rate = calculate_last_period_churn_rate
 
       {
         start_date: start_date.to_s,
         end_date: end_date.to_s,
-        metrics: build_metrics(result),
+        metrics: build_metrics(period_metrics, last_period_rate),
         daily_data: format_daily_data(daily_results)
       }
     end
@@ -93,13 +95,16 @@ class CreatorAnalytics::Churn
       end
     end
 
-    def calculate
-      @calculate ||= begin
-        subscriptions = fetch_subscriptions(from: start_date, to: end_date).load
-        metrics = calculate_period_metrics(start_date, end_date, subscriptions)
+    def subscriptions_for_period
+      @subscriptions_for_period ||= fetch_subscriptions(from: start_date, to: end_date).load
+    end
+
+    def build_daily_results(subscriptions)
+      (start_date..end_date).map do |date|
+        metrics = calculate_period_metrics(date, date, subscriptions)
 
         {
-          date: end_date,
+          date: date,
           customer_churn_rate: metrics[:churn_rate],
           churned_subscribers: metrics[:churned_count],
           churned_mrr_cents: metrics[:churned_mrr]
@@ -107,25 +112,9 @@ class CreatorAnalytics::Churn
       end
     end
 
-    def calculate_by_date
-      @calculate_by_date ||= begin
-        all_subscriptions = fetch_subscriptions(from: start_date, to: end_date).load
-
-        (start_date..end_date).map do |date|
-          calculate_for_period(date, date, all_subscriptions)
-        end
-      end
-    end
-
-    def calculate_for_period(period_start, period_end, subscriptions)
-      metrics = calculate_period_metrics(period_start, period_end, subscriptions)
-
-      {
-        date: period_end,
-        customer_churn_rate: metrics[:churn_rate],
-        churned_subscribers: metrics[:churned_count],
-        churned_mrr_cents: metrics[:churned_mrr]
-      }
+    def calculate_churn_rate
+      metrics = calculate_period_metrics(start_date, end_date, subscriptions_for_period)
+      metrics[:churn_rate]
     end
 
     def calculate_period_metrics(period_start, period_end, subscriptions)
@@ -154,11 +143,7 @@ class CreatorAnalytics::Churn
       }
     end
 
-    def customer_churn_rate
-      calculate[:customer_churn_rate]
-    end
-
-    def last_period_churn_rate
+    def calculate_last_period_churn_rate
       period_length = (end_date - start_date).to_i
       last_period_end = start_date - 1.day
       last_period_start = last_period_end - period_length.days
@@ -227,12 +212,12 @@ class CreatorAnalytics::Churn
                   .where(link_id: subscription_products.select(:id))
     end
 
-    def build_metrics(result)
+    def build_metrics(period_metrics, last_period_rate)
       {
-        customer_churn_rate: result[:customer_churn_rate].to_f,
-        last_period_churn_rate: last_period_churn_rate.to_f,
-        churned_subscribers: result[:churned_subscribers],
-        churned_mrr_cents: result[:churned_mrr_cents]
+        customer_churn_rate: period_metrics[:churn_rate],
+        last_period_churn_rate: last_period_rate,
+        churned_subscribers: period_metrics[:churned_count],
+        churned_mrr_cents: period_metrics[:churned_mrr]
       }
     end
 
@@ -243,7 +228,7 @@ class CreatorAnalytics::Churn
           date: date.to_s,
           month: date.strftime("%B %Y"),
           month_index: ((date.year - start_date.year) * 12) + (date.month - start_date.month),
-          customer_churn_rate: record[:customer_churn_rate].to_f,
+          customer_churn_rate: record[:customer_churn_rate],
           churned_subscribers: record[:churned_subscribers],
           churned_mrr_cents: record[:churned_mrr_cents]
         }
