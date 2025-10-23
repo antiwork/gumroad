@@ -178,7 +178,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
   const setDragOver = (value: boolean) => {
     // Prevent dropcursor showing up around file embed rather than inside
-    document.querySelector(".product-content .drop-cursor")?.classList.toggle("hidden", value);
+    editor.view.dom.querySelector(".drop-cursor")?.classList.toggle("hidden", value);
     setIsDropZone(value);
   };
 

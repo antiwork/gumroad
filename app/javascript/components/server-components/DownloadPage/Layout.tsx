@@ -235,7 +235,7 @@ export const Layout = ({
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}
         </div>
       ) : null}
-      <div className="product-content flex-1">
+      <div className="flex-1">
         {is_mobile_app_web_view ? null : (
           <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
         )}

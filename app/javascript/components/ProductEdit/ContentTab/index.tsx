@@ -479,7 +479,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   return (
     <>
-      <div className="product-content h-screen sm:h-full md:flex md:flex-col">
+      <div className="h-screen sm:h-full md:flex md:flex-col">
         {editor ? (
           <RichTextEditorToolbar
             color="ghost"
