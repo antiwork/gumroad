@@ -58,6 +58,41 @@ class CreatorAnalytics::Churn
   end
 
   private
+    def fetch_realtime_data
+      raise ArgumentError, "Invalid date range: #{errors.full_messages.join(', ')}" unless valid?
+
+      result = calculate
+      daily_results = calculate_by_date
+
+      {
+        start_date: start_date.to_s,
+        end_date: end_date.to_s,
+        metrics: build_metrics(result),
+        daily_data: format_daily_data(daily_results)
+      }
+    end
+
+    def fetch_cached_data
+      Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRY) do
+        fetch_realtime_data
+      end
+    end
+
+    def should_use_cache?
+      LargeSeller.where(user: user).exists?
+    end
+
+    def cache_key
+      @cache_key ||= begin
+        product_ids = if @products.respond_to?(:map)
+          @products.map(&:id).sort.join(",")
+        else
+          "all"
+        end
+        "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}:#{product_ids}"
+      end
+    end
+
     def calculate
       @calculate ||= begin
         subscriptions = fetch_subscriptions(from: start_date, to: end_date).load
@@ -79,86 +114,6 @@ class CreatorAnalytics::Churn
         (start_date..end_date).map do |date|
           calculate_for_period(date, date, all_subscriptions)
         end
-      end
-    end
-
-    def customer_churn_rate
-      calculate[:customer_churn_rate]
-    end
-
-    def fetch_realtime_data
-      raise ArgumentError, "Invalid date range: #{errors.full_messages.join(', ')}" unless valid?
-
-      result = calculate
-      daily_results = calculate_by_date
-
-      {
-        start_date: start_date.to_s,
-        end_date: end_date.to_s,
-        metrics: build_metrics(result),
-        daily_data: format_daily_data(daily_results)
-      }
-    end
-
-    def last_period_churn_rate
-      period_length = (end_date - start_date).to_i
-      last_period_end = start_date - 1.day
-      last_period_start = last_period_end - period_length.days
-
-      self.class.customer_churn_rate(
-        user: user,
-        start_date: last_period_start,
-        end_date: last_period_end,
-        products: @products
-      )
-    end
-
-    def build_metrics(result)
-      {
-        customer_churn_rate: result[:customer_churn_rate].to_f,
-        last_period_churn_rate: last_period_churn_rate.to_f,
-        churned_subscribers: result[:churned_subscribers],
-        churned_mrr_cents: result[:churned_mrr_cents]
-      }
-    end
-
-    def parse_date(date_value, type)
-      return date_value.to_date if date_value
-
-      case type
-      when :start
-        (@params[:start_time] || @params[:from])&.to_date || DEFAULT_START_DATE_OFFSET.ago.to_date
-      when :end
-        (@params[:end_time] || @params[:to])&.to_date || Date.current
-      end
-    rescue Date::Error => e
-      raise ArgumentError, "Invalid date format: #{e.message}"
-    end
-
-    def parse_products
-      return Link.none unless @params[:products].present?
-
-      @user.products.where(id: @params[:products])
-    end
-
-    def should_use_cache?
-      LargeSeller.where(user: user).exists?
-    end
-
-    def cache_key
-      @cache_key ||= begin
-        product_ids = if @products.respond_to?(:map)
-          @products.map(&:id).sort.join(",")
-        else
-          "all"
-        end
-        "seller_daily_churn_metrics:#{user.id}:#{start_date}:#{end_date}:#{product_ids}"
-      end
-    end
-
-    def fetch_cached_data
-      Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRY) do
-        fetch_realtime_data
       end
     end
 
@@ -197,6 +152,23 @@ class CreatorAnalytics::Churn
         churned_count: churned_count,
         churned_mrr: churned_mrr
       }
+    end
+
+    def customer_churn_rate
+      calculate[:customer_churn_rate]
+    end
+
+    def last_period_churn_rate
+      period_length = (end_date - start_date).to_i
+      last_period_end = start_date - 1.day
+      last_period_start = last_period_end - period_length.days
+
+      self.class.customer_churn_rate(
+        user: user,
+        start_date: last_period_start,
+        end_date: last_period_end,
+        products: @products
+      )
     end
 
     def active_at_period_start?(subscription, period_start)
@@ -255,6 +227,15 @@ class CreatorAnalytics::Churn
                   .where(link_id: subscription_products.select(:id))
     end
 
+    def build_metrics(result)
+      {
+        customer_churn_rate: result[:customer_churn_rate].to_f,
+        last_period_churn_rate: last_period_churn_rate.to_f,
+        churned_subscribers: result[:churned_subscribers],
+        churned_mrr_cents: result[:churned_mrr_cents]
+      }
+    end
+
     def format_daily_data(daily_results)
       daily_results.map do |record|
         date = record[:date]
@@ -267,5 +248,24 @@ class CreatorAnalytics::Churn
           churned_mrr_cents: record[:churned_mrr_cents]
         }
       end
+    end
+
+    def parse_date(date_value, type)
+      return date_value.to_date if date_value
+
+      case type
+      when :start
+        (@params[:start_time] || @params[:from])&.to_date || DEFAULT_START_DATE_OFFSET.ago.to_date
+      when :end
+        (@params[:end_time] || @params[:to])&.to_date || Date.current
+      end
+    rescue Date::Error => e
+      raise ArgumentError, "Invalid date format: #{e.message}"
+    end
+
+    def parse_products
+      return Link.none unless @params[:products].present?
+
+      @user.products.where(id: @params[:products])
     end
 end
