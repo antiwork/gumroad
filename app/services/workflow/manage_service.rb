@@ -58,7 +58,7 @@ class Workflow::ManageService
         sync_installments! if workflow.has_never_been_published?
         unless was_just_created
           workflow.publish! if params[:save_action_name] == Workflow::SAVE_AND_PUBLISH_ACTION
-          workflow.unpublish! if params[:save_action_name] == Workflow::SAVE_AND_UNPUBLISH_ACTION || params[:save_action_name] == "save_and_unpublish"
+          workflow.unpublish! if params[:save_action_name] == Workflow::SAVE_AND_UNPUBLISH_ACTION
         end
       end
     rescue ActiveRecord::RecordInvalid => e
