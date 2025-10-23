@@ -1,7 +1,6 @@
 import React from "react";
-
+import { cast } from "ts-safe-cast";
 import { assertResponseError, request } from "$app/utils/request";
-
 import { showAlert } from "$app/components/server-components/Alert";
 
 interface UseLazyFetchOptions<T> {
@@ -30,13 +29,6 @@ export type Pagination = {
 
 type PaginatedResponse = {
   pagination: Pagination;
-};
-
-const isPaginatedResponse = (data: unknown): data is PaginatedResponse => {
-  if (typeof data !== "object" || data === null || !("pagination" in data)) {
-    return false;
-  }
-  return typeof data.pagination === "object" && data.pagination !== null;
 };
 
 // Internal hook that handles the core fetching logic
@@ -138,11 +130,7 @@ export const useLazyPaginatedFetch = <T>(
     options,
     (hasLoaded) => !hasLoaded || hasMore,
     (responseData, parsedData) => {
-      if (!isPaginatedResponse(responseData)) {
-        return;
-      }
-
-      const { pagination: paginationData } = responseData;
+      const { pagination: paginationData } = cast<PaginatedResponse>(responseData);
       setPagination(paginationData);
 
       const canFetchMore = paginationData.next !== null;
