@@ -18,8 +18,8 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-// We sometimes want to display files as a list of connected rows rather than separate cards. Styling
-// Styling these is an issue because we can't easily pass config to the file embed view from the group,
+// We sometimes want to display files as a list of connected rows rather than separate cards.
+// Styling these is an issue because we can't easily pass config to the file embed view from the group
 // (context doesn't work: https://github.com/ueberdosis/tiptap/issues/6547) so child selectors works around it.
 export const fileGroupRowsClassName =
   "rows [&_[role=treeitem]]:border-none! [&>_*>_:not(:last-child)]:border-b! [&>_*>_:not(:last-child)]:border-border";
