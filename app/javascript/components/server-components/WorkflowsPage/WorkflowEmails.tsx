@@ -27,7 +27,6 @@ import { assertResponseError, request } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import {
   CartListItem,
-  CartItemBody,
   CartItemMain,
   CartItemMedia,
   CartItemRow,
@@ -678,9 +677,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
                         <h4 className="font-bold">{product.name}</h4>
                       </a>
                     </CartItemTitle>
-                    <CartItemBody>
-                      <SellerByLine isPreview={isPreview} />
-                    </CartItemBody>
+                    <SellerByLine isPreview={isPreview} />
                   </CartItemMain>
                 </CartItemRow>
               </CartListItem>

@@ -3,7 +3,6 @@ import * as React from "react";
 import { BundleProduct } from "$app/components/BundleEdit/state";
 import {
   CartListItem,
-  CartItemBody,
   CartItemEnd,
   CartItemMain,
   CartItemMedia,
@@ -27,14 +26,12 @@ export const BundleProductSelector = ({
         <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
       </CartItemMedia>
       <CartItemMain>
-        <CartItemTitle asChild>
-          <h4>{bundleProduct.name}</h4>
-        </CartItemTitle>
+        <CartItemTitle>{bundleProduct.name}</CartItemTitle>
         {bundleProduct.variants ? (
-          <CartItemBody>
+          <>
             {bundleProduct.variants.list.length} {bundleProduct.variants.list.length === 1 ? "version" : "versions"}{" "}
             available
-          </CartItemBody>
+          </>
         ) : null}
       </CartItemMain>
       <CartItemEnd className="justify-center">

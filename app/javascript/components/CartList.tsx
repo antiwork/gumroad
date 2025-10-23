@@ -6,7 +6,6 @@ import { classNames } from "$app/utils/classNames";
 type BaseProps = {
   className?: string;
   children?: React.ReactNode;
-  asChild?: boolean;
 } & React.HTMLAttributes<HTMLElement>;
 
 export const CartList = ({ children, className }: BaseProps) => (
@@ -53,14 +52,9 @@ export const CartItemMain = ({ className, children }: BaseProps) => (
   <section className={classNames("flex flex-col gap-1 sm:py-4", className)}>{children}</section>
 );
 
-export const CartItemTitle = ({ className, children, asChild = false }: BaseProps) => {
-  const Comp = asChild ? Slot : "div";
+export const CartItemTitle = ({ className, children, asChild = false }: BaseProps & { asChild?: boolean }) => {
+  const Comp = asChild ? Slot : "h4";
   return <Comp className={classNames("line-clamp-2 font-bold", className)}>{children}</Comp>;
-};
-
-export const CartItemBody = ({ className, children, asChild = false }: BaseProps) => {
-  const Comp = asChild ? Slot : "div";
-  return <Comp className={classNames(className)}>{children}</Comp>;
 };
 
 export const CartItemFooter = ({ className, children }: BaseProps) => (

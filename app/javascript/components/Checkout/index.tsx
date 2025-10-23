@@ -23,7 +23,6 @@ import {
   CartItemTitle,
   CartList,
   CartItemExtra,
-  CartItemBody,
   CartItemEnd,
 } from "$app/components/CartList";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
@@ -455,9 +454,9 @@ const CartItemComponent = ({
               <h4 className="font-bold">{item.product.name}</h4>
             </a>
           </CartItemTitle>
-          <CartItemBody>
+          <CartItemTitle className="font-normal" asChild>
             <a href={item.product.creator.profile_url}>{item.product.creator.name}</a>
-          </CartItemBody>
+          </CartItemTitle>
           <CartItemFooter>
             <ul className="list-none pl-0">
               <li>
@@ -584,9 +583,7 @@ const CartItemComponent = ({
                     <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
                   </CartItemMedia>
                   <CartItemMain>
-                    <CartItemTitle asChild>
-                      <h4>{bundleProduct.name}</h4>
-                    </CartItemTitle>
+                    <CartItemTitle>{bundleProduct.name}</CartItemTitle>
                     <CartItemFooter>
                       <ul className="list-none pl-0">
                         <li>

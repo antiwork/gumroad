@@ -28,7 +28,6 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 import { NavigationButton } from "$app/components/Button";
 import {
   CartListItem,
-  CartItemBody,
   CartItemEnd,
   CartItemFooter,
   CartItemMain,
@@ -401,10 +400,10 @@ export const Product = ({
                           </a>
                         </CartItemTitle>
                         {bundleProduct.ratings ? (
-                          <CartItemBody className="flex shrink-0 items-center gap-1" aria-label="Rating">
+                          <div className="flex shrink-0 items-center gap-1" aria-label="Rating">
                             <Icon name="solid-star" />
                             {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                          </CartItemBody>
+                          </div>
                         ) : null}
                         <CartItemFooter>
                           <ul className="list-none pl-0">

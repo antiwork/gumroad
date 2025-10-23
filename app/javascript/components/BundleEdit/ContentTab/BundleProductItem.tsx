@@ -47,9 +47,7 @@ export const BundleProductItem = ({
           <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
         </CartItemMedia>
         <CartItemMain>
-          <CartItemTitle asChild>
-            <h4>{bundleProduct.name}</h4>
-          </CartItemTitle>
+          <CartItemTitle>{bundleProduct.name}</CartItemTitle>
           <CartItemFooter>
             <ul className="mt-auto list-none pl-0">
               <li>
