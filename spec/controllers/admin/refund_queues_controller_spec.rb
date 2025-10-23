@@ -52,7 +52,6 @@ describe Admin::RefundQueuesController, type: :controller, inertia: true do
       expect(props[:users]).not_to match_array([hash_including(id: user_1.id)])
       expect(props[:users]).not_to match_array([hash_including(id: user_2.id)])
       expect(props[:users]).to match_array([hash_including(id: user_3.id)])
-
     end
   end
 end

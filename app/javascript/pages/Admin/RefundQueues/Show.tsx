@@ -2,8 +2,8 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 
 import EmptyState from "$app/components/Admin/EmptyState";
-import UserCard, { type User } from "$app/components/Admin/Users/User";
 import PaginatedLoader, { type Pagination } from "$app/components/Admin/PaginatedLoader";
+import UserCard, { type User } from "$app/components/Admin/Users/User";
 
 type PageProps = {
   users: User[];
@@ -11,7 +11,7 @@ type PageProps = {
 };
 
 const AdminRefundQueue = () => {
-  const { pagination,users } = usePage<PageProps>().props;
+  const { pagination, users } = usePage<PageProps>().props;
 
   return (
     <section className="flex flex-col gap-4">
