@@ -8,6 +8,7 @@ import {
   CartItemMedia,
   CartItemRow,
   CartItemTitle,
+  CartItemFooter,
 } from "$app/components/CartList";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 
@@ -28,10 +29,10 @@ export const BundleProductSelector = ({
       <CartItemMain>
         <CartItemTitle>{bundleProduct.name}</CartItemTitle>
         {bundleProduct.variants ? (
-          <>
+          <CartItemFooter>
             {bundleProduct.variants.list.length} {bundleProduct.variants.list.length === 1 ? "version" : "versions"}{" "}
             available
-          </>
+          </CartItemFooter>
         ) : null}
       </CartItemMain>
       <CartItemEnd className="justify-center">

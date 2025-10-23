@@ -62,7 +62,7 @@ export const BundleProductItem = ({
           </CartItemFooter>
           {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
             <CartItemFooter>
-              <ul className="pl-0">
+              <ul className="list-none pl-0">
                 <li>
                   <Popover
                     trigger={<div className="link">Configure</div>}
