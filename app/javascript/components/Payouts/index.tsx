@@ -1,14 +1,14 @@
+import classNames from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
 import { createInstantPayout } from "$app/data/payout";
-import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartPriceItem } from "$app/components/CartList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -840,14 +840,14 @@ const Payouts = ({
                         )}
                       </div>
                     </div>
-                    <CartPriceItem title="Amount" price={instantPayoutAmountCents} />
-                    <CartPriceItem
+                    <PayoutLineItem title="Amount" price={instantPayoutAmountCents} />
+                    <PayoutLineItem
                       title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
                       price={instantPayoutFee}
                     />
                   </div>
                   <footer className="grid gap-4 p-4">
-                    <CartPriceItem
+                    <PayoutLineItem
                       title="You'll receive"
                       price={instantPayoutAmountCents - instantPayoutFee}
                       className="*:text-lg"
@@ -955,5 +955,26 @@ const Payouts = ({
     </div>
   );
 };
+
+export function PayoutLineItem({
+  title,
+  price,
+  className,
+}: {
+  title: React.ReactNode;
+  price?: number | null;
+  className?: string;
+}) {
+  if (!price || price === 0) {
+    return null;
+  }
+
+  return (
+    <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
+      <h4 className="inline-flex flex-wrap gap-2">{title}</h4>
+      <div>${formatPriceCentsWithoutCurrencySymbol("usd", price)}</div>
+    </div>
+  );
+}
 
 export default Payouts;

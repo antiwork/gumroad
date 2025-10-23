@@ -26,7 +26,17 @@ import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
-import { CartList, CartListItem } from "$app/components/CartList";
+import {
+  CartListItem,
+  CartItemBody,
+  CartItemEnd,
+  CartItemFooter,
+  CartItemMain,
+  CartItemMedia,
+  CartItemRow,
+  CartItemTitle,
+  CartList,
+} from "$app/components/CartList";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -379,40 +389,43 @@ export const Product = ({
                   symbolFormat: "long",
                 });
                 return (
-                  <CartListItem
-                    key={bundleProduct.id}
-                    media={<Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />}
-                    title={
-                      <a href={bundleProduct.url}>
-                        <h4>{bundleProduct.name}</h4>
-                      </a>
-                    }
-                    body={
-                      bundleProduct.ratings ? (
-                        <section className="flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Icon name="solid-star" />
-                          {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
-                        </section>
-                      ) : null
-                    }
-                    footer={
-                      <ul>
-                        <li>
-                          <strong>Qty:</strong> {bundleProduct.quantity}
-                        </li>
-                        {bundleProduct.variant ? (
-                          <li>
-                            <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
-                          </li>
+                  <CartListItem key={bundleProduct.id}>
+                    <CartItemRow>
+                      <CartItemMedia>
+                        <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+                      </CartItemMedia>
+                      <CartItemMain>
+                        <CartItemTitle asChild>
+                          <a href={bundleProduct.url}>
+                            <h4 className="font-bold">{bundleProduct.name}</h4>
+                          </a>
+                        </CartItemTitle>
+                        {bundleProduct.ratings ? (
+                          <CartItemBody className="flex shrink-0 items-center gap-1" aria-label="Rating">
+                            <Icon name="solid-star" />
+                            {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
+                          </CartItemBody>
                         ) : null}
-                      </ul>
-                    }
-                    end={
-                      <span className="current-price" aria-label="Price">
-                        {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
-                      </span>
-                    }
-                  />
+                        <CartItemFooter>
+                          <ul className="list-none pl-0">
+                            <li>
+                              <strong>Qty:</strong> {bundleProduct.quantity}
+                            </li>
+                            {bundleProduct.variant ? (
+                              <li>
+                                <strong>{variantLabel(bundleProduct.native_type)}:</strong> {bundleProduct.variant}
+                              </li>
+                            ) : null}
+                          </ul>
+                        </CartItemFooter>
+                      </CartItemMain>
+                      <CartItemEnd>
+                        <span className="current-price" aria-label="Price">
+                          {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
+                        </span>
+                      </CartItemEnd>
+                    </CartItemRow>
+                  </CartListItem>
                 );
               })}
             </CartList>

@@ -4,7 +4,15 @@ import { variantLabel } from "$app/utils/labels";
 
 import { BundleProduct } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
-import { CartListItem } from "$app/components/CartList";
+import {
+  CartItemEnd,
+  CartItemFooter,
+  CartItemMain,
+  CartItemMedia,
+  CartItemRow,
+  CartItemTitle,
+  CartListItem,
+} from "$app/components/CartList";
 import { Popover } from "$app/components/Popover";
 import { ConfigurationSelector, PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
@@ -33,96 +41,102 @@ export const BundleProductItem = ({
   });
 
   return (
-    <CartListItem
-      key={bundleProduct.id}
-      media={<Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />}
-      title={<h4>{bundleProduct.name}</h4>}
-      body={
-        <ul className="mt-auto pl-0">
-          <li>
-            <strong>Qty:</strong> {bundleProduct.quantity}
-          </li>
-          {selectedVariant ? (
-            <li>
-              <strong>{variantLabel(bundleProduct.native_type)}:</strong> {selectedVariant.name}
-            </li>
-          ) : null}
-        </ul>
-      }
-      footer={
-        bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
-          <ul className="pl-0">
-            <li>
-              <Popover
-                trigger={<div className="link">Configure</div>}
-                open={editPopoverOpen}
-                onToggle={setEditPopoverOpen}
-              >
-                <div className="paragraphs" style={{ width: "24rem" }}>
-                  <ConfigurationSelector
-                    selection={selection}
-                    setSelection={setSelection}
-                    product={{
-                      permalink: bundleProduct.permalink,
-                      options:
-                        bundleProduct.variants?.list.map((variant) => ({
-                          id: variant.id,
-                          name: variant.name,
-                          quantity_left: null,
-                          description: variant.description,
-                          price_difference_cents: null,
-                          recurrence_price_values: null,
-                          is_pwyw: false,
-                          duration_in_minutes: null,
-                        })) ?? [],
-                      is_quantity_enabled: bundleProduct.is_quantity_enabled,
-                      rental: null,
-                      currency_code: "usd",
-                      price_cents: 0,
-                      is_tiered_membership: false,
-                      is_legacy_subscription: false,
-                      is_multiseat_license: false,
-                      quantity_remaining: null,
-                      recurrences: null,
-                      pwyw: null,
-                      installment_plan: null,
-                      ppp_details: null,
-                      native_type: bundleProduct.native_type,
-                    }}
-                    discount={null}
-                    hidePrices
-                  />
-                  <Button
-                    color="accent"
-                    onClick={() => {
-                      updateBundleProduct({
-                        variants: bundleProduct.variants && {
-                          ...bundleProduct.variants,
-                          selected_id: selection.optionId ?? bundleProduct.variants.selected_id,
-                        },
-                        quantity: selection.quantity,
-                      });
-                      setEditPopoverOpen(false);
-                    }}
+    <CartListItem key={bundleProduct.id}>
+      <CartItemRow>
+        <CartItemMedia>
+          <Thumbnail url={bundleProduct.thumbnail_url} nativeType={bundleProduct.native_type} />
+        </CartItemMedia>
+        <CartItemMain>
+          <CartItemTitle asChild>
+            <h4>{bundleProduct.name}</h4>
+          </CartItemTitle>
+          <CartItemFooter>
+            <ul className="mt-auto list-none pl-0">
+              <li>
+                <strong>Qty:</strong> {bundleProduct.quantity}
+              </li>
+              {selectedVariant ? (
+                <li>
+                  <strong>{variantLabel(bundleProduct.native_type)}:</strong> {selectedVariant.name}
+                </li>
+              ) : null}
+            </ul>
+          </CartItemFooter>
+          {bundleProduct.is_quantity_enabled || bundleProduct.variants ? (
+            <CartItemFooter>
+              <ul className="pl-0">
+                <li>
+                  <Popover
+                    trigger={<div className="link">Configure</div>}
+                    open={editPopoverOpen}
+                    onToggle={setEditPopoverOpen}
                   >
-                    Apply
-                  </Button>
-                </div>
-              </Popover>
+                    <div className="paragraphs" style={{ width: "24rem" }}>
+                      <ConfigurationSelector
+                        selection={selection}
+                        setSelection={setSelection}
+                        product={{
+                          permalink: bundleProduct.permalink,
+                          options:
+                            bundleProduct.variants?.list.map((variant) => ({
+                              id: variant.id,
+                              name: variant.name,
+                              quantity_left: null,
+                              description: variant.description,
+                              price_difference_cents: null,
+                              recurrence_price_values: null,
+                              is_pwyw: false,
+                              duration_in_minutes: null,
+                            })) ?? [],
+                          is_quantity_enabled: bundleProduct.is_quantity_enabled,
+                          rental: null,
+                          currency_code: "usd",
+                          price_cents: 0,
+                          is_tiered_membership: false,
+                          is_legacy_subscription: false,
+                          is_multiseat_license: false,
+                          quantity_remaining: null,
+                          recurrences: null,
+                          pwyw: null,
+                          installment_plan: null,
+                          ppp_details: null,
+                          native_type: bundleProduct.native_type,
+                        }}
+                        discount={null}
+                        hidePrices
+                      />
+                      <Button
+                        color="accent"
+                        onClick={() => {
+                          updateBundleProduct({
+                            variants: bundleProduct.variants && {
+                              ...bundleProduct.variants,
+                              selected_id: selection.optionId ?? bundleProduct.variants.selected_id,
+                            },
+                            quantity: selection.quantity,
+                          });
+                          setEditPopoverOpen(false);
+                        }}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </Popover>
+                </li>
+              </ul>
+            </CartItemFooter>
+          ) : null}
+        </CartItemMain>
+        <CartItemEnd className="mt-auto">
+          <ul className="list-none">
+            <li>
+              <button className="underline" onClick={removeBundleProduct}>
+                Remove
+              </button>
             </li>
           </ul>
-        ) : null
-      }
-      end={
-        <ul>
-          <li>
-            <button className="link" onClick={removeBundleProduct}>
-              Remove
-            </button>
-          </li>
-        </ul>
-      }
-      endClassName="mt-auto"
-    />
+        </CartItemEnd>
+      </CartItemRow>
+    </CartListItem>
   );
 };

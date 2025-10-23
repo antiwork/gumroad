@@ -5,7 +5,15 @@ import { ProductNativeType } from "$app/parsers/product";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartList, CartListItem } from "$app/components/CartList";
+import {
+  CartListItem,
+  CartItemExtra,
+  CartItemMain,
+  CartItemMedia,
+  CartItemRow,
+  CartItemTitle,
+  CartList,
+} from "$app/components/CartList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
@@ -76,42 +84,48 @@ const ReviewsPage = ({
           <div className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
             {purchases.map((purchase) => (
               <CartList className="h-min" key={purchase.id}>
-                <CartListItem
-                  key={purchase.id}
-                  media={<Thumbnail url={purchase.product.thumbnail_url} nativeType={purchase.product.native_type} />}
-                  title={
-                    <>
-                      <a href={purchase.product.url}>
-                        <h4>{purchase.product.name}</h4>
-                      </a>
-                      <a href={purchase.product.seller.url}>{purchase.product.seller.name}</a>
-                    </>
-                  }
-                >
-                  <ReviewForm
-                    permalink={purchase.product.permalink}
-                    purchaseId={purchase.id}
-                    purchaseEmailDigest={purchase.email_digest}
-                    review={null}
-                    onChange={(newReview) => {
-                      setReviews((prevReviews) => [
-                        ...prevReviews,
-                        {
-                          ...purchase,
-                          ...newReview,
-                          id: (newReviewId++).toString(),
-                          review: newReview,
-                          purchase_id: purchase.id,
-                          purchase_email_digest: purchase.email_digest,
-                        },
-                      ]);
-                      setPurchases((prevPurchases) =>
-                        prevPurchases.filter((prevPurchase) => prevPurchase.id !== purchase.id),
-                      );
-                    }}
-                    style={{ display: "grid", gap: "var(--spacer-4)" }}
-                    ref={(el) => (inputRefs.current[purchase.id] = el)}
-                  />
+                <CartListItem key={purchase.id}>
+                  <CartItemRow>
+                    <CartItemMedia>
+                      <Thumbnail url={purchase.product.thumbnail_url} nativeType={purchase.product.native_type} />
+                    </CartItemMedia>
+                    <CartItemMain>
+                      <CartItemTitle asChild>
+                        <a href={purchase.product.url}>
+                          <h4 className="font-bold">{purchase.product.name}</h4>
+                        </a>
+                      </CartItemTitle>
+                      <CartItemTitle className="font-normal" asChild>
+                        <a href={purchase.product.seller.url}>{purchase.product.seller.name}</a>
+                      </CartItemTitle>
+                    </CartItemMain>
+                  </CartItemRow>
+                  <CartItemExtra>
+                    <ReviewForm
+                      permalink={purchase.product.permalink}
+                      purchaseId={purchase.id}
+                      purchaseEmailDigest={purchase.email_digest}
+                      review={null}
+                      onChange={(newReview) => {
+                        setReviews((prevReviews) => [
+                          ...prevReviews,
+                          {
+                            ...purchase,
+                            ...newReview,
+                            id: (newReviewId++).toString(),
+                            review: newReview,
+                            purchase_id: purchase.id,
+                            purchase_email_digest: purchase.email_digest,
+                          },
+                        ]);
+                        setPurchases((prevPurchases) =>
+                          prevPurchases.filter((prevPurchase) => prevPurchase.id !== purchase.id),
+                        );
+                      }}
+                      style={{ display: "grid", gap: "var(--spacer-4)" }}
+                      ref={(el) => (inputRefs.current[purchase.id] = el)}
+                    />
+                  </CartItemExtra>
                 </CartListItem>
               </CartList>
             ))}
