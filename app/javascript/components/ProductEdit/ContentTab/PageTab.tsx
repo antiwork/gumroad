@@ -70,7 +70,7 @@ export const PageTab = ({
     <PageListItem
       onClick={onClick}
       isSelected={selected}
-      className="group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted-foreground [&_.sortable-ghost]:outline [&_.sortable-ghost]:outline-accent [&_.sortable-ghost]:outline-dashed [&_.sortable-ghost>_*]:opacity-30"
+      className="group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted [&.sortable-ghost]:outline [&.sortable-ghost]:outline-accent [&.sortable-ghost]:outline-dashed [&.sortable-ghost>_*]:opacity-30"
       role="tab"
     >
       {!disabled ? (
