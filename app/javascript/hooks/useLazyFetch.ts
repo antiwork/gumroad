@@ -145,8 +145,11 @@ export const useLazyPaginatedFetch = <T>(
     },
   );
 
-  const fetchData = (queryParams: QueryParams = {}): Promise<void> =>
-    core.fetchData({ ...queryParams, per_page: perPage });
+  const fetchData = React.useCallback(
+    (queryParams: QueryParams = {}): Promise<void> =>
+      core.fetchData({ ...queryParams, per_page: perPage }),
+    [core.fetchData, perPage],
+  );
 
   return {
     ...core,
