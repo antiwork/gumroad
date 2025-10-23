@@ -74,7 +74,7 @@ export const ActivityFeed = ({ items }: { items: ActivityItem[] }) => {
             {type === "follower_added" && <Follow details={details} />}
             {type === "follower_removed" && <FollowRemoved details={details} />}
           </span>
-          <span className="text-muted" suppressHydrationWarning>
+          <span className="text-muted-foreground" suppressHydrationWarning>
             {new Date(timestamp).toLocaleString(userAgentInfo.locale, { dateStyle: "medium", timeStyle: "short" })}
           </span>
         </div>

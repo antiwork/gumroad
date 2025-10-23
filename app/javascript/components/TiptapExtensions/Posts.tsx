@@ -72,7 +72,10 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
           contentEditable={false}
         >
           {total > 0 ? expanded ? <Icon name="outline-cheveron-down" /> : <Icon name="outline-cheveron-right" /> : null}
-          <Icon name="file-earmark-medical-fill" className={cx("type-icon", { "text-muted": total === 0 })} />
+          <Icon
+            name="file-earmark-medical-fill"
+            className={cx("type-icon", { "text-muted-foreground": total === 0 })}
+          />
           <div>
             {isLoading || total > 0 ? (
               <>
@@ -81,7 +84,9 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               </>
             ) : (
               <>
-                <h4 className="text-muted">Posts (emails) sent to customers of this product will appear here</h4>
+                <h4 className="text-muted-foreground">
+                  Posts (emails) sent to customers of this product will appear here
+                </h4>
                 <a href={`${newEmailPath}?product=${productPermalink}`} target="_blank" rel="noreferrer">
                   Create an email
                 </a>

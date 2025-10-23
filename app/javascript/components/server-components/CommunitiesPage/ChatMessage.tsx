@@ -131,7 +131,7 @@ export const ChatMessage = ({
               </span>
             ) : null}
             <time
-              className="text-xs text-muted"
+              className="text-xs text-muted-foreground"
               title={new Date(message.created_at).toLocaleString(userAgentInfo.locale, {
                 dateStyle: "full",
                 timeStyle: "short",

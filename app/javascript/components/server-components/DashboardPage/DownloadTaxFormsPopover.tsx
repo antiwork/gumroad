@@ -52,7 +52,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
       {isOpen ? (
         <div className="max-w-[300px] space-y-4 sm:max-w-full">
           {Object.keys(taxForms).length === 0 ? (
-            <section className="text-muted">No tax forms available.</section>
+            <section className="text-muted-foreground">No tax forms available.</section>
           ) : (
             <>
               <header>

@@ -112,7 +112,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
           ) : null}
           {result.is_gift_sender_purchase ? (
             <div>
-              <div className="text-muted">
+              <div className="text-muted-foreground">
                 {result.gift_sender_text}
                 {result.has_files
                   ? "They'll get an email with your note and a download link."
@@ -121,21 +121,21 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
             </div>
           ) : result.extra_purchase_notice ? (
             <div>
-              <div className="text-muted">{result.extra_purchase_notice}</div>
+              <div className="text-muted-foreground">{result.extra_purchase_notice}</div>
             </div>
           ) : null}
           {result.is_gift_receiver_purchase ? (
             <div>
-              <div className="text-muted">{result.gift_receiver_text}</div>
+              <div className="text-muted-foreground">{result.gift_receiver_text}</div>
             </div>
           ) : null}
           {result.test_purchase_notice ? (
             <div>
-              <div className="text-muted">{result.test_purchase_notice}</div>
+              <div className="text-muted-foreground">{result.test_purchase_notice}</div>
             </div>
           ) : null}
           <div>
-            <div className="generate-invoice text-muted">
+            <div className="generate-invoice text-muted-foreground">
               Need an invoice for this?{" "}
               <a
                 target="_blank"

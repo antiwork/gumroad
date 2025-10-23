@@ -1081,7 +1081,7 @@ export const ContentTab = () => {
                                 )}
                               </small>
                             ) : (
-                              <small className="text-muted">No content yet</small>
+                              <small className="text-muted-foreground">No content yet</small>
                             )}
                           </div>
                         </div>

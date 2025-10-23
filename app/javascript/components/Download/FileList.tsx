@@ -450,7 +450,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           contentLength={file.duration || 0}
         >
           <button
-            className={cx("content", { "text-muted": isProcessing })}
+            className={cx("content", { "text-muted-foreground": isProcessing })}
             style={{
               gridColumn: "3 span",
               userSelect: "none",
@@ -481,7 +481,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         </TrackClick>
       </WithTooltip>
       <div
-        className={cx("actions", { "text-muted": isProcessing })}
+        className={cx("actions", { "text-muted-foreground": isProcessing })}
         style={{ gridColumn: "4", gap: "var(--spacer-4)", flexWrap: "nowrap" }}
       >
         {file.download_url ? (
@@ -510,7 +510,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           ) : isCompleted ? (
             <button aria-label="Play" disabled={isProcessing}>
               <Icon
-                className="type-icon text-muted"
+                className="type-icon text-muted-foreground"
                 name="outline-check-circle"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />

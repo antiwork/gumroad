@@ -99,11 +99,11 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
           {typeof item === "string" ? (
             <div {...props}>
               <a href={Routes.discover_path({ query: item })} className="flex flex-1 items-center no-underline">
-                <Icon name="clock-history" className="mr-2 text-muted" />
+                <Icon name="clock-history" className="mr-2 text-muted-foreground" />
                 {highlightQuery(item)}
               </a>
               <button onClick={() => deleteRecentSearch(item)} aria-label="Remove">
-                <Icon name="x" className="text-muted" />
+                <Icon name="x" className="text-muted-foreground" />
               </button>
             </div>
           ) : (
