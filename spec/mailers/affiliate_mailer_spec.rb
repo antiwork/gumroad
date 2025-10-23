@@ -62,7 +62,7 @@ describe AffiliateMailer do
     context "for a global affiliate" do
       let(:affiliate) { create(:user).global_affiliate }
       let(:email_subject) { "You helped make a sale through the global affiliate program." }
-      let(:email_body) { "A creator just made a sale thanks to you!" }
+      let(:email_body) { "#{seller.name_or_username} just made a sale of #{product_name} thanks to you!" }
 
       it_behaves_like "notifies affiliate of a sale"
     end

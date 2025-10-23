@@ -191,6 +191,10 @@ class AffiliateMailer < ApplicationMailer
     end
 
     def notify_global_affiliate_of_sale
+      @seller = @purchase.seller
+      @seller_name = @seller.name_or_username
+      @product_name = @purchase.link.name
+
       @subject = "You helped make a sale through the global affiliate program."
       mail to: @affiliate.affiliate_user.form_email,
            subject: @subject,
