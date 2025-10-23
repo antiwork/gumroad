@@ -44,7 +44,6 @@ namespace :admin do
       post :mass_transfer_purchases
       post :probation_with_reminder
       post :refund_balance
-      get :stats
       post :verify
       post :enable
       post :create_stripe_managed_account

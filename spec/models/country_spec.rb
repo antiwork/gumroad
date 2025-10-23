@@ -477,6 +477,12 @@ describe Country do
   end
 
   describe "#min_cross_border_payout_amount_local_cents" do
+    it "returns a minimum payout amount cents in local currency for all supported cross-border countries" do
+      Country.const_get(:CROSS_BORDER_PAYOUTS_COUNTRIES).each do |country|
+        expect(Country.new(country.alpha2).min_cross_border_payout_amount_local_cents).not_to be nil
+      end
+    end
+
     it "returns the correct minimum payout amount in local currency cents for supported cross-border countries" do
       expect(Country.new("TH").min_cross_border_payout_amount_local_cents).to eq 600_00
       expect(Country.new("KR").min_cross_border_payout_amount_local_cents).to eq 40_000_00
@@ -505,37 +511,30 @@ describe Country do
       expect(Country.new("DZ").min_cross_border_payout_amount_local_cents).to eq 1_00
     end
 
-    it "returns 0 for unsupported or default countries" do
-      expect(Country.new("US").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("GB").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("AU").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("FR").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("IL").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("TT").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("IN").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("VN").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("ID").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("CR").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("PK").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("NE").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("SM").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("BA").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("TR").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("MA").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("RS").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("ZA").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("KE").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("EG").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("CO").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("SA").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("BW").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("KZ").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("EC").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("MY").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("UY").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("MU").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("JM").min_cross_border_payout_amount_local_cents).to eq 0
-      expect(Country.new("DO").min_cross_border_payout_amount_local_cents).to eq 0
+    it "returns nil for regular (non cross-border) payout and unsupported countries" do
+      regular_payout_countries = User::Compliance.const_get(:SUPPORTED_COUNTRIES) - Country.const_get(:CROSS_BORDER_PAYOUTS_COUNTRIES)
+      regular_payout_countries.each do |country|
+        expect(Country.new(country.alpha2).min_cross_border_payout_amount_local_cents).to be nil
+      end
+      expect(Country.new(Compliance::Countries::BRA.alpha2).min_cross_border_payout_amount_local_cents).to be nil # Brazil (unsupported country)
+    end
+  end
+
+  describe "#min_cross_border_payout_amount_usd_cents" do
+    it "returns the min_cross_border_payout_amount_local_cents converted to usd cents " do
+      Country.const_get(:CROSS_BORDER_PAYOUTS_COUNTRIES).map(&:alpha2).each do |country_alpha2_code|
+        country = Country.new(country_alpha2_code)
+        expect(country.min_cross_border_payout_amount_usd_cents).to be_present
+        expect(country.min_cross_border_payout_amount_usd_cents).to eq(country.get_usd_cents(country.payout_currency, country.min_cross_border_payout_amount_local_cents))
+      end
+    end
+
+    it "returns 0 if min_cross_border_payout_amount_local_cents is nil" do
+      regular_payout_countries = User::Compliance.const_get(:SUPPORTED_COUNTRIES) - Country.const_get(:CROSS_BORDER_PAYOUTS_COUNTRIES)
+      regular_payout_countries.each do |country|
+        expect(Country.new(country.alpha2).min_cross_border_payout_amount_usd_cents).to eq 0
+      end
+      expect(Country.new(Compliance::Countries::BRA.alpha2).min_cross_border_payout_amount_usd_cents).to eq 0 # Brazil (unsupported country)
     end
   end
 end
