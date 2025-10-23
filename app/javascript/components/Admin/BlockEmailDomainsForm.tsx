@@ -1,6 +1,8 @@
 import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
+import CodeSnippet from "$app/components/ui/CodeSnippet";
+
 export type Props = {
   action: string;
   header: string;
@@ -39,21 +41,17 @@ const Form = ({ action, header, buttonLabel }: Props) => {
           <code>john@list.example.org</code>, enter what is to the right of the <code>@</code> character.
         </p>
 
-        <figure className="code">
-          <figcaption>Example with comma-separated items</figcaption>
-          <pre>example.com, example.net, list.example.org</pre>
-        </figure>
+        <CodeSnippet caption="Example with comma-separated items">
+          example.com, example.net, list.example.org
+        </CodeSnippet>
 
-        <figure className="code">
-          <figcaption>Example with items separated by newline</figcaption>
-          <pre>
-            example.com
-            <br />
-            example.net
-            <br />
-            list.example.org
-          </pre>
-        </figure>
+        <CodeSnippet caption="Example with items separated by newline">
+          example.com
+          <br />
+          example.net
+          <br />
+          list.example.org
+        </CodeSnippet>
 
         <textarea
           id="identifiers"

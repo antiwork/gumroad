@@ -17,9 +17,9 @@ describe "InstallmentSendInstallment"  do
 
     context "video transcoding" do
       it "transcodes video files on publishing the product only if `queue_for_transcoding?` is true for the product file" do
-        video_file_1 = create(:product_file, installment: @installment, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
-        video_file_2 = create(:product_file, installment: @installment, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter3.mp4")
-        video_file_3 = create(:product_file, installment: @installment, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter4.mp4")
+        video_file_1 = create(:product_file, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
+        video_file_2 = create(:product_file, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter3.mp4")
+        video_file_3 = create(:product_file, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter4.mp4")
         video_file_3.delete!
 
         @installment.publish!
@@ -51,12 +51,12 @@ describe "InstallmentSendInstallment"  do
           allow(@s3_double).to receive(:content_length).and_return(10_000)
           allow(@s3_double).to receive(:get).and_return("")
 
-          create(:product_file, installment: @installment, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png")
+          create(:product_file, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
           @installment.publish!
         end
 
         it "transcodes video when the link is already published" do
-          video_file = create(:product_file, installment: @installment, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+          video_file = create(:product_file, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
           allow(video_file).to receive(:s3_object).and_return(@s3_double)
           allow(video_file).to receive(:confirm_s3_key!)
           video_file.analyze
@@ -69,7 +69,7 @@ describe "InstallmentSendInstallment"  do
           @installment.unpublish!
           @installment.reload
 
-          video_file = create(:product_file, link: @installment.link, installment: @installment, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+          video_file = create(:product_file, link: @installment.link, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
           allow(video_file).to receive(:s3_object).and_return(@s3_double)
           allow(video_file).to receive(:confirm_s3_key!)
           video_file.analyze

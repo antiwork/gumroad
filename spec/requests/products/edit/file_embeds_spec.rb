@@ -23,9 +23,12 @@ describe("File embeds in product content editor", type: :system, js: true) do
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     end
-    button = find_button("Save changes", disabled: true)
-    button.hover
-    expect(button).to have_tooltip(text: "Files are still uploading...")
+
+    # TODO(ershad): Enable this once we have a way to slow down the upload process
+    # button = find_button("Save changes", disabled: true)
+    # button.hover
+    # expect(button).to have_tooltip(text: "Files are still uploading...")
+
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     find_button("Save changes").hover
     expect(find_button("Save changes")).to_not have_tooltip(text: "Files are still uploading...")
@@ -87,7 +90,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "displays file size after save properly" do
-    @product.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png")
+    @product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
     visit edit_link_path(@product.unique_permalink) + "/content"
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
@@ -119,11 +122,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows users to upload subtitles with special characters in filenames" do
-    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("https://s3.amazonaws.com/gumroad-specs/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
+    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
 
-    product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
+    product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     @product.product_files << product_file
-    subtitle_file = create(:subtitle_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/111113dbf4a6428597332c8d2efb51fc/original/[]&+_subtitles.vtt")
+    subtitle_file = create(:subtitle_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/111113dbf4a6428597332c8d2efb51fc/original/[]&+_subtitles.vtt")
     product_file.subtitle_files << subtitle_file
     create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
     visit edit_link_path(@product.unique_permalink)
@@ -144,9 +147,9 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   describe "with video" do
     before do
-      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("https://s3.amazonaws.com/gumroad-specs/attachment/1111163137454006b85553304efaffb7/original/[]&+.mp4")))))
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/1111163137454006b85553304efaffb7/original/[]&+.mp4")))))
 
-      product_file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
       @product.product_files << product_file
       @rich_content = create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
       visit edit_link_path(@product.unique_permalink) + "/content"
@@ -191,11 +194,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
       before do
         @product = create(:product, user: seller)
         video_path = "attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter2.mp4"
-        video_uri = URI.parse("https://s3.amazonaws.com/gumroad-specs/#{video_path}").to_s
+        video_uri = URI.parse("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{video_path}").to_s
         video_product_file = create(:product_file, url: video_uri.to_s)
         @product.product_files = [video_product_file]
-        pdf_path = "attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf"
-        pdf_uri = URI.parse("https://s3.amazonaws.com/gumroad-specs/#{pdf_path}").to_s
+        pdf_path = "attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/test.pdf"
+        pdf_uri = URI.parse("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{pdf_path}").to_s
         subtitle_file = build(:subtitle_file, url: pdf_uri.to_s, product_file_id: video_product_file.id)
         # Skip subtitle validation to allow saving an invalid file type
         subtitle_file.save!(validate: false)
@@ -213,7 +216,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
         visit edit_link_path(@product.unique_permalink) + "/content"
         within find_embed(name: "chapter2") do
           click_on "Edit"
-          expect(page).to have_subtitle_row(name: "nyt")
+          expect(page).to have_subtitle_row(name: "test")
         end
       end
 
@@ -233,7 +236,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "updates a file's name, description, and ISBN right away" do
     product = create(:product, user: seller)
-    product.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/jimbo.pdf")
+    product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/jimbo.pdf")
     create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product.product_files.first.external_id, "uid" => SecureRandom.uuid } }])
     visit edit_link_path(product.unique_permalink) + "/content"
     expect(product.product_files.first.name_displayable).to eq "jimbo"
@@ -252,7 +255,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "shows validation error when ISBN isn't valid" do
     product = create(:product, user: seller)
-    product.product_files << create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachment/jimbo.pdf")
+    product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/jimbo.pdf")
     create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product.product_files.first.external_id, "uid" => SecureRandom.uuid } }])
     visit edit_link_path(product.unique_permalink) + "/content"
     within find_embed(name: "jimbo") do
@@ -297,9 +300,9 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows to rename files even if filenames have special characters [, ], &, +" do
-    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("https://s3.amazonaws.com/gumroad-specs/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
+    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
 
-    product_file = create(:product_file, link: @product, url: "https://s3.amazonaws.com/gumroad-specs/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
+    product_file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
     visit edit_link_path(@product.unique_permalink) + "/content"
 

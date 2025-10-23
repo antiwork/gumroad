@@ -302,8 +302,8 @@ describe WithProductFiles do
 
       it "enqueues a `PdfUnstampableNotifierJob` job when new stampable files are added" do
         product_files_params = product.product_files.each_with_object([]) { |file, params| params << { external_id: file.external_id, url: file.url } }
-        product_files_params << { external_id: SecureRandom.uuid, pdf_stamp_enabled: false, url: "https://s3.amazonaws.com/gumroad-specs/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf" }
-        product_files_params << { external_id: SecureRandom.uuid, pdf_stamp_enabled: true, url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf" }
+        product_files_params << { external_id: SecureRandom.uuid, pdf_stamp_enabled: false, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/23b2d41ac63a40b5afa1a99bf38a0982/original/nyt.pdf" }
+        product_files_params << { external_id: SecureRandom.uuid, pdf_stamp_enabled: true, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf" }
 
         expect do
           product.save_files!(product_files_params)
@@ -314,7 +314,7 @@ describe WithProductFiles do
 
       it "does not enqueue a `PdfUnstampableNotifierJob` job when new non-stampable files are added" do
         product_files_params = product.product_files.each_with_object([]) { |file, params| params << { external_id: file.external_id, url: file.url } }
-        product_files_params << { external_id: SecureRandom.uuid, pdf_stamp_enabled: false, url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf" }
+        product_files_params << { external_id: SecureRandom.uuid, pdf_stamp_enabled: false, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf" }
 
         expect do
           product.save_files!(product_files_params)
@@ -369,7 +369,7 @@ describe WithProductFiles do
         post = create(:installment)
 
         expect do
-          post.save_files!([{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf" }])
+          post.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf" }])
         end.to change { post.product_files.alive.count }.by(1)
 
         expect(PdfUnstampableNotifierJob.jobs.size).to eq(0)
@@ -377,8 +377,8 @@ describe WithProductFiles do
 
       it "sets content_updated_at when new files are added" do
         product_files_params = product.product_files.each_with_object([]) { |file, acc| acc << { external_id: file.external_id, url: file.url } }
-        product_files_params << { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg" }
-        product_files_params << { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4" }
+        product_files_params << { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" }
+        product_files_params << { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4" }
 
         freeze_time do
           expect do
@@ -402,7 +402,7 @@ describe WithProductFiles do
         product_files_params = product.product_files.each_with_object([]) { |file, acc| acc << { external_id: file.external_id, url: file.url } }
 
         product_files_params[0].merge!({ position: 2, display_name: "new book name", description: "new_description" })
-        product_files_params << { external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg", size: 2, position: 0 }
+        product_files_params << { external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg", size: 2, position: 0 }
         product_files_params << { external_id: SecureRandom.uuid, url: "http://www.gum.road", size: "", filetype: "link", position: 1, display_name: "link file" }
 
         expect do
@@ -440,8 +440,8 @@ describe WithProductFiles do
         folder_1 = create(:product_folder, link: product, name: "Test Folder 1")
         folder_2 = create(:product_folder, link: product, name: "Test Folder 2")
 
-        file_1 = create(:product_file, link: product, description: "pencil", url: "https://s3.amazonaws.com/gumroad-specs/attachment/pencil.png", folder_id: folder_1.id)
-        file_2 = create(:product_file, link: product, description: "manual", url: "https://s3.amazonaws.com/gumroad-specs/attachment/manual.pdf", folder_id: folder_2.id)
+        file_1 = create(:product_file, link: product, description: "pencil", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png", folder_id: folder_1.id)
+        file_2 = create(:product_file, link: product, description: "manual", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf", folder_id: folder_2.id)
 
         product_files_params = product.product_files.each_with_object([]) { |file, acc| acc << { external_id: file.external_id, url: file.url, folder_id: file.folder_id } }
 
@@ -520,14 +520,14 @@ describe WithProductFiles do
 
       it "does not enqueue a `PdfUnstampableNotifierJob` job when a new file is added" do
         expect do
-          installment.save_files!([{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg" }])
+          installment.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" }])
         end.to change { installment.product_files.alive.count }.by(1)
 
         expect(PdfUnstampableNotifierJob.jobs.size).to eq(0)
       end
 
       it "does not enqueue a `PdfUnstampableNotifierJob` job when a file is removed" do
-        installment.save_files!([{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg" }])
+        installment.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" }])
 
         expect do
           installment.save_files!([])
@@ -538,7 +538,7 @@ describe WithProductFiles do
 
       it "generates the product files archive" do
         expect do
-          installment.save_files!([{ external_id: SecureRandom.uuid, url: "https://s3.amazonaws.com/gumroad-specs/attachment/pic.jpg" }])
+          installment.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" }])
         end.to change { installment.product_files.alive.count }.by(1)
 
         expect(installment.product_files_archives.size).to eq(1)
@@ -692,7 +692,7 @@ describe WithProductFiles do
   describe "#has_been_transcoded?" do
     before do
       @product = create(:product)
-      file_1 = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+      file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
       @product.product_files << file_1
 
       @transcoded_video = create(:transcoded_video, streamable: file_1, is_hls: true)
@@ -719,7 +719,7 @@ describe WithProductFiles do
       expect(@product.has_been_transcoded?).to be(false)
 
       not_yet_analyzed_product = create(:product)
-      file = create(:product_file, url: "https://s3.amazonaws.com/gumroad-specs/attachments/2/original/chapter2.mp4")
+      file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
       not_yet_analyzed_product.product_files << file
       expect(not_yet_analyzed_product.has_been_transcoded?).to be(false)
     end

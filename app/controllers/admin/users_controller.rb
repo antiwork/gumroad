@@ -22,10 +22,6 @@ class Admin::UsersController < Admin::BaseController
     end
   end
 
-  def stats
-    render partial: "stats", locals: { user: @user }
-  end
-
   def refund_balance
     RefundUnpaidPurchasesWorker.perform_async(@user.id, current_user.id)
     render json: { success: true }
@@ -41,7 +37,13 @@ class Admin::UsersController < Admin::BaseController
 
   def refund_queue
     @title = "Refund queue"
-    @users = User.refund_queue
+    @users = User.refund_queue.with_attached_avatar.includes(:admin_manageable_user_memberships, :links, :purchases)
+
+    render inertia: "Admin/RefundQueues/Show",
+           props: {
+             users: @users.map { |user| user.as_json(admin: true, impersonatable: policy([:admin, :impersonators, user]).create?) }
+           },
+           legacy_template: "admin/users/refund_queue"
   end
 
   def enable

@@ -3,12 +3,21 @@
 # aws credentials for the web app are stored in the secrets
 AWS_ACCESS_KEY = GlobalConfig.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_KEY = GlobalConfig.get("AWS_SECRET_ACCESS_KEY")
+AWS_S3_ENDPOINT = GlobalConfig.get("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
 AWS_DEFAULT_REGION = GlobalConfig.get("AWS_DEFAULT_REGION", "us-east-1")
 
-Aws.config.update(
+aws_config = {
   region: AWS_DEFAULT_REGION,
   credentials: Aws::Credentials.new(AWS_ACCESS_KEY, AWS_SECRET_KEY)
-)
+}
+
+# Support for MinIO in development and test environments
+if Rails.env.development? || Rails.env.test?
+  aws_config[:endpoint] = AWS_S3_ENDPOINT if AWS_S3_ENDPOINT.present?
+  Aws.config[:s3] = { force_path_style: true }
+end
+
+Aws.config.update(aws_config)
 
 INVOICES_S3_BUCKET = GlobalConfig.get("INVOICES_S3_BUCKET", "gumroad-invoices")
 S3_CREDENTIALS = { access_key_id: AWS_ACCESS_KEY, secret_access_key: AWS_SECRET_KEY, s3_region: AWS_DEFAULT_REGION }.freeze
@@ -30,7 +39,8 @@ S3_BUCKET = {
   production: "gumroad"
 }[Rails.env.to_sym]
 
-S3_BASE_URL = GlobalConfig.get("S3_BASE_URL_TEMPLATE", "https://s3.amazonaws.com/#{S3_BUCKET}/")
+S3_BASE_URL = GlobalConfig.get("S3_BASE_URL_TEMPLATE", "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/")
+
 
 PUBLIC_STORAGE_S3_BUCKET = {
   development: "gumroad-dev-public-storage",

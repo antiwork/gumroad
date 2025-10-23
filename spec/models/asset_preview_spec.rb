@@ -6,8 +6,8 @@ describe AssetPreview, :vcr do
   describe "Attachment" do
     it "scales down a big image and keeps original" do
       asset_preview = create(:asset_preview)
-      expect(asset_preview.file.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.file.key}")
-      expect(asset_preview.retina_variant.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.retina_variant.key}")
+      expect(asset_preview.file.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.file.key}")
+      expect(asset_preview.retina_variant.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.retina_variant.key}")
       expect(asset_preview.width).to eq(1633)
       expect(asset_preview.height).to eq(512)
       expect(asset_preview.display_width).to eq(670)
@@ -25,12 +25,12 @@ describe AssetPreview, :vcr do
 
     it "succeeds with video" do
       asset_preview = create(:asset_preview_mov)
-      expect(asset_preview.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.file.key}")
+      expect(asset_preview.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.file.key}")
     end
 
     it "doesn't post process GIFs and keeps the original" do
       asset_preview = create(:asset_preview_gif)
-      expect(asset_preview.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.file.key}")
+      expect(asset_preview.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.file.key}")
       expect(asset_preview.display_width).to eq(670)
       expect(asset_preview.display_height).to eq(500)
       expect(asset_preview.retina_width).to eq(670)
@@ -143,24 +143,24 @@ describe AssetPreview, :vcr do
 
     it "works as expected with a public URL" do
       expect do
-        asset_preview.url = "https://s3.amazonaws.com/gumroad-specs/specs/amir.png"
+        asset_preview.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.png"
         asset_preview.analyze_file
         asset_preview.save!
       end.to_not raise_error
 
-      expect(asset_preview.file.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.file.key}")
-      expect(asset_preview.retina_variant.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.retina_variant.key}")
+      expect(asset_preview.file.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.file.key}")
+      expect(asset_preview.retina_variant.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.retina_variant.key}")
     end
 
     it "works as expected when a URL with square brackets is encoded and passed as an argument" do
       expect do
-        asset_preview.url = "https://s3.amazonaws.com/gumroad-specs/specs/test-small+with+%5Bsquare+brackets%5D.jpg"
+        asset_preview.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test-small+with+%5Bsquare+brackets%5D.jpg"
         asset_preview.analyze_file
         asset_preview.save!
       end.to_not raise_error
 
-      expect(asset_preview.file.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.file.key}")
-      expect(asset_preview.retina_variant.url).to match("https://gumroad-specs.s3.amazonaws.com/#{asset_preview.retina_variant.key}")
+      expect(asset_preview.file.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.file.key}")
+      expect(asset_preview.retina_variant.url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{asset_preview.retina_variant.key}")
     end
 
     it "prevents non-http urls from being downloaded" do

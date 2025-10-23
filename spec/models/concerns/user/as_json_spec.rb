@@ -117,5 +117,70 @@ describe User::AsJson do
         end
       end
     end
+
+    context "for admin" do
+      let(:options) { { admin: true } }
+
+      before do
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE)
+      end
+
+      it "returns admin-specific fields" do
+        expect(as_json).to include(
+          "id",
+          "display_name",
+          "form_email",
+          "form_email_block",
+          "form_email_domain",
+          "form_email_domain_block",
+          "avatar_url",
+          "username",
+          "subdomain_with_protocol",
+          "support_email",
+          "custom_fee_per_thousand",
+          "updated_at",
+          "verified",
+          "deleted_at",
+          "all_adult_products",
+          "unpaid_balance_cents",
+          "suspended",
+          "flagged_for_fraud",
+          "flagged_for_tos_violation",
+          "on_probation",
+          "disable_paypal_sales",
+          "user_risk_state",
+          "comment_count"
+        )
+      end
+
+      it "returns the numeric id, not the obfuscated one" do
+        expect(as_json["id"]).to eq(user.id)
+      end
+
+      it "returns the comment count" do
+        expect(as_json["comment_count"]).to eq(2)
+      end
+
+      it "returns user_risk_state as humanized" do
+        expect(as_json["user_risk_state"]).to eq("Not reviewed")
+      end
+
+      context "when impersonatable option is true" do
+        let(:options) { { admin: true, impersonatable: true } }
+
+        it "includes impersonatable flag" do
+          expect(as_json["impersonatable"]).to be(true)
+        end
+      end
+
+      context "when impersonatable option is false" do
+        let(:options) { { admin: true, impersonatable: false } }
+
+        it "includes impersonatable flag as false" do
+          expect(as_json["impersonatable"]).to be(false)
+        end
+      end
+    end
   end
 end
