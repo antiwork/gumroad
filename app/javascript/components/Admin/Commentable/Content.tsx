@@ -2,7 +2,7 @@ import React from "react";
 
 import Comment, { type CommentProps } from "$app/components/Admin/Commentable/Comment";
 import Loading from "$app/components/Admin/Loading";
-import useIsIntersecting from "$app/components/useIsIntersecting";
+import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminCommentableContentProps = {
   count: number;
